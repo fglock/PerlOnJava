@@ -43,6 +43,7 @@ public class MortalList {
     // deferredCaptures for final cleanup — they are effectively dead
     // from Perl's view, only held Java-alive by this static list.
     private static final java.util.IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new java.util.IdentityHashMap<>();
+    private static boolean deferredCapturesMayBeReady = false;
 
     private static final ThreadLocal<ArrayDeque<RuntimeBase>> temporaryRoots =
             ThreadLocal.withInitial(ArrayDeque::new);
@@ -100,6 +101,15 @@ public class MortalList {
     public static void addDeferredCapture(RuntimeScalar scalar) {
         deferredCaptures.add(scalar);
         deferredCapturesSet.merge(scalar, 1, Integer::sum);
+        if (scalar.captureCount == 0 && scalar.scopeExited) {
+            deferredCapturesMayBeReady = true;
+        }
+    }
+
+    static void noteDeferredCaptureMayBeReady() {
+        if (!deferredCaptures.isEmpty()) {
+            deferredCapturesMayBeReady = true;
+        }
     }
 
     /**
@@ -120,6 +130,8 @@ public class MortalList {
      */
     private static void processReadyDeferredCaptures() {
         if (deferredCaptures.isEmpty()) return;
+        if (!deferredCapturesMayBeReady) return;
+        deferredCapturesMayBeReady = false;
         boolean found = false;
         for (int i = deferredCaptures.size() - 1; i >= 0; i--) {
             RuntimeScalar scalar = deferredCaptures.get(i);
@@ -165,6 +177,7 @@ public class MortalList {
         }
         deferredCaptures.clear();
         deferredCapturesSet.clear();
+        deferredCapturesMayBeReady = false;
         flush();
 
         // After flushing deferred captures, clear weak refs for objects that
@@ -375,7 +388,9 @@ public class MortalList {
         // source_registrations hash is assigned into the live schema while the
         // original hash later exits; walking it here would destroy ResultSources
         // still reachable through the schema.
-        if (hadLocalBinding && isReachableFromExternalRootCached(hash)) return;
+        if (hadLocalBinding
+                && hash.refCount >= 0
+                && ReachabilityWalker.isReachableFromExternalRootExcludingDirectLexical(hash)) return;
         for (RuntimeScalar val : hash.elements.values()) {
             deferDecrementRecursive(val);
         }

@@ -72,6 +72,9 @@ sub _bootstrap_prefs {
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
         'HTML-Parser.yml'            => 'PerlOnJava/CpanDistroprefs/HTML-Parser.yml',
         'HTTP-Message.yml'           => 'PerlOnJava/CpanDistroprefs/HTTP-Message.yml',
+        'HTTP-Daemon.yml'            => 'PerlOnJava/CpanDistroprefs/HTTP-Daemon.yml',
+        'WWW-RobotRules.yml'         => 'PerlOnJava/CpanDistroprefs/WWW-RobotRules.yml',
+        'libwww-perl.yml'            => 'PerlOnJava/CpanDistroprefs/libwww-perl.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'

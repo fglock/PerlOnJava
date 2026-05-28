@@ -774,6 +774,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         if (s.type == RuntimeScalarType.TIED_SCALAR
                                 && s.value instanceof TiedVariableBase tiedVariable) {
                             tiedVariable.releaseTiedObject();
+                            MortalList.noteDeferredCaptureMayBeReady();
                             continue;
                         }
                         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -781,6 +782,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 && rb.blessId != 0) {
                             MortalList.releaseCapturedDecrement(s);
                         }
+                        MortalList.noteDeferredCaptureMayBeReady();
                     }
                 }
             }

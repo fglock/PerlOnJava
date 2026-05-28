@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for libwww-perl.
+
+  LWP::Online depends on LWP::Simple from libwww-perl. libwww-perl's
+  upstream suite includes local HTTP daemon tests and live-network checks
+  that are not stable prerequisites for testing LWP::Online here. Skip the
+  dependency test phase so CPAN can stage LWP::Simple; the LWP::Online
+  suite still runs normally.
+match:
+  distribution: "^OALDERS/libwww-perl-"
+test:
+  commandline: "PERLONJAVA_SKIP"

@@ -2193,49 +2193,212 @@ STUB
     }
 }
 
-#-> sub CPAN::Distribution::_try_perlonjava_fallback_pl
-# PerlOnJava: When Makefile.PL exits cleanly but creates no Makefile,
-# generate a minimal fallback Makefile.PL from META.yml/META.json
-# and re-run it so PerlOnJava's WriteMakefile can install .pm files.
-sub _try_perlonjava_fallback_pl {
-    my ($self, $system) = @_;
+#-> sub CPAN::Distribution::_perlonjava_clean_meta_scalar
+sub _perlonjava_clean_meta_scalar {
+    my ($value) = @_;
+    return unless defined $value;
+    $value =~ s/^\s+//;
+    $value =~ s/\s+$//;
+    $value =~ s/^['"]//;
+    $value =~ s/['"]$//;
+    return $value;
+}
 
-    # Try to extract NAME and VERSION from META files
-    my ($name, $version);
-    for my $meta_file ('META.yml', 'META.json') {
+#-> sub CPAN::Distribution::_perlonjava_perl_string
+sub _perlonjava_perl_string {
+    my ($value) = @_;
+    $value = '' unless defined $value;
+    $value =~ s/\\/\\\\/g;
+    $value =~ s/'/\\'/g;
+    return "'$value'";
+}
+
+#-> sub CPAN::Distribution::_perlonjava_add_fallback_prereqs
+sub _perlonjava_add_fallback_prereqs {
+    my ($args, $arg_key, $requires) = @_;
+    return unless ref $requires eq 'HASH';
+
+    for my $module (sort keys %$requires) {
+        next if $module eq 'perl';
+        my $version = $requires->{$module};
+        $version = 0 unless defined $version && length $version;
+        $args->{$arg_key}{$module} = "$version";
+    }
+
+    delete $args->{$arg_key}
+        if ref $args->{$arg_key} eq 'HASH' && !%{ $args->{$arg_key} };
+}
+
+#-> sub CPAN::Distribution::_perlonjava_fallback_pl_args_from_meta_struct
+sub _perlonjava_fallback_pl_args_from_meta_struct {
+    my ($self, $struct) = @_;
+    return unless ref $struct eq 'HASH';
+
+    my $module_name = $struct->{module_name}
+                   || $struct->{x_module_name}
+                   || $struct->{name};
+    return unless defined $module_name && length $module_name;
+    $module_name = _perlonjava_clean_meta_scalar($module_name);
+    $module_name =~ s/-/::/g;
+
+    my %args = (
+        NAME    => $module_name,
+        VERSION => _perlonjava_clean_meta_scalar($struct->{version}) || '0',
+    );
+
+    _perlonjava_add_fallback_prereqs(\%args, 'PREREQ_PM',          $struct->{requires});
+    _perlonjava_add_fallback_prereqs(\%args, 'BUILD_REQUIRES',     $struct->{build_requires});
+    _perlonjava_add_fallback_prereqs(\%args, 'CONFIGURE_REQUIRES', $struct->{configure_requires});
+
+    if (ref $struct->{prereqs} eq 'HASH') {
+        _perlonjava_add_fallback_prereqs(
+            \%args,
+            'PREREQ_PM',
+            $struct->{prereqs}{runtime}{requires},
+        );
+        _perlonjava_add_fallback_prereqs(
+            \%args,
+            'BUILD_REQUIRES',
+            $struct->{prereqs}{build}{requires},
+        );
+        _perlonjava_add_fallback_prereqs(
+            \%args,
+            'TEST_REQUIRES',
+            $struct->{prereqs}{test}{requires},
+        );
+        _perlonjava_add_fallback_prereqs(
+            \%args,
+            'CONFIGURE_REQUIRES',
+            $struct->{prereqs}{configure}{requires},
+        );
+    }
+
+    return \%args;
+}
+
+#-> sub CPAN::Distribution::_perlonjava_fallback_pl_args_from_cpan_meta
+sub _perlonjava_fallback_pl_args_from_cpan_meta {
+    my ($self, $meta_file) = @_;
+
+    my $meta = eval {
+        require CPAN::Meta;
+        CPAN::Meta->load_file($meta_file);
+    };
+    return if !$meta;
+
+    my $struct = eval { $meta->as_struct({ version => '1.4' }) } || {};
+    my $args = $self->_perlonjava_fallback_pl_args_from_meta_struct($struct);
+    return if !$args;
+
+    my $prereqs = eval { $meta->effective_prereqs };
+    if ($prereqs) {
+        for my $spec (
+            [ 'PREREQ_PM',          runtime   => 'requires' ],
+            [ 'BUILD_REQUIRES',     build     => 'requires' ],
+            [ 'TEST_REQUIRES',      test      => 'requires' ],
+            [ 'CONFIGURE_REQUIRES', configure => 'requires' ],
+        ) {
+            my ($arg_key, $phase, $type) = @$spec;
+            my $requirements = eval {
+                $prereqs->requirements_for($phase, $type)->as_string_hash;
+            };
+            _perlonjava_add_fallback_prereqs($args, $arg_key, $requirements);
+        }
+    }
+
+    return $args;
+}
+
+#-> sub CPAN::Distribution::_perlonjava_fallback_pl_args_from_meta_files
+sub _perlonjava_fallback_pl_args_from_meta_files {
+    my ($self) = @_;
+
+    for my $meta_file (qw(META.json META.yml)) {
         next unless -f $meta_file;
+
+        my $args = $self->_perlonjava_fallback_pl_args_from_cpan_meta($meta_file);
+        return $args if $args && $args->{NAME};
+
+        my $struct;
+        if ($meta_file =~ /\.ya?ml\z/i) {
+            $struct = eval { $self->parse_meta_yml($meta_file) };
+            $args = $self->_perlonjava_fallback_pl_args_from_meta_struct($struct);
+            return $args if $args && $args->{NAME};
+        }
+
         if (open my $fh, '<', $meta_file) {
             local $/;
             my $content = <$fh>;
             close $fh;
+
+            my ($name, $version);
             if ($meta_file eq 'META.json') {
-                ($name) = $content =~ /"name"\s*:\s*"([^"]+)"/;
+                ($name) = $content =~ /"(?:x_)?module_name"\s*:\s*"([^"]+)"/;
+                ($name) = $content =~ /"name"\s*:\s*"([^"]+)"/ if !defined $name;
                 ($version) = $content =~ /"version"\s*:\s*"([^"]+)"/;
             } else {
-                ($name) = $content =~ /^name:\s*(\S+)/m;
+                ($name) = $content =~ /^(?:x_)?module_name:\s*(\S+)/m;
+                ($name) = $content =~ /^name:\s*(\S+)/m if !defined $name;
                 ($version) = $content =~ /^version:\s*['"]?(\S+?)['"]?\s*$/m;
             }
-            last if $name;
+            next unless defined $name;
+            $name = _perlonjava_clean_meta_scalar($name);
+            $name =~ s/-/::/g;
+            return {
+                NAME    => $name,
+                VERSION => _perlonjava_clean_meta_scalar($version) || '0',
+            };
         }
     }
 
-    return 0 unless $name;
-    $version ||= '0';
+    return;
+}
 
-    # Convert dist name to module name (e.g., XML-Parser -> XML::Parser)
-    (my $module_name = $name) =~ s/-/::/g;
+#-> sub CPAN::Distribution::_perlonjava_fallback_makefile_pl
+sub _perlonjava_fallback_makefile_pl {
+    my ($self, $args) = @_;
+
+    my $text = "use ExtUtils::MakeMaker;\n";
+    $text .= "WriteMakefile(\n";
+    $text .= "    NAME    => " . _perlonjava_perl_string($args->{NAME}) . ",\n";
+    $text .= "    VERSION => " . _perlonjava_perl_string($args->{VERSION} || '0') . ",\n";
+
+    for my $arg_key (qw(PREREQ_PM BUILD_REQUIRES TEST_REQUIRES CONFIGURE_REQUIRES)) {
+        next unless ref $args->{$arg_key} eq 'HASH' && %{ $args->{$arg_key} };
+        $text .= "    $arg_key => {\n";
+        for my $module (sort keys %{ $args->{$arg_key} }) {
+            $text .= "        "
+                   . _perlonjava_perl_string($module)
+                   . " => "
+                   . _perlonjava_perl_string($args->{$arg_key}{$module})
+                   . ",\n";
+        }
+        $text .= "    },\n";
+    }
+
+    $text .= ");\n";
+    return $text;
+}
+
+#-> sub CPAN::Distribution::_try_perlonjava_fallback_pl
+# PerlOnJava: When Makefile.PL exits cleanly but creates no Makefile,
+# generate a fallback Makefile.PL from META.yml/META.json and re-run it
+# so PerlOnJava's WriteMakefile can install .pm files and preserve prereqs.
+sub _try_perlonjava_fallback_pl {
+    my ($self, $system) = @_;
+
+    my $args = $self->_perlonjava_fallback_pl_args_from_meta_files;
+    return 0 unless $args && $args->{NAME};
+    $args->{VERSION} ||= '0';
+
+    my $module_name = $args->{NAME};
+    my $version = $args->{VERSION};
 
     $CPAN::Frontend->myprint("PerlOnJava: Generating fallback Makefile.PL for $module_name $version\n");
 
-    # Write minimal Makefile.PL
+    # Write fallback Makefile.PL
     if (open my $fh, '>', 'Makefile.PL') {
-        print $fh <<"FALLBACK";
-use ExtUtils::MakeMaker;
-WriteMakefile(
-    NAME         => '$module_name',
-    VERSION      => '$version',
-);
-FALLBACK
+        print $fh $self->_perlonjava_fallback_makefile_pl($args);
         close $fh;
     } else {
         return 0;

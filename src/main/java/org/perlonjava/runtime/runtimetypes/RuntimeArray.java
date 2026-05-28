@@ -92,21 +92,21 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean add(RuntimeScalar value) {
-            owner.notePackageRootMutation();
+            owner.notePackageRootMutation(null, value);
             owner.markPackageRootedValue(value);
             return super.add(value);
         }
 
         @Override
         public void add(int index, RuntimeScalar element) {
-            owner.notePackageRootMutation();
+            owner.notePackageRootMutation(null, element);
             owner.markPackageRootedValue(element);
             super.add(index, element);
         }
 
         @Override
         public boolean addAll(java.util.Collection<? extends RuntimeScalar> c) {
-            owner.notePackageRootMutation();
+            owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
                 owner.markPackageRootedValue(value);
             }
@@ -115,7 +115,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean addAll(int index, java.util.Collection<? extends RuntimeScalar> c) {
-            owner.notePackageRootMutation();
+            owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
                 owner.markPackageRootedValue(value);
             }
@@ -124,7 +124,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public RuntimeScalar set(int index, RuntimeScalar element) {
-            owner.notePackageRootMutation();
+            RuntimeScalar previous = super.get(index);
+            owner.notePackageRootMutation(previous, element);
             owner.markPackageRootedValue(element);
             return super.set(index, element);
         }
@@ -132,21 +133,55 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar remove(int index) {
             RuntimeScalar previous = super.remove(index);
-            owner.notePackageRootMutation();
+            owner.notePackageRootMutation(previous, null);
             return previous;
         }
 
         @Override
         public boolean remove(Object o) {
             boolean removed = super.remove(o);
-            if (removed) owner.notePackageRootMutation();
+            if (removed && o instanceof RuntimeScalar scalar) {
+                owner.notePackageRootMutation(scalar, null);
+            }
             return removed;
         }
 
         @Override
         public void clear() {
-            if (!isEmpty()) owner.notePackageRootMutation();
+            if (!isEmpty()) owner.notePackageRootClear(this);
             super.clear();
+        }
+    }
+
+    private static boolean rootEdge(RuntimeScalar value) {
+        return value != null
+                && (value.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value.value instanceof RuntimeBase;
+    }
+
+    private boolean hasRootEdge(java.util.Collection<? extends RuntimeScalar> values) {
+        if (!isPackageGlobalRoot) return false;
+        for (RuntimeScalar value : values) {
+            if (rootEdge(value)) return true;
+        }
+        return false;
+    }
+
+    private void notePackageRootMutation(RuntimeScalar oldValue, RuntimeScalar newValue) {
+        if (isPackageGlobalRoot && (rootEdge(oldValue) || rootEdge(newValue))) {
+            MortalList.invalidateExternalRootSnapshot();
+        }
+    }
+
+    private void notePackageRootMutationIf(boolean invalidates) {
+        if (invalidates) {
+            MortalList.invalidateExternalRootSnapshot();
+        }
+    }
+
+    private void notePackageRootClear(java.util.Collection<? extends RuntimeScalar> values) {
+        if (hasRootEdge(values)) {
+            MortalList.invalidateExternalRootSnapshot();
         }
     }
 

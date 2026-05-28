@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for WWW::RobotRules.
+
+  WWW::RobotRules is a runtime dependency of libwww-perl. Its DBM-backed
+  tests require AnyDBM_File, which PerlOnJava does not currently provide.
+  The pure-Perl module is still needed by libwww-perl, so skip the
+  dependency test phase and stage it for downstream tests.
+match:
+  distribution: "^OALDERS/WWW-RobotRules-"
+test:
+  commandline: "PERLONJAVA_SKIP"
