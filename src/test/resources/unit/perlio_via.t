@@ -115,5 +115,13 @@ print {$reject_fh} 'raw';
 close $reject_fh;
 is slurp_raw($reject_file), 'raw', 'failed binmode leaves original handle installed';
 
+my $reject_open_file = tmpfile();
+push @cleanup, $reject_open_file;
+{
+    local $SIG{__WARN__} = sub { };
+    my $reject_open_fh;
+    ok !open($reject_open_fh, '>:via(Local::RejectVia)', $reject_open_file), 'failed PUSHED makes open false';
+}
+
 unlink @cleanup;
 done_testing;

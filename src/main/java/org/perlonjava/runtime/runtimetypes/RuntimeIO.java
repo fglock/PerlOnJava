@@ -727,8 +727,7 @@ public class RuntimeIO extends RuntimeScalar {
                     // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
                     fh.ioHandle = new SeekableJarHandle(is);
                     addHandle(fh.ioHandle);
-                    if (!fh.binmode(ioLayers).getBoolean()) {
-                        fh.close();
+                    if (!fh.applyOpenLayers(ioLayers)) {
                         return null;
                     }
                     return fh;
@@ -769,8 +768,7 @@ public class RuntimeIO extends RuntimeScalar {
             }
 
             // Apply any I/O layers
-            if (!fh.binmode(ioLayers).getBoolean()) {
-                fh.close();
+            if (!fh.applyOpenLayers(ioLayers)) {
                 return null;
             }
 
@@ -779,6 +777,24 @@ public class RuntimeIO extends RuntimeScalar {
             fh = null;
         }
         return fh;
+    }
+
+    private boolean applyOpenLayers(String ioLayers) {
+        RuntimeScalar status = binmode(ioLayers);
+        if (status.getBoolean()) {
+            return true;
+        }
+
+        if (containsViaLayer(ioLayers)) {
+            close();
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean containsViaLayer(String ioLayers) {
+        return ioLayers != null && ioLayers.contains("via(");
     }
 
     /**
@@ -870,8 +886,7 @@ public class RuntimeIO extends RuntimeScalar {
         // PerlIO::scalar is not a real OS file descriptor, so a plain scalar
         // open should not inherit the platform text layer such as Windows :crlf.
         if (!ioLayers.isEmpty()) {
-            if (!fh.binmode(ioLayers).getBoolean()) {
-                fh.close();
+            if (!fh.applyOpenLayers(ioLayers)) {
                 return null;
             }
         }
@@ -964,8 +979,7 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Apply any I/O layers (excluding the already-processed :noshell)
             if (!ioLayers.isEmpty()) {
-                if (!fh.binmode(ioLayers).getBoolean()) {
-                    fh.close();
+                if (!fh.applyOpenLayers(ioLayers)) {
                     return null;
                 }
             }

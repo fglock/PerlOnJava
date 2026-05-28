@@ -306,8 +306,11 @@ CPAN/end-to-end checks:
 - [x] Safe `binmode` push and CPAN integration (2026-05-28)
   - Changed `RuntimeIO.binmode()` to return status and preserve the original
     handle when layer push fails.
+  - Kept failed `open(..., ":via(...)")` pushes fatal while preserving the
+    previous non-fatal `open()` behavior for unsupported non-via layer specs.
   - Updated `IOOperator.binmode()` to return undef on failed layer push.
-  - Added `unit/perlio_via.t`.
+  - Added `unit/perlio_via.t`, including failed `binmode` and failed `open`
+    coverage for rejected `PUSHED`.
   - Fixed `MIME::QuotedPrint::encode_qp` final soft-break parity exposed by
     `PerlIO::via::QuotedPrint`.
   - Files: `RuntimeIO.java`, `IOOperator.java`, `MIMEQuotedPrint.java`,
@@ -321,6 +324,9 @@ CPAN/end-to-end checks:
 - `timeout 600 ./jcpan -t PerlIO::via::QuotedPrint` passed.
 - `timeout 600 ./jcpan -t PerlIO::via::Timeout` passed with the upstream
   socket test skipped for fork/Test::TCP.
+- `timeout 600 perl dev/tools/perl_test_runner.pl perl5_t/t/io/perlio_leaks.t
+  perl5_t/t/io/open.t` restored the expected counts: `io/perlio_leaks.t`
+  12/12 and `io/open.t` 191/216.
 - `timeout 120 ./jperl -I.../PerlIO-via-Timeout... -MPerlIO::via::Timeout=:all`
   file-write smoke passed.
 
