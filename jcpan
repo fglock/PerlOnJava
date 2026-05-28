@@ -65,6 +65,12 @@ export JPERL_TEST_TIMEOUT="${JPERL_TEST_TIMEOUT:-300}"
 # pkill'd. See AGENTS.md "ALWAYS WRAP jperl/jcpan IN timeout" rule.
 export JPERL_ORPHAN_EXIT=1
 
+# CPAN test suites should run with deterministic semantics. User-interface
+# color preferences such as NO_COLOR can change module behavior under test
+# (for example Color::ANSI::Util), so do not pass them into jcpan runs.
+unset NO_COLOR
+unset ANSI_COLORS_DISABLED
+
 # Expose the jperl launcher AND the jcpan launcher itself so distroprefs
 # (e.g. Moose.yml) can run upstream tests against the bundled shims with
 # `prove --exec jperl`, and bootstrap missing helper modules with

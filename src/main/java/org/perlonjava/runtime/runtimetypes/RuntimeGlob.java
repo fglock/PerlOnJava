@@ -709,9 +709,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     if (this.scalarSlot == null) {
                         this.scalarSlot = new RuntimeScalar();
                     }
-                    yield this.scalarSlot;
+                    yield this.scalarSlot.createReference();
                 }
-                yield GlobalVariable.getGlobalVariable(this.globName);
+                yield GlobalVariable.getGlobalVariable(this.globName).createReference();
             }
             case "ARRAY" -> {
                 // For anonymous globs (null globName), use local arraySlot
@@ -757,6 +757,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             }
             default -> new RuntimeScalar();
         };
+    }
+
+    /**
+     * Get the scalar slot value for scalar dereference of a glob.
+     * This is distinct from *glob{SCALAR}, which returns a reference to the slot.
+     */
+    public RuntimeScalar getGlobScalarSlot() {
+        if (this.globName == null) {
+            if (this.scalarSlot == null) {
+                this.scalarSlot = new RuntimeScalar();
+            }
+            return this.scalarSlot;
+        }
+        return GlobalVariable.getGlobalVariable(this.globName);
     }
 
     public RuntimeScalar getIO() {

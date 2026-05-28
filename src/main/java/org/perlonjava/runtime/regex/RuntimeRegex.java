@@ -1681,7 +1681,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return A string representing the regex reference.
      */
     public String toStringRef() {
-        return "REF(0x" + this.hashCode() + ")";
+        return "REGEXP(0x" + Integer.toHexString(this.hashCode()) + ")";
     }
 
     /**

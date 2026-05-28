@@ -291,10 +291,8 @@ sub get_symbol {
     my $entry_ref = \$namespace->{$name};
 
     if (ref($entry_ref) eq 'GLOB') {
-        # PerlOnJava: avoid *GLOB{SCALAR} (which our impl returns as
-        # value, not ref). For SCALAR type, return a direct symbol-table
-        # ref so $stash->get_symbol('$VERSION') works for Class::Load /
-        # version detection. ARRAY/HASH/CODE/IO continue using *{...}{type}.
+        # PerlOnJava: return a direct symbol-table scalar ref. This keeps
+        # historical behavior here and avoids vivifying unrelated glob slots.
         if ($type eq 'SCALAR') {
             no strict 'refs';
             return \${ $self->name . '::' . $name };

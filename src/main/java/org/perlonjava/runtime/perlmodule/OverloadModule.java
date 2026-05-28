@@ -42,9 +42,8 @@ public class OverloadModule extends PerlModuleBase {
         RuntimeScalar scalar = args.get(0);
 
         return switch (scalar.type) {
-            case REFERENCE -> new RuntimeScalar(scalar.toStringRef()).getList();
-            case ARRAYREFERENCE, HASHREFERENCE, CODE, GLOB, GLOBREFERENCE, FORMAT, REGEX ->
-                    new RuntimeScalar(((RuntimeBase) scalar.value).toStringRef()).getList();
+            case REFERENCE, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOB, GLOBREFERENCE, FORMAT, REGEX ->
+                    new RuntimeScalar(scalar.toStringRef()).getList();
             default ->
                     // For non-references, return the raw string value
                     new RuntimeScalar(scalar.toStringRef()).getList();

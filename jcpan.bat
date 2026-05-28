@@ -26,6 +26,9 @@ rem Enable orphan-exit watchdog in every jperl this run spawns — when
 rem the parent jcpan dies, each child JVM self-exits within ~4s instead
 rem of getting reparented to PID 1 and burning 100% CPU forever.
 set "JPERL_ORPHAN_EXIT=1"
+rem Keep CPAN test semantics independent from the caller's UI color settings.
+set "NO_COLOR="
+set "ANSI_COLORS_DISABLED="
 rem Expose jperl and jcpan launchers, and prepend SCRIPT_DIR to PATH so
 rem shell-spawned subprocesses (distroprefs commandlines, prove --exec,
 rem etc.) can find jperl/jcpan without tokens that don't expand in
