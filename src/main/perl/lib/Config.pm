@@ -68,6 +68,12 @@ my $user_home = getProperty('user.home') || '';
 my $user_dir = getProperty('user.dir') || '';
 my $java_home = getProperty('java.home') || '';
 my $user_name = getProperty('user.name') || 'unknown';
+my $perlonjava_home = $user_home
+    ? _catdir($file_separator, $user_home, '.perlonjava')
+    : '.perlonjava';
+my $core_privlib = _catdir($file_separator, $perlonjava_home, 'core', 'lib', 'perl5', '5.42.0');
+my $core_archlib = _catdir($file_separator, $core_privlib, "java-$java_version-$os_arch");
+_ensure_dir(_catdir($file_separator, $core_archlib, 'CORE'));
 
 # Best-effort hostname; falls back to "localhost" if Java doesn't expose it.
 my $host_name = eval {
@@ -133,6 +139,8 @@ $os_name =~ s/\s+/_/g;
     # implement full taint checking. This allows tests that check for taint
     # support to skip gracefully.
     ccflags => '-DSILENT_NO_TAINT_SUPPORT',
+    ldflags => '',
+    lddlflags => '',
     optimize => '',
 
     # Library/path configuration
@@ -154,9 +162,10 @@ $os_name =~ s/\s+/_/g;
     cf_by     => $user_name,
     myhostname => $host_name,
 
-    # Standard Perl paths (relative to jar or filesystem)
-    archlibexp => 'perlonjava/lib/perl5/5.42.0/' . "java-$java_version-$os_arch",
-    privlibexp => 'perlonjava/lib/perl5/5.42.0',
+    # Standard Perl paths. The core exp paths must be real directories because
+    # CPAN build helpers such as ExtUtils::CBuilder probe $archlibexp/CORE.
+    archlibexp => $core_archlib,
+    privlibexp => $core_privlib,
     sitearchexp => 'perlonjava/lib/perl5/site_perl/5.42.0/' . "java-$java_version-$os_arch",
     sitelibexp => 'perlonjava/lib/perl5/site_perl/5.42.0',
     vendorarchexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0/' . "java-$java_version-$os_arch",
@@ -350,6 +359,33 @@ $os_name =~ s/\s+/_/g;
 
 sub non_bincompat_options() {}
 sub bincompat_options() {}
+
+sub _catdir {
+    my ($sep, @parts) = @_;
+    my $path = shift @parts;
+    for my $part (@parts) {
+        next unless defined $part && length $part;
+        $path =~ s/\Q$sep\E+\z//;
+        $path .= $sep . $part;
+    }
+    return $path;
+}
+
+sub _ensure_dir {
+    my ($dir) = @_;
+    return if -d $dir;
+
+    my $sep = $file_separator;
+    my @parts = grep length, split /\Q$sep\E+/, $dir;
+    my $current = $dir =~ /^\Q$sep\E/ ? $sep : '';
+
+    for my $part (@parts) {
+        $current = length($current) && $current ne $sep
+            ? _catdir($sep, $current, $part)
+            : $current . $part;
+        mkdir $current unless -d $current;
+    }
+}
 
 # Return a string describing the perl configuration (like perl -V)
 sub myconfig {
