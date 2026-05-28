@@ -69,6 +69,20 @@ my $user_dir = getProperty('user.dir') || '';
 my $java_home = getProperty('java.home') || '';
 my $user_name = getProperty('user.name') || 'unknown';
 
+sub _perl_os_name {
+    my ($name) = @_;
+    my $lc = lc($name || 'unknown');
+    return 'MSWin32' if $lc =~ /^win/;
+    return 'darwin'  if $lc =~ /^(?:mac|darwin)/;
+    return 'linux'   if $lc =~ /(?:nix|nux|linux)/;
+    return 'solaris' if $lc =~ /(?:sunos|solaris)/;
+    return 'aix'     if $lc =~ /aix/;
+    return 'freebsd' if $lc =~ /freebsd/;
+    return 'openbsd' if $lc =~ /openbsd/;
+    $lc =~ s/\s+//g;
+    return $lc;
+}
+
 # Best-effort hostname; falls back to "localhost" if Java doesn't expose it.
 my $host_name = eval {
     require Sys::Hostname;
@@ -104,9 +118,9 @@ my $system_cc = do {
     $found || ($is_win ? 'cl' : 'cc');
 };
 
-# Normalize OS name
-$os_name = lc($os_name);
-$os_name =~ s/\s+/_/g;
+# Normalize OS name to Perl's $^O conventions.
+$os_name = _perl_os_name($os_name);
+my $is_windows = $os_name eq 'MSWin32';
 
 # tie returns the object, so the value returned to require will be true.
 %Config = (
@@ -258,17 +272,17 @@ $os_name =~ s/\s+/_/g;
     # Signal handling - signal 0 is ZERO (used for process existence checks)
     # Note: Signal names vary by OS. This is a common POSIX subset.
     # The index in the space-separated list corresponds to the signal number.
-    sig_name => ($os_name =~ /win/
+    sig_name => ($is_windows
         ? 'ZERO INT ILL FPE SEGV TERM ABRT BREAK'
         : 'ZERO HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM'),
-    sig_num => ($os_name =~ /win/
+    sig_num => ($is_windows
         ? '0 2 4 8 11 15 22 21'
         : '0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15'),
 
     # Executable
     obj_ext => '.o',
-    exe_ext => $os_name =~ /win/ ? '.exe' : '',
-    _exe => $os_name =~ /win/ ? '.exe' : '',
+    exe_ext => $is_windows ? '.exe' : '',
+    _exe => $is_windows ? '.exe' : '',
     perlpath => $^X,  # Path to the perl interpreter (jperl)
     startperl => '#!' . $^X,  # Shebang line for Perl scripts
     sharpbang => '#!',  # Shebang prefix

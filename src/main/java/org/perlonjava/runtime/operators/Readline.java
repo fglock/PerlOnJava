@@ -81,10 +81,9 @@ public class Readline {
                 (rs == null && rsScalar.type == RuntimeScalarType.UNDEF);
         if (isSlurp) {
             // Match Perl's semantics: a slurp call on a fresh handle returns
-            // the file contents (possibly the empty string) and leaves the
-            // handle at EOF; the *next* call returns undef. If we are already
-            // at EOF on entry, this is that "next" call -> undef.
-            if (runtimeIO.eof().getBoolean()) {
+            // the file contents (possibly the empty string) even if the
+            // handle is positioned at EOF; the next call returns undef.
+            if (runtimeIO.eof().getBoolean() && runtimeIO.currentLineNumber > 0) {
                 return scalarUndef;
             }
             StringBuilder content = new StringBuilder();
