@@ -1104,6 +1104,9 @@ public class PrototypeArgs {
             // but \my(@bar) should produce an ARRAYREFERENCE, same as \my @bar.
             // Unwrap the ListNode so we get OperatorNode("my", OperatorNode("@")).
             referenceArg = unwrapMyListDeclaration(referenceArg);
+
+            validateBackslashPrototypeArgument(parser, args, refType, referenceArg);
+
             // For \& prototype, check for invalid forms like &foo(), foo(), or bareword foo
             if (refType == '&') {
                 String subName = parser.ctx.symbolTable.getCurrentSubroutine();
@@ -1209,6 +1212,68 @@ public class PrototypeArgs {
             prototypeIndex++;
         }
         return prototypeIndex;  // Return index of ']'; caller's i++ advances past it
+    }
+
+    private static void validateBackslashPrototypeArgument(Parser parser, ListNode args, char refType, Node referenceArg) {
+        if (refType != '$' && refType != '@' && refType != '%') {
+            return;
+        }
+
+        Character actualSigil = sigilForBackslashPrototypeArg(referenceArg);
+        if (actualSigil == null || actualSigil == refType) {
+            return;
+        }
+
+        String expected = switch (refType) {
+            case '$' -> "scalar";
+            case '@' -> "array";
+            case '%' -> "hash";
+            default -> "reference";
+        };
+        String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+        String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
+        parser.throwError("Type of arg " + (args.elements.size() + 1) + subNamePart
+                + " must be " + expected + " (not " + describeBackslashPrototypeArg(referenceArg) + ")");
+    }
+
+    private static Character sigilForBackslashPrototypeArg(Node node) {
+        if (!(node instanceof OperatorNode opNode)) {
+            return null;
+        }
+        if (opNode.operator.equals("$") || opNode.operator.equals("@") || opNode.operator.equals("%")) {
+            return opNode.operator.charAt(0);
+        }
+        if (opNode.operator.equals("my") || opNode.operator.equals("our") || opNode.operator.equals("local")) {
+            return sigilForBackslashPrototypeArg(opNode.operand);
+        }
+        return null;
+    }
+
+    private static String describeBackslashPrototypeArg(Node node) {
+        String prefix = "";
+        while (node instanceof OperatorNode opNode
+                && (opNode.operator.equals("my") || opNode.operator.equals("our") || opNode.operator.equals("local"))) {
+            if (opNode.operator.equals("my")) {
+                prefix = "private ";
+            } else if (opNode.operator.equals("our")) {
+                prefix = "our ";
+            } else {
+                prefix = "local ";
+            }
+            node = opNode.operand;
+        }
+
+        Character sigil = sigilForBackslashPrototypeArg(node);
+        if (sigil != null) {
+            String type = switch (sigil) {
+                case '$' -> "scalar";
+                case '@' -> "array";
+                case '%' -> "hash";
+                default -> "reference";
+            };
+            return prefix + type;
+        }
+        return prefix + "constant item";
     }
 
     public static boolean consumeCommaIfPresent(Parser parser, boolean isOptional) {

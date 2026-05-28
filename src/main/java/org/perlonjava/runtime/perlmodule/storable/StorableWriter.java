@@ -87,7 +87,11 @@ public final class StorableWriter {
             // wrapping in the output) and matches the corresponding
             // upstream `do_store` → `store` flow.
             if (value.type == RuntimeScalarType.REFERENCE) {
-                dispatch(c, (RuntimeScalar) value.value);
+                if (RuntimeScalarType.blessedId(value) != 0) {
+                    dispatchReferent(c, value);
+                } else {
+                    dispatch(c, (RuntimeScalar) value.value);
+                }
             } else {
                 dispatchReferent(c, value);
             }

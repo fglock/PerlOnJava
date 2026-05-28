@@ -67,6 +67,9 @@ public final class Blessed {
         // not a ref-to-ref). The cost: `freeze \$blessed_ref`
         // round-trips with one level lost. See item 8 in
         // dev/modules/storable_binary_format.md.
+        if (!org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(inner)) {
+            inner = inner.createReference();
+        }
         return ReferenceOperators.bless(inner, new RuntimeScalar(classname));
     }
 
@@ -94,6 +97,9 @@ public final class Blessed {
         String classname = c.getClass(ix);
         RuntimeScalar inner = r.dispatch(c);
         // See readBless above for the bare-container-flag rationale.
+        if (!org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(inner)) {
+            inner = inner.createReference();
+        }
         return ReferenceOperators.bless(inner, new RuntimeScalar(classname));
     }
 }
