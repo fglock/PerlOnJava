@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for UNIVERSAL::can.
+
+  UNIVERSAL::can is a dependency of Test::MockObject. Its upstream suite checks
+  exact diagnostics for function-style UNIVERSAL::can warnings, while the module
+  itself is usable for Test::MockObject's dependency surface. Skip only when it
+  is pulled as a dependency.
+match:
+  distribution: "^CHROMATIC/UNIVERSAL-can-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])UNIVERSAL::can($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

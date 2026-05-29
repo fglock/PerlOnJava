@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Error.
+
+  Error itself is pure Perl and works, but t/08warndie.t captures child
+  STDERR with fork().  PerlOnJava does not implement POSIX fork(), so patch
+  only that test file to skip on no-fork runtimes while keeping the rest of
+  the upstream suite active.
+match:
+  distribution: "^SHLOMIF/Error-"
+patches:
+  - "Error-0.17030/SkipForkWarndie.patch"

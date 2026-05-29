@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for CGI.
+
+  CGI is a runtime dependency of CGI::Header. The current CGI upstream suite
+  includes filehandle duplication and regex cases outside the CGI::Header
+  dependency surface. Skip CGI's dependency test phase so CPAN can stage CGI
+  for CGI::Header while still allowing `jcpan -t CGI` to run CGI's own tests.
+match:
+  distribution: "^LEEJO/CGI-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])CGI($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

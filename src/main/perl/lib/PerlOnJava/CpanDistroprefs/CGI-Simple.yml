@@ -1,0 +1,15 @@
+---
+comment: |
+  PerlOnJava distroprefs for CGI::Simple.
+
+  CGI::Simple is a build/test dependency of CGI::Header, but CGI::Header's
+  runtime code uses CGI.pm directly. CGI::Simple's full upstream suite still
+  exercises broader request-parsing paths that are not needed to test
+  CGI::Header. Skip this dependency test phase unless CGI::Simple itself is
+  the requested jcpan target.
+match:
+  distribution: "^MANWAR/CGI-Simple-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])CGI::Simple($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for UNIVERSAL::isa.
+
+  UNIVERSAL::isa is a dependency of Test::MockObject. Its standalone suite is
+  stricter than the dependency behavior required by Event::Notify, so skip only
+  for dependency installs.
+match:
+  distribution: "^ETHER/UNIVERSAL-isa-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])UNIVERSAL::isa($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Hook::LexWrap.
+
+  Test::SubCalls depends on Hook::LexWrap. Hook::LexWrap's own upstream suite
+  completes its assertions but emits TAP out of sequence under PerlOnJava's
+  harness, causing CPAN to reject the dependency. Skip only for dependency
+  installs so Test::SubCalls can exercise the runtime surface directly.
+match:
+  distribution: "^ETHER/Hook-LexWrap-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Hook::LexWrap($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

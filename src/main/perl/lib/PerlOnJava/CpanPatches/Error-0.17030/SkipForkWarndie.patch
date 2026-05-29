@@ -1,0 +1,19 @@
+--- t/08warndie.t.orig
++++ t/08warndie.t
+@@ -2,7 +2,14 @@
+ 
+ use strict;
+ use warnings;
+ 
+-use Test::More tests => 21;
++use Config ();
++use Test::More;
++
++if (!$Config::Config{d_fork} || $ENV{PERLONJAVA_EXECUTABLE} || $^X =~ /(?:^|[\/\\])jperl(?:\z|[.])/) {
++    plan skip_all => 't/08warndie.t requires fork() to capture child STDERR';
++}
++
++plan tests => 21;
+ 
+ use Error qw/ :warndie /;
+ 

@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::MockObject.
+
+  Event::Notify uses Test::MockObject in its own tests. Test::MockObject's
+  upstream suite also covers Extends.pm internals that require Devel::Peek::CvGV
+  and exact UNIVERSAL warning diagnostics not needed by Event::Notify. Skip the
+  dependency test phase unless Test::MockObject itself is the jcpan target.
+match:
+  distribution: "^CHROMATIC/Test-MockObject-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Test::MockObject($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"
