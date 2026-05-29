@@ -26,16 +26,27 @@ sub import {
 		}
 	    }
 	    $sym = "${callpack}::$sym" unless $sym =~ /::/;
-	    *$sym =
-		(  $ch eq "\$" ? \$$sym
-		 : $ch eq "\@" ? \@$sym
-		 : $ch eq "\%" ? \%$sym
-		 : $ch eq "\*" ? \*$sym
-		 : $ch eq "\&" ? \&$sym 
-		 : do {
-		     require Carp;
-		     Carp::croak("'$_' is not a valid variable name");
-		 });
+	    if ($ch eq "\*") {
+		# A typeglob declaration predeclares all variable slots under
+		# strict vars. Materialize the common value slots explicitly so
+		# runtimes without native Gv slot metadata can make the same
+		# strict-vars decision as perl.
+		*$sym = \$$sym;
+		*$sym = \@$sym;
+		*$sym = \%$sym;
+		*$sym = \*$sym;
+	    }
+	    else {
+		*$sym =
+		    (  $ch eq "\$" ? \$$sym
+		     : $ch eq "\@" ? \@$sym
+		     : $ch eq "\%" ? \%$sym
+		     : $ch eq "\&" ? \&$sym 
+		     : do {
+			 require Carp;
+			 Carp::croak("'$_' is not a valid variable name");
+		     });
+	    }
 	} else {
 	    require Carp;
 	    Carp::croak("'$_' is not a valid variable name");

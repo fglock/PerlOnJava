@@ -814,6 +814,9 @@ public class ScopedSymbolTable {
         Integer bitPosition = warningBitPositions.get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().set(bitPosition);
+            // A normal "use warnings 'category'" downgrades any inherited
+            // FATAL bit for that category back to a regular warning.
+            warningFatalStack.peek().clear(bitPosition);
             // Clear the disabled bit when enabling
             warningDisabledStack.peek().clear(bitPosition);
         }

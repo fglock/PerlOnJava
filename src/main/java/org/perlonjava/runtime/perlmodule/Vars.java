@@ -62,7 +62,14 @@ public class Vars extends PerlModuleBase {
                 // Create a code variable
                 GlobalVariable.getGlobalCodeRef(fullName);
             } else if (variableString.startsWith("*")) {
-                // autovivify the bareword handle
+                // A typeglob declaration predeclares all ordinary variable
+                // slots under strict vars, not just the IO slot.
+                GlobalVariable.getGlobalVariable(fullName);
+                GlobalVariable.declareGlobalVariable(fullName);
+                GlobalVariable.getGlobalArray(fullName);
+                GlobalVariable.declareGlobalArray(fullName);
+                GlobalVariable.getGlobalHash(fullName);
+                GlobalVariable.declareGlobalHash(fullName);
                 GlobalVariable.getGlobalIO(fullName);
             } else {
                 throw new PerlCompilerException("Invalid variable type: " + variableString);
