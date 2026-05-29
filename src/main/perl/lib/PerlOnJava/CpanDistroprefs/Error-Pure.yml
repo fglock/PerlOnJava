@@ -9,7 +9,7 @@ comment: |
   Allow installation so downstream pure-Perl modules such as Class::Utils can
   test against the built module.
 match:
-  distribution: "^SKIM/Error-Pure-"
+  distribution: "^SKIM/Error-Pure-[0-9]"
 patches:
   - "Error-Pure-0.34/PlainLexicalConstants.patch"
 test:

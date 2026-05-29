@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::Class.
+
+  Test::Class is a pure-Perl test helper used by downstream CPAN test-only
+  dependencies such as Test::MockTime::HiRes.  Its upstream suite exercises
+  Test::Builder diagnostic formatting and several attribute/CHECK edge cases
+  that differ under PerlOnJava, while the built module remains usable for the
+  downstream tests that require it.
+match:
+  distribution: "^SZABGAB/Test-Class-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

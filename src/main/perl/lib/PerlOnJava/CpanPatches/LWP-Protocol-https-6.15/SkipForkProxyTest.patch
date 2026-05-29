@@ -1,0 +1,18 @@
+--- t/https_proxy.t.orig
++++ t/https_proxy.t
+@@ -6,12 +6,15 @@
+ use warnings;
+ use Test::More;
+ use File::Temp 'tempfile';
++use Config;
+ use IO::Socket::INET;
+ use IO::Select;
+ use Socket 'MSG_PEEK';
+ use LWP::UserAgent;
+ use LWP::Protocol::https;
+ 
++plan skip_all => "fork not implemented on this platform" unless $Config{d_fork};
++
+ plan skip_all => "fork not implemented on this platform" if
+     grep { $^O =~m{$_} } qw( MacOS VOS vmesa riscos amigaos );
+ 
