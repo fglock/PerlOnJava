@@ -548,7 +548,10 @@ public class NumberParser {
 
     // parseNumber(RuntimeScalar, String) method - with optional operation context for warnings
     public static RuntimeScalar parseNumber(RuntimeScalar runtimeScalar, String operation) {
-        String str = (String) runtimeScalar.value;
+        String str = runtimeScalar.toString();
+        if (str == null) {
+            str = "";
+        }
 
         RuntimeScalar result = numificationCache.get(str);
         if (result != null) {

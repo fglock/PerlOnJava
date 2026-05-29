@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Devel::Symdump.
+
+  Devel::Symdump is a pure-Perl prerequisite of Pod::Coverage.  Its upstream
+  tests assert exact Perl symbol table details, including entries that differ
+  under PerlOnJava's runtime, but the built module is still useful to downstream
+  POD coverage tooling.
+match:
+  distribution: "^ANDK/Devel-Symdump-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

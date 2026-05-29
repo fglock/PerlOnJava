@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava distroprefs for LWP::Protocol::https.
+
+  t/https_proxy.t forks a child process to run local proxy/server sockets.
+  PerlOnJava does not implement POSIX fork(), so skip that one test on
+  no-fork platforms while leaving the rest of the upstream suite intact.
+match:
+  distribution: "^OALDERS/LWP-Protocol-https-"
+patches:
+  - "LWP-Protocol-https-6.15/SkipForkProxyTest.patch"

@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for CGI::Widget::Tabs.
+
+  CGI::Widget::Tabs 1.14 declares Test::Distribution as a build requirement
+  even though t/01_distribution.t already treats it as optional author-test
+  coverage.  Pulling it in adds Pod::Coverage dependencies that are unrelated
+  to installing CGI::Widget::Tabs.
+
+  Its main test also tries to skip itself when neither CGI nor CGI::Minimal is
+  installed, but it emits a fixed 11-test plan first.  Patch the distribution
+  so these optional test dependencies are genuinely optional.
+match:
+  distribution: "^SRSHAH/CGI-Widget-Tabs-"
+patches:
+  - "CGI-Widget-Tabs-1.14/OptionalAuthorAndCGITests.patch"

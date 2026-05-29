@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Pod::Parser.
+
+  Pod::Parser supplies Pod::Find and Pod::Parser for Pod::Coverage.  The 1.67
+  test suite expects File::Find to resolve to a filesystem core-library path,
+  while PerlOnJava loads bundled core modules from jar:PERL5LIB.  Ignore that
+  packaging-path assertion so downstream CPAN distributions can install.
+match:
+  distribution: "^MAREKR/Pod-Parser-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

@@ -33,6 +33,8 @@ import java.util.regex.Pattern;
 public class XMLParserExpat extends PerlModuleBase {
 
     public static final String XS_VERSION = "2.56";
+    private static final Pattern SYSTEM_ID_PATTERN =
+            Pattern.compile("\\bSYSTEM\\s+(['\"])(.*?)\\1", Pattern.DOTALL);
 
     // Namespace separator character (same as expat's NSDELIM = 0xFC)
     private static final char NS_SEP = '\u00FC';
@@ -207,6 +209,9 @@ public class XMLParserExpat extends PerlModuleBase {
 
         // Base URI from InputSource for un-resolving SAX systemIds
         String parseBaseUri;
+
+        // Raw DTD system IDs keyed by SAX-resolved equivalents.
+        Map<String, String> rawSystemIds;
 
         // Protocol encoding (e.g. "ISO-8859-1") from ParserCreate
         String protocolEncoding;
@@ -715,9 +720,7 @@ public class XMLParserExpat extends PerlModuleBase {
                     ? xmlString.getBytes(StandardCharsets.ISO_8859_1)
                     : xmlString.getBytes(StandardCharsets.UTF_8);
             xmlBytes = convertEncoding(xmlBytes);
-            state.bytesProcessed = 0;
-            state.inputBytes = xmlBytes;
-            state.inputScanPos = 0;
+            prepareInputBytes(state, xmlBytes);
             doParse(state, new ByteArrayInputStream(xmlBytes));
             return scalarTrue.getList();
         } catch (PerlDieException e) {
@@ -784,9 +787,7 @@ public class XMLParserExpat extends PerlModuleBase {
 
             byte[] xmlBytes = baos.toByteArray();
             xmlBytes = convertEncoding(xmlBytes);
-            state.bytesProcessed = 0;
-            state.inputBytes = xmlBytes;
-            state.inputScanPos = 0;
+            prepareInputBytes(state, xmlBytes);
             doParse(state, new ByteArrayInputStream(xmlBytes));
             return scalarTrue.getList();
         } catch (PerlDieException e) {
@@ -840,9 +841,7 @@ public class XMLParserExpat extends PerlModuleBase {
                     : xml.getBytes(StandardCharsets.UTF_8);
             xmlBytes = convertEncoding(xmlBytes);
             state.partialIsByteString = false;
-            state.bytesProcessed = 0;
-            state.inputBytes = xmlBytes;
-            state.inputScanPos = 0;
+            prepareInputBytes(state, xmlBytes);
             doParse(state, new ByteArrayInputStream(xmlBytes));
             return scalarTrue.getList();
         } catch (PerlDieException e) {
@@ -998,6 +997,7 @@ public class XMLParserExpat extends PerlModuleBase {
                         sb.insert(insertPos, doctypeDecl);
                         byte[] newBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
                         state.inputBytes = newBytes;
+                        rememberRawSystemIdsFromInput(state);
                         input = new ByteArrayInputStream(newBytes);
                     }
                 }
@@ -1552,12 +1552,13 @@ public class XMLParserExpat extends PerlModuleBase {
         @Override
         public void unparsedEntityDecl(String name, String publicId, String systemId,
                                        String notationName) throws SAXException {
+            String rawSysId = unresolveSysId(systemId, state);
+            rememberRawSystemId(rawSysId, state);
             if (state.unparsedHandler != null) {
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(name));
                 RuntimeArray.push(callArgs, state.base != null ? new RuntimeScalar(state.base) : scalarUndef);
-                String rawSysId = unresolveSysId(systemId, state);
                 RuntimeArray.push(callArgs, new RuntimeScalar(rawSysId != null ? rawSysId : ""));
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(notationName));
@@ -1574,8 +1575,7 @@ public class XMLParserExpat extends PerlModuleBase {
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(name));
                 RuntimeArray.push(callArgs, scalarUndef); // val (undef for external entities)
-                String rawSysId2 = unresolveSysId(systemId, state);
-                RuntimeArray.push(callArgs, rawSysId2 != null ? new RuntimeScalar(rawSysId2) : scalarUndef);
+                RuntimeArray.push(callArgs, rawSysId != null ? new RuntimeScalar(rawSysId) : scalarUndef);
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(notationName)); // ndata
                 RuntimeArray.push(callArgs, scalarZero); // is_param
@@ -1590,12 +1590,13 @@ public class XMLParserExpat extends PerlModuleBase {
         @Override
         public void notationDecl(String name, String publicId, String systemId)
                 throws SAXException {
+            String rawNotSysId = unresolveSysId(systemId, state);
+            rememberRawSystemId(rawNotSysId, state);
             if (state.notationHandler != null) {
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(name));
                 RuntimeArray.push(callArgs, state.base != null ? new RuntimeScalar(state.base) : scalarUndef);
-                String rawNotSysId = unresolveSysId(systemId, state);
                 RuntimeArray.push(callArgs, rawNotSysId != null ? new RuntimeScalar(rawNotSysId) : scalarUndef);
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 try {
@@ -1665,6 +1666,7 @@ public class XMLParserExpat extends PerlModuleBase {
 
         @Override
         public void startDTD(String name, String publicId, String systemId) throws SAXException {
+            rememberRawSystemId(systemId, state);
             if (state.doctypeHandler != null) {
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
@@ -1732,12 +1734,13 @@ public class XMLParserExpat extends PerlModuleBase {
         @Override
         public void externalEntityDecl(String name, String publicId, String systemId)
                 throws SAXException {
+            String rawExtSysId = unresolveSysId(systemId, state);
+            rememberRawSystemId(rawExtSysId, state);
             if (state.entityDeclHandler != null) {
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(name));
                 RuntimeArray.push(callArgs, scalarUndef); // value (external entities have no inline value)
-                String rawExtSysId = unresolveSysId(systemId, state);
                 RuntimeArray.push(callArgs, rawExtSysId != null ? new RuntimeScalar(rawExtSysId) : scalarUndef);
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 RuntimeArray.push(callArgs, scalarUndef); // notation
@@ -2135,6 +2138,10 @@ public class XMLParserExpat extends PerlModuleBase {
      */
     private static String unresolveSysId(String systemId, ParserState state) {
         if (systemId == null) return null;
+        if (state.rawSystemIds != null) {
+            String raw = state.rawSystemIds.get(systemId);
+            if (raw != null) return raw;
+        }
         // Try to strip the parse base URI that we set on the InputSource
         if (state.parseBaseUri != null && systemId.startsWith(state.parseBaseUri)) {
             return systemId.substring(state.parseBaseUri.length());
@@ -2153,30 +2160,48 @@ public class XMLParserExpat extends PerlModuleBase {
                 return systemId.substring(base.length());
             }
         }
-        // Try to strip file:// + CWD prefix to recover relative or absolute file paths
+        // Preserve explicit file: URIs. Expat passes the lexical SYSTEM id through
+        // to Perl callbacks, so `file:///tmp/x` must not become `/tmp/x`.
         if (systemId.startsWith("file:")) {
-            try {
-                String cwd = System.getProperty("user.dir");
-                String filePath;
-                if (systemId.startsWith("file:///")) {
-                    filePath = systemId.substring(7); // file:///path -> /path
-                } else if (systemId.startsWith("file://")) {
-                    filePath = systemId.substring(7); // file://path -> path  
-                } else if (systemId.startsWith("file:/")) {
-                    filePath = systemId.substring(5); // file:/path -> /path
-                } else {
-                    filePath = systemId.substring(5); // file:path -> path
-                }
-                if (cwd != null) {
-                    String cwdWithSlash = cwd.endsWith("/") ? cwd : cwd + "/";
-                    if (filePath.startsWith(cwdWithSlash)) {
-                        return filePath.substring(cwdWithSlash.length());
-                    }
-                }
-                return filePath;
-            } catch (Exception ignored) {}
+            return systemId;
         }
         return systemId;
+    }
+
+    private static void rememberRawSystemId(String rawSystemId, ParserState state) {
+        if (rawSystemId == null) return;
+        if (state.rawSystemIds == null) {
+            state.rawSystemIds = new HashMap<>();
+        }
+        state.rawSystemIds.put(rawSystemId, rawSystemId);
+        try {
+            java.net.URI rawUri = new java.net.URI(rawSystemId);
+            if (rawUri.isAbsolute()) {
+                state.rawSystemIds.put(rawUri.toString(), rawSystemId);
+            } else if (rawSystemId.startsWith("/")) {
+                state.rawSystemIds.put(new File(rawSystemId).toURI().toString(), rawSystemId);
+            } else if (state.parseBaseUri != null) {
+                state.rawSystemIds.put(new java.net.URI(state.parseBaseUri).resolve(rawUri).toString(), rawSystemId);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void prepareInputBytes(ParserState state, byte[] xmlBytes) {
+        state.bytesProcessed = 0;
+        state.inputBytes = xmlBytes;
+        state.inputScanPos = 0;
+        state.rawSystemIds = null;
+        rememberRawSystemIdsFromInput(state);
+    }
+
+    private static void rememberRawSystemIdsFromInput(ParserState state) {
+        if (state.inputBytes == null) return;
+        String input = new String(state.inputBytes, StandardCharsets.ISO_8859_1);
+        Matcher matcher = SYSTEM_ID_PATTERN.matcher(input);
+        while (matcher.find()) {
+            rememberRawSystemId(matcher.group(2), state);
+        }
     }
 
     /**

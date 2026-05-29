@@ -205,4 +205,29 @@ subtest 'gethostbyname operator override' => sub {
        'CORE::gethostbyname still bypasses override');
 };
 
+subtest 'time family CORE::GLOBAL overrides' => sub {
+    plan tests => 8;
+
+    BEGIN {
+        *CORE::GLOBAL::localtime = sub (;$) {
+            return wantarray ? ('local-list', $_[0] // 'undef') : 'local-scalar:' . ($_[0] // 'undef');
+        };
+        *CORE::GLOBAL::gmtime = sub (;$) {
+            return wantarray ? ('gm-list', $_[0] // 'undef') : 'gm-scalar:' . ($_[0] // 'undef');
+        };
+    }
+
+    is(scalar(localtime), 'local-scalar:undef', 'localtime override works without args');
+    is(scalar(localtime 123), 'local-scalar:123', 'localtime override works with an arg');
+    is_deeply([ localtime 456 ], [ 'local-list', 456 ], 'localtime override preserves list context');
+
+    my @values = (0, 1, 2);
+    is(scalar(localtime @values), 'local-scalar:3', 'localtime override applies unary prototype');
+
+    is(scalar(gmtime), 'gm-scalar:undef', 'gmtime override works without args');
+    is(scalar(gmtime 789), 'gm-scalar:789', 'gmtime override works with an arg');
+    is_deeply([ gmtime 987 ], [ 'gm-list', 987 ], 'gmtime override preserves list context');
+    is(scalar(gmtime @values), 'gm-scalar:3', 'gmtime override applies unary prototype');
+};
+
 done_testing();
