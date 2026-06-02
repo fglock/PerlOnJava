@@ -57,6 +57,7 @@ public class BytecodeInterpreter {
         return scalar instanceof ReadOnlyAlias
                 || scalar.captureCount > 0
                 || scalar.captureRefCountOwned > 0
+                || scalar.referencedByScalarReference
                 || scalar.type == RuntimeScalarType.TIED_SCALAR
                 || scalar.type == RuntimeScalarType.READONLY_SCALAR;
     }
@@ -513,9 +514,6 @@ public class BytecodeInterpreter {
                                 int dest = bytecode[pc++];
                                 int src = bytecode[pc++];
                                 RuntimeBase srcVal = registers[src];
-                                if (dest == 51 && srcVal instanceof RuntimeList) {
-                                    new RuntimeException("TRACE ALIAS dest=51 src=" + src + " putting list in reg 51, srcVal=" + srcVal).printStackTrace();
-                                }
                                 registers[dest] = isImmutableProxy(srcVal) ? ensureMutableScalar(srcVal) : srcVal;
                             }
 

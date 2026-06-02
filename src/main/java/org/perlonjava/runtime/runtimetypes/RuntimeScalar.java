@@ -217,6 +217,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean ownsScalarReferenceContents;
 
+    /**
+     * True once a scalar reference has been created to this scalar, e.g.
+     * {@code \$x}. Interpreter lexical assignment must preserve the scalar
+     * object's identity after that point so existing references continue to
+     * observe later assignments to the lexical.
+     */
+    public boolean referencedByScalarReference;
+
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
@@ -2624,6 +2632,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // store the RuntimeGlob directly, losing the reference to this container.
     // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
+        referencedByScalarReference = true;
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.REFERENCE;
         result.value = this;
@@ -3488,6 +3497,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.value = this.value;
         currentState.blessId = this.blessId;
         currentState.ownsScalarReferenceContents = this.ownsScalarReferenceContents;
+        currentState.referencedByScalarReference = this.referencedByScalarReference;
         currentState.tainted = this.tainted;
         // Push the current state onto the stack
         dynamicStateStack.push(currentState);
@@ -3510,6 +3520,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
+            boolean referencedDuringLocal = this.referencedByScalarReference;
 
             RuntimeBase displacedBase = null;
             if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -3523,6 +3534,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.value = previousState.value;
             this.blessId = previousState.blessId;
             this.ownsScalarReferenceContents = previousState.ownsScalarReferenceContents;
+            this.referencedByScalarReference =
+                    previousState.referencedByScalarReference || referencedDuringLocal;
             this.tainted = previousState.tainted;
 
             releaseScalarReferenceContents(scalarReferenceContents);
