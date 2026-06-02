@@ -21,7 +21,8 @@
 #   perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Test specific modules
 #   perl dev/tools/cpan_random_tester.pl --modules list.txt # Test modules from file
 #   perl dev/tools/cpan_random_tester.pl --report-only      # Regenerate .md from .dat
-#   perl dev/tools/cpan_random_tester.pl --timeout 120      # 2 min (overrides below win)
+#   perl dev/tools/cpan_random_tester.pl --timeout 120      # 2 min soft timeout
+#   perl dev/tools/cpan_random_tester.pl --jobs 8           # Parallelize CPAN test files
 #   perl dev/tools/cpan_random_tester.pl --install           # Install mode (deps stay)
 #
 # Output:
@@ -31,7 +32,7 @@
 #   - dev/cpan-reports/cpan-compatibility-skip.dat  (machine-readable skip list)
 #   - Per-module logs to /tmp/cpan_random_logs/
 #
-# Run with `perl` (not jperl) because this script uses fork and backticks.
+# Run with `perl` (not jperl) because this script uses fork.
 #
 # Prerequisites:
 #   - Build PerlOnJava first: make dev
@@ -45,6 +46,7 @@ use File::Basename;
 use File::Spec;
 use File::Path qw(make_path);
 use Getopt::Long;
+use IO::Select;
 use POSIX qw(strftime WNOHANG);
 use Time::Local qw(timelocal);
 
@@ -62,8 +64,8 @@ my $skip_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-skip.dat
 my $log_dir      = '/tmp/cpan_random_logs';
 my $KILL_AFTER   = 10;  # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 
-# jcpan -t timeouts (seconds): distribution root module -> wall clock.  Overrides --timeout
-# for that target only (heavy test suites).
+# jcpan -t soft timeouts (seconds): distribution root module -> timeout.
+# Overrides --timeout for that target only (heavy test suites).
 my %MODULE_TIMEOUT_SECONDS = (
     'DBIx::Class' => 3600,
     'Image::ExifTool' => 3600,
@@ -76,7 +78,11 @@ my $packages_gz  = glob('~/.cpan/sources/modules/02packages.details.txt.gz');
 # CLI options
 # ──────────────────────────────────────────────────────────────────────
 my $count       = 10;
-my $timeout     = 1200;
+my $timeout     = 1200;   # soft wall-clock timeout; progress can extend it
+my $activity_grace = 300; # after soft timeout, allow this many idle seconds
+my $max_runtime = 0;      # 0 = no hard cap beyond activity timeout
+my $progress_interval = 60;
+my $jcpan_jobs  = 1;      # passed through as `jcpan --jobs N`
 my $report_only = 0;
 my $install     = 0;      # --install: use jcpan (install) instead of jcpan -t
 my $retest_age  = 0;      # --retest-age DAYS: include modules tested N+ days ago
@@ -87,6 +93,10 @@ my $seed;
 GetOptions(
     'count|n=i'    => \$count,
     'timeout=i'    => \$timeout,
+    'activity-grace=i' => \$activity_grace,
+    'max-runtime=i' => \$max_runtime,
+    'progress-interval=i' => \$progress_interval,
+    'jobs=i'       => \$jcpan_jobs,
     'report-only'  => \$report_only,
     'install'      => \$install,
     'retest-age=i' => \$retest_age,
@@ -99,6 +109,12 @@ if ($help) {
     print_usage();
     exit 0;
 }
+
+die "--timeout must be a positive integer\n" unless $timeout > 0;
+die "--activity-grace must be a positive integer\n" unless $activity_grace > 0;
+die "--max-runtime must be 0 or a positive integer\n" unless $max_runtime >= 0;
+die "--progress-interval must be 0 or a positive integer\n" unless $progress_interval >= 0;
+die "--jobs must be a positive integer\n" unless $jcpan_jobs > 0;
 
 sub effective_timeout_for {
     my ($module) = @_;
@@ -234,10 +250,11 @@ if ($modules_arg) {
     @selected = @pool[0 .. $count - 1];
 }
 
-printf "\nTesting %d randomly selected modules (default timeout: %ds, commit: %s):\n",
-    scalar @selected, $timeout, $git_commit;
+printf "\nTesting %d randomly selected modules (soft timeout: %ds, activity grace: %ds, jcpan jobs: %d, commit: %s):\n",
+    scalar @selected, $timeout, $activity_grace, $jcpan_jobs, $git_commit;
+printf "Hard max runtime: %ds\n", $max_runtime if $max_runtime;
 if (%MODULE_TIMEOUT_SECONDS) {
-    print "Per-module timeouts: ",
+    print "Per-module soft timeouts: ",
         join(', ', map { "$_=${MODULE_TIMEOUT_SECONDS{$_}}s" } sort keys %MODULE_TIMEOUT_SECONDS),
         "\n";
 }
@@ -256,15 +273,13 @@ my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
 
 for my $module (@selected) {
     $target_count++;
-    my $mode = $install ? '' : '-t';
     my $module_timeout = effective_timeout_for($module);
-    printf "[%d/%d] jcpan %s %s (timeout %ds)\n",
-        $target_count, scalar @selected, $mode, $module, $module_timeout;
+    my @cmd = jcpan_command_for($module);
+    printf "[%d/%d] %s (soft timeout %ds, activity grace %ds)\n",
+        $target_count, scalar @selected, command_label(@cmd), $module_timeout, $activity_grace;
 
     my $start = time();
-    my $cmd = $install ? "$jcpan $module" : "$jcpan -t $module";
-
-    my ($output, $timed_out) = run_with_timeout($cmd, $module_timeout);
+    my ($output, $timed_out, $timeout_error) = run_with_timeout(\@cmd, $module_timeout);
 
     my $elapsed = sprintf('%.1f', time() - $start);
 
@@ -273,15 +288,19 @@ for my $module (@selected) {
     # Parse ALL module results from the output (target + deps)
     my @all_results = parse_all_module_results($output);
 
+    # A timed-out target can still have parseable dependency results in the
+    # output. Preserve those, but make sure the target itself is recorded too.
+    if ($timed_out && !grep { ($_->{module} // '') eq $module } @all_results) {
+        push @all_results, {
+            module => $module, status => 'FAIL',
+            tests => undef, pass_count => undef,
+            error => $timeout_error || "TIMEOUT (>${module_timeout}s)",
+        };
+    }
+
     # If nothing parsed, check for special cases before recording failure
     if (!@all_results) {
-        if ($timed_out) {
-            push @all_results, {
-                module => $module, status => 'FAIL',
-                tests => undef, pass_count => undef,
-                error => "TIMEOUT (>${module_timeout}s)",
-            };
-        } elsif ($output =~ /\Q$module\E is up to date/) {
+        if ($output =~ /\Q$module\E is up to date/) {
             # Already installed, jcpan skipped it — not a failure
             printf "  (already installed, skipped)\n\n";
             next;
@@ -731,107 +750,185 @@ sub parse_module_list {
     return @modules;
 }
 
-# Run a command with a hard timeout.  On timeout, kills the entire
-# process group so no orphaned jperl/java children survive.
-# Returns ($output, $timed_out).
-#
-# Strategy (borrowed from perl_test_runner.pl):
-#   1. Prefer external `timeout` / `gtimeout` — they send SIGTERM to the
-#      process group and follow up with SIGKILL (-k) if the child (e.g.
-#      a wedged JVM) ignores SIGTERM. Skipped on Windows because
-#      `timeout.exe` there is a sleep-with-countdown, NOT GNU coreutils.
-#   2. Fallback: fork + setpgrp + kill(-$pid) for platforms without
-#      coreutils (and for Windows, where it degrades to a plain alarm).
+sub jcpan_command_for {
+    my ($module) = @_;
+    my @cmd = ($jcpan);
+    push @cmd, '--jobs', $jcpan_jobs if $jcpan_jobs > 1;
+    push @cmd, '-t' unless $install;
+    push @cmd, $module;
+    return @cmd;
+}
+
+sub command_label {
+    return join ' ', map { command_arg_label($_) } @_;
+}
+
+sub command_arg_label {
+    my ($arg) = @_;
+    return "''" if !defined($arg) || $arg eq '';
+    return $arg if $arg =~ /\A[A-Za-z0-9_:\.\/=+-]+\z/;
+    $arg =~ s/'/'"'"'/g;
+    return "'$arg'";
+}
+
+# Run a command with a progress-aware timeout.  The per-module timeout is a
+# soft wall clock: after it expires, output activity can keep the run alive.
+# Once the child has been idle for --activity-grace seconds after that soft
+# timeout, the whole process group is killed so no jperl/java child survives.
+# Returns ($output, $timed_out, $timeout_error).
 sub run_with_timeout {
     my ($cmd, $secs) = @_;
+    my @cmd = ref($cmd) eq 'ARRAY' ? @$cmd : ('/bin/sh', '-c', $cmd);
 
-    # --- Strategy 1: external timeout command ---
-    my $timeout_cmd = _find_timeout_cmd();
-    if ($timeout_cmd) {
-        my $full = "$timeout_cmd -k ${KILL_AFTER}s ${secs}s $cmd 2>&1";
-        my $output = `$full`;
-        my $exit_code = $? >> 8;
-        # 124 = SIGTERM sent and child exited, 137 = 128+SIGKILL (hard-killed
-        # by -k), 143 = 128+SIGTERM (child exited due to SIGTERM).
-        my $timed_out = ($exit_code == 124 || $exit_code == 137 || $exit_code == 143);
-        return ($output // '', $timed_out);
-    }
+    my $output        = '';
+    my $timed_out     = 0;
+    my $timeout_error = '';
 
-    # --- Strategy 2: fork + process-group kill ---
-    my $output    = '';
-    my $timed_out = 0;
+    pipe(my $pipe, my $writer) or do {
+        warn "pipe failed: $!\n";
+        return ('', 0, '');
+    };
 
-    my $pid = open my $pipe, '-|';
+    my $pid = fork();
     if (!defined $pid) {
         warn "fork failed: $!\n";
-        return ('', 0);
+        close $pipe;
+        close $writer;
+        return ('', 0, '');
     }
 
     if ($pid == 0) {
+        close $pipe;
         # Child: run in its own process group so kill(-pid) reaches
         # the entire tree (jcpan → jperl → java, make, etc.)
         setpgrp(0, 0);
+        open STDOUT, '>&', $writer or exit 127;
         open STDERR, '>&', \*STDOUT;
-        exec('/bin/sh', '-c', $cmd);
-        exit 127;
+        close $writer;
+        exec @cmd or do {
+            print STDERR "exec failed for " . command_label(@cmd) . ": $!\n";
+            exit 127;
+        };
     }
 
-    # Parent: read with alarm timeout
-    eval {
-        local $SIG{ALRM} = sub { die "TIMEOUT\n" };
-        alarm($secs);
-        local $/;
-        $output = <$pipe>;
-        alarm(0);
-    };
+    close $writer;
 
-    if ($@ && $@ =~ /TIMEOUT/) {
-        $timed_out = 1;
-        # Kill the entire process group (negative PID)
-        kill 'TERM', -$pid;
-        # Give children a moment to exit, then force-kill
-        my $reaped = 0;
-        for (1..10) {
-            if (waitpid($pid, WNOHANG) > 0) {
-                $reaped = 1;
+    my $selector      = IO::Select->new($pipe);
+    my $start         = time();
+    my $last_output   = $start;
+    my $soft_deadline = $start + $secs;
+    my $next_progress = $progress_interval ? $start + $progress_interval : 0;
+    my $pipe_open     = 1;
+    my $child_done    = 0;
+    my $term_sent_at  = 0;
+    my $kill_sent     = 0;
+
+    while ($pipe_open || !$child_done) {
+        my $now = time();
+
+        if (!$timed_out) {
+            if ($max_runtime && ($now - $start) >= $max_runtime) {
+                $timed_out = 1;
+                $timeout_error = sprintf(
+                    'TIMEOUT (runtime >%ds; last output %ds ago)',
+                    $max_runtime, $now - $last_output
+                );
+                $term_sent_at = $now;
+                terminate_process_group($pid, 'TERM');
+            } elsif ($now >= $soft_deadline && ($now - $last_output) >= $activity_grace) {
+                $timed_out = 1;
+                $timeout_error = sprintf(
+                    'TIMEOUT (soft limit %ds exceeded; no output for %ds)',
+                    $secs, $now - $last_output
+                );
+                $term_sent_at = $now;
+                terminate_process_group($pid, 'TERM');
+            }
+        }
+
+        if ($timed_out && !$child_done && !$kill_sent
+            && $term_sent_at && (time() - $term_sent_at) >= $KILL_AFTER) {
+            terminate_process_group($pid, 'KILL');
+            $kill_sent = 1;
+        }
+
+        my @ready;
+        if ($pipe_open) {
+            @ready = $selector->can_read(1);
+        } else {
+            select(undef, undef, undef, 1);
+        }
+        for my $fh (@ready) {
+            my $got = sysread $fh, my $chunk, 8192;
+            if (!defined $got) {
+                next if $!{EINTR};
+                $selector->remove($fh);
+                $pipe_open = 0;
                 last;
             }
-            select(undef, undef, undef, 0.2);
+            if ($got == 0) {
+                $selector->remove($fh);
+                $pipe_open = 0;
+                last;
+            }
+            $output .= $chunk;
+            $last_output = time();
         }
-        unless ($reaped) {
-            kill 'KILL', -$pid;
-            waitpid($pid, 0);
+
+        if (!$child_done) {
+            my $reaped = waitpid($pid, WNOHANG);
+            if ($reaped == $pid) {
+                $child_done = 1;
+            }
+        }
+
+        if (!$timed_out && $progress_interval && time() >= $next_progress) {
+            print_progress_line($start, $last_output, $secs);
+            $next_progress += $progress_interval
+                while $next_progress && $next_progress <= time();
+        }
+
+        # If SIGKILL somehow did not close the pipe, do not let the monitor
+        # become the new hang.  The process group was already force-killed.
+        if ($timed_out && $kill_sent && !$child_done
+            && $term_sent_at && (time() - $term_sent_at) >= ($KILL_AFTER + 5)) {
+            last;
         }
     }
 
     close $pipe;    # always close to avoid FD leak
-    # Reap child if not already reaped (close may have done it, but
-    # waitpid on an already-reaped pid is harmless)
-    waitpid($pid, WNOHANG) unless $timed_out;
+    waitpid($pid, WNOHANG) unless $child_done;
 
-    return ($output // '', $timed_out);
+    return ($output // '', $timed_out, $timeout_error);
 }
 
-{
-    my $_timeout_cmd;       # cached result (undef = not checked yet)
-    my $_checked = 0;
-
-    sub _find_timeout_cmd {
-        return $_timeout_cmd if $_checked;
-        $_checked = 1;
-        # Windows ships a `timeout.exe` that is a sleep-with-countdown
-        # (NOT GNU coreutils) — skip detection there. The fallback path
-        # (alarm + kill) handles Windows; setpgrp/kill(-$pid) are no-ops
-        # but the alarm still bounds runtime.
-        return undef if $^O eq 'MSWin32';
-        for my $candidate (qw(timeout gtimeout)) {
-            if (system("which $candidate >/dev/null 2>&1") == 0) {
-                $_timeout_cmd = $candidate;
-                return $_timeout_cmd;
-            }
-        }
-        return undef;
+sub terminate_process_group {
+    my ($pid, $signal) = @_;
+    if ($^O eq 'MSWin32') {
+        kill $signal, $pid;
+        return;
     }
+    kill $signal, -$pid;
+    kill $signal,  $pid;
+}
+
+sub print_progress_line {
+    my ($start, $last_output, $soft_secs) = @_;
+    my $now = time();
+    my $extra = $now >= ($start + $soft_secs) ? ', past soft timeout' : '';
+    printf "  ... still running (%s elapsed, %ds since output%s)\n",
+        format_duration($now - $start), $now - $last_output, $extra;
+}
+
+sub format_duration {
+    my ($seconds) = @_;
+    $seconds = int($seconds);
+    my $hours = int($seconds / 3600);
+    my $mins  = int(($seconds % 3600) / 60);
+    my $secs  = $seconds % 60;
+    return sprintf('%dh%02dm%02ds', $hours, $mins, $secs) if $hours;
+    return sprintf('%dm%02ds', $mins, $secs) if $mins;
+    return sprintf('%ds', $secs);
 }
 
 sub save_log {
@@ -992,6 +1089,9 @@ perl dev/tools/cpan_random_tester.pl
 # Test more modules
 perl dev/tools/cpan_random_tester.pl --count 50
 
+# Run CPAN test files in parallel inside each module
+perl dev/tools/cpan_random_tester.pl --jobs 8 --count 20
+
 # Install mode (deps stay installed for future runs)
 perl dev/tools/cpan_random_tester.pl --install --count 20
 
@@ -1049,7 +1149,19 @@ Options:
                      - Comma-separated: --modules Foo::Bar,Baz::Qux
                      - File path: --modules modules.txt (one per line, # for comments)
   --timeout N      Default timeout per target module in seconds (default: 1200).
+                   This is a soft wall clock: after this time, runs continue
+                   while they keep producing output.
                    Known-slow distributions use a larger timeout wired in this script.
+  --activity-grace N
+                   After --timeout has elapsed, kill the target if it produces
+                   no output for this many seconds (default: 300).
+  --max-runtime N  Optional hard cap per target module in seconds (default: 0,
+                   disabled). Useful for chatty tests that never finish.
+  --progress-interval N
+                   Print a progress heartbeat every N seconds while a target is
+                   still running (default: 60; 0 disables).
+  --jobs N         Pass `--jobs N` to jcpan so CPAN test files run in parallel
+                   inside each target module (default: 1).
   --install        Use jcpan (install) instead of jcpan -t (test only).
                    Deps stay installed for future runs, but already-installed
                    modules are skipped (no re-test).
@@ -1065,6 +1177,11 @@ Behavior:
     (or from --modules if specified).
   - Dependencies discovered during a run are recorded too (PASS/FAIL).
   - A few heavy targets (e.g. DBIx::Class) have a higher per-module timeout in the script.
+  - Long targets are not killed merely for crossing --timeout if their output
+    is still active; they time out only after --activity-grace seconds without
+    output, or after --max-runtime if one is set.
+  - --jobs parallelizes test files within a single jcpan run. This script keeps
+    target modules sequential to avoid CPAN build/install directory contention.
   - If a previously-failed module now passes (e.g., its deps got
     installed), the record is upgraded from FAIL to PASS.
   - PASS results include the git commit hash for regression bisecting.
@@ -1077,6 +1194,8 @@ Examples:
   perl dev/tools/cpan_random_tester.pl --count 50        # 50 targets
   perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Specific modules
   perl dev/tools/cpan_random_tester.pl --modules list.txt # From file
+  perl dev/tools/cpan_random_tester.pl --jobs 8 -n 20      # parallel test files
+  perl dev/tools/cpan_random_tester.pl --activity-grace 600 -n 20  # tolerate quiet phases
   perl dev/tools/cpan_random_tester.pl --seed 42 -n 20   # reproducible
   perl dev/tools/cpan_random_tester.pl --report-only     # regen report
   perl dev/tools/cpan_random_tester.pl --retest-age 7 -n 30  # test modules not tested in 7 days
