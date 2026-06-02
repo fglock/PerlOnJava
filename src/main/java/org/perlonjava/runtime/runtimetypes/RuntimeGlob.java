@@ -177,6 +177,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 || !(codeContainer.value instanceof RuntimeCode existingCode)
                 || existingCode.defined()
                 || !existingCode.isDeclared
+                || !existingCode.isSymbolicReference
                 || value == null
                 || value.type != CODE
                 || !(value.value instanceof RuntimeCode newCode)

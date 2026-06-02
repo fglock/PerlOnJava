@@ -343,6 +343,21 @@ public class RegexPreprocessorHelper {
                 sb.append("[^\\n]");
                 return offset;
             }
+        } else if ((nextChar == 'p' || nextChar == 'P')
+                && offset + 1 < length
+                && s.charAt(offset + 1) != '{'
+                && Character.isLetter(s.charAt(offset + 1))) {
+            // Perl accepts single-letter property shorthands such as \pC and \pL.
+            boolean negated = (nextChar == 'P');
+            String property = Character.toString(s.charAt(offset + 1));
+            try {
+                String translatedProperty = translateUnicodeProperty(property, negated);
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append("(?-i:").append(translatedProperty).append(")");
+                return offset + 1;
+            } catch (IllegalArgumentException e) {
+                RegexPreprocessor.regexError(s, offset + 1, e.getMessage() == null ? "Invalid Unicode property" : e.getMessage());
+            }
         } else if ((nextChar == 'p' || nextChar == 'P') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \p{...} and \P{...} constructs
             boolean negated = (nextChar == 'P');

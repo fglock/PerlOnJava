@@ -1,4 +1,4 @@
-use Test::More tests => 2;
+use Test::More tests => 3;
 
 my $callback = \&later;
 *later = sub { 42 };
@@ -13,3 +13,13 @@ my $eval_callback = eval q{
 die $@ if $@;
 
 is($eval_callback->(), 84, 'eval coderef to an undefined glob sees later CODE assignment');
+
+{
+    no strict 'refs';
+    my $name = 'Restored::missing';
+    my $saved = \&{$name};
+    *{$name} = sub { 1 };
+    *{$name} = $saved;
+    my $ok = eval { Restored::missing(); 1 };
+    like($@, qr/Undefined subroutine &Restored::missing called/, 'restoring a symbolic undefined coderef keeps the slot undefined');
+}

@@ -2365,7 +2365,7 @@ public class RegexPreprocessor {
             sb.append("(?:");
             handleRegex(yesBranch, 0, sb, regexFlags, false);
             sb.append(")?");
-            return pos + 1;
+            return pos;
         }
 
         // Conditional patterns are not supported by Java regex
@@ -2381,7 +2381,7 @@ public class RegexPreprocessor {
 
         regexUnimplemented(s, condStart - 1, "Conditional patterns (?(...)...) not implemented");
 
-        return pos + 1; // Skip past the closing ) of the conditional
+        return pos;
     }
 
     /**
