@@ -84,6 +84,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     int patternFlagsUnicode;
     public String patternString;
     String javaPatternString; // Preprocessed Java-compatible pattern for recompilation
+    private String requiredLiteral;
     boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     // Indicates if \G assertion is used (set from regexFlags during compilation)
     private boolean useGAssertion = false;
@@ -121,6 +122,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.patternFlagsUnicode = this.patternFlagsUnicode;
         copy.patternString = this.patternString;
         copy.javaPatternString = this.javaPatternString;
+        copy.requiredLiteral = this.requiredLiteral;
         copy.hasPreservesMatch = this.hasPreservesMatch;
         copy.useGAssertion = this.useGAssertion;
         copy.regexFlags = this.regexFlags;
@@ -203,6 +205,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 regex.patternString = patternString;
                 regex.javaPatternString = javaPattern;
+                regex.requiredLiteral = findTopLevelRequiredLiteral(patternString, regex.regexFlags);
 
                 // Compile the regex pattern for byte strings (ASCII-only \w, \d)
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
@@ -333,7 +336,172 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.regexFlags = recompiled.regexFlags;
         regex.useGAssertion = recompiled.useGAssertion;
         regex.deferredUserDefinedUnicodeProperties = recompiled.deferredUserDefinedUnicodeProperties;
+        regex.requiredLiteral = recompiled.requiredLiteral;
         return regex;
+    }
+
+    private static String findTopLevelRequiredLiteral(String pattern, RegexFlags flags) {
+        if (pattern == null || pattern.isEmpty() || flags == null || flags.isCaseInsensitive()
+                || pattern.contains("(?i") || hasTopLevelAlternation(pattern)) {
+            return null;
+        }
+
+        int depth = 0;
+        boolean inCharClass = false;
+        boolean escaped = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+
+            if (escaped) {
+                if (depth == 0 && !inCharClass && isEscapedRequiredLiteral(ch)
+                        && !isOptionalQuantifiedAt(pattern, i + 1)) {
+                    return Character.toString(ch);
+                }
+                if (!isEscapedRequiredLiteral(ch)) {
+                    i = skipEscapePayload(pattern, i);
+                }
+                escaped = false;
+                continue;
+            }
+
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+
+            if (inCharClass) {
+                if (ch == ']') {
+                    inCharClass = false;
+                }
+                continue;
+            }
+
+            if (ch == '[') {
+                inCharClass = true;
+                continue;
+            }
+
+            if (ch == '(') {
+                depth++;
+                continue;
+            }
+
+            if (ch == ')' && depth > 0) {
+                depth--;
+                continue;
+            }
+
+            if (depth != 0) {
+                continue;
+            }
+
+            if ((flags.isExtended() || flags.isExtendedWhitespace()) && Character.isWhitespace(ch)) {
+                continue;
+            }
+            if ((flags.isExtended() || flags.isExtendedWhitespace()) && ch == '#') {
+                while (i < pattern.length() && pattern.charAt(i) != '\n') {
+                    i++;
+                }
+                continue;
+            }
+
+            if (!isTopLevelLiteralMetaCharacter(ch) && !isOptionalQuantifiedAt(pattern, i + 1)) {
+                return Character.toString(ch);
+            }
+        }
+
+        return null;
+    }
+
+    private static boolean hasTopLevelAlternation(String pattern) {
+        int depth = 0;
+        boolean inCharClass = false;
+        boolean escaped = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (inCharClass) {
+                if (ch == ']') {
+                    inCharClass = false;
+                }
+                continue;
+            }
+            if (ch == '[') {
+                inCharClass = true;
+                continue;
+            }
+            if (ch == '(') {
+                depth++;
+                continue;
+            }
+            if (ch == ')' && depth > 0) {
+                depth--;
+                continue;
+            }
+            if (ch == '|' && depth == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isEscapedRequiredLiteral(char ch) {
+        return switch (ch) {
+            case 'A', 'B', 'C', 'D', 'G', 'H', 'K', 'N', 'P', 'R', 'S', 'V', 'W', 'X', 'Z',
+                 'b', 'c', 'd', 'g', 'h', 'k', 'n', 'o', 'p', 'r', 's', 't', 'v', 'w', 'x', 'z',
+                 '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> false;
+            default -> true;
+        };
+    }
+
+    private static int skipEscapePayload(String pattern, int escapeNameOffset) {
+        char ch = pattern.charAt(escapeNameOffset);
+        if ((ch == 'p' || ch == 'P' || ch == 'x' || ch == 'o' || ch == 'N' || ch == 'g')
+                && escapeNameOffset + 1 < pattern.length()
+                && pattern.charAt(escapeNameOffset + 1) == '{') {
+            int close = pattern.indexOf('}', escapeNameOffset + 2);
+            return close >= 0 ? close : escapeNameOffset;
+        }
+        if (ch == 'k' && escapeNameOffset + 1 < pattern.length()) {
+            char opener = pattern.charAt(escapeNameOffset + 1);
+            char closer = opener == '<' ? '>' : (opener == '\'' ? '\'' : 0);
+            if (closer != 0) {
+                int close = pattern.indexOf(closer, escapeNameOffset + 2);
+                return close >= 0 ? close : escapeNameOffset;
+            }
+        }
+        return escapeNameOffset;
+    }
+
+    private static boolean isTopLevelLiteralMetaCharacter(char ch) {
+        return ch == '^' || ch == '$' || ch == '.' || ch == '*' || ch == '+'
+                || ch == '?' || ch == '{' || ch == '}';
+    }
+
+    private static boolean isOptionalQuantifiedAt(String pattern, int offset) {
+        if (offset >= pattern.length()) {
+            return false;
+        }
+        char ch = pattern.charAt(offset);
+        if (ch == '?' || ch == '*') {
+            return true;
+        }
+        if (ch != '{') {
+            return false;
+        }
+        int close = pattern.indexOf('}', offset + 1);
+        if (close < 0) {
+            return false;
+        }
+        String body = pattern.substring(offset + 1, close).trim();
+        return body.equals("0") || body.startsWith("0,") || body.startsWith(",");
     }
 
     /**
@@ -668,6 +836,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
                 tempRegex.patternString = lastSuccessfulPattern.patternString;
                 tempRegex.javaPatternString = lastSuccessfulPattern.javaPatternString;
+                tempRegex.requiredLiteral = lastSuccessfulPattern.requiredLiteral;
                 tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
@@ -795,6 +964,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         isPosDefined = true;
                     }
                 }
+            }
+        }
+
+        if (regex.requiredLiteral != null && !inputStr.contains(regex.requiredLiteral)) {
+            if (DEBUG_REGEX) {
+                System.err.println("  required literal prefilter failed: " + regex.requiredLiteral);
+            }
+            if (regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
+                posScalar.set(scalarUndef);
+            }
+            globalMatchString = null;
+            lastMatchedString = null;
+            lastMatchStart = -1;
+            lastMatchEnd = -1;
+            if (ctx == RuntimeContextType.LIST) {
+                return new RuntimeList();
+            } else if (ctx == RuntimeContextType.SCALAR) {
+                return RuntimeScalarCache.scalarFalse;
+            } else {
+                return scalarUndef;
             }
         }
 

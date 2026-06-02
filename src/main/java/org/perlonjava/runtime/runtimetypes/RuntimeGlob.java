@@ -171,6 +171,40 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
     }
 
+    protected static boolean fillForwardCodeRefInPlace(String globName, RuntimeScalar codeContainer, RuntimeScalar value) {
+        if (codeContainer == null
+                || codeContainer.type != CODE
+                || !(codeContainer.value instanceof RuntimeCode existingCode)
+                || existingCode.defined()
+                || !existingCode.isDeclared
+                || value == null
+                || value.type != CODE
+                || !(value.value instanceof RuntimeCode newCode)
+                || !newCode.defined()) {
+            return false;
+        }
+        if (newCode.compilerSupplier != null
+                && newCode.constantValue == null
+                && newCode.subroutine == null
+                && newCode.methodHandle == null
+                && newCode.codeObject == null) {
+            return false;
+        }
+        boolean newCodeHasStableName = newCode.packageName != null
+                && newCode.subName != null
+                && !newCode.subName.isEmpty()
+                && !"__ANON__".equals(newCode.subName);
+        if (newCodeHasStableName && !coderefFqMatchesGlob(newCode, globName)) {
+            return false;
+        }
+
+        existingCode.adoptDefinitionFrom(newCode);
+        attachCoderefToNamedGlob(existingCode, globName);
+        existingCode.hadStashRef = true;
+        existingCode.stashRefCount++;
+        return true;
+    }
+
     /**
      * Overload without code parameter for backward compatibility.
      */
@@ -273,6 +307,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case CODE:
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+
+                if (fillForwardCodeRefInPlace(this.globName, codeContainer, value)) {
+                    InheritanceResolver.invalidateCache();
+                    GlobalVariable.isSubs.put(this.globName, true);
+                    int lastColonIdx = this.globName.lastIndexOf("::");
+                    if (lastColonIdx > 0) {
+                        String pkgName = this.globName.substring(0, lastColonIdx);
+                        org.perlonjava.runtime.perlmodule.Mro.incrementPackageGeneration(pkgName);
+                    }
+                    return value;
+                }
 
                 // Before overwriting, clear weak refs to the old sub's pad constants.
                 // This emulates Perl 5's behavior where replacing a sub frees its op-tree,

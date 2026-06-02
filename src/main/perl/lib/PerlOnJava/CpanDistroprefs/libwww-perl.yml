@@ -2,11 +2,12 @@
 comment: |
   PerlOnJava distroprefs for libwww-perl.
 
-  LWP::Online depends on LWP::Simple from libwww-perl. libwww-perl's
-  upstream suite includes local HTTP daemon tests and live-network checks
-  that are not stable prerequisites for testing LWP::Online here. Skip the
-  dependency test phase so CPAN can stage LWP::Simple; the LWP::Online
-  suite still runs normally.
+  Some downstream distributions need libwww-perl only as a dependency
+  (for example LWP::Online uses LWP::Simple, and HTTP::Response::Encoding's
+  file test uses LWP::UserAgent). libwww-perl's upstream suite includes local
+  HTTP daemon tests and live-network checks that are not stable prerequisites
+  for those downstream tests. Skip the dependency test phase so CPAN can stage
+  the LWP modules; downstream suites still run normally.
 
   Do not apply this dependency-only skip when libwww-perl itself is the
   requested jcpan target. The LWP suite is expected to run in that case.

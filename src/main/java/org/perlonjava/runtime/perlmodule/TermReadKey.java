@@ -81,7 +81,10 @@ public class TermReadKey extends PerlModuleBase {
             readkey.registerMethod("SetTerminalSize", "setTerminalSize", "$;$");
             readkey.registerMethod("GetSpeed", "getSpeed", ";$");
             readkey.registerMethod("GetControlChars", "getControlChars", ";$");
-            readkey.registerMethod("SetControlChars", "setControlChars", "\\@;$");
+            readkey.registerMethod("SetControlChars", "setControlChars", null);
+            readkey.registerMethod("blockoptions", "blockOptions", "");
+            readkey.registerMethod("termoptions", "termOptions", "");
+            readkey.registerMethod("termsizeoptions", "termSizeOptions", "");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Term::ReadKey method: " + e.getMessage());
         }
@@ -279,34 +282,55 @@ public class TermReadKey extends PerlModuleBase {
 
     /**
      * Sets control characters.
-     * SetControlChars(array_ref, [filehandle])
+     * SetControlChars(%charpairs, [filehandle])
      */
     public static RuntimeList setControlChars(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
-            throw new PerlCompilerException("SetControlChars requires array reference");
+            throw new PerlCompilerException("Usage: Term::ReadKey::SetControlChars(%charpairs,file=STDIN)");
         }
-
-        RuntimeScalar arrayRef = args.get(0);
-        if (arrayRef.type != RuntimeScalarType.ARRAYREFERENCE) {
-            throw new PerlCompilerException("First argument to SetControlChars must be array reference");
-        }
-
-        RuntimeArray controlArray = (RuntimeArray) arrayRef.value;
 
         RuntimeIO fh = RuntimeIO.stdin;
-        if (args.size() > 1) {
-            RuntimeScalar fileHandle = args.get(1);
-            fh = RuntimeIO.getRuntimeIO(fileHandle);
+        RuntimeArray controlArgs = new RuntimeArray();
+
+        RuntimeScalar first = args.get(0);
+        if ((first.type == RuntimeScalarType.ARRAYREFERENCE || first.type == RuntimeScalarType.HASHREFERENCE)
+                && args.size() <= 2) {
+            if (first.type == RuntimeScalarType.ARRAYREFERENCE) {
+                RuntimeArray controlArray = (RuntimeArray) first.value;
+                controlArgs.elements.addAll(controlArray.elements);
+            } else {
+                RuntimeHash controlHash = (RuntimeHash) first.value;
+                for (Map.Entry<String, RuntimeScalar> entry : controlHash.elements.entrySet()) {
+                    controlArgs.add(new RuntimeScalar(entry.getKey()));
+                    controlArgs.add(entry.getValue());
+                }
+            }
+            if (args.size() == 2) {
+                fh = RuntimeIO.getRuntimeIO(args.get(1));
+            }
+        } else {
+            int pairEnd = args.size();
+            if ((pairEnd % 2) == 1) {
+                fh = RuntimeIO.getRuntimeIO(args.get(pairEnd - 1));
+                pairEnd--;
+            }
+            for (int i = 0; i < pairEnd; i++) {
+                controlArgs.add(args.get(i));
+            }
+        }
+
+        if ((controlArgs.size() % 2) != 0) {
+            throw new PerlCompilerException("Usage: Term::ReadKey::SetControlChars(%charpairs,file=STDIN)");
         }
 
         // Convert array to map
         Map<String, String> controlChars = new HashMap<>();
-        for (int i = 0; i < controlArray.size() - 1; i += 2) {
-            String key = controlArray.get(i).toString();
-            RuntimeScalar valueScalar = controlArray.get(i + 1);
+        for (int i = 0; i < controlArgs.size(); i += 2) {
+            String key = controlArgs.get(i).toString();
+            RuntimeScalar valueScalar = controlArgs.get(i + 1);
             String value;
 
-            if (valueScalar.type == INTEGER) {
+            if (valueScalar.type == INTEGER || valueScalar.type == RuntimeScalarType.DOUBLE) {
                 int charCode = valueScalar.getInt();
                 if (charCode < 0 || charCode > 255) {
                     throw new PerlCompilerException("Control character value must be 0-255");
@@ -314,9 +338,10 @@ public class TermReadKey extends PerlModuleBase {
                 value = String.valueOf((char) charCode);
             } else {
                 value = valueScalar.toString();
-                if (value.length() != 1) {
-                    throw new PerlCompilerException("Control character must be single character");
+                if (value.isEmpty()) {
+                    throw new PerlCompilerException("Invalid control character passed to SetControlChars");
                 }
+                value = value.substring(0, 1);
             }
 
             controlChars.put(key, value);
@@ -324,5 +349,18 @@ public class TermReadKey extends PerlModuleBase {
 
         handler.setControlChars(controlChars, fh);
         return new RuntimeList();
+    }
+
+    public static RuntimeList blockOptions(RuntimeArray args, int ctx) {
+        int options = SystemUtils.osIsWindows() ? 8 : 4;
+        return new RuntimeList(new RuntimeScalar(options));
+    }
+
+    public static RuntimeList termOptions(RuntimeArray args, int ctx) {
+        return new RuntimeList(new RuntimeScalar(SystemUtils.osIsWindows() ? 5 : 1));
+    }
+
+    public static RuntimeList termSizeOptions(RuntimeArray args, int ctx) {
+        return new RuntimeList(new RuntimeScalar(SystemUtils.osIsWindows() ? 8 : 2));
     }
 }

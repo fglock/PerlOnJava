@@ -193,7 +193,11 @@ public class GlobalContext {
 
         // Initialize %ENV
         Map<String, RuntimeScalar> env = GlobalVariable.getGlobalHash("main::ENV").elements;
-        System.getenv().forEach((k, v) -> env.put(k, new RuntimeScalar(v)));
+        System.getenv().forEach((k, v) -> {
+            RuntimeScalar envValue = new RuntimeScalar(v);
+            envValue.tainted = compilerOptions.taintMode;
+            env.put(k, envValue);
+        });
 
         /* Initialize @INC.
            @INC Search order mirrors Perl 5's site_perl > core pattern:

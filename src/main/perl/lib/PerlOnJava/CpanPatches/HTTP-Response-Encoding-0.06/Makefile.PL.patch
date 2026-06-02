@@ -1,0 +1,10 @@
+--- Makefile.PL.orig
++++ Makefile.PL
+@@ -13,6 +13,7 @@
+         'Test::More'     => 0,
+ 	# 'HTTP::Message'  => 5.827,
+         'HTTP::Response' => 0,
++        'LWP::UserAgent' => 0,
+       },
+     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+     clean               => { FILES => 'HTTP-Response-Encoding-*' },

@@ -155,9 +155,12 @@ public class RuntimeStashEntry extends RuntimeGlob {
             case TIED_SCALAR:
                 return set(value.tiedFetch());
             case CODE:
-                GlobalVariable.defineGlobalCodeRef(this.globName).set(value);
-                if (value.value instanceof RuntimeCode code) {
-                    RuntimeGlob.attachCoderefToNamedGlob(code, this.globName);
+                RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+                if (!RuntimeGlob.fillForwardCodeRefInPlace(this.globName, codeContainer, value)) {
+                    codeContainer.set(value);
+                    if (value.value instanceof RuntimeCode code) {
+                        RuntimeGlob.attachCoderefToNamedGlob(code, this.globName);
+                    }
                 }
 
                 // Invalidate the method resolution cache

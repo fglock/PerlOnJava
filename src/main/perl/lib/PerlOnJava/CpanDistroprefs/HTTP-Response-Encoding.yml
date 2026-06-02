@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for HTTP::Response::Encoding.
+
+  The upstream t/01-file.t test uses LWP::UserAgent, but Makefile.PL does not
+  declare libwww-perl as a prerequisite. System Perl often has LWP installed
+  already, while a clean jcpan environment does not. Patch the metadata so CPAN
+  stages libwww-perl and the target test can run normally.
+match:
+  distribution: "^DANKOGAI/HTTP-Response-Encoding-"
+patches:
+  - "HTTP-Response-Encoding-0.06/Makefile.PL.patch"

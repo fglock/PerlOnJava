@@ -937,13 +937,52 @@ public class RegexPreprocessorHelper {
                     first = false;
                     afterCaret = false;
                     break;
-                case ' ', '\t':
+                case ' ':
                     if (flag_xx) {
                         sb.append(Character.toChars(c));
                     } else {
                         // make this space a "token", even inside /x
-                        sb.append("\\").append(Character.toChars(c));
+                        sb.append("\\ ");
                     }
+                    first = false;
+                    afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
+                    break;
+                case '\t':
+                    if (flag_xx) {
+                        sb.append(Character.toChars(c));
+                    } else {
+                        sb.append("\\t");
+                    }
+                    first = false;
+                    afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
+                    break;
+                case '\n':
+                    sb.append("\\n");
+                    first = false;
+                    afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
+                    break;
+                case '\r':
+                    sb.append("\\r");
+                    first = false;
+                    afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
+                    break;
+                case '\f':
+                    sb.append("\\f");
+                    first = false;
+                    afterCaret = false;
+                    lastChar = c;
+                    wasEscape = false;
+                    break;
+                case 0x0B:
+                    sb.append("\\x{B}");
                     first = false;
                     afterCaret = false;
                     lastChar = c;
