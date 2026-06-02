@@ -1,0 +1,15 @@
+---
+comment: |
+  PerlOnJava distroprefs for AnyEvent when testing AnyEvent::STOMP.
+
+  AnyEvent::STOMP's own CPAN suite is a load smoke test. Its AnyEvent
+  prerequisite suite covers fork, local socket, SSL, and live-network surfaces
+  that are broader than that downstream load test and are not stable under
+  PerlOnJava or this sandbox. Keep direct `jcpan -t AnyEvent` honest by only
+  skipping this prerequisite test phase for the AnyEvent::STOMP target.
+match:
+  distribution: "^MLEHMANN/AnyEvent-"
+  env:
+    PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])AnyEvent::STOMP($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

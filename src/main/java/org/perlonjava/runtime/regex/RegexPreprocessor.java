@@ -125,6 +125,8 @@ public class RegexPreprocessor {
         s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
         s = normalizeQuantifiers(s);
+        s = optimizeTerminatedWhitespaceQuantifiers(s);
+        s = optimizeTerminatedLazyNegatedClasses(s);
 
         // Expand multi-character case folds when case-insensitive flag is set
         if (regexFlags.isCaseInsensitive()) {
@@ -135,6 +137,356 @@ public class RegexPreprocessor {
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
         return preferOmniHolderLiteralAlternation(result);
+    }
+
+    private static String optimizeTerminatedWhitespaceQuantifiers(String pattern) {
+        StringBuilder result = new StringBuilder(pattern.length());
+        int i = 0;
+        int len = pattern.length();
+        boolean escaped = false;
+
+        while (i < len) {
+            char ch = pattern.charAt(i);
+
+            if (escaped) {
+                result.append(ch);
+                escaped = false;
+                i++;
+                continue;
+            }
+
+            if (ch == '[' && !startsExtendedCharacterClass(pattern, i)) {
+                int classEnd = findRegularCharacterClassEnd(pattern, i);
+                if (classEnd > i) {
+                    result.append(pattern, i, classEnd + 1);
+                    i = classEnd + 1;
+                    continue;
+                }
+            }
+
+            if (ch == '\\'
+                    && i + 3 < len
+                    && pattern.charAt(i + 1) == 's'
+                    && (pattern.charAt(i + 2) == '*' || pattern.charAt(i + 2) == '+')) {
+                int literalOffset = i + 3;
+                if (pattern.charAt(literalOffset) == '+') {
+                    result.append(pattern, i, literalOffset + 1);
+                    i = literalOffset + 1;
+                    continue;
+                }
+                if (pattern.charAt(literalOffset) == '?') {
+                    literalOffset++;
+                }
+
+                LiteralToken nextLiteral = readLiteralToken(pattern, literalOffset);
+                if (nextLiteral != null && !isPerlWhitespaceCodePoint(nextLiteral.codePoint)) {
+                    result.append("\\s").append(pattern.charAt(i + 2)).append('+');
+                    i = literalOffset;
+                    continue;
+                }
+            }
+
+            if (ch == '\\') {
+                result.append(ch);
+                escaped = true;
+                i++;
+                continue;
+            }
+
+            result.append(ch);
+            i++;
+        }
+
+        return result.toString();
+    }
+
+    private static boolean isPerlWhitespaceCodePoint(int codePoint) {
+        return codePoint == '\t'
+                || codePoint == '\n'
+                || codePoint == 0x000B
+                || codePoint == '\f'
+                || codePoint == '\r'
+                || codePoint == ' '
+                || codePoint == 0x1680
+                || (codePoint >= 0x2000 && codePoint <= 0x200A)
+                || codePoint == 0x2028
+                || codePoint == 0x2029
+                || codePoint == 0x202F
+                || codePoint == 0x205F
+                || codePoint == 0x3000;
+    }
+
+    /**
+     * Java's regex engine can recurse deeply for repeated lazy negated classes,
+     * for example {@code /'[^']+?'/} applied thousands of times. When the next
+     * token is a literal that the negated class explicitly excludes, laziness is
+     * irrelevant: the class can never consume the delimiter. Make that specific
+     * quantifier possessive so Java does not build a deep lazy-loop stack.
+     */
+    private static String optimizeTerminatedLazyNegatedClasses(String pattern) {
+        StringBuilder result = new StringBuilder(pattern.length());
+        int i = 0;
+        int len = pattern.length();
+        boolean escaped = false;
+
+        while (i < len) {
+            char ch = pattern.charAt(i);
+
+            if (escaped) {
+                result.append(ch);
+                escaped = false;
+                i++;
+                continue;
+            }
+
+            if (ch == '\\') {
+                result.append(ch);
+                escaped = true;
+                i++;
+                continue;
+            }
+
+            if (ch == '[' && !startsExtendedCharacterClass(pattern, i)) {
+                int classEnd = findRegularCharacterClassEnd(pattern, i);
+                if (classEnd > i) {
+                    if (i + 1 < len
+                            && pattern.charAt(i + 1) == '^'
+                            && classEnd + 3 < len
+                            && pattern.charAt(classEnd + 1) == '+'
+                            && pattern.charAt(classEnd + 2) == '?') {
+                        LiteralToken nextLiteral = readLiteralToken(pattern, classEnd + 3);
+                        if (nextLiteral != null
+                                && negatedClassExcludesLiteral(pattern, i, classEnd, nextLiteral.codePoint)) {
+                            result.append(pattern, i, classEnd + 1);
+                            result.append("++");
+                            i = classEnd + 3;
+                            continue;
+                        }
+                    }
+                    result.append(pattern, i, classEnd + 1);
+                    i = classEnd + 1;
+                    continue;
+                }
+            }
+
+            result.append(ch);
+            i++;
+        }
+
+        return result.toString();
+    }
+
+    private static boolean startsExtendedCharacterClass(String pattern, int bracketOffset) {
+        return bracketOffset >= 2
+                && pattern.charAt(bracketOffset - 2) == '('
+                && pattern.charAt(bracketOffset - 1) == '?';
+    }
+
+    private static int findRegularCharacterClassEnd(String pattern, int classStart) {
+        boolean escaped = false;
+        for (int i = classStart + 1; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                if (ch == 'c' && i + 1 < pattern.length()) {
+                    i++;
+                }
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == ']') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static LiteralToken readLiteralToken(String pattern, int offset) {
+        if (offset >= pattern.length()) {
+            return null;
+        }
+
+        int cp = pattern.codePointAt(offset);
+        if (cp == '\\') {
+            if (offset + 1 >= pattern.length()) {
+                return null;
+            }
+            return readEscapedLiteralToken(pattern, offset + 1);
+        }
+
+        if (isRegexMetaCharacter(cp)) {
+            return null;
+        }
+        return new LiteralToken(cp, offset + Character.charCount(cp));
+    }
+
+    private static LiteralToken readEscapedLiteralToken(String pattern, int offset) {
+        int cp = pattern.codePointAt(offset);
+        int nextOffset = offset + Character.charCount(cp);
+        switch (cp) {
+            case 'n':
+                return new LiteralToken('\n', nextOffset);
+            case 'r':
+                return new LiteralToken('\r', nextOffset);
+            case 't':
+                return new LiteralToken('\t', nextOffset);
+            case 'f':
+                return new LiteralToken('\f', nextOffset);
+            case 'a':
+                return new LiteralToken(0x07, nextOffset);
+            case 'e':
+                return new LiteralToken(0x1B, nextOffset);
+            case 'c':
+                if (nextOffset < pattern.length()) {
+                    int control = pattern.codePointAt(nextOffset);
+                    return new LiteralToken(control ^ 64, nextOffset + Character.charCount(control));
+                }
+                return null;
+            case 'x':
+                return readHexLiteralToken(pattern, nextOffset);
+            case 'o':
+                return readBracedRadixLiteralToken(pattern, nextOffset, 8);
+            default:
+                if (cp >= '0' && cp <= '7') {
+                    return readOctalLiteralToken(pattern, offset);
+                }
+                if (isRegexEscapeWithVariableMeaning(cp)) {
+                    return null;
+                }
+                return new LiteralToken(cp, nextOffset);
+        }
+    }
+
+    private static LiteralToken readHexLiteralToken(String pattern, int offset) {
+        if (offset < pattern.length() && pattern.charAt(offset) == '{') {
+            return readBracedRadixLiteralToken(pattern, offset, 16);
+        }
+
+        int value = 0;
+        int digits = 0;
+        int pos = offset;
+        while (pos < pattern.length() && digits < 2) {
+            int digit = Character.digit(pattern.charAt(pos), 16);
+            if (digit < 0) {
+                break;
+            }
+            value = value * 16 + digit;
+            pos++;
+            digits++;
+        }
+        return digits > 0 ? new LiteralToken(value, pos) : null;
+    }
+
+    private static LiteralToken readBracedRadixLiteralToken(String pattern, int offset, int radix) {
+        if (offset >= pattern.length() || pattern.charAt(offset) != '{') {
+            return null;
+        }
+        int close = pattern.indexOf('}', offset + 1);
+        if (close < 0) {
+            return null;
+        }
+        String digits = pattern.substring(offset + 1, close).trim().replace("_", "");
+        if (digits.isEmpty()) {
+            return null;
+        }
+        int value = 0;
+        for (int i = 0; i < digits.length(); i++) {
+            int digit = Character.digit(digits.charAt(i), radix);
+            if (digit < 0) {
+                return null;
+            }
+            value = value * radix + digit;
+        }
+        return new LiteralToken(value, close + 1);
+    }
+
+    private static LiteralToken readOctalLiteralToken(String pattern, int offset) {
+        int value = 0;
+        int digits = 0;
+        int pos = offset;
+        while (pos < pattern.length() && digits < 3) {
+            char ch = pattern.charAt(pos);
+            if (ch < '0' || ch > '7') {
+                break;
+            }
+            value = value * 8 + (ch - '0');
+            pos++;
+            digits++;
+        }
+        return digits > 0 ? new LiteralToken(value, pos) : null;
+    }
+
+    private static boolean negatedClassExcludesLiteral(String pattern, int classStart, int classEnd, int literal) {
+        int pos = classStart + 2; // skip [^
+        LiteralToken previous = null;
+
+        while (pos < classEnd) {
+            if (pattern.charAt(pos) == '[' && pos + 1 < classEnd && pattern.charAt(pos + 1) == ':') {
+                return false;
+            }
+
+            LiteralToken current;
+            if (pattern.charAt(pos) == '\\') {
+                if (pos + 1 >= classEnd) {
+                    return false;
+                }
+                current = readEscapedLiteralToken(pattern, pos + 1);
+                if (current == null || current.endOffset > classEnd) {
+                    return false;
+                }
+            } else {
+                int cp = pattern.codePointAt(pos);
+                current = new LiteralToken(cp, pos + Character.charCount(cp));
+            }
+
+            if (current.codePoint == literal) {
+                return true;
+            }
+
+            if (previous != null
+                    && previous.endOffset == pos - 1
+                    && pattern.charAt(pos - 1) == '-'
+                    && previous.codePoint <= literal
+                    && literal <= current.codePoint) {
+                return true;
+            }
+
+            previous = current;
+            pos = current.endOffset;
+
+            if (pos < classEnd && pattern.charAt(pos) == '-') {
+                pos++;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isRegexMetaCharacter(int cp) {
+        return cp == '.' || cp == '^' || cp == '$' || cp == '|' || cp == '(' || cp == ')'
+                || cp == '[' || cp == ']' || cp == '{' || cp == '}' || cp == '*'
+                || cp == '+' || cp == '?';
+    }
+
+    private static boolean isRegexEscapeWithVariableMeaning(int cp) {
+        return cp == 'A' || cp == 'B' || cp == 'C' || cp == 'D' || cp == 'G'
+                || cp == 'H' || cp == 'K' || cp == 'N' || cp == 'P' || cp == 'R'
+                || cp == 'S' || cp == 'V' || cp == 'W' || cp == 'X' || cp == 'Z'
+                || cp == 'b' || cp == 'd' || cp == 'g' || cp == 'h' || cp == 'k'
+                || cp == 'p' || cp == 's' || cp == 'v' || cp == 'w' || cp == 'z';
+    }
+
+    private static class LiteralToken {
+        final int codePoint;
+        final int endOffset;
+
+        LiteralToken(int codePoint, int endOffset) {
+            this.codePoint = codePoint;
+            this.endOffset = endOffset;
+        }
     }
 
     /**
@@ -2007,6 +2359,15 @@ public class RegexPreprocessor {
             regexError(s, pos, "Switch (?(condition)... not terminated");
         }
 
+        String yesBranch = pipePos >= 0 ? s.substring(branchStart, pipePos) : s.substring(branchStart, pos);
+
+        if (condition.matches("\\d+") && pipeCount == 0) {
+            sb.append("(?:");
+            handleRegex(yesBranch, 0, sb, regexFlags, false);
+            sb.append(")?");
+            return pos;
+        }
+
         // Conditional patterns are not supported by Java regex
         // (?(1)yes|no) means: if group 1 matched, use 'yes' branch, else use 'no' branch
         // This is fundamentally different from alternation and cannot be converted
@@ -2020,7 +2381,7 @@ public class RegexPreprocessor {
 
         regexUnimplemented(s, condStart - 1, "Conditional patterns (?(...)...) not implemented");
 
-        return pos + 1; // Skip past the closing ) of the conditional
+        return pos;
     }
 
     /**

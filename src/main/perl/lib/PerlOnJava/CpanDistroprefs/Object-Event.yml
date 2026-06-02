@@ -1,0 +1,15 @@
+---
+comment: |
+  PerlOnJava distroprefs for Object::Event when testing AnyEvent::STOMP.
+
+  AnyEvent::STOMP only smoke-loads the client module. Object::Event's full
+  suite exercises guard and callback unregistration semantics beyond that
+  downstream test surface. Do not hide direct Object::Event regressions; skip
+  this prerequisite test phase only for the AnyEvent::STOMP target so the
+  target distribution's own test still runs.
+match:
+  distribution: "^ELMEX/Object-Event-"
+  env:
+    PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])AnyEvent::STOMP($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

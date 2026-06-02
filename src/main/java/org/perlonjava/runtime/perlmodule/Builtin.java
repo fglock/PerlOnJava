@@ -200,8 +200,7 @@ public class Builtin extends PerlModuleBase {
 
     public static RuntimeList isTainted(RuntimeArray args, int ctx) {
         RuntimeScalar var = args.get(0);
-        // Implementation for taint checking
-        return new RuntimeList(scalarFalse);
+        return new RuntimeList(new RuntimeScalar(var.isTainted()));
     }
 
     public static RuntimeList indexed(RuntimeArray args, int ctx) {

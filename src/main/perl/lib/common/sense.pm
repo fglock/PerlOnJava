@@ -11,8 +11,9 @@ our $VERSION = '3.75';
 # how the script is invoked.
 
 sub import {
-    # Equivalent of: use strict;
-    strict->import;
+    # common::sense enables strict vars/subs, but intentionally leaves
+    # symbolic references available for modules that manage stashes directly.
+    strict->import(qw(vars subs));
 
     # Equivalent of: use utf8;
     utf8->import;
@@ -41,7 +42,7 @@ sub import {
 }
 
 sub unimport {
-    strict->unimport;
+    strict->unimport(qw(vars subs));
     utf8->unimport;
     warnings->unimport;
     require feature;

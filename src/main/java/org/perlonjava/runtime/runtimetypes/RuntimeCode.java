@@ -971,6 +971,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return GlobalVariable.getLocalizedCodeRefForDirectCall(lookupName, runtimeScalar);
     }
 
+    private static RuntimeScalar resolveLateDefinedForwardCodeRef(RuntimeScalar current, RuntimeCode code) {
+        if (code == null
+                || code.defined()
+                || code.packageName == null
+                || code.subName == null
+                || code.subName.isEmpty()) {
+            return null;
+        }
+
+        RuntimeScalar resolved = GlobalVariable.globalCodeRefs.get(code.packageName + "::" + code.subName);
+        if (resolved == null
+                || resolved.type != RuntimeScalarType.CODE
+                || !(resolved.value instanceof RuntimeCode resolvedCode)
+                || resolvedCode == code
+                || !resolvedCode.defined()) {
+            return null;
+        }
+        return resolved;
+    }
+
     /**
      * Preflight for generated direct subroutine calls. Perl reports an
      * undefined direct call at the line containing the function token, but
@@ -1022,6 +1042,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             code = (RuntimeCode) curScalar.value;
                         }
                     }
+                }
+
+                RuntimeScalar lateResolved = resolveLateDefinedForwardCodeRef(curScalar, code);
+                if (lateResolved != null) {
+                    curScalar = lateResolved;
+                    code = (RuntimeCode) curScalar.value;
                 }
 
                 if (code.defined()) {
@@ -1329,6 +1355,57 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.subroutine = codeFrom.subroutine;
         code.isStatic = codeFrom.isStatic;
         code.codeObject = codeFrom.codeObject;
+    }
+
+    public void adoptDefinitionFrom(RuntimeCode codeFrom) {
+        Supplier<Void> sourceCompilerSupplier = codeFrom.compilerSupplier;
+        boolean sourceIsLazyOnly = sourceCompilerSupplier != null
+                && codeFrom.constantValue == null
+                && codeFrom.subroutine == null
+                && codeFrom.methodHandle == null
+                && codeFrom.codeObject == null;
+
+        this.methodHandle = codeFrom.methodHandle;
+        this.subroutine = codeFrom.subroutine;
+        this.isStatic = codeFrom.isStatic;
+        this.autoloadVariableName = codeFrom.autoloadVariableName;
+        this.codeObject = codeFrom.codeObject;
+        this.prototype = codeFrom.prototype;
+        this.attributes = codeFrom.attributes != null ? new ArrayList<>(codeFrom.attributes) : null;
+        this.packageName = codeFrom.packageName;
+        this.subName = codeFrom.subName;
+        this.sourcePackage = codeFrom.sourcePackage;
+        this.isSymbolicReference = codeFrom.isSymbolicReference;
+        this.isBuiltin = codeFrom.isBuiltin;
+        this.isDeclared = codeFrom.isDeclared;
+        this.isClosurePrototype = codeFrom.isClosurePrototype;
+        this.isMapGrepBlock = codeFrom.isMapGrepBlock;
+        this.isEvalBlock = codeFrom.isEvalBlock;
+        this.explicitlyRenamed = codeFrom.explicitlyRenamed;
+        this.cvStartFile = codeFrom.cvStartFile;
+        this.cvStartLine = codeFrom.cvStartLine;
+        this.isConstantCv = codeFrom.isConstantCv;
+        this.stashInstallPackage = codeFrom.stashInstallPackage;
+        this.stashInstallSub = codeFrom.stashInstallSub;
+        this.hadStashRef = codeFrom.hadStashRef;
+        this.installedViaAnonGlobAssign = codeFrom.installedViaAnonGlobAssign;
+        this.stateVariableInitialized = codeFrom.stateVariableInitialized;
+        this.stateVariable = codeFrom.stateVariable;
+        this.stateArray = codeFrom.stateArray;
+        this.stateHash = codeFrom.stateHash;
+        this.constantValue = codeFrom.constantValue;
+        if (sourceIsLazyOnly) {
+            this.subroutine = (runtimeArgs, callContext) ->
+                    RuntimeCode.apply(new RuntimeScalar(codeFrom), runtimeArgs, callContext);
+            this.codeObject = codeFrom;
+            this.compilerSupplier = null;
+        } else {
+            this.compilerSupplier = codeFrom.compilerSupplier;
+        }
+        this.__SUB__ = codeFrom.__SUB__;
+        this.capturedScalars = codeFrom.capturedScalars;
+        this.capturedAggregates = codeFrom.capturedAggregates;
+        this.padConstants = codeFrom.padConstants;
     }
 
     /**
@@ -3339,6 +3416,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
             }
+            RuntimeScalar lateResolved = resolveLateDefinedForwardCodeRef(curScalar, code);
+            if (lateResolved != null) {
+                curScalar = lateResolved;
+                continue;
+            }
             if (!code.defined()) {
                 // Try to find AUTOLOAD for this subroutine
                 String subroutineName = code.packageName + "::" + code.subName;
@@ -3687,6 +3769,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
+            RuntimeScalar lateResolved = resolveLateDefinedForwardCodeRef(runtimeScalar, code);
+            if (lateResolved != null) {
+                return apply(lateResolved, subroutineName, args, callContext);
+            }
+
             if (code.defined()) {
                 requireLvalueCallable(code, callContext, subroutineName);
                 int effectiveContext = effectiveCallContext(callContext);
@@ -3934,6 +4021,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     runtimeScalar = GlobalVariable.getGlobalCodeRef("CORE::" + code.subName);
                     code = (RuntimeCode) runtimeScalar.value;
                 }
+            }
+
+            RuntimeScalar lateResolved = resolveLateDefinedForwardCodeRef(runtimeScalar, code);
+            if (lateResolved != null) {
+                return apply(lateResolved, subroutineName, list, callContext);
             }
 
             if (code.defined()) {
@@ -4355,6 +4447,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                     }
                 }
+                RuntimeScalar lateResolved = resolveLateDefinedForwardCodeRef(null, this);
+                if (lateResolved != null) {
+                    return apply(lateResolved, a, callContext);
+                }
                 String fullSubName = "";
                 if (this.packageName != null && this.subName != null) {
                     fullSubName = this.packageName + "::" + this.subName;
@@ -4471,6 +4567,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Check if subroutine is defined (prefer functional interface over methodHandle)
             if (this.subroutine == null && this.methodHandle == null) {
+                RuntimeScalar lateResolved = resolveLateDefinedForwardCodeRef(null, this);
+                if (lateResolved != null) {
+                    return apply(lateResolved, a, callContext);
+                }
                 String fullSubName = (this.packageName != null && this.subName != null)
                         ? this.packageName + "::" + this.subName
                         : subroutineName;
