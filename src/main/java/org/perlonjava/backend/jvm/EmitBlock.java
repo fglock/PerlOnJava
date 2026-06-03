@@ -467,7 +467,15 @@ public class EmitBlock {
                 || hasBlockResultRegister;
         boolean flushAtScopeExit = !isSubBody
                 && (isDoBlock ? doBlockFreshResult : !blockMayNeedResultAfterScopeExit);
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit);
+        int returnedLvalueSlot = -1;
+        if (isSubBody && emitterVisitor.ctx.javaClassInfo.isLvalueSubroutine) {
+            returnedLvalueSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
+        }
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit, returnedLvalueSlot);
+        if (returnedLvalueSlot >= 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+        }
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         emitPostBlockStrictOptions(mv, node);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");

@@ -1175,7 +1175,8 @@ public class CompileOperator {
                     bytecodeCompiler.evalSiteRegistries.add(bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
                     bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
                             bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
-                            bytecodeCompiler.symbolTable.featureFlagsStack.peek()
+                            bytecodeCompiler.symbolTable.featureFlagsStack.peek(),
+                            op.equals("evalbytes") ? 1 : 0
                     });
                     bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                     bytecodeCompiler.emitReg(rd);

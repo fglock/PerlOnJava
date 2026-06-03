@@ -101,7 +101,7 @@ public class CompileBinaryOperator {
                 break;
         }
 
-        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, &.=, |.=, ^.=, binary&=, binary|=, binary^=, x=, **=, <<=, >>=, &&=, ||=)
+        // Handle compound assignment operators (+=, -=, *=, /=, %=, .=, &=, |=, ^=, &.=, |.=, ^.=, binary&=, binary|=, binary^=, x=, **=, <<=, >>=, &&=, ||=, ^^=)
         if (node.operator.equals("+=") || node.operator.equals("-=") ||
                 node.operator.equals("*=") || node.operator.equals("/=") ||
                 node.operator.equals("%=") || node.operator.equals(".=") ||
@@ -110,7 +110,7 @@ public class CompileBinaryOperator {
                 node.operator.equals("x=") || node.operator.equals("**=") ||
                 node.operator.equals("<<=") || node.operator.equals(">>=") ||
                 node.operator.equals("&&=") || node.operator.equals("||=") ||
-                node.operator.equals("//=") ||
+                node.operator.equals("//=") || node.operator.equals("^^=") ||
                 node.operator.equals("binary&=") ||
                 node.operator.equals("binary|=") ||
                 node.operator.equals("binary^=")) {

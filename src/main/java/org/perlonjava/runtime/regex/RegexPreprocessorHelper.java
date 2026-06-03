@@ -86,11 +86,8 @@ public class RegexPreprocessorHelper {
             int endQuote = s.indexOf('\'', offset);
             if (endQuote != -1) {
                 String name = s.substring(offset, endQuote);
-                // Encode underscores for Java regex compatibility
-                String encodedName = CaptureNameEncoder.encodeGroupName(name);
                 // Convert to Java syntax \k<name>
-                sb.setLength(sb.length() - 1); // Remove the backslash
-                sb.append("\\k<").append(encodedName).append(">");
+                appendNamedBackreference(sb, name);
                 return endQuote; // Return position at closing quote
             } else {
                 RegexPreprocessor.regexError(s, offset - 2, "Unterminated \\k'...' backreference");
@@ -102,10 +99,7 @@ public class RegexPreprocessorHelper {
             int endAngle = s.indexOf('>', offset);
             if (endAngle != -1) {
                 String name = s.substring(offset, endAngle);
-                // Encode underscores for Java regex compatibility
-                String encodedName = CaptureNameEncoder.encodeGroupName(name);
-                sb.setLength(sb.length() - 1); // Remove the backslash
-                sb.append("\\k<").append(encodedName).append(">");
+                appendNamedBackreference(sb, name);
                 return endAngle; // Return position at closing >
             } else {
                 RegexPreprocessor.regexError(s, offset - 2, "Unterminated \\k<...> backreference");
@@ -144,10 +138,8 @@ public class RegexPreprocessorHelper {
                             sb.append("\\").append(groupNum);
                         }
                     } catch (NumberFormatException e) {
-                        // It's a named reference - encode underscores for Java regex
-                        String encodedRef = CaptureNameEncoder.encodeGroupName(ref);
-                        sb.setLength(sb.length() - 1); // Remove the backslash
-                        sb.append("\\k<").append(encodedRef).append(">");
+                        // It's a named reference.
+                        appendNamedBackreference(sb, ref);
                     }
                     offset = endBrace;
                 }
@@ -545,6 +537,24 @@ public class RegexPreprocessorHelper {
             }
         }
         return offset;
+    }
+
+    private static void appendNamedBackreference(StringBuilder sb, String perlName) {
+        java.util.List<String> targets = RegexPreprocessor.namedBackreferenceTargets(perlName);
+        sb.setLength(sb.length() - 1); // Remove the already-appended backslash
+        if (targets.size() == 1) {
+            sb.append("\\k<").append(targets.get(0)).append(">");
+            return;
+        }
+
+        sb.append("(?:");
+        for (int i = 0; i < targets.size(); i++) {
+            if (i > 0) {
+                sb.append('|');
+            }
+            sb.append("\\k<").append(targets.get(i)).append(">");
+        }
+        sb.append(')');
     }
 
     /**
@@ -1056,8 +1066,6 @@ public class RegexPreprocessorHelper {
             RegexPreprocessor.regexError(s, start + 2, "Sequence (?^d...) not recognized");
         }
 
-        sb.append("(?");
-
         // Split into positive and negative parts
         String[] parts = flags.split("-", 2);
         String positiveFlags = parts[0];
@@ -1129,6 +1137,16 @@ public class RegexPreprocessorHelper {
             RegexPreprocessor.inlinePFlagEncountered = true;
         }
 
+        if (positiveFlags.isEmpty()
+                && negativeFlags.isEmpty()
+                && (colonPos == -1 || closeParen < colonPos)) {
+            offset = RegexPreprocessor.handleRegex(s, closeParen + 1, sb, newFlags, true);
+            if (offset < s.length()) {
+                offset--;
+            }
+            return offset;
+        }
+
         // Handle `n` flags
         if (positiveFlags.indexOf('n') >= 0) {
             positiveFlags = positiveFlags.replace("n", "");
@@ -1142,6 +1160,7 @@ public class RegexPreprocessorHelper {
         negativeFlags = filterSupportedFlags(negativeFlags);
 
         // Build the new flag string
+        sb.append("(?");
         sb.append(positiveFlags);
         if (!negativeFlags.isEmpty()) {
             sb.append('-').append(negativeFlags);

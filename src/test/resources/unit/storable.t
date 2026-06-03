@@ -7,7 +7,7 @@ use File::Temp qw(tempfile);
 use Storable qw(store retrieve nstore freeze thaw nfreeze dclone);
 
 # Test plan
-plan tests => 13;
+plan tests => 15;
 
 subtest 'Basic scalar serialization' => sub {
     plan tests => 6;
@@ -241,6 +241,24 @@ subtest 'Deep cloning' => sub {
     isa_ok($blessed_clone, 'CloneTest', 'Cloned blessed object preserves class');
 };
 
+subtest 'dclone has unary prototype' => sub {
+    plan tests => 3;
+
+    is(prototype('dclone'), '$', 'imported dclone has scalar prototype');
+    is(prototype('Storable::dclone'), '$', 'qualified dclone has scalar prototype');
+
+    sub _storable_proto_receiver {
+        return scalar(@_) . ':' . ref($_[1]) . ':' . $_[2];
+    }
+
+    my $source = [ 'x' ];
+    is(
+        _storable_proto_receiver('head', dclone $source, 'tail'),
+        '3:ARRAY:tail',
+        'bare dclone consumes one argument inside a larger argument list'
+    );
+};
+
 subtest 'Deep cloning preserves hash-wrapper independence' => sub {
     plan tests => 2;
 
@@ -263,6 +281,59 @@ subtest 'Deep cloning preserves hash-wrapper independence' => sub {
         $clone->{attrs}{order_by}[0] != $clone->{shared},
         'order_by chunk hash and shared wrapper hash are distinct refs in clone'
     );
+};
+
+subtest 'dclone array elements keep destructor-owned nested state' => sub {
+    plan tests => 3;
+
+    package _StDcloneClearingElement;
+
+    sub DESTROY {
+        %{ $_[0] } = ();
+        $main::_st_dclone_destroyed++;
+    }
+
+    package _StDcloneDocument;
+
+    sub STORABLE_freeze {
+        my ($self, $cloning) = @_;
+        my $class = ref $self;
+        my %hash = %$self;
+        return ($class, \%hash);
+    }
+
+    sub STORABLE_thaw {
+        my ($self, undef, $class, $hash) = @_;
+        bless $self, $class;
+        foreach (keys %$hash) {
+            $self->{$_} = delete $hash->{$_};
+        }
+    }
+
+    package _StDcloneNode;
+    our @ISA = ('_StDcloneClearingElement');
+
+    package _StDcloneToken;
+    our @ISA = ('_StDcloneClearingElement');
+
+    package main;
+
+    local $_st_dclone_destroyed = 0;
+    my $original = bless {
+        children => [
+            bless({
+                children => [
+                    bless({ content => 'x' }, '_StDcloneToken'),
+                ],
+            }, '_StDcloneNode'),
+        ],
+    }, '_StDcloneDocument';
+
+    my $clone = dclone($original);
+
+    is(scalar(@{ $clone->{children} }), 1, 'top-level array child survives dclone');
+    is(scalar(@{ $clone->{children}[0]{children} }), 1, 'nested array child survives dclone');
+    is($clone->{children}[0]{children}[0]{content}, 'x', 'nested token content survives dclone');
 };
 
 # Regression test: STORABLE_freeze hook cookie must survive nfreeze/thaw.

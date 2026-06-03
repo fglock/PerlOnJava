@@ -283,7 +283,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, null);
-        int effectiveContext = RuntimeCode.effectiveCallContext(callContext);
+        int effectiveContext = RuntimeCode.effectiveCallContext(this, callContext);
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         // This matches what RuntimeCode.apply() does for JVM-compiled subs
         RuntimeCode.pushArgs(args);
@@ -295,7 +295,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         try {
             return RuntimeCode.coerceScalarCallResult(
-                    BytecodeInterpreter.execute(this, args, effectiveContext), effectiveContext);
+                    BytecodeInterpreter.execute(this, args, effectiveContext), effectiveContext, callContext);
         } finally {
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
@@ -313,7 +313,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);
-        int effectiveContext = RuntimeCode.effectiveCallContext(callContext);
+        int effectiveContext = RuntimeCode.effectiveCallContext(this, callContext);
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         RuntimeCode.pushArgs(args);
         RuntimeCode.pushActiveCode(this);
@@ -324,7 +324,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         try {
             return RuntimeCode.coerceScalarCallResult(
                     BytecodeInterpreter.execute(this, args, effectiveContext, subroutineName),
-                    effectiveContext);
+                    effectiveContext, callContext);
         } finally {
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();

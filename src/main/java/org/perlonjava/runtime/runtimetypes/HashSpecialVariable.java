@@ -1,14 +1,13 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
-import org.perlonjava.runtime.regex.CaptureNameEncoder;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.AbstractMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
@@ -74,47 +73,15 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public Set<Entry<String, RuntimeScalar>> entrySet() {
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Matcher matcher = RuntimeRegex.globalMatcher;
-            if (matcher != null) {
-                Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
-                // Collect entries by decoded Perl name so that duplicate-name
-                // captures (e.g. `(?<y>a)|(?<y>b)`) merge into a single key.
-                // Note: Java's Pattern.namedGroups() returns an unordered map
-                // (ImmutableCollections.MapN), so we must explicitly sort each
-                // bucket by group number so that the *leftmost* alternative
-                // wins (Perl semantics for $+{name}).
-                java.util.Map<String, java.util.List<String>> byPerlName = new java.util.LinkedHashMap<>();
-                for (String name : namedGroups.keySet()) {
-                    if (CaptureNameEncoder.isInternalCapture(name)) {
-                        continue;
-                    }
-                    String perlName = CaptureNameEncoder.decodeGroupName(name);
-                    byPerlName.computeIfAbsent(perlName, k -> new java.util.ArrayList<>()).add(name);
-                }
-                for (java.util.List<String> jns : byPerlName.values()) {
-                    jns.sort(java.util.Comparator.comparingInt(namedGroups::get));
-                }
-                for (Map.Entry<String, java.util.List<String>> e : byPerlName.entrySet()) {
-                    String perlName = e.getKey();
-                    java.util.List<String> javaNames = e.getValue();
+            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            if (namedCaptures != null) {
+                for (Map.Entry<String, List<String>> e : namedCaptures.entrySet()) {
                     if (this.mode == Id.CAPTURE_ALL) {
-                        // For %-, value is an arrayref containing every alternative
-                        // (matched ones get the captured value, unmatched get undef).
-                        RuntimeArray arr = new RuntimeArray();
-                        for (String jn : javaNames) {
-                            String v = matcher.group(jn);
-                            arr.push(v != null ? new RuntimeScalar(v) : new RuntimeScalar());
-                        }
-                        entries.add(new SimpleEntry<>(perlName, arr.createReference()));
+                        entries.add(new SimpleEntry<>(e.getKey(), captureAllArrayRef(e.getValue())));
                     } else {
-                        // For %+, only include the alternative that actually matched.
-                        // For duplicate names at most one branch will have matched.
-                        for (String jn : javaNames) {
-                            String v = matcher.group(jn);
-                            if (v != null) {
-                                entries.add(new SimpleEntry<>(perlName, new RuntimeScalar(v)));
-                                break;
-                            }
+                        RuntimeScalar matched = firstDefinedCapture(e.getValue());
+                        if (matched.getDefinedBoolean()) {
+                            entries.add(new SimpleEntry<>(e.getKey(), matched));
                         }
                     }
                 }
@@ -199,34 +166,14 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     @Override
     public RuntimeScalar get(Object key) {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Matcher matcher = RuntimeRegex.globalMatcher;
-            if (matcher != null && key instanceof String name) {
-                // Encode the Perl name to Java regex name (underscore encoding)
-                String encodedName = CaptureNameEncoder.encodeGroupName(name);
-                Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
-                // Collect every Java group whose decoded Perl name matches the
-                // requested key. For non-duplicated names this is just the
-                // single direct match; for duplicated names we may have several.
-                java.util.List<String> javaNames = collectJavaNamesFor(namedGroups, encodedName);
-                if (javaNames.isEmpty()) {
-                    return scalarUndef;
-                }
+            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            if (namedCaptures != null && key instanceof String name) {
+                List<String> captures = namedCaptures.get(name);
+                if (captures == null) return scalarUndef;
                 if (this.mode == Id.CAPTURE_ALL) {
-                    // For %-, always return array ref containing one slot per alternative.
-                    RuntimeArray arr = new RuntimeArray();
-                    for (String jn : javaNames) {
-                        String v = matcher.group(jn);
-                        arr.push(v != null ? new RuntimeScalar(v) : new RuntimeScalar());
-                    }
-                    return arr.createReference();
+                    return captureAllArrayRef(captures);
                 } else {
-                    // For %+, return the matched value (or undef if no branch matched).
-                    for (String jn : javaNames) {
-                        String v = matcher.group(jn);
-                        if (v != null) {
-                            return new RuntimeScalar(v);
-                        }
-                    }
+                    return firstDefinedCapture(captures);
                 }
             }
         } else if (this.mode == Id.STASH) {
@@ -249,23 +196,15 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public boolean containsKey(Object key) {
         if (this.mode == Id.CAPTURE_ALL) {
             // For %-, all named groups exist (even non-participating ones)
-            Matcher matcher = RuntimeRegex.globalMatcher;
-            if (matcher != null && key instanceof String name) {
-                String encodedName = CaptureNameEncoder.encodeGroupName(name);
-                return !collectJavaNamesFor(matcher.pattern().namedGroups(), encodedName).isEmpty();
-            }
-            return false;
+            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            return namedCaptures != null && key instanceof String name && namedCaptures.containsKey(name);
         }
         if (this.mode == Id.CAPTURE) {
             // For %+, only groups that actually captured
-            Matcher matcher = RuntimeRegex.globalMatcher;
-            if (matcher != null && key instanceof String name) {
-                String encodedName = CaptureNameEncoder.encodeGroupName(name);
-                for (String jn : collectJavaNamesFor(matcher.pattern().namedGroups(), encodedName)) {
-                    if (matcher.group(jn) != null) {
-                        return true;
-                    }
-                }
+            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            if (namedCaptures != null && key instanceof String name) {
+                List<String> captures = namedCaptures.get(name);
+                return captures != null && captures.stream().anyMatch(v -> v != null);
             }
             return false;
         }
@@ -320,34 +259,21 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         return keys;
     }
 
-    /**
-     * Returns every Java capture-group name in the matcher's pattern whose
-     * decoded Perl name equals {@code encodedPerlName}. For typical patterns
-     * this is at most one entry; for duplicate-name patterns like
-     * {@code (?<y>a)|(?<y>b)} the preprocessor renames the second occurrence
-     * to {@code yZpjdupZ0}, etc., and this helper collects all of them.
-     */
-    private static java.util.List<String> collectJavaNamesFor(Map<String, Integer> namedGroups, String encodedPerlName) {
-        java.util.List<String> out = new java.util.ArrayList<>();
-        if (namedGroups == null) {
-            return out;
+    private static RuntimeScalar captureAllArrayRef(List<String> captures) {
+        RuntimeArray arr = new RuntimeArray();
+        for (String v : captures) {
+            arr.push(v != null ? new RuntimeScalar(v) : new RuntimeScalar());
         }
-        if (namedGroups.containsKey(encodedPerlName)) {
-            out.add(encodedPerlName);
-        }
-        // Also pick up duplicate-marker variants (e.g. nameZpjdupZ0, ZpjdupZ1, ...).
-        for (String jn : namedGroups.keySet()) {
-            if (!jn.equals(encodedPerlName)
-                    && CaptureNameEncoder.isDuplicateMarkerName(jn)
-                    && CaptureNameEncoder.stripDuplicateMarker(jn).equals(encodedPerlName)) {
-                out.add(jn);
+        return arr.createReference();
+    }
+
+    private static RuntimeScalar firstDefinedCapture(List<String> captures) {
+        for (String v : captures) {
+            if (v != null) {
+                return new RuntimeScalar(v);
             }
         }
-        // Java's Pattern.namedGroups() doesn't preserve insertion order, so sort
-        // by group number to match Perl's source order. This makes `$+{name}`
-        // return the *leftmost* alternative for duplicate-named captures.
-        out.sort(java.util.Comparator.comparingInt(namedGroups::get));
-        return out;
+        return scalarUndef;
     }
 
     @Override

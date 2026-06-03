@@ -12,7 +12,9 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The EmitStatement class is responsible for handling various control flow statements
@@ -88,6 +90,10 @@ public class EmitStatement {
      * @param flush      If true, emit scoped MortalList flush around null stores
      */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush) {
+        emitScopeExitNullStores(ctx, scopeIndex, flush, -1);
+    }
+
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush, int returnedLvalueSlot) {
         // Gather variable indices for this scope first, to determine if cleanup is needed.
         java.util.List<Integer> scalarIndices = withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex));
         java.util.List<Integer> hashIndices = withoutCaptured(ctx, ctx.symbolTable.getMyHashIndicesInScope(scopeIndex));
@@ -144,11 +150,20 @@ public class EmitStatement {
         // and handles IO fd recycling for anonymous filehandle globs.
         for (int idx : scalarIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                    "scopeExitCleanup",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
-                    false);
+            if (returnedLvalueSlot >= 0) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "scopeExitCleanupPreservingReturnedLvalue",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+            } else {
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "scopeExitCleanup",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
+            }
         }
         // Phase 1b: Walk hash/array variables for nested blessed references.
         // When a hash/array goes out of scope, any blessed refs stored inside
@@ -224,6 +239,117 @@ public class EmitStatement {
                     "flush",
                     "()V",
                     false);
+        }
+    }
+
+    private static Set<Integer> myVariableIndexSet(EmitterContext ctx, int scopeIndex) {
+        return new HashSet<>(ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex));
+    }
+
+    private static List<Integer> indicesAddedSince(List<Integer> indices, Set<Integer> before) {
+        if (indices.isEmpty()) {
+            return indices;
+        }
+        List<Integer> added = new ArrayList<>();
+        for (int idx : indices) {
+            if (!before.contains(idx)) {
+                added.add(idx);
+            }
+        }
+        return added;
+    }
+
+    private static ConditionMyCleanup conditionMyCleanupSince(EmitterContext ctx, int scopeIndex, Set<Integer> before) {
+        if (scopeIndex < 0) {
+            return ConditionMyCleanup.empty();
+        }
+
+        List<Integer> scalarIndices = indicesAddedSince(
+                withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex)), before);
+        List<Integer> hashIndices = indicesAddedSince(
+                withoutCaptured(ctx, ctx.symbolTable.getMyHashIndicesInScope(scopeIndex)), before);
+        List<Integer> arrayIndices = indicesAddedSince(
+                withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex)), before);
+        List<Integer> allIndices = indicesAddedSince(
+                withoutCaptured(ctx, ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex)), before);
+
+        return new ConditionMyCleanup(scalarIndices, hashIndices, arrayIndices, allIndices);
+    }
+
+    private static void emitConditionMyCleanup(EmitterContext ctx, ConditionMyCleanup cleanup) {
+        if (cleanup.isEmpty()) {
+            return;
+        }
+
+        for (int idx : cleanup.scalarIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "scopeExitCleanup",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+        }
+        for (int idx : cleanup.hashIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupHash",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+        for (int idx : cleanup.arrayIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupArray",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                    false);
+        }
+
+        if (ctx.javaClassInfo.cleanupNeeded) {
+            for (int idx : cleanup.allIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                        "unregister",
+                        "(Ljava/lang/Object;)V",
+                        false);
+            }
+        }
+        for (int idx : cleanup.allIndices) {
+            ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
+        }
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "flush",
+                "()V",
+                false);
+    }
+
+    private static final class ConditionMyCleanup {
+        private static final ConditionMyCleanup EMPTY = new ConditionMyCleanup(
+                List.of(), List.of(), List.of(), List.of());
+
+        final List<Integer> scalarIndices;
+        final List<Integer> hashIndices;
+        final List<Integer> arrayIndices;
+        final List<Integer> allIndices;
+
+        ConditionMyCleanup(List<Integer> scalarIndices, List<Integer> hashIndices,
+                           List<Integer> arrayIndices, List<Integer> allIndices) {
+            this.scalarIndices = scalarIndices;
+            this.hashIndices = hashIndices;
+            this.arrayIndices = arrayIndices;
+            this.allIndices = allIndices;
+        }
+
+        static ConditionMyCleanup empty() {
+            return EMPTY;
+        }
+
+        boolean isEmpty() {
+            return allIndices.isEmpty();
         }
     }
 
@@ -458,9 +584,17 @@ public class EmitStatement {
             // Check for pending signals (alarm, etc.) at loop entry
             emitSignalCheck(mv);
 
+            ConditionMyCleanup conditionMyCleanup = ConditionMyCleanup.empty();
+
             // Visit the condition node in scalar context
             if (node.condition != null) {
+                Set<Integer> conditionMyBefore = node.useNewScope
+                        ? myVariableIndexSet(emitterVisitor.ctx, scopeIndex)
+                        : Set.of();
                 node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                if (node.useNewScope) {
+                    conditionMyCleanup = conditionMyCleanupSince(emitterVisitor.ctx, scopeIndex, conditionMyBefore);
+                }
 
                 if (needWhileConditionResult) {
                     mv.visitInsn(Opcodes.DUP);
@@ -514,6 +648,7 @@ public class EmitStatement {
                         RuntimeContextType.VOID,
                         true,
                         true);
+                emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels().cleanupScopeIndex = scopeIndex + 1;
 
                 // Visit the loop body
                 if (needsReturnValue) {
@@ -558,6 +693,7 @@ public class EmitStatement {
             }
 
             if (!node.isSimpleBlock) {
+                emitConditionMyCleanup(emitterVisitor.ctx, conditionMyCleanup);
                 // Jump back to the start label to continue the loop
                 mv.visitJumpInsn(Opcodes.GOTO, startLabel);
             }

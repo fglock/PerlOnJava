@@ -36,6 +36,13 @@ public class LoopLabels {
     public Label controlFlowHandler;
 
     /**
+     * Lexical scope lower bound that must be cleaned before a local
+     * last/next/redo jump. Normal loop-end labels clean the loop's outer
+     * scope; this covers body/nested scopes that the jump bypasses.
+     */
+    public int cleanupScopeIndex = -1;
+
+    /**
      * The context type in which this loop operates
      */
     public int context;

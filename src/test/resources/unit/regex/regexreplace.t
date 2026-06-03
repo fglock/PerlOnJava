@@ -19,6 +19,11 @@ $replacement = "Galaxy";
 $substituted = $string =~ s/$pattern/$replacement/r;
 ok(!($substituted ne "Hello World"), '\'Hello World\' remains \'Hello World\'');
 
+my $replace_count = $string =~ s/$pattern/$replacement/;
+ok(defined $replace_count, 'failed destructive s/// returns a defined false value');
+ok(!$replace_count, 'failed destructive s/// result is false');
+is($replace_count, '', 'failed destructive s/// stringifies to empty string');
+
 # Global substitution
 $string = "Hello World World";
 $pattern = qr/World/;

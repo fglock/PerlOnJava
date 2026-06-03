@@ -1231,7 +1231,12 @@ public class EmitVariable {
         new BinaryOperatorNode("||", testStateVariable, initStateVariable, tokenIndex)
                 .accept(emitterVisitor.with(RuntimeContextType.VOID));
 
-        varNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int resultContext = switch (ctx.contextType) {
+            case RuntimeContextType.RUNTIME -> RuntimeContextType.RUNTIME;
+            case RuntimeContextType.LIST, RuntimeContextType.LVALUE_LIST -> RuntimeContextType.LIST;
+            default -> RuntimeContextType.SCALAR;
+        };
+        varNode.accept(emitterVisitor.with(resultContext));
     }
 
     static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node) {

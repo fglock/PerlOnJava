@@ -20,7 +20,7 @@ public class ListOperators {
      * Only releases captures for closures flagged as isMapGrepBlock (set by the
      * compiler for BLOCK syntax). Named subs and user closures are not affected.
      */
-    private static void releaseEphemeralCaptures(RuntimeScalar closure) {
+    public static void releaseEphemeralCaptures(RuntimeScalar closure) {
         if (closure.type == RuntimeScalarType.CODE
                 && closure.value instanceof RuntimeCode code
                 && code.isMapGrepBlock) {

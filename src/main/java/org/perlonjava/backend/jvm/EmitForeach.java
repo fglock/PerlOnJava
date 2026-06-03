@@ -586,6 +586,7 @@ public class EmitForeach {
         EmitterVisitor voidVisitor = emitterVisitor.with(RuntimeContextType.VOID);
         if (node.body instanceof BlockNode blockNode) {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
+            currentLoopLabels.cleanupScopeIndex = bodyScopeIndex;
             Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv, true);
 
             pushGotoLabelsForBlock(emitterVisitor, blockNode);

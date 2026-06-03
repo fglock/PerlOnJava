@@ -72,8 +72,8 @@ public class ReferenceOperators {
             // which specific increment/decrement site causes the
             // metaclass refCount underflow during CMOP bootstrap.
             if (RuntimeBase.refCountTraceEnabled()
-                    && org.perlonjava.runtime.runtimetypes.DestroyDispatch
-                            .classNeedsWalkerGate(newBlessId)) {
+                    && (org.perlonjava.runtime.runtimetypes.DestroyDispatch
+                            .classNeedsWalkerGate(newBlessId))) {
                 referent.refCountTrace = true;
                 System.err.println("[REFCOUNT] *** ARMED *** base="
                     + System.identityHashCode(referent)

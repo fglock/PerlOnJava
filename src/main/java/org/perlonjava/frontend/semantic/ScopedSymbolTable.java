@@ -172,6 +172,13 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Returns the current top lexical scope index.
+     */
+    public int currentScopeIndex() {
+        return symbolTableStack.size() - 1;
+    }
+
+    /**
      * Exits the current scope by popping the top SymbolTable from the stack.
      * Also removes the top state of warnings, features, and strict options.
      * <p>

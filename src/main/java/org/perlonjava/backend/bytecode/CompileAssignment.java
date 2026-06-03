@@ -498,6 +498,14 @@ public class CompileAssignment {
                                 bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                                 int listReg = bytecodeCompiler.lastResultReg;
 
+                                int countReg = -1;
+                                if (outerContext == RuntimeContextType.SCALAR) {
+                                    countReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                                    bytecodeCompiler.emitReg(countReg);
+                                    bytecodeCompiler.emitReg(listReg);
+                                }
+
                                 // Populate array from list
                                 bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                                 bytecodeCompiler.emitReg(arrayReg);
@@ -507,11 +515,7 @@ public class CompileAssignment {
 
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, arrayReg, "@");
 
-                                if (rhsContext == RuntimeContextType.SCALAR) {
-                                    int countReg = bytecodeCompiler.allocateRegister();
-                                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                                    bytecodeCompiler.emitReg(countReg);
-                                    bytecodeCompiler.emitReg(listReg);
+                                if (outerContext == RuntimeContextType.SCALAR) {
                                     bytecodeCompiler.lastResultReg = countReg;
                                 } else {
                                     bytecodeCompiler.lastResultReg = arrayReg;
@@ -524,6 +528,14 @@ public class CompileAssignment {
                             bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                             int listReg = bytecodeCompiler.lastResultReg;
 
+                            int countReg = -1;
+                            if (outerContext == RuntimeContextType.SCALAR) {
+                                countReg = bytecodeCompiler.allocateRegister();
+                                bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                                bytecodeCompiler.emitReg(countReg);
+                                bytecodeCompiler.emitReg(listReg);
+                            }
+
                             bytecodeCompiler.registerVariable(varName, arrayReg);
                             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
                             bytecodeCompiler.emitReg(arrayReg);
@@ -535,11 +547,7 @@ public class CompileAssignment {
                             // Runtime attribute dispatch for my variables with attributes
                             bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, arrayReg, "@");
 
-                            if (rhsContext == RuntimeContextType.SCALAR) {
-                                int countReg = bytecodeCompiler.allocateRegister();
-                                bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                                bytecodeCompiler.emitReg(countReg);
-                                bytecodeCompiler.emitReg(listReg);
+                            if (outerContext == RuntimeContextType.SCALAR) {
                                 bytecodeCompiler.lastResultReg = countReg;
                             } else {
                                 bytecodeCompiler.lastResultReg = arrayReg;
@@ -564,6 +572,14 @@ public class CompileAssignment {
                                 bytecodeCompiler.compileNode(node.right, -1, rhsContext);
                                 int listReg = bytecodeCompiler.lastResultReg;
 
+                                int countReg = -1;
+                                if (outerContext == RuntimeContextType.SCALAR) {
+                                    countReg = bytecodeCompiler.allocateRegister();
+                                    bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                                    bytecodeCompiler.emitReg(countReg);
+                                    bytecodeCompiler.emitReg(listReg);
+                                }
+
                                 // Populate hash from list
                                 bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
                                 bytecodeCompiler.emitReg(hashReg);
@@ -573,7 +589,7 @@ public class CompileAssignment {
 
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, hashReg, "%");
 
-                                bytecodeCompiler.lastResultReg = hashReg;
+                                bytecodeCompiler.lastResultReg = outerContext == RuntimeContextType.SCALAR ? countReg : hashReg;
                                 return;
                             }
 
@@ -591,6 +607,14 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.NEW_HASH);
                             bytecodeCompiler.emitReg(hashReg);
 
+                            int countReg = -1;
+                            if (outerContext == RuntimeContextType.SCALAR) {
+                                countReg = bytecodeCompiler.allocateRegister();
+                                bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                                bytecodeCompiler.emitReg(countReg);
+                                bytecodeCompiler.emitReg(listReg);
+                            }
+
                             // Populate hash from list
                             bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
                             bytecodeCompiler.emitReg(hashReg);
@@ -599,7 +623,7 @@ public class CompileAssignment {
                             // Runtime attribute dispatch for my variables with attributes
                             bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, hashReg, "%");
 
-                            bytecodeCompiler.lastResultReg = hashReg;
+                            bytecodeCompiler.lastResultReg = outerContext == RuntimeContextType.SCALAR ? countReg : hashReg;
                             return;
                         }
                     }
@@ -908,6 +932,14 @@ public class CompileAssignment {
                         bytecodeCompiler.emit(nameIdx);
                     }
 
+                    int countReg = -1;
+                    if (outerContext == RuntimeContextType.SCALAR) {
+                        countReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                        bytecodeCompiler.emitReg(countReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                    }
+
                     // Populate array from list using setFromList
                     bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                     bytecodeCompiler.emitReg(arrayReg);
@@ -915,12 +947,7 @@ public class CompileAssignment {
 
                     // In scalar context, return the array size; in list context, return the array
                     if (outerContext == RuntimeContextType.SCALAR) {
-                        // Convert array to scalar (returns size)
-                        int sizeReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                        bytecodeCompiler.emitReg(sizeReg);
-                        bytecodeCompiler.emitReg(arrayReg);
-                        bytecodeCompiler.lastResultReg = sizeReg;
+                        bytecodeCompiler.lastResultReg = countReg;
                     } else {
                         bytecodeCompiler.lastResultReg = arrayReg;
                     }
@@ -1159,6 +1186,14 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(pkgIdx);
                         }
 
+                        int countReg = -1;
+                        if (outerContext == RuntimeContextType.SCALAR) {
+                            countReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                            bytecodeCompiler.emitReg(countReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                        }
+
                         // Assign the value to the dereferenced array
                         bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                         bytecodeCompiler.emitReg(arrayReg);
@@ -1166,11 +1201,7 @@ public class CompileAssignment {
 
                         // In scalar context, return array size; in list context, return the array
                         if (outerContext == RuntimeContextType.SCALAR) {
-                            int sizeReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                            bytecodeCompiler.emitReg(sizeReg);
-                            bytecodeCompiler.emitReg(arrayReg);
-                            bytecodeCompiler.lastResultReg = sizeReg;
+                            bytecodeCompiler.lastResultReg = countReg;
                         } else {
                             bytecodeCompiler.lastResultReg = arrayReg;
                         }
@@ -1872,6 +1903,14 @@ public class CompileAssignment {
                 bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LVALUE_LIST);
                 int lhsListReg = bytecodeCompiler.lastResultReg;
 
+                int countReg = -1;
+                if (outerContext == RuntimeContextType.SCALAR) {
+                    countReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                    bytecodeCompiler.emitReg(countReg);
+                    bytecodeCompiler.emitReg(rhsListReg);
+                }
+
                 // Call SET_FROM_LIST to assign RHS values to LHS lvalues
                 // setFromList() returns a RuntimeArray with scalarContextSize set to the
                 // original RHS element count, and elements containing the assigned values.
@@ -1884,12 +1923,6 @@ public class CompileAssignment {
 
                 if (outerContext == RuntimeContextType.SCALAR) {
                     // In scalar context, return the RHS element count.
-                    // resultReg is a RuntimeArray with scalarContextSize set;
-                    // ARRAY_SIZE on it calls scalar() which returns scalarContextSize.
-                    int countReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                    bytecodeCompiler.emitReg(countReg);
-                    bytecodeCompiler.emitReg(resultReg);
                     bytecodeCompiler.lastResultReg = countReg;
                 } else {
                     // In list context, return the assigned values (after hash dedup etc.)

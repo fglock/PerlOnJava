@@ -869,7 +869,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeList containing the elements of the hash.
      */
     public RuntimeList getList() {
-        return new RuntimeList(this);
+        RuntimeList result = new RuntimeList();
+        Iterator<RuntimeScalar> iterator = iterator();
+        while (iterator.hasNext()) {
+            result.elements.add(new RuntimeScalar(iterator.next()));
+        }
+        return result;
     }
 
     /**

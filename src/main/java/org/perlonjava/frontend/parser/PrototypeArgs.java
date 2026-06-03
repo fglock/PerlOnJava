@@ -32,6 +32,21 @@ import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
  * ; - separates required from optional arguments
  */
 public class PrototypeArgs {
+    private static boolean isListUtilCallback(String subName) {
+        if (subName == null || subName.isEmpty()) {
+            return false;
+        }
+        String baseName = subName;
+        int idx = baseName.lastIndexOf("::");
+        if (idx >= 0) {
+            baseName = baseName.substring(idx + 2);
+        }
+        return switch (baseName) {
+            case "reduce", "reductions", "any", "all", "none", "notall",
+                    "first", "pairmap", "pairgrep", "pairfirst" -> true;
+            default -> false;
+        };
+    }
 
     private static boolean isOpenDupMode(Node modeNode) {
         if (modeNode instanceof StringNode stringNode) {
@@ -403,16 +418,16 @@ public class PrototypeArgs {
             char c = prototype.charAt(i);
 
             if (inBackslash) {
-                if (c == '[') {
+                if (inGroup) {
+                    if (c == ']') {
+                        count++;
+                        inGroup = false;
+                        inBackslash = false;
+                    }
+                } else if (c == '[') {
                     inGroup = true;
                 } else if (!inGroup) {
                     count++;
-                    inBackslash = false;
-                }
-            } else if (inGroup) {
-                if (c == ']') {
-                    count++;
-                    inGroup = false;
                     inBackslash = false;
                 }
             } else {
@@ -429,6 +444,34 @@ public class PrototypeArgs {
         }
 
         return count;
+    }
+
+    private static boolean hasSlurpyPrototypeSlot(String prototype) {
+        boolean inBackslash = false;
+        boolean inGroup = false;
+
+        for (int i = 0; i < prototype.length(); i++) {
+            char c = prototype.charAt(i);
+
+            if (inBackslash) {
+                if (inGroup) {
+                    if (c == ']') {
+                        inGroup = false;
+                        inBackslash = false;
+                    }
+                } else if (c == '[') {
+                    inGroup = true;
+                } else if (!inGroup) {
+                    inBackslash = false;
+                }
+            } else if (c == '\\') {
+                inBackslash = true;
+            } else if (c == '@' || c == '%') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -882,6 +925,9 @@ public class PrototypeArgs {
             
             try {
                 Node block = new SubroutineNode(null, null, null, ParseBlock.parseBlock(parser), false, parser.tokenIndex);
+                if (isListUtilCallback(parser.ctx.symbolTable.getCurrentSubroutine())) {
+                    block.setAnnotation("isMapGrepBlock", true);
+                }
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                 // Code references/blocks are evaluated in SCALAR context
                 block.setAnnotation("context", "SCALAR");
@@ -1085,7 +1131,9 @@ public class PrototypeArgs {
         //     so assignment and other operators ARE consumed. Example:
         //     sreftest my $a = 'val', $i++  →  sreftest(\(my $a = 'val'), $i++)
         Node referenceArg;
-        boolean useNamedUnary = !hasParentheses && countPrototypeArgs(prototype) <= 1;
+        boolean useNamedUnary = !hasParentheses
+                && countPrototypeArgs(prototype) <= 1
+                && !hasSlurpyPrototypeSlot(prototype);
         if (useNamedUnary) {
             referenceArg = parseBackslashArgWithComma(parser, isOptional, needComma, expectedType);
         } else {

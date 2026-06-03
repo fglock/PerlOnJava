@@ -104,8 +104,22 @@ public class EvalStringHandler {
                                              Map<String, Integer> siteRegistry,
                                              int siteStrictOptions,
                                              int siteFeatureFlags) {
+        return evalStringList(perlCode, currentCode, registers, sourceName, sourceLine,
+                callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, false);
+    }
+
+    public static RuntimeList evalStringList(String perlCode,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes) {
         return evalStringList(perlCode, RuntimeScalarType.STRING, currentCode, registers,
-                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags);
+                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, isEvalbytes);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -117,8 +131,22 @@ public class EvalStringHandler {
                                              Map<String, Integer> siteRegistry,
                                              int siteStrictOptions,
                                              int siteFeatureFlags) {
+        return evalStringList(codeScalar, currentCode, registers, sourceName, sourceLine,
+                callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, false);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes) {
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
-                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags);
+                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, isEvalbytes);
     }
 
     private static RuntimeList evalStringList(String perlCode,
@@ -130,13 +158,18 @@ public class EvalStringHandler {
                                              int callContext,
                                              Map<String, Integer> siteRegistry,
                                              int siteStrictOptions,
-                                             int siteFeatureFlags) {
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes) {
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
                     " sourceType=" + sourceType);
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
+
+            if (isEvalbytes && RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode)) {
+                perlCode = RuntimeCode.decodeEvalbytesUtf8Source(perlCode);
+            }
 
             // Step 2: Parse the string to AST
             Lexer lexer = new Lexer(perlCode);
@@ -152,7 +185,7 @@ public class EvalStringHandler {
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
-            configureEvalSourceOptions(opts, perlCode, sourceType);
+            configureEvalSourceOptions(opts, perlCode, sourceType, isEvalbytes);
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
             // Add standard variables that are always available in eval context.
@@ -398,7 +431,16 @@ public class EvalStringHandler {
 
     private static void configureEvalSourceOptions(CompilerOptions opts,
                                                    String perlCode,
-                                                   int sourceType) {
+                                                   int sourceType,
+                                                   boolean isEvalbytes) {
+        if (isEvalbytes) {
+            if (RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode)) {
+                opts.isUnicodeSource = true;
+            } else {
+                opts.isEvalbytes = true;
+            }
+            return;
+        }
         if (sourceType == RuntimeScalarType.BYTE_STRING) {
             opts.isByteStringSource = true;
             return;
@@ -442,7 +484,7 @@ public class EvalStringHandler {
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
-            configureEvalSourceOptions(opts, perlCode, RuntimeScalarType.STRING);
+            configureEvalSourceOptions(opts, perlCode, RuntimeScalarType.STRING, false);
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
             // Add standard variables that are always available in eval context.

@@ -370,47 +370,7 @@ public class BytecodeCompiler implements Visitor {
         if (!scopeIndices.isEmpty()) {
             int scopeIdx = scopeIndices.pop();
 
-            // Gather variable indices to determine if cleanup is needed.
-            java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
-            java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
-            java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
-
-            // Only emit pushMark/popAndFlush when there are variables that need cleanup.
-            // Scopes with no my-variables skip this entirely.
-            boolean needsCleanup = flush
-                    && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
-
-            // Push mark so popAndFlush only drains entries added by
-            // scopeExitCleanup. Entries from method returns within the block
-            // that are below the mark will be processed by the next setLarge()
-            // or undefine() flush, or by the enclosing scope's exit.
-            if (needsCleanup) {
-                emit(Opcodes.MORTAL_PUSH_MARK);
-            }
-
-            // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
-            // This calls RuntimeScalar.scopeExitCleanup() which handles:
-            // 1. IO fd recycling for anonymous filehandle globs
-            // 2. refCount decrement for blessed references with DESTROY
-            for (int reg : scalarIndices) {
-                emit(Opcodes.SCOPE_EXIT_CLEANUP);
-                emitReg(reg);
-            }
-
-            // Walk hash/array variables for nested blessed references.
-            for (int reg : hashIndices) {
-                emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
-                emitReg(reg);
-            }
-            for (int reg : arrayIndices) {
-                emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
-                emitReg(reg);
-            }
-
-            // Pop mark and flush only entries added since the mark
-            if (needsCleanup) {
-                emit(Opcodes.MORTAL_POP_FLUSH);
-            }
+            emitScopeCleanup(scopeIdx, flush);
 
             symbolTable.exitScope(scopeIdx);
             if (!savedNextRegister.isEmpty()) {
@@ -427,6 +387,130 @@ public class BytecodeCompiler implements Visitor {
                 st.warningFatalStack.pop();
                 st.warningDisabledStack.pop();
             }
+        }
+    }
+
+    private void emitScopeCleanup(int scopeIdx, boolean flush) {
+        // Gather variable indices to determine if cleanup is needed.
+        java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+        java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
+        java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
+
+        // Only emit pushMark/popAndFlush when there are variables that need cleanup.
+        // Scopes with no my-variables skip this entirely.
+        boolean needsCleanup = flush
+                && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+
+        // Push mark so popAndFlush only drains entries added by
+        // scopeExitCleanup. Entries from method returns within the block
+        // that are below the mark will be processed by the next setLarge()
+        // or undefine() flush, or by the enclosing scope's exit.
+        if (needsCleanup) {
+            emit(Opcodes.MORTAL_PUSH_MARK);
+        }
+
+        // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
+        // This calls RuntimeScalar.scopeExitCleanup() which handles:
+        // 1. IO fd recycling for anonymous filehandle globs
+        // 2. refCount decrement for blessed references with DESTROY
+        for (int reg : scalarIndices) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP);
+            emitReg(reg);
+        }
+
+        // Walk hash/array variables for nested blessed references.
+        for (int reg : hashIndices) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emitReg(reg);
+        }
+        for (int reg : arrayIndices) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+            emitReg(reg);
+        }
+
+        // Pop mark and flush only entries added since the mark.
+        if (needsCleanup) {
+            emit(Opcodes.MORTAL_POP_FLUSH);
+        }
+    }
+
+    private void emitLoopControlScopeCleanup(LoopInfo loopInfo) {
+        if (loopInfo.cleanupScopeIndex < 0) {
+            return;
+        }
+        emitScopeCleanup(loopInfo.cleanupScopeIndex, true);
+    }
+
+    private Set<Integer> myVariableIndexSet() {
+        return new HashSet<>(symbolTable.getMyVariableIndicesInScope(0));
+    }
+
+    private List<Integer> indicesAddedSince(List<Integer> indices, Set<Integer> before) {
+        if (indices.isEmpty()) {
+            return indices;
+        }
+        List<Integer> added = new ArrayList<>();
+        for (int idx : indices) {
+            if (!before.contains(idx)) {
+                added.add(idx);
+            }
+        }
+        return added;
+    }
+
+    private MyVarCleanupRegisters myVariablesAddedSince(Set<Integer> before) {
+        return new MyVarCleanupRegisters(
+                indicesAddedSince(symbolTable.getMyScalarIndicesInScope(0), before),
+                indicesAddedSince(symbolTable.getMyHashIndicesInScope(0), before),
+                indicesAddedSince(symbolTable.getMyArrayIndicesInScope(0), before),
+                indicesAddedSince(symbolTable.getMyVariableIndicesInScope(0), before));
+    }
+
+    private void emitMyVarCleanup(MyVarCleanupRegisters cleanup, boolean flush) {
+        if (cleanup.isEmpty()) {
+            return;
+        }
+
+        for (int reg : cleanup.scalarRegs) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP);
+            emitReg(reg);
+        }
+        for (int reg : cleanup.hashRegs) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emitReg(reg);
+        }
+        for (int reg : cleanup.arrayRegs) {
+            emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+            emitReg(reg);
+        }
+        if (flush) {
+            emit(Opcodes.MORTAL_FLUSH);
+        }
+    }
+
+    private static final class MyVarCleanupRegisters {
+        private static final MyVarCleanupRegisters EMPTY = new MyVarCleanupRegisters(
+                List.of(), List.of(), List.of(), List.of());
+
+        final List<Integer> scalarRegs;
+        final List<Integer> hashRegs;
+        final List<Integer> arrayRegs;
+        final List<Integer> allRegs;
+
+        MyVarCleanupRegisters(List<Integer> scalarRegs, List<Integer> hashRegs,
+                              List<Integer> arrayRegs, List<Integer> allRegs) {
+            this.scalarRegs = scalarRegs;
+            this.hashRegs = hashRegs;
+            this.arrayRegs = arrayRegs;
+            this.allRegs = allRegs;
+        }
+
+        static MyVarCleanupRegisters empty() {
+            return EMPTY;
+        }
+
+        boolean isEmpty() {
+            return allRegs.isEmpty();
         }
     }
 
@@ -1958,9 +2042,6 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Hash slice requires HashLiteralNode");
         }
         HashLiteralNode keysNode = (HashLiteralNode) node.right;
-        if (keysNode.elements.isEmpty()) {
-            throwCompilerException("Hash slice requires at least one key");
-        }
 
         // Compile all keys into a list
         List<Integer> keyRegs = new ArrayList<>();
@@ -1997,7 +2078,21 @@ public class BytecodeCompiler implements Visitor {
         emitReg(hashReg);
         emitReg(keysListReg);
 
-        lastResultReg = rdSlice;
+        if (currentCallContext == RuntimeContextType.SCALAR) {
+            int lastIndexReg = allocateRegister();
+            emit(Opcodes.LOAD_INT);
+            emitReg(lastIndexReg);
+            emit(-1);
+
+            int scalarReg = allocateOutputRegister();
+            emit(Opcodes.ARRAY_GET);
+            emitReg(scalarReg);
+            emitReg(rdSlice);
+            emitReg(lastIndexReg);
+            lastResultReg = scalarReg;
+        } else {
+            lastResultReg = rdSlice;
+        }
     }
 
     void handleHashKeyValueSlice(BinaryOperatorNode node, OperatorNode leftOp) {
@@ -2113,6 +2208,30 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
+        if (op.equals("x=") && node.left instanceof OperatorNode leftOp && leftOp.operator.equals("%")) {
+            throwCompilerException("Can't modify hash dereference in repeat (x)", node.getIndex());
+            return;
+        }
+
+        if (op.equals("^^=")) {
+            compileNode(node.right, -1, RuntimeContextType.SCALAR);
+            int valueReg = lastResultReg;
+            int targetReg = compileLhsForCompoundAssignment(node);
+            int resultReg = allocateRegister();
+
+            emit(Opcodes.XOR_LOGICAL);
+            emitReg(resultReg);
+            emitReg(targetReg);
+            emitReg(valueReg);
+
+            emit(Opcodes.SET_SCALAR);
+            emitReg(targetReg);
+            emitReg(resultReg);
+
+            lastResultReg = targetReg;
+            return;
+        }
+
         // Compile the right operand first (the value to add/subtract/etc.)
         compileNode(node.right, -1, RuntimeContextType.SCALAR);
         int valueReg = lastResultReg;
@@ -2160,6 +2279,11 @@ public class BytecodeCompiler implements Visitor {
     private int compileLhsForCompoundAssignment(BinaryOperatorNode node) {
         int targetReg;
 
+        if (node.left instanceof ListNode listNode && listNode.elements.size() == 1) {
+            compileNode(listNode.elements.get(0), -1, RuntimeContextType.LVALUE);
+            return lastResultReg;
+        }
+
         // Check if left side is a simple variable reference
         if (node.left instanceof OperatorNode leftOp) {
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
@@ -2181,14 +2305,14 @@ public class BytecodeCompiler implements Visitor {
                     emit(nameIdx);
                 }
             } else {
-                // Other operator (not simple variable) - compile as expression in SCALAR context
-                compileNode(node.left, -1, RuntimeContextType.SCALAR);
+                // Other operator (not simple variable) - compile as lvalue expression
+                compileNode(node.left, -1, RuntimeContextType.LVALUE);
                 targetReg = lastResultReg;
             }
         } else {
             // Not an OperatorNode (could be BinaryOperatorNode like ($x &= $y))
-            // Compile the left side as an expression in SCALAR context
-            compileNode(node.left, -1, RuntimeContextType.SCALAR);
+            // Compile the left side as an lvalue expression
+            compileNode(node.left, -1, RuntimeContextType.LVALUE);
             targetReg = lastResultReg;
         }
 
@@ -4668,10 +4792,15 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                // Compile operand in LIST context to get the actual value
+                // Compile most operands in LIST context to get the actual value.
                 // Example: \@array should get a reference to the array itself,
-                // not its size (which would happen in SCALAR context)
-                compileNode(node.operand, -1, RuntimeContextType.LIST);
+                // not its size (which would happen in SCALAR context). Assignment
+                // expressions are the exception: \(my @a = ...) references the
+                // scalar assignment result, matching Perl's prototype refgen path.
+                int refContext = node.operand instanceof BinaryOperatorNode binOp && binOp.operator.equals("=")
+                        ? RuntimeContextType.SCALAR
+                        : RuntimeContextType.LIST;
+                compileNode(node.operand, -1, refContext);
                 int valueReg = lastResultReg;
 
                 // Allocate register for reference
@@ -5641,6 +5770,7 @@ public class BytecodeCompiler implements Visitor {
         int bodyStartPc = bytecode.size();
         LoopInfo loopInfo = new LoopInfo(node.labelName, bodyStartPc, true);
         loopStack.push(loopInfo);
+        loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
 
         // Step 8: Execute body
         if (node.body != null) {
@@ -5840,6 +5970,7 @@ public class BytecodeCompiler implements Visitor {
         loopStack.push(loopInfo);
 
         int loopEndJumpPc = -1;
+        MyVarCleanupRegisters conditionMyCleanup = MyVarCleanupRegisters.empty();
 
         if (node.isDoWhile) {
             // do-while loop: body executes at least once, condition checked at end
@@ -5876,8 +6007,10 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 int condReg = allocateRegister();
                 if (node.condition != null) {
+                    Set<Integer> conditionMyBefore = myVariableIndexSet();
                     // Evaluate condition in SCALAR context (need boolean result)
                     compileNode(node.condition, -1, RuntimeContextType.SCALAR);
+                    conditionMyCleanup = myVariablesAddedSince(conditionMyBefore);
                     condReg = lastResultReg;
                 } else {
                     // No condition means infinite loop - load true
@@ -5897,8 +6030,10 @@ public class BytecodeCompiler implements Visitor {
             // Step 3: Check condition (redo jumps here)
             int condReg = allocateRegister();
             if (node.condition != null) {
+                Set<Integer> conditionMyBefore = myVariableIndexSet();
                 // Evaluate condition in SCALAR context (need boolean result)
                 compileNode(node.condition, -1, RuntimeContextType.SCALAR);
+                conditionMyCleanup = myVariablesAddedSince(conditionMyBefore);
                 condReg = lastResultReg;
             } else {
                 // No condition means infinite loop - load true
@@ -5915,6 +6050,7 @@ public class BytecodeCompiler implements Visitor {
 
             // Step 5: Execute body
             if (node.body != null) {
+                loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
                 node.body.accept(this);
             }
 
@@ -5932,6 +6068,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Step 9: Jump back to loop start
+            emitMyVarCleanup(conditionMyCleanup, true);
             emit(Opcodes.GOTO);
             emitInt(loopStartPc);
         }
@@ -5940,6 +6077,7 @@ public class BytecodeCompiler implements Visitor {
         // POP_LOCAL_LEVEL must be at loopEndPc so `last` runs it.
         // On normal exit (condition false) this is a no-op since the body already cleaned up.
         int loopEndPc = bytecode.size();
+        emitMyVarCleanup(conditionMyCleanup, true);
         if (for3LocalLevelReg >= 0) {
             emit(Opcodes.POP_LOCAL_LEVEL);
             emitReg(for3LocalLevelReg);
@@ -6373,6 +6511,7 @@ public class BytecodeCompiler implements Visitor {
                 LoopInfo targetLoop = localMatchLoops.get(i);
                 patchJump(matchPatchPos, bytecode.size());
 
+                emitLoopControlScopeCleanup(targetLoop);
                 emit(Opcodes.MORTAL_FLUSH);
                 emitWithToken(localOpcode, node.getIndex());
                 int patchPc = bytecode.size();
@@ -6438,6 +6577,7 @@ public class BytecodeCompiler implements Visitor {
                 : op.equals("next") ? Opcodes.NEXT
                 : Opcodes.REDO;
 
+        emitLoopControlScopeCleanup(targetLoop);
         emit(Opcodes.MORTAL_FLUSH);
         emitWithToken(opcode, node.getIndex());
 
@@ -6464,12 +6604,14 @@ public class BytecodeCompiler implements Visitor {
         final List<Integer> redoPcs;  // PCs to patch for redo
         final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
         int continuePc;              // PC for next (continue block or increment)
+        int cleanupScopeIndex;       // Lower bound for scopes bypassed by local loop control
 
         LoopInfo(String label, int startPc, boolean isTrueLoop) {
             this.label = label;
             this.startPc = startPc;
             this.isTrueLoop = isTrueLoop;
             this.continuePc = -1;  // Will be set later
+            this.cleanupScopeIndex = -1;
             this.breakPcs = new ArrayList<>();
             this.nextPcs = new ArrayList<>();
             this.redoPcs = new ArrayList<>();

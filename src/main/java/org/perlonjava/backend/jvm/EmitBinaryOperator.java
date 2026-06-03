@@ -229,11 +229,13 @@ public class EmitBinaryOperator {
             // Use the new *Assign methods which check for compound overloads first
             EmitterVisitor scalarVisitor =
                     emitterVisitor.with(RuntimeContextType.SCALAR);
+            EmitterVisitor lvalueVisitor =
+                    emitterVisitor.with(RuntimeContextType.LVALUE);
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
             // We need to properly handle the lvalue by using spill slots
             // This ensures the same object is both read and written
-            node.left.accept(scalarVisitor); // target - left parameter
+            node.left.accept(lvalueVisitor); // target - left parameter
             int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
             boolean pooledLeft = leftSlot >= 0;
             if (!pooledLeft) {
@@ -265,8 +267,10 @@ public class EmitBinaryOperator {
             // Use the old approach: strip = and call base operator, then assign
             EmitterVisitor scalarVisitor =
                     emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+            EmitterVisitor lvalueVisitor =
+                    emitterVisitor.with(RuntimeContextType.LVALUE);
             MethodVisitor mv = emitterVisitor.ctx.mv;
-            node.left.accept(scalarVisitor); // target - left parameter
+            node.left.accept(lvalueVisitor); // target - left parameter
             int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
             boolean pooledLeft = leftSlot >= 0;
             if (!pooledLeft) {

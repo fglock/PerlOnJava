@@ -6,6 +6,7 @@ import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +66,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Capture groups from the last successful match that had captures.
     // In Perl 5, $1/$2/etc persist across non-capturing matches.
     public static String[] lastCaptureGroups = null;
+    public static Map<String, List<String>> lastNamedCaptureGroups = null;
     // Track whether the last successful match was on a BYTE_STRING input,
     // so that captures ($1, $2, $&, etc.) preserve BYTE_STRING type.
     public static boolean lastMatchWasByteString = false;
@@ -947,6 +949,37 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
     }
 
+    private static void updateLastNamedCaptureGroups(Matcher matcher) {
+        Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
+        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
+        if (namedGroups == null || namedGroups.isEmpty()) {
+            lastNamedCaptureGroups = byPerlName;
+            return;
+        }
+
+        Map<String, List<String>> javaNamesByPerlName = new LinkedHashMap<>();
+        for (String javaName : namedGroups.keySet()) {
+            if (CaptureNameEncoder.isInternalCapture(javaName)) {
+                continue;
+            }
+            String perlName = CaptureNameEncoder.decodeGroupName(javaName);
+            javaNamesByPerlName.computeIfAbsent(perlName, k -> new ArrayList<>()).add(javaName);
+        }
+
+        for (List<String> javaNames : javaNamesByPerlName.values()) {
+            javaNames.sort(java.util.Comparator.comparingInt(namedGroups::get));
+        }
+
+        for (Map.Entry<String, List<String>> entry : javaNamesByPerlName.entrySet()) {
+            List<String> values = new ArrayList<>();
+            for (String javaName : entry.getValue()) {
+                values.add(matcher.group(javaName));
+            }
+            byPerlName.put(entry.getKey(), values);
+        }
+        lastNamedCaptureGroups = byPerlName;
+    }
+
     /**
      * Direct regex matching without timeout wrapper (fast path).
      */
@@ -1172,6 +1205,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 globalMatcher = matcher;
                 globalMatchString = inputStr;
                 lastMatchUsedBackslashK = regex.hasBackslashK;
+                updateLastNamedCaptureGroups(matcher);
                 if (captureCount > 0) {
                     if (regex.hasBackslashK) {
                         // Skip the internal perlK capture group
@@ -1563,6 +1597,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 globalMatcher = matcher;
                 globalMatchString = inputStr;
                 lastMatchUsedBackslashK = regex.hasBackslashK;
+                updateLastNamedCaptureGroups(matcher);
                 if (matcher.groupCount() > 0) {
                     if (regex.hasBackslashK) {
                         // Skip the internal perlK capture group when populating $1, $2, etc.
@@ -1685,8 +1720,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // /r modifier with no matches: return the original string
                 return string;
             } else {
-                // Return `undef`
-                return scalarUndef;
+                // Perl returns a defined false value for a destructive s/// that
+                // does not match.
+                return RuntimeScalarCache.scalarEmptyString;
             }
         }
     }
@@ -1732,6 +1768,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         lastSuccessfulMatchString = null;
         lastMatchUsedPFlag = false;
         lastCaptureGroups = null;
+        lastNamedCaptureGroups = null;
 
         // Reset regex cache matched flags
         reset();
