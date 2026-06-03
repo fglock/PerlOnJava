@@ -51,6 +51,9 @@ my $_java_find_encoding = \&find_encoding;
         my ($name, $skip_external) = @_;
         return undef unless defined $name;
 
+        my $key = lc $name;
+        return $_encoding_cache{$key} if exists $_encoding_cache{$key};
+
         # Guard against circular alias chains for the same name
         return undef if $_resolving{$name};
         local $_resolving{$name} = 1;
@@ -59,7 +62,10 @@ my $_java_find_encoding = \&find_encoding;
         # that the Java backend also knows, such as "locale".
         if (defined &Encode::Alias::find_alias) {
             my $resolved = eval { Encode::Alias::find_alias("Encode", $name) };
-            return $resolved if defined $resolved;
+            if (defined $resolved) {
+                $_encoding_cache{$key} = $resolved;
+                return $resolved;
+            }
         }
 
         return $_cached_java_find_encoding->($name);

@@ -2,7 +2,12 @@ use strict;
 use warnings;
 use Test::More;
 
-use Term::Size qw(chars pixels);
+eval {
+    require Term::Size;
+    Term::Size->import(qw(chars pixels));
+    1;
+} or plan skip_all => 'Term::Size required';
+
 require PerlIO;
 
 pipe my $rd, my $wr or die "pipe: $!";

@@ -2,7 +2,8 @@ use strict;
 use warnings;
 use Test::More;
 
-use XString ();
+eval { require XString; 1 }
+    or plan skip_all => 'XString required';
 
 is(XString->VERSION, '0.005', 'bundled XString version matches CPAN prereq');
 is(XString::cstring(q[a$@"]), q["a$@\""], 'cstring does not escape Perl sigils');

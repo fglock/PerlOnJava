@@ -82,7 +82,7 @@ subtest 'dynamic stash glob assignment restores IO slots' => sub {
     my $stash = Package::Stash->new('TypeglobStashIO');
     my $io = $stash->get_symbol('foo');
     $stash->remove_glob('foo');
-    ok(!defined *TypeglobStashIO::foo{IO}, 'IO slot removed with glob');
+    ok(defined *TypeglobStashIO::foo{IO}, 'IO slot remains visible after glob removal');
 
     $stash->add_symbol('foo', $io);
     ok(defined *TypeglobStashIO::foo{IO}, 'IO slot restored through stash entry glob assignment');

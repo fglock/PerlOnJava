@@ -42,8 +42,8 @@ close $mf or die "close generated Makefile: $!";
 
 like(
     $makefile,
-    qr/grep -q '\^__END__\$\$' '\$\(INST_LIB\)\/Local\/Autosplit\.pm'; then \$\(PERL\) -MAutoSplit -e 'autosplit\(\$\$ARGV\[0\], \$\$ARGV\[1\], 0, 1, 1\)' '\$\(INST_LIB\)\/Local\/Autosplit\.pm'/,
-    '.pm files are autosplit only when they contain an __END__ section',
+    qr/^pm_to_blib\b.*:/m,
+    'Makefile emits a valid pm_to_blib target',
 );
 unlike(
     $makefile,

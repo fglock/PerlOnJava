@@ -542,7 +542,7 @@ public class EmitForeach {
                         // Scalar: use aliasGlobalVariable (original behavior)
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                                "aliasGlobalVariable",
+                                "aliasForeachGlobalVariable",
                                 "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                                 false);
                     }
@@ -550,7 +550,7 @@ public class EmitForeach {
                     // Non-reference-aliasing case: use aliasGlobalVariable
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                            "aliasGlobalVariable",
+                            "aliasForeachGlobalVariable",
                             "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                             false);
                 }

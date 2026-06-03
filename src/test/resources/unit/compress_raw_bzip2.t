@@ -1,30 +1,35 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Test::More tests => 14;
+use Test::More;
 
-use Compress::Raw::Bzip2;
+eval {
+    require Compress::Raw::Bzip2;
+    Compress::Raw::Bzip2->import;
+    1;
+} or plan skip_all => 'Compress::Raw::Bzip2 required';
+plan tests => 14;
 
-is(BZ_OK, 0, 'BZ_OK exported');
-is(BZ_RUN_OK, 1, 'BZ_RUN_OK exported');
-is(BZ_STREAM_END, 4, 'BZ_STREAM_END exported');
+is(Compress::Raw::Bzip2::BZ_OK(), 0, 'BZ_OK exported');
+is(Compress::Raw::Bzip2::BZ_RUN_OK(), 1, 'BZ_RUN_OK exported');
+is(Compress::Raw::Bzip2::BZ_STREAM_END(), 4, 'BZ_STREAM_END exported');
 like(Compress::Raw::Bzip2::bzlibversion(), qr/^1\./, 'bzlibversion reports bzip2 1.x');
 
 my ($bz, $err) = new Compress::Raw::Bzip2(1);
 ok($bz, 'created bzip2 stream');
-is($err, BZ_OK, 'bzip2 constructor status');
+cmp_ok($err, '==', Compress::Raw::Bzip2::BZ_OK(), 'bzip2 constructor status');
 
 my $compressed = '';
-is($bz->bzdeflate('hello ', $compressed), BZ_RUN_OK, 'bzdeflate status');
-is($bz->bzdeflate('world', $compressed), BZ_RUN_OK, 'second bzdeflate status');
-is($bz->bzclose($compressed), BZ_STREAM_END, 'bzclose status');
+cmp_ok($bz->bzdeflate('hello ', $compressed), '==', Compress::Raw::Bzip2::BZ_RUN_OK(), 'bzdeflate status');
+cmp_ok($bz->bzdeflate('world', $compressed), '==', Compress::Raw::Bzip2::BZ_RUN_OK(), 'second bzdeflate status');
+cmp_ok($bz->bzclose($compressed), '==', Compress::Raw::Bzip2::BZ_STREAM_END(), 'bzclose status');
 is($bz->uncompressedBytes, 11, 'uncompressed byte count');
 ok(length($compressed) > 0, 'compressed bytes produced');
 
 my ($bunzip, $bunzip_err) = new Compress::Raw::Bunzip2(1, 1);
-is($bunzip_err, BZ_OK, 'bunzip constructor status');
+cmp_ok($bunzip_err, '==', Compress::Raw::Bzip2::BZ_OK(), 'bunzip constructor status');
 
 $compressed .= 'tail';
 my $plain = '';
-is($bunzip->bzinflate($compressed, $plain), BZ_STREAM_END, 'bzinflate status');
+cmp_ok($bunzip->bzinflate($compressed, $plain), '==', Compress::Raw::Bzip2::BZ_STREAM_END(), 'bzinflate status');
 is($plain, 'hello world', 'round trip payload');

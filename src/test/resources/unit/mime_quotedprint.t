@@ -20,13 +20,13 @@ subtest 'Basic encoding and decoding' => sub {
     # Simple ASCII text
     my $text = 'Hello, World!';
     my $encoded = encode_qp($text);
-    is($encoded, "Hello, World!", 'Basic ASCII text unchanged');
+    is($encoded, "Hello, World!=\n", 'Basic ASCII text gets final soft break');
     is(decode_qp($encoded), $text, 'Basic decoding works');
     
     # Text with non-printable characters
     my $text_with_tab = "Hello\tWorld";
     my $encoded_tab = encode_qp($text_with_tab);
-    is($encoded_tab, "Hello\tWorld", 'Tab character in middle not encoded');
+    is($encoded_tab, "Hello\tWorld=\n", 'Tab character in middle not encoded');
     is(decode_qp($encoded_tab), $text_with_tab, 'Tab character decoded');
     
     # Empty string
@@ -36,7 +36,7 @@ subtest 'Basic encoding and decoding' => sub {
     # Text with equals sign
     my $text_equals = 'a=b';
     my $encoded_equals = encode_qp($text_equals);
-    is($encoded_equals, "a=3Db", 'Equals sign encoded');
+    is($encoded_equals, "a=3Db=\n", 'Equals sign encoded');
     is(decode_qp($encoded_equals), $text_equals, 'Equals sign decoded');
 };
 
@@ -48,19 +48,19 @@ subtest 'Line ending parameter' => sub {
     
     # Default line ending
     my $default = encode_qp($text);
-    is($default, "Hello, World!", 'Default does not add final soft break');
+    is($default, "Hello, World!=\n", 'Default adds final soft break');
     
     # CRLF line ending
     my $crlf = encode_qp($text, "\015\012");
-    is($crlf, "Hello, World!", 'CRLF line ending does not force final soft break');
+    is($crlf, "Hello, World!=\015\012", 'CRLF line ending is used for final soft break');
     
     # Unix line ending (explicit)
     my $unix = encode_qp($text, "\n");
-    is($unix, "Hello, World!", 'Unix line ending does not force final soft break');
+    is($unix, "Hello, World!=\n", 'Unix line ending is used for final soft break');
     
     # Custom line ending
     my $custom = encode_qp($text, " <EOL>");
-    is($custom, "Hello, World!", 'Custom line ending does not force final soft break');
+    is($custom, "Hello, World!= <EOL>", 'Custom line ending is used for final soft break');
     
     # Empty line ending (special case - enables binary mode, no soft break)
     my $no_eol = encode_qp("Hello\nWorld", "");
@@ -74,7 +74,7 @@ subtest 'Line breaking at 76 characters' => sub {
     # String that's exactly 75 characters
     my $text75 = 'A' x 75;
     my $encoded75 = encode_qp($text75);
-    is($encoded75, $text75, 'Line of 75 chars does not get final soft break');
+    is($encoded75, $text75 . "=\n", 'Line of 75 chars gets final soft break');
     
     # String that's exactly 76 characters needs to break
     my $text76 = 'A' x 76;
@@ -105,15 +105,15 @@ subtest 'Binary mode' => sub {
     
     # Normal mode - newline preserved as-is
     my $normal = encode_qp($text_with_newline);
-    is($normal, "Hello\nWorld", 'Normal mode preserves literal newlines');
+    is($normal, "Hello\nWorld=\n", 'Normal mode preserves literal newlines and adds final soft break');
     
     # Binary mode - newline encoded
     my $binary = encode_qp($text_with_newline, "\n", 1);
-    is($binary, "Hello=0AWorld", 'Binary mode encodes newlines');
+    is($binary, "Hello=0AWorld=\n", 'Binary mode encodes newlines');
     
     # Binary mode with CRLF
     my $binary_crlf = encode_qp($text_with_newline, "\015\012", 1);
-    is($binary_crlf, "Hello=0AWorld", 'Binary mode with CRLF line ending');
+    is($binary_crlf, "Hello=0AWorld=\015\012", 'Binary mode with CRLF line ending');
     
     # Empty EOL implies binary mode - no soft break
     my $empty_eol = encode_qp($text_with_newline, "");
@@ -122,7 +122,7 @@ subtest 'Binary mode' => sub {
     # Binary data
     my $binary_data = "\x00\x01\x02\x03\x04\x05";
     my $encoded_binary = encode_qp($binary_data, "\n", 1);
-    is($encoded_binary, "=00=01=02=03=04=05", 'Binary data encoded');
+    is($encoded_binary, "=00=01=02=03=04=05=\n", 'Binary data encoded');
     is(decode_qp($encoded_binary), $binary_data, 'Binary data decoded');
 };
 
@@ -139,32 +139,32 @@ subtest 'Character encoding rules' => sub {
     # Space at end of line should be encoded
     my $trailing_space = "Hello ";
     my $encoded_space = encode_qp($trailing_space);
-    is($encoded_space, "Hello=20", 'Trailing space encoded');
+    is($encoded_space, "Hello=20=\n", 'Trailing space encoded');
     
     # Tab at end of line should be encoded  
     my $trailing_tab = "Hello\t";
     my $encoded_tab = encode_qp($trailing_tab);
-    is($encoded_tab, "Hello=09", 'Trailing tab encoded');
+    is($encoded_tab, "Hello=09=\n", 'Trailing tab encoded');
     
     # Control characters
     my $control = "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F";
     my $encoded_control = encode_qp($control);
-    is($encoded_control, "=00=01=02=03=04=05=06=07=08=0B=0C=0E=0F", 'Control characters encoded');
+    is($encoded_control, "=00=01=02=03=04=05=06=07=08=0B=0C=0E=0F=\n", 'Control characters encoded');
     
     # High bytes (128-255)
     my $high_bytes = "\x80\x90\xA0\xB0\xC0\xD0\xE0\xF0\xFF";
     my $encoded_high = encode_qp($high_bytes);
-    is($encoded_high, "=80=90=A0=B0=C0=D0=E0=F0=FF", 'High bytes encoded');
+    is($encoded_high, "=80=90=A0=B0=C0=D0=E0=F0=FF=\n", 'High bytes encoded');
     
     # Space and tab in middle of line not encoded
     my $space_tab = "Hello world\there";
     my $encoded_st = encode_qp($space_tab);
-    is($encoded_st, "Hello world\there", 'Space and tab in middle not encoded');
+    is($encoded_st, "Hello world\there=\n", 'Space and tab in middle not encoded');
     
     # Equals sign must be encoded
     my $equals = "2+2=4";
     my $encoded_eq = encode_qp($equals);
-    is($encoded_eq, "2+2=3D4", 'Equals sign encoded as =3D');
+    is($encoded_eq, "2+2=3D4=\n", 'Equals sign encoded as =3D');
 };
 
 # Test decode special cases
@@ -214,13 +214,13 @@ subtest 'Edge cases' => sub {
     # Line ending exactly at 75 characters
     my $exact_75 = ('X' x 75);
     my $encoded_exact = encode_qp($exact_75);
-    is($encoded_exact, $exact_75, '75 character line does not get final soft break');
+    is($encoded_exact, $exact_75 . "=\n", '75 character line gets final soft break');
     
     # Equals at end of line - encoder breaks line before the equals to avoid splitting =3D
     my $text_end_eq = ('X' x 74) . '=';
     my $encoded_end_eq = encode_qp($text_end_eq);
     # The encoder will put 74 X's, then a soft break, then =3D on the next line
-    is($encoded_end_eq, ('X' x 74) . "=\n=3D", 'Equals at position 75 handled correctly');
+    is($encoded_end_eq, ('X' x 74) . "=\n=3D=\n", 'Equals at position 75 handled correctly');
     
     # Multiple consecutive equals  
     is(decode_qp("=3D=3D=3D"), "===", 'Multiple encoded equals decoded correctly');
@@ -266,12 +266,12 @@ subtest 'Real-world examples' => sub {
     # Email header example - note high bytes will be encoded
     my $subject = "Re: Test message";
     my $encoded_subject = encode_qp($subject);
-    is($encoded_subject, "Re: Test message", 'Simple subject unchanged');
+    is($encoded_subject, "Re: Test message=\n", 'Simple subject gets final soft break');
     
     # URL with special characters
     my $url = "http://example.com/path?param=value&other=test";
     my $encoded_url = encode_qp($url);
-    is($encoded_url, "http://example.com/path?param=3Dvalue&other=3Dtest", 'URL with = encoded');
+    is($encoded_url, "http://example.com/path?param=3Dvalue&other=3Dtest=\n", 'URL with = encoded');
     
     # Text with mixed content
     my $mixed = "Normal text\tWith tabs\nAnd lines\x00And nulls";

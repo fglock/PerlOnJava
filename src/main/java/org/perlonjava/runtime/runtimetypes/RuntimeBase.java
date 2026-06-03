@@ -33,6 +33,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // ─────────────────────────────────────────────────────────────────────
     public boolean refCountTrace = false;
 
+    // Temporary aliases installed by foreach loop variables such as $_.
+    // They are visible to B::SV::REFCNT but are not persistent container owners.
+    public int foreachAliasCount = 0;
+
     /**
      * D-W6.18: marks objects whose lifetime is "module-global metadata":
      * stored as the value of a package-global hash element (`$Foo::META{x}

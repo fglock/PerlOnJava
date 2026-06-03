@@ -432,6 +432,20 @@ public class EmitSubroutine {
                     "Z");
         }
 
+        if (node.getBooleanAnnotation("tryExpressionWrapper")) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "value",
+                    "Ljava/lang/Object;");
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeCode");
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitFieldInsn(Opcodes.PUTFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "isTryExpressionWrapper",
+                    "Z");
+        }
+
         // Set attributes if needed (after try-catch, both paths leave RuntimeScalar on stack)
         if (node.attributes != null && !node.attributes.isEmpty()) {
             mv.visitInsn(Opcodes.DUP);

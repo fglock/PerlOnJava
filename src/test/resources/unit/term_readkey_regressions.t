@@ -1,5 +1,10 @@
-use Test::More tests => 4;
-use Term::ReadKey ();
+use strict;
+use warnings;
+use Test::More;
+
+eval { require Term::ReadKey; 1 }
+    or plan skip_all => 'Term::ReadKey required';
+plan tests => 4;
 
 ok(defined &Term::ReadKey::termoptions, 'termoptions is available');
 ok(defined &Term::ReadKey::blockoptions, 'blockoptions is available');

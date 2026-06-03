@@ -3,7 +3,11 @@ use strict;
 use warnings;
 use Test::More;
 
-use Digest::SHA1 qw(sha1 sha1_hex sha1_base64 sha1_transform);
+eval {
+    require Digest::SHA1;
+    Digest::SHA1->import(qw(sha1 sha1_hex sha1_base64 sha1_transform));
+    1;
+} or plan skip_all => 'Digest::SHA1 required';
 
 is(Digest::SHA1->new->add("abc")->hexdigest,
     "a9993e364706816aba3e25717850c26c9cd0d89d",

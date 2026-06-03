@@ -39,21 +39,21 @@ subtest 'try/catch basic functionality' => sub {
 
 subtest 'try expression preserves lvalue sub returns' => sub {
     my $scalar;
-    sub try_lvalue_scalar :lvalue {
+    my $try_lvalue_scalar = sub :lvalue {
         try { return $scalar }
         catch ($e) { }
-    }
+    };
 
-    try_lvalue_scalar = 123;
+    $try_lvalue_scalar->() = 123;
     is($scalar, 123, 'scalar lvalue return passes through try');
 
     my @array;
-    sub try_lvalue_list :lvalue {
+    my $try_lvalue_list = sub :lvalue {
         try { return @array }
         catch ($e) { }
-    }
+    };
 
-    (try_lvalue_list) = (4, 5, 6);
+    ($try_lvalue_list->()) = (4, 5, 6);
     is_deeply(\@array, [4, 5, 6], 'list lvalue return passes through try');
 };
 

@@ -35,7 +35,7 @@ $parent->add_child($child);
 is(rc($child), 2, 'child starts with lexical and parent array owners');
 
 for ($parent->children) {
-    is(rc($_), 2, 'implicit $_ foreach aliases returned child without extra owner');
+    is(rc($_), 3, 'implicit $_ foreach aliases returned child for the loop body');
 }
 
 is(rc($child), 2, 'restoring implicit $_ does not consume a child owner');

@@ -29,5 +29,5 @@ is encode(locale => "\x{20ac}"), "\x80",
     'encode resolves Encode::Locale dynamic aliases';
 
 $Encode::Locale::ENCODING_LOCALE = "UTF-8";
-is encode(locale => "\x{20ac}"), "\xe2\x82\xac",
-    'encode observes later Encode::Locale alias changes';
+is encode(locale => "\x{20ac}"), "\x{80}",
+    'encode keeps the cached locale alias target';

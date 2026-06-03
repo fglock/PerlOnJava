@@ -924,9 +924,11 @@ $pm_to_blib_target
 \t\@mkdir -p \$(INST_LIB)/auto
 $blib_cmds_str
 
-# pure_all is an alias target some postambles (File::ShareDir::Install,
-# Alien::Build) hook to add extra blib-staging steps. Depends on pm_to_blib.
-pure_all:: pm_to_blib
+    # pure_all is an alias target some postambles (File::ShareDir::Install,
+    # Alien::Build) hook to add extra blib-staging steps. Depends on pm_to_blib
+    # and blib_scripts so EXE_FILES are staged for direct test execution, matching
+    # standard MakeMaker.
+    pure_all:: pm_to_blib blib_scripts
 
 # Stage EXE_FILES into blib/script/ so tests can invoke them via the blib tree
 blib_scripts::

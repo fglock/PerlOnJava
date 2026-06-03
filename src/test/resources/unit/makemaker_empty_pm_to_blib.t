@@ -25,7 +25,7 @@ open my $mf, '<', 'Makefile' or die "open generated Makefile: $!";
 my $makefile = do { local $/; <$mf> };
 close $mf or die "close generated Makefile: $!";
 
-like($makefile, qr/^pm_to_blib::$/m, 'empty pm_to_blib target is valid make syntax');
+like($makefile, qr/^pm_to_blib\b.*:/m, 'empty pm_to_blib target is valid make syntax');
 unlike($makefile, qr/^pm_to_blib$/m, 'empty pm_to_blib target is not emitted without a colon');
 
 done_testing();

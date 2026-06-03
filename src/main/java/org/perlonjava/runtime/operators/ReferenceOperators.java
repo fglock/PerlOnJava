@@ -160,6 +160,13 @@ public class ReferenceOperators {
                             && (runtimeScalar instanceof GlobalRuntimeScalar
                             || GlobalVariable.globalVariables.containsValue(runtimeScalar)
                             || MyVarCleanupStack.isRegistered(runtimeScalar));
+                    if (existingScalarOwner
+                            && (runtimeScalar instanceof GlobalRuntimeScalar
+                            || GlobalVariable.globalVariables.containsValue(runtimeScalar))
+                            && referent instanceof RuntimeScalar scalarReferent
+                            && scalarReferent.referencedByScalarReference) {
+                        scalarReferent.localBindingExists = true;
+                    }
                     referent.refCount = existingScalarOwner ? 2 : 1;
                     if (existingScalarOwner) {
                         referent.recordOwner(runtimeScalar, "first bless of existing scalar ref");

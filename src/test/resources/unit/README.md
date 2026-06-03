@@ -1,13 +1,13 @@
 # PerlOnJava Unit Tests
 
-This directory contains PerlOnJava-specific unit tests that are NOT part of the standard Perl test suite.
+This directory contains unit tests for Perl behavior exercised by PerlOnJava.
 
 ## Purpose
 
 These tests verify:
-- PerlOnJava implementation details
-- Edge cases specific to the Java implementation
-- Features that differ from standard Perl
+- Standard Perl behavior that PerlOnJava must match
+- Edge cases that have regressed in PerlOnJava
+- Compatibility with CPAN modules and core Perl APIs
 - Integration between Perl and Java components
 - Performance and optimization features
 
@@ -24,7 +24,7 @@ These tests verify:
 - `bitwise_*.t` - Bitwise operators
 
 ### Regular Expressions
-- `regex/` - Regex engine tests specific to PerlOnJava
+- `regex/` - Regex engine compatibility tests
 
 ### Pack/Unpack
 - `pack/`, `pack.t`, `pack_*.t` - Pack/unpack implementation
@@ -49,13 +49,15 @@ These tests verify:
 
 ## Adding New Tests
 
-When adding new PerlOnJava-specific tests:
+When adding new unit tests:
 1. Place them in this directory
 2. Use descriptive names
 3. Add comments explaining what's being tested
-4. Document any PerlOnJava-specific behavior
+4. Verify the expected behavior with standard Perl first
 5. Use Test::More framework
+6. Capture the standard Perl run before relying on the test:
+   `prove -r src/test/resources/unit > /tmp/prove_unit_perl.txt 2>&1; echo "EXIT: $?" >> /tmp/prove_unit_perl.txt`
 
 ## Note
 
-These tests are maintained separately from the standard Perl test suite to clearly distinguish PerlOnJava-specific functionality from standard Perl compatibility testing.
+These tests are maintained separately from the upstream Perl test suite, but their expectations should remain compatible with standard Perl unless a test is explicitly skipped because an optional module or platform facility is unavailable.
