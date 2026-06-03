@@ -8,7 +8,7 @@ use Exporter 'import';
 our $VERSION = '1.643';
 our $stderr = 2000000000;
 our ($err, $errstr, $state);
-our ($ACTIVE_FETCH_SWEEPING, $DDL_SWEEPING);
+our ($ACTIVE_FETCH_FREETMPS_RUNNING, $DDL_CLEANUP_RUNNING);
 our %InstalledDrivers;
 our $SqlEngineStorePatched;
 our $AnyDataDestroyPatched;
@@ -292,16 +292,17 @@ sub _handle_error_with_handler {
     return undef;
 }
 
-sub _quiet_gc_before_ddl {
+sub _cleanup_before_ddl {
     my ($statement) = @_;
     return unless defined $statement && !ref($statement);
     return unless $statement =~ /^\s*(?:--[^\n]*\n\s*)*(?:CREATE|DROP|ALTER|VACUUM|REINDEX)\b/i;
-    return if $DDL_SWEEPING;
+    return if $DDL_CLEANUP_RUNNING;
 
-    local $DDL_SWEEPING = 1;
+    local $DDL_CLEANUP_RUNNING = 1;
     eval {
         require Internals;
-        Internals::jperl_gc_quiet();
+        Internals::jperl_freetmps();
+        Internals::jperl_sweep_destroyables_no_jvm_gc();
         1;
     };
     return 1;
@@ -733,11 +734,12 @@ sub FETCH {
     if (($self->{Type} || '') eq 'st'
             && $key eq 'Active'
             && $self->{$key}
-            && !$ACTIVE_FETCH_SWEEPING) {
-        local $ACTIVE_FETCH_SWEEPING = 1;
+            && !$ACTIVE_FETCH_FREETMPS_RUNNING) {
+        local $ACTIVE_FETCH_FREETMPS_RUNNING = 1;
         eval {
             require Internals;
-            Internals::jperl_gc_quiet();
+            Internals::jperl_freetmps();
+            Internals::jperl_sweep_destroyables_no_jvm_gc();
             1;
         };
     }
@@ -758,7 +760,7 @@ sub STORE {
 
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
-    _quiet_gc_before_ddl($statement) if _is_jdbc_handle($dbh);
+    _cleanup_before_ddl($statement) if _is_jdbc_handle($dbh);
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;
     my $rows = $sth->rows;

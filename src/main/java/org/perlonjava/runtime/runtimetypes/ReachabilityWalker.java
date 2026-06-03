@@ -1292,6 +1292,10 @@ public class ReachabilityWalker {
         return sweepWeakRefs(false);
     }
 
+    public static int sweepWeakRefs(boolean quiet) {
+        return sweepWeakRefs(quiet, true);
+    }
+
     /**
      * Run a reachability sweep. When {@code quiet} is true, only clear
      * weak refs for unreachable objects — do NOT fire DESTROY or drain
@@ -1302,9 +1306,11 @@ public class ReachabilityWalker {
      * @param quiet if true, skip DESTROY invocations
      * @return number of weak-ref entries cleared
      */
-    public static int sweepWeakRefs(boolean quiet) {
+    public static int sweepWeakRefs(boolean quiet, boolean forceJvmGc) {
         if (!WeakRefRegistry.weakRefsExist) return 0;
-        ScalarRefRegistry.forceGcAndSnapshot();
+        if (forceJvmGc) {
+            ScalarRefRegistry.forceGcAndSnapshot();
+        }
         if (!quiet) {
             // Explicit sweeps drain rescued objects. Quiet auto-sweeps run
             // during user workflows and must not clear DBIC Schema rescue
@@ -1410,6 +1416,45 @@ public class ReachabilityWalker {
             cleared++;
         }
         return cleared;
+    }
+
+    /**
+     * Sweep only objects registered by {@link DestroyDispatch} as needing
+     * deterministic DESTROY side effects even when they are not weak-ref
+     * referents. This is intentionally narrower than {@link #sweepWeakRefs}:
+     * it does not clear unrelated weak references and it can be used from hot
+     * DBI statement-polling paths without forcing a JVM GC.
+     */
+    public static int sweepDestroyableObjects(boolean forceJvmGc) {
+        if (!DestroyDispatch.hasDestroyableObjects()) return 0;
+        if (forceJvmGc) {
+            ScalarRefRegistry.forceGcAndSnapshot();
+        }
+        ReachabilityWalker w = new ReachabilityWalker();
+        return destroyUnreachableDestroyables(w.walk());
+    }
+
+    private static int destroyUnreachableDestroyables(Set<RuntimeBase> live) {
+        int destroyed = 0;
+        for (RuntimeBase referent : DestroyDispatch.snapshotDestroyableObjects()) {
+            if (referent == null
+                    || referent.destroyFired
+                    || referent.currentlyDestroying
+                    || referent.refCount == Integer.MIN_VALUE) {
+                continue;
+            }
+            if (live.contains(referent)) {
+                continue;
+            }
+            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                    && referent.localBindingExists) {
+                continue;
+            }
+            referent.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(referent);
+            destroyed++;
+        }
+        return destroyed;
     }
 
     private static boolean isCapturedByWeakBackrefCode(RuntimeBase target) {

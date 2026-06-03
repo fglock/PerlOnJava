@@ -80,6 +80,10 @@ public class DestroyDispatch {
         }
     }
 
+    public static boolean hasDestroyableObjects() {
+        return !destroyableObjects.isEmpty();
+    }
+
     // Rescued objects whose weak refs need deferred clearing.
     // We cannot clear weak refs immediately after rescue because that would also
     // clear back-references from sibling objects (e.g., $source->{schema}) that
@@ -524,7 +528,7 @@ public class DestroyDispatch {
             if (savedTarget == null && sweepPendingAfterOuterDestroy
                     && !ModuleInitGuard.inModuleInit()) {
                 sweepPendingAfterOuterDestroy = false;
-                ReachabilityWalker.sweepWeakRefs(false);
+                ReachabilityWalker.sweepWeakRefs(false, false);
             }
         }
     }

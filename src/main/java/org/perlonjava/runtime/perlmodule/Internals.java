@@ -41,6 +41,8 @@ public class Internals extends PerlModuleBase {
             // the number of weak refs cleared.
             internals.registerMethod("jperl_gc", "jperl_gc", "");
             internals.registerMethod("jperl_gc_quiet", "jperl_gc_quiet", "");
+            internals.registerMethod("jperl_sweep_destroyables_no_jvm_gc", "jperl_sweep_destroyables_no_jvm_gc", "");
+            internals.registerMethod("jperl_freetmps", "jperl_freetmps", "");
             // Phase 4 diagnostic: trace a reachable path from any Perl root
             // to the given referent. Returns the first-found path string or
             // undef if unreachable. Used to debug why an object that should
@@ -271,6 +273,29 @@ public class Internals extends PerlModuleBase {
         int cleared = ReachabilityWalker.sweepWeakRefs(true);
         int secondPass = ReachabilityWalker.sweepWeakRefs(true);
         return new RuntimeScalar(cleared + secondPass).getList();
+    }
+
+    /**
+     * Drain Perl-style mortal temporaries without asking the JVM to run GC.
+     * This mirrors Perl's FREETMPS boundary for refcounted RuntimeBase objects.
+     */
+    public static RuntimeList jperl_freetmps(RuntimeArray args, int ctx) {
+        MortalList.flush();
+        return new RuntimeScalar(0).getList();
+    }
+
+    /**
+     * Reconcile destroyable objects that require deterministic DESTROY side
+     * effects but are not weak-ref referents, without clearing arbitrary weak
+     * refs and without forcing HotSpot GC. Used by DBI statement polling to
+     * match Perl's cursor DESTROY/finish timing.
+     */
+    public static RuntimeList jperl_sweep_destroyables_no_jvm_gc(RuntimeArray args, int ctx) {
+        int destroyed = ReachabilityWalker.sweepDestroyableObjects(false);
+        if (destroyed > 0) {
+            destroyed += ReachabilityWalker.sweepDestroyableObjects(false);
+        }
+        return new RuntimeScalar(destroyed).getList();
     }
 
     /**

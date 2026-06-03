@@ -931,8 +931,12 @@ public class MortalList {
                 immediateWeakSweepRequested = false;
                 lastAutoSweepNanos = System.nanoTime();
             }
-            // Quiet mode handles ordinary statement-boundary checks.
-            int cleared = ReachabilityWalker.sweepWeakRefs(true);
+            // Quiet auto-sweeps run from normal statement-boundary checks.
+            // Do not force HotSpot GC here: current live-lexical tracking is
+            // driven by MyVarCleanupStack, and forcing JVM GC at this cadence
+            // dominates DBIC-scale runtimes. Keep the old forced behavior only
+            // for the diagnostic "sweep every flush" mode.
+            int cleared = ReachabilityWalker.sweepWeakRefs(true, FORCE_SWEEP_EVERY_FLUSH);
             if (AUTO_GC_DEBUG) {
                 System.err.println("DBG auto-sweep cleared=" + cleared);
             }
