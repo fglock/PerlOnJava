@@ -177,6 +177,7 @@ public class ReferenceOperators {
                 // Activate the mortal mechanism
                 MortalList.active = true;
             }
+            DestroyDispatch.registerIfDestroyable(referent, newBlessId);
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");
         }

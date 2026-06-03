@@ -148,6 +148,8 @@ sub _extract_source_visible_block {
     my $body = substr($source, $brace + 1, $end - $brace - 1);
     $body =~ s/^\s+//;
     $body =~ s/\s+$//;
+    return if defined($source_offset) && $source_offset == -1
+        && $body =~ /\A\{\s*use\s+(?:strict|warnings)\b/s;
     $body .= ';' if length($body) && $body !~ /[;}]\z/;
     if ($flags) {
         my @lines;

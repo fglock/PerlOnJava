@@ -40,6 +40,7 @@ public class Internals extends PerlModuleBase {
             // objects) and clears weak refs for unreachable objects. Returns
             // the number of weak refs cleared.
             internals.registerMethod("jperl_gc", "jperl_gc", "");
+            internals.registerMethod("jperl_gc_quiet", "jperl_gc_quiet", "");
             // Phase 4 diagnostic: trace a reachable path from any Perl root
             // to the given referent. Returns the first-found path string or
             // undef if unreachable. Used to debug why an object that should
@@ -259,6 +260,16 @@ public class Internals extends PerlModuleBase {
         // unreachable. The second pass catches those cascades.
         int cleared = ReachabilityWalker.sweepWeakRefs();
         int secondPass = ReachabilityWalker.sweepWeakRefs();
+        return new RuntimeScalar(cleared + secondPass).getList();
+    }
+
+    /**
+     * Quiet statement-boundary sweep. Unlike jperl_gc(), this does not drain
+     * rescued DBIC-style objects before END-time cleanup.
+     */
+    public static RuntimeList jperl_gc_quiet(RuntimeArray args, int ctx) {
+        int cleared = ReachabilityWalker.sweepWeakRefs(true);
+        int secondPass = ReachabilityWalker.sweepWeakRefs(true);
         return new RuntimeScalar(cleared + secondPass).getList();
     }
 

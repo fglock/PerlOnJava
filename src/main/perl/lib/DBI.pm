@@ -8,6 +8,7 @@ use Exporter 'import';
 our $VERSION = '1.643';
 our $stderr = 2000000000;
 our ($err, $errstr, $state);
+our ($ACTIVE_FETCH_SWEEPING, $DDL_SWEEPING);
 our %InstalledDrivers;
 our $SqlEngineStorePatched;
 our $AnyDataDestroyPatched;
@@ -289,6 +290,21 @@ sub _handle_error_with_handler {
     my ($handler, $err) = @_;
     $handler->($err, undef, undef);
     return undef;
+}
+
+sub _quiet_gc_before_ddl {
+    my ($statement) = @_;
+    return unless defined $statement && !ref($statement);
+    return unless $statement =~ /^\s*(?:--[^\n]*\n\s*)*(?:CREATE|DROP|ALTER|VACUUM|REINDEX)\b/i;
+    return if $DDL_SWEEPING;
+
+    local $DDL_SWEEPING = 1;
+    eval {
+        require Internals;
+        Internals::jperl_gc_quiet();
+        1;
+    };
+    return 1;
 }
 
 sub _append_isa {
@@ -714,6 +730,17 @@ our $MAX_CACHED_CONNECTIONS = 10;
 # $dbh->FETCH('Active') explicitly, so we need method wrappers.
 sub FETCH {
     my ($self, $key) = @_;
+    if (($self->{Type} || '') eq 'st'
+            && $key eq 'Active'
+            && $self->{$key}
+            && !$ACTIVE_FETCH_SWEEPING) {
+        local $ACTIVE_FETCH_SWEEPING = 1;
+        eval {
+            require Internals;
+            Internals::jperl_gc_quiet();
+            1;
+        };
+    }
     return $self->{$key};
 }
 
@@ -731,6 +758,7 @@ sub STORE {
 
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
+    _quiet_gc_before_ddl($statement) if _is_jdbc_handle($dbh);
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;
     my $rows = $sth->rows;
@@ -855,16 +883,22 @@ sub state {
 
 sub selectrow_arrayref {
     my ($dbh, $statement, $attr, @params) = @_;
-    my $sth = $dbh->prepare($statement, $attr) or return undef;
+    my $sth = ref($statement) ? $statement : $dbh->prepare($statement, $attr)
+        or return undef;
     $sth->execute(@params) or return undef;
-    return $sth->fetchrow_arrayref();
+    my $row = $sth->fetchrow_arrayref()
+        and $sth->finish;
+    return $row;
 }
 
 sub selectrow_hashref {
     my ($dbh, $statement, $attr, @params) = @_;
-    my $sth = $dbh->prepare($statement, $attr) or return undef;
+    my $sth = ref($statement) ? $statement : $dbh->prepare($statement, $attr)
+        or return undef;
     $sth->execute(@params) or return undef;
-    return $sth->fetchrow_hashref();
+    my $row = $sth->fetchrow_hashref()
+        and $sth->finish;
+    return $row;
 }
 
 sub fetchrow_arrayref {

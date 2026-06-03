@@ -1367,6 +1367,24 @@ public class ReachabilityWalker {
                 toClear.add(referent);
             }
         }
+        for (RuntimeBase referent : DestroyDispatch.snapshotDestroyableObjects()) {
+            if (referent == null
+                    || referent.destroyFired
+                    || referent.currentlyDestroying
+                    || referent.refCount == Integer.MIN_VALUE) {
+                continue;
+            }
+            if (live.contains(referent)) {
+                continue;
+            }
+            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                    && referent.localBindingExists) {
+                continue;
+            }
+            if (!toClear.contains(referent)) {
+                toClear.add(referent);
+            }
+        }
         int cleared = 0;
         for (RuntimeBase referent : toClear) {
             // Phase I: auto-sweep (quiet) now fires DESTROY on blessed
