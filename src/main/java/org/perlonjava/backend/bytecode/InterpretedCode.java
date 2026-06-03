@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.BitSet;
@@ -23,6 +24,8 @@ import java.util.TreeMap;
  * - InterpretedCode overrides apply() to dispatch to BytecodeInterpreter
  */
 public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
+    private static final int DEPARSE_SOURCE_TEXT_LIMIT = 64 * 1024;
+
     // Bytecode and metadata
     public final int[] bytecode;           // Instruction stream (opcodes + operands as ints)
     public final Object[] constants;       // Constant pool (RuntimeBase objects)
@@ -194,6 +197,16 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         this.cvStartFile = sourceName;
         this.cvStartLine = sourceLine;
+        this.deparseSourceText = shouldKeepRuntimeDeparseSource(sourceName)
+                ? sourceTextFromErrorUtil(errorUtil)
+                : null;
+        int strictAll = Strict.HINT_STRICT_REFS | Strict.HINT_STRICT_SUBS | Strict.HINT_STRICT_VARS;
+        if ((strictOptions & strictAll) == strictAll) {
+            this.deparseFlags |= RuntimeCode.DEPARSE_FLAG_STRICT;
+        }
+        if (warningFlags != null && !warningFlags.isEmpty()) {
+            this.deparseFlags |= RuntimeCode.DEPARSE_FLAG_WARNINGS;
+        }
         // Scan bytecodes to find registers used by SCOPE_EXIT_CLEANUP opcodes.
         // These are the actual "my" variable registers that need cleanup during
         // exception propagation. Temporaries (hash element aliases, method return
@@ -204,6 +217,37 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             String registryKey = "interpreter:" + System.identityHashCode(this);
             WarningBitsRegistry.register(registryKey, warningBitsString);
         }
+    }
+
+    private static String sourceTextFromErrorUtil(ErrorMessageUtil errorUtil) {
+        if (errorUtil == null) {
+            return null;
+        }
+        String[] lines = errorUtil.extractSourceLines();
+        if (lines == null || lines.length <= 1) {
+            return null;
+        }
+        StringBuilder source = new StringBuilder();
+        for (int i = 1; i < lines.length; i++) {
+            if (i > 1) {
+                source.append('\n');
+            }
+            source.append(lines[i]);
+            if (source.length() > DEPARSE_SOURCE_TEXT_LIMIT) {
+                return null;
+            }
+        }
+        return source.toString();
+    }
+
+    private static boolean shouldKeepRuntimeDeparseSource(String sourceName) {
+        if (sourceName == null || sourceName.isEmpty()) {
+            return true;
+        }
+        if ("-e".equals(sourceName)) {
+            return true;
+        }
+        return !new java.io.File(sourceName).isFile();
     }
 
     // Legacy constructor for backward compatibility

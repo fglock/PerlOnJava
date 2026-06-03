@@ -60,6 +60,7 @@ public class Internals extends PerlModuleBase {
             // such as Pod::Coverage can skip imported helpers.
             internals.registerMethod("jperl_is_imported_sub", "jperl_is_imported_sub", "$");
             internals.registerMethod("jperl_cv_start_location", "jperlCvStartLocation", "$");
+            internals.registerMethod("jperl_cv_deparse_info", "jperlCvDeparseInfo", "$");
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
         } catch (NoSuchMethodException e) {
@@ -663,6 +664,24 @@ public class Internals extends PerlModuleBase {
             file = defFile;
         }
         return new RuntimeList(new RuntimeScalar(file), new RuntimeScalar(line));
+    }
+
+    public static RuntimeList jperlCvDeparseInfo(RuntimeArray args, int ctx) {
+        if (args.size() == 0) {
+            return new RuntimeList(new RuntimeScalar(), new RuntimeScalar(0));
+        }
+        RuntimeScalar s = args.get(0);
+        if (s == null) {
+            return new RuntimeList(new RuntimeScalar(), new RuntimeScalar(0));
+        }
+        s = s.scalar();
+        if (s.type != RuntimeScalarType.CODE || !(s.value instanceof RuntimeCode code)) {
+            return new RuntimeList(new RuntimeScalar(), new RuntimeScalar(0));
+        }
+        RuntimeScalar source = code.deparseSourceText != null
+                ? new RuntimeScalar(code.deparseSourceText)
+                : new RuntimeScalar();
+        return new RuntimeList(source, new RuntimeScalar(code.deparseFlags), new RuntimeScalar(code.deparseSourceOffset));
     }
 
     /**

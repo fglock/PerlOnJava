@@ -1,0 +1,90 @@
+--- t/core_fork.t.orig
++++ t/core_fork.t
+@@ -3,5 +3,15 @@
+ use strict;
+ use warnings;
++BEGIN {
++    my $is_perlonjava = ($ENV{PERLONJAVA_EXECUTABLE} || $^X || '')
++        =~ m{(?:^|[\\/])jperl(?:\\.bat)?$};
++    if ($is_perlonjava) {
++        require Test::More;
++        Test::More::plan(skip_all =>
++            'PerlOnJava does not implement fork()');
++    }
++}
++
+ use Test::More;
+ 
+ SKIP: {
+--- t/core_fork_pp.t.orig
++++ t/core_fork_pp.t
+@@ -3,5 +3,15 @@
+ use strict;
+ use warnings;
++BEGIN {
++    my $is_perlonjava = ($ENV{PERLONJAVA_EXECUTABLE} || $^X || '')
++        =~ m{(?:^|[\\/])jperl(?:\\.bat)?$};
++    if ($is_perlonjava) {
++        require Test::More;
++        Test::More::plan(skip_all =>
++            'PerlOnJava does not implement fork()');
++    }
++}
++
+ use Test::More;
+ use English();
+ use Carp();
+--- t/core_read.t.orig
++++ t/core_read.t
+@@ -3,5 +3,15 @@
+ use strict;
+ use warnings;
++BEGIN {
++    my $is_perlonjava = ($ENV{PERLONJAVA_EXECUTABLE} || $^X || '')
++        =~ m{(?:^|[\\/])jperl(?:\\.bat)?$};
++    if ($is_perlonjava) {
++        require Test::More;
++        Test::More::plan(skip_all =>
++            'PerlOnJava uses getrandom, so CORE::GLOBAL::read overrides do not exercise Crypt::URandom fallback');
++    }
++}
++
+ use Test::More;
+ use English();
+ use Carp();
+--- t/core_partial_read.t.orig
++++ t/core_partial_read.t
+@@ -3,5 +3,15 @@
+ use strict;
+ use warnings;
++BEGIN {
++    my $is_perlonjava = ($ENV{PERLONJAVA_EXECUTABLE} || $^X || '')
++        =~ m{(?:^|[\\/])jperl(?:\\.bat)?$};
++    if ($is_perlonjava) {
++        require Test::More;
++        Test::More::plan(skip_all =>
++            'PerlOnJava uses getrandom, so CORE::GLOBAL::read overrides do not exercise Crypt::URandom fallback');
++    }
++}
++
+ use Test::More;
+ use English();
+ use Carp();
+--- t/core_sysopen.t.orig
++++ t/core_sysopen.t
+@@ -3,5 +3,15 @@
+ use strict;
+ use warnings;
++BEGIN {
++    my $is_perlonjava = ($ENV{PERLONJAVA_EXECUTABLE} || $^X || '')
++        =~ m{(?:^|[\\/])jperl(?:\\.bat)?$};
++    if ($is_perlonjava) {
++        require Test::More;
++        Test::More::plan(skip_all =>
++            'PerlOnJava uses getrandom, so CORE::GLOBAL::sysopen overrides do not exercise Crypt::URandom fallback');
++    }
++}
++
+ use Test::More;
+ use English();
+ use Carp();

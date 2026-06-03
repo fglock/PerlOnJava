@@ -784,6 +784,7 @@ public class Variable {
         Node node = parseVariable(parser, token.text);
         // Reset the flag after parsing
         parser.parsingForLoopVariable = false;
+        annotateParseTimeCodeRef(parser, node);
 
         // If we are parsing a reference (e.g., \&sub or defined(&sub)),
         // return the node without adding parameters.
@@ -843,6 +844,21 @@ public class Variable {
         BinaryOperatorNode callNode = new BinaryOperatorNode("(", node, list, parser.tokenIndex);
         if (shareArgs) callNode.setAnnotation("shareCallerArgs", true);
         return callNode;
+    }
+
+    private static void annotateParseTimeCodeRef(Parser parser, Node node) {
+        if (!(node instanceof OperatorNode operatorNode)
+                || !operatorNode.operator.equals("&")
+                || !(operatorNode.operand instanceof IdentifierNode identifierNode)) {
+            return;
+        }
+
+        String fullName = NameNormalizer.normalizeVariableName(
+                identifierNode.name,
+                parser.ctx.symbolTable.getCurrentPackage());
+        if (GlobalVariable.isGlobalCodeRefDefined(fullName)) {
+            operatorNode.setAnnotation("parseTimeCodeRef", GlobalVariable.getGlobalCodeRef(fullName));
+        }
     }
 
     /**

@@ -674,6 +674,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public String cvStartFile;
     public int cvStartLine;
+    public String deparseSourceText;
+    public int deparseFlags;
+    public int deparseSourceOffset = -1;
+    public static final int DEPARSE_FLAG_STRICT = 1;
+    public static final int DEPARSE_FLAG_WARNINGS = 2;
     /**
      * True when the parser recognized this CV as a compile-time constant sub
      * (for example {@code sub foo () { 1 }}). {@link #constantValue} covers
@@ -949,6 +954,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.installedViaAnonGlobAssign = this.installedViaAnonGlobAssign;
         clone.cvStartFile = this.cvStartFile;
         clone.cvStartLine = this.cvStartLine;
+        clone.deparseSourceText = this.deparseSourceText;
+        clone.deparseFlags = this.deparseFlags;
+        clone.deparseSourceOffset = this.deparseSourceOffset;
         clone.isConstantCv = this.isConstantCv;
         clone.isStatic = this.isStatic;
         clone.isDeclared = this.isDeclared;
@@ -2486,6 +2494,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             String packageName,
             String cvStartFile,
             int cvStartLine) throws Exception {
+        return makeCodeObject(codeObject, prototype, packageName, cvStartFile, cvStartLine, null, 0);
+    }
+
+    public static RuntimeScalar makeCodeObject(
+            Object codeObject,
+            String prototype,
+            String packageName,
+            String cvStartFile,
+            int cvStartLine,
+            String deparseSourceText,
+            int deparseFlags) throws Exception {
+        return makeCodeObject(codeObject, prototype, packageName, cvStartFile, cvStartLine,
+                deparseSourceText, deparseFlags, -1);
+    }
+
+    public static RuntimeScalar makeCodeObject(
+            Object codeObject,
+            String prototype,
+            String packageName,
+            String cvStartFile,
+            int cvStartLine,
+            String deparseSourceText,
+            int deparseFlags,
+            int deparseSourceOffset) throws Exception {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
@@ -2505,6 +2537,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (cvStartLine > 0) {
             code.cvStartLine = cvStartLine;
         }
+        code.deparseSourceText = deparseSourceText;
+        code.deparseFlags = deparseFlags;
+        code.deparseSourceOffset = deparseSourceOffset;
 
         // Look up pad constants registered at compile time for this class.
         // These track cached string literals referenced via \ inside the sub,

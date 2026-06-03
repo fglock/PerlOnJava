@@ -154,6 +154,7 @@ public class PerlLanguageProvider {
         if (compilerOptions.applySourceFilters) {
             compilerOptions.code = FilterUtilCall.preprocessWithBeginFilters(compilerOptions.code);
         }
+        compilerOptions.deparseSourceCode = compilerOptions.code;
 
         // Create the LexerToken list
         Lexer lexer = new Lexer(compilerOptions.code);
@@ -690,6 +691,7 @@ public class PerlLanguageProvider {
         }
 
         // Tokenize
+        compilerOptions.deparseSourceCode = compilerOptions.code;
         Lexer lexer = new Lexer(compilerOptions.code);
         List<LexerToken> tokens = lexer.tokenize();
         compilerOptions.code = null;  // Free memory
@@ -709,4 +711,3 @@ public class PerlLanguageProvider {
         return compileToExecutable(ast, ctx);
     }
 }
-

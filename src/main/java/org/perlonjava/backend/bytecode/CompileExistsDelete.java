@@ -131,23 +131,8 @@ public class CompileExistsDelete {
     }
 
     private static void visitDeleteHashSlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode hashAccess, OperatorNode leftOp) {
-        int hashReg;
-        if (leftOp.operand instanceof IdentifierNode id) {
-            String hashVarName = "%" + id.name;
-            if (bc.hasVariable(hashVarName)) {
-                hashReg = bc.getVariableRegister(hashVarName);
-            } else {
-                hashReg = bc.allocateRegister();
-                String globalHashName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
-                int nameIdx = bc.addToStringPool(globalHashName);
-                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
-                bc.emitReg(hashReg);
-                bc.emit(nameIdx);
-            }
-        } else {
-            bc.throwCompilerException("Hash slice delete requires identifier");
-            return;
-        }
+        int hashReg = resolveHashSliceTarget(bc, node, leftOp, "Hash slice delete requires identifier or reference");
+        if (hashReg < 0) return;
         if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
             bc.throwCompilerException("Hash slice delete requires HashLiteralNode");
             return;
@@ -162,8 +147,8 @@ public class CompileExistsDelete {
                 bc.emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                // Compile key in SCALAR context
-                bc.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                // Compile key in LIST context so @array / @$arrayref expand as slice keys.
+                bc.compileNode(keyElement, -1, RuntimeContextType.LIST);
                 keyRegs.add(bc.lastResultReg);
             }
         }
@@ -183,23 +168,8 @@ public class CompileExistsDelete {
     }
 
     private static void visitDeleteHashKVSlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode hashAccess, OperatorNode leftOp) {
-        int hashReg;
-        if (leftOp.operand instanceof IdentifierNode id) {
-            String hashVarName = "%" + id.name;
-            if (bc.hasVariable(hashVarName)) {
-                hashReg = bc.getVariableRegister(hashVarName);
-            } else {
-                hashReg = bc.allocateRegister();
-                String globalHashName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
-                int nameIdx = bc.addToStringPool(globalHashName);
-                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
-                bc.emitReg(hashReg);
-                bc.emit(nameIdx);
-            }
-        } else {
-            bc.throwCompilerException("Hash kv-slice delete requires identifier");
-            return;
-        }
+        int hashReg = resolveHashSliceTarget(bc, node, leftOp, "Hash kv-slice delete requires identifier or reference");
+        if (hashReg < 0) return;
         if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
             bc.throwCompilerException("Hash kv-slice delete requires HashLiteralNode");
             return;
@@ -214,8 +184,8 @@ public class CompileExistsDelete {
                 bc.emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                // Compile key in SCALAR context
-                bc.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                // Compile key in LIST context so @array / @$arrayref expand as slice keys.
+                bc.compileNode(keyElement, -1, RuntimeContextType.LIST);
                 keyRegs.add(bc.lastResultReg);
             }
         }
@@ -276,31 +246,16 @@ public class CompileExistsDelete {
     }
 
     private static void visitDeleteArraySlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess, OperatorNode leftOp) {
-        int arrayReg;
-        if (leftOp.operand instanceof IdentifierNode id) {
-            String arrayVarName = "@" + id.name;
-            if (bc.hasVariable(arrayVarName)) {
-                arrayReg = bc.getVariableRegister(arrayVarName);
-            } else {
-                arrayReg = bc.allocateRegister();
-                String globalArrayName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
-                int nameIdx = bc.addToStringPool(globalArrayName);
-                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                bc.emitReg(arrayReg);
-                bc.emit(nameIdx);
-            }
-        } else {
-            bc.throwCompilerException("Array slice delete requires identifier");
-            return;
-        }
+        int arrayReg = resolveArraySliceTarget(bc, node, leftOp, "Array slice delete requires identifier or reference");
+        if (arrayReg < 0) return;
         if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
             bc.throwCompilerException("Array slice delete requires ArrayLiteralNode");
             return;
         }
         List<Integer> indexRegs = new ArrayList<>();
         for (Node indexElement : indicesNode.elements) {
-            // Compile index in SCALAR context
-            bc.compileNode(indexElement, -1, RuntimeContextType.SCALAR);
+            // Compile index in LIST context so @array / @$arrayref expand as slice indices.
+            bc.compileNode(indexElement, -1, RuntimeContextType.LIST);
             indexRegs.add(bc.lastResultReg);
         }
         int indicesListReg = bc.allocateRegister();
@@ -319,31 +274,16 @@ public class CompileExistsDelete {
     }
 
     private static void visitDeleteArrayKVSlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess, OperatorNode leftOp) {
-        int arrayReg;
-        if (leftOp.operand instanceof IdentifierNode id) {
-            String arrayVarName = "@" + id.name;
-            if (bc.hasVariable(arrayVarName)) {
-                arrayReg = bc.getVariableRegister(arrayVarName);
-            } else {
-                arrayReg = bc.allocateRegister();
-                String globalArrayName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
-                int nameIdx = bc.addToStringPool(globalArrayName);
-                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                bc.emitReg(arrayReg);
-                bc.emit(nameIdx);
-            }
-        } else {
-            bc.throwCompilerException("Array kv-slice delete requires identifier");
-            return;
-        }
+        int arrayReg = resolveArraySliceTarget(bc, node, leftOp, "Array kv-slice delete requires identifier or reference");
+        if (arrayReg < 0) return;
         if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
             bc.throwCompilerException("Array kv-slice delete requires ArrayLiteralNode");
             return;
         }
         List<Integer> indexRegs = new ArrayList<>();
         for (Node indexElement : indicesNode.elements) {
-            // Compile index in SCALAR context
-            bc.compileNode(indexElement, -1, RuntimeContextType.SCALAR);
+            // Compile index in LIST context so @array / @$arrayref expand as slice indices.
+            bc.compileNode(indexElement, -1, RuntimeContextType.LIST);
             indexRegs.add(bc.lastResultReg);
         }
         int indicesListReg = bc.allocateRegister();
@@ -403,6 +343,82 @@ public class CompileExistsDelete {
         bc.emitReg(rd);
         bc.emitReg(argReg);
         bc.lastResultReg = rd;
+    }
+
+    private static int resolveHashSliceTarget(BytecodeCompiler bc, OperatorNode node, OperatorNode leftOp, String error) {
+        if (leftOp.operand instanceof IdentifierNode id) {
+            return loadHashVariable(bc, id.name, node.getIndex());
+        }
+        if (leftOp.operand instanceof OperatorNode
+                || leftOp.operand instanceof BlockNode
+                || leftOp.operand instanceof BinaryOperatorNode) {
+            bc.compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
+            return derefHash(bc, bc.lastResultReg, node.getIndex());
+        }
+        bc.throwCompilerException(error);
+        return -1;
+    }
+
+    private static int resolveArraySliceTarget(BytecodeCompiler bc, OperatorNode node, OperatorNode leftOp, String error) {
+        if (leftOp.operand instanceof IdentifierNode id) {
+            return loadArrayVariable(bc, id.name, node.getIndex());
+        }
+        if (leftOp.operand instanceof OperatorNode
+                || leftOp.operand instanceof BlockNode
+                || leftOp.operand instanceof BinaryOperatorNode) {
+            bc.compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
+            return derefArray(bc, bc.lastResultReg, node.getIndex());
+        }
+        bc.throwCompilerException(error);
+        return -1;
+    }
+
+    private static int loadHashVariable(BytecodeCompiler bc, String name, int tokenIndex) {
+        String hashVarName = "%" + name;
+        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
+                && bc.currentSubroutineClosureVars.contains(hashVarName)) {
+            int hashReg = bc.allocateRegister();
+            int nameIdx = bc.addToStringPool(hashVarName);
+            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, tokenIndex);
+            bc.emitReg(hashReg);
+            bc.emit(nameIdx);
+            bc.emit(bc.currentSubroutineBeginId);
+            return hashReg;
+        }
+        if (bc.hasVariable(hashVarName)) {
+            return bc.getVariableRegister(hashVarName);
+        }
+        int hashReg = bc.allocateRegister();
+        String globalHashName = NameNormalizer.normalizeVariableName(name, bc.getCurrentPackage());
+        int nameIdx = bc.addToStringPool(globalHashName);
+        bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+        bc.emitReg(hashReg);
+        bc.emit(nameIdx);
+        return hashReg;
+    }
+
+    private static int loadArrayVariable(BytecodeCompiler bc, String name, int tokenIndex) {
+        String arrayVarName = "@" + name;
+        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
+                && bc.currentSubroutineClosureVars.contains(arrayVarName)) {
+            int arrayReg = bc.allocateRegister();
+            int nameIdx = bc.addToStringPool(arrayVarName);
+            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, tokenIndex);
+            bc.emitReg(arrayReg);
+            bc.emit(nameIdx);
+            bc.emit(bc.currentSubroutineBeginId);
+            return arrayReg;
+        }
+        if (bc.hasVariable(arrayVarName)) {
+            return bc.getVariableRegister(arrayVarName);
+        }
+        int arrayReg = bc.allocateRegister();
+        String globalArrayName = NameNormalizer.normalizeVariableName(name, bc.getCurrentPackage());
+        int nameIdx = bc.addToStringPool(globalArrayName);
+        bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+        bc.emitReg(arrayReg);
+        bc.emit(nameIdx);
+        return arrayReg;
     }
 
     private static int resolveHashFromBinaryOp(BytecodeCompiler bc, BinaryOperatorNode hashAccess, int tokenIndex) {
@@ -567,23 +583,8 @@ public class CompileExistsDelete {
     }
 
     private static void visitDeleteLocalHashSlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode hashAccess, OperatorNode leftOp) {
-        int hashReg;
-        if (leftOp.operand instanceof IdentifierNode id) {
-            String hashVarName = "%" + id.name;
-            if (bc.hasVariable(hashVarName)) {
-                hashReg = bc.getVariableRegister(hashVarName);
-            } else {
-                hashReg = bc.allocateRegister();
-                String globalHashName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
-                int nameIdx = bc.addToStringPool(globalHashName);
-                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
-                bc.emitReg(hashReg);
-                bc.emit(nameIdx);
-            }
-        } else {
-            bc.throwCompilerException("Hash slice delete local requires identifier");
-            return;
-        }
+        int hashReg = resolveHashSliceTarget(bc, node, leftOp, "Hash slice delete local requires identifier or reference");
+        if (hashReg < 0) return;
         if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
             bc.throwCompilerException("Hash slice delete local requires HashLiteralNode");
             return;
@@ -598,7 +599,7 @@ public class CompileExistsDelete {
                 bc.emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                bc.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                bc.compileNode(keyElement, -1, RuntimeContextType.LIST);
                 keyRegs.add(bc.lastResultReg);
             }
         }
@@ -633,30 +634,15 @@ public class CompileExistsDelete {
     }
 
     private static void visitDeleteLocalArraySlice(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess, OperatorNode leftOp) {
-        int arrayReg;
-        if (leftOp.operand instanceof IdentifierNode id) {
-            String arrayVarName = "@" + id.name;
-            if (bc.hasVariable(arrayVarName)) {
-                arrayReg = bc.getVariableRegister(arrayVarName);
-            } else {
-                arrayReg = bc.allocateRegister();
-                String globalArrayName = NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage());
-                int nameIdx = bc.addToStringPool(globalArrayName);
-                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                bc.emitReg(arrayReg);
-                bc.emit(nameIdx);
-            }
-        } else {
-            bc.throwCompilerException("Array slice delete local requires identifier");
-            return;
-        }
+        int arrayReg = resolveArraySliceTarget(bc, node, leftOp, "Array slice delete local requires identifier or reference");
+        if (arrayReg < 0) return;
         if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
             bc.throwCompilerException("Array slice delete local requires ArrayLiteralNode");
             return;
         }
         List<Integer> indexRegs = new ArrayList<>();
         for (Node indexElement : indicesNode.elements) {
-            bc.compileNode(indexElement, -1, RuntimeContextType.SCALAR);
+            bc.compileNode(indexElement, -1, RuntimeContextType.LIST);
             indexRegs.add(bc.lastResultReg);
         }
         int indicesListReg = bc.allocateRegister();

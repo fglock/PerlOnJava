@@ -992,12 +992,19 @@ public class CompileOperator {
                 // The regular RETURN opcode is used for implicit end-of-block returns.
                 short returnOpcode = bytecodeCompiler.isInMapGrepBlock
                         ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
-                if (node.operand != null) {
-                    node.operand.accept(bytecodeCompiler);
+                boolean hasOperand = !(node.operand == null
+                        || (node.operand instanceof ListNode list && list.elements.isEmpty()));
+                if (!hasOperand) {
+                    int listReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.CREATE_LIST);
+                    bytecodeCompiler.emitReg(listReg);
+                    bytecodeCompiler.emit(0);
+                    bytecodeCompiler.lastResultReg = listReg;
+                } else if (node.operand instanceof ListNode list && list.elements.size() == 1) {
+                    bytecodeCompiler.compileNode(
+                            list.elements.getFirst(), -1, RuntimeContextType.RUNTIME);
                 } else {
-                    int undefReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                    bytecodeCompiler.emitReg(undefReg);
+                    bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.RUNTIME);
                 }
                 int exprReg = bytecodeCompiler.lastResultReg;
 

@@ -2,11 +2,7 @@
 comment: |
   PerlOnJava distroprefs for Test::Differences.
 
-  The module itself loads and produces diffs, but several upstream tests compare
-  exact captured diagnostics. PerlOnJava currently reports different `-e` line
-  numbers and anonymous sub deparse text, so allow CPAN to continue past those
-  harness-only failures.
+  No test override is required. Keep this file bootstrapped so older
+  PerlOnJava installations replace the former ignore-failures preference.
 match:
   distribution: "^DCANTRELL/Test-Differences-"
-test:
-  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

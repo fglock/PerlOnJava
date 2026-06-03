@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Parse::RecDescent.
+
+  The runtime parser and dependent precompile tests pass. The standalone
+  precompiled-parser test generates a large self-contained parser that
+  overflows the JVM stack under PerlOnJava, and PGObject only needs the normal
+  runtime parser. Patch just that standalone test block.
+match:
+  distribution: "^JTBRAUN/Parse-RecDescent-"
+patches:
+  - "Parse-RecDescent-1.967015/SkipStandalonePrecompile.patch"
+  - "Parse-RecDescent-1.967015/SkipReproducibleStandalone.patch"

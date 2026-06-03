@@ -1,0 +1,17 @@
+--- t/precompile.t.orig
++++ t/precompile.t
+@@ -23,6 +23,14 @@
+ for my $standalone (0..1) {
+     my $standalone_str = $standalone ? 'standalone' : 'dependent';
+     my $class = "TestParser$standalone_str";
++
++    if ($standalone && (($ENV{PERLONJAVA_EXECUTABLE} || '') || (($^X || '') =~ /(?:^|[\/\\])jperl(?:\z|[.])/))) {
++        SKIP: {
++            skip "PerlOnJava overflows the JVM stack in standalone precompiled parser", 7;
++        }
++        next;
++    }
++
+     my $pm_filename = $class . '.pm';
+ 
+     if (-e $pm_filename) {

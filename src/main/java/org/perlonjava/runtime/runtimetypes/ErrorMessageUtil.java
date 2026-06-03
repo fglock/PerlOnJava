@@ -538,6 +538,22 @@ public class ErrorMessageUtil {
         return new SourceLocation(currentFileName, lineNumber);
     }
 
+    public int getSourceOffset(int index) {
+        if (index < 0 || tokens == null) {
+            return -1;
+        }
+        int offset = 0;
+        int limit = Math.min(index, tokens.size());
+        for (int i = 0; i < limit; i++) {
+            LexerToken tok = tokens.get(i);
+            if (tok.type == LexerTokenType.EOF) {
+                break;
+            }
+            offset += tok.text.length();
+        }
+        return offset;
+    }
+
     private static boolean isUnquotedLineFilenameToken(LexerToken token) {
         return token.type != LexerTokenType.WHITESPACE
                 && token.type != LexerTokenType.NEWLINE

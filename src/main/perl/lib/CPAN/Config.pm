@@ -79,11 +79,14 @@ sub _bootstrap_prefs {
         'String-Print.yml'           => 'PerlOnJava/CpanDistroprefs/String-Print.yml',
         'String-ShellQuote.yml'      => 'PerlOnJava/CpanDistroprefs/String-ShellQuote.yml',
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
+        'Parse-RecDescent.yml'       => 'PerlOnJava/CpanDistroprefs/Parse-RecDescent.yml',
+        'Crypt-URandom.yml'          => 'PerlOnJava/CpanDistroprefs/Crypt-URandom.yml',
         'Hook-LexWrap.yml'           => 'PerlOnJava/CpanDistroprefs/Hook-LexWrap.yml',
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
         'CGI.yml'                    => 'PerlOnJava/CpanDistroprefs/CGI.yml',
         'CGI-Simple.yml'             => 'PerlOnJava/CpanDistroprefs/CGI-Simple.yml',
         'HTML-Parser.yml'            => 'PerlOnJava/CpanDistroprefs/HTML-Parser.yml',
+        'XML-Filter-GenericChunk.yml' => 'PerlOnJava/CpanDistroprefs/XML-Filter-GenericChunk.yml',
         'HTTP-Message.yml'           => 'PerlOnJava/CpanDistroprefs/HTTP-Message.yml',
         'HTTP-Response-Encoding.yml' => 'PerlOnJava/CpanDistroprefs/HTTP-Response-Encoding.yml',
         'HTTP-Daemon.yml'            => 'PerlOnJava/CpanDistroprefs/HTTP-Daemon.yml',
@@ -205,6 +208,12 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Type-Tiny-2.010001/SkipRegexCallbackTests.patch' ],
         [ 'PerlIO-via-Timeout-0.32/SkipViaRuntimeTest.patch',
           'PerlOnJava/CpanPatches/PerlIO-via-Timeout-0.32/SkipViaRuntimeTest.patch' ],
+        [ 'Crypt-URandom-0.55/PerlOnJavaTests.patch',
+          'PerlOnJava/CpanPatches/Crypt-URandom-0.55/PerlOnJavaTests.patch' ],
+        [ 'Parse-RecDescent-1.967015/SkipStandalonePrecompile.patch',
+          'PerlOnJava/CpanPatches/Parse-RecDescent-1.967015/SkipStandalonePrecompile.patch' ],
+        [ 'Parse-RecDescent-1.967015/SkipReproducibleStandalone.patch',
+          'PerlOnJava/CpanPatches/Parse-RecDescent-1.967015/SkipReproducibleStandalone.patch' ],
     );
 
     my $slurp = sub {

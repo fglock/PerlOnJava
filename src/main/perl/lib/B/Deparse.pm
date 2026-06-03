@@ -72,22 +72,40 @@ sub _source_visible_anon_sub {
     my $cop = eval { $cv->START } or return;
     my $file = eval { $cop->file } or return;
     my $line = eval { $cop->line } || 0;
-    return if $line <= 0 || $file eq '-e' || !-f $file;
+    return if $line <= 0;
+
+    my ($runtime_source, $flags, $source_offset) = _runtime_deparse_info($coderef);
+    if (defined $runtime_source && length $runtime_source) {
+        my $block = _extract_source_visible_block($runtime_source, $line, $flags, $source_offset);
+        return $block if defined $block;
+    }
+
+    return if $file eq '-e' || !-f $file;
 
     open my $fh, '<', $file or return;
     my @lines = <$fh>;
     close $fh;
 
     my $source = join '', @lines;
-    return _extract_source_visible_block($source, $line);
+    return _extract_source_visible_block($source, $line, $flags, $source_offset);
+}
+
+sub _runtime_deparse_info {
+    my ($coderef) = @_;
+
+    return unless eval { require Internals; 1 };
+    my @info = eval { Internals::jperl_cv_deparse_info($coderef) };
+    return unless @info;
+    return @info;
 }
 
 sub _extract_source_visible_block {
-    my ($source, $target_line) = @_;
+    my ($source, $target_line, $flags, $source_offset) = @_;
 
     my @stack;
     my @candidates;
     my $line = 1;
+    my $line_start = 0;
     for (my $i = 0; $i < length($source); $i++) {
         my $ch = substr($source, $i, 1);
         if ($ch eq '{') {
@@ -100,10 +118,26 @@ sub _extract_source_visible_block {
             next unless $start_line <= $target_line && $target_line <= $line;
             push @candidates, [$start, $i];
         } elsif ($ch eq "\n") {
-            $line++;
+            my $line_text = substr($source, $line_start, $i - $line_start);
+            if ($line_text =~ /^\s*#line\s+(\d+)/) {
+                $line = $1;
+            } else {
+                $line++;
+            }
+            $line_start = $i + 1;
         }
     }
     return unless @candidates;
+
+    if (defined $source_offset && $source_offset >= 0) {
+        my @containing = grep { $_->[0] <= $source_offset && $source_offset <= $_->[1] } @candidates;
+        if (@containing) {
+            @candidates = @containing;
+        } else {
+            my @after = grep { $_->[0] >= $source_offset } @candidates;
+            @candidates = @after if @after;
+        }
+    }
 
     @candidates = sort {
         ($a->[1] - $a->[0]) <=> ($b->[1] - $b->[0])
@@ -115,6 +149,13 @@ sub _extract_source_visible_block {
     $body =~ s/^\s+//;
     $body =~ s/\s+$//;
     $body .= ';' if length($body) && $body !~ /[;}]\z/;
+    if ($flags) {
+        my @lines;
+        push @lines, 'use warnings;' if $flags & 2;
+        push @lines, 'use strict;' if $flags & 1;
+        push @lines, split /\n/, $body;
+        return "{\n" . join('', map { "    $_\n" } @lines) . "}";
+    }
     return "{ $body }";
 }
 
