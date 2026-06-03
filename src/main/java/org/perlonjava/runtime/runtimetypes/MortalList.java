@@ -31,6 +31,11 @@ public class MortalList {
     // Drained at statement boundaries (FREETMPS equivalent).
     private static final ArrayList<RuntimeBase> pending = new ArrayList<>();
 
+    // Tied scalar wrappers whose handler release must happen at the next
+    // statement boundary. Used when a :lvalue sub returns a tied lexical: the
+    // callee's scope exits before the caller performs STORE.
+    private static final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
+
     // Scalars whose scope has exited while captureCount > 0.
     // These variables hold blessed references that could not be decremented
     // at scope exit because closures still reference the RuntimeScalar.
@@ -89,6 +94,11 @@ public class MortalList {
             base.traceRefCount(0, "MortalList.deferDecrement (queued)");
         }
         pending.add(base);
+    }
+
+    public static void deferTiedObjectRelease(TiedVariableBase tiedVariable) {
+        if (!active || tiedVariable == null) return;
+        pendingTiedReleases.add(tiedVariable);
     }
 
     /**
@@ -643,6 +653,20 @@ public class MortalList {
     // Each mark records the pending list size at scope entry, so that
     // popAndFlush() only processes entries added within that scope.
     private static final ArrayList<Integer> marks = new ArrayList<>();
+    private static final ArrayList<Integer> tiedReleaseMarks = new ArrayList<>();
+
+    private static void processDeferredEntriesFrom(int pendingStartIdx, int tiedReleaseStartIdx) {
+        int pendingIdx = pendingStartIdx;
+        int tiedReleaseIdx = tiedReleaseStartIdx;
+        while (pendingIdx < pending.size() || tiedReleaseIdx < pendingTiedReleases.size()) {
+            while (tiedReleaseIdx < pendingTiedReleases.size()) {
+                pendingTiedReleases.get(tiedReleaseIdx++).releaseTiedObject();
+            }
+            while (pendingIdx < pending.size()) {
+                processDeferredBase(pending.get(pendingIdx++), false);
+            }
+        }
+    }
 
     /**
      * Process all pending decrements. Called at statement boundaries.
@@ -862,7 +886,7 @@ public class MortalList {
     public static void flush() {
         if (!active) return;
         if (flushing) return;
-        if (pending.isEmpty()) {
+        if (pending.isEmpty() && pendingTiedReleases.isEmpty()) {
             processReadyDeferredCaptures();
             maybeAutoSweepAfterFlush();
             return;
@@ -870,12 +894,11 @@ public class MortalList {
         invalidateDrainReachabilityCaches();
         flushing = true;
         try {
-            // Process list — DESTROY may add new entries, so use index-based loop
-            for (int i = 0; i < pending.size(); i++) {
-                processDeferredBase(pending.get(i), false);
-            }
+            processDeferredEntriesFrom(0, 0);
             pending.clear();
+            pendingTiedReleases.clear();
             marks.clear(); // All entries drained; marks are meaningless now
+            tiedReleaseMarks.clear();
         } finally {
             flushing = false;
             invalidateDrainReachabilityCaches();
@@ -985,6 +1008,7 @@ public class MortalList {
     public static void pushMark() {
         if (!active) return;
         marks.add(pending.size());
+        tiedReleaseMarks.add(pendingTiedReleases.size());
     }
 
     /**
@@ -997,6 +1021,9 @@ public class MortalList {
     public static void popMark() {
         if (!active || marks.isEmpty()) return;
         marks.removeLast();
+        if (!tiedReleaseMarks.isEmpty()) {
+            tiedReleaseMarks.removeLast();
+        }
     }
 
     /**
@@ -1014,7 +1041,7 @@ public class MortalList {
         if (!active) return;
         if (flushing) return;
         boolean topLevel = marks.isEmpty();
-        if (pending.isEmpty()) {
+        if (pending.isEmpty() && pendingTiedReleases.isEmpty()) {
             processReadyDeferredCaptures();
             if (topLevel) {
                 maybeAutoSweep();
@@ -1022,7 +1049,8 @@ public class MortalList {
             return;
         }
         int mark = marks.isEmpty() ? 0 : marks.getLast();
-        if (pending.size() <= mark) {
+        int tiedMark = tiedReleaseMarks.isEmpty() ? 0 : tiedReleaseMarks.getLast();
+        if (pending.size() <= mark && pendingTiedReleases.size() <= tiedMark) {
             processReadyDeferredCaptures();
             if (topLevel) {
                 maybeAutoSweep();
@@ -1032,12 +1060,13 @@ public class MortalList {
         invalidateDrainReachabilityCaches();
         flushing = true;
         try {
-            for (int i = mark; i < pending.size(); i++) {
-                processDeferredBase(pending.get(i), false);
-            }
+            processDeferredEntriesFrom(mark, tiedMark);
             // Remove only entries above the mark
             while (pending.size() > mark) {
                 pending.removeLast();
+            }
+            while (pendingTiedReleases.size() > tiedMark) {
+                pendingTiedReleases.removeLast();
             }
         } finally {
             flushing = false;
@@ -1058,7 +1087,8 @@ public class MortalList {
     public static void popAndFlush() {
         if (!active || marks.isEmpty()) return;
         int mark = marks.removeLast();
-        if (pending.size() <= mark) {
+        int tiedMark = tiedReleaseMarks.isEmpty() ? 0 : tiedReleaseMarks.removeLast();
+        if (pending.size() <= mark && pendingTiedReleases.size() <= tiedMark) {
             // Even if no mortal entries to process, check deferred captures
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
@@ -1068,12 +1098,13 @@ public class MortalList {
         }
         invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
-        for (int i = mark; i < pending.size(); i++) {
-            processDeferredBase(pending.get(i), false);
-        }
+        processDeferredEntriesFrom(mark, tiedMark);
         // Remove only the entries we processed (keep entries before mark)
         while (pending.size() > mark) {
             pending.removeLast();
+        }
+        while (pendingTiedReleases.size() > tiedMark) {
+            pendingTiedReleases.removeLast();
         }
         invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures

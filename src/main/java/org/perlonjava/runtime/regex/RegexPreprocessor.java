@@ -69,6 +69,7 @@ public class RegexPreprocessor {
      * `%+` / `%-`.
      */
     static java.util.Set<String> seenNamedCaptures = new java.util.HashSet<>();
+    static java.util.Map<String, java.util.List<String>> emittedNamedCaptures = new java.util.LinkedHashMap<>();
     static int duplicateNameCounter;
 
     static void markDeferredUnicodePropertyEncountered() {
@@ -115,6 +116,7 @@ public class RegexPreprocessor {
         branchResetEncountered = false;
         backslashKEncountered = false;
         seenNamedCaptures.clear();
+        emittedNamedCaptures.clear();
         duplicateNameCounter = 0;
 
         // First, escape invalid quantifier braces (Perl compatibility)
@@ -1585,7 +1587,7 @@ public class RegexPreprocessor {
             } else if (c3 == '[') {
                 // Handle extended bracketed character class (?[...])
                 return ExtendedCharClass.handleExtendedCharacterClass(s, offset, sb, regexFlags);
-            } else if ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^' || c3 == ':') {
+            } else if ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^' || c3 == ':' || c3 == ')') {
                 // Handle (?modifiers: ... ) construct and non-capturing groups
                 return RegexPreprocessorHelper.handleFlagModifiers(s, offset, sb, regexFlags);
             } else if (c3 == ':') {
@@ -1671,6 +1673,7 @@ public class RegexPreprocessor {
         String name = s.substring(start, end);
         // Encode underscores for Java regex compatibility
         String encodedName = CaptureNameEncoder.encodeGroupName(name);
+        String originalEncodedName = encodedName;
         // Perl allows the same capture group name to appear in multiple
         // alternation branches (e.g. `(?<y>\d+)|(?<y>foo)`). Java's regex
         // engine rejects duplicates outright, so we suffix subsequent
@@ -1679,9 +1682,19 @@ public class RegexPreprocessor {
         if (!seenNamedCaptures.add(encodedName)) {
             encodedName = encodedName + CaptureNameEncoder.DUPLICATE_MARKER + (duplicateNameCounter++);
         }
+        emittedNamedCaptures.computeIfAbsent(originalEncodedName, k -> new java.util.ArrayList<>()).add(encodedName);
         sb.append("(?<").append(encodedName).append(">");
         captureGroupCount++; // Increment counter for capturing groups
         return handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
+    }
+
+    static java.util.List<String> namedBackreferenceTargets(String perlName) {
+        String encodedName = CaptureNameEncoder.encodeGroupName(perlName);
+        java.util.List<String> emitted = emittedNamedCaptures.get(encodedName);
+        if (emitted == null || emitted.isEmpty()) {
+            return java.util.Collections.singletonList(encodedName);
+        }
+        return emitted;
     }
 
     /**

@@ -32,6 +32,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Supplier;
 
@@ -391,6 +392,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 : callContext;
     }
 
+    public static int effectiveCallContext(RuntimeCode code, int callContext) {
+        if (isLvalueCode(code)
+                && (callContext == RuntimeContextType.LVALUE
+                || callContext == RuntimeContextType.LVALUE_LIST)) {
+            return callContext;
+        }
+        return effectiveCallContext(callContext);
+    }
+
     public static RuntimeList returnList(RuntimeBase retVal, int callContext) {
         return returnList(retVal, callContext, true);
     }
@@ -446,7 +456,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() == 1) {
                 RuntimeBase value = result.elements.getFirst();
-                if (value instanceof RuntimeScalar scalar && scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                if (originalContext != RuntimeContextType.LVALUE
+                        && originalContext != RuntimeContextType.LVALUE_LIST
+                        && value instanceof RuntimeScalar scalar
+                        && scalar.type == RuntimeScalarType.TIED_SCALAR) {
                     return copyReturnedReferenceScalars(new RuntimeList(scalar.tiedFetch()), originalContext, copyCapturedScalars);
                 }
             }
@@ -1421,6 +1434,38 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return evalStringHelper(code, evalTag, new Object[0]);
     }
 
+    public static boolean shouldDecodeEvalbytesUtf8Source(String source) {
+        if (source == null) {
+            return false;
+        }
+        int pos = source.indexOf("use utf8");
+        while (pos >= 0) {
+            boolean startsAtWordBoundary = pos == 0 || !Character.isJavaIdentifierPart(source.charAt(pos - 1));
+            int after = pos + "use utf8".length();
+            boolean endsAtWordBoundary = after >= source.length()
+                    || Character.isWhitespace(source.charAt(after))
+                    || source.charAt(after) == ';';
+            if (startsAtWordBoundary && endsAtWordBoundary) {
+                for (int i = 0; i < pos; i++) {
+                    if (source.charAt(i) > 127) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            pos = source.indexOf("use utf8", pos + 1);
+        }
+        return false;
+    }
+
+    public static String decodeEvalbytesUtf8Source(String source) {
+        byte[] bytes = new byte[source.length()];
+        for (int i = 0; i < source.length(); i++) {
+            bytes[i] = (byte) (source.charAt(i) & 0xFF);
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
     /**
      * Compiles the text of an eval string into a Class that represents an anonymous subroutine.
      * After the Class is returned to the caller, an instance of the Class will be populated
@@ -1491,8 +1536,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // If so, treat it as Unicode source to preserve Unicode characters during parsing
             // EXCEPT for evalbytes, which must treat everything as bytes
             String evalString = code.toString();
+            boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
+            if (evalbytesUtf8Source) {
+                evalString = decodeEvalbytesUtf8Source(evalString);
+            }
             boolean hasUnicode = false;
-            if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
+            if (evalbytesUtf8Source) {
+                hasUnicode = true;
+            } else if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
                 for (int i = 0; i < evalString.length(); i++) {
                     if (evalString.charAt(i) > 127) {
                         hasUnicode = true;
@@ -1512,7 +1563,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
             }
-            if (ctx.isEvalbytes) {
+            if (ctx.isEvalbytes && !evalbytesUtf8Source) {
                 evalCompilerOptions.isEvalbytes = true;
             }
             if (isByteStringSource) {
@@ -1537,7 +1588,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Include package name in cache key to ensure source location info is correct per-package
             int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
             String currentPackage = ctx.symbolTable.getCurrentPackage();
-            String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
+            String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
                 synchronized (evalCache) {
@@ -1986,11 +2037,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         try {
             String evalString = code.toString();
+            boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
+            if (evalbytesUtf8Source) {
+                evalString = decodeEvalbytesUtf8Source(evalString);
+            }
             evalTrace("evalStringWithInterpreter parse start tag=" + evalTag + " ctx=" + callContext +
                     " fileName=" + ctx.compilerOptions.fileName);
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
-            if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
+            if (evalbytesUtf8Source) {
+                hasUnicode = true;
+            } else if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
                 for (int i = 0; i < evalString.length(); i++) {
                     if (evalString.charAt(i) > 127) {
                         hasUnicode = true;
@@ -2006,7 +2063,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
             }
-            if (ctx.isEvalbytes) {
+            if (ctx.isEvalbytes && !evalbytesUtf8Source) {
                 evalCompilerOptions.isEvalbytes = true;
             }
             if (isByteStringSource) {
@@ -3461,7 +3518,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ? code.packageName + "::" + code.subName
                     : null;
             requireLvalueCallable(code, callContext, resolvedSubroutineName);
-            int effectiveContext = effectiveCallContext(callContext);
+            int effectiveContext = effectiveCallContext(code, callContext);
             // Look up warning bits for the code's class and push to context stack
             // This enables FATAL warnings to work even at top-level (no caller frame)
             String warningBits = getWarningBitsForCode(code);
@@ -3776,7 +3833,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             if (code.defined()) {
                 requireLvalueCallable(code, callContext, subroutineName);
-                int effectiveContext = effectiveCallContext(callContext);
+                int effectiveContext = effectiveCallContext(code, callContext);
                 // Look up warning bits for the code's class and push to context stack
                 String warningBits = getWarningBitsForCode(code);
                 if (warningBits != null) {
@@ -4030,7 +4087,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             if (code.defined()) {
                 requireLvalueCallable(code, callContext, subroutineName);
-                int effectiveContext = effectiveCallContext(callContext);
+                int effectiveContext = effectiveCallContext(code, callContext);
                 // Look up warning bits for the code's class and push to context stack
                 String warningBits = getWarningBitsForCode(code);
                 if (warningBits != null) {
@@ -4480,7 +4537,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             requireLvalueCallable(this, callContext, null);
-            int effectiveContext = effectiveCallContext(callContext);
+            int effectiveContext = effectiveCallContext(this, callContext);
 
             // Debug mode: push args and track subroutine entry
             if (DebugState.debugMode) {
@@ -4599,7 +4656,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             requireLvalueCallable(this, callContext, subroutineName);
-            int effectiveContext = effectiveCallContext(callContext);
+            int effectiveContext = effectiveCallContext(this, callContext);
 
             // Debug mode: push args and track subroutine entry
             if (DebugState.debugMode) {

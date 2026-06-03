@@ -152,8 +152,16 @@ public class EmitControlFlow {
         Label label = operator.equals("next") ? loopLabels.nextLabel
                 : operator.equals("last") ? loopLabels.lastLabel
                 : loopLabels.redoLabel;
+        emitLoopControlScopeCleanup(ctx, loopLabels);
         emitMortalFlushAboveMark(ctx);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
+    }
+
+    private static void emitLoopControlScopeCleanup(EmitterContext ctx, LoopLabels loopLabels) {
+        if (loopLabels.cleanupScopeIndex < 0) {
+            return;
+        }
+        EmitStatement.emitScopeExitNullStores(ctx, loopLabels.cleanupScopeIndex, true);
     }
 
     private static void emitMortalFlushAboveMark(EmitterContext ctx) {

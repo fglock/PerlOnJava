@@ -1132,9 +1132,19 @@ public class Encode extends PerlModuleBase {
         RuntimeScalar arg = args.get(0);
         boolean wasUtf8 = (arg.type == STRING);
         if (!wasUtf8) {
-            boolean fromBytes = (arg.type == BYTE_STRING);
+            String s = arg.toString();
+            byte[] bytes = s.getBytes(StandardCharsets.ISO_8859_1);
             arg.type = STRING;
-            arg.utf8UncheckedOctets = fromBytes;
+            try {
+                CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT);
+                arg.value = decoder.decode(ByteBuffer.wrap(bytes)).toString();
+                arg.utf8UncheckedOctets = false;
+            } catch (CharacterCodingException e) {
+                arg.value = s;
+                arg.utf8UncheckedOctets = true;
+            }
         }
         return new RuntimeScalar(wasUtf8).getList();
     }
@@ -1150,9 +1160,11 @@ public class Encode extends PerlModuleBase {
         RuntimeScalar arg = args.get(0);
         boolean wasUtf8 = (arg.type == STRING);
         if (wasUtf8) {
-            String s = arg.toString();
-            byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
-            arg.set(new String(bytes, StandardCharsets.ISO_8859_1));
+            if (!arg.utf8UncheckedOctets) {
+                String s = arg.toString();
+                byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+                arg.set(new String(bytes, StandardCharsets.ISO_8859_1));
+            }
         }
         arg.type = BYTE_STRING;
         arg.utf8UncheckedOctets = false;

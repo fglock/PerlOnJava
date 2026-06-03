@@ -3551,6 +3551,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    public static void scopeExitCleanupPreservingReturnedLvalue(RuntimeScalar scalar, RuntimeBase returnedLvalue) {
+        if (scalar != null
+                && scalar == returnedLvalue
+                && scalar.type == RuntimeScalarType.TIED_SCALAR
+                && scalar.value instanceof TiedVariableBase tiedVariable) {
+            MortalList.deferTiedObjectRelease(tiedVariable);
+            return;
+        }
+        scopeExitCleanup(scalar);
+    }
+
     private static class RuntimeScalarIterator implements Iterator<RuntimeScalar> {
         private final RuntimeScalar scalar;
         private boolean hasNext = true;

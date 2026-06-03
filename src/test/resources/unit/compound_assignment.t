@@ -96,9 +96,19 @@ $a = 0;
 $a ||= 1;
 ok(!($a != 1), '0 ||= 1 equals 1');
 
+# Logical XOR Assignment
+$a = 0;
+$a ^^= 1;
+is($a, 1, '0 ^^= 1 equals 1');
+
 # Defined-or Assignment
 my $undefined;
 $undefined //= "default";
 ok(!($undefined ne "default"), 'undefined //= \'default\' equals \'default\'');
+
+# Parenthesized compound assignment should stay an lvalue
+my ($x, $y) = (0x7a, 0x3e);
+($x &= $y) .= "x";
+is($x, "58x", 'parenthesized bitwise assignment remains assignable');
 
 done_testing();

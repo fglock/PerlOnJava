@@ -78,8 +78,8 @@ my $packages_gz  = glob('~/.cpan/sources/modules/02packages.details.txt.gz');
 # CLI options
 # ──────────────────────────────────────────────────────────────────────
 my $count       = 10;
-my $timeout     = 1200;   # soft wall-clock timeout; progress can extend it
-my $activity_grace = 300; # after soft timeout, allow this many idle seconds
+my $timeout     = 2400;   # soft wall-clock timeout; progress can extend it
+my $activity_grace = 600; # after soft timeout, allow this many idle seconds
 my $max_runtime = 0;      # 0 = no hard cap beyond activity timeout
 my $progress_interval = 60;
 my $jcpan_jobs  = 1;      # passed through as `jcpan --jobs N`
@@ -1148,13 +1148,13 @@ Options:
                    Can be:
                      - Comma-separated: --modules Foo::Bar,Baz::Qux
                      - File path: --modules modules.txt (one per line, # for comments)
-  --timeout N      Default timeout per target module in seconds (default: 1200).
+  --timeout N      Default timeout per target module in seconds (default: 2400).
                    This is a soft wall clock: after this time, runs continue
                    while they keep producing output.
                    Known-slow distributions use a larger timeout wired in this script.
   --activity-grace N
                    After --timeout has elapsed, kill the target if it produces
-                   no output for this many seconds (default: 300).
+                   no output for this many seconds (default: 600).
   --max-runtime N  Optional hard cap per target module in seconds (default: 0,
                    disabled). Useful for chatty tests that never finish.
   --progress-interval N

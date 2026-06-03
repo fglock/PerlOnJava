@@ -157,6 +157,10 @@ public class ListUtil extends PerlModuleBase {
         }
     }
 
+    private static void releaseEphemeralCaptures(RuntimeScalar codeRef) {
+        ListOperators.releaseEphemeralCaptures(codeRef);
+    }
+
     /**
      * Gets the package name from a code ref for $a/$b variable resolution.
      * In Perl 5, reduce/pairmap/etc. use $a and $b in the caller's package,
@@ -192,9 +196,11 @@ public class ListUtil extends PerlModuleBase {
         RuntimeList values = createSubList(args, 1);
 
         if (values.size() == 0) {
+            releaseEphemeralCaptures(codeRef);
             return scalarUndef.getList();
         }
         if (values.size() == 1) {
+            releaseEphemeralCaptures(codeRef);
             return values.elements.get(0).scalar().getList();
         }
 
@@ -228,6 +234,7 @@ public class ListUtil extends PerlModuleBase {
         } finally {
             varA.set(saveA);
             varB.set(saveB);
+            releaseEphemeralCaptures(codeRef);
         }
     }
 
@@ -244,6 +251,7 @@ public class ListUtil extends PerlModuleBase {
         RuntimeArray results = new RuntimeArray();
 
         if (values.size() == 0) {
+            releaseEphemeralCaptures(codeRef);
             return results.getList();
         }
 
@@ -274,6 +282,7 @@ public class ListUtil extends PerlModuleBase {
         } finally {
             varA.set(saveA);
             varB.set(saveB);
+            releaseEphemeralCaptures(codeRef);
         }
     }
 
@@ -390,6 +399,7 @@ public class ListUtil extends PerlModuleBase {
             return scalarUndef.getList();
         } finally {
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            releaseEphemeralCaptures(codeRef);
         }
     }
 
@@ -816,6 +826,7 @@ public class ListUtil extends PerlModuleBase {
         } finally {
             GlobalVariable.aliasGlobalVariable(aName, saveA);
             GlobalVariable.aliasGlobalVariable(bName, saveB);
+            releaseEphemeralCaptures(codeRef);
         }
 
         return ctx == RuntimeContextType.SCALAR ?
@@ -870,6 +881,7 @@ public class ListUtil extends PerlModuleBase {
         } finally {
             GlobalVariable.aliasGlobalVariable(aName, saveA);
             GlobalVariable.aliasGlobalVariable(bName, saveB);
+            releaseEphemeralCaptures(codeRef);
         }
 
         return ctx == RuntimeContextType.SCALAR ?
@@ -920,6 +932,7 @@ public class ListUtil extends PerlModuleBase {
         } finally {
             GlobalVariable.aliasGlobalVariable(aName, saveA);
             GlobalVariable.aliasGlobalVariable(bName, saveB);
+            releaseEphemeralCaptures(codeRef);
         }
 
         return ctx == RuntimeContextType.SCALAR ? scalarFalse.getList() : new RuntimeList();

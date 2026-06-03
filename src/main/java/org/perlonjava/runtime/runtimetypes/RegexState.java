@@ -2,6 +2,8 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 
 /**
@@ -25,6 +27,7 @@ public class RegexState implements DynamicState {
     private final RuntimeRegex lastSuccessfulPattern;
     private final boolean lastMatchUsedPFlag;
     private final String[] lastCaptureGroups;
+    private final Map<String, List<String>> lastNamedCaptureGroups;
     private final boolean lastMatchWasByteString;
 
     public RegexState() {
@@ -40,6 +43,7 @@ public class RegexState implements DynamicState {
         this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
         this.lastMatchUsedPFlag = RuntimeRegex.lastMatchUsedPFlag;
         this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
+        this.lastNamedCaptureGroups = RuntimeRegex.lastNamedCaptureGroups;
         this.lastMatchWasByteString = RuntimeRegex.lastMatchWasByteString;
     }
 
@@ -69,6 +73,7 @@ public class RegexState implements DynamicState {
         RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
         RuntimeRegex.lastMatchUsedPFlag = this.lastMatchUsedPFlag;
         RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
+        RuntimeRegex.lastNamedCaptureGroups = this.lastNamedCaptureGroups;
         RuntimeRegex.lastMatchWasByteString = this.lastMatchWasByteString;
     }
 }

@@ -45,6 +45,14 @@ is($iterated_count, scalar(keys %hash), 'Iteration count matches key count');
     is_deeply(\@slice, ['value2', 'value3'], 'Hashref slice retrieval');
 }
 
+{
+    my @slice = @hash{()};
+    is_deeply(\@slice, [], 'Empty hash slice returns an empty list');
+    my $empty_scalar = scalar @hash{()};
+    ok(!defined($empty_scalar), 'Empty hash slice is undef in scalar context');
+    is(join(':', 30, scalar @hash{()}), '30:', 'Empty hash slice composes in list context');
+}
+
 # Slice delete
 delete @hash{'key2', 'key3'};
 ok(!exists $hash{key2} && !exists $hash{key3}, 'Slice delete successful');

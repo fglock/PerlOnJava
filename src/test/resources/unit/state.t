@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 13;
+use Test::More tests => 17;
 use feature 'state';
 
 # Function using a state variable
@@ -66,5 +66,21 @@ sub state_hash {
 # Test the state hash
 is_deeply({state_hash()}, {a => 1, b => 2, c => 3}, 'First call to state_hash should return {a => 1, b => 2, c => 3}');
 is_deeply({state_hash()}, {a => 1, b => 2, c => 4}, 'Second call to state_hash should return {a => 1, b => 2, c => 4}');
+
+sub state_hash_return {
+    state %h = (a => 1);
+}
+
+my $hash_result = join '', state_hash_return(), state_hash_return();
+is($hash_result, 'a1a1', 'state hash implicit return expands in list context');
+is(scalar state_hash_return(), 1, 'state hash implicit return counts in scalar context');
+
+sub state_array_return {
+    state @a = qw(b 2);
+}
+
+my $array_result = join '', state_array_return(), state_array_return();
+is($array_result, 'b2b2', 'state array implicit return expands in list context');
+is(scalar state_array_return(), 2, 'state array implicit return counts in scalar context');
 
 done_testing();

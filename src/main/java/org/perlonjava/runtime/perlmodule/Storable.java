@@ -40,7 +40,7 @@ public class Storable extends PerlModuleBase {
             storable.registerMethod("store", null);
             storable.registerMethod("retrieve", null);
             storable.registerMethod("nstore", null);
-            storable.registerMethod("dclone", null);
+            storable.registerMethod("dclone", "$");
             storable.registerMethod("last_op_in_netorder", null);
 
             storable.defineExport("EXPORT", "store", "retrieve", "nstore", "freeze", "thaw", "nfreeze", "dclone");
@@ -453,12 +453,13 @@ public class Storable extends PerlModuleBase {
                     // Create new TieHash with cloned handler
                     newHash.type = RuntimeHash.TIED_HASH;
                     newHash.elements = new TieHash(tieHash.getTiedPackage(), previousValue, clonedSelf);
-                    // Copy the data through the tied interface (STORE calls)
-                    // Iterate original hash via FIRSTKEY/NEXTKEY and FETCH each value
+                    // Initialize the backing value directly. Replaying through STORE
+                    // breaks read-only tie classes during dclone; the cloned handler
+                    // already carries the tie object's state.
                     RuntimeScalar firstKey = TieHash.tiedFirstKey(origHash);
                     while (firstKey.type != RuntimeScalarType.UNDEF) {
                         RuntimeScalar val = TieHash.tiedFetch(origHash, firstKey);
-                        TieHash.tiedStore(newHash, firstKey, deepClone(val, cloned));
+                        previousValue.put(firstKey.toString(), deepClone(val, cloned));
                         firstKey = TieHash.tiedNextKey(origHash, firstKey);
                     }
                 } else {
@@ -489,16 +490,18 @@ public class Storable extends PerlModuleBase {
                     RuntimeArray previousValue = new RuntimeArray();
                     newArray.type = RuntimeArray.TIED_ARRAY;
                     newArray.elements = new TieArray(tieArray.getTiedPackage(), previousValue, clonedSelf, newArray);
-                    // Copy the data through the tied interface (STORE calls)
+                    // Initialize the backing value directly. Replaying through STORE
+                    // breaks read-only tie classes during dclone; the cloned handler
+                    // already carries the tie object's state.
                     int size = TieArray.tiedFetchSize(origArray).getInt();
                     for (int i = 0; i < size; i++) {
                         RuntimeScalar val = TieArray.tiedFetch(origArray, new RuntimeScalar(i));
-                        TieArray.tiedStore(newArray, new RuntimeScalar(i), deepClone(val, cloned));
+                        previousValue.add(deepClone(val, cloned));
                     }
                 } else {
                     // Regular (untied) array: deep-clone each element
                     for (RuntimeScalar element : origArray.elements) {
-                        newArray.elements.add(deepClone(element, cloned));
+                        newArray.add(deepClone(element, cloned));
                     }
                 }
                 yield newRef;

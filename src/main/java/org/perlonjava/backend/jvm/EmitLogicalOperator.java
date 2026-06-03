@@ -105,7 +105,7 @@ public class EmitLogicalOperator {
         // Evaluate the left side once and spill it to keep the operand stack clean.
         // This is critical when the right side may perform non-local control flow (return/last/next/redo)
         // and jump away during evaluation.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // target - left parameter
+        node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE)); // target - left parameter
 
         // Vivify the LHS proxy so hash/array entries exist before the condition check.
         // This matches Perl 5's behavior where $h{key} ||= expr creates the hash entry
