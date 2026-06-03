@@ -851,7 +851,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return True if the hash is not empty, false otherwise.
      */
     public boolean getBoolean() {
-        return !elements.isEmpty();
+        return switch (type) {
+            case TIED_HASH -> TieHash.tiedScalar(this).getBoolean();
+            default -> !elements.isEmpty();
+        };
     }
 
     /**
@@ -883,6 +886,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the size of the hash.
      */
     public RuntimeScalar scalar() {
+        if (this.type == TIED_HASH) {
+            return TieHash.tiedScalar(this);
+        }
         return new RuntimeScalar(this.size());
     }
 

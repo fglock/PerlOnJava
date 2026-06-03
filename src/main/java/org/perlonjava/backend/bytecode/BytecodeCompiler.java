@@ -2278,14 +2278,15 @@ public class BytecodeCompiler implements Visitor {
      */
     private int compileLhsForCompoundAssignment(BinaryOperatorNode node) {
         int targetReg;
+        Node left = scalarizeSingleElementSliceLvalue(node.left);
 
-        if (node.left instanceof ListNode listNode && listNode.elements.size() == 1) {
+        if (left instanceof ListNode listNode && listNode.elements.size() == 1) {
             compileNode(listNode.elements.get(0), -1, RuntimeContextType.LVALUE);
             return lastResultReg;
         }
 
         // Check if left side is a simple variable reference
-        if (node.left instanceof OperatorNode leftOp) {
+        if (left instanceof OperatorNode leftOp) {
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                 // Simple scalar variable: $x += 5
                 String varName = "$" + ((IdentifierNode) leftOp.operand).name;
@@ -2312,11 +2313,37 @@ public class BytecodeCompiler implements Visitor {
         } else {
             // Not an OperatorNode (could be BinaryOperatorNode like ($x &= $y))
             // Compile the left side as an lvalue expression
-            compileNode(node.left, -1, RuntimeContextType.LVALUE);
+            compileNode(left, -1, RuntimeContextType.LVALUE);
             targetReg = lastResultReg;
         }
 
         return targetReg;
+    }
+
+    private Node scalarizeSingleElementSliceLvalue(Node left) {
+        if (!(left instanceof BinaryOperatorNode access)) {
+            return left;
+        }
+        if (!(access.left instanceof OperatorNode sigilNode) || !"@".equals(sigilNode.operator)) {
+            return left;
+        }
+
+        boolean singleHashKey = "{".equals(access.operator)
+                && access.right instanceof HashLiteralNode keys
+                && keys.elements.size() == 1;
+        boolean singleArrayIndex = "[".equals(access.operator)
+                && access.right instanceof ArrayLiteralNode indices
+                && indices.elements.size() == 1;
+        if (!singleHashKey && !singleArrayIndex) {
+            return left;
+        }
+
+        return new BinaryOperatorNode(
+                access.operator,
+                new OperatorNode("$", sigilNode.operand, sigilNode.tokenIndex),
+                access.right,
+                access.tokenIndex
+        );
     }
 
     /**

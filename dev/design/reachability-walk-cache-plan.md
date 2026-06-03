@@ -1,6 +1,6 @@
 # Reachability Walk Cache for DBIC Scope Cleanup
 
-**Status:** Phase 1 design complete; Phase 2 implementation pending
+**Status:** Phase 3 complete; CPAN verification passed for DateTime::Format::ISO8601 and IO::Async::Loop
 **Date:** 2026-05-12
 **Branch / PR:** `fix/math-bigint-method-chain-regression` / PR #709
 
@@ -126,7 +126,7 @@ ps aux | awk '$3 > 20 {print $2, $3, $11, $12}'
 
 ## Progress Tracking
 
-### Current Status: Phase 1 Complete
+### Current Status: Phase 3 complete
 
 ### Completed Phases
 
@@ -134,15 +134,39 @@ ps aux | awk '$3 > 20 {print $2, $3, $11, $12}'
   - Recorded three pre-fix `t/52leaks.t` timings.
   - Median baseline: 72.36s.
   - Target after fix: <= 24.12s.
+- [x] Phase 2: Cached scope-exit root query (2026-06-03)
+  - `MortalList.scopeExitCleanupHash()` now uses the cached external/live
+    root snapshot path instead of a fresh
+    `ReachabilityWalker.isReachableFromExternalRootExcludingDirectLexical()`
+    walk per hash.
+  - Motivation: JFR on `DateTime::Format::ISO8601` `t/date.t` showed the
+    slow nested Test2 section dominated by `ReachabilityWalker` and
+    `MortalList.scopeExitCleanupHash()`.
+  - Files: `MortalList.java`
+- [x] Phase 3: Quiet weak-sweep cycle closure (2026-06-03)
+  - Quiet weak sweeps now preserve not only objects that are themselves in a
+    strong cycle, but also objects strongly reachable from such a cycle.
+  - Motivation: `IO::Async::Loop` retained void-context futures with
+    `on_ready(sub { undef $future })`; the outer future formed the intentional
+    Perl refcount cycle, while connector sequence futures were strong children
+    of that cycle. Clearing weak refs to those children produced Future's
+    "lost a sequence Future" warning in `t/51loop-connect.t` and
+    `t/61protocol-stream.t`.
+  - Added regression coverage for a weak child reachable only from a retained
+    blessed callback cycle.
+  - Files: `ReachabilityWalker.java`, `blessed_self_cycle.t`
+  - Verification:
+    - `make`: `/tmp/make_blessed_cycle_child_regression.log`
+    - `./jcpan -t DateTime::Format::ISO8601`: `/tmp/jcpan-datetime-format-iso8601-after-cycle-closure.log`
+    - `./jcpan -t IO::Async::Loop`: `/tmp/jcpan-io-async-loop-after-cycle-closure.log`
 
 ### Next Steps
 
-1. Implement `ReachabilityWalker.ExternalRootSnapshot`.
-2. Use a cached snapshot from `MortalList.scopeExitCleanupHash()`.
-3. Add conservative invalidation at flush/drain/DESTROY boundaries.
-4. Run the targeted and final verification gates.
+1. Re-check DBIx::Class leak/perf targets when touching this area again.
+2. Keep quiet-sweep cycle protection conservative; explicit
+   `Internals::jperl_gc()` remains the aggressive cleanup path.
 
 ### Open Questions
 
-- None. Cache lifetime should stay conservative unless later profiling shows a
-  broader lifetime is necessary.
+- None. Cache lifetime and quiet-sweep cycle protection should stay
+  conservative unless later profiling shows a broader lifetime is necessary.

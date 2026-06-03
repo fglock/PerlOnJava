@@ -13,6 +13,32 @@ import java.util.List;
 
 public class CompileAssignment {
 
+    private static boolean shouldReleaseConsumedRhsTemp(Node rhs) {
+        if (rhs instanceof HashLiteralNode || rhs instanceof ArrayLiteralNode) {
+            return true;
+        }
+        if (rhs instanceof BinaryOperatorNode bin) {
+            if (bin.operator.equals("(") || bin.operator.equals("()")) {
+                return true;
+            }
+            if (bin.operator.equals("->")
+                    && bin.right instanceof BinaryOperatorNode rightCall
+                    && (rightCall.operator.equals("(") || rightCall.operator.equals("()"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void emitReleaseConsumedRhsTemp(BytecodeCompiler bc, Node rhs, int valueReg, int targetReg) {
+        if (!shouldReleaseConsumedRhsTemp(rhs)) {
+            return;
+        }
+        bc.emit(Opcodes.RELEASE_CONSUMED_TEMP);
+        bc.emitReg(valueReg);
+        bc.emitReg(targetReg);
+    }
+
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
@@ -471,10 +497,12 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitReg(valueReg);
+                                emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
                             } else {
                                 bytecodeCompiler.emit(Opcodes.MY_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitReg(valueReg);
+                                emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
                             }
 
                             bytecodeCompiler.lastResultReg = reg;
@@ -642,6 +670,7 @@ public class CompileAssignment {
                         bytecodeCompiler.emit(Opcodes.MY_SCALAR);
                         bytecodeCompiler.emitReg(reg);
                         bytecodeCompiler.emitReg(valueReg);
+                        emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
 
                         bytecodeCompiler.lastResultReg = reg;
                         return;
@@ -877,6 +906,7 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
+                            emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, targetReg);
                         } else {
                             // Regular lexical assignment normally replaces the scalar object
                             // to avoid alias/local restoration bugs, but must preserve magical
@@ -884,6 +914,7 @@ public class CompileAssignment {
                             bytecodeCompiler.emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
+                            emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, targetReg);
                         }
 
                         bytecodeCompiler.lastResultReg = targetReg;

@@ -71,8 +71,12 @@ public class ReferenceOperators {
             // when env-flag PJ_REFCOUNT_TRACE is set. Lets us pinpoint
             // which specific increment/decrement site causes the
             // metaclass refCount underflow during CMOP bootstrap.
+            String traceClass = System.getenv("PJ_REFCOUNT_TRACE_CLASS");
+            boolean traceClassMatch = traceClass != null
+                    && !traceClass.isEmpty()
+                    && str.contains(traceClass);
             if (RuntimeBase.refCountTraceEnabled()
-                    && (org.perlonjava.runtime.runtimetypes.DestroyDispatch
+                    && (traceClassMatch || org.perlonjava.runtime.runtimetypes.DestroyDispatch
                             .classNeedsWalkerGate(newBlessId))) {
                 referent.refCountTrace = true;
                 System.err.println("[REFCOUNT] *** ARMED *** base="

@@ -1474,6 +1474,29 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return arr;
     }
 
+    @Override
+    public RuntimeArray getTailCallArrayOfAlias() {
+        RuntimeArray arr = getArrayOfAlias();
+        if (!this.elementsOwned) return arr;
+
+        if (this.elementsAliased) {
+            if (this.ownedAliasElements != null) {
+                for (RuntimeScalar element : this.ownedAliasElements.toArray(new RuntimeScalar[0])) {
+                    arr.markOwnedAliasElement(element);
+                }
+                this.ownedAliasElements = null;
+            }
+        } else {
+            for (RuntimeScalar element : this.elements) {
+                if (element != null) {
+                    arr.markOwnedAliasElement(element);
+                }
+            }
+        }
+        this.elementsOwned = false;
+        return arr;
+    }
+
     /**
      * Returns an iterator for the array.
      *

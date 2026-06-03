@@ -23,6 +23,40 @@ public class EmitControlFlow {
     // Set to true to enable debug output for control flow operations
     private static final boolean DEBUG_CONTROL_FLOW = false;
 
+    private static void emitSubroutineExitCleanup(EmitterContext ctx) {
+        java.util.List<Integer> scalarIndices =
+                EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(0));
+        java.util.List<Integer> hashIndices =
+                EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyHashIndicesInScope(0));
+        java.util.List<Integer> arrayIndices =
+                EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(0));
+
+        for (int idx : scalarIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "deferDecrementIfNotCaptured",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+        }
+        for (int idx : hashIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupHash",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+        for (int idx : arrayIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupArray",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                    false);
+        }
+    }
+
     /**
      * Handles the 'next', 'last', and 'redo' operators for loop control.
      * - 'next' is equivalent to 'continue' in Java
@@ -344,7 +378,7 @@ public class EmitControlFlow {
         // JSON::Validator::Schema::_validate_type_boolean which relies on this.)
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "getArrayOfAlias",
+                "getTailCallArrayOfAlias",
                 "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                 false);
         int argsSlot = ctx.javaClassInfo.acquireSpillSlot();
@@ -354,10 +388,9 @@ public class EmitControlFlow {
         }
         ctx.mv.visitVarInsn(Opcodes.ASTORE, argsSlot);
 
-        // Create TAILCALL marker with eval scope for runtime check.
-        // Teardown (defer blocks, local variables) happens at returnLabel
-        // before this marker is returned to the caller.
-        // The caller's call-site trampoline handles the actual tail call.
+        // Create TAILCALL marker with eval scope for runtime check. The
+        // caller's call-site trampoline handles the actual tail call, but this
+        // subroutine's lexicals must be released before the marker propagates.
 
         ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
         ctx.mv.visitInsn(Opcodes.DUP);
@@ -385,8 +418,11 @@ public class EmitControlFlow {
             ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        // Jump to returnLabel (teardown happens there, then marker returned to caller)
+        // Jump to returnLabel after releasing this subroutine's my-variable
+        // refcount owners. The shared epilogue still handles dynamic `local`
+        // teardown via DynamicVariableManager.
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+        emitSubroutineExitCleanup(ctx);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
 
@@ -426,10 +462,11 @@ public class EmitControlFlow {
 
         // Build the args array
         argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // See note in handleGotoSubroutine: skip getList() to preserve @_ aliasing.
+        // See note in handleGotoSubroutine: preserve @_ aliasing and transfer
+        // any counted refs inserted into the current tailcall frame.
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "getArrayOfAlias",
+                "getTailCallArrayOfAlias",
                 "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                 false);
         int argsSlot = ctx.javaClassInfo.acquireSpillSlot();
@@ -466,8 +503,11 @@ public class EmitControlFlow {
             ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        // Jump to returnLabel (teardown happens there, then marker returned to caller)
+        // Jump to returnLabel after releasing this subroutine's my-variable
+        // refcount owners. The shared epilogue still handles dynamic `local`
+        // teardown via DynamicVariableManager.
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+        emitSubroutineExitCleanup(ctx);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
 

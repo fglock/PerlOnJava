@@ -406,7 +406,8 @@ public class MortalList {
         // still reachable through the schema.
         if (hadLocalBinding
                 && hash.refCount >= 0
-                && ReachabilityWalker.isReachableFromExternalRootExcludingDirectLexical(hash)) return;
+                && hash.hadCountedReference
+                && isReachableFromExternalRootCached(hash)) return;
         for (RuntimeScalar val : hash.elements.values()) {
             deferDecrementRecursive(val);
         }
@@ -484,6 +485,90 @@ public class MortalList {
         }
     }
 
+    public static void releaseTailCallArgs(RuntimeArray args) {
+        if (args == null || !active || !args.elementsOwned) return;
+        if (args.elementsAliased) {
+            if (args.ownedAliasElements == null || args.ownedAliasElements.isEmpty()) return;
+            RuntimeScalar[] owned = args.ownedAliasElements.toArray(new RuntimeScalar[0]);
+            for (RuntimeScalar elem : owned) {
+                releaseTailCallArgElement(elem);
+                args.forgetOwnedAliasElement(elem);
+            }
+            return;
+        }
+        for (RuntimeScalar elem : args.elements) {
+            releaseTailCallArgElement(elem);
+        }
+        args.elementsOwned = false;
+    }
+
+    public static void releaseTailCallCodeRef(RuntimeScalar codeRef) {
+        if (codeRef == null
+                || !active
+                || !codeRef.refCountOwned
+                || codeRef.type != RuntimeScalarType.CODE
+                || !(codeRef.value instanceof RuntimeCode code)
+                || code.refCount <= 0) {
+            return;
+        }
+
+        codeRef.refCountOwned = false;
+        if (code.refCountTrace) {
+            code.traceRefCount(-1, "MortalList.releaseTailCallCodeRef");
+            code.releaseOwner(codeRef, "releaseTailCallCodeRef");
+        }
+        code.releaseActiveOwner(codeRef);
+
+        if (--code.refCount > 0) return;
+
+        if (code.stashRefCount > 0) {
+            code.refCount = 0;
+            return;
+        }
+
+        if (code.localBindingExists) {
+            code.refCount = 1;
+            return;
+        }
+
+        code.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(code);
+    }
+
+    private static void releaseTailCallArgElement(RuntimeScalar scalar) {
+        if (scalar == null
+                || !scalar.refCountOwned
+                || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase base)
+                || base.refCount <= 0) {
+            return;
+        }
+
+        scalar.refCountOwned = false;
+        if (base.refCountTrace) {
+            base.traceRefCount(-1, "MortalList.releaseTailCallArgElement");
+            base.releaseOwner(scalar, "releaseTailCallArgElement");
+        }
+        base.releaseActiveOwner(scalar);
+
+        if (--base.refCount > 0) return;
+
+        if (base.localBindingExists || reachableTailCallArgReferent(base)) {
+            base.refCount = 1;
+            return;
+        }
+
+        base.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(base);
+    }
+
+    private static boolean reachableTailCallArgReferent(RuntimeBase base) {
+        return WeakRefRegistry.hasWeakRefsTo(base)
+                && (ReachabilityWalker.isReachableFromRoots(base)
+                || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
+                || ReachabilityWalker.isReachableFromLiveCodeCaptures(base));
+    }
+
     /**
      * Iteratively process a scalar value: if it holds a reference to a
      * tracked blessed object and owns a refCount, defer a decrement.
@@ -557,6 +642,9 @@ public class MortalList {
                     pending.add(base);
                 }
             } else {
+                boolean hasDirectWeakElementRefs = containerHasWeakElementRefs(base);
+                boolean hasCleanupTargets = hasDirectWeakElementRefs
+                        || containerMayContainCleanupTargets(base);
                 if (s.refCountOwned && base.refCount > 0) {
                     s.refCountOwned = false;
                     if (base.refCountTrace) {
@@ -564,15 +652,17 @@ public class MortalList {
                     }
                     base.releaseActiveOwner(s);
                     pending.add(base);
-                    if (base.activeOwnerCount() > 0
+                    if (!hasCleanupTargets
+                            || base.activeOwnerCount() > 0
                             || (base.refCount > 1
-                            && !containerHasWeakElementRefs(base)
+                            && !hasDirectWeakElementRefs
                             && isReachableFromExternalRootCached(base))) {
                         continue;
                     }
                 } else if (base.refCount > 0
-                        && (base.activeOwnerCount() > 0
-                        || (!containerHasWeakElementRefs(base)
+                        && (!hasCleanupTargets
+                        || base.activeOwnerCount() > 0
+                        || (!hasDirectWeakElementRefs
                         && isReachableFromExternalRootCached(base)))) {
                     // This scalar is a non-owning copy of a still-live container.
                     // Cleaning it up must not walk into the shared container and
@@ -591,6 +681,44 @@ public class MortalList {
                 }
             }
         }
+    }
+
+    private static boolean containerMayContainCleanupTargets(RuntimeBase base) {
+        if (!(base instanceof RuntimeArray || base instanceof RuntimeHash)) return false;
+        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        work.add(base);
+
+        while (!work.isEmpty()) {
+            RuntimeBase cur = work.poll();
+            if (cur == null || !visited.add(cur)) continue;
+            if (cur instanceof RuntimeArray arr) {
+                for (RuntimeScalar elem : arr.elements) {
+                    if (scalarMayContainCleanupTarget(elem, work)) return true;
+                }
+            } else if (cur instanceof RuntimeHash hash) {
+                for (RuntimeScalar value : hash.elements.values()) {
+                    if (scalarMayContainCleanupTarget(value, work)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean scalarMayContainCleanupTarget(RuntimeScalar scalar,
+                                                        ArrayDeque<RuntimeBase> work) {
+        if (scalar == null) return false;
+        if (WeakRefRegistry.hasWeakRefsTo(scalar)) return true;
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return false;
+        if (!(scalar.value instanceof RuntimeBase base)) return false;
+        if (WeakRefRegistry.hasWeakRefsTo(base)) return true;
+        if (base.blessId != 0) return true;
+        if (base instanceof RuntimeArray || base instanceof RuntimeHash) {
+            work.add(base);
+        } else if (base instanceof RuntimeCode && base.refCount >= 0) {
+            return true;
+        }
+        return false;
     }
 
     private static boolean containerHasWeakElementRefs(RuntimeBase base) {

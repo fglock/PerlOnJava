@@ -8,6 +8,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CompileOperator {
+    private static void emitSubroutineExitCleanup(BytecodeCompiler bc, int returnReg) {
+        java.util.List<Integer> scalarIdxs = bc.symbolTable.getMyScalarIndicesInScope(0);
+        for (int idx : scalarIdxs) {
+            if (idx == returnReg) continue;
+            bc.emit(Opcodes.SCOPE_EXIT_CLEANUP);
+            bc.emitReg(idx);
+        }
+        java.util.List<Integer> hashIdxs = bc.symbolTable.getMyHashIndicesInScope(0);
+        for (int idx : hashIdxs) {
+            bc.emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            bc.emitReg(idx);
+        }
+        java.util.List<Integer> arrayIdxs = bc.symbolTable.getMyArrayIndicesInScope(0);
+        for (int idx : arrayIdxs) {
+            bc.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+            bc.emitReg(idx);
+        }
+    }
+
     private static void compileScalarOperand(BytecodeCompiler bc, OperatorNode node, String opName) {
         if (node.operand instanceof ListNode list) {
             if (!list.elements.isEmpty()) {
@@ -1249,6 +1268,9 @@ public class CompileOperator {
                     bytecodeCompiler.emit(Opcodes.LOAD_CONST);
                     bytecodeCompiler.emitReg(undefReg);
                     bytecodeCompiler.emit(constIdx);
+                } else if (bytecodeCompiler.currentCallContext == RuntimeContextType.LVALUE_LIST) {
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF_READONLY);
+                    bytecodeCompiler.emitReg(undefReg);
                 } else {
                     bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
                     bytecodeCompiler.emitReg(undefReg);
@@ -1555,6 +1577,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
                     bc.lastResultReg = -1;
@@ -1584,6 +1607,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
                     bc.lastResultReg = -1;
@@ -1606,6 +1630,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
                     bc.lastResultReg = -1;

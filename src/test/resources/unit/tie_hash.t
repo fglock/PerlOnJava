@@ -152,6 +152,34 @@ sub FETCH {
     return $self->SUPER::FETCH($key);
 }
 
+package NoScalarTiedHash;
+
+sub TIEHASH {
+    my ($class) = @_;
+    return bless { hash => {} }, $class;
+}
+
+sub FETCH {
+    my ($self, $key) = @_;
+    return $self->{hash}{$key};
+}
+
+sub STORE {
+    my ($self, $key, $value) = @_;
+    $self->{hash}{$key} = $value;
+}
+
+sub FIRSTKEY {
+    my ($self) = @_;
+    my $reset = keys %{$self->{hash}};
+    return each %{$self->{hash}};
+}
+
+sub NEXTKEY {
+    my ($self, $lastkey) = @_;
+    return each %{$self->{hash}};
+}
+
 # Main test package
 package main;
 
@@ -578,6 +606,18 @@ subtest 'SCALAR method' => sub {
         pass('hash evaluates to true');
     }
     ok($obj->{scalar_count} >= 3, 'SCALAR called in boolean context');
+};
+
+subtest 'missing SCALAR fallback' => sub {
+    my %hash;
+    tie %hash, 'NoScalarTiedHash';
+
+    is(scalar %hash, '', 'missing SCALAR returns empty scalar for empty tied hash');
+    ok(!%hash, 'missing SCALAR fallback is false for empty tied hash');
+
+    $hash{0} = 'zero key';
+    is(scalar %hash, 1, 'missing SCALAR returns 1 for non-empty tied hash');
+    ok(%hash, 'missing SCALAR fallback is true for non-empty tied hash');
 };
 
 subtest 'Special keys' => sub {

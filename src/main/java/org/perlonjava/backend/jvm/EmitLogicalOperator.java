@@ -8,7 +8,9 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
+import org.perlonjava.frontend.astnode.ArrayLiteralNode;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.HashLiteralNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.TernaryOperatorNode;
@@ -101,11 +103,12 @@ public class EmitLogicalOperator {
     static void emitLogicalAssign(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
+        Node left = scalarizeSingleElementSliceLvalue(node.left);
 
         // Evaluate the left side once and spill it to keep the operand stack clean.
         // This is critical when the right side may perform non-local control flow (return/last/next/redo)
         // and jump away during evaluation.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE)); // target - left parameter
+        left.accept(emitterVisitor.with(RuntimeContextType.LVALUE)); // target - left parameter
 
         // Vivify the LHS proxy so hash/array entries exist before the condition check.
         // This matches Perl 5's behavior where $h{key} ||= expr creates the hash entry
@@ -157,6 +160,32 @@ public class EmitLogicalOperator {
 
         // If the context is VOID, pop the result from the stack
         EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    private static Node scalarizeSingleElementSliceLvalue(Node left) {
+        if (!(left instanceof BinaryOperatorNode access)) {
+            return left;
+        }
+        if (!(access.left instanceof OperatorNode sigilNode) || !"@".equals(sigilNode.operator)) {
+            return left;
+        }
+
+        boolean singleHashKey = "{".equals(access.operator)
+                && access.right instanceof HashLiteralNode keys
+                && keys.elements.size() == 1;
+        boolean singleArrayIndex = "[".equals(access.operator)
+                && access.right instanceof ArrayLiteralNode indices
+                && indices.elements.size() == 1;
+        if (!singleHashKey && !singleArrayIndex) {
+            return left;
+        }
+
+        return new BinaryOperatorNode(
+                access.operator,
+                new OperatorNode("$", sigilNode.operand, sigilNode.tokenIndex),
+                access.right,
+                access.tokenIndex
+        );
     }
 
     /**

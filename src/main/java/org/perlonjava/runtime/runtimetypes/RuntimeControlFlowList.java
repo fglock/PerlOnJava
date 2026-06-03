@@ -82,7 +82,7 @@ public class RuntimeControlFlowList extends RuntimeList {
         if (evalScope != null) {
             throw new PerlCompilerException("Can't goto subroutine from an " + evalScope);
         }
-        this.marker = new ControlFlowMarker(codeRef, args, fileName, lineNumber);
+        this.marker = new ControlFlowMarker(retainTailCallCodeRef(codeRef), args, fileName, lineNumber);
         this.returnValue = null;
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0b] RuntimeControlFlowList constructor (codeRef,args): codeRef=" + codeRef +
@@ -90,6 +90,12 @@ public class RuntimeControlFlowList extends RuntimeList {
                     " @ " + fileName + ":" + lineNumber +
                     " marker.type=" + marker.type);
         }
+    }
+
+    private static RuntimeScalar retainTailCallCodeRef(RuntimeScalar codeRef) {
+        RuntimeScalar retained = new RuntimeScalar(codeRef);
+        RuntimeScalar.incrementRefCountForContainerStore(retained);
+        return retained;
     }
 
     /**
@@ -221,4 +227,3 @@ public class RuntimeControlFlowList extends RuntimeList {
         return this;  // Return self for chaining
     }
 }
-
