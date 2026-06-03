@@ -1596,6 +1596,16 @@ public class BytecodeCompiler implements Visitor {
                         lastResultReg = rd;
                         return;
                     }
+                    String normalizedBarewordName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+                    if (GlobalVariable.hasGlobalPseudoConstant(normalizedBarewordName)) {
+                        int rd = allocateOutputRegister();
+                        int nameIdx = addToStringPool(normalizedBarewordName);
+                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                        emitReg(rd);
+                        emit(nameIdx);
+                        lastResultReg = rd;
+                        return;
+                    }
                     // This is a bareword (no sigil)
                     if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
                         throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
@@ -4749,7 +4759,10 @@ public class BytecodeCompiler implements Visitor {
                 Object parseTimeCodeRef = node.getAnnotation("parseTimeCodeRef");
                 RuntimeScalar codeRef = parseTimeCodeRef instanceof RuntimeScalar runtimeScalar
                         ? runtimeScalar
-                        : GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                        : GlobalVariable.createPseudoConstantCodeRef(subName);
+                if (codeRef == null) {
+                    codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                }
 
                 // Allocate register and load from constant pool
                 int rd = allocateOutputRegister();
@@ -4763,7 +4776,10 @@ public class BytecodeCompiler implements Visitor {
             } else if (node.operand instanceof StringNode strNode) {
                 // Symbolic ref: &{'name'} — look up global code reference by string name
                 String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(globalName);
+                RuntimeScalar codeRef = GlobalVariable.createPseudoConstantCodeRef(globalName);
+                if (codeRef == null) {
+                    codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(globalName);
+                }
                 int rd = allocateOutputRegister();
                 int constIdx = addToConstantPool(codeRef);
                 emit(Opcodes.LOAD_CONST);
@@ -4805,7 +4821,10 @@ public class BytecodeCompiler implements Visitor {
                         Object parseTimeCodeRef = operandOp.getAnnotation("parseTimeCodeRef");
                         RuntimeScalar codeRef = parseTimeCodeRef instanceof RuntimeScalar runtimeScalar
                                 ? runtimeScalar
-                                : GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                                : GlobalVariable.createPseudoConstantCodeRef(subName);
+                        if (codeRef == null) {
+                            codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                        }
                         if (codeRef.type == RuntimeScalarType.CODE
                                 && codeRef.value instanceof RuntimeCode rc) {
                             rc.isSymbolicReference = true;

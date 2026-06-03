@@ -32,6 +32,7 @@ BEGIN {
     if ($const) {
 	Internals::SvREADONLY($const, 1);
 	Internals::SvREADONLY($downgrade, 1);
+	Internals::SvREADONLY($constarray, 1);
 	$constant::{_CAN_PCS}   = \$const;
 	$constant::{_DOWNGRADE} = \$downgrade;
 	$constant::{_CAN_PCS_FOR_ARRAY} = \$constarray;

@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for Sub::Delete.
+
+  Sub::Delete is a dependency of Monkey::Patch::Action/Module::Patch for
+  HTTP::Tiny::Patch::Delay. PerlOnJava now preserves the glob slots needed by
+  that dependency chain, but Sub::Delete's own suite still checks unrelated
+  %^H/tied-$@ corners. Skip dependency tests and keep downstream tests as the
+  gate.
+
+  Do not apply this when Sub::Delete itself is the requested jcpan target.
+match:
+  distribution: "^DJERIUS/Sub-Delete-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Sub::Delete($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

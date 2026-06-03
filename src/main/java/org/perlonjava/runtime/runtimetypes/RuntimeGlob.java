@@ -27,6 +27,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     RuntimeHash hashSlot;
     // Local code slot for detached globs (from stash delete)
     public RuntimeScalar codeSlot;
+    // True for named glob values copied into scalars.  Perl keeps such GV
+    // values alive independently of later stash deletion, so slot access on
+    // the saved scalar must consult these snapshots before global maps.
+    private boolean slotSnapshot;
     // Dynamic name override set by `*foo = $string` glob-as-scalar assignment.
     // Used to honor the `local *PKG::__ANON__ = 'name'` idiom (see SUPER.pm,
     // Try::Tiny, namespace::clean) — caller()/Sub::Util::subname report this
@@ -90,11 +94,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      */
     public RuntimeGlob createDetachedCopy() {
         RuntimeGlob copy = new RuntimeGlob(this.globName);
+        copy.slotSnapshot = true;
         copy.IO = this.IO;  // Share the current IO reference
-        // Detached copies get their own hash/array/scalar slots so that
-        // patterns like \do { local *FH } have per-instance storage.
-        // This is used by IO::Scalar which stores state via *$self->{Key}.
-        copy.hashSlot = new RuntimeHash();
+        copy.scalarSlot = GlobalVariable.globalVariables.get(this.globName);
+        if (copy.scalarSlot == null) {
+            copy.scalarSlot = new RuntimeScalar();
+        }
+        if (GlobalVariable.existsGlobalArray(this.globName)) {
+            copy.arraySlot = GlobalVariable.getGlobalArray(this.globName);
+        }
+        if (GlobalVariable.existsGlobalHash(this.globName) || this.globName.endsWith("::")) {
+            copy.hashSlot = GlobalVariable.getGlobalHash(this.globName);
+        }
         return copy;
     }
 
@@ -666,6 +677,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     private void markGlobAsAssigned() {
         GlobalVariable.markStashEntryVisible(globName);
+        GlobalVariable.clearGlobalPseudoConstant(globName);
         // Mark this name as having been assigned via glob syntax (e.g. *CORE::GLOBAL::do = ...)
         // This distinction is crucial because subroutines assigned via glob assignment
         // are eligible to override built-in operators, whereas those defined using
@@ -692,7 +704,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar getGlobSlot(RuntimeScalar index) {
         return switch (index.toString()) {
             case "CODE" -> {
-                // For detached globs (null globName, from stash delete), use local code slot
+                // For detached globs (null globName, from stash delete), use local code slot.
+                // Named glob snapshots copied into scalars should still report CODE from
+                // the visible stash only; otherwise saved glob values keep methods alive
+                // after namespace::clean/autoclean removes them from the package.
                 if (this.globName == null) {
                     yield this.codeSlot != null ? this.codeSlot : new RuntimeScalar();
                 }
@@ -752,7 +767,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             }
             case "SCALAR" -> {
                 // For anonymous globs (null globName), use local scalarSlot
-                if (this.globName == null) {
+                if (this.globName == null || this.slotSnapshot) {
                     if (this.scalarSlot == null) {
                         this.scalarSlot = new RuntimeScalar();
                     }
@@ -767,6 +782,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         this.arraySlot = new RuntimeArray();
                     }
                     yield this.arraySlot.createReference();
+                }
+                if (this.slotSnapshot) {
+                    yield this.arraySlot != null
+                            ? this.arraySlot.createReference()
+                            : new RuntimeScalar();
                 }
                 // Only return reference if array exists (has elements or was explicitly created)
                 if (GlobalVariable.existsGlobalArray(this.globName)) {
@@ -783,6 +803,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                         this.hashSlot = new RuntimeHash();
                     }
                     yield this.hashSlot.createReference();
+                }
+                if (this.slotSnapshot) {
+                    yield this.hashSlot != null
+                            ? this.hashSlot.createReference()
+                            : new RuntimeScalar();
                 }
                 // Stash entries: *Pkg::{HASH} always returns the package's symbol table,
                 // even if it hasn't been explicitly materialized. This mirrors Perl 5
@@ -811,7 +836,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * This is distinct from *glob{SCALAR}, which returns a reference to the slot.
      */
     public RuntimeScalar getGlobScalarSlot() {
-        if (this.globName == null) {
+        if (this.globName == null || this.slotSnapshot) {
             if (this.scalarSlot == null) {
                 this.scalarSlot = new RuntimeScalar();
             }
@@ -830,6 +855,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * For named globs without a local hashSlot, retrieves from GlobalVariable.
      */
     public RuntimeHash getGlobHash() {
+        if (this.slotSnapshot) {
+            if (this.hashSlot == null) {
+                this.hashSlot = new RuntimeHash();
+            }
+            return this.hashSlot;
+        }
         if (this.hashSlot != null) {
             return this.hashSlot;
         }
@@ -859,7 +890,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * For named globs, retrieves from GlobalVariable.
      */
     public RuntimeArray getGlobArray() {
-        if (this.globName == null) {
+        if (this.globName == null || this.slotSnapshot) {
             if (this.arraySlot == null) {
                 this.arraySlot = new RuntimeArray();
             }

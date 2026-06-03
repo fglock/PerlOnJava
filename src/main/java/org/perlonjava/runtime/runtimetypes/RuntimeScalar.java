@@ -1573,7 +1573,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
                         " refCount=" + (oldBase != null ? oldBase.refCount : -1));
             }
-            DestroyDispatch.clearRescuedWeakRefsTo(oldBase);
+            if (ReachabilityWalker.isReachableFromExternalRootExcludingRescued(oldBase)) {
+                DestroyDispatch.clearRescuedWeakRefsToSelfOnly(oldBase);
+            } else {
+                DestroyDispatch.clearRescuedWeakRefsTo(oldBase);
+            }
         }
 
         if (isPackageGlobalRoot && globalCodeRefFqn != null) {

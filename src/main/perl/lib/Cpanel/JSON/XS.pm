@@ -87,6 +87,10 @@ sub from_json ($@) {
 *false   = \&JSON::PP::false;
 *is_bool = \&JSON::PP::is_bool;
 
+sub stringify_infnan { return $_[0] }
+sub escape_slash     { return $_[0] }
+sub allow_dupkeys    { return $_[0] }
+
 1;
 
 __END__

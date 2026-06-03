@@ -970,6 +970,7 @@ public class StatementParser {
 
         // Remember that this package exists
         packageExistsCache.put(packageName, true);
+        GlobalVariable.ensurePackageStash(packageName);
 
         boolean isClass = token.text.equals("class");
 

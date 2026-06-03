@@ -327,24 +327,12 @@ BEGIN {
 	EHWPOISON => 133,
         );
     }
-    # Generate proxy constant subroutines for all the values.
-    # Well, almost all the values. Unfortunately we can't assume that at this
-    # point that our symbol table is empty, as code such as if the parser has
-    # seen code such as C<exists &Errno::EINVAL>, it will have created the
-    # typeglob.
-    # Doing this before defining @EXPORT_OK etc means that even if a platform is
-    # crazy enough to define EXPORT_OK as an error constant, everything will
-    # still work, because the parser will upgrade the PCS to a real typeglob.
-    # We rely on the subroutine definitions below to update the internal caches.
-    # Don't use %each, as we don't want a copy of the value.
+    # Generate constant subroutines for all the values. Perl 5 can upgrade
+    # parser-created proxy constants when later code has already mentioned a
+    # glob; PerlOnJava's runtime require path does not reliably preseed those
+    # placeholders, so install real CODE slots directly.
     foreach my $name (keys %err) {
-        if ($Errno::{$name}) {
-            # We expect this to be reached fairly rarely, so take an approach
-            # which uses the least compile time effort in the common case:
-            eval "sub $name() { $err{$name} }; 1" or die $@;
-        } else {
-            $Errno::{$name} = \$err{$name};
-        }
+        eval "sub $name() { $err{$name} }; 1" or die $@;
     }
 }
 

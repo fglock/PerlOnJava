@@ -133,7 +133,7 @@ public class Re extends PerlModuleBase {
     }
 
     /**
-     * Handle `use re ...` import. Recognizes: 'strict', '/a', '/u', '/aa'.
+     * Handle `use re ...` import. Recognizes: 'strict', 'eval', '/a', '/u', '/aa'.
      * Enables appropriate experimental warning categories so our regex preprocessor can emit them.
      */
     public static RuntimeList importRe(RuntimeArray args, int ctx) {
@@ -164,6 +164,8 @@ public class Re extends PerlModuleBase {
                 Warnings.warningManager.enableWarning("experimental::re_strict");
                 Warnings.warningManager.enableWarning("experimental::uniprop_wildcards");
                 Warnings.warningManager.enableWarning("experimental::vlb");
+            } else if (opt.equalsIgnoreCase("eval")) {
+                symbolTable.enableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equals("/a")) {
                 // use re '/a' - ASCII-restrict regex character classes
                 symbolTable.enableStrictOption(Strict.HINT_RE_ASCII);
@@ -182,7 +184,7 @@ public class Re extends PerlModuleBase {
     }
 
     /**
-     * Handle `no re ...` unimport. Recognizes: 'strict', '/a', '/u', '/aa'.
+     * Handle `no re ...` unimport. Recognizes: 'strict', 'eval', '/a', '/u', '/aa'.
      */
     public static RuntimeList unimportRe(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
@@ -195,6 +197,8 @@ public class Re extends PerlModuleBase {
                 Warnings.warningManager.disableWarning("experimental::re_strict");
                 Warnings.warningManager.disableWarning("experimental::uniprop_wildcards");
                 Warnings.warningManager.disableWarning("experimental::vlb");
+            } else if (opt.equalsIgnoreCase("eval")) {
+                symbolTable.disableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equals("/a") || opt.equals("/aa")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
             } else if (opt.equals("/u")) {

@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for String::Random.
+
+  String::Random is a dependency of IPCamera::Reolink. Its upstream tests have
+  escape-sequence regex expectations that currently differ under PerlOnJava, but
+  IPCamera::Reolink only needs the module installed. Skip dependency tests and
+  keep the downstream target suite as the gate.
+
+  Do not apply this when String::Random itself is the requested jcpan target.
+match:
+  distribution: "^SHLOMIF/String-Random-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])String::Random($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

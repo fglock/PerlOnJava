@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for Mojolicious.
+
+  Mojolicious is a large framework dependency of WWW::Suffit::Client::NoAPI.
+  Its upstream suite includes local networking, filesystem edge cases, and
+  platform assumptions beyond the downstream client's dependency needs. Skip
+  the dependency test phase so WWW::Suffit::Client::NoAPI remains the target
+  gate.
+
+  Do not apply this when Mojolicious itself is the requested jcpan target.
+match:
+  distribution: "^SRI/Mojolicious-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Mojolicious($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

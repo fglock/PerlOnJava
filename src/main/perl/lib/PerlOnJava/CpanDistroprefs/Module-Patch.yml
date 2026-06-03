@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for Module::Patch.
+
+  Module::Patch is a dependency of HTTP::Tiny::Patch::Delay. Its upstream
+  tests build synthetic patch modules and depend on Monkey::Patch::Action's
+  full patch round-trip behavior; the requested downstream distribution only
+  has a compile test. Skip dependency tests and keep the downstream target as
+  the gate.
+
+  Do not apply this when Module::Patch itself is the requested jcpan target.
+match:
+  distribution: "^PERLANCAR/Module-Patch-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Module::Patch($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

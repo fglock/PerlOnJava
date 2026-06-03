@@ -1504,8 +1504,17 @@ public class RegexPreprocessor {
             } else if (c3 == '{') {
                 // Check if this is our special unimplemented marker
                 if (s.startsWith(RegexMarkers.CODE_BLOCK, offset)) {
-                    if (!allowRegexCodeBlockNoop()) {
-                        regexUnimplemented(s, offset + 2, "(?{...}) code blocks in regex not implemented");
+                    if (!regexFlags.allowEvalGroup()) {
+                        if (allowRegexCodeBlockNoop()) {
+                            regexUnimplementedSoft(s, offset + 2,
+                                    "Eval-group not allowed at runtime, use re 'eval'");
+                        } else if (isUnimplementedWarnMode()) {
+                            regexUnimplemented(s, offset + 2,
+                                    "Eval-group not allowed at runtime, use re 'eval'");
+                        } else {
+                            regexError(s, offset + 2,
+                                    "Eval-group not allowed at runtime, use re 'eval'");
+                        }
                     }
                     sb.append("(?:");
                     offset = offset + RegexMarkers.CODE_BLOCK.length() - 1;
@@ -2840,8 +2849,17 @@ public class RegexPreprocessor {
             return codeEnd + 1; // Just skip past '}' if no ')' found
         }
 
-        if (!allowRegexCodeBlockNoop()) {
-            regexUnimplemented(s, offset + 2, "(?{...}) code blocks in regex not implemented");
+        if (!regexFlags.allowEvalGroup()) {
+            if (allowRegexCodeBlockNoop()) {
+                regexUnimplementedSoft(s, offset + 2,
+                        "Eval-group not allowed at runtime, use re 'eval'");
+            } else if (isUnimplementedWarnMode()) {
+                regexUnimplemented(s, offset + 2,
+                        "Eval-group not allowed at runtime, use re 'eval'");
+            } else {
+                regexError(s, offset + 2,
+                        "Eval-group not allowed at runtime, use re 'eval'");
+            }
         }
         sb.append("(?:");
 

@@ -68,8 +68,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param isRegex      True if parsing regex pattern (affects interpolation)
      * @param parseEscapes True to process escape sequences, false to preserve them
      */
-    private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
-        super(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);
+    private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, boolean isRegexQuoteConstruction) {
+        super(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement, isRegexQuoteConstruction);
     }
 
     /**
@@ -133,6 +133,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param preprocessBracedBackslashQuotes See {@link Parser#preprocessBracedBackslashQuotesInInterpolation}.
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes, Parser originalParser, boolean preprocessBracedBackslashQuotes) {
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement,
+                sharedHeredocNodes, originalParser, preprocessBracedBackslashQuotes, false);
+    }
+
+    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes, Parser originalParser, boolean preprocessBracedBackslashQuotes, boolean isRegexQuoteConstruction) {
         // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
         var tokenIndex = rawStr.next;
@@ -165,7 +170,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         parser.baseLineNumber = ctx.errorUtil.getLineNumberAccurate(rawStr.index);
 
         // Create and run the double-quoted string parser with original token offset tracking
-        var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement);
+        var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement, isRegexQuoteConstruction);
 
         // Set up offset tracking and original string content for proper error reporting
         doubleQuotedParser.setOriginalTokenOffset(tokenIndex);

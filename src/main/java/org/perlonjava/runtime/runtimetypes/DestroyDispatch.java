@@ -634,6 +634,24 @@ public class DestroyDispatch {
     }
 
     /**
+     * Clear weak refs to the rescued object itself, but keep the rescued object
+     * queued for the normal deferred deep cleanup.  Explicit {@code undef $obj}
+     * should make weak refs to {@code $obj} go undef, but if DESTROY rescued the
+     * object its owned internals are still live and must not have their weak refs
+     * cleared until the pre-END rescued-object sweep.
+     */
+    public static boolean clearRescuedWeakRefsToSelfOnly(RuntimeBase rescued) {
+        if (rescued == null) return false;
+        boolean present;
+        synchronized (rescuedObjects) {
+            present = rescuedObjects.contains(rescued);
+        }
+        if (!present) return false;
+        WeakRefRegistry.clearWeakRefsTo(rescued);
+        return true;
+    }
+
+    /**
      * Recursively walk a hash's values and clear weak refs for any blessed
      * objects found, including nested hashes and arrays. This is used after
      * DESTROY rescue to clear weak refs for objects contained inside the

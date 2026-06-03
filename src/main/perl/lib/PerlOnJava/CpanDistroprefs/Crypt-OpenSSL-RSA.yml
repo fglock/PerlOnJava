@@ -1,0 +1,18 @@
+---
+comment: |
+  PerlOnJava distroprefs for Crypt::OpenSSL::RSA.
+
+  PerlOnJava provides a Java-backed implementation surface for this XS module,
+  but the upstream suite asserts OpenSSL-specific error text, padding behavior,
+  and edge cases that do not match the Java provider exactly. Skip dependency
+  tests so WWW::Suffit can install and let downstream tests decide whether the
+  loaded surface is sufficient.
+
+  Do not apply this when Crypt::OpenSSL::RSA itself is the requested jcpan
+  target.
+match:
+  distribution: "^TIMLEGGE/Crypt-OpenSSL-RSA-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Crypt::OpenSSL::RSA($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

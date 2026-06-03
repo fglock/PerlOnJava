@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for HTTP::Server::Simple.
+
+  HTTP::Server::Simple is a dependency in the LWP chain used by downstream
+  clients such as IPCamera::Reolink. Its upstream live CGI/server tests require
+  fork, which PerlOnJava does not implement. Skip dependency tests and let the
+  downstream distribution exercise the installed module surface it needs.
+
+  Do not apply this when HTTP::Server::Simple itself is the requested jcpan
+  target.
+match:
+  distribution: "^BPS/HTTP-Server-Simple-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])HTTP::Server::Simple($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

@@ -182,25 +182,36 @@ public class SubroutineParser {
         List<String> attributes = null;
         RuntimeScalar parseTimeCodeRef = null;
         String prototypeErrorName = fullName;
-        if (!isNewMethod && !isMethod && GlobalVariable.existsGlobalCodeRef(fullName)) {
-            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-            parseTimeCodeRef = codeRef;
-            if (codeRef.value instanceof RuntimeCode runtimeCode) {
-                prototype = runtimeCode.prototype;
-                attributes = runtimeCode.attributes;
-                if (runtimeCode.packageName != null && runtimeCode.subName != null
-                        && !runtimeCode.packageName.isEmpty() && !runtimeCode.subName.isEmpty()
-                        && !runtimeCode.subName.equals("__ANON__")) {
-                    prototypeErrorName = runtimeCode.packageName + "::" + runtimeCode.subName;
+        if (!isNewMethod && !isMethod) {
+            RuntimeScalar codeRef = null;
+            if (GlobalVariable.existsGlobalCodeRef(fullName)) {
+                codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            } else {
+                codeRef = GlobalVariable.createPseudoConstantCodeRef(fullName);
+                if (codeRef != null) {
+                    subExists = true;
                 }
-                subExists = runtimeCode.subroutine != null
-                        || runtimeCode.methodHandle != null
-                        || runtimeCode.compilerSupplier != null
-                        || runtimeCode.isBuiltin
-                        || prototype != null
-                        // Forward declarations like `sub foo;` create a RuntimeCode with a non-null
-                        // attributes list (possibly empty). Placeholders created implicitly use null.
-                        || attributes != null;
+            }
+            if (codeRef != null) {
+                parseTimeCodeRef = codeRef;
+                if (codeRef.value instanceof RuntimeCode runtimeCode) {
+                    prototype = runtimeCode.prototype;
+                    attributes = runtimeCode.attributes;
+                    if (runtimeCode.packageName != null && runtimeCode.subName != null
+                            && !runtimeCode.packageName.isEmpty() && !runtimeCode.subName.isEmpty()
+                            && !runtimeCode.subName.equals("__ANON__")) {
+                        prototypeErrorName = runtimeCode.packageName + "::" + runtimeCode.subName;
+                    }
+                    subExists = subExists
+                            || runtimeCode.subroutine != null
+                            || runtimeCode.methodHandle != null
+                            || runtimeCode.compilerSupplier != null
+                            || runtimeCode.isBuiltin
+                            || prototype != null
+                            // Forward declarations like `sub foo;` create a RuntimeCode with a non-null
+                            // attributes list (possibly empty). Placeholders created implicitly use null.
+                            || attributes != null;
+                }
             }
         }
         if (!subExists && !isNewMethod && !isMethod) {

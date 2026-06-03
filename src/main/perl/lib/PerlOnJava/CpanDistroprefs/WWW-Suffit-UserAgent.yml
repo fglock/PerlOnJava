@@ -1,0 +1,18 @@
+---
+comment: |
+  PerlOnJava distroprefs for WWW::Suffit::UserAgent.
+
+  WWW::Suffit::UserAgent is an intermediate dependency for
+  WWW::Suffit::Client::NoAPI. Its tests require WWW::Suffit to have installed
+  first, and WWW::Suffit itself depends on dependency suites skipped under
+  PerlOnJava. Skip this intermediate dependency's tests and keep the final
+  WWW::Suffit::Client target as the gate.
+
+  Do not apply this when WWW::Suffit::UserAgent itself is the requested jcpan
+  target.
+match:
+  distribution: "^ABALAMA/WWW-Suffit-UserAgent-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])WWW::Suffit::UserAgent($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

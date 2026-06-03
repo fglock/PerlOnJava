@@ -327,6 +327,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // compiled call sites keep their CV, while future lookups must see
             // the deletion and create an undefined slot.
             RuntimeScalar code = GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
+            GlobalVariable.clearGlobalPseudoConstant(fullKey);
             RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
             RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
             RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);
@@ -340,10 +341,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // Any stash mutation can affect method lookup; clear method resolution caches.
             InheritanceResolver.invalidateCache();
 
-            // Return a detached glob with all saved non-CODE slots.
+            // Return a detached glob with all saved slots.
             // Matches RuntimeStash.deleteGlob() behavior: the returned glob lets callers
             // access old slot values (e.g., *{$old}{SCALAR} in namespace::clean).
-            return RuntimeGlob.createDetachedWithSlots(scalar, array, hash, io);
+            return RuntimeGlob.createDetachedWithSlots(scalar, array, hash, io, code);
         }
         return scalarUndef;
     }
@@ -353,6 +354,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         if (this.mode == Id.STASH) {
             String prefix = namespace;
 
+            GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
             GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));

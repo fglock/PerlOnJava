@@ -188,6 +188,7 @@ public class RuntimeStash extends RuntimeHash {
         // the visible stash entry while keeping already-pinned CVs alive for
         // previously compiled call sites.
         GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
+        GlobalVariable.clearGlobalPseudoConstant(fullKey);
         GlobalVariable.globalVariables.remove(fullKey);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);
@@ -249,6 +250,7 @@ public class RuntimeStash extends RuntimeHash {
 
         // Remove all symbols with this prefix from all global maps (prefix-based removal)
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.clearGlobalPseudoConstantsForNamespace(childPrefix);
         GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
@@ -420,6 +422,7 @@ public class RuntimeStash extends RuntimeHash {
 
         GlobalVariable.clearStashAlias(prefix);
 
+        GlobalVariable.clearGlobalPseudoConstantsForNamespace(prefix);
         GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));

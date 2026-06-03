@@ -91,10 +91,23 @@ sub _bootstrap_prefs {
         'HTTP-Message.yml'           => 'PerlOnJava/CpanDistroprefs/HTTP-Message.yml',
         'HTTP-Response-Encoding.yml' => 'PerlOnJava/CpanDistroprefs/HTTP-Response-Encoding.yml',
         'HTTP-Daemon.yml'            => 'PerlOnJava/CpanDistroprefs/HTTP-Daemon.yml',
+        'HTTP-Server-Simple.yml'     => 'PerlOnJava/CpanDistroprefs/HTTP-Server-Simple.yml',
         'WWW-RobotRules.yml'         => 'PerlOnJava/CpanDistroprefs/WWW-RobotRules.yml',
         'libwww-perl.yml'            => 'PerlOnJava/CpanDistroprefs/libwww-perl.yml',
         'LWP-Protocol-https.yml'     => 'PerlOnJava/CpanDistroprefs/LWP-Protocol-https.yml',
+        'REST-Client.yml'            => 'PerlOnJava/CpanDistroprefs/REST-Client.yml',
+        'String-Random.yml'          => 'PerlOnJava/CpanDistroprefs/String-Random.yml',
         'PerlIO-via-Timeout.yml'     => 'PerlOnJava/CpanDistroprefs/PerlIO-via-Timeout.yml',
+        'File-Slurp.yml'             => 'PerlOnJava/CpanDistroprefs/File-Slurp.yml',
+        'Sub-Delete.yml'             => 'PerlOnJava/CpanDistroprefs/Sub-Delete.yml',
+        'Monkey-Patch-Action.yml'    => 'PerlOnJava/CpanDistroprefs/Monkey-Patch-Action.yml',
+        'Module-Patch.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Patch.yml',
+        'Mojolicious.yml'            => 'PerlOnJava/CpanDistroprefs/Mojolicious.yml',
+        'Acrux.yml'                  => 'PerlOnJava/CpanDistroprefs/Acrux.yml',
+        'Crypt-OpenSSL-RSA.yml'      => 'PerlOnJava/CpanDistroprefs/Crypt-OpenSSL-RSA.yml',
+        'WWW-Suffit.yml'             => 'PerlOnJava/CpanDistroprefs/WWW-Suffit.yml',
+        'WWW-Suffit-UserAgent.yml'   => 'PerlOnJava/CpanDistroprefs/WWW-Suffit-UserAgent.yml',
+        'XML-FromPerl.yml'           => 'PerlOnJava/CpanDistroprefs/XML-FromPerl.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -215,6 +228,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Parse-RecDescent-1.967015/SkipStandalonePrecompile.patch' ],
         [ 'Parse-RecDescent-1.967015/SkipReproducibleStandalone.patch',
           'PerlOnJava/CpanPatches/Parse-RecDescent-1.967015/SkipReproducibleStandalone.patch' ],
+        [ 'XML-FromPerl-0.01/Makefile.PL.patch',
+          'PerlOnJava/CpanPatches/XML-FromPerl-0.01/Makefile.PL.patch' ],
     );
 
     my $slurp = sub {
