@@ -130,10 +130,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean scopeExited;
 
     public void retainClosureCapture() {
-        if (referencedByScalarReference && refCount == -1) {
-            refCount = 0;
-            localBindingExists = true;
-        }
         captureCount++;
     }
 
@@ -2637,10 +2633,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
         referencedByScalarReference = true;
-        boolean hasLiveScalarBinding = this instanceof GlobalRuntimeScalar
-                || GlobalVariable.globalVariables.containsValue(this)
-                || (MyVarCleanupStack.isRegistered(this) && !RuntimeCode.hasActiveCode());
-        if (this.refCount == -1 && hasLiveScalarBinding) {
+        if (this.refCount == -1
+                && MyVarCleanupStack.isRegistered(this)
+                && !RuntimeCode.hasActiveCode()) {
             this.refCount = 0;
             this.localBindingExists = true;
         }
