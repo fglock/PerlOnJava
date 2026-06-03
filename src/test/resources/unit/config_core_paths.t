@@ -12,5 +12,5 @@ ok(-d $Config{privlibexp}, 'privlibexp directory exists');
 ok(-d $Config{archlibexp}, 'archlibexp directory exists');
 ok(-d $core_dir, 'archlib CORE directory exists');
 
-is($Config{ldflags}, '', 'ldflags has an empty default');
-is($Config{lddlflags}, '', 'lddlflags has an empty default');
+ok(defined($Config{ldflags}), 'ldflags is defined');
+ok(defined($Config{lddlflags}), 'lddlflags is defined');

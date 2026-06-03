@@ -55,6 +55,7 @@ public class GlobalVariable {
     // Maps glob names to their canonical (target) name.
     // When looking up or assigning to glob slots, we resolve through this map.
     static final Map<String, String> globAliases = new HashMap<>();
+    private static final Map<String, RuntimeScalar> foreachGlobalAliases = new HashMap<>();
 
     // Flags used by operator override
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
@@ -532,6 +533,7 @@ public class GlobalVariable {
 
     public static RuntimeScalar aliasGlobalVariable(String key, String to) {
         RuntimeScalar var = globalVariables.get(to);
+        clearForeachGlobalAlias(key);
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
         invalidatePackageRootSnapshot();
@@ -539,9 +541,43 @@ public class GlobalVariable {
     }
 
     public static void aliasGlobalVariable(String key, RuntimeScalar var) {
+        clearForeachGlobalAlias(key);
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
         invalidatePackageRootSnapshot();
+    }
+
+    public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
+        clearForeachGlobalAlias(key);
+        retainForeachAlias(var);
+        foreachGlobalAliases.put(key, var);
+        markPackageGlobalRoot(var);
+        globalVariables.put(key, var);
+        invalidatePackageRootSnapshot();
+    }
+
+    public static void clearForeachGlobalAlias(String key) {
+        RuntimeScalar previous = foreachGlobalAliases.remove(key);
+        if (previous != null) {
+            releaseForeachAlias(previous);
+        }
+    }
+
+    private static void retainForeachAlias(RuntimeScalar scalar) {
+        if (scalar != null
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base) {
+            base.foreachAliasCount++;
+        }
+    }
+
+    private static void releaseForeachAlias(RuntimeScalar scalar) {
+        if (scalar != null
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && base.foreachAliasCount > 0) {
+            base.foreachAliasCount--;
+        }
     }
 
     /**

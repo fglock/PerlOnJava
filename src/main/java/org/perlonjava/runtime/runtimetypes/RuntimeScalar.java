@@ -130,6 +130,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean scopeExited;
 
     public void retainClosureCapture() {
+        if (referencedByScalarReference && refCount == -1) {
+            refCount = 0;
+            localBindingExists = true;
+        }
         captureCount++;
     }
 
@@ -2633,6 +2637,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
         referencedByScalarReference = true;
+        boolean hasLiveScalarBinding = this instanceof GlobalRuntimeScalar
+                || GlobalVariable.globalVariables.containsValue(this)
+                || (MyVarCleanupStack.isRegistered(this) && !RuntimeCode.hasActiveCode());
+        if (this.refCount == -1 && hasLiveScalarBinding) {
+            this.refCount = 0;
+            this.localBindingExists = true;
+        }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.REFERENCE;
         result.value = this;
@@ -2855,6 +2866,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
+
+        if (scalar.referencedByScalarReference
+                && scalar.localBindingExists
+                && scalar.captureCount == 0) {
+            cleanupScalarReferenceBinding(scalar);
+        }
 
         // Fast path: skip if no special state (most common case for integer/string vars).
         // When all three conditions are true, the entire method body is a no-op:
@@ -3560,6 +3577,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         scopeExitCleanup(scalar);
+    }
+
+    private static void cleanupScalarReferenceBinding(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.referencedByScalarReference || !scalar.localBindingExists) {
+            return;
+        }
+        scalar.localBindingExists = false;
+        if (scalar.refCount == 0 && scalar.blessId != 0) {
+            scalar.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(scalar);
+        }
     }
 
     private static class RuntimeScalarIterator implements Iterator<RuntimeScalar> {

@@ -114,12 +114,6 @@ public class Encode extends PerlModuleBase {
         }
 
         // Locale fallbacks before Encode::Locale has initialized its globals.
-        Charset defaultCharset = Charset.defaultCharset();
-        CHARSET_ALIASES.put("locale", defaultCharset);
-        CHARSET_ALIASES.put("locale_fs", defaultCharset);
-        CHARSET_ALIASES.put("console_in", defaultCharset);
-        CHARSET_ALIASES.put("console_out", defaultCharset);
-
         // UTF-32 aliases
         try {
             Charset utf32 = Charset.forName("UTF-32");
@@ -1261,7 +1255,13 @@ public class Encode extends PerlModuleBase {
             return null;
         }
 
-        String globalName = switch (encodingName.toLowerCase(Locale.ROOT)) {
+        String key = encodingName.toLowerCase(Locale.ROOT);
+        Charset cached = CHARSET_ALIASES.get(key);
+        if (cached != null) {
+            return cached.name();
+        }
+
+        String globalName = switch (key) {
             case "locale" -> "Encode::Locale::ENCODING_LOCALE";
             case "locale_fs" -> "Encode::Locale::ENCODING_LOCALE_FS";
             case "console_in" -> "Encode::Locale::ENCODING_CONSOLE_IN";
@@ -1274,8 +1274,14 @@ public class Encode extends PerlModuleBase {
 
         RuntimeScalar aliasTarget = GlobalVariable.globalVariables.get(globalName);
         if (aliasTarget != null && aliasTarget.getDefinedBoolean()) {
-            return aliasTarget.toString();
+            String target = aliasTarget.toString();
+            try {
+                CHARSET_ALIASES.put(key, getCharset(target));
+            } catch (RuntimeException ignored) {
+                return target;
+            }
+            return target;
         }
-        return encodingName;
+        return Charset.defaultCharset().name();
     }
 }

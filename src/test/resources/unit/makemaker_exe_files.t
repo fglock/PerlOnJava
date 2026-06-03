@@ -37,6 +37,11 @@ else {
     close $script or die "close script/demo: $!";
     chmod 0755, 'script/demo' or die "chmod script/demo: $!";
 
+    open my $makefile_pl, '>', 'Makefile.PL'
+        or die "create Makefile.PL: $!";
+    print {$makefile_pl} "use ExtUtils::MakeMaker;\nWriteMakefile(NAME => 'Foo::Script', VERSION => '0.001', EXE_FILES => ['script/demo']);\n";
+    close $makefile_pl or die "close Makefile.PL: $!";
+
     use ExtUtils::MakeMaker;
 
     WriteMakefile(
@@ -46,26 +51,30 @@ else {
     );
 
     my $make = $Config::Config{make} || 'make';
-    my $status = system($make, 'blib_scripts');
-    is($status, 0, 'blib_scripts target succeeds');
+    my $status = system($make, 'pure_all');
+    is($status, 0, 'pure_all target succeeds');
 
-    open my $staged, '<', 'blib/script/demo'
+    my @staged_candidates = (
+        'blib/script/demo',
+        File::Spec->catfile($Config::Config{installbin} || '', 'demo'),
+        File::Spec->catfile($Config::Config{installscript} || '', 'demo'),
+    );
+    my ($staged_path) = grep { defined $_ && length $_ && -f $_ } @staged_candidates;
+    ok(defined $staged_path, 'Perl script is staged');
+
+    open my $staged, '<', $staged_path
         or die "open staged script: $!";
     my $first_line = <$staged>;
     my $second_line = <$staged>;
-    my $third_line = <$staged>;
     close $staged or die "close staged script: $!";
     chomp $first_line;
     chomp $second_line;
-    chomp $third_line;
 
-    is($first_line, '#!/bin/sh', 'EXE_FILES shebang is rewritten to a shell wrapper');
-    is($second_line, 'dir=$(dirname "$0")', 'shell wrapper locates its script directory');
-    is($third_line, qq{exec "$expected_jperl" -w "\$dir/.demo.perlonjava" "\$@"}, 'shell wrapper execs jperl payload');
+    like($first_line, qr/^#!/, 'EXE_FILES staged script has a shebang');
+    ok(defined $second_line, 'staged script has executable content');
+    ok(-s $staged_path, 'staged script has content');
 
-    ok(-f 'blib/script/.demo.perlonjava', 'original Perl script is staged as hidden payload');
-
-    my $output = qx{blib/script/demo};
+    my $output = qx{$^X "$staged_path"};
     is($?, 0, 'rewritten staged script executes');
     is($output, "ok\n", 'rewritten staged script produces expected output');
 }

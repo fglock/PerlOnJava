@@ -135,6 +135,9 @@ public class MIMEQuotedPrint extends PerlModuleBase {
                 }
             }
             output.append(currentLine);
+            if (!eol.isEmpty()) {
+                output.append("=").append(eol);
+            }
         }
 
         return output.toString();

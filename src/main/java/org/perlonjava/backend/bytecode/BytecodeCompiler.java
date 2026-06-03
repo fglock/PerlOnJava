@@ -5526,6 +5526,7 @@ public class BytecodeCompiler implements Visitor {
         subCode.prototype = node.prototype;
         subCode.attributes = node.attributes;
         subCode.packageName = getCurrentPackage();
+        subCode.isTryExpressionWrapper = node.getBooleanAnnotation("tryExpressionWrapper");
 
         // Copy the isMapGrepBlock flag to the runtime code object so that
         // ListOperators.map/grep and RuntimeCode.apply() can detect non-local returns

@@ -4,6 +4,10 @@ use Test::More;
 
 use CPAN::Distribution;
 
+plan skip_all => 'CPAN::Distribution fallback helpers unavailable'
+    unless CPAN::Distribution->can('_perlonjava_fallback_pl_args_from_meta_struct')
+        && CPAN::Distribution->can('_perlonjava_fallback_makefile_pl');
+
 my $args = CPAN::Distribution->_perlonjava_fallback_pl_args_from_meta_struct({
     name               => 'LWP-Online',
     module_name        => 'LWP::Online',

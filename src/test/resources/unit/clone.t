@@ -2,8 +2,14 @@ use strict;
 use warnings;
 use Test::More;
 use Scalar::Util qw(refaddr);
-use Clone qw(clone);
-use Storable qw(dclone);
+
+eval {
+    require Clone;
+    Clone->import(qw(clone));
+    require Storable;
+    Storable->import(qw(dclone));
+    1;
+} or plan skip_all => 'Clone and Storable required';
 
 subtest 'Clone handles self-referential scalar refs' => sub {
     my $scalar = 'Scalar';

@@ -155,7 +155,7 @@ public class Internals extends PerlModuleBase {
             //   - inccode.t "no leaks" delta-checks
             //   - for-many.t "refcount inside/after loop"
             //   - test_pl/examples.t "only one reference"/"two references"
-            int extra = base.localBindingExists ? 1 : 0;
+            int extra = (base.localBindingExists ? 1 : 0) + base.foreachAliasCount;
             // Legacy fudge: anonymous tracked container with no counted
             // owners -- still report 1 to indicate "live SV". Used by
             // Sub::Quote / Moo introspection paths that probe for liveness.

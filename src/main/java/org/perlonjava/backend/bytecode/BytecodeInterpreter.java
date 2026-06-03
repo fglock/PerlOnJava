@@ -680,7 +680,7 @@ public class BytecodeInterpreter {
                                         element = ensureMutableScalar(element);
                                     }
                                     registers[rd] = element;
-                                    GlobalVariable.aliasGlobalVariable(name, element);
+                                    GlobalVariable.aliasForeachGlobalVariable(name, element);
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
                                 } else {
                                     registers[rd] = new RuntimeScalar();

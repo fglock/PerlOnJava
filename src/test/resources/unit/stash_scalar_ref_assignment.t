@@ -13,7 +13,8 @@ ${*StashScalarRefTarget::}{$name} = \do { my $v = 1 };
 
 is($StashScalarRefTarget::x, 1, 'stash scalar-ref assignment updates existing scalar slot');
 is(${${*StashScalarRefTarget::}{$name}}, 1, 'stash entry scalar slot sees aliased value');
-is(StashScalarRefTarget::x(), 1, 'stash scalar-ref assignment preserves constant-style code slot');
+my $call_ok = eval { StashScalarRefTarget::x(); 1 };
+ok(!$call_ok, 'stash scalar-ref assignment does not create a code slot');
 
 $StashScalarRefTarget::{y} = \do { my $v = 2 };
 is($StashScalarRefTarget::y, 2, 'direct stash scalar-ref assignment updates existing scalar slot');

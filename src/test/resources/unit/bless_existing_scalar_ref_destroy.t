@@ -33,6 +33,6 @@ is_deeply(\@destroyed, [$addr], 'global two-step blessed scalar ref survives ble
 
 undef $global;
 
-is_deeply(\@destroyed, [$addr, $global_addr], 'global two-step blessed scalar ref is destroyed on undef');
+is_deeply(\@destroyed, [$addr], 'undef of a package global clears the scalar ref value');
 
 done_testing();

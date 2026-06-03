@@ -243,6 +243,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    public static boolean hasActiveCode() {
+        return !activeCodeStack.get().isEmpty();
+    }
+
     /**
      * Get the caller's @_ array (one level up from current).
      * Used by Java-implemented functions (like List::Util::any) that need to pass
@@ -575,7 +579,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static void requireLvalueCallable(RuntimeCode code, int callContext, String subroutineName) {
         if ((callContext != RuntimeContextType.LVALUE && callContext != RuntimeContextType.LVALUE_LIST)
-                || isLvalueCode(code)) {
+                || isLvalueCode(code)
+                || (code != null && code.isTryExpressionWrapper)) {
             return;
         }
 
@@ -590,6 +595,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         throw new PerlCompilerException(
                 "Can't modify non-lvalue subroutine call of &" + displayName + " in scalar assignment");
+    }
+
+    private RuntimeList detachTryExpressionLvalueResult(RuntimeList result, int callContext) {
+        if (!isTryExpressionWrapper
+                || (callContext != RuntimeContextType.LVALUE
+                && callContext != RuntimeContextType.LVALUE_LIST)
+                || result == null
+                || result instanceof RuntimeControlFlowList) {
+            return result;
+        }
+        if (callContext == RuntimeContextType.LVALUE_LIST) {
+            RuntimeList detached = new RuntimeList();
+            for (RuntimeBase elem : result.elements) {
+                RuntimeList values = elem.getList();
+                for (RuntimeBase value : values.elements) {
+                    detached.elements.add(value instanceof RuntimeScalar scalar ? scalar.clone() : value);
+                }
+            }
+            return detached;
+        }
+        return result.cloneScalars();
     }
     
     // Temporary storage for anonymous subroutines and eval string compiler context
@@ -610,6 +636,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String prototype;
     // Attributes associated with the subroutine
     public List<String> attributes = new ArrayList<>();
+    public boolean isTryExpressionWrapper = false;
     // Method context information for next::method support
     public String packageName;
     public String subName;
@@ -4579,7 +4606,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this));
+                return detachTryExpressionLvalueResult(
+                        coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
+                        callContext);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
@@ -4702,7 +4731,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this));
+                return detachTryExpressionLvalueResult(
+                        coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
+                        callContext);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();

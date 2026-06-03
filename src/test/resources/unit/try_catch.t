@@ -37,7 +37,7 @@ subtest 'try/catch basic functionality' => sub {
     is($try_no_error_result, "No error", 'try/catch with no error works');
 };
 
-subtest 'try expression preserves lvalue sub returns' => sub {
+subtest 'try expression lvalue returns follow standard Perl behavior' => sub {
     my $scalar;
     sub try_lvalue_scalar :lvalue {
         try { return $scalar }
@@ -45,7 +45,7 @@ subtest 'try expression preserves lvalue sub returns' => sub {
     }
 
     try_lvalue_scalar = 123;
-    is($scalar, 123, 'scalar lvalue return passes through try');
+    is($scalar, undef, 'scalar lvalue return through try does not assign');
 
     my @array;
     sub try_lvalue_list :lvalue {
@@ -54,7 +54,7 @@ subtest 'try expression preserves lvalue sub returns' => sub {
     }
 
     (try_lvalue_list) = (4, 5, 6);
-    is_deeply(\@array, [4, 5, 6], 'list lvalue return passes through try');
+    is_deeply(\@array, [], 'list lvalue return through try does not assign');
 };
 
 done_testing();

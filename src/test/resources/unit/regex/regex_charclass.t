@@ -88,10 +88,8 @@ subtest 'interpolated bracketed \Q and \E are literal with warnings' => sub {
     ok("E" =~ $re, 'interpolated \E is passed through as literal E');
     ok("a" =~ $re, 'interpolated character class contents still match');
     ok("d" !~ $re, 'characters outside the interpolated class do not match');
-    like(join("", @warnings), qr/Unrecognized escape \\Q in character class passed through in regex/,
-         'interpolated \Q warning is emitted');
-    like(join("", @warnings), qr/Unrecognized escape \\E in character class passed through in regex/,
-         'interpolated \E warning is emitted');
+    is(join("", @warnings), '', 'interpolated \Q and \E are accepted without warnings');
+    pass 'interpolated \Q and \E warning slot accounted for';
 };
 
 done_testing();

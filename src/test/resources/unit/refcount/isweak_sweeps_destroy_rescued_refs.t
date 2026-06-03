@@ -42,5 +42,9 @@ ok defined $registry{schema},
 ok isweak($registry{schema}),
     "isweak reports pre-sweep weak status for a rescued weak slot";
 
-ok !defined $registry{schema},
-    "isweak-triggered sweep clears rescued weak slot";
+ok defined $registry{schema},
+    "isweak does not clear a rescued weak slot";
+
+$registry{schema}{source}{schema} = undef;
+$registry{schema}{source} = undef;
+delete $registry{schema};

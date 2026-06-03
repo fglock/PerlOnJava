@@ -29,15 +29,21 @@ is(subname($renamed), 'Foo::renamed', 'explicit set_subname still wins');
     }
 }
 
-{
-    package TargetForAutoclean;
-    use namespace::autoclean;
-    BEGIN { SourceForAutoclean::install_t() }
-}
+SKIP: {
+    skip 'namespace::autoclean required', 1
+        unless eval { require namespace::autoclean; 1 };
 
-ok(
-    !TargetForAutoclean->can('t'),
-    'namespace::autoclean removes imported anonymous coderef',
-);
+    eval q{
+        package TargetForAutoclean;
+        use namespace::autoclean;
+        BEGIN { SourceForAutoclean::install_t() }
+        1;
+    } or die $@;
+
+    ok(
+        !TargetForAutoclean->can('t'),
+        'namespace::autoclean removes imported anonymous coderef',
+    );
+}
 
 done_testing();

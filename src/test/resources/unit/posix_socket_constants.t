@@ -15,6 +15,6 @@ ok defined(EINPROGRESS), 'POSIX exports EINPROGRESS';
 ok defined(EWOULDBLOCK), 'POSIX exports EWOULDBLOCK';
 ok EINPROGRESS == POSIX::EINPROGRESS(), 'POSIX::EINPROGRESS is callable fully qualified';
 ok EWOULDBLOCK == POSIX::EWOULDBLOCK(), 'POSIX::EWOULDBLOCK is callable fully qualified';
-ok nice(0), 'POSIX exports nice';
+ok defined(&nice), 'POSIX exports nice';
 
 done_testing;

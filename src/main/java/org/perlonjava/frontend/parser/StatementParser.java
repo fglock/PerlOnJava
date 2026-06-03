@@ -397,16 +397,12 @@ public class StatementParser {
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
 
-            // The generated wrapper is internal syntax for the try expression.
-            // Let it accept lvalue contexts so :lvalue subs can return aliases
-            // through try { ... } without failing the subroutine lvalue check.
-            return new BinaryOperatorNode("->",
-                    new SubroutineNode(null, null, List.of("lvalue"),
-                            new BlockNode(List.of(
-                                new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, index)), index),
-                        false, index),
-                atUnderscoreArgs(parser),
-                index);
+            SubroutineNode wrapper = new SubroutineNode(null, null, null,
+                    new BlockNode(List.of(
+                            new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, index)), index),
+                    false, index);
+            wrapper.setAnnotation("tryExpressionWrapper", true);
+            return new BinaryOperatorNode("->", wrapper, atUnderscoreArgs(parser), index);
         } finally {
             if (catchScopeIndex >= 0) {
                 parser.ctx.symbolTable.exitScope(catchScopeIndex);

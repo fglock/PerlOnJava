@@ -192,7 +192,7 @@ public class SysSyslog extends PerlModuleBase {
     public static RuntimeList LOG_MAKEPRI(RuntimeArray args, int ctx) {
         int facility = args.size() > 0 ? args.get(0).getInt() : 0;
         int priority = args.size() > 1 ? args.get(1).getInt() : 0;
-        return new RuntimeScalar((facility << 3) | priority).getList();
+        return new RuntimeScalar(facility | priority).getList();
     }
 
     public static RuntimeList LOG_MASK(RuntimeArray args, int ctx) {

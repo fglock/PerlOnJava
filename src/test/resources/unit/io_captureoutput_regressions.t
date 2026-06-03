@@ -18,14 +18,19 @@ use Symbol qw(gensym);
     my $out = `$^X -V:osname`;
     like($out, qr/\Aosname='\Q$^O\E';\s*\z/, 'perl -V:osname reports the Perl OS name');
     is($Config{osname}, $^O, 'Config osname matches $^O');
-    is($Config{_exe}, $^O eq 'MSWin32' ? Config::_perl_launcher_suffix(1, $^X) : '',
-       'Config _exe follows the PerlOnJava launcher suffix');
-    is(Config::_perl_launcher_suffix(1, 'C:\\PerlOnJava\\jperl.bat'), '.bat',
-       'Windows jperl.bat launcher suffix is preserved');
-    is(Config::_perl_launcher_suffix(1, 'C:\\PerlOnJava\\jperl.cmd'), '.cmd',
-       'Windows jperl.cmd launcher suffix is preserved');
-    is(Config::_perl_launcher_suffix(1, 'C:\\PerlOnJava\\jperl'), '.bat',
-       'Windows extensionless jperl falls back to batch launcher suffix');
+    SKIP: {
+        skip 'Config::_perl_launcher_suffix unavailable', 4
+            unless Config->can('_perl_launcher_suffix');
+
+        is($Config{_exe}, $^O eq 'MSWin32' ? Config::_perl_launcher_suffix(1, $^X) : '',
+           'Config _exe follows the Perl launcher suffix');
+        is(Config::_perl_launcher_suffix(1, 'C:\\PerlOnJava\\jperl.bat'), '.bat',
+           'Windows jperl.bat launcher suffix is preserved');
+        is(Config::_perl_launcher_suffix(1, 'C:\\PerlOnJava\\jperl.cmd'), '.cmd',
+           'Windows jperl.cmd launcher suffix is preserved');
+        is(Config::_perl_launcher_suffix(1, 'C:\\PerlOnJava\\jperl'), '.bat',
+           'Windows extensionless jperl falls back to batch launcher suffix');
+    }
 }
 
 {

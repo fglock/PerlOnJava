@@ -265,6 +265,11 @@ PerlOnJava does **not** implement the following Perl features:
 
 **NEVER modify or delete existing tests.** Tests are the source of truth. If a test fails, fix the code, not the test. When in doubt, verify expected behavior with system Perl (`perl`, not `jperl`).
 
+**ALWAYS validate new unit tests with standard Perl before relying on them.** Unit tests in `src/test/resources/unit` must encode standard Perl behavior, not PerlOnJava-specific behavior. For any new or changed unit test, run it with `perl` or `prove` first, capture the output, and only then use it to drive PerlOnJava fixes:
+```bash
+prove -r src/test/resources/unit > /tmp/prove_unit_perl.txt 2>&1; echo "EXIT: $?" >> /tmp/prove_unit_perl.txt
+```
+
 **ALWAYS capture full test output to a file.** Test output can be very long and gets truncated in the terminal. Always redirect output to a file and read from there:
 ```bash
 # For prove-based tests

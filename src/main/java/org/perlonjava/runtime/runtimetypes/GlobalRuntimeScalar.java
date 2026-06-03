@@ -122,6 +122,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 // (notably localized $_). Clean up only the scalar object that
                 // local() installed; mutating the current slot can corrupt the
                 // aliased iterator value.
+                GlobalVariable.clearForeachGlobalAlias(saved.fullName);
                 RuntimeScalar localVar = saved.localizedVariable;
                 RuntimeBase displacedBase = null;
                 RuntimeScalar scalarReferenceContents = null;

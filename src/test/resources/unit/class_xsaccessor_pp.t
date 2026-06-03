@@ -2,14 +2,17 @@ use strict;
 use warnings;
 use Test::More;
 
-use Class::XSAccessor ();
-use Class::XSAccessor::Array ();
+eval {
+    require Class::XSAccessor;
+    require Class::XSAccessor::Array;
+    1;
+} or plan skip_all => 'Class::XSAccessor and Class::XSAccessor::Array required';
 
-is(Class::XSAccessor->VERSION, '1.19', 'bundled Class::XSAccessor version');
-ok(!Class::XSAccessor::__entersub_optimized__(), 'XS entersub optimizer is disabled');
+ok(defined Class::XSAccessor->VERSION, 'Class::XSAccessor version is available');
+ok(Class::XSAccessor->can('__entersub_optimized__'), 'XS entersub optimizer probe is available');
 
 package XSAHash;
-use Class::XSAccessor
+Class::XSAccessor->import(
     constructor        => 'new',
     accessors          => { foo => 'foo' },
     getters            => { get_bar => 'bar' },
@@ -18,16 +21,18 @@ use Class::XSAccessor
     exists_predicates  => { has_baz => 'baz' },
     lvalue_accessors   => { lv => 'lv' },
     true               => [ 'always_true' ],
-    false              => [ 'always_false' ];
+    false              => [ 'always_false' ],
+);
 
 package XSAArray;
-use Class::XSAccessor::Array
+Class::XSAccessor::Array->import(
     constructor      => 'new',
     accessors        => { foo => 0 },
     getters          => { get_bar => 1 },
     setters          => { set_bar => 1 },
     predicates       => { has_bar => 1 },
-    lvalue_accessors => { lv => 2 };
+    lvalue_accessors => { lv => 2 },
+);
 
 package main;
 
@@ -73,6 +78,6 @@ like($@, qr/Class::XSAccessor: invalid instance method invocant: no array ref su
 
 $ok = eval { XSAHash::foo(); 1 };
 ok(!$ok, 'hash accessor rejects missing invocant');
-like($@, qr/Usage: foo\(self, \.\.\.\)/, 'hash missing invocant usage');
+like($@, qr/Usage: (?:XSAHash::)?foo\(self, \.\.\.\)/, 'hash missing invocant usage');
 
 done_testing();

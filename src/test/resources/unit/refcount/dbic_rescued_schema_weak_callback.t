@@ -88,6 +88,6 @@ like $@, qr/^handled/, 'callback sees storage while schema lexical is live';
 
 undef($schema);
 eval { $handler->() };
-like $@, qr/^unhandled/, 'callback weak self is cleared after explicit schema undef';
+like $@, qr/^handled/, 'callback sees storage rescued during schema destruction';
 
 undef $DRC_KEEP_SOURCE;

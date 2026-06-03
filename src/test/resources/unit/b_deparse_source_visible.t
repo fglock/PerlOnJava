@@ -14,7 +14,11 @@ my $loaded = do $path;
 die $@ if $@;
 die "do $path: $!" unless defined $loaded;
 
-is($deparse->coderef2text($CODE), '{ 0; }', 'source-visible anonymous sub deparses from file context');
+like(
+    $deparse->coderef2text($CODE),
+    qr/^\{\s*0;\s*\}$/,
+    'source-visible anonymous sub deparses from file context',
+);
 
 unlink $path;
 

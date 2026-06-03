@@ -318,7 +318,7 @@ subtest 'dclone array elements keep destructor-owned nested state' => sub {
 
     package main;
 
-    local $_st_dclone_destroyed = 0;
+    local $main::_st_dclone_destroyed = 0;
     my $original = bless {
         children => [
             bless({

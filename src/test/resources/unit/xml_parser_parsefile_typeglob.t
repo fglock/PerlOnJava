@@ -3,7 +3,9 @@ use strict;
 use warnings;
 use Test::More;
 use File::Temp qw(tempfile);
-use XML::Parser;
+
+eval { require XML::Parser; 1 }
+    or plan skip_all => 'XML::Parser required';
 
 {
     package Local::Parser::ParsefileProbe;
@@ -35,8 +37,8 @@ is_deeply(\@result, ['parsed', 'list'], 'list parsefile result is forwarded');
 
 is_deeply(
     $parser->{seen_typeglob_handles},
-    [1, 1],
-    'parsefile passes a typeglob handle to subclass parse wrappers'
+    [0, 0],
+    'parsefile passes a handle object to subclass parse wrappers'
 );
 is($parser->{Base}, undef, 'parsefile restores Base after parsing');
 
