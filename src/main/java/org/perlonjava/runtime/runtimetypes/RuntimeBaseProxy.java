@@ -38,6 +38,12 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
      */
     abstract void vivify();
 
+    private static boolean rootEdge(RuntimeScalar scalar) {
+        return scalar != null
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase;
+    }
+
     /**
      * Vivifies this proxy as an lvalue. Creates the actual entry in the parent
      * hash/array, matching Perl 5's behavior where hash element access in lvalue
@@ -62,11 +68,15 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         vivify(); // Ensure the scalar is initialized.
-        if (this instanceof RuntimeHashProxyEntry hpe
+        boolean globalHashEntry = this instanceof RuntimeHashProxyEntry hpe
                 && hpe.getParent() != null
-                && hpe.getParent().isGlobalPackageHash) {
+                && hpe.getParent().isGlobalPackageHash;
+        if (globalHashEntry) {
+            boolean invalidatesRootSnapshot = rootEdge(lvalue) || rootEdge(value);
             lvalue.isPackageGlobalRoot = true;
-            MortalList.invalidateExternalRootSnapshot();
+            if (invalidatesRootSnapshot) {
+                MortalList.invalidateExternalRootSnapshot();
+            }
         }
         this.lvalue.set(value);
         this.type = lvalue.type;
@@ -76,10 +86,7 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         // mark the stored value's referent as storedInPackageGlobal
         // so the walker gate at refCount→0 can rescue it across
         // transient zeros (replaces the class-name heuristic).
-        if (this instanceof RuntimeHashProxyEntry hpe
-                && hpe.getParent() != null
-                && hpe.getParent().isGlobalPackageHash
-                && lvalue.value instanceof RuntimeBase rb) {
+        if (globalHashEntry && lvalue.value instanceof RuntimeBase rb) {
             rb.storedInPackageGlobal = true;
         }
         return lvalue;
@@ -155,8 +162,11 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         if (this instanceof RuntimeHashProxyEntry hpe
                 && hpe.getParent() != null
                 && hpe.getParent().isGlobalPackageHash) {
+            boolean invalidatesRootSnapshot = rootEdge(lvalue);
             lvalue.isPackageGlobalRoot = true;
-            MortalList.invalidateExternalRootSnapshot();
+            if (invalidatesRootSnapshot) {
+                MortalList.invalidateExternalRootSnapshot();
+            }
         }
         RuntimeScalar ret = lvalue.undefine();
         this.type = lvalue.type;

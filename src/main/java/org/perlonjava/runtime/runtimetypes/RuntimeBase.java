@@ -222,7 +222,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         sb.append("[REFCOUNT-RECORD] base=").append(System.identityHashCode(this))
           .append(" owner=").append(System.identityHashCode(owner))
           .append("   ").append(site);
-        for (int i = 1; i < Math.min(st.length, 5); i++) {
+        for (int i = 1; i < Math.min(st.length, 12); i++) {
             sb.append("\n      at ").append(st[i]);
         }
         System.err.println(sb);
@@ -365,6 +365,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         arr.elementsAliased = true;
         arr.elementsOwned = arr.ownedAliasElements != null && !arr.ownedAliasElements.isEmpty();
         return arr;
+    }
+
+    /**
+     * Retrieves the argument array for {@code goto &sub}. Most values use
+     * ordinary aliasing, but RuntimeArray overrides this to transfer ownership
+     * of any refs inserted into the current frame's {@code @_}.
+     */
+    public RuntimeArray getTailCallArrayOfAlias() {
+        return getArrayOfAlias();
     }
 
     /**

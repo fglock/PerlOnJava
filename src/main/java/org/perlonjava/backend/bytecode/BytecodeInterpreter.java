@@ -62,6 +62,28 @@ public class BytecodeInterpreter {
                 || scalar.type == RuntimeScalarType.READONLY_SCALAR;
     }
 
+    private static void releaseConsumedTemp(RuntimeBase temp, RuntimeBase target) {
+        if (!(temp instanceof RuntimeScalar tempScalar)
+                || !(target instanceof RuntimeScalar targetScalar)
+                || tempScalar == targetScalar
+                || !tempScalar.refCountOwned
+                || !RuntimeScalarType.isReference(tempScalar)
+                || tempScalar.type != targetScalar.type
+                || tempScalar.value != targetScalar.value
+                || !(tempScalar.value instanceof RuntimeBase base)
+                || base.refCount <= 0) {
+            return;
+        }
+
+        tempScalar.refCountOwned = false;
+        if (base.refCountTrace) {
+            base.traceRefCount(-1, "BytecodeInterpreter.releaseConsumedTemp");
+            base.releaseOwner(tempScalar, "releaseConsumedTemp");
+        }
+        base.releaseActiveOwner(tempScalar);
+        base.refCount--;
+    }
+
     private static java.util.Set<RuntimeCode> collectReturnedClosures(RuntimeBase value) {
         java.util.IdentityHashMap<RuntimeCode, Boolean> closures = new java.util.IdentityHashMap<>();
         collectReturnedClosures(value, closures);
@@ -193,6 +215,13 @@ public class BytecodeInterpreter {
         java.util.List<RuntimeCode> createdClosures = null;
         java.util.Set<RuntimeCode> returnedClosures = null;
 
+        // Scope-exit cleanup emitted by BytecodeCompiler is bracketed by
+        // MORTAL_PUSH_MARK / MORTAL_POP_FLUSH. Defer unregister/null-store
+        // until the POP so interpreted code matches the JVM backend:
+        // cleanup all lexicals first, unregister/null them second, then flush.
+        java.util.ArrayDeque<java.util.ArrayList<Integer>> scopeCleanupBatches =
+                new java.util.ArrayDeque<>();
+
         // Structure: try { while(true) { try { ...dispatch... } catch { handle eval/die } } } finally { cleanup }
         //
         // Outer try/finally — cleanup only, no catch.
@@ -233,9 +262,17 @@ public class BytecodeInterpreter {
                             case Opcodes.MORTAL_PUSH_MARK -> {
                                 // Push mark before scope-exit cleanup (SAVETMPS equivalent)
                                 MortalList.pushMark();
+                                scopeCleanupBatches.push(new java.util.ArrayList<>());
                             }
 
                             case Opcodes.MORTAL_POP_FLUSH -> {
+                                if (!scopeCleanupBatches.isEmpty()) {
+                                    for (int cleanupReg : scopeCleanupBatches.pop()) {
+                                        RuntimeBase slot = registers[cleanupReg];
+                                        MyVarCleanupStack.unregister(slot);
+                                        registers[cleanupReg] = null;
+                                    }
+                                }
                                 // Pop mark and flush only entries added since it (scoped FREETMPS)
                                 MortalList.popAndFlush();
                             }
@@ -271,8 +308,12 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.scopeExitCleanup(rs);
                                 }
-                                MyVarCleanupStack.unregister(slot);
-                                registers[reg] = null;
+                                if (!scopeCleanupBatches.isEmpty()) {
+                                    scopeCleanupBatches.peek().add(reg);
+                                } else {
+                                    MyVarCleanupStack.unregister(slot);
+                                    registers[reg] = null;
+                                }
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP_HASH -> {
@@ -350,8 +391,12 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeHash rh) {
                                     MortalList.scopeExitCleanupHash(rh);
                                 }
-                                MyVarCleanupStack.unregister(slot);
-                                registers[reg] = null;
+                                if (!scopeCleanupBatches.isEmpty()) {
+                                    scopeCleanupBatches.peek().add(reg);
+                                } else {
+                                    MyVarCleanupStack.unregister(slot);
+                                    registers[reg] = null;
+                                }
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP_ARRAY -> {
@@ -383,8 +428,12 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeArray ra) {
                                     MortalList.scopeExitCleanupArray(ra);
                                 }
-                                MyVarCleanupStack.unregister(slot);
-                                registers[reg] = null;
+                                if (!scopeCleanupBatches.isEmpty()) {
+                                    scopeCleanupBatches.peek().add(reg);
+                                } else {
+                                    MyVarCleanupStack.unregister(slot);
+                                    registers[reg] = null;
+                                }
                             }
 
                             case Opcodes.RETURN -> {
@@ -438,9 +487,7 @@ public class BytecodeInterpreter {
                                 // If target is a CODE reference, treat as goto &sub (tail call)
                                 if (target.type == RuntimeScalarType.CODE) {
                                     // Create a TAILCALL marker - pass current @_ (register 1)
-                                    RuntimeArray currentArgs = (registers[1] instanceof RuntimeArray)
-                                            ? (RuntimeArray) registers[1]
-                                            : new RuntimeArray();
+                                    RuntimeArray currentArgs = registers[1].getTailCallArrayOfAlias();
                                     RuntimeControlFlowList marker = new RuntimeControlFlowList(
                                             target, currentArgs, code.sourceName, code.sourceLine);
                                     return marker;
@@ -826,6 +873,12 @@ public class BytecodeInterpreter {
                                     registers[rd] = targetScalar;
                                 }
                                 registers[rs].addToScalar(targetScalar);
+                            }
+
+                            case Opcodes.RELEASE_CONSUMED_TEMP -> {
+                                int tempReg = bytecode[pc++];
+                                int targetReg = bytecode[pc++];
+                                releaseConsumedTemp(registers[tempReg], registers[targetReg]);
                             }
 
                             // =================================================================
@@ -1283,19 +1336,24 @@ public class BytecodeInterpreter {
                                             // Extract codeRef and args, call target
                                             codeRef = flow.getTailCallCodeRef();
                                             callArgs = flow.getTailCallArgs();
-                                            // Use fast path for InterpretedCode
-                                            if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
-                                                RuntimeCode.requireLvalueCallable(interpCode, context, "tailcall");
-                                                int effectiveContext = RuntimeCode.effectiveCallContext(interpCode, context);
-                                                // Push args for tail call too
-                                                RuntimeCode.pushArgs(callArgs);
-                                                try {
-                                                    result = BytecodeInterpreter.execute(interpCode, callArgs, effectiveContext, null);
-                                                } finally {
-                                                    RuntimeCode.popArgs();
+                                            try {
+                                                // Use fast path for InterpretedCode
+                                                if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
+                                                    RuntimeCode.requireLvalueCallable(interpCode, context, "tailcall");
+                                                    int effectiveContext = RuntimeCode.effectiveCallContext(interpCode, context);
+                                                    // Push args for tail call too
+                                                    RuntimeCode.pushArgs(callArgs);
+                                                    try {
+                                                        result = BytecodeInterpreter.execute(interpCode, callArgs, effectiveContext, null);
+                                                    } finally {
+                                                        RuntimeCode.popArgs();
+                                                    }
+                                                } else {
+                                                    result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
                                                 }
-                                            } else {
-                                                result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                            } finally {
+                                                RuntimeCode.cleanupTailCallArgs(callArgs);
+                                                RuntimeCode.cleanupTailCallCodeRef(codeRef);
                                             }
                                             // Loop to handle chained tail calls
                                         } else {
@@ -1533,17 +1591,7 @@ public class BytecodeInterpreter {
                                     codeRef = codeRef.codeDerefNonStrict(currentPackageScalar.toString());
                                 }
 
-                                // Get args
-                                RuntimeBase argsBase = registers[argsReg];
-                                RuntimeArray callArgs;
-                                if (argsBase instanceof RuntimeArray) {
-                                    callArgs = (RuntimeArray) argsBase;
-                                } else if (argsBase instanceof RuntimeList) {
-                                    callArgs = new RuntimeArray();
-                                    argsBase.setArrayOfAlias(callArgs);
-                                } else {
-                                    callArgs = new RuntimeArray((RuntimeScalar) argsBase);
-                                }
+                                RuntimeArray callArgs = registers[argsReg].getTailCallArrayOfAlias();
 
                                 // Create TAILCALL marker with eval scope for runtime check
                                 String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;

@@ -249,4 +249,28 @@ sub hoisted_with_prototype($) {
        '&_get_obj pattern - functional call uses fallback');
 }
 
+{
+    no strict 'subs';
+    no warnings 'once';
+
+    sub _bareword_arg_list { join ":", @_ }
+    my $direct = _bareword_arg_list c1, f, o5;
+    is(
+        $direct,
+        "c1:f:o5",
+        "known parenthesis-free sub call keeps bareword list args"
+    );
+
+    package BarewordIndirectTarget;
+    sub _known_method { return "method:@_" }
+
+    package main;
+    my $indirect = _known_method BarewordIndirectTarget;
+    is(
+        $indirect,
+        "method:BarewordIndirectTarget",
+        "known package still uses indirect-object syntax"
+    );
+}
+
 done_testing();

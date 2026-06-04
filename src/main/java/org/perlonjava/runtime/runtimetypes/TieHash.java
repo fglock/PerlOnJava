@@ -80,27 +80,37 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
     }
 
     /**
-     * Calls a tie method if it exists in the tied object's class hierarchy.
-     * Used by tiedDestroy() and tiedUntie() for optional methods.
+     * Finds a tie method that exists in the tied object's class hierarchy.
+     * Optional tie methods do not dispatch through AUTOLOAD.
      */
-    private static RuntimeScalar tieCallIfExists(RuntimeHash hash, String methodName) {
+    private static RuntimeScalar findTieMethodIfExists(RuntimeHash hash, String methodName) {
         TieHash tieHash = (TieHash) hash.elements;
-        RuntimeScalar self = tieHash.getSelf();
         String className = tieHash.getTiedPackage();
 
-        // Check if method exists in the class hierarchy
         RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
         if (method == null) {
-            // Method doesn't exist, return undef
-            return RuntimeScalarCache.scalarUndef;
+            return null;
         }
         // Ignore AUTOLOAD fallback — tie special methods (UNTIE, DESTROY) are
         // "if exists" only; they should not trigger AUTOLOAD dispatch.
         if (method.value instanceof RuntimeCode rc && rc.autoloadVariableName != null) {
+            return null;
+        }
+        return method;
+    }
+
+    /**
+     * Calls a tie method if it exists in the tied object's class hierarchy.
+     * Used by tiedDestroy() and tiedUntie() for optional methods.
+     */
+    private static RuntimeScalar tieCallIfExists(RuntimeHash hash, String methodName) {
+        RuntimeScalar method = findTieMethodIfExists(hash, methodName);
+        if (method == null) {
             return RuntimeScalarCache.scalarUndef;
         }
 
-        // Method exists, call it
+        TieHash tieHash = (TieHash) hash.elements;
+        RuntimeScalar self = tieHash.getSelf();
         return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
     }
 
@@ -150,7 +160,14 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * Gets the scalar representation of a tied hash (delegates to SCALAR).
      */
     public static RuntimeScalar tiedScalar(RuntimeHash hash) {
-        return tieCall(hash, "SCALAR");
+        RuntimeScalar scalarMethod = findTieMethodIfExists(hash, "SCALAR");
+        if (scalarMethod != null) {
+            TieHash tieHash = (TieHash) hash.elements;
+            return RuntimeCode.apply(scalarMethod, new RuntimeArray(tieHash.getSelf()), RuntimeContextType.SCALAR).getFirst();
+        }
+
+        RuntimeScalar firstKey = tiedFirstKey(hash);
+        return firstKey.getDefinedBoolean() ? RuntimeScalarCache.scalarOne : RuntimeScalarCache.scalarEmptyString;
     }
 
     /**

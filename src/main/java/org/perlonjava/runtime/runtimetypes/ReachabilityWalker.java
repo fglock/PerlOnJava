@@ -399,8 +399,8 @@ public class ReachabilityWalker {
     /**
      * Return true if {@code target} can reach itself through strong Perl
      * references. Weak scalars are ignored. This models Perl's refcount
-     * behavior for unblessed self-cycles: they remain alive even when no
-     * package/global root points at them.
+     * behavior for self-cycles: they remain alive even when no package/global
+     * root points at them.
      */
     public static boolean hasStrongCycle(RuntimeBase target) {
         if (target == null) return false;
@@ -1320,6 +1320,9 @@ public class ReachabilityWalker {
         ReachabilityWalker w = new ReachabilityWalker();
         Set<RuntimeBase> live = w.walk();
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
+        Set<RuntimeBase> strongCycleProtected = quiet
+                ? collectStrongCycleProtected()
+                : Collections.emptySet();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             if (!live.contains(referent)) {
                 // A named hash/array lexical (`my %h`, `my @a`) is NOT a
@@ -1368,6 +1371,14 @@ public class ReachabilityWalker {
                         && referent.blessId == 0
                         && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                         && isCapturedByWeakBackrefCode(referent)) {
+                    continue;
+                }
+                // Quiet auto-sweeps run at statement boundaries. Do not clear
+                // weak refs into, or strongly reachable from, a strong cycle:
+                // Perl's refcounting keeps such cycle islands alive. This
+                // covers callback-retained futures where the outer future is
+                // cyclic and inner sequence futures are strong children.
+                if (quiet && strongCycleProtected.contains(referent)) {
                     continue;
                 }
                 toClear.add(referent);
@@ -1455,6 +1466,36 @@ public class ReachabilityWalker {
             destroyed++;
         }
         return destroyed;
+    }
+
+    private static Set<RuntimeBase> collectStrongCycleProtected() {
+        java.util.List<RuntimeBase> referents = WeakRefRegistry.snapshotWeakRefReferents();
+        if (referents.isEmpty()) return Collections.emptySet();
+
+        Set<RuntimeBase> protectedSet =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase referent : referents) {
+            if (referent == null || protectedSet.contains(referent)) continue;
+            if (hasStrongCycle(referent)) {
+                collectStrongReachable(referent, protectedSet);
+            }
+        }
+        return protectedSet;
+    }
+
+    private static void collectStrongReachable(RuntimeBase root, Set<RuntimeBase> seen) {
+        final int MAX_VISITS = 50_000;
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        if (seen.add(root)) {
+            todo.addLast(root);
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            visits++;
+            enqueueStrongEdges(cur, null, seen, todo);
+        }
     }
 
     private static boolean isCapturedByWeakBackrefCode(RuntimeBase target) {

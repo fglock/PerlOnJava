@@ -41,4 +41,19 @@ is(svref_2object($single)->REFCNT, 1, 'single object starts with one owner');
 is_oneref($single, 'Test2 one-ref helper reports one owner');
 is(svref_2object($single)->REFCNT, 1, 'one-ref helper does not consume a counted owner');
 
+{
+    package T2UndefPlaceholder;
+    sub new { bless {}, shift }
+}
+
+my $placeholder = T2UndefPlaceholder->new;
+my $captured;
+my $callback = eval q{sub { (undef, $captured) = @_ }};
+die $@ if $@;
+$callback->($placeholder, 42);
+
+is(svref_2object($placeholder)->REFCNT, 1,
+    'interpreter undef placeholder assignment does not keep first arg');
+is($captured, 42, 'interpreter undef placeholder still consumes the first arg');
+
 done_testing;

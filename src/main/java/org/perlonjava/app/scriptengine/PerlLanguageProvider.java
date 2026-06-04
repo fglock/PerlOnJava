@@ -180,23 +180,29 @@ public class PerlLanguageProvider {
         DataSection.createPlaceholderDataHandle(parser);
 
         Node ast;
+        boolean trackEndOfScope = ctx.compilerOptions.fileName != null
+                && !ctx.compilerOptions.fileName.isEmpty();
         if (isTopLevelScript) {
             CallerStack.push(
                     "main",
                     ctx.compilerOptions.fileName,
                     ctx.errorUtil.getLineNumber(parser.tokenIndex));
-            // Push the main script onto BHooksEndOfScope's loading stack so that
-            // on_scope_end callbacks (e.g., from namespace::clean) are deferred
-            // until end of parsing, matching Perl 5 behavior.
+        }
+        if (trackEndOfScope) {
+            // Push this compilation unit onto BHooksEndOfScope's loading stack so
+            // compile-time on_scope_end callbacks (e.g. namespace::autoclean)
+            // fire at the end of parsing, before top-level runtime statements.
             BHooksEndOfScope.beginFileLoad(ctx.compilerOptions.fileName);
         }
         try {
             ast = parser.parse(); // Generate the abstract syntax tree (AST)
         } finally {
-            if (isTopLevelScript) {
+            if (trackEndOfScope) {
                 // Fire on_scope_end callbacks now that parsing is complete.
                 // This is the "end of compilation scope" equivalent.
                 BHooksEndOfScope.endFileLoad(ctx.compilerOptions.fileName);
+            }
+            if (isTopLevelScript) {
                 CallerStack.pop();
             }
         }

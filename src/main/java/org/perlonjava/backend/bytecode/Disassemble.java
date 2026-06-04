@@ -184,6 +184,11 @@ public class Disassemble {
                         src = interpretedCode.bytecode[pc++];
                         sb.append("ASSIGN_LEXICAL_SCALAR r").append(rd).append(" = r").append(src).append("\n");
                         break;
+                    case Opcodes.RELEASE_CONSUMED_TEMP:
+                        src = interpretedCode.bytecode[pc++];
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("RELEASE_CONSUMED_TEMP r").append(src).append(" after copy to r").append(rd).append("\n");
+                        break;
                     case Opcodes.LOAD_GLOBAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         int nameIdx = interpretedCode.bytecode[pc++];

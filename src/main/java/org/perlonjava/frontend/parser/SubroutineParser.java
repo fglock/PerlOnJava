@@ -275,6 +275,12 @@ public class SubroutineParser {
                     || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::") && subExists)
                     || (subExists && packageName.contains("::") && token.text.equals("(")
                         && !(isPackage != null && isPackage))
+                    // If the method name is a known subroutine and the invocant
+                    // candidate is an unknown bareword followed by a list boundary,
+                    // Perl keeps the direct sub call: `foo Bar, baz` is
+                    // `foo("Bar", "baz")`, not `Bar->foo(), "baz"`. If Bar is a
+                    // known package we still accept indirect-object syntax above.
+                    || (subExists && isPackage == null && !isKnownSub && isDirectBarewordArgumentBoundary(token))
                     // If packageName is not a known class and the next token is itself a
                     // bareword identifier, then `packageName` is more likely a method name
                     // (e.g. `new`) rather than a class — and the inner `packageName IDENT`
@@ -1790,5 +1796,15 @@ public class SubroutineParser {
             case "if", "unless", "while", "until", "for", "foreach", "when" -> true;
             default -> false;
         };
+    }
+
+    private static boolean isDirectBarewordArgumentBoundary(LexerToken token) {
+        return token.text.equals(",")
+                || token.text.equals("=>")
+                || token.text.equals(";")
+                || token.text.equals(")")
+                || token.text.equals("}")
+                || token.text.equals("]")
+                || token.type == LexerTokenType.EOF;
     }
 }

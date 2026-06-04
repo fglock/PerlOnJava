@@ -1358,21 +1358,39 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // have permanently overcounted refCount, preventing releaseCaptures
         // from firing at the right time.
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
+        RuntimeCode removedLocalCodeForReachabilityCheck = null;
         if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
+            boolean removedLastStashRef = false;
             // Decrement stashRefCount on the local scope's CODE ref being removed
             if (localBase instanceof RuntimeCode localCodeObj) {
                 if (localCodeObj.stashRefCount > 0) {
                     localCodeObj.stashRefCount--;
+                    removedLastStashRef = localCodeObj.stashRefCount == 0;
                 }
             }
             if (localBase.refCount > 0 && --localBase.refCount == 0) {
                 localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
+            } else if (localBase.refCount == 0 && localBase instanceof RuntimeCode) {
+                localBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(localBase);
+            } else if (localBase instanceof RuntimeCode localCodeObj
+                    && removedLastStashRef
+                    && (localCodeObj.capturedScalars != null || localCodeObj.capturedAggregates != null)) {
+                removedLocalCodeForReachabilityCheck = localCodeObj;
             }
         }
         GlobalVariable.markPackageGlobalRoot(snap.code);
         GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
         GlobalVariable.invalidatePackageRootSnapshot();
+        if (removedLocalCodeForReachabilityCheck != null
+                && removedLocalCodeForReachabilityCheck.activeOwnerCount() == 0
+                && !ReachabilityWalker.isReachableFromLiveScalarRegistry(removedLocalCodeForReachabilityCheck)
+                && !ReachabilityWalker.isReachableFromLiveCodeCaptures(removedLocalCodeForReachabilityCheck)
+                && !ReachabilityWalker.isReachableFromRoots(removedLocalCodeForReachabilityCheck)) {
+            removedLocalCodeForReachabilityCheck.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(removedLocalCodeForReachabilityCheck);
+        }
         // Increment stashRefCount on the restored CODE ref being put back in the stash
         if (snap.code != null && snap.code.value instanceof RuntimeCode restoredCode) {
             restoredCode.hadStashRef = true;

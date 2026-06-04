@@ -2362,6 +2362,13 @@ public class Opcodes {
      */
     public static final short ASSIGN_LEXICAL_SCALAR = 491;
 
+    /**
+     * Release a consumed temporary scalar after its reference value has been
+     * copied into the target scalar.
+     * Format: RELEASE_CONSUMED_TEMP tempReg targetReg
+     */
+    public static final short RELEASE_CONSUMED_TEMP = 492;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
