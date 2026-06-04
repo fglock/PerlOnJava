@@ -143,6 +143,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return regexFlags;
     }
 
+    /** Select the byte or Unicode compiled pattern for a particular target scalar. */
+    public Pattern selectPattern(RuntimeScalar string) {
+        Pattern selected = this.pattern;
+        if (this.patternUnicode != null && this.patternUnicode != this.pattern) {
+            if (this.regexFlags != null && this.regexFlags.isAscii()) {
+                selected = this.pattern;
+            } else if (hasInlineAsciiModifier(this.patternString)) {
+                selected = this.pattern;
+            } else if (Utf8.isUtf8(string)) {
+                selected = this.patternUnicode;
+            }
+        }
+        return selected;
+    }
+
     /**
      * Compiles a regex pattern string with optional modifiers into a RuntimeRegex object.
      *
@@ -209,17 +224,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.javaPatternString = javaPattern;
                 regex.requiredLiteral = findTopLevelRequiredLiteral(patternString, regex.regexFlags);
 
-                // Compile the regex pattern for byte strings (ASCII-only \w, \d)
+                // Compile the regex pattern for byte strings (ASCII-only \w, \d, \s)
                 regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
                 
                 // Compile the Unicode variant for Unicode strings
                 // Only compile separately if the flags differ (saves memory when /a or /u is used)
                 if (regex.patternFlagsUnicode != regex.patternFlags) {
+                    String javaPatternUnicode = preProcessRegex(patternString, regex.regexFlags.with("u", "a"), false);
                     // Fix POSIX [:punct:] for Unicode mode: Java's UNICODE_CHARACTER_CLASS flag
                     // changes \p{Punct} from ASCII punct+symbols to only \p{P} (Unicode Punctuation).
                     // Perl's [:punct:] should match both Punctuation and Symbols in Unicode mode.
-                    String javaPatternUnicode = javaPattern
-                            .replace("\\p{Punct}", "[\\p{P}\\p{S}]")
+                    javaPatternUnicode = javaPatternUnicode.replace("\\p{Punct}", "[\\p{P}\\p{S}]")
                             .replace("\\P{Punct}", "[^\\p{P}\\p{S}]");
                     regex.patternUnicode = Pattern.compile(javaPatternUnicode, regex.patternFlagsUnicode);
                 } else {
@@ -247,7 +262,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         String notemptyJava = "(?=[\\s\\S])" + javaPattern.replace("??", "?");
                         regex.notemptyPattern = Pattern.compile(notemptyJava, regex.patternFlags);
                         if (regex.patternFlagsUnicode != regex.patternFlags) {
-                            String notemptyUnicode = "(?=[\\s\\S])" + javaPattern
+                            String javaPatternUnicode = preProcessRegex(patternString, regex.regexFlags.with("u", "a"), false);
+                            String notemptyUnicode = "(?=[\\s\\S])" + javaPatternUnicode
                                     .replace("\\p{Punct}", "[\\p{P}\\p{S}]")
                                     .replace("\\P{Punct}", "[^\\p{P}\\p{S}]")
                                     .replace("??", "?");

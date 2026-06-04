@@ -809,9 +809,9 @@ public class SlowOpcodeHandler {
     }
 
     /**
-     * SLOW_SPLIT: rd = Operator.split(pattern, args, ctx)
-     * Format: [SLOW_SPLIT] [rd] [patternReg] [argsReg] [ctx]
-     * Effect: rd = Operator.split(pattern, args, ctx)
+     * SLOW_SPLIT: rd = Operator.split(pattern, args, ctx, implicit_unicode_strings_u)
+     * Format: [SLOW_SPLIT] [rd] [patternReg] [argsReg] [ctx] [implicit_unicode_strings_u]
+     * Effect: rd = Operator.split(pattern, args, ctx, implicit_unicode_strings_u)
      */
     public static int executeSplit(
             int[] bytecode,
@@ -822,6 +822,7 @@ public class SlowOpcodeHandler {
         int patternReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+        boolean unicodeStrings = bytecode[pc++] != 0;
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
 
@@ -831,7 +832,7 @@ public class SlowOpcodeHandler {
                 ? (RuntimeList) argsBase
                 : new RuntimeList(argsBase.scalar());
 
-        RuntimeList result = Operator.split(pattern, args, ctx);
+        RuntimeList result = Operator.split(pattern, args, ctx, unicodeStrings);
 
         registers[rd] = result;
         return pc;

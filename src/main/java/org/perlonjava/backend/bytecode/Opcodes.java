@@ -760,7 +760,7 @@ public class Opcodes {
      */
     public static final short REVERSE = 123;
     /**
-     * Split string into array: rd = Operator.split(pattern, args, ctx)
+     * Split string into array: rd = Operator.split(pattern, args, ctx, implicit_unicode_strings_u)
      */
     public static final short SPLIT = 124;
     /**

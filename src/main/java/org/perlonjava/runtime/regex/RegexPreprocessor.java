@@ -71,6 +71,11 @@ public class RegexPreprocessor {
     static java.util.Set<String> seenNamedCaptures = new java.util.HashSet<>();
     static java.util.Map<String, java.util.List<String>> emittedNamedCaptures = new java.util.LinkedHashMap<>();
     static int duplicateNameCounter;
+    private static final ThreadLocal<Boolean> EMIT_WARNINGS = ThreadLocal.withInitial(() -> true);
+
+    static boolean shouldEmitWarnings() {
+        return EMIT_WARNINGS.get();
+    }
 
     static void markDeferredUnicodePropertyEncountered() {
         deferredUnicodePropertyEncountered = true;
@@ -107,6 +112,20 @@ public class RegexPreprocessor {
      * @throws PerlCompilerException If there are unmatched parentheses in the regex.
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
+        return preProcessRegex(s, regexFlags, true);
+    }
+
+    static String preProcessRegex(String s, RegexFlags regexFlags, boolean emitWarnings) {
+        boolean previousEmitWarnings = EMIT_WARNINGS.get();
+        EMIT_WARNINGS.set(emitWarnings);
+        try {
+            return preProcessRegexInternal(s, regexFlags);
+        } finally {
+            EMIT_WARNINGS.set(previousEmitWarnings);
+        }
+    }
+
+    private static String preProcessRegexInternal(String s, RegexFlags regexFlags) {
         if (s == null) {
             s = "";
         }
@@ -209,6 +228,8 @@ public class RegexPreprocessor {
                 || codePoint == '\f'
                 || codePoint == '\r'
                 || codePoint == ' '
+                || codePoint == 0x0085
+                || codePoint == 0x00A0
                 || codePoint == 0x1680
                 || (codePoint >= 0x2000 && codePoint <= 0x200A)
                 || codePoint == 0x2028
@@ -2089,7 +2110,9 @@ public class RegexPreprocessor {
 
         String message = errMsg + " in regex; marked by <-- HERE in m/" +
                 before + marker + after + "/\n";
-        WarnDie.warn(new RuntimeScalar(message), new RuntimeScalar());
+        if (shouldEmitWarnings()) {
+            WarnDie.warn(new RuntimeScalar(message), new RuntimeScalar());
+        }
     }
 
     private static boolean isUnimplementedWarnMode() {

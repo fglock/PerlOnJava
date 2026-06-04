@@ -850,7 +850,21 @@ public class EmitOperator {
             emitSplitArgs(emitterVisitor, node.right);
         }
         emitterVisitor.pushCallContext();
-        emitOperator(node, emitterVisitor);
+        boolean unicodeStrings = emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings");
+        emitterVisitor.ctx.mv.visitInsn(unicodeStrings ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/Operator",
+                "split",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                false);
+
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            handleVoidContext(emitterVisitor);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            handleScalarContext(emitterVisitor, node);
+        }
     }
 
     /**
