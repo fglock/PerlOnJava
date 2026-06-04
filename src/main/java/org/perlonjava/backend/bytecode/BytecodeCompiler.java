@@ -5747,6 +5747,15 @@ public class BytecodeCompiler implements Visitor {
                 && sigilOp0.operator.equals("$") && sigilOp0.operand instanceof IdentifierNode idNode0) {
             globalLoopVarName = NameNormalizer.normalizeVariableName(idNode0.name, getCurrentPackage());
         }
+        if (globalLoopVarName == null && node.variable instanceof OperatorNode varOp1
+                && varOp1.operator.equals("$") && varOp1.operand instanceof IdentifierNode idNode1) {
+            String varName = "$" + idNode1.name;
+            SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(varName);
+            if (entry != null && "our".equals(entry.decl())) {
+                String perlPackage = entry.perlPackage() != null ? entry.perlPackage() : getCurrentPackage();
+                globalLoopVarName = NameNormalizer.normalizeVariableName(idNode1.name, perlPackage);
+            }
+        }
 
         // Step 1: Evaluate list in list context
         compileNode(node.list, -1, RuntimeContextType.LIST);

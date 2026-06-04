@@ -72,7 +72,9 @@ foreach $x (1..3) { }
 is($x, "before", 'foreach with range restores lexical loop variable');
 
 our $gv = "saved";
-foreach $gv ("x", "y") { }
+my @gv_seen;
+foreach $gv ("x", "y") { push @gv_seen, $gv }
+is_deeply(\@gv_seen, ["x", "y"], 'foreach updates predeclared our loop variable in body');
 is($gv, "saved", 'foreach restores global loop variable');
 
 # $1 scoping: persists across iterations, restores after loop exit

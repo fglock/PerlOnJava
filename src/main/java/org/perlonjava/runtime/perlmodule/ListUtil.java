@@ -520,8 +520,15 @@ public class ListUtil extends PerlModuleBase {
      */
     public static RuntimeList shuffle(RuntimeArray args, int ctx) {
         RuntimeArray shuffled = new RuntimeArray(args.elements);
-        Collections.shuffle(shuffled.elements);
+        shuffleScalars(shuffled.elements);
         return shuffled.getList();
+    }
+
+    private static void shuffleScalars(List<RuntimeScalar> elements) {
+        for (int i = elements.size(); i > 1; i--) {
+            int j = org.perlonjava.runtime.operators.Random.rand(new RuntimeScalar(i)).getInt();
+            Collections.swap(elements, i - 1, j);
+        }
     }
 
     /**
@@ -548,7 +555,7 @@ public class ListUtil extends PerlModuleBase {
         for (RuntimeBase element : values.elements) {
             shuffled.add(element.scalar());
         }
-        Collections.shuffle(shuffled);
+        shuffleScalars(shuffled);
 
         for (int i = 0; i < count; i++) {
             result.push(shuffled.get(i));

@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Set::Object.
+
+  PerlOnJava supplies a pure-Perl Set::Object shim for downstream CPAN
+  modules such as Graph. The upstream distribution's test suite targets the
+  full XS implementation, including XS-only magic, weak set internals, and
+  thread-specific behavior that this shim does not claim to implement. Skip
+  the dependency test phase and let downstream modules exercise the supported
+  object-set surface.
+match:
+  distribution: "^RURBAN/Set-Object-"
+test:
+  commandline: "PERLONJAVA_SKIP"

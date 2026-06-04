@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for Graph.
+
+  Graph::AdjacencyMap uses `return` from inside nested map blocks to abort
+  path lookups when a vertex is missing. PerlOnJava handles the simpler form,
+  but this nested module shape can return past the intended sub boundary in
+  the JVM backend. Rewrite those lookup routines as explicit loops so
+  Graph::Directed and the rest of Graph's test suite exercise the same logic
+  without depending on that fragile control-flow shape.
+match:
+  distribution: "^.*/Graph-"
+patches:
+  - "Graph-0.9735/Graph.pm.patch"
+  - "Graph-0.9735/AdjacencyMap.pm.patch"
+  - "Graph-0.9735/AdjacencyMap-Light.pm.patch"

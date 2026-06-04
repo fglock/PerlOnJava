@@ -213,6 +213,32 @@ sub hoisted_with_prototype($) {
     is($remaining, 2, '&func shares @_ - shift modifies caller @_');
 }
 
+# `goto &sub` after a shared-args mutation must pass the same @_ container to
+# the tail-called sub, so sentinel args pushed before the goto can be popped
+# without leaking into the original caller's @_.
+{
+    sub _tail_pop_sentinel {
+        my $sentinel = pop @_;
+        return ($sentinel, scalar @_);
+    }
+
+    sub _push_then_goto_tail {
+        push @_, "sentinel";
+        goto &_tail_pop_sentinel;
+    }
+
+    sub caller_of_push_goto_tail {
+        my ($sentinel, $tail_argc) = &_push_then_goto_tail;
+        return ($sentinel, $tail_argc, scalar @_);
+    }
+
+    my ($sentinel, $tail_argc, $caller_argc) =
+        caller_of_push_goto_tail("a", "b", "c");
+    is($sentinel, "sentinel", 'goto &sub sees pushed shared-args sentinel');
+    is($tail_argc, 3, 'goto &sub target pops sentinel from shared @_');
+    is($caller_argc, 3, 'goto &sub does not leak pushed sentinel into caller @_');
+}
+
 # _get_obj pattern (used by Hash::Merge and other CPAN modules)
 {
     use Scalar::Util "blessed";

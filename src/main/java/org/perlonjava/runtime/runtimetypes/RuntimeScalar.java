@@ -162,7 +162,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((type & RuntimeScalarType.REFERENCE_BIT) == 0 || !(value instanceof RuntimeBase base)) {
             return null;
         }
-        if (refCountOwned && !(base instanceof RuntimeCode)) return null;
         if (base.refCount < 0 || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
                 || base.refCount == Integer.MIN_VALUE) {
             return null;
@@ -187,6 +186,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             captureRefCountOwned--;
         }
+    }
+
+    void releaseClosureCaptureReferentsForWeaken(RuntimeBase oldBase) {
+        releaseAllClosureCaptureReferents(oldBase);
+    }
+
+    void retainClosureCaptureReferentsForUnweaken() {
+        retainMissingClosureCaptureReferents();
     }
 
     /**
@@ -1546,7 +1553,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
-        retainMissingClosureCaptureReferents();
         retainScalarReferenceContents(value);
 
         // Flush deferred mortal decrements from the current function scope.
@@ -2939,7 +2945,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Mark that this variable's scope has exited. When releaseCaptures
             // later decrements captureCount to 0, it will know the scope is gone.
             scalar.scopeExited = true;
-            scalar.retainMissingClosureCaptureReferents();
             // For CODE refs: still decrement the VALUE's refCount so the RuntimeCode
             // is eventually destroyed and its releaseCaptures fires (decrementing
             // captureCount on all the variables IT captured). This is critical for

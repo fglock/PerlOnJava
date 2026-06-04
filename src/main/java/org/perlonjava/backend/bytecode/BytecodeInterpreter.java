@@ -2263,7 +2263,7 @@ public class BytecodeInterpreter {
                                 // Update the runtime current-package tracker so caller() returns the right package.
                                 // Uses cached RuntimeScalar reference to avoid ThreadLocal lookup
                                 int nameIdx = bytecode[pc++];
-                                currentPackageScalar.set(code.stringPool[nameIdx]);
+                                InterpreterState.setCurrentPackageStatic(code.stringPool[nameIdx]);
                             }
 
                             case Opcodes.PUSH_PACKAGE -> {

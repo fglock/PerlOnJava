@@ -857,9 +857,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             for (RuntimeScalar s : scalars) {
                 s.releaseClosureCapture();
                 if (s.captureCount == 0) {
-                    // If the captured scalar itself holds a CODE ref with captures,
-                    // release those recursively (handles nested closures).
-                    if (s.type == RuntimeScalarType.CODE && s.value instanceof RuntimeCode innerCode) {
+                    // If the captured scalar itself holds an unowned CODE ref with
+                    // captures, release those recursively (handles nested closures).
+                    // Do not recurse into CODE refs still stored elsewhere (for
+                    // example Iterator.pm keeps a callback in %code_for while an
+                    // eval block temporarily captures the local $code scalar).
+                    if (s.type == RuntimeScalarType.CODE
+                            && s.value instanceof RuntimeCode innerCode
+                            && innerCode.refCount <= 0) {
                         innerCode.releaseCaptures();
                     }
                     // The captured variable's scope has exited but refCount was NOT

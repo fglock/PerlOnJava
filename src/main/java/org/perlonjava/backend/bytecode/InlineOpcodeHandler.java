@@ -1441,8 +1441,7 @@ public class InlineOpcodeHandler {
 
     public static int executePushPackage(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
         int nameIdx = bytecode[pc++];
-        DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
-        InterpreterState.currentPackage.get().set(code.stringPool[nameIdx]);
+        InterpreterState.setCurrentPackageLocal(code.stringPool[nameIdx]);
         return pc;
     }
 

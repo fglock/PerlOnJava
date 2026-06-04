@@ -699,8 +699,15 @@ public class CompareOperators {
      * @return A RuntimeScalar representing true if they match, false otherwise
      */
     public static RuntimeScalar smartmatch(RuntimeScalar arg1, RuntimeScalar arg2) {
-        // Simplified smartmatch: try string equality first, then numeric
-        // This handles the basic case in the state.t test
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(~~");
+            if (result != null) return result;
+
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, arg2, blessId, blessId2, "~~");
+            if (result != null) return result;
+        }
 
         // Check if both are defined
         if (!arg1.getDefinedBoolean() && !arg2.getDefinedBoolean()) {
