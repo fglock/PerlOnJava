@@ -143,6 +143,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     continue;
                 }
 
+                if (!containsAnySlotWithPrefix(globName)) {
+                    continue;
+                }
+
                 // Add the entry only if it's not already in the set of unique keys
                 if (uniqueKeys.add(entryKey)) {
                     entries.add(new SimpleEntry<>(entryKey, new RuntimeStashEntry(globName, true)));
@@ -183,7 +187,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
                     containsNamespace(GlobalVariable.globalHashes, prefix) ||
                     containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
-                    containsNamespace(GlobalVariable.globalIORefs, prefix) ||
+                    GlobalVariable.containsVisibleGlobalIORefWithPrefix(prefix) ||
                     containsNamespace(GlobalVariable.globalFormatRefs, prefix)) {
                 return new RuntimeStashEntry(prefix, true);
             }
@@ -233,6 +237,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         boolean isMainStash = "main::".equals(namespace);
         for (String key : allKeys) {
             String entryKey = null;
+            String globName = null;
             if (key.startsWith(namespace)) {
                 String remainingKey = key.substring(namespace.length());
                 int nextSeparatorIndex = remainingKey.indexOf("::");
@@ -241,10 +246,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 } else {
                     entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
                 }
+                globName = namespace + entryKey;
             } else if (isMainStash) {
                 int separatorIndex = key.indexOf("::");
                 if (separatorIndex > 0) {
                     entryKey = key.substring(0, separatorIndex + 2);
+                    globName = entryKey;
                 }
             }
 
@@ -252,6 +259,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 continue;
             }
             if (entryKey.equals("a") || entryKey.equals("b")) {
+                continue;
+            }
+            if (globName == null || !containsAnySlotWithPrefix(globName)) {
                 continue;
             }
             keys.add(entryKey);
@@ -306,7 +316,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     containsNamespace(GlobalVariable.globalArrays, fullKey) ||
                     containsNamespace(GlobalVariable.globalHashes, fullKey) ||
                     containsNamespace(GlobalVariable.globalCodeRefs, fullKey) ||
-                    containsNamespace(GlobalVariable.globalIORefs, fullKey) ||
+                    GlobalVariable.containsVisibleGlobalIORefWithPrefix(fullKey) ||
                     containsNamespace(GlobalVariable.globalFormatRefs, fullKey);
 
             if (!exists) {
@@ -320,7 +330,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
             RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
             RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);
-            RuntimeGlob io = GlobalVariable.globalIORefs.remove(fullKey);
+            RuntimeGlob io = GlobalVariable.globalIORefs.get(fullKey);
+            if (io != null) {
+                GlobalVariable.hideIORefAfterStashDelete(fullKey);
+            }
             RuntimeScalar format = GlobalVariable.globalFormatRefs.remove(fullKey);
             GlobalVariable.invalidatePackageRootSnapshot();
 
@@ -346,6 +359,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.clearHiddenIORefsForNamespace(prefix);
             GlobalVariable.invalidatePackageRootSnapshot();
 
             InheritanceResolver.invalidateCache();
@@ -405,7 +419,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 containsNamespace(GlobalVariable.globalArrays, prefix) ||
                 containsNamespace(GlobalVariable.globalHashes, prefix) ||
                 containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
-                containsNamespace(GlobalVariable.globalIORefs, prefix) ||
+                GlobalVariable.containsVisibleGlobalIORefWithPrefix(prefix) ||
                 containsNamespace(GlobalVariable.globalFormatRefs, prefix);
     }
 

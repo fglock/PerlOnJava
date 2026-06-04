@@ -105,7 +105,8 @@ public class RuntimeStash extends RuntimeHash {
             boolean hasCodeSlot = GlobalVariable.isGlobalCodeRefDefined(fullKey);
 
             // Check if the IO slot exists AND has a real handle (don't auto-create)
-            boolean hasIOSlot = GlobalVariable.isGlobalIODefined(fullKey);
+            boolean hasIOSlot = GlobalVariable.isVisibleGlobalIORef(fullKey)
+                    && GlobalVariable.isGlobalIODefined(fullKey);
 
             // Check if the format slot exists AND is defined (don't auto-create)
             boolean hasFormatSlot = GlobalVariable.isGlobalFormatDefined(fullKey);
@@ -168,7 +169,7 @@ public class RuntimeStash extends RuntimeHash {
                 GlobalVariable.globalVariables.containsKey(fullKey) ||
                 GlobalVariable.globalArrays.containsKey(fullKey) ||
                 GlobalVariable.globalHashes.containsKey(fullKey) ||
-                GlobalVariable.globalIORefs.containsKey(fullKey) ||
+                GlobalVariable.isVisibleGlobalIORef(fullKey) ||
                 GlobalVariable.globalFormatRefs.containsKey(fullKey);
 
         if (!exists) {
@@ -190,7 +191,9 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalVariables.remove(fullKey);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);
-        GlobalVariable.globalIORefs.remove(fullKey);
+        if (savedIO != null) {
+            GlobalVariable.hideIORefAfterStashDelete(fullKey);
+        }
         GlobalVariable.globalFormatRefs.remove(fullKey);
         GlobalVariable.invalidatePackageRootSnapshot();
 
@@ -251,6 +254,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalIORefs.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.clearHiddenIORefsForNamespace(childPrefix);
         GlobalVariable.invalidatePackageRootSnapshot();
 
         // Clear pinned code refs so deleted subs don't get resurrected
@@ -422,6 +426,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.clearHiddenIORefsForNamespace(prefix);
         GlobalVariable.invalidatePackageRootSnapshot();
 
         this.elements.clear();

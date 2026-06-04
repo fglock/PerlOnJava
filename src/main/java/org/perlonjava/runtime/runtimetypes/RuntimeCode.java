@@ -25,6 +25,7 @@ import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.CoreSubroutineGenerator;
 
 import java.lang.invoke.MethodHandle;
@@ -1752,7 +1753,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Create an instance of ErrorMessageUtil with the file name and token list
                 evalCtx.errorUtil = new ErrorMessageUtil(evalCtx.compilerOptions.fileName, tokens);
                 Parser parser = new Parser(evalCtx, tokens); // Parse the tokens
-                ast = parser.parse(); // Generate the abstract syntax tree (AST)
+                BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
+                try {
+                    ast = parser.parse(); // Generate the abstract syntax tree (AST)
+                } finally {
+                    BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
+                }
 
                 // ast = ConstantFoldingVisitor.foldConstants(ast);
 
@@ -2180,7 +2186,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ctx.unitcheckBlocks);
 
                 Parser parser = new Parser(evalCtx, tokens);
-                ast = parser.parse();
+                BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
+                try {
+                    ast = parser.parse();
+                } finally {
+                    BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
+                }
 
                 // Run UNITCHECK blocks
                 runUnitcheckBlocks(evalCtx.unitcheckBlocks);

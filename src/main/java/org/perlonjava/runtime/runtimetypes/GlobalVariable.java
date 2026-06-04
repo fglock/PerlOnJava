@@ -36,6 +36,7 @@ public class GlobalVariable {
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
     private static final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
+    private static final Set<String> hiddenIORefsAfterStashDelete = new HashSet<>();
 
     // Pinned code references: RuntimeScalars that were accessed at compile time
     // and should survive stash deletion. This matches Perl's behavior where
@@ -79,6 +80,7 @@ public class GlobalVariable {
     private static final class PackageRootMap<T extends RuntimeBase> extends HashMap<String, T> {
         @Override
         public T put(String key, T value) {
+            markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             T previous = super.put(key, value);
             invalidatePackageRootSnapshot();
@@ -87,6 +89,7 @@ public class GlobalVariable {
 
         @Override
         public T putIfAbsent(String key, T value) {
+            markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             T previous = super.putIfAbsent(key, value);
             if (previous == null) {
@@ -134,6 +137,7 @@ public class GlobalVariable {
 
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
+            markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             RuntimeScalar old = super.put(key, value);
             invalidatePackageRootSnapshot();
@@ -262,6 +266,7 @@ public class GlobalVariable {
         compiledCodeRefs.clear();
         nextCompiledCodeRefId = 1;
         globalIORefs.clear();
+        hiddenIORefsAfterStashDelete.clear();
         globalFormatRefs.clear();
         globalGlobs.clear();
         isSubs.clear();
@@ -421,8 +426,46 @@ public class GlobalVariable {
                 String newKey = srcNs + key.substring(dstLen);
                 RuntimeGlob value = globalIORefs.remove(key);
                 if (value != null) globalIORefs.putIfAbsent(newKey, value);
+                if (hiddenIORefsAfterStashDelete.remove(key)) {
+                    hiddenIORefsAfterStashDelete.add(newKey);
+                }
             }
         }
+    }
+
+    static void hideIORefAfterStashDelete(String key) {
+        if (key != null && globalIORefs.containsKey(key)) {
+            hiddenIORefsAfterStashDelete.add(key);
+        }
+    }
+
+    static void markStashEntryVisible(String key) {
+        if (key != null) {
+            hiddenIORefsAfterStashDelete.remove(key);
+        }
+    }
+
+    static boolean isIORefHiddenAfterStashDelete(String key) {
+        return key != null && hiddenIORefsAfterStashDelete.contains(key);
+    }
+
+    static boolean isVisibleGlobalIORef(String key) {
+        return key != null
+                && globalIORefs.containsKey(key)
+                && !hiddenIORefsAfterStashDelete.contains(key);
+    }
+
+    static boolean containsVisibleGlobalIORefWithPrefix(String prefix) {
+        for (String key : globalIORefs.keySet()) {
+            if (key.startsWith(prefix) && !hiddenIORefsAfterStashDelete.contains(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static void clearHiddenIORefsForNamespace(String prefix) {
+        hiddenIORefsAfterStashDelete.removeIf(k -> k.startsWith(prefix));
     }
 
     /**
@@ -1333,7 +1376,9 @@ public class GlobalVariable {
      * the runtime open call installs the real handle.
      */
     public static RuntimeGlob vivifyGlobalIO(String key) {
+        String resolvedKey = resolveStashHashRedirect(key);
         RuntimeGlob glob = getGlobalIO(key);
+        markStashEntryVisible(resolvedKey);
         if (glob.IO == null || glob.IO.type == RuntimeScalarType.UNDEF || glob.IO.value == null) {
             glob.setIO(new RuntimeIO());
         }
@@ -1376,7 +1421,7 @@ public class GlobalVariable {
      * @return True if the global IO reference exists, false otherwise.
      */
     public static boolean existsGlobalIO(String key) {
-        if (globalIORefs.containsKey(key)) return true;
+        if (isVisibleGlobalIORef(key)) return true;
         // Follow stash hash redirects so a bareword-handle existence probe in
         // an aliased package sees IO placeholders that got redirected at
         // auto-viv time. Without this, the parser path that tries
@@ -1384,7 +1429,7 @@ public class GlobalVariable {
         // misses the handle and falls back to the hard-coded main::DATA path,
         // which then reads from an empty placeholder.
         String resolved = resolveStashHashRedirect(key);
-        if (!resolved.equals(key) && globalIORefs.containsKey(resolved)) return true;
+        if (!resolved.equals(key) && isVisibleGlobalIORef(resolved)) return true;
         return false;
     }
 
@@ -1534,6 +1579,7 @@ public class GlobalVariable {
         if (format == null) {
             format = new RuntimeFormat(key);
             globalFormatRefs.put(key, format);
+            markStashEntryVisible(key);
         }
         return format;
     }
@@ -1547,6 +1593,7 @@ public class GlobalVariable {
      */
     public static void setGlobalFormatRef(String key, RuntimeFormat format) {
         globalFormatRefs.put(key, format);
+        markStashEntryVisible(key);
     }
 
     /**
