@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -398,7 +399,13 @@ public class EvalStringHandler {
             );
 
             Parser parser = new Parser(ctx, tokens);
-            Node ast = parser.parse();
+            Node ast;
+            BHooksEndOfScope.beginFileLoad(evalFileName);
+            try {
+                ast = parser.parse();
+            } finally {
+                BHooksEndOfScope.endFileLoad(evalFileName);
+            }
 
             // (Captured variables and adjustedRegistry were computed above,
             //  before parsing, so the parser's symbol table could be seeded
@@ -559,7 +566,13 @@ public class EvalStringHandler {
             );
 
             Parser parser = new Parser(ctx, tokens);
-            Node ast = parser.parse();
+            Node ast;
+            BHooksEndOfScope.beginFileLoad(evalFileName);
+            try {
+                ast = parser.parse();
+            } finally {
+                BHooksEndOfScope.endFileLoad(evalFileName);
+            }
 
             // Compile to bytecode.
             // IMPORTANT: Do NOT call compiler.setCompilePackage() here — same reason as the

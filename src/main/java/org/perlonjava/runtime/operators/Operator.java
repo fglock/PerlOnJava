@@ -92,6 +92,10 @@ public class Operator {
      * @return A RuntimeList containing the split parts of the string.
      */
     public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx) {
+        return split(quotedRegex, args, ctx, false);
+    }
+
+    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx, boolean unicodeStrings) {
         Iterator<RuntimeScalar> iterator = args.iterator();
         RuntimeScalar string = iterator.hasNext() ? iterator.next() : getGlobalVariable("main::_");
         RuntimeScalar limitArg = iterator.hasNext() ? iterator.next() : new RuntimeScalar(0);
@@ -112,8 +116,13 @@ public class Operator {
         if (quotedRegex.type != RuntimeScalarType.REGEX) {
             String patternStr = quotedRegex.toString();
             if (patternStr.equals(" ")) {
-                quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(""));
-                inputStr = inputStr.replaceAll("^\\s+", "");
+                quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(unicodeStrings ? "u" : ""));
+                RuntimeRegex whitespaceRegex = (RuntimeRegex) quotedRegex.value;
+                Matcher leadingMatcher = whitespaceRegex.selectPattern(string)
+                        .matcher(new RegexTimeoutCharSequence(inputStr));
+                if (leadingMatcher.lookingAt()) {
+                    inputStr = inputStr.substring(leadingMatcher.end());
+                }
             } else {
                 quotedRegex = RuntimeRegex.getQuotedRegex(quotedRegex, new RuntimeScalar(""));
             }
@@ -121,7 +130,7 @@ public class Operator {
 
         if (quotedRegex.type == RuntimeScalarType.REGEX) {
             RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
-            Pattern pattern = regex.pattern;
+            Pattern pattern = regex.selectPattern(string);
 
             // Special case: if the pattern is "/^/", treat it as if it used the multiline modifier
             if (pattern.pattern().equals("^")) {

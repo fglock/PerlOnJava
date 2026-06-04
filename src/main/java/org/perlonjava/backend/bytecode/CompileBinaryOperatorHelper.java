@@ -302,6 +302,8 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);  // Pattern register
                 bytecodeCompiler.emitReg(rs2);  // Args register
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.emit(bytecodeCompiler.symbolTable != null
+                        && bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("unicode_strings") ? 1 : 0);
             }
             case "[" -> {
                 // Array element access: $a[10] means get element 10 from array @a

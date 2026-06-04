@@ -1449,8 +1449,10 @@ public class Disassemble {
                         int splitPatternReg = interpretedCode.bytecode[pc++];
                         int splitArgsReg = interpretedCode.bytecode[pc++];
                         int splitCtx = interpretedCode.bytecode[pc++];
+                        int splitImplicitU = interpretedCode.bytecode[pc++];
                         sb.append("SPLIT r").append(rd).append(" = split(r").append(splitPatternReg)
-                                .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx).append(")\n");
+                                .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx)
+                                .append(") implicitU=").append(splitImplicitU).append("\n");
                         break;
                     case Opcodes.LOCAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];

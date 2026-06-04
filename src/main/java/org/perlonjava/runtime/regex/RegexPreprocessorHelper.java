@@ -10,6 +10,11 @@ import java.util.stream.Collectors;
 import static org.perlonjava.runtime.regex.UnicodeResolver.translateUnicodeProperty;
 
 public class RegexPreprocessorHelper {
+    static final String ASCII_WHITESPACE_CLASS = "[\\t\\n\\u000B\\f\\r\\x20]";
+    static final String ASCII_NON_WHITESPACE_CLASS = "[^\\t\\n\\u000B\\f\\r\\x20]";
+    static final String UNICODE_WHITESPACE_CLASS = "[\\t\\n\\u000B\\f\\r\\x20\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]";
+    static final String UNICODE_NON_WHITESPACE_CLASS = "[^\\t\\n\\u000B\\f\\r\\x20\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]";
+
     static int handleEscapeSequences(String s, StringBuilder sb, int c, int offset, RegexFlags regexFlags) {
         sb.append(Character.toChars(c));  // This appends the backslash
         final int length = s.length();
@@ -184,35 +189,15 @@ public class RegexPreprocessorHelper {
                 return end - 1;
             }
         } else if (nextChar == 's' || nextChar == 'S') {
-            // Handle \s and \S based on ASCII mode
             sb.setLength(sb.length() - 1); // Remove the backslash
-            if (regexFlags.isAscii()) {
-                // ASCII mode: \s matches only ASCII whitespace
-                if (nextChar == 's') {
-                    sb.append("[\\t\\n\\u000B\\f\\r\\x20]");
-                } else {
-                    sb.append("[^\\t\\n\\u000B\\f\\r\\x20]");
-                }
+            // Default regexes must keep byte-string \s ASCII-only. Explicit /u
+            // compiles the primary pattern with Unicode whitespace, and the
+            // UTF-8 target variant is widened after preprocessing.
+            boolean unicodeWhitespace = regexFlags.isUnicode() && !regexFlags.isAscii();
+            if (nextChar == 's') {
+                sb.append(unicodeWhitespace ? UNICODE_WHITESPACE_CLASS : ASCII_WHITESPACE_CLASS);
             } else {
-                // Unicode mode: Perl's \s matches Unicode whitespace
-                // Expand \s to match all Perl whitespace characters:
-                // \t \n \f \r space (ASCII: 09-0D, 20)
-                // U+000B (vertical tab - Perl includes this)
-                // U+1680 (OGHAM SPACE MARK)
-                // U+2000-U+200A (EN QUAD through HAIR SPACE)
-                // U+2028 (LINE SEPARATOR)
-                // U+2029 (PARAGRAPH SEPARATOR)
-                // U+202F (NARROW NO-BREAK SPACE)
-                // U+205F (MEDIUM MATHEMATICAL SPACE)
-                // U+3000 (IDEOGRAPHIC SPACE)
-                if (nextChar == 's') {
-                    // Positive: matches whitespace
-                    // Use \x20 instead of literal space to avoid issues with /x modifier
-                    sb.append("[\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
-                } else {
-                    // Negative: matches non-whitespace
-                    sb.append("[^\\t\\n\\u000B\\f\\r\\x20\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]");
-                }
+                sb.append(unicodeWhitespace ? UNICODE_NON_WHITESPACE_CLASS : ASCII_NON_WHITESPACE_CLASS);
             }
             return offset;
         } else if (nextChar == 'h') {
@@ -1190,6 +1175,9 @@ public class RegexPreprocessorHelper {
     }
 
     private static void warnForUselessMatchOnlyFlags(String flags, boolean negative) {
+        if (!RegexPreprocessor.shouldEmitWarnings()) {
+            return;
+        }
         boolean suppressNegativeG = negative && flags.indexOf('c') >= 0;
         for (int i = 0; i < flags.length(); i++) {
             char flag = flags.charAt(i);
