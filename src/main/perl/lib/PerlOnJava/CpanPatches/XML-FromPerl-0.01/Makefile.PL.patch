@@ -1,0 +1,12 @@
+--- Makefile.PL.orig
++++ Makefile.PL
+@@ -3,7 +3,8 @@
+ 
+ WriteMakefile( NAME          => 'XML::FromPerl',
+                VERSION_FROM  => 'lib/XML/FromPerl.pm',
+-               PREREQ_PM     => { 'XML::LibXML' => 0 },
++               PREREQ_PM     => { 'XML::LibXML' => 0,
++                                  'XML::SAX'    => 0 },
+                ABSTRACT_FROM => 'lib/XML/FromPerl.pm',
+                AUTHOR        => 'Salvador Fandiño <sfandino@yahoo.com>',
+                LICENSE       => 'perl',

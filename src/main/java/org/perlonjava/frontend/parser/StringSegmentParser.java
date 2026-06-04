@@ -73,6 +73,7 @@ public abstract class StringSegmentParser {
      */
     protected final boolean isRegex;
     protected final boolean isRegexReplacement;
+    protected final boolean isRegexQuoteConstruction;
     /**
      * Buffer for accumulating literal text segments
      */
@@ -106,6 +107,10 @@ public abstract class StringSegmentParser {
      * @param isRegex    flag indicating if this is parsing a regex pattern
      */
     public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
+        this(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement, false);
+    }
+
+    public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, boolean isRegexQuoteConstruction) {
         this.ctx = ctx;
         this.tokens = tokens;
         this.parser = parser;
@@ -116,6 +121,7 @@ public abstract class StringSegmentParser {
         this.segments = new ArrayList<>();
         this.interpolateVariable = interpolateVariable;
         this.isRegexReplacement = isRegexReplacement;
+        this.isRegexQuoteConstruction = isRegexQuoteConstruction;
     }
 
     /**
@@ -885,10 +891,56 @@ public abstract class StringSegmentParser {
         } else {
             if (isRecursive) {
                 segments.add(new StringNode(RegexMarkers.RECURSIVE_PATTERN, savedTokenIndex));
+            } else if (isSimpleRegexCodeBlockSideEffect(block)) {
+                List<Node> sideEffectElements = new ArrayList<>();
+                if (block instanceof BlockNode blockNode) {
+                    sideEffectElements.addAll(blockNode.elements);
+                } else {
+                    sideEffectElements.add(block);
+                }
+                sideEffectElements.add(new StringNode("", savedTokenIndex));
+                segments.add(new BlockNode(sideEffectElements, savedTokenIndex));
             } else {
                 segments.add(new StringNode(RegexMarkers.CODE_BLOCK, savedTokenIndex));
             }
         }
+    }
+
+    private boolean isSimpleRegexCodeBlockSideEffect(Node block) {
+        if (!isRegexQuoteConstruction) {
+            return false;
+        }
+        if (hasRemainingNonEofTokens()) {
+            return false;
+        }
+        Node node = block;
+        if (node instanceof BlockNode blockNode) {
+            if (blockNode.elements.size() != 1) {
+                return false;
+            }
+            node = blockNode.elements.get(0);
+        }
+        if (!(node instanceof OperatorNode operatorNode)) {
+            return false;
+        }
+        if (!operatorNode.operator.equals("++")
+                && !operatorNode.operator.equals("++postfix")
+                && !operatorNode.operator.equals("--")
+                && !operatorNode.operator.equals("--postfix")) {
+            return false;
+        }
+        return operatorNode.operand instanceof OperatorNode scalarOp
+                && scalarOp.operator.equals("$")
+                && scalarOp.operand instanceof IdentifierNode;
+    }
+
+    private boolean hasRemainingNonEofTokens() {
+        for (int i = parser.tokenIndex; i < tokens.size(); i++) {
+            if (tokens.get(i).type != LexerTokenType.EOF) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

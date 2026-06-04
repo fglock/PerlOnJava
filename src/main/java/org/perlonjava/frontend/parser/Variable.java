@@ -856,8 +856,14 @@ public class Variable {
         String fullName = NameNormalizer.normalizeVariableName(
                 identifierNode.name,
                 parser.ctx.symbolTable.getCurrentPackage());
+        RuntimeScalar codeRef = null;
         if (GlobalVariable.isGlobalCodeRefDefined(fullName)) {
-            operatorNode.setAnnotation("parseTimeCodeRef", GlobalVariable.getGlobalCodeRef(fullName));
+            codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+        } else {
+            codeRef = GlobalVariable.createPseudoConstantCodeRef(fullName);
+        }
+        if (codeRef != null) {
+            operatorNode.setAnnotation("parseTimeCodeRef", codeRef);
         }
     }
 

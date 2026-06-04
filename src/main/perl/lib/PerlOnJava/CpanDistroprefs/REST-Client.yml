@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for REST::Client.
+
+  REST::Client is a dependency of IPCamera::Reolink. Its upstream suite starts
+  a local HTTP::Server::Simple test server with fork, which PerlOnJava does not
+  implement. Skip dependency tests and let the downstream distribution exercise
+  the installed module surface it needs.
+
+  Do not apply this when REST::Client itself is the requested jcpan target.
+match:
+  distribution: "^AKHUETTEL/REST-Client-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])REST::Client($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

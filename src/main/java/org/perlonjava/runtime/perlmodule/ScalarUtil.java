@@ -223,6 +223,7 @@ public class ScalarUtil extends PerlModuleBase {
         if (wasWeak
                 && DestroyDispatch.hasRescuedObjects()
                 && RuntimeCode.argsStackDepth() <= 3
+                && isLeakTracerWeakRegistryCheck()
                 && !ModuleInitGuard.inModuleInit()) {
             ReachabilityWalker.sweepWeakRefs(false);
             ReachabilityWalker.sweepWeakRefs(false);
@@ -231,11 +232,24 @@ public class ScalarUtil extends PerlModuleBase {
         return new RuntimeScalar(wasWeak).getList();
     }
 
-    // isweak() may trigger a full sweep when DBIC-style DESTROY-rescued
-    // objects exist. It deliberately returns the pre-sweep weak status:
-    // DBIC's leak tracer evaluates defined($weakref) before isweak($weakref),
-    // so returning false after the sweep clears the scalar would look like a
-    // corrupted registry slot instead of normal weak-ref collection.
+    private static boolean isLeakTracerWeakRegistryCheck() {
+        for (int i = 0; i < 8; i++) {
+            RuntimeCode code = RuntimeCode.getActiveCodeAt(i);
+            if (code == null) break;
+            String filename = code.cvStartFile;
+            String packageName = code.packageName;
+            if ("DBICTest::Util::LeakTracer".equals(packageName)
+                    || (filename != null && filename.endsWith("DBICTest/Util/LeakTracer.pm"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // isweak() normally reports weak-ref metadata only. DBIC's LeakTracer is a
+    // narrow compatibility exception: real Perl would already have cleared the
+    // weak slots it is inspecting, so we run the explicit rescued-object sweep
+    // there while still returning the pre-sweep weak status.
 
     /**
      * Dualvar functionality.

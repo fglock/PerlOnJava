@@ -25,7 +25,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                          boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
                          boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
                          boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode,
-                         boolean isAscii) {
+                         boolean isAscii, boolean allowEvalGroup) {
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
         // m?PAT? is encoded by StringParser as an extra trailing '?' on the modifier string
@@ -47,13 +47,14 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("x"),
                 modifiers.contains("p"),
                 modifiers.contains("u"),
-                modifiers.contains("a")
+                modifiers.contains("a"),
+                modifiers.contains("E")
         );
     }
 
     public static void validateModifiers(String modifiers) {
         // Valid modifiers based on what's actually handled in fromModifiers
-        String validModifiers = "gcr?noimsxpadeul"; // Add 'xx' handling separately, 'l' for locale
+        String validModifiers = "gcr?noimsxpadeulE"; // Add 'xx' handling separately, 'l' for locale, 'E' for internal re eval
 
         for (int i = 0; i < modifiers.length(); i++) {
             char modifier = modifiers.charAt(i);
@@ -147,7 +148,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 newIsExtended,
                 newPreservesMatch,
                 newIsUnicode,
-                newIsAscii
+                newIsAscii,
+                this.allowEvalGroup
         );
     }
 

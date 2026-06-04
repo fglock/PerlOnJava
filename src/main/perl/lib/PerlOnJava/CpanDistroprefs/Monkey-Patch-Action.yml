@@ -1,0 +1,18 @@
+---
+comment: |
+  PerlOnJava distroprefs for Monkey::Patch::Action.
+
+  Monkey::Patch::Action is a dependency of Module::Patch for
+  HTTP::Tiny::Patch::Delay. Its own suite checks deeper wrapping/unwrapping
+  patch semantics than the downstream compile-only target needs. Skip
+  dependency tests so CPAN installs the module and lets the downstream target
+  remain the gate.
+
+  Do not apply this when Monkey::Patch::Action itself is the requested jcpan
+  target.
+match:
+  distribution: "^PERLANCAR/Monkey-Patch-Action-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Monkey::Patch::Action($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

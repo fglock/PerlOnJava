@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for Acrux.
+
+  Acrux is a dependency of WWW::Suffit. Its own suite currently fails on
+  harness/plan details in filepid/filelock tests while the other subtests pass.
+  Skip dependency tests so WWW::Suffit::Client::NoAPI can exercise the parts it
+  actually loads.
+
+  Do not apply this when Acrux itself is the requested jcpan target.
+match:
+  distribution: "^ABALAMA/Acrux-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Acrux($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

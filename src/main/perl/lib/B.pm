@@ -315,6 +315,18 @@ package B::GV {
         return B::SPECIAL->new(0);  # 0 = index for 'Nullsv'
     }
 
+    sub IO {
+        my $self = shift;
+        my $name = $self->{name};
+        my $pkg  = $self->{package};
+        my $glob = $self->{ref};
+        if (!defined $glob && defined $name && defined $pkg) {
+            no strict 'refs';
+            $glob = \*{"${pkg}::${name}"};
+        }
+        return B::IO->new($glob, $name, $pkg);
+    }
+
     # GvFLAGS returns the GV flag bits. PerlOnJava does not track real GV
     # flags, but we can approximate GVf_IMPORTED_CV by comparing the CV's
     # original package (recorded via Sub::Util introspection) against this
@@ -365,6 +377,21 @@ package B::GV {
             return B::CV->new($code);
         }
         return B::SPECIAL->new(0);
+    }
+}
+
+package B::IO {
+    sub new {
+        my ($class, $glob, $name, $pkg) = @_;
+        return bless { glob => $glob, name => $name, package => $pkg }, $class;
+    }
+
+    sub IoFLAGS {
+        my $self = shift;
+        # File::Slurp uses the UNTAINT flag (0x10) to recognize DATA handles.
+        # PerlOnJava does not expose full IO flag state, but identifying DATA
+        # preserves the behavior that matters to its __DATA__ reader path.
+        return (defined $self->{name} && $self->{name} eq 'DATA') ? 16 : 0;
     }
 }
 

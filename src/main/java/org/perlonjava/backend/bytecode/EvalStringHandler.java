@@ -11,6 +11,7 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;

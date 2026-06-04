@@ -33,6 +33,7 @@ public class GlobalVariable {
     // as user-defined subroutines instead of built-in operators
     public static final Map<String, Boolean> isSubs = new HashMap<>();
     public static final Map<String, RuntimeScalar> globalCodeRefs = new GlobalCodeRefMap();
+    private static final Map<String, RuntimeScalar> globalPseudoConstants = new HashMap<>();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
     private static final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
@@ -209,6 +210,44 @@ public class GlobalVariable {
     }
 
     /**
+     * Materializes the stash hashes implied by a package declaration.
+     *
+     * <p>In Perl, {@code package Foo::Bar;} creates visible symbol-table
+     * entries for both {@code Foo::} in {@code %main::} and {@code Bar::} in
+     * {@code %Foo::}, even before the package defines subs or variables.
+     */
+    public static void ensurePackageStash(String packageName) {
+        if (packageName == null || packageName.isEmpty()) {
+            return;
+        }
+
+        String normalized = packageName;
+        if (normalized.endsWith("::")) {
+            normalized = normalized.substring(0, normalized.length() - 2);
+        }
+        if (normalized.length() > 6 && normalized.startsWith("main::")) {
+            normalized = normalized.substring(6);
+        }
+
+        if (normalized.equals("main")) {
+            getGlobalHash("main::");
+            packageExistsCache.put("main", true);
+            return;
+        }
+
+        StringBuilder stashName = new StringBuilder();
+        for (String part : normalized.split("::")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            stashName.append(part).append("::");
+            getGlobalHash(stashName.toString());
+            packageExistsCache.put(stashName.substring(0, stashName.length() - 2), true);
+        }
+        packageExistsCache.put(packageName, true);
+    }
+
+    /**
      * Marks a global variable as explicitly declared (e.g., via use vars, Exporter import).
      */
     public static void declareGlobalVariable(String key) {
@@ -261,6 +300,7 @@ public class GlobalVariable {
         globalArrays.clear();
         globalHashes.clear();
         globalCodeRefs.clear();
+        globalPseudoConstants.clear();
         pinnedCodeRefs.clear();
         deletedCodeRefPins.clear();
         compiledCodeRefs.clear();
@@ -669,9 +709,51 @@ public class GlobalVariable {
      * @return The removed RuntimeScalar, or null if it did not exist.
      */
     public static RuntimeScalar removeGlobalVariable(String key) {
+        clearGlobalPseudoConstant(key);
         RuntimeScalar removed = globalVariables.remove(key);
         if (removed != null) invalidatePackageRootSnapshot();
         return removed;
+    }
+
+    public static void setGlobalPseudoConstant(String key, RuntimeScalar scalar) {
+        if (key == null || scalar == null) {
+            return;
+        }
+        String resolvedKey = resolveAliasedFqn(key);
+        markPackageGlobalRoot(scalar);
+        globalPseudoConstants.put(resolvedKey, scalar);
+        if (resolvedKey != key) {
+            globalPseudoConstants.remove(key);
+        }
+    }
+
+    public static void clearGlobalPseudoConstant(String key) {
+        if (key == null) {
+            return;
+        }
+        globalPseudoConstants.remove(key);
+        String resolvedKey = resolveAliasedFqn(key);
+        if (resolvedKey != key) {
+            globalPseudoConstants.remove(resolvedKey);
+        }
+    }
+
+    public static void clearGlobalPseudoConstantsForNamespace(String childPrefix) {
+        if (childPrefix == null || childPrefix.isEmpty()) {
+            return;
+        }
+        globalPseudoConstants.keySet().removeIf(key -> key.startsWith(childPrefix));
+    }
+
+    public static boolean hasGlobalPseudoConstant(String key) {
+        if (key == null) {
+            return false;
+        }
+        if (globalPseudoConstants.containsKey(key)) {
+            return true;
+        }
+        String resolvedKey = resolveAliasedFqn(key);
+        return resolvedKey != key && globalPseudoConstants.containsKey(resolvedKey);
     }
 
     /**
@@ -955,6 +1037,24 @@ public class GlobalVariable {
 
         var.value = runtimeCode;
         return var;
+    }
+
+    public static RuntimeScalar createPseudoConstantCodeRef(String key) {
+        RuntimeScalar scalar = globalPseudoConstants.get(key);
+        if (scalar == null) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key) {
+                scalar = globalPseudoConstants.get(resolvedKey);
+                key = resolvedKey;
+            }
+        }
+        if (scalar == null) {
+            return null;
+        }
+
+        RuntimeCode runtimeCode = new RuntimeCode("", null);
+        runtimeCode.constantValue = scalar.getList();
+        return new RuntimeScalar(runtimeCode);
     }
 
     /**

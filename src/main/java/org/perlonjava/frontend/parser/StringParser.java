@@ -15,6 +15,7 @@ import java.util.Map;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
 
@@ -320,6 +321,10 @@ public class StringParser {
     }
 
     static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser, String modifiers) {
+        return parseRegexString(ctx, rawStr, parser, modifiers, false);
+    }
+
+    static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser, String modifiers, boolean isRegexQuoteConstruction) {
         Node parsed;
 
         if (rawStr.startDelim == '\'') {
@@ -345,7 +350,7 @@ public class StringParser {
             // interpolate variables, but ignore the escapes, keep `\$` if present
             // Pass shared heredoc nodes to handle heredocs inside regex patterns
             parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true,
-                    parser != null ? parser.getHeredocNodes() : null);
+                    parser != null ? parser.getHeredocNodes() : null, null, true, isRegexQuoteConstruction);
         }
         return parsed;
     }
@@ -553,6 +558,7 @@ public class StringParser {
     }
 
     public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr, Parser parser) {
+        boolean isQuoteRegex = operator.equals("qr");
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
         String modStr = rawStr.buffers.get(1);
         
@@ -567,9 +573,12 @@ public class StringParser {
                     modStr = "u" + modStr;
                 }
             }
+            if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_EVAL) && !modStr.contains("E")) {
+                modStr = "E" + modStr;
+            }
         }
         
-        Node parsed = parseRegexString(ctx, rawStr, parser, modStr);
+        Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
         if (rawStr.startDelim == '?') {
             // `m?PAT?` matches exactly once
             // save the internal flag in the modifier string

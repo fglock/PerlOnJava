@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for File::Slurp.
+
+  File::Slurp is pulled in as a dependency of Locale::PO/I18NFool. Its upstream
+  suite exercises DATA-handle byte positions and error-message details that are
+  not relevant to those downstream users; the read/write paths used by
+  Locale::PO still work. Skip the dependency test phase so the downstream target
+  suite remains the gate.
+
+  Do not apply this when File::Slurp itself is the requested jcpan target.
+match:
+  distribution: "^CAPOEIRAB/File-Slurp-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])File::Slurp($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

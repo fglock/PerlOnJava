@@ -858,6 +858,10 @@ public class ReachabilityWalker {
         return new ExternalRootSnapshot().isReachable(target);
     }
 
+    public static boolean isReachableFromExternalRootExcludingRescued(RuntimeBase target) {
+        return new ExternalRootSnapshot(false).isReachable(target);
+    }
+
     public static boolean isReachableFromTemporaryRoots(RuntimeBase target) {
         if (target == null) return false;
         ReachabilityWalker walker = new ReachabilityWalker();
@@ -960,7 +964,11 @@ public class ReachabilityWalker {
                 Collections.newSetFromMap(new IdentityHashMap<>());
 
         public ExternalRootSnapshot() {
-            buildNonLexicalRoots();
+            this(true);
+        }
+
+        public ExternalRootSnapshot(boolean includeRescued) {
+            buildNonLexicalRoots(includeRescued);
         }
 
         public boolean isReachable(RuntimeBase target) {
@@ -973,7 +981,7 @@ public class ReachabilityWalker {
             return target != null && nonLexicalReachable.contains(target);
         }
 
-        private void buildNonLexicalRoots() {
+        private void buildNonLexicalRoots(boolean includeRescued) {
             java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
             for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
@@ -988,8 +996,10 @@ public class ReachabilityWalker {
             for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
                 addNonLexical(e.getValue(), todo);
             }
-            for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
-                addNonLexical(rescued, todo);
+            if (includeRescued) {
+                for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+                    addNonLexical(rescued, todo);
+                }
             }
 
             int visits = 0;

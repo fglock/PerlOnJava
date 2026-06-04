@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for WWW::Suffit.
+
+  WWW::Suffit is an intermediate dependency for WWW::Suffit::Client::NoAPI.
+  Its tests require Acrux and Crypt::OpenSSL::RSA suites that are dependency-
+  skipped under PerlOnJava. Skip WWW::Suffit's dependency tests so the final
+  WWW::Suffit::Client distribution remains the gate.
+
+  Do not apply this when WWW::Suffit itself is the requested jcpan target.
+match:
+  distribution: "^ABALAMA/WWW-Suffit-1"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])WWW::Suffit($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"

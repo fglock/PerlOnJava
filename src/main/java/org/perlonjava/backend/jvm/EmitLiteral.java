@@ -661,6 +661,18 @@ public class EmitLiteral {
             return;
         }
 
+        String normalizedBarewordName = NameNormalizer.normalizeVariableName(
+                node.name,
+                ctx.symbolTable.getCurrentPackage());
+        if (GlobalVariable.hasGlobalPseudoConstant(normalizedBarewordName)) {
+            ctx.mv.visitLdcInsn(normalizedBarewordName);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "getGlobalVariable",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            return;
+        }
+
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS)) {
             throw new PerlCompilerException(
                     node.tokenIndex,

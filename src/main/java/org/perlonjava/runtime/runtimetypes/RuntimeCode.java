@@ -3654,10 +3654,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             } catch (PerlNonLocalReturnException e) {
                 // Non-local return from map/grep block
-                if (code.isMapGrepBlock || code.isEvalBlock) {
-                    throw e;  // Propagate through map/grep blocks and eval blocks
+                if (code.isMapGrepBlock) {
+                    throw e;  // Propagate through nested map/grep blocks
                 }
-                // Consume at normal subroutine boundary.
+                // Consume at normal subroutine and eval-block boundaries.
+                // Perl treats `return` inside eval { ... } as the eval value,
+                // including when it originates from a nested map/grep block.
                 RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                 return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
             } catch (RuntimeException e) {
@@ -3941,10 +3943,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return result;
                 } catch (PerlNonLocalReturnException e) {
                     // Non-local return from map/grep block
-                    if (code.isMapGrepBlock || code.isEvalBlock) {
-                        throw e;  // Propagate through map/grep blocks and eval blocks
+                    if (code.isMapGrepBlock) {
+                        throw e;  // Propagate through nested map/grep blocks
                     }
-                    // Consume at normal subroutine boundary.
+                    // Consume at normal subroutine and eval-block boundaries.
                     RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                     return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 } catch (RuntimeException e) {
@@ -4202,10 +4204,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return result;
                 } catch (PerlNonLocalReturnException e) {
                     // Non-local return from map/grep block
-                    if (code.isMapGrepBlock || code.isEvalBlock) {
-                        throw e;  // Propagate through map/grep blocks and eval blocks
+                    if (code.isMapGrepBlock) {
+                        throw e;  // Propagate through nested map/grep blocks
                     }
-                    // Consume at normal subroutine boundary.
+                    // Consume at normal subroutine and eval-block boundaries.
                     RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                     return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 } catch (RuntimeException e) {
@@ -4394,6 +4396,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         String name = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), packageName);
         // System.out.println("Creating code reference: " + name + " got: " + GlobalContext.getGlobalCodeRef(name));
+        RuntimeScalar pseudoConstantCodeRef = GlobalVariable.createPseudoConstantCodeRef(name);
+        if (pseudoConstantCodeRef != null) {
+            return pseudoConstantCodeRef;
+        }
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
 
         // Lazily generate CORE:: subroutine wrappers on first reference

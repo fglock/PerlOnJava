@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava distroprefs for XML::FromPerl.
+
+  XML::FromPerl uses XML::SAX::Exception through XML::SAX but its 0.01
+  Makefile.PL only declares XML::LibXML. Patch the metadata so CPAN installs
+  XML::SAX before running the target test.
+match:
+  distribution: "^SALVA/XML-FromPerl-0\\.01"
+patches:
+  - "XML-FromPerl-0.01/Makefile.PL.patch"
