@@ -78,6 +78,7 @@ sub _bootstrap_prefs {
         'Readonly.yml'               => 'PerlOnJava/CpanDistroprefs/Readonly.yml',
         'String-Print.yml'           => 'PerlOnJava/CpanDistroprefs/String-Print.yml',
         'String-ShellQuote.yml'      => 'PerlOnJava/CpanDistroprefs/String-ShellQuote.yml',
+        'Template.yml'               => 'PerlOnJava/CpanDistroprefs/Template.yml',
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
         'Parse-RecDescent.yml'       => 'PerlOnJava/CpanDistroprefs/Parse-RecDescent.yml',
         'Crypt-URandom.yml'          => 'PerlOnJava/CpanDistroprefs/Crypt-URandom.yml',

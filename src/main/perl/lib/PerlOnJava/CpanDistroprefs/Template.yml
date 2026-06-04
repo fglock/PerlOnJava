@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for Template Toolkit.
+
+  Template Toolkit's Makefile.PL prompts before building the optional
+  Template::Stash::XS implementation. PerlOnJava cannot build XS, and
+  CPAN's generic PERL_MM_USE_DEFAULT handling would accept the upstream
+  default of "yes", so configure it explicitly for the pure-Perl stash.
+match:
+  distribution: '/Template-Toolkit-[0-9]'
+pl:
+  args:
+    - TT_XS_ENABLE=n
+    - TT_XS_DEFAULT=n
+    - TT_ACCEPT=y
+    - TT_QUIET=y
