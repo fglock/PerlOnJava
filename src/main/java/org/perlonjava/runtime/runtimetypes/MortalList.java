@@ -765,8 +765,11 @@ public class MortalList {
                         && (base instanceof RuntimeHash
                         || base instanceof RuntimeArray
                         || base instanceof RuntimeCode);
+                boolean reachableCodeRef = base instanceof RuntimeCode
+                        && scalar.isStoredInRegisteredContainerOwner()
+                        && ReachabilityWalker.isScalarReachable(scalar);
                 if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
-                        && !ReachabilityWalker.isScalarReachable(scalar)) {
+                        && !reachableCodeRef) {
                     scalar.refCountOwned = false;
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");

@@ -129,6 +129,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean scopeExited;
 
+    // Last hash/array container that stored this scalar slot. Used only as a
+    // narrow guard for live CODE refs whose captures must survive void discard.
+    RuntimeBase containerOwner;
+
+    void markContainerOwner(RuntimeBase owner) {
+        this.containerOwner = owner;
+    }
+
+    boolean isStoredInRegisteredContainerOwner() {
+        RuntimeBase owner = containerOwner;
+        if (owner == null || !MyVarCleanupStack.isRegistered(owner)) return false;
+        if (owner instanceof RuntimeHash hash) {
+            return hash.elements.containsValue(this);
+        }
+        if (owner instanceof RuntimeArray array) {
+            return array.elements.contains(this);
+        }
+        return false;
+    }
+
     public void retainClosureCapture() {
         captureCount++;
     }
