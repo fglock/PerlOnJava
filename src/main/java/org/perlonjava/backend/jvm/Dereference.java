@@ -971,18 +971,18 @@ public class Dereference {
 
             // Allocate a unique callsite ID for inline method caching
             int callsiteId = nextMethodCallsiteId++;
-            // Set debug line number to the whole method call. Perl's caller()
-            // reports the closing line for a multi-line call expression, which
-            // is carried by the "->" node or its argument ListNode.
-            int callSiteIndex = node.getIndex();
+            // Perl reports the method expression start for ordinary multi-line
+            // calls, but literal anon sub/block arguments report the block line.
+            int callSiteIndex = node.left.getIndex();
             if (node.right instanceof BinaryOperatorNode callNode
                     && "(".equals(callNode.operator)
+                    && firstMethodArgumentIsLiteralSub(callNode)
                     && callNode.right != null
                     && callNode.right.getIndex() > 0) {
                 callSiteIndex = callNode.right.getIndex();
             }
-            if (callSiteIndex <= 0 && node.left.getIndex() > 0) {
-                callSiteIndex = node.left.getIndex();
+            if (callSiteIndex <= 0 && node.getIndex() > 0) {
+                callSiteIndex = node.getIndex();
             }
             if (callSiteIndex > 0) {
                 ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
@@ -1151,6 +1151,14 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
             }
         }
+    }
+
+    private static boolean firstMethodArgumentIsLiteralSub(BinaryOperatorNode callNode) {
+        if (!(callNode.right instanceof ListNode list) || list.elements == null || list.elements.isEmpty()) {
+            return false;
+        }
+
+        return list.elements.get(0) instanceof SubroutineNode;
     }
 
     public static void handleArrowArrayDeref(EmitterVisitor emitterVisitor, BinaryOperatorNode node, String arrayOperation) {

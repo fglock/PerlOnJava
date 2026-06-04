@@ -253,11 +253,10 @@ public class CompileBinaryOperator {
                     // Allocate result register
                     int rd = bytecodeCompiler.allocateOutputRegister();
 
-                    // Emit CALL_METHOD
-                    // Use emitWithToken so pcToTokenIndex maps the call instruction to the
-                    // invocant's token index (call-site line), not the closing ')' line.
-                    // This ensures caller() inside the called method reports the correct line.
-                    int callSiteToken = node.left.getIndex();
+                    // Emit CALL_METHOD. Perl reports ordinary method calls at
+                    // the expression start, but literal anon sub/block
+                    // arguments report the block/arg line.
+                    int callSiteToken = methodCallerLineCallSiteToken(node, argsNode);
                     if (callSiteToken > 0) {
                         bytecodeCompiler.emitWithToken(Opcodes.CALL_METHOD, callSiteToken);
                     } else {
@@ -418,10 +417,9 @@ public class CompileBinaryOperator {
             // Check if this is a &func (no parens) call that should share caller's @_
             boolean shareCallerArgs = node.getBooleanAnnotation("shareCallerArgs");
 
-            // Emit CALL_SUB or CALL_SUB_SHARE_ARGS opcode. Ordinary named calls
-            // report the closing line, but non-& prototyped calls report the
-            // expression start; keep the interpreter mapping aligned with the
-            // JVM emitter.
+            // Emit CALL_SUB or CALL_SUB_SHARE_ARGS opcode. Perl reports the
+            // expression start for ordinary multi-line calls, but literal anon
+            // sub/block arguments and &-prototype calls report the block/arg line.
             int callSiteToken = callerLineCallSiteToken(node);
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
                     bytecodeCompiler, node.operator, rs1, rs2, callSiteToken,
@@ -781,7 +779,7 @@ public class CompileBinaryOperator {
     }
 
     private static int callerLineCallSiteToken(BinaryOperatorNode node) {
-        if (usesExpressionStartLine(node)) {
+        if (!usesBlockArgumentLine(node)) {
             return expressionStartIndex(node);
         }
 
@@ -792,27 +790,47 @@ public class CompileBinaryOperator {
     }
 
     private static int expressionStartIndex(BinaryOperatorNode node) {
-        if (node.getIndex() > 0) {
-            return node.getIndex();
+        if (node.left != null && node.left.getIndex() > 0) {
+            return node.left.getIndex();
         }
+        return node.getIndex() > 0 ? node.getIndex() : -1;
+    }
+
+    private static int methodCallerLineCallSiteToken(BinaryOperatorNode node, Node argsNode) {
+        if (firstArgumentIsLiteralSub(argsNode) && argsNode.getIndex() > 0) {
+            return argsNode.getIndex();
+        }
+
         return node.left != null ? node.left.getIndex() : -1;
     }
 
-    private static boolean usesExpressionStartLine(BinaryOperatorNode node) {
+    private static boolean usesBlockArgumentLine(BinaryOperatorNode node) {
         String prototype = directCallPrototype(node);
-        if (prototype == null) {
+        if (prototype != null) {
+            for (int i = 0; i < prototype.length(); i++) {
+                char c = prototype.charAt(i);
+                if (Character.isWhitespace(c) || c == ';' || c == ',') {
+                    continue;
+                }
+                return c == '&';
+            }
+
             return false;
         }
 
-        for (int i = 0; i < prototype.length(); i++) {
-            char c = prototype.charAt(i);
-            if (Character.isWhitespace(c) || c == ';' || c == ',') {
-                continue;
-            }
-            return c != '&';
+        return firstArgumentIsLiteralSub(node);
+    }
+
+    private static boolean firstArgumentIsLiteralSub(BinaryOperatorNode node) {
+        return firstArgumentIsLiteralSub(node.right);
+    }
+
+    private static boolean firstArgumentIsLiteralSub(Node argsNode) {
+        if (!(argsNode instanceof ListNode list) || list.elements == null || list.elements.isEmpty()) {
+            return false;
         }
 
-        return true;
+        return list.elements.get(0) instanceof SubroutineNode;
     }
 
     private static String directCallPrototype(BinaryOperatorNode node) {

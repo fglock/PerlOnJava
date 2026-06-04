@@ -33,8 +33,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class SystemOperator {
 
-    // Pattern to detect shell metacharacters
-    private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\\\$\\s]");
+    // Shell syntax that prevents Perl's one-string command direct-exec fast path.
+    private static final Pattern DIRECT_COMMAND_SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\$%]");
 
     /**
      * Executes a system command and returns the output as a RuntimeBase.
@@ -70,15 +70,11 @@ public class SystemOperator {
         String cmd = command.toString();
         CommandResult result;
 
-        // Check for shell metacharacters - if none, execute directly without shell
-        // This matches native Perl behavior where simple commands bypass the shell
-        if (SHELL_METACHARACTERS.matcher(cmd).find()) {
-            // Has shell metacharacters, use shell
-            result = executeCommand(cmd, true);
+        List<String> directCommand = splitDirectCommandWords(cmd);
+        if (directCommand != null) {
+            result = executeCommandDirectCapture(directCommand);
         } else {
-            // No shell metacharacters, split into words and execute directly
-            String[] words = cmd.trim().split("\\s+");
-            result = executeCommandDirectCapture(Arrays.asList(words));
+            result = executeCommand(cmd, true);
         }
 
         // Set $? to the exit status
@@ -130,13 +126,11 @@ public class SystemOperator {
         } else if (!hasHandle && flattenedArgs.size() == 1) {
             // Single argument - check for shell metacharacters
             String command = flattenedArgs.getFirst();
-            if (SHELL_METACHARACTERS.matcher(command).find()) {
-                // Has shell metacharacters, use shell
-                result = executeCommand(command, false);
+            List<String> directCommand = splitDirectCommandWords(command);
+            if (directCommand != null) {
+                result = executeCommandDirect(directCommand);
             } else {
-                // No shell metacharacters, split into words and execute directly
-                String[] words = command.trim().split("\\s+");
-                result = executeCommandDirect(Arrays.asList(words));
+                result = executeCommand(command, false);
             }
         } else {
             // Multiple arguments - execute directly without shell
@@ -182,6 +176,23 @@ public class SystemOperator {
             }
         }
         return result;
+    }
+
+    private static List<String> splitDirectCommandWords(String command) {
+        String trimmed = command.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+
+        if (DIRECT_COMMAND_SHELL_METACHARACTERS.matcher(trimmed).find()) {
+            return null;
+        }
+
+        if (!SystemUtils.osIsWindows() && trimmed.contains("\\")) {
+            return null;
+        }
+
+        return Arrays.asList(trimmed.split("\\s+"));
     }
 
     /**
@@ -866,13 +877,11 @@ public class SystemOperator {
             } else if (!hasHandle && flattenedArgs.size() == 1) {
                 // Single argument - check for shell metacharacters
                 String command = flattenedArgs.getFirst();
-                if (SHELL_METACHARACTERS.matcher(command).find()) {
-                    // Has shell metacharacters, use shell
-                    exitCode = execCommand(command);
+                List<String> directCommand = splitDirectCommandWords(command);
+                if (directCommand != null) {
+                    exitCode = execCommandDirect(directCommand);
                 } else {
-                    // No shell metacharacters, split into words and execute directly
-                    String[] words = command.trim().split("\\s+");
-                    exitCode = execCommandDirect(Arrays.asList(words));
+                    exitCode = execCommand(command);
                 }
             } else {
                 // Multiple arguments - execute directly without shell
@@ -927,16 +936,15 @@ public class SystemOperator {
                 command.addAll(flattenedArgs.subList(2, flattenedArgs.size()));
             } else if (!hasHandle && flattenedArgs.size() == 1) {
                 String cmdStr = flattenedArgs.getFirst();
-                if (SHELL_METACHARACTERS.matcher(cmdStr).find()) {
-                    // Use shell for metacharacters
+                List<String> directCommand = splitDirectCommandWords(cmdStr);
+                if (directCommand != null) {
+                    command = directCommand;
+                } else {
                     if (SystemUtils.osIsWindows()) {
                         command = Arrays.asList("cmd.exe", "/c", cmdStr);
                     } else {
                         command = Arrays.asList("/bin/sh", "-c", cmdStr);
                     }
-                } else {
-                    // Split simple command
-                    command = Arrays.asList(cmdStr.trim().split("\\s+"));
                 }
             } else {
                 command = flattenedArgs;

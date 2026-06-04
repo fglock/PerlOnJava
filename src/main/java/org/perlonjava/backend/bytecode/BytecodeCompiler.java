@@ -6349,9 +6349,11 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        int elementContext = currentCallContext == RuntimeContextType.LVALUE_LIST
-                ? RuntimeContextType.LVALUE_LIST
-                : RuntimeContextType.LIST;
+        int elementContext = switch (currentCallContext) {
+            case RuntimeContextType.RUNTIME -> RuntimeContextType.RUNTIME;
+            case RuntimeContextType.LVALUE_LIST -> RuntimeContextType.LVALUE_LIST;
+            default -> RuntimeContextType.LIST;
+        };
 
         // Fast path: single element in LIST context
         // In list context, returns a RuntimeList with one element

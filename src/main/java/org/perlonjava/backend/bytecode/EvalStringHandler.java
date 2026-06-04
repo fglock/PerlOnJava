@@ -38,6 +38,43 @@ public class EvalStringHandler {
         }
     }
 
+    private static final class EvalSeedAlias {
+        final char sigil;
+        final String fullName;
+        final RuntimeBase value;
+
+        EvalSeedAlias(char sigil, String fullName, RuntimeBase value) {
+            this.sigil = sigil;
+            this.fullName = fullName;
+            this.value = value;
+        }
+    }
+
+    private static void deactivateEvalSeedAliases(List<EvalSeedAlias> aliases) {
+        for (EvalSeedAlias alias : aliases) {
+            switch (alias.sigil) {
+                case '$' -> {
+                    if (GlobalVariable.globalVariables.get(alias.fullName) == alias.value) {
+                        GlobalVariable.globalVariables.remove(alias.fullName);
+                    }
+                }
+                case '@' -> {
+                    if (GlobalVariable.globalArrays.get(alias.fullName) == alias.value) {
+                        GlobalVariable.globalArrays.remove(alias.fullName);
+                    }
+                }
+                case '%' -> {
+                    if (GlobalVariable.globalHashes.get(alias.fullName) == alias.value) {
+                        GlobalVariable.globalHashes.remove(alias.fullName);
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+        aliases.clear();
+    }
+
     /**
      * Evaluate a Perl string dynamically.
      * <p>
@@ -160,6 +197,7 @@ public class EvalStringHandler {
                                              int siteStrictOptions,
                                              int siteFeatureFlags,
                                              boolean isEvalbytes) {
+        List<EvalSeedAlias> seedAliases = new ArrayList<>();
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
@@ -275,11 +313,17 @@ public class EvalStringHandler {
                     String bareName = varName.substring(1);
                     String fullName = seedPkg + "::" + bareName;
                     if (sigil == '$' && value instanceof RuntimeScalar rs) {
-                        GlobalVariable.globalVariables.put(fullName, rs);
+                        if (GlobalVariable.globalVariables.putIfAbsent(fullName, rs) == null) {
+                            seedAliases.add(new EvalSeedAlias(sigil, fullName, rs));
+                        }
                     } else if (sigil == '@' && value instanceof RuntimeArray ra) {
-                        GlobalVariable.globalArrays.put(fullName, ra);
+                        if (GlobalVariable.globalArrays.putIfAbsent(fullName, ra) == null) {
+                            seedAliases.add(new EvalSeedAlias(sigil, fullName, ra));
+                        }
                     } else if (sigil == '%' && value instanceof RuntimeHash rh) {
-                        GlobalVariable.globalHashes.put(fullName, rh);
+                        if (GlobalVariable.globalHashes.putIfAbsent(fullName, rh) == null) {
+                            seedAliases.add(new EvalSeedAlias(sigil, fullName, rh));
+                        }
                     } else {
                         // Sigil / value-type mismatch (e.g. captured as null).
                         // Skip the alias but still proceed to the symbol-table
@@ -396,6 +440,11 @@ public class EvalStringHandler {
                 evalCode = evalCode.withCapturedVars(currentCode.capturedVars);
             }
 
+            // These aliases are parser/compile-time helpers only. Direct eval
+            // body references use captured registers, and named subs have
+            // already captured the aliased cells by this point.
+            deactivateEvalSeedAliases(seedAliases);
+
             // Step 6: Execute the compiled code.
             // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
             // currentPackage is a runtime-only field used by caller() — it does NOT
@@ -426,6 +475,8 @@ public class EvalStringHandler {
             evalTrace("EvalStringHandler exec exception ctx=" + callContext + " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
             WarnDie.catchEval(e);
             return new RuntimeList(new RuntimeScalar());
+        } finally {
+            deactivateEvalSeedAliases(seedAliases);
         }
     }
 

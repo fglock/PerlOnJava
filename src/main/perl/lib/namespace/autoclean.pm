@@ -154,6 +154,10 @@ sub _method_check {
 
         return 1 if $code_stash eq $package;   # Defined locally
         return 1 if $code_stash eq 'constant'; # Constant subs
+        # The bundled pure-Perl Class::XSAccessor installs accessors into the
+        # target stash, but the coderefs keep Class::XSAccessor::__ANON__
+        # subnames. Those are generated methods, not imports to clean.
+        return 1 if $code_stash eq 'Class::XSAccessor';
         # Companion/helper packages (e.g. DateTime::PP for DateTime) install
         # functions via glob assignment — these are intentional methods, not imports.
         # In PerlOnJava, method calls are resolved at runtime through the stash,

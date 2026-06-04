@@ -3,7 +3,11 @@ package org.perlonjava.runtime.runtimetypes;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.WarnDie;
 
+import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -24,6 +28,13 @@ public class DestroyDispatch {
     private static final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCache =
             new ConcurrentHashMap<>();
 
+    // Cursor objects whose classes define DESTROY. Weak-ref sweeps already
+    // clean unreachable weak referents; this registry covers DBIC-style
+    // storage cursors that are not themselves weakened, but whose finish()
+    // side-effect must happen deterministically.
+    private static final Set<RuntimeBase> destroyableObjects =
+            Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+
     // DESTROY rescue detection: when DESTROY stores $self in a hash element,
     // the object should survive (like Perl 5's Schema::DESTROY self-save pattern).
     // These fields track the current DESTROY target so RuntimeHash.put can detect
@@ -43,6 +54,34 @@ public class DestroyDispatch {
 
     public static boolean isInsideDestroy() {
         return currentDestroyTarget != null;
+    }
+
+    public static void registerIfDestroyable(RuntimeBase referent, int blessId) {
+        if (referent == null || blessId == 0) return;
+        String className = NameNormalizer.getBlessStr(blessId);
+        if (className != null
+                && className.endsWith("::Cursor")
+                && classHasDestroy(blessId, className)) {
+            destroyableObjects.add(referent);
+        } else {
+            destroyableObjects.remove(referent);
+        }
+    }
+
+    public static void unregisterDestroyable(RuntimeBase referent) {
+        if (referent != null) {
+            destroyableObjects.remove(referent);
+        }
+    }
+
+    public static ArrayList<RuntimeBase> snapshotDestroyableObjects() {
+        synchronized (destroyableObjects) {
+            return new ArrayList<>(destroyableObjects);
+        }
+    }
+
+    public static boolean hasDestroyableObjects() {
+        return !destroyableObjects.isEmpty();
     }
 
     // Rescued objects whose weak refs need deferred clearing.
@@ -164,6 +203,7 @@ public class DestroyDispatch {
             }
             return;
         }
+        unregisterDestroyable(referent);
 
         // Phase 3 (refcount_alignment_plan.md): Resurrection re-fire.
         // If a prior DESTROY left refCount > 0 (object resurrected by a
@@ -488,7 +528,7 @@ public class DestroyDispatch {
             if (savedTarget == null && sweepPendingAfterOuterDestroy
                     && !ModuleInitGuard.inModuleInit()) {
                 sweepPendingAfterOuterDestroy = false;
-                ReachabilityWalker.sweepWeakRefs(false);
+                ReachabilityWalker.sweepWeakRefs(false, false);
             }
         }
     }

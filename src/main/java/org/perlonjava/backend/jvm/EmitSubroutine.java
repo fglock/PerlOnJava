@@ -25,6 +25,8 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_SUBS;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
 
 /**
  * The EmitSubroutine class is responsible for handling subroutine-related operations
@@ -252,6 +254,26 @@ public class EmitSubroutine {
             } else if (ctx.compilerOptions != null && ctx.compilerOptions.fileName != null) {
                 cvStartFile = ctx.compilerOptions.fileName;
             }
+            int deparseSourceOffset = -1;
+            if (ctx.errorUtil != null && node.block != null) {
+                deparseSourceOffset = ctx.errorUtil.getSourceOffset(node.block.getIndex());
+            }
+            String deparseSourceText = null;
+            if (ctx.compilerOptions != null) {
+                deparseSourceText = ctx.compilerOptions.deparseSourceCode != null
+                        ? ctx.compilerOptions.deparseSourceCode
+                        : ctx.compilerOptions.code;
+            }
+            int deparseFlags = 0;
+            int strictAll = HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS;
+            if ((ctx.symbolTable.getStrictOptions() & strictAll) == strictAll) {
+                deparseFlags |= RuntimeCode.DEPARSE_FLAG_STRICT;
+            }
+            if (ctx.symbolTable.warningFlagsStack != null
+                    && !ctx.symbolTable.warningFlagsStack.isEmpty()
+                    && !ctx.symbolTable.warningFlagsStack.peek().isEmpty()) {
+                deparseFlags |= RuntimeCode.DEPARSE_FLAG_WARNINGS;
+            }
 
             // Transfer pad constants (cached string literals referenced via \) from compile time
             // to a registry so makeCodeObject() can attach them to the RuntimeCode at runtime.
@@ -303,11 +325,18 @@ public class EmitSubroutine {
             mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
             mv.visitLdcInsn(cvStartFile);
             mv.visitLdcInsn(cvStartLine);
+            if (deparseSourceText != null) {
+                mv.visitLdcInsn(deparseSourceText);
+            } else {
+                mv.visitInsn(Opcodes.ACONST_NULL);
+            }
+            mv.visitLdcInsn(deparseFlags);
+            mv.visitLdcInsn(deparseSourceOffset);
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "makeCodeObject",
-                    "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;II)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } catch (InterpreterFallbackException fallback) {
             // JVM compilation failed (e.g., ASM frame crash) - use InterpretedCode instead
@@ -783,9 +812,9 @@ public class EmitSubroutine {
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
                 false);
 
-        // Set debug line number to the call site. Ordinary direct calls report
-        // the completed call expression's closing line, but prototyped calls
-        // whose first prototype slot is not `&` report the expression start.
+        // Set debug line number to the call site. Perl reports the expression
+        // start for ordinary multi-line calls, but literal anon sub/block
+        // arguments and &-prototype calls report the block/arg line.
         int callSiteIndex = callerLineCallSiteIndex(node);
         if (callSiteIndex > 0) {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
@@ -911,7 +940,7 @@ public class EmitSubroutine {
     }
 
     private static int callerLineCallSiteIndex(BinaryOperatorNode node) {
-        if (usesExpressionStartLine(node)) {
+        if (!usesBlockArgumentLine(node)) {
             return expressionStartIndex(node);
         }
 
@@ -922,27 +951,35 @@ public class EmitSubroutine {
     }
 
     private static int expressionStartIndex(BinaryOperatorNode node) {
-        if (node.getIndex() > 0) {
-            return node.getIndex();
+        if (node.left != null && node.left.getIndex() > 0) {
+            return node.left.getIndex();
         }
-        return node.left != null ? node.left.getIndex() : -1;
+        return node.getIndex() > 0 ? node.getIndex() : -1;
     }
 
-    private static boolean usesExpressionStartLine(BinaryOperatorNode node) {
+    private static boolean usesBlockArgumentLine(BinaryOperatorNode node) {
         String prototype = directCallPrototype(node);
-        if (prototype == null) {
+        if (prototype != null) {
+            for (int i = 0; i < prototype.length(); i++) {
+                char c = prototype.charAt(i);
+                if (Character.isWhitespace(c) || c == ';' || c == ',') {
+                    continue;
+                }
+                return c == '&';
+            }
+
             return false;
         }
 
-        for (int i = 0; i < prototype.length(); i++) {
-            char c = prototype.charAt(i);
-            if (Character.isWhitespace(c) || c == ';' || c == ',') {
-                continue;
-            }
-            return c != '&';
+        return firstArgumentIsLiteralSub(node);
+    }
+
+    private static boolean firstArgumentIsLiteralSub(BinaryOperatorNode node) {
+        if (!(node.right instanceof ListNode list) || list.elements == null || list.elements.isEmpty()) {
+            return false;
         }
 
-        return true;
+        return list.elements.get(0) instanceof SubroutineNode;
     }
 
     private static String directCallPrototype(BinaryOperatorNode node) {

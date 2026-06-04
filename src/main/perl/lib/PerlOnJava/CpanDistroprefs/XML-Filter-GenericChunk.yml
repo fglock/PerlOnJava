@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for XML::Filter::GenericChunk.
+
+  Upstream only declares XML::SAX::Base, but the test suite also loads
+  XML::SAX::DocumentLocator and XML::NamespaceSupport. Clean CPAN installs
+  therefore miss prerequisites that system Perl often has already. Make them
+  explicit so jcpan stages the normal pure-Perl XML stack first.
+match:
+  distribution: "^PHISH/XML-Filter-GenericChunk-"
+depends:
+  requires:
+    XML::LibXML: 1.40
+    XML::NamespaceSupport: 0
+    XML::SAX: 0
+    XML::SAX::Base: 1.03

@@ -40,6 +40,9 @@ public class Internals extends PerlModuleBase {
             // objects) and clears weak refs for unreachable objects. Returns
             // the number of weak refs cleared.
             internals.registerMethod("jperl_gc", "jperl_gc", "");
+            internals.registerMethod("jperl_gc_quiet", "jperl_gc_quiet", "");
+            internals.registerMethod("jperl_sweep_destroyables_no_jvm_gc", "jperl_sweep_destroyables_no_jvm_gc", "");
+            internals.registerMethod("jperl_freetmps", "jperl_freetmps", "");
             // Phase 4 diagnostic: trace a reachable path from any Perl root
             // to the given referent. Returns the first-found path string or
             // undef if unreachable. Used to debug why an object that should
@@ -60,6 +63,7 @@ public class Internals extends PerlModuleBase {
             // such as Pod::Coverage can skip imported helpers.
             internals.registerMethod("jperl_is_imported_sub", "jperl_is_imported_sub", "$");
             internals.registerMethod("jperl_cv_start_location", "jperlCvStartLocation", "$");
+            internals.registerMethod("jperl_cv_deparse_info", "jperlCvDeparseInfo", "$");
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
         } catch (NoSuchMethodException e) {
@@ -259,6 +263,39 @@ public class Internals extends PerlModuleBase {
         int cleared = ReachabilityWalker.sweepWeakRefs();
         int secondPass = ReachabilityWalker.sweepWeakRefs();
         return new RuntimeScalar(cleared + secondPass).getList();
+    }
+
+    /**
+     * Quiet statement-boundary sweep. Unlike jperl_gc(), this does not drain
+     * rescued DBIC-style objects before END-time cleanup.
+     */
+    public static RuntimeList jperl_gc_quiet(RuntimeArray args, int ctx) {
+        int cleared = ReachabilityWalker.sweepWeakRefs(true);
+        int secondPass = ReachabilityWalker.sweepWeakRefs(true);
+        return new RuntimeScalar(cleared + secondPass).getList();
+    }
+
+    /**
+     * Drain Perl-style mortal temporaries without asking the JVM to run GC.
+     * This mirrors Perl's FREETMPS boundary for refcounted RuntimeBase objects.
+     */
+    public static RuntimeList jperl_freetmps(RuntimeArray args, int ctx) {
+        MortalList.flush();
+        return new RuntimeScalar(0).getList();
+    }
+
+    /**
+     * Reconcile destroyable objects that require deterministic DESTROY side
+     * effects but are not weak-ref referents, without clearing arbitrary weak
+     * refs and without forcing HotSpot GC. Used by DBI statement polling to
+     * match Perl's cursor DESTROY/finish timing.
+     */
+    public static RuntimeList jperl_sweep_destroyables_no_jvm_gc(RuntimeArray args, int ctx) {
+        int destroyed = ReachabilityWalker.sweepDestroyableObjects(false);
+        if (destroyed > 0) {
+            destroyed += ReachabilityWalker.sweepDestroyableObjects(false);
+        }
+        return new RuntimeScalar(destroyed).getList();
     }
 
     /**
@@ -663,6 +700,24 @@ public class Internals extends PerlModuleBase {
             file = defFile;
         }
         return new RuntimeList(new RuntimeScalar(file), new RuntimeScalar(line));
+    }
+
+    public static RuntimeList jperlCvDeparseInfo(RuntimeArray args, int ctx) {
+        if (args.size() == 0) {
+            return new RuntimeList(new RuntimeScalar(), new RuntimeScalar(0));
+        }
+        RuntimeScalar s = args.get(0);
+        if (s == null) {
+            return new RuntimeList(new RuntimeScalar(), new RuntimeScalar(0));
+        }
+        s = s.scalar();
+        if (s.type != RuntimeScalarType.CODE || !(s.value instanceof RuntimeCode code)) {
+            return new RuntimeList(new RuntimeScalar(), new RuntimeScalar(0));
+        }
+        RuntimeScalar source = code.deparseSourceText != null
+                ? new RuntimeScalar(code.deparseSourceText)
+                : new RuntimeScalar();
+        return new RuntimeList(source, new RuntimeScalar(code.deparseFlags), new RuntimeScalar(code.deparseSourceOffset));
     }
 
     /**

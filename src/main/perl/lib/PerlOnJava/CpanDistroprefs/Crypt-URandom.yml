@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Crypt::URandom.
+
+  The distribution's core RNG paths work under PerlOnJava, including the
+  bundled getrandom path. A few upstream tests require POSIX fork or force the
+  pure-Perl /dev/urandom fallback by overriding CORE::GLOBAL::{read,sysread,
+  sysopen}; those overrides are not meaningful when getrandom is available.
+  Patch only those test files and keep the rest of the suite active.
+match:
+  distribution: "^DDICK/Crypt-URandom-0\\.55"
+patches:
+  - "Crypt-URandom-0.55/PerlOnJavaTests.patch"
