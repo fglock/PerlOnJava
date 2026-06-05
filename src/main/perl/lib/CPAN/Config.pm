@@ -81,12 +81,15 @@ sub _bootstrap_prefs {
         'Template.yml'               => 'PerlOnJava/CpanDistroprefs/Template.yml',
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
         'Parse-RecDescent.yml'       => 'PerlOnJava/CpanDistroprefs/Parse-RecDescent.yml',
+        'CryptX.yml'                 => 'PerlOnJava/CpanDistroprefs/CryptX.yml',
         'Crypt-URandom.yml'          => 'PerlOnJava/CpanDistroprefs/Crypt-URandom.yml',
         'Hook-LexWrap.yml'           => 'PerlOnJava/CpanDistroprefs/Hook-LexWrap.yml',
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
         'CGI.yml'                    => 'PerlOnJava/CpanDistroprefs/CGI.yml',
         'CGI-Simple.yml'             => 'PerlOnJava/CpanDistroprefs/CGI-Simple.yml',
         'HTML-Parser.yml'            => 'PerlOnJava/CpanDistroprefs/HTML-Parser.yml',
+        'Graph.yml'                  => 'PerlOnJava/CpanDistroprefs/Graph.yml',
+        'Set-Object.yml'             => 'PerlOnJava/CpanDistroprefs/Set-Object.yml',
         'XML-Filter-GenericChunk.yml' => 'PerlOnJava/CpanDistroprefs/XML-Filter-GenericChunk.yml',
         'HTTP-Message.yml'           => 'PerlOnJava/CpanDistroprefs/HTTP-Message.yml',
         'HTTP-Response-Encoding.yml' => 'PerlOnJava/CpanDistroprefs/HTTP-Response-Encoding.yml',
@@ -230,6 +233,12 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Parse-RecDescent-1.967015/SkipReproducibleStandalone.patch' ],
         [ 'XML-FromPerl-0.01/Makefile.PL.patch',
           'PerlOnJava/CpanPatches/XML-FromPerl-0.01/Makefile.PL.patch' ],
+        [ 'Graph-0.9735/Graph.pm.patch',
+          'PerlOnJava/CpanPatches/Graph-0.9735/Graph.pm.patch' ],
+        [ 'Graph-0.9735/AdjacencyMap.pm.patch',
+          'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap.pm.patch' ],
+        [ 'Graph-0.9735/AdjacencyMap-Light.pm.patch',
+          'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap-Light.pm.patch' ],
     );
 
     my $slurp = sub {

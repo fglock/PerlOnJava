@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 12;
+use Test::More tests => 17;
 
 # Regression: parsing of a package-stash variable like %Foo:: must NOT
 # consume a following whitespace-separated keyword (and / or / not / xor /
@@ -75,3 +75,26 @@ eval q{
     fail("Dumpvalue.pm pattern compiles: $@");
 };
 pass("Dumpvalue.pm pattern (and %overload:: and defined ...) compiles cleanly");
+
+BEGIN {
+    ok(!exists $::{"PackageStmtEmpty::"}, 'empty package stash absent before package statement');
+}
+
+package PackageStmtEmpty;
+
+package PackageStmtParent::PackageStmtChild;
+package PackageStmtParent::PackageStmtChild::PackageStmtGrandchild;
+
+package main;
+
+{
+    no strict 'refs';
+    ok(exists $::{"PackageStmtEmpty::"}, 'package statement creates visible empty stash');
+    ok(exists $::{"PackageStmtParent::"}, 'nested package statement creates visible parent stash');
+    ok(exists ${"PackageStmtParent::"}{"PackageStmtChild::"}, 'parent stash contains child package entry');
+
+    my @direct = sort map { "PackageStmtParent::$_" }
+        grep { /::$/ } keys %{"PackageStmtParent::"};
+    is_deeply(\@direct, ["PackageStmtParent::PackageStmtChild::"],
+        'keys on package stash lists child packages');
+}

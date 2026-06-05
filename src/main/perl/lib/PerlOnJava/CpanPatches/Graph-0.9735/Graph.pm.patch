@@ -1,0 +1,37 @@
+--- lib/Graph.pm.orig
++++ lib/Graph.pm
+@@ -29,5 +29,7 @@ sub _can_deep_copy_Storable () {
+     return $can_deep_copy_Storable if defined $can_deep_copy_Storable;
+     return $can_deep_copy_Storable = 0 if $] < 5.010; # no :load tag Safe 5.8
++    require Config;
++    return $can_deep_copy_Storable = 0 if $Config::Config{perlonjava};
+     eval {
+         require Storable;
+         require B::Deparse;
+@@ -128,8 +130,13 @@ sub _opt_unknown {
+ sub _opt_unknown {
+     my ($opt) = @_;
+     return unless my @opt = keys %$opt;
++    my @caller1 = caller(1);
++    my @caller2 = caller(2);
++    my $caller = $caller1[3];
++    $caller = $caller2[3]
++	if defined $caller && $caller =~ /::_opt_unknown\z/ && defined $caller2[3];
+     __carp_confess sprintf
+-        "@{[(caller(1))[3]]}: Unknown option%s: @{[map qq['$_'], sort @opt]}",
++        "$caller: Unknown option%s: @{[map qq['$_'], sort @opt]}",
+         @opt > 1 ? 's' : '';
+ }
+ 
+@@ -2162,8 +2169,9 @@ sub strongly_connected_component_by_vertex {
+ sub strongly_connected_component_by_index {
+     &expect_directed;
+     my $i = $_[1];
+-    return if !defined(my $c = &_strongly_connected_components->[0][ $i ]);
+-    @$c;
++    my $c = &_strongly_connected_components->[0][ $i ];
++    return unless defined $c;
++    return @$c;
+ }
+ 
+ sub same_strongly_connected_components {

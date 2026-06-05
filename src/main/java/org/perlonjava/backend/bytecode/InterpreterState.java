@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayDeque;
@@ -52,6 +53,7 @@ public class InterpreterState {
      * INVOKESTATIC.
      */
     public static void setCurrentPackageStatic(String name) {
+        GlobalVariable.ensurePackageStash(name);
         currentPackage.get().set(name);
     }
 
@@ -67,6 +69,7 @@ public class InterpreterState {
      * calls (which inherit the caller's package).
      */
     public static void setCurrentPackageLocal(String name) {
+        GlobalVariable.ensurePackageStash(name);
         RuntimeScalar pkg = currentPackage.get();
         org.perlonjava.runtime.runtimetypes.DynamicVariableManager.pushLocalVariable(pkg);
         pkg.set(name);

@@ -57,6 +57,31 @@ public class EmitControlFlow {
         }
     }
 
+    private static boolean isAtUnderscore(Node node) {
+        if (node instanceof ListNode list
+                && list.elements.size() == 1) {
+            return isAtUnderscore(list.elements.getFirst());
+        }
+        return node instanceof OperatorNode op
+                && op.operator.equals("@")
+                && op.operand instanceof IdentifierNode id
+                && id.name.equals("_");
+    }
+
+    private static void emitGotoArgsArray(EmitterVisitor emitterVisitor, Node argsNode) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        if (isAtUnderscore(argsNode)) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, 1);
+            return;
+        }
+        argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                "getTailCallArrayOfAlias",
+                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                false);
+    }
+
     /**
      * Handles the 'next', 'last', and 'redo' operators for loop control.
      * - 'next' is equivalent to 'continue' in Java
@@ -369,18 +394,11 @@ public class EmitControlFlow {
         }
         ctx.mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
 
-        argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // Call getArrayOfAlias() directly on the RuntimeBase value: going through
-        // getList() would force RuntimeArray.getList() to copy each element with
-        // `new RuntimeScalar(element)`, which destroys aliasing of @_ across the
-        // tail call. `goto &SUB` is required to pass the caller's @_ aliased to
-        // the target sub so that `$_[N] = ...` mutations propagate. (See
-        // JSON::Validator::Schema::_validate_type_boolean which relies on this.)
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "getTailCallArrayOfAlias",
-                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
-                false);
+        // Preserve the actual @_ container for the synthetic `goto &SUB` args.
+        // Graph uses `push @_, ...; goto &helper`; the tail-called helper then
+        // `pop`s the sentinel, which must restore the caller-visible argument
+        // count. For non-@_ argument expressions, keep the alias-array path.
+        emitGotoArgsArray(emitterVisitor, argsNode);
         int argsSlot = ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledArgs = argsSlot >= 0;
         if (!pooledArgs) {
@@ -460,15 +478,8 @@ public class EmitControlFlow {
         }
         ctx.mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
 
-        // Build the args array
-        argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
-        // See note in handleGotoSubroutine: preserve @_ aliasing and transfer
-        // any counted refs inserted into the current tailcall frame.
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "getTailCallArrayOfAlias",
-                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
-                false);
+        // Build the args array. See handleGotoSubroutine for the @_ fast path.
+        emitGotoArgsArray(emitterVisitor, argsNode);
         int argsSlot = ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledArgs = argsSlot >= 0;
         if (!pooledArgs) {

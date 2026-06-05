@@ -146,4 +146,98 @@ use feature 'say';
               "named sub: continue block captures outer my variable");
 }
 
+# Closure stored outside the current scope keeps a captured temporary argument alive
+{
+    package ClosureCapturedArgState;
+    our %state;
+
+    sub new {
+        my $class = shift;
+        my $self = bless {}, $class;
+        $state{$self} = 1;
+        return $self;
+    }
+
+    sub get {
+        return $state{$_[0]};
+    }
+
+    sub DESTROY {
+        delete $state{$_[0]};
+    }
+
+    package main;
+    my %code;
+
+    sub _capture_arg_in_hash (&$) {
+        my ($cb, $obj) = @_;
+        $code{k} = sub {
+            local $_ = $obj->get;
+            return $cb->();
+        };
+    }
+
+    sub _make_captured_arg_object {
+        return ClosureCapturedArgState->new;
+    }
+
+    _capture_arg_in_hash { $_ } _make_captured_arg_object();
+    is($code{k}->(), 1, "closure stored in hash keeps captured temporary argument object alive");
+}
+
+# eval block capture must not release captures of a still-stored CODE ref
+{
+    package ClosureIteratorLike;
+    my (%code_for, %next_for);
+
+    sub new {
+        my ($class, $code) = @_;
+        my $self = \do { my $anonymous };
+        bless $self, $class;
+        $code_for{$self} = $code;
+        eval {
+            $next_for{$self} = $code->();
+        };
+        return $self;
+    }
+
+    sub value {
+        my $self = shift;
+        my $this_value = $next_for{$self};
+        eval {
+            $next_for{$self} = $code_for{$self}->();
+        };
+        return $this_value;
+    }
+
+    sub DESTROY {
+        my $self = shift;
+        delete $code_for{$self};
+        delete $next_for{$self};
+    }
+
+    package main;
+
+    sub _closure_iter_range {
+        my $from = shift;
+        return ClosureIteratorLike->new(sub {
+            my $ret = $from;
+            $from++;
+            return $ret;
+        });
+    }
+
+    sub _closure_iter_map (&$) {
+        my ($transformation, $iter) = @_;
+        return ClosureIteratorLike->new(sub {
+            local $_ = $iter->value();
+            return $transformation->();
+        });
+    }
+
+    my $iter = _closure_iter_map { $_ * 2 } _closure_iter_range(0);
+    is_deeply([map { $iter->value() } 1..4], [0, 2, 4, 6],
+              "eval block capture does not release stored CODE ref captures");
+}
+
 done_testing();

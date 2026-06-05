@@ -81,6 +81,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         public RuntimeScalar put(String key, RuntimeScalar value) {
             RuntimeScalar previous = super.get(key);
             owner.notePackageRootMutation(previous, value);
+            if (value != null) value.markContainerOwner(owner);
             owner.markPackageRootedValue(value);
             return super.put(key, value);
         }
@@ -98,6 +99,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             owner.notePackageRootMutationIf(invalidates);
             for (RuntimeScalar value : m.values()) {
+                if (value != null) value.markContainerOwner(owner);
                 owner.markPackageRootedValue(value);
             }
             super.putAll(m);

@@ -1,6 +1,8 @@
 use strict;
 use warnings;
 use Test::More;
+use if $] >= 5.010, feature => qw<switch>;
+no if $] >= 5.018, warnings => 'experimental::smartmatch';
 
 # Test class with numeric comparison overloading
 {
@@ -478,6 +480,37 @@ subtest 'Multiple overload interactions' => sub {
     is($multi1 <=> $multi2, -1, 'multi: direct <=>');
     is($multi1 cmp $multi2, 1, 'multi: direct cmp');
     is("$multi1", "Multi5", 'multi: stringification');
+};
+
+subtest 'Smartmatch overloading' => sub {
+    {
+        package SmartMatchRange;
+        use overload
+            '~~' => sub {
+                my ($self, $other, $swap) = @_;
+                return $other >= $self->{min} && $other <= $self->{max};
+            },
+            fallback => 1;
+
+        sub new {
+            my ($class, $min, $max) = @_;
+            return bless { min => $min, max => $max }, $class;
+        }
+    }
+
+    my $range = SmartMatchRange->new(4, 6);
+    ok(5 ~~ $range, 'right-hand object smartmatch invokes overload');
+    ok(!(7 ~~ $range), 'right-hand object smartmatch false result');
+
+    my @seen;
+    for my $guess (5, 7) {
+        given ($guess) {
+            when ($range) { push @seen, 'match' }
+            default       { push @seen, 'miss'  }
+        }
+    }
+
+    is_deeply(\@seen, ['match', 'miss'], 'given/when uses smartmatch overload');
 };
 
 done_testing();

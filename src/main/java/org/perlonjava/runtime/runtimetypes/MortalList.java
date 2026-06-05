@@ -652,6 +652,9 @@ public class MortalList {
                     }
                     base.releaseActiveOwner(s);
                     pending.add(base);
+                    if (!WeakRefRegistry.weakRefsExist && base.refCount > 1) {
+                        continue;
+                    }
                     if (!hasCleanupTargets
                             || base.activeOwnerCount() > 0
                             || (base.refCount > 1
@@ -659,6 +662,13 @@ public class MortalList {
                             && isReachableFromExternalRootCached(base))) {
                         continue;
                     }
+                } else if (base.refCount > 0
+                        && !WeakRefRegistry.weakRefsExist) {
+                    // A non-owning copy of a still-counted unblessed container
+                    // must not release that container's children. With no weak
+                    // refs anywhere, there is no weak-ref cleanup that requires
+                    // peeking inside before the container's own count reaches 0.
+                    continue;
                 } else if (base.refCount > 0
                         && (!hasCleanupTargets
                         || base.activeOwnerCount() > 0
@@ -722,6 +732,7 @@ public class MortalList {
     }
 
     private static boolean containerHasWeakElementRefs(RuntimeBase base) {
+        if (!WeakRefRegistry.weakRefsExist) return false;
         if (base instanceof RuntimeArray arr) {
             for (RuntimeScalar elem : arr.elements) {
                 if (elem != null && WeakRefRegistry.hasWeakRefsTo(elem)) {
@@ -754,7 +765,11 @@ public class MortalList {
                         && (base instanceof RuntimeHash
                         || base instanceof RuntimeArray
                         || base instanceof RuntimeCode);
-                if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer) {
+                boolean reachableCodeRef = base instanceof RuntimeCode
+                        && scalar.isStoredInRegisteredContainerOwner()
+                        && ReachabilityWalker.isScalarReachable(scalar);
+                if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer
+                        && !reachableCodeRef) {
                     scalar.refCountOwned = false;
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");

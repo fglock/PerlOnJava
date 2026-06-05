@@ -1,0 +1,47 @@
+--- lib/Graph/AdjacencyMap/Light.pm.orig
++++ lib/Graph/AdjacencyMap/Light.pm
+@@ -97,15 +97,25 @@ sub get_ids_by_paths {
+     my ($pi, $m, $list, $ensure, $deep) = ( @{ $_[0] }[ _pi ], @_ );
+     $deep ||= 0;
+-    map {
+-	my @ret = map {
+-	    my @ret2 = map {
+-		my $id = $pi->{ $_ };
+-		defined $id ? $id : $ensure ? $m->set_paths($_) : return;
+-	    } $deep > 1 ? @$_ : $_;
+-	    $deep > 1 ? \@ret2 : @ret2;
+-	} $deep ? @$_ : $_;
+-	$deep ? \@ret : @ret;
+-    } @$list;
++    my @out;
++    for my $entry (@$list) {
++	my @ret;
++	for my $path ($deep ? @$entry : $entry) {
++	    my @ret2;
++	    for my $key ($deep > 1 ? @$path : $path) {
++		my $id = $pi->{ $key };
++		if (defined $id) {
++		    push @ret2, $id;
++		} elsif ($ensure) {
++		    push @ret2, $m->set_paths($key);
++		} else {
++		    return;
++		}
++	    }
++	    push @ret, $deep > 1 ? \@ret2 : @ret2;
++	}
++	push @out, $deep ? \@ret : @ret;
++    }
++    return @out;
+ }
+ 
+ sub has_path {
+@@ -116,7 +126,7 @@ sub has_path {
+ }
+ 
+ sub _get_path_count {
+-    defined(my $dummy = &has_path) ? 1 : 0; # defined &x asks if func defined
++    defined($_[0]->has_path($_[1])) ? 1 : 0;
+ }
+ 
+ sub del_path {

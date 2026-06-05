@@ -1,0 +1,146 @@
+--- lib/Graph/AdjacencyMap.pm.orig
++++ lib/Graph/AdjacencyMap.pm
+@@ -75,19 +75,25 @@
+ 		? map [$_, join '|', map "@$_", @$_], @p
+ 		: map [$_,"@$_"], @p; # use the Schwartz
+     if ($arity == 2) {
+-	require Set::Object;
+-	my ($pre, $suc, @s) = (Set::Object->new(map $_->[0], @p), Set::Object->new(map $_->[1], @p));
+-	@rows = ([ 'to:', @s = sort $suc->members ], map {
+-	    my $p = $_;
+-	    [ $p, map {
+-		my $text = defined(my $id = $m->has_path([$p, $_])) ? 1 : '';
++	my (%pre, %suc, @s);
++	for my $path (@p) {
++	    $pre{ $path->[0] } = 1;
++	    $suc{ $path->[1] } = 1;
++	}
++	@rows = ([ 'to:', @s = sort keys %suc ]);
++	for my $p (sort keys %pre) {
++	    my @row = ($p);
++	    for my $s (@s) {
++		my $text = defined(my $id = $m->has_path([$p, $s])) ? 1 : '';
+ 		my $attrs = !$text ? undef :
+-		    $multi ? $m->[ _attr ][$id] : $m->_get_path_attrs([$p, $_]);
+-		defined $attrs ? $m->_dumper($attrs) : $text;
+-	    } @s ];
+-	} sort $pre->members);
++		    $multi ? $m->[ _attr ][$id] : $m->_get_path_attrs([$p, $s]);
++		push @row, defined $attrs ? $m->_dumper($attrs) : $text;
++	    }
++	    push @rows, \@row;
++	}
+     } else {
+ 	@rows = map {
++	    my $p = $_;
+ 	    my $attrs = $multi
+ 		? $m->[ _attr ][ $m->has_path($_) ] : $m->_get_path_attrs($_);
+ 	    [ $m->_dumper($_),
+@@ -110,6 +116,7 @@
+ sub _dumper {
+     my (undef, $got) = @_;
+     return $got if defined $got and !ref $got;
++    return _dumper_hash($got) if ref($got) eq 'HASH';
+     require Data::Dumper;
+     my $dumper = Data::Dumper->new([$got]);
+     $dumper->Indent(0)->Terse(1);
+@@ -117,6 +124,30 @@
+     $dumper->Dump;
+ }
+ 
++sub _dumper_quote {
++    my ($value) = @_;
++    $value =~ s/([\\\'])/\\$1/g;
++    return "'$value'";
++}
++
++sub _dumper_hash {
++    my ($hash) = @_;
++    return '{' . join(',', map {
++	my $key = $_;
++	_dumper_quote($key) . ' => ' . _dumper_value($hash->{$key});
++    } sort keys %$hash) . '}';
++}
++
++sub _dumper_value {
++    my ($value) = @_;
++    return 'undef' unless defined $value;
++    return _dumper_hash($value) if ref($value) eq 'HASH';
++    if (ref($value) eq 'ARRAY') {
++	return '[' . join(',', map _dumper_value($_), @$value) . ']';
++    }
++    return _dumper_quote($value);
++}
++
+ sub has_any_paths {
+     scalar keys %{ $_[0]->[ _pi ] };
+ }
+@@ -342,30 +373,47 @@
+     my ($f, $a, $pi, $m, $list, $ensure, $deep) = ( @{ $_[0] }[ _f, _arity, _pi ], @_ );
+     $deep ||= 0;
+     my ($is_multi, $is_ref, $is_unord) = (map $f & $_, _MULTI, _REF, _UNORD);
+-    return map { # Fast path
+-	my @ret = map {
+-	    my $id = $pi->{ $a != 1 ? "@$_" : $_ };
+-	    defined $id ? $id :
+-		!$ensure ? return :
+-		($is_multi ? $m->set_path_by_multi_id($_, _GEN_ID) : $m->set_paths($_))[0];
+-	} $deep ? @$_ : $_;
+-	$deep ? \@ret : @ret;
+-    } @$list if $a and !$is_ref and $deep < 2;
+-    map {
+-	my @ret = map {
+-	    my @ret2 = map {
+-		my $k = $_;
++    if ($a and !$is_ref and $deep < 2) {
++	my @out;
++	for my $entry (@$list) {
++	    my @ret;
++	    for my $path ($deep ? @$entry : $entry) {
++		my $id = $pi->{ $a != 1 ? "@$path" : $path };
++		if (defined $id) {
++		    push @ret, $id;
++		} elsif ($ensure) {
++		    push @ret, ($is_multi ? $m->set_path_by_multi_id($path, _GEN_ID) : $m->set_paths($path))[0];
++		} else {
++		    return;
++		}
++	    }
++	    push @out, $deep ? \@ret : @ret;
++	}
++	return @out;
++    }
++    my @out;
++    for my $entry (@$list) {
++	my @ret;
++	for my $path ($deep ? @$entry : $entry) {
++	    my @ret2;
++	    for my $item ($deep > 1 ? @$path : $path) {
++		my $k = $item;
+ 		$k = __strval($k, $f) if $a == 1 && $is_ref && ref($k);
+ 		my $l = ($a == 0 && !$is_unord) ? join '|', map join(' ', sort @$_), @$k : $a == 1 ? "$k" : "@$k";
+ 		my $id = $pi->{ $l };
+-		defined $id ? $id :
+-		    !$ensure ? return :
+-		    ($is_multi ? $m->set_path_by_multi_id($_, _GEN_ID) : $m->set_paths($_))[0];
+-	    } $deep > 1 ? @$_ : $_;
+-	    $deep > 1 ? \@ret2 : @ret2;
+-	} $deep ? @$_ : $_;
+-	$deep ? \@ret : @ret;
+-    } @$list;
++		if (defined $id) {
++		    push @ret2, $id;
++		} elsif ($ensure) {
++		    push @ret2, ($is_multi ? $m->set_path_by_multi_id($item, _GEN_ID) : $m->set_paths($item))[0];
++		} else {
++		    return;
++		}
++	    }
++	    push @ret, $deep > 1 ? \@ret2 : @ret2;
++	}
++	push @out, $deep ? \@ret : @ret;
++    }
++    return @out;
+ }
+ 
+ sub _paths_fromto {

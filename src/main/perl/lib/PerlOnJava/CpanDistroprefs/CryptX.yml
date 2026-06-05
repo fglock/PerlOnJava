@@ -1,0 +1,19 @@
+---
+comment: |
+  PerlOnJava distroprefs for CryptX.
+
+  CryptX is an XS distribution with broad cipher, digest, MAC, and public-key
+  bindings. PerlOnJava bundles a focused Crypt::PRNG implementation backed by
+  Java SecureRandom via Crypt::OpenSSL::Random. Avoid installing upstream
+  CryptX files into ~/.perlonjava/lib where they would shadow the bundled
+  shim, and replace the XS-heavy test phase with a focused Crypt::PRNG smoke.
+match:
+  distribution: "^MIK/CryptX-"
+pl:
+  commandline: "PERLONJAVA_SKIP"
+make:
+  commandline: "PERLONJAVA_SKIP"
+test:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::CryptX -e "PerlOnJava::Distroprefs::CryptX::test_phase()"'
+install:
+  commandline: "PERLONJAVA_SKIP"

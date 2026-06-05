@@ -93,6 +93,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public boolean add(RuntimeScalar value) {
             owner.notePackageRootMutation(null, value);
+            if (value != null) value.markContainerOwner(owner);
             owner.markPackageRootedValue(value);
             return super.add(value);
         }
@@ -100,6 +101,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public void add(int index, RuntimeScalar element) {
             owner.notePackageRootMutation(null, element);
+            if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
             super.add(index, element);
         }
@@ -108,6 +110,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         public boolean addAll(java.util.Collection<? extends RuntimeScalar> c) {
             owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
+                if (value != null) value.markContainerOwner(owner);
                 owner.markPackageRootedValue(value);
             }
             return super.addAll(c);
@@ -117,6 +120,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         public boolean addAll(int index, java.util.Collection<? extends RuntimeScalar> c) {
             owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
+                if (value != null) value.markContainerOwner(owner);
                 owner.markPackageRootedValue(value);
             }
             return super.addAll(index, c);
@@ -126,6 +130,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         public RuntimeScalar set(int index, RuntimeScalar element) {
             RuntimeScalar previous = super.get(index);
             owner.notePackageRootMutation(previous, element);
+            if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
             return super.set(index, element);
         }

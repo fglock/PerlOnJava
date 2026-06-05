@@ -175,6 +175,12 @@ subtest 'shuffle' => sub {
     # Empty list
     my @empty = shuffle();
     is_deeply(\@empty, [], 'shuffle empty list');
+
+    srand 1234;
+    my @seeded1 = shuffle(1..10);
+    srand 1234;
+    my @seeded2 = shuffle(1..10);
+    is_deeply(\@seeded2, \@seeded1, 'shuffle observes srand');
 };
 
 # Test sample (if implemented)
@@ -197,6 +203,12 @@ SKIP: {
         # Empty source
         my @from_empty = sample(5, ());
         is_deeply(\@from_empty, [], 'sample from empty list');
+
+        srand 4321;
+        my @seeded1 = sample(4, 1..10);
+        srand 4321;
+        my @seeded2 = sample(4, 1..10);
+        is_deeply(\@seeded2, \@seeded1, 'sample observes srand');
     };
 }
 

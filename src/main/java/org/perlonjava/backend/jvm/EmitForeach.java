@@ -8,6 +8,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -131,8 +132,14 @@ public class EmitForeach {
         if (variableNode instanceof OperatorNode opNode && opNode.operator.equals("$")) {
             if (opNode.operand instanceof IdentifierNode idNode) {
                 String varName = opNode.operator + idNode.name;
-                int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
-                if (varIndex == -1) {
+                SymbolTable.SymbolEntry entry = emitterVisitor.ctx.symbolTable.getSymbolEntry(varName);
+                if (entry != null && "our".equals(entry.decl())) {
+                    loopVariableIsGlobal = true;
+                    String perlPackage = entry.perlPackage() != null
+                            ? entry.perlPackage()
+                            : emitterVisitor.ctx.symbolTable.getCurrentPackage();
+                    globalVarName = NameNormalizer.normalizeVariableName(idNode.name, perlPackage);
+                } else if (entry == null) {
                     loopVariableIsGlobal = true;
                     globalVarName = idNode.name;
                 }
