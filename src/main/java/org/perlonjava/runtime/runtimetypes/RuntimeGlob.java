@@ -1201,6 +1201,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.invalidateStashEnumerationCache();
             GlobalVariable.invalidatePackageRootSnapshot();
             // Drop the stash hash view so it's empty.
             new RuntimeStash(prefix).elements.clear();

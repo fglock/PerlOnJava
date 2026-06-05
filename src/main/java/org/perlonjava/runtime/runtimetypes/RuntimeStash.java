@@ -256,6 +256,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalIORefs.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(childPrefix);
         GlobalVariable.invalidatePackageRootSnapshot();
 
@@ -429,6 +430,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(prefix);
         GlobalVariable.invalidatePackageRootSnapshot();
 

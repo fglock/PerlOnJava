@@ -4,6 +4,8 @@ import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,18 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     // Namespace for the stash, if any
     private String namespace = null;
+    private static long stashEntryCacheVersion = -1;
+    private static final Map<String, List<StashEntryName>> stashEntryCache = new HashMap<>();
+
+    private static final class StashEntryName {
+        final String entryKey;
+        final String globName;
+
+        StashEntryName(String entryKey, String globName) {
+            this.entryKey = entryKey;
+            this.globName = globName;
+        }
+    }
 
     /**
      * Constructs a HashSpecialVariable for the given Matcher.
@@ -88,69 +102,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             }
         } else if (this.mode == Id.STASH) {
             // System.out.println("EntrySet ");
-            // Collect all keys from GlobalVariable
-            Set<String> allKeys = new HashSet<>();
-            allKeys.addAll(GlobalVariable.globalVariables.keySet());
-            allKeys.addAll(GlobalVariable.globalArrays.keySet());
-            allKeys.addAll(GlobalVariable.globalHashes.keySet());
-            allKeys.addAll(GlobalVariable.globalCodeRefs.keySet());
-            allKeys.addAll(GlobalVariable.globalIORefs.keySet());
-            allKeys.addAll(GlobalVariable.globalFormatRefs.keySet());
-
-            // Process each key to extract the namespace part
-            Set<String> uniqueKeys = new HashSet<>(); // Set to track unique keys
-            boolean isMainStash = "main::".equals(namespace);
-            for (String key : allKeys) {
-                String entryKey = null;
-                String globName = null;
-
-                if (key.startsWith(namespace)) {
-                    String remainingKey = key.substring(namespace.length());
-                    int nextSeparatorIndex = remainingKey.indexOf("::");
-                    if (nextSeparatorIndex == -1) {
-                        entryKey = remainingKey;
-                    } else {
-                        // Stash keys for nested packages include the trailing "::"
-                        // (e.g. "Foo::" not "Foo") - this is how Perl indicates sub-packages
-                        entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
-                    }
-                    // entryKey already includes "::" for nested packages
-                    globName = namespace + entryKey;
-                } else if (isMainStash) {
-                    // For %main::, also include top-level packages that aren't explicitly
-                    // prefixed with "main::". In Perl, $Foo::x and $main::Foo::x are the same.
-                    // Variables in top-level packages are stored as "Foo::x", not "main::Foo::x".
-                    int separatorIndex = key.indexOf("::");
-                    if (separatorIndex > 0) {
-                        // This is a top-level package (like "Foo::test")
-                        // Extract "Foo::" as the entry key
-                        entryKey = key.substring(0, separatorIndex + 2);
-                        // The glob name is the original key prefix
-                        globName = entryKey;
-                    }
-                }
-
-                if (entryKey == null) {
-                    continue;
-                }
-
-                // Special sort variables should not show up in stash enumeration
-                if (entryKey.equals("a") || entryKey.equals("b")) {
-                    continue;
-                }
-
-                if (entryKey.isEmpty()) {
-                    continue;
-                }
-
-                if (!containsAnySlotWithPrefix(globName)) {
-                    continue;
-                }
-
-                // Add the entry only if it's not already in the set of unique keys
-                if (uniqueKeys.add(entryKey)) {
-                    entries.add(new SimpleEntry<>(entryKey, new RuntimeStashEntry(globName, true)));
-                }
+            for (StashEntryName entry : cachedStashEntries(namespace)) {
+                entries.add(new SimpleEntry<>(entry.entryKey, new RuntimeStashEntry(entry.globName, true)));
             }
         }
         return entries;
@@ -225,48 +178,95 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             return super.keySet();
         }
 
-        Set<String> allKeys = new HashSet<>();
-        allKeys.addAll(GlobalVariable.globalVariables.keySet());
-        allKeys.addAll(GlobalVariable.globalArrays.keySet());
-        allKeys.addAll(GlobalVariable.globalHashes.keySet());
-        allKeys.addAll(GlobalVariable.globalCodeRefs.keySet());
-        allKeys.addAll(GlobalVariable.globalIORefs.keySet());
-        allKeys.addAll(GlobalVariable.globalFormatRefs.keySet());
-
         Set<String> keys = new HashSet<>();
-        boolean isMainStash = "main::".equals(namespace);
-        for (String key : allKeys) {
-            String entryKey = null;
-            String globName = null;
-            if (key.startsWith(namespace)) {
-                String remainingKey = key.substring(namespace.length());
-                int nextSeparatorIndex = remainingKey.indexOf("::");
-                if (nextSeparatorIndex == -1) {
-                    entryKey = remainingKey;
-                } else {
-                    entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
-                }
-                globName = namespace + entryKey;
-            } else if (isMainStash) {
-                int separatorIndex = key.indexOf("::");
-                if (separatorIndex > 0) {
-                    entryKey = key.substring(0, separatorIndex + 2);
-                    globName = entryKey;
-                }
-            }
-
-            if (entryKey == null || entryKey.isEmpty()) {
-                continue;
-            }
-            if (entryKey.equals("a") || entryKey.equals("b")) {
-                continue;
-            }
-            if (globName == null || !containsAnySlotWithPrefix(globName)) {
-                continue;
-            }
-            keys.add(entryKey);
+        for (StashEntryName entry : cachedStashEntries(namespace)) {
+            keys.add(entry.entryKey);
         }
         return keys;
+    }
+
+    private static List<StashEntryName> cachedStashEntries(String namespace) {
+        long version = GlobalVariable.stashEnumerationVersion();
+        if (stashEntryCacheVersion != version) {
+            stashEntryCache.clear();
+            stashEntryCacheVersion = version;
+        }
+        List<StashEntryName> cached = stashEntryCache.get(namespace);
+        if (cached != null) {
+            return cached;
+        }
+        List<StashEntryName> computed = computeStashEntries(namespace);
+        stashEntryCache.put(namespace, computed);
+        return computed;
+    }
+
+    private static List<StashEntryName> computeStashEntries(String namespace) {
+        Set<String> uniqueKeys = new HashSet<>();
+        List<StashEntryName> entries = new ArrayList<>();
+        addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalVariables.keySet(), uniqueKeys, entries);
+        addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalArrays.keySet(), uniqueKeys, entries);
+        addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalHashes.keySet(), uniqueKeys, entries);
+        addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalCodeRefs.keySet(), uniqueKeys, entries);
+        for (String key : GlobalVariable.globalIORefs.keySet()) {
+            if (!GlobalVariable.isIORefHiddenAfterStashDelete(key)) {
+                addCachedStashEntryFromGlobalKey(namespace, key, uniqueKeys, entries);
+            }
+        }
+        addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalFormatRefs.keySet(), uniqueKeys, entries);
+        return entries;
+    }
+
+    private static void addCachedStashEntriesFromGlobalKeys(String namespace,
+                                                            Iterable<String> globalKeys,
+                                                            Set<String> uniqueKeys,
+                                                            List<StashEntryName> entries) {
+        for (String key : globalKeys) {
+            addCachedStashEntryFromGlobalKey(namespace, key, uniqueKeys, entries);
+        }
+    }
+
+    private static void addCachedStashEntryFromGlobalKey(String namespace,
+                                                         String key,
+                                                         Set<String> uniqueKeys,
+                                                         List<StashEntryName> entries) {
+        boolean isMainStash = "main::".equals(namespace);
+        String entryKey = stashEntryKeyFromGlobalKey(namespace, key, isMainStash);
+        if (entryKey == null || entryKey.isEmpty() || entryKey.equals("a") || entryKey.equals("b")) {
+            return;
+        }
+        if (uniqueKeys.add(entryKey)) {
+            entries.add(new StashEntryName(entryKey, stashGlobNameForEntryKey(namespace, entryKey, key)));
+        }
+    }
+
+    private static String stashEntryKeyFromGlobalKey(String namespace, String key, boolean isMainStash) {
+        if (key.startsWith(namespace)) {
+            String remainingKey = key.substring(namespace.length());
+            int nextSeparatorIndex = remainingKey.indexOf("::");
+            if (nextSeparatorIndex == -1) {
+                return remainingKey;
+            }
+            // Stash keys for nested packages include the trailing "::"
+            // (e.g. "Foo::" not "Foo") - this is how Perl indicates sub-packages.
+            return remainingKey.substring(0, nextSeparatorIndex + 2);
+        }
+        if (isMainStash) {
+            // For %main::, also include top-level packages that aren't explicitly
+            // prefixed with "main::". In Perl, $Foo::x and $main::Foo::x are the same.
+            // Variables in top-level packages are stored as "Foo::x", not "main::Foo::x".
+            int separatorIndex = key.indexOf("::");
+            if (separatorIndex > 0) {
+                return key.substring(0, separatorIndex + 2);
+            }
+        }
+        return null;
+    }
+
+    private static String stashGlobNameForEntryKey(String namespace, String entryKey, String originalGlobalKey) {
+        if ("main::".equals(namespace) && originalGlobalKey.startsWith(entryKey)) {
+            return entryKey;
+        }
+        return namespace + entryKey;
     }
 
     private static RuntimeScalar captureAllArrayRef(List<String> captures) {
@@ -361,6 +361,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.invalidateStashEnumerationCache();
             GlobalVariable.clearHiddenIORefsForNamespace(prefix);
             GlobalVariable.invalidatePackageRootSnapshot();
 

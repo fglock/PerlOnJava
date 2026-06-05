@@ -34,8 +34,8 @@ public class GlobalVariable {
     public static final Map<String, Boolean> isSubs = new HashMap<>();
     public static final Map<String, RuntimeScalar> globalCodeRefs = new GlobalCodeRefMap();
     private static final Map<String, RuntimeScalar> globalPseudoConstants = new HashMap<>();
-    static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
-    static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
+    static final Map<String, RuntimeGlob> globalIORefs = new StashSlotMap<>();
+    static final Map<String, RuntimeFormat> globalFormatRefs = new StashSlotMap<>();
     private static final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
     private static final Set<String> hiddenIORefsAfterStashDelete = new HashSet<>();
 
@@ -77,13 +77,26 @@ public class GlobalVariable {
     private static final Set<String> declaredGlobalVariables = new HashSet<>();
     private static final Set<String> declaredGlobalArrays = new HashSet<>();
     private static final Set<String> declaredGlobalHashes = new HashSet<>();
+    private static long stashEnumerationVersion = 0;
+
+    static long stashEnumerationVersion() {
+        return stashEnumerationVersion;
+    }
+
+    static void invalidateStashEnumerationCache() {
+        stashEnumerationVersion++;
+    }
 
     private static final class PackageRootMap<T extends RuntimeBase> extends HashMap<String, T> {
         @Override
         public T put(String key, T value) {
+            boolean newKey = !containsKey(key);
             markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             T previous = super.put(key, value);
+            if (newKey) {
+                invalidateStashEnumerationCache();
+            }
             invalidatePackageRootSnapshot();
             return previous;
         }
@@ -94,6 +107,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(value);
             T previous = super.putIfAbsent(key, value);
             if (previous == null) {
+                invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
             } else {
                 markPackageGlobalRoot(previous);
@@ -105,6 +119,7 @@ public class GlobalVariable {
         public T remove(Object key) {
             T previous = super.remove(key);
             if (previous != null) {
+                invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
             }
             return previous;
@@ -113,6 +128,7 @@ public class GlobalVariable {
         @Override
         public void clear() {
             if (!isEmpty()) {
+                invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
             }
             super.clear();
@@ -138,9 +154,13 @@ public class GlobalVariable {
 
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
+            boolean newKey = !containsKey(key);
             markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             RuntimeScalar old = super.put(key, value);
+            if (newKey) {
+                invalidateStashEnumerationCache();
+            }
             invalidatePackageRootSnapshot();
             if (old != null && old != value) {
                 old.globalCodeRefFqn = null;
@@ -166,6 +186,7 @@ public class GlobalVariable {
         public RuntimeScalar remove(Object key) {
             RuntimeScalar prev = super.remove(key);
             if (prev != null) {
+                invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
                 prev.globalCodeRefFqn = null;
             }
@@ -178,12 +199,51 @@ public class GlobalVariable {
         @Override
         public void clear() {
             if (!isEmpty()) {
+                invalidateStashEnumerationCache();
                 for (RuntimeScalar s : values()) {
                     if (s != null) {
                         s.globalCodeRefFqn = null;
                     }
                 }
                 invalidatePackageRootSnapshot();
+            }
+            super.clear();
+        }
+    }
+
+    private static final class StashSlotMap<T> extends HashMap<String, T> {
+        @Override
+        public T put(String key, T value) {
+            boolean newKey = !containsKey(key);
+            T previous = super.put(key, value);
+            if (newKey) {
+                invalidateStashEnumerationCache();
+            }
+            return previous;
+        }
+
+        @Override
+        public T putIfAbsent(String key, T value) {
+            T previous = super.putIfAbsent(key, value);
+            if (previous == null) {
+                invalidateStashEnumerationCache();
+            }
+            return previous;
+        }
+
+        @Override
+        public T remove(Object key) {
+            T previous = super.remove(key);
+            if (previous != null) {
+                invalidateStashEnumerationCache();
+            }
+            return previous;
+        }
+
+        @Override
+        public void clear() {
+            if (!isEmpty()) {
+                invalidateStashEnumerationCache();
             }
             super.clear();
         }
@@ -475,13 +535,17 @@ public class GlobalVariable {
 
     static void hideIORefAfterStashDelete(String key) {
         if (key != null && globalIORefs.containsKey(key)) {
-            hiddenIORefsAfterStashDelete.add(key);
+            if (hiddenIORefsAfterStashDelete.add(key)) {
+                invalidateStashEnumerationCache();
+            }
         }
     }
 
     static void markStashEntryVisible(String key) {
         if (key != null) {
-            hiddenIORefsAfterStashDelete.remove(key);
+            if (hiddenIORefsAfterStashDelete.remove(key)) {
+                invalidateStashEnumerationCache();
+            }
         }
     }
 
@@ -505,7 +569,9 @@ public class GlobalVariable {
     }
 
     static void clearHiddenIORefsForNamespace(String prefix) {
-        hiddenIORefsAfterStashDelete.removeIf(k -> k.startsWith(prefix));
+        if (hiddenIORefsAfterStashDelete.removeIf(k -> k.startsWith(prefix))) {
+            invalidateStashEnumerationCache();
+        }
     }
 
     /**
