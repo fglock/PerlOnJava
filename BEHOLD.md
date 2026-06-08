@@ -1,79 +1,230 @@
-# PerlOnJava
+# BEHOLD: PerlOnJava
 
-*"It shouldn't work. It does work. These two facts have not yet been introduced to each other."*
-
----
-
-## What Is This Thing?
-
-Somewhere between a clever idea and a cry for help, **PerlOnJava** compiles Perl to JVM bytecode.
-
-Yes, *that* Perl. The one with the `$`, `@`, and `%` sigils that look like someone sneezed on a shift key. And yes, *that* JVM — the one that runs inside roughly 97% of enterprise software, approximately 40% of which nobody has touched since 2009.
-
-Together, they form something that computer scientists will one day study, in the same hushed tones reserved for the Antikythera mechanism and the Winchester Mystery House.
+*"There are two kinds of software engineering: carefully designed architecture, and finding out what happens if you pull this lever. PerlOnJava is interested in both."*
 
 ---
 
-## Why?
+# What Is PerlOnJava?
 
-This is, admittedly, a question that comes up a lot.
+PerlOnJava compiles Perl to JVM bytecode.
 
-The honest answer is: because Perl is extraordinarily good at things that Java finds deeply uncomfortable — text processing, regular expressions, rapid scripting, a certain devil-may-care attitude toward types — and Java is extraordinarily good at things Perl finds uncomfortable, such as *running on anything built after 2005 without a three-page installation ritual.*
+Yes, that Perl.
 
-PerlOnJava is the arranged marriage nobody asked for and everybody quietly benefits from.
+The one that regards punctuation not as decoration but as a management strategy.
 
----
+And yes, that JVM.
 
-## Features
+The immense subterranean bureaucracy responsible for keeping the modern world functioning through a combination of strict rules, virtual machines, and application servers installed by people who have since retired.
 
-**A single JAR.** That's it. One file. You can put it in a drawer. You can email it. You can, theoretically, throw it at someone, though we accept no liability for the results. The entire Perl runtime, a standard library, and enough ambition to make sensible people nervous — all in one tidy archive.
+Against all expectation, the arrangement works.
 
-**Bundled modules.** The most useful Perl modules are included, because we are not monsters. You should not have to fight CPAN simply to read a file.
-
-**DBI via JDBC.** You can talk to databases. Real databases. With SQL. The kind of databases that have been running payroll since before you were born and will continue to do so long after everyone has forgotten what they contain or why.
-
-**JSR-223 embedding.** This means you can run Perl *inside* Java programs. We understand if you need a moment.
-
-**HTTP via Netty.** A fast, non-blocking HTTP stack, because sometimes a Perl script needs to be a web service, and the universe is under no obligation to make sense.
-
-**Regex. Glorious, terrifying regex.** Perl's regular expressions are the reason the phrase "write-only code" exists. They are also the reason complex text problems get solved in one line instead of forty. PerlOnJava brings them to the JVM intact, like archaeological treasures that are still somehow dangerous.
+This has disappointed several theorists.
 
 ---
 
-## Getting Started
+# Why?
+
+Because Perl and Java have complementary personalities.
+
+Perl is the eccentric wizard who lives in a tower constructed entirely from regular expressions and insists that every problem can be solved elegantly with a one-liner.
+
+Java is the city clerk who requires Form 27-B, submitted in triplicate, before allowing the one-liner anywhere near production.
+
+Between them, they accidentally form a balanced individual.
+
+Perl excels at text processing, scripting, automation, and expressing complex ideas in alarming brevity.
+
+Java excels at portability, stability, tooling, and continuing to execute code long after everyone involved has forgotten why it was written.
+
+PerlOnJava allows each language to exploit the other's strengths while outsourcing its weaknesses.
+
+Like many successful partnerships, it began with mutual suspicion.
+
+---
+
+# Features
+
+## One JAR
+
+One file.
+
+Contained within it are:
+
+* a Perl compiler,
+* a Perl runtime,
+* standard libraries,
+* assorted modules,
+* and a quantity of optimism that some experts would describe as "operationally significant."
+
+You may distribute this JAR.
+
+You may archive it.
+
+You may place it reverently upon a shelf.
+
+You may throw it at a system administrator.
+
+The authors recommend against the final option, although they acknowledge that circumstances vary.
+
+---
+
+## Bundled Modules
+
+Useful modules are included.
+
+This decision was reached after extensive scientific investigation determined that installing dependencies individually builds character mainly in the people who aren't doing it.
+
+CPAN remains available for those who enjoy adventure.
+
+---
+
+## Database Access via DBI and JDBC
+
+PerlOnJava speaks to databases through JDBC.
+
+Ancient databases.
+
+Modern databases.
+
+Databases created during mergers that nobody entirely remembers authorizing.
+
+Databases containing a table named `TEMP_FINAL_V2_OLD_BACKUP_DO_NOT_DELETE`.
+
+Especially those databases.
+
+---
+
+## JSR-223 Embedding
+
+Perl can run inside Java applications.
+
+Java developers encountering this feature typically pass through five emotional stages:
+
+1. Curiosity.
+2. Denial.
+3. Experimentation.
+4. Unexpected productivity.
+5. The uncomfortable realization that they quite like Perl.
+
+---
+
+## HTTP via Netty
+
+Sometimes a Perl script should become a web service.
+
+The universe provides no guidance on this matter.
+
+PerlOnJava therefore assumes the answer is yes and supplies a fast, non-blocking HTTP stack.
+
+Whether this represents progress is left as an exercise for future historians.
+
+---
+
+## Regular Expressions
+
+Perl regular expressions are among humanity's great achievements.
+
+Alongside cathedrals, orbital mechanics, and inventing cheese.
+
+They have also been compared unfavorably to eldritch incantations.
+
+Both views contain elements of truth.
+
+PerlOnJava preserves Perl's regex behaviour faithfully.
+
+Even the expression you wrote at two in the morning.
+
+Especially that one.
+
+You may not understand it.
+
+But somewhere, deep in its nested parentheses, it understands you.
+
+---
+
+# Getting Started
 
 ```bash
 java -jar perlonjava.jar myscript.pl
 ```
 
-That's it. The JAR will do the rest. It will parse your Perl, construct an abstract syntax tree, lower it into JVM bytecode, and execute it — all without once asking you how your day is going or suggesting you might prefer Kotlin.
+The JAR performs the necessary rituals.
+
+It parses Perl source code.
+
+Constructs abstract syntax trees.
+
+Generates JVM bytecode.
+
+Loads classes.
+
+Executes the result.
+
+At no point does it recommend rewriting everything in Kotlin.
 
 ---
 
-## A Note on Compatibility
+# Compatibility
 
-PerlOnJava aims for broad compatibility with standard Perl behaviour. "Broad compatibility" is, admittedly, a phrase that leaves some room. Perl has been accumulating behaviour since 1987. Some of that behaviour was intentional. PerlOnJava handles the vast majority of it, and is improving continuously, which is more than can be said for several programming languages currently drawing a salary in production systems worldwide.
+PerlOnJava aims for broad compatibility with Perl.
 
----
+The phrase "broad compatibility" acknowledges two important facts.
 
-## A Note on Regular Expressions
+First, Perl has existed since 1987.
 
-They work. All of them. Even the ones you wrote at 2am that you no longer understand. *Especially* those.
+Second, Perl programmers have spent much of that time discovering entirely new interpretations of the phrase "perfectly reasonable behaviour."
 
----
+PerlOnJava supports the overwhelming majority of real-world Perl code and continues to improve.
 
-## Contributing
+Occasionally, compatibility bugs are discovered.
 
-Contributions are welcome. PerlOnJava is open source, which means it belongs, in a philosophical sense, to everyone, and in a practical sense, to whoever fixes the most bugs.
-
-If you find something broken, please open an issue. If you know how to fix it, please open a pull request. If you have found something that *shouldn't* work but does, please open a pull request and also perhaps lie down for a bit.
+These are generally distinguished from language features by whether anyone admits to creating them.
 
 ---
 
-## Licence
+# Contributing
 
-Open source. See `LICENSE` for the legal specifics, which are considerably less entertaining than this document but considerably more binding.
+PerlOnJava is open source.
+
+In principle, it belongs to everyone.
+
+In practice, it belongs to whoever is currently investigating why a test named `t/op/magic/something_really_important.t` has suddenly begun failing on Tuesdays.
+
+Bug reports are welcome.
+
+Pull requests are welcome.
+
+Documentation improvements are welcome.
+
+If you discover behaviour that should not work but demonstrably does, please submit a pull request accompanied by a detailed explanation.
+
+The explanation will be studied carefully.
+
+Future generations deserve answers.
 
 ---
 
-*PerlOnJava: Because the right tool for the job is occasionally two tools duct-taped together by someone who really knew what they were doing.*
+# Licence
+
+See `LICENSE`.
+
+The licence document is substantially more authoritative than this one.
+
+It is also less amusing, although this is generally considered appropriate in legal literature.
+
+---
+
+# Final Remarks
+
+PerlOnJava exists because software engineering occasionally advances through careful planning, rigorous analysis, and disciplined execution.
+
+And occasionally because someone says:
+
+> "That sounds ridiculous. I wonder if it works."
+
+PerlOnJava is dedicated to exploring the overlap between these two approaches.
+
+Bring Perl to the JVM.
+
+The JVM has had plenty of time to prepare.
+
