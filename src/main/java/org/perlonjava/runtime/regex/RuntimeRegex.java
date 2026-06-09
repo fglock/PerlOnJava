@@ -559,7 +559,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static boolean isEscapedRequiredLiteral(char ch) {
         return switch (ch) {
             case 'A', 'B', 'C', 'D', 'G', 'H', 'K', 'N', 'P', 'R', 'S', 'V', 'W', 'X', 'Z',
-                 'b', 'c', 'd', 'g', 'h', 'k', 'n', 'o', 'p', 'r', 's', 't', 'v', 'w', 'x', 'z',
+                 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'k', 'n', 'o', 'p', 'r', 's', 't', 'v', 'w', 'x', 'z',
                  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> false;
             default -> true;
         };

@@ -873,7 +873,6 @@ public class ModuleOperators {
             String message;
             if (err.isEmpty() && ioErr.isEmpty()) {
                 // File executed but returned undef
-                // For non-moduleTrue, undef means failure
                 message = fileName + " did not return a true value";
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
@@ -920,7 +919,6 @@ public class ModuleOperators {
 
         // Check if the result is false (0 or empty string but not undef)
         if (!result.getBoolean()) {
-            // False values cause failure in require
             String message = fileName + " did not return a true value";
             // Remove from %INC since it didn't return true
             incHash.elements.remove(fileName);

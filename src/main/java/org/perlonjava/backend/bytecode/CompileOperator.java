@@ -1040,11 +1040,13 @@ public class CompileOperator {
                 }
                 java.util.List<Integer> hashIdxs = bytecodeCompiler.symbolTable.getMyHashIndicesInScope(0);
                 for (int idx : hashIdxs) {
+                    if (idx == exprReg) continue;
                     bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
                     bytecodeCompiler.emitReg(idx);
                 }
                 java.util.List<Integer> arrayIdxs = bytecodeCompiler.symbolTable.getMyArrayIndicesInScope(0);
                 for (int idx : arrayIdxs) {
+                    if (idx == exprReg) continue;
                     bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
                     bytecodeCompiler.emitReg(idx);
                 }
