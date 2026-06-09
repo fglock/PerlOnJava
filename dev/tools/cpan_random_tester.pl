@@ -22,6 +22,7 @@
 #   perl dev/tools/cpan_random_tester.pl --modules list.txt # Test modules from file
 #   perl dev/tools/cpan_random_tester.pl --report-only      # Regenerate .md from .dat
 #   perl dev/tools/cpan_random_tester.pl --timeout 120      # 2 min soft timeout
+#   perl dev/tools/cpan_random_tester.pl --max-runtime 0    # disable 90 min hard cap
 #   perl dev/tools/cpan_random_tester.pl --jobs 8           # Parallelize CPAN test files
 #   perl dev/tools/cpan_random_tester.pl --install           # Install mode (deps stay)
 #
@@ -62,12 +63,14 @@ my $pass_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-pass.dat
 my $fail_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-fail.dat');
 my $skip_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-skip.dat');
 my $log_dir      = '/tmp/cpan_random_logs';
-my $KILL_AFTER   = 10;  # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
+my $KILL_AFTER          = 10;   # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
+my $DEFAULT_MAX_RUNTIME = 5400; # 90 minutes — hard cap per target (install or test)
 
 # jcpan -t soft timeouts (seconds): distribution root module -> timeout.
 # Overrides --timeout for that target only (heavy test suites).
+# Hard --max-runtime still applies regardless of soft timeout or activity.
 my %MODULE_TIMEOUT_SECONDS = (
-    'DBIx::Class' => 3600,
+    'DBIx::Class'     => 3600,
     'Image::ExifTool' => 3600,
 );
 
@@ -78,9 +81,9 @@ my $packages_gz  = glob('~/.cpan/sources/modules/02packages.details.txt.gz');
 # CLI options
 # ──────────────────────────────────────────────────────────────────────
 my $count       = 10;
-my $timeout     = 2400;   # soft wall-clock timeout; progress can extend it
-my $activity_grace = 600; # after soft timeout, allow this many idle seconds
-my $max_runtime = 0;      # 0 = no hard cap beyond activity timeout
+my $timeout        = 2400;  # soft wall-clock timeout; progress can extend it
+my $activity_grace = 600;   # after soft timeout, allow this many idle seconds
+my $max_runtime    = $DEFAULT_MAX_RUNTIME;  # hard cap per target module
 my $progress_interval = 60;
 my $jcpan_jobs  = 1;      # passed through as `jcpan --jobs N`
 my $report_only = 0;
@@ -118,8 +121,11 @@ die "--jobs must be a positive integer\n" unless $jcpan_jobs > 0;
 
 sub effective_timeout_for {
     my ($module) = @_;
-    my $secs = $MODULE_TIMEOUT_SECONDS{$module};
-    defined $secs ? $secs : $timeout;
+    my $secs = $MODULE_TIMEOUT_SECONDS{$module} // $timeout;
+    if ($max_runtime && $secs > $max_runtime) {
+        $secs = $max_runtime;
+    }
+    return $secs;
 }
 
 # ──────────────────────────────────────────────────────────────────────
@@ -250,9 +256,8 @@ if ($modules_arg) {
     @selected = @pool[0 .. $count - 1];
 }
 
-printf "\nTesting %d randomly selected modules (soft timeout: %ds, activity grace: %ds, jcpan jobs: %d, commit: %s):\n",
-    scalar @selected, $timeout, $activity_grace, $jcpan_jobs, $git_commit;
-printf "Hard max runtime: %ds\n", $max_runtime if $max_runtime;
+printf "\nTesting %d randomly selected modules (soft timeout: %ds, activity grace: %ds, max runtime: %ds, jcpan jobs: %d, commit: %s):\n",
+    scalar @selected, $timeout, $activity_grace, $max_runtime, $jcpan_jobs, $git_commit;
 if (%MODULE_TIMEOUT_SECONDS) {
     print "Per-module soft timeouts: ",
         join(', ', map { "$_=${MODULE_TIMEOUT_SECONDS{$_}}s" } sort keys %MODULE_TIMEOUT_SECONDS),
@@ -772,17 +777,20 @@ sub command_arg_label {
 }
 
 # Run a command with a progress-aware timeout.  The per-module timeout is a
-# soft wall clock: after it expires, output activity can keep the run alive.
-# Once the child has been idle for --activity-grace seconds after that soft
-# timeout, the whole process group is killed so no jperl/java child survives.
+# soft wall clock: after it expires, output activity can keep the run alive
+# until --max-runtime (default 90 minutes) or --activity-grace idle seconds.
+# Once timed out, the process group is killed and any perlonjava JVMs that
+# escaped into a different group but are still descendants of our jcpan child
+# are mopped up (user-started jperl processes elsewhere are untouched).
 # Returns ($output, $timed_out, $timeout_error).
 sub run_with_timeout {
     my ($cmd, $secs) = @_;
     my @cmd = ref($cmd) eq 'ARRAY' ? @$cmd : ('/bin/sh', '-c', $cmd);
 
-    my $output        = '';
-    my $timed_out     = 0;
-    my $timeout_error = '';
+    my $output          = '';
+    my $timed_out       = 0;
+    my $timeout_error   = '';
+    my %run_descendants = ();
 
     pipe(my $pipe, my $writer) or do {
         warn "pipe failed: $!\n";
@@ -834,6 +842,7 @@ sub run_with_timeout {
                     $max_runtime, $now - $last_output
                 );
                 $term_sent_at = $now;
+                note_run_descendants($pid, \%run_descendants);
                 terminate_process_group($pid, 'TERM');
             } elsif ($now >= $soft_deadline && ($now - $last_output) >= $activity_grace) {
                 $timed_out = 1;
@@ -842,12 +851,14 @@ sub run_with_timeout {
                     $secs, $now - $last_output
                 );
                 $term_sent_at = $now;
+                note_run_descendants($pid, \%run_descendants);
                 terminate_process_group($pid, 'TERM');
             }
         }
 
         if ($timed_out && !$child_done && !$kill_sent
             && $term_sent_at && (time() - $term_sent_at) >= $KILL_AFTER) {
+            note_run_descendants($pid, \%run_descendants);
             terminate_process_group($pid, 'KILL');
             $kill_sent = 1;
         }
@@ -899,6 +910,11 @@ sub run_with_timeout {
     close $pipe;    # always close to avoid FD leak
     waitpid($pid, WNOHANG) unless $child_done;
 
+    if ($timed_out) {
+        note_run_descendants($pid, \%run_descendants);
+        cleanup_run_perlonjava_jvms(\%run_descendants);
+    }
+
     return ($output // '', $timed_out, $timeout_error);
 }
 
@@ -910,6 +926,63 @@ sub terminate_process_group {
     }
     kill $signal, -$pid;
     kill $signal,  $pid;
+}
+
+# Build pid => ppid map from ps (one snapshot per call).
+sub read_ppid_map {
+    my %ppid;
+    open my $ps, '-|', 'ps', '-axo', 'pid=,ppid=' or return %ppid;
+    while (<$ps>) {
+        my ($p, $pp) = split;
+        next unless defined $p && defined $pp;
+        $ppid{$p} = $pp;
+    }
+    close $ps;
+    return %ppid;
+}
+
+# Record every descendant of $root (including $root) into $seen.
+sub note_run_descendants {
+    my ($root, $seen) = @_;
+    return unless $root;
+
+    my %ppid = read_ppid_map();
+    my @frontier = ($root);
+    $seen->{$root} = 1;
+
+    while (@frontier) {
+        my @next;
+        for my $parent (@frontier) {
+            for my $p (keys %ppid) {
+                next unless ($ppid{$p} // -1) == $parent;
+                next if $seen->{$p};
+                $seen->{$p} = 1;
+                push @next, $p;
+            }
+        }
+        @frontier = @next;
+    }
+}
+
+sub is_perlonjava_java_pid {
+    my ($pid) = @_;
+    return 0 unless $pid && kill 0, $pid;
+    open my $ps, '-|', 'ps', '-p', $pid, '-o', 'command=' or return 0;
+    my $cmd = <$ps>;
+    close $ps;
+    return 0 unless defined $cmd;
+    return $cmd =~ /perlonjava.*\.jar|org\.perlonjava\.app\.cli\.Main/ ? 1 : 0;
+}
+
+# Parallel prove --jobs workers can land outside the jcpan process group, so
+# SIGKILL on the group may leave JVM descendants behind. Only kill JVMs we
+# tracked as descendants of our forked jcpan child — not unrelated user jperl.
+sub cleanup_run_perlonjava_jvms {
+    my ($descendants) = @_;
+    for my $pid (sort { $a <=> $b } keys %$descendants) {
+        next unless is_perlonjava_java_pid($pid);
+        kill 9, $pid;
+    }
 }
 
 sub print_progress_line {
@@ -1155,8 +1228,9 @@ Options:
   --activity-grace N
                    After --timeout has elapsed, kill the target if it produces
                    no output for this many seconds (default: 600).
-  --max-runtime N  Optional hard cap per target module in seconds (default: 0,
-                   disabled). Useful for chatty tests that never finish.
+  --max-runtime N  Hard cap per target module in seconds (default: 5400,
+                   90 minutes). Stops chatty installs/tests that never finish.
+                   Pass 0 to disable the hard cap.
   --progress-interval N
                    Print a progress heartbeat every N seconds while a target is
                    still running (default: 60; 0 disables).
@@ -1178,8 +1252,10 @@ Behavior:
   - Dependencies discovered during a run are recorded too (PASS/FAIL).
   - A few heavy targets (e.g. DBIx::Class) have a higher per-module timeout in the script.
   - Long targets are not killed merely for crossing --timeout if their output
-    is still active; they time out only after --activity-grace seconds without
-    output, or after --max-runtime if one is set.
+    is still active; they time out after --activity-grace seconds without
+    output, or unconditionally at --max-runtime (default 90 minutes).
+  - On timeout, stray perlonjava JVMs that are still descendants of the
+    forked jcpan child are cleaned up; unrelated user jperl runs are left alone.
   - --jobs parallelizes test files within a single jcpan run. This script keeps
     target modules sequential to avoid CPAN build/install directory contention.
   - If a previously-failed module now passes (e.g., its deps got
