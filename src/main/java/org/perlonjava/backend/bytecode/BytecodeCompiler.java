@@ -1189,6 +1189,11 @@ public class BytecodeCompiler implements Visitor {
             Node elem = node.elements.get(i);
             if (elem == null) continue;
             if (elem instanceof ListNode ln && ln.elements.isEmpty()) continue;
+            // Pragma flag nodes and format declarations adjust compile-time state
+            // but do not contribute a do/require return value (matches Perl 5:
+            // use/no run as BEGIN; their CompilerFlagNode epilogue is not the
+            // file's last runtime expression).
+            if (elem instanceof CompilerFlagNode || elem instanceof FormatNode) continue;
             if (elem instanceof AbstractNode an && (an.getBooleanAnnotation("compileTimeOnly") || an.getBooleanAnnotation("noReturnValue"))) continue;
             lastMeaningfulIndex = i;
             break;
@@ -6356,8 +6361,6 @@ public class BytecodeCompiler implements Visitor {
         // Update per-call-site $^H and %^H for caller()[8] and caller()[10]
         WarningBitsRegistry.setCallSiteHints(node.getStrictOptions());
         WarningBitsRegistry.snapshotCurrentHintHash();
-
-        lastResultReg = -1;
     }
 
     @Override
@@ -6365,7 +6368,6 @@ public class BytecodeCompiler implements Visitor {
         // Format declarations are handled at the JVM compilation stage.
         // When the interpreter backend processes the AST, formats are already
         // registered, so this is a no-op.
-        lastResultReg = -1;
     }
 
     @Override
