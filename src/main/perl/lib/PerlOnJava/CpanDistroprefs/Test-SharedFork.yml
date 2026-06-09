@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::SharedFork.
+
+  PerlOnJava does not implement fork, and Test::SharedFork's own test suite
+  intentionally exercises fork coordination. Some downstream pure-Perl
+  distributions, such as Module::Build::Pluggable, load Test::SharedFork as a
+  test harness helper while their useful behavior remains independently covered
+  by their own tests. Build the module but skip its fork-only upstream tests so
+  CPAN can stage it for those downstream test phases.
+match:
+  distribution: "^EXODIST/Test-SharedFork-"
+test:
+  commandline: "PERLONJAVA_SKIP"

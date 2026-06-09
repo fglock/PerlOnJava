@@ -3325,7 +3325,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else if (frame >= stackTraceSize) {
             RuntimeCode activeCode = hasExplicitExpr ? getActiveCodeAt(originalFrame) : null;
-            if (activeCode != null && activeCode.explicitlyRenamed) {
+            if (activeCode != null && !calledFromDB) {
                 String pkg = normalizeCallerPackage(activeCode.packageName);
                 if (ctx == RuntimeContextType.SCALAR) {
                     res.add(new RuntimeScalar(pkg));
@@ -3334,6 +3334,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     res.add(new RuntimeScalar(activeCode.cvStartFile != null ? activeCode.cvStartFile : ""));
                     res.add(new RuntimeScalar(activeCode.cvStartLine));
                     String subName = applyAnonNameOverride(callerSubNameForCode(activeCode));
+                    if (subName == null || subName.isEmpty()) {
+                        subName = pkg + "::__ANON__";
+                    }
                     res.add(subName != null && !subName.isEmpty()
                             ? new RuntimeScalar(subName)
                             : RuntimeScalarCache.scalarUndef);

@@ -70,6 +70,7 @@ sub _bootstrap_prefs {
         'Test-File-ShareDir.yml'     => 'PerlOnJava/CpanDistroprefs/Test-File-ShareDir.yml',
         'DateTime-Locale.yml'        => 'PerlOnJava/CpanDistroprefs/DateTime-Locale.yml',
         'Test-File.yml'              => 'PerlOnJava/CpanDistroprefs/Test-File.yml',
+        'Test-SharedFork.yml'        => 'PerlOnJava/CpanDistroprefs/Test-SharedFork.yml',
         'UNIVERSAL-can.yml'          => 'PerlOnJava/CpanDistroprefs/UNIVERSAL-can.yml',
         'UNIVERSAL-isa.yml'          => 'PerlOnJava/CpanDistroprefs/UNIVERSAL-isa.yml',
         'Test-MockObject.yml'        => 'PerlOnJava/CpanDistroprefs/Test-MockObject.yml',
