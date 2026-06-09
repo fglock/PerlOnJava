@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 13;
+use Test::More tests => 14;
 use Eval::Closure qw(eval_closure);
 use Sub::Util qw(set_subname);
 
@@ -137,5 +137,29 @@ is( $renamed_eval_closure->(),
 is( CallerLineNumber::GeneratedAccessor::generated(),
     'CallerLineNumber::GeneratedAccessor::generated',
     'caller(1)[3] uses explicit set_subname for generated accessors' );
+
+{
+    package CallerLineNumber::TiedHash;
+    require Tie::Hash;
+    our @ISA = qw(Tie::StdHash);
+    sub FETCH {
+        main::is('x', 'x', 'Test::More context survives set_subname accessor tied FETCH');
+        return 42;
+    }
+
+    package CallerLineNumber::SetSubnameAccessor;
+    sub new {
+        my %store;
+        tie %store, 'CallerLineNumber::TiedHash';
+        return bless \%store, shift;
+    }
+
+    my $accessor = sub { return $_[0]{value} };
+    Sub::Util::set_subname('CallerLineNumber::SetSubnameAccessor::value', $accessor);
+    no strict 'refs';
+    *{'CallerLineNumber::SetSubnameAccessor::value'} = $accessor;
+}
+
+my $tied_fetch_value = CallerLineNumber::SetSubnameAccessor->new->value();
 
 # End of tests

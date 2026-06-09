@@ -3325,7 +3325,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else if (frame >= stackTraceSize) {
             RuntimeCode activeCode = hasExplicitExpr ? getActiveCodeAt(originalFrame) : null;
-            if (activeCode != null && activeCode.explicitlyRenamed) {
+            String activeSubName = activeCode != null
+                    ? applyAnonNameOverride(callerSubNameForCode(activeCode))
+                    : null;
+            if (activeCode != null && !calledFromDB
+                    && hasExplicitlyRenamedActiveCode()
+                    && activeSubName != null && !activeSubName.isEmpty()) {
                 String pkg = normalizeCallerPackage(activeCode.packageName);
                 if (ctx == RuntimeContextType.SCALAR) {
                     res.add(new RuntimeScalar(pkg));
@@ -3333,10 +3338,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     res.add(new RuntimeScalar(pkg));
                     res.add(new RuntimeScalar(activeCode.cvStartFile != null ? activeCode.cvStartFile : ""));
                     res.add(new RuntimeScalar(activeCode.cvStartLine));
-                    String subName = applyAnonNameOverride(callerSubNameForCode(activeCode));
-                    res.add(subName != null && !subName.isEmpty()
-                            ? new RuntimeScalar(subName)
-                            : RuntimeScalarCache.scalarUndef);
+                    res.add(new RuntimeScalar(activeSubName));
                     Boolean hasArgsFromStack = getHasArgsAt(originalFrame);
                     res.add(hasArgsFromStack != null && hasArgsFromStack
                             ? RuntimeScalarCache.scalarTrue
@@ -3392,6 +3394,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    private static boolean hasExplicitlyRenamedActiveCode() {
+        for (RuntimeCode active : activeCodeStack.get()) {
+            if (active.explicitlyRenamed) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String applyAnonNameOverride(String subName) {
