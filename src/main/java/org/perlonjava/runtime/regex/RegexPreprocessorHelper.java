@@ -516,6 +516,14 @@ public class RegexPreprocessorHelper {
                     sb.append(String.format("x{%X}", hexVal));
                     offset = pos - 1; // -1 because caller will increment
                 }
+            } else if (c2 == 'e') {
+                // Perl \e is ESC (0x1B); Java regex has no \e alias
+                sb.setLength(sb.length() - 1);
+                sb.append("\\x1B");
+            } else if (c2 == 'a') {
+                // Perl \a is BEL (0x07)
+                sb.setLength(sb.length() - 1);
+                sb.append("\\x07");
             } else {
                 // Other escape sequences, pass through
                 sb.append(Character.toChars(c2));

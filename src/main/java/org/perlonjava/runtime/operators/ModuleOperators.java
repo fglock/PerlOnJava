@@ -873,6 +873,10 @@ public class ModuleOperators {
             String message;
             if (err.isEmpty() && ioErr.isEmpty()) {
                 // File executed but returned undef
+                RuntimeScalar versionFallback = requireVersionFallback(fileName);
+                if (versionFallback != null) {
+                    return versionFallback;
+                }
                 // For non-moduleTrue, undef means failure
                 message = fileName + " did not return a true value";
                 throw new PerlCompilerException(message);
@@ -920,6 +924,13 @@ public class ModuleOperators {
 
         // Check if the result is false (0 or empty string but not undef)
         if (!result.getBoolean()) {
+            // Perl falls back to $Package::VERSION when a .pm file's last
+            // statement is not true but the package defines a version.
+            RuntimeScalar versionFallback = requireVersionFallback(fileName);
+            if (versionFallback != null) {
+                return versionFallback;
+            }
+
             // False values cause failure in require
             String message = fileName + " did not return a true value";
             // Remove from %INC since it didn't return true
@@ -1182,6 +1193,93 @@ public class ModuleOperators {
     private static boolean isFilehandle(RuntimeScalar scalar) {
         return scalar.type == RuntimeScalarType.GLOB
                 || scalar.type == RuntimeScalarType.GLOBREFERENCE;
+    }
+
+    /**
+     * When a required .pm file's trailing statement is not true, Perl 5 accepts
+     * a successful require if the loaded package defines a truthy {@code $VERSION}.
+     */
+    private static RuntimeScalar requireVersionFallback(String fileName) {
+        if (fileName == null || !fileName.endsWith(".pm")) {
+            return null;
+        }
+
+        String packageName = packageNameFromIncPath(fileName);
+        if (packageName == null) {
+            packageName = packageNameFromLibSuffix(fileName);
+        }
+        if (packageName == null) {
+            packageName = packageNameFromRelativeModulePath(fileName);
+        }
+        if (packageName == null) {
+            return null;
+        }
+
+        String versionKey = packageName + "::VERSION";
+        RuntimeScalar version = GlobalVariable.globalVariables.get(versionKey);
+        if (version == null || !version.defined().getBoolean() || !version.getBoolean()) {
+            version = getGlobalVariable(versionKey);
+        }
+        if (version == null || !version.defined().getBoolean() || !version.getBoolean()) {
+            String requireDebug = System.getenv("JPERL_REQUIRE_DEBUG");
+            if (requireDebug != null && !requireDebug.isEmpty()) {
+                System.err.println("versionFallback miss file=" + fileName + " pkg=" + packageName
+                        + " defined=" + (version != null && version.defined().getBoolean())
+                        + " bool=" + (version != null && version.getBoolean())
+                        + " str=" + version);
+            }
+            return null;
+        }
+        return version;
+    }
+
+    private static String packageNameFromIncPath(String fileName) {
+        RuntimeArray inc = GlobalVariable.getGlobalArray("main::INC");
+        String bestMatch = null;
+        int bestPrefixLen = -1;
+        for (int i = 0; i < inc.size(); i++) {
+            String incPath = inc.get(i).toString();
+            if (incPath.isEmpty() || !fileName.startsWith(incPath)) {
+                continue;
+            }
+            if (incPath.length() <= bestPrefixLen) {
+                continue;
+            }
+            String rel = fileName.substring(incPath.length());
+            if (rel.startsWith("/")) {
+                rel = rel.substring(1);
+            }
+            if (!rel.endsWith(".pm") || rel.isEmpty()) {
+                continue;
+            }
+            bestPrefixLen = incPath.length();
+            bestMatch = rel.substring(0, rel.length() - 3).replace("/", "::");
+        }
+        return bestMatch;
+    }
+
+    private static String packageNameFromLibSuffix(String fileName) {
+        String normalized = fileName.replace('\\', '/');
+        int libIdx = normalized.indexOf("/lib/");
+        if (libIdx < 0) {
+            return null;
+        }
+        String rel = normalized.substring(libIdx + 5);
+        if (!rel.endsWith(".pm") || rel.isEmpty()) {
+            return null;
+        }
+        return rel.substring(0, rel.length() - 3).replace("/", "::");
+    }
+
+    private static String packageNameFromRelativeModulePath(String fileName) {
+        String normalized = fileName.replace('\\', '/');
+        if (normalized.startsWith("/") || normalized.contains(":")) {
+            return null;
+        }
+        if (!normalized.endsWith(".pm") || normalized.isEmpty()) {
+            return null;
+        }
+        return normalized.substring(0, normalized.length() - 3).replace("/", "::");
     }
 
     private static class IncHookValues {
