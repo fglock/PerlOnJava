@@ -61,6 +61,26 @@ ok(!exists $hash{key2} && !exists $hash{key3}, 'Slice delete successful');
 $hash{outer}{inner} = 'nested';
 is($hash{outer}{inner}, 'nested', 'Autovivification works');
 
+{
+    my $hashref = {};
+    ${$hashref->{a}} = 1;
+    ${$hashref->{b}} = 2;
+    ${$hashref->{c}} = 3;
+    is_deeply(
+        [${$hashref->{a}}, ${$hashref->{b}}, ${$hashref->{c}}],
+        [1, 2, 3],
+        'Scalar dereference autovivifies distinct hash entries'
+    );
+
+    ${$hashref->{b}} = 9;
+    is_deeply(
+        [${$hashref->{a}}, ${$hashref->{b}}, ${$hashref->{c}}],
+        [1, 9, 3],
+        'Autovivified scalar refs do not alias across hash keys'
+    );
+    is(scalar(keys %$hashref), 3, 'Scalar dereference autovivifies hash keys');
+}
+
 my @array;
 $array[2]{inner} = 'nested';
 is($array[2]{inner}, 'nested', 'Autovivification works');

@@ -70,6 +70,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Track whether the last successful match was on a BYTE_STRING input,
     // so that captures ($1, $2, $&, etc.) preserve BYTE_STRING type.
     public static boolean lastMatchWasByteString = false;
+    public static int[] manualCaptureStarts = null;
+    public static int[] manualCaptureEnds = null;
     // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
     public Pattern pattern;
     // Compiled regex pattern for Unicode strings (Unicode \w, \d)
@@ -1100,6 +1102,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             posScalar = RuntimePosLvalue.pos(string);
             isPosDefined = posScalar.getDefinedBoolean();
             startPos = isPosDefined ? posScalar.getInt() : 0;
+
+            RuntimeBase fastXmlElementResult = tryFastXmlElementScan(regex, string, inputStr, startPos, posScalar, ctx);
+            if (fastXmlElementResult != null) {
+                return fastXmlElementResult;
+            }
+
+            RuntimeBase fastXmpResult = tryFastXmpMetaElementScan(regex, string, inputStr, startPos, posScalar, ctx);
+            if (fastXmpResult != null) {
+                return fastXmpResult;
+            }
             
             // Check if previous call had zero-length match at this position (for SCALAR context)
             // This prevents infinite loops in: while ($str =~ /pat/g)
@@ -1219,6 +1231,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
                 globalMatcher = matcher;
+                manualCaptureStarts = null;
+                manualCaptureEnds = null;
                 globalMatchString = inputStr;
                 lastMatchUsedBackslashK = regex.hasBackslashK;
                 updateLastNamedCaptureGroups(matcher);
@@ -1415,6 +1429,287 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         } else {
             return scalarUndef;
         }
+    }
+
+    /**
+     * Avoid Java Pattern recursion for ExifTool's XMP element scan:
+     * {@code <(/?)x:xmpmeta([-\w:.\x80-\xff]*)(.*?(/?))>}.
+     *
+     * <p>On Google extended-XMP payloads, Java's backtracking engine can
+     * recurse deeply enough to throw {@link StackOverflowError}, while Perl
+     * handles the scan iteratively. This narrow path preserves the captures
+     * ExifTool uses while keeping other regexes on the normal engine.</p>
+     */
+    private static RuntimeBase tryFastXmpMetaElementScan(RuntimeRegex regex,
+                                                         RuntimeScalar string,
+                                                         String inputStr,
+                                                         int startPos,
+                                                         RuntimeScalar posScalar,
+                                                         int ctx) {
+        if (ctx == RuntimeContextType.LIST || regex.regexFlags == null) {
+            return null;
+        }
+        if (!isXmpMetaElementScanPattern(regex)) {
+            return null;
+        }
+
+        int tagStart = findXmpMetaTagStart(inputStr, startPos);
+        if (tagStart < 0) {
+            if (regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
+                posScalar.set(scalarUndef);
+            }
+            globalMatchString = null;
+            lastMatchedString = null;
+            lastMatchStart = -1;
+            lastMatchEnd = -1;
+            manualCaptureStarts = null;
+            manualCaptureEnds = null;
+            return ctx == RuntimeContextType.SCALAR ? RuntimeScalarCache.scalarFalse : scalarUndef;
+        }
+
+        boolean closing = inputStr.charAt(tagStart + 1) == '/';
+        int literalStart = tagStart + (closing ? 2 : 1);
+        int nameEnd = literalStart + "x:xmpmeta".length();
+        int suffixEnd = nameEnd;
+        while (suffixEnd < inputStr.length() && isXmpMetaNameSuffixChar(inputStr.charAt(suffixEnd))) {
+            suffixEnd++;
+        }
+        int tagEnd = inputStr.indexOf('>', suffixEnd);
+        if (tagEnd < 0) {
+            if (regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
+                posScalar.set(scalarUndef);
+            }
+            globalMatchString = null;
+            lastMatchedString = null;
+            lastMatchStart = -1;
+            lastMatchEnd = -1;
+            manualCaptureStarts = null;
+            manualCaptureEnds = null;
+            return ctx == RuntimeContextType.SCALAR ? RuntimeScalarCache.scalarFalse : scalarUndef;
+        }
+
+        String group1 = closing ? "/" : "";
+        String group2 = inputStr.substring(nameEnd, suffixEnd);
+        String group3 = inputStr.substring(suffixEnd, tagEnd);
+        String group4 = group3.endsWith("/") ? "/" : "";
+
+        lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+        globalMatcher = null;
+        globalMatchString = inputStr;
+        lastMatchUsedBackslashK = false;
+        lastNamedCaptureGroups = new LinkedHashMap<>();
+        lastCaptureGroups = new String[]{group1, group2, group3, group4};
+        manualCaptureStarts = new int[]{
+                closing ? tagStart + 1 : literalStart,
+                nameEnd,
+                suffixEnd,
+                group4.equals("/") ? tagEnd - 1 : tagEnd
+        };
+        manualCaptureEnds = new int[]{
+                closing ? tagStart + 2 : literalStart,
+                suffixEnd,
+                tagEnd,
+                group4.equals("/") ? tagEnd : tagEnd
+        };
+        lastMatchedString = inputStr.substring(tagStart, tagEnd + 1);
+        lastMatchStart = tagStart;
+        lastMatchEnd = tagEnd + 1;
+        lastMatchUsedPFlag = regex.hasPreservesMatch;
+        lastSuccessfulPattern = regex;
+        lastSuccessfulMatchedString = lastMatchedString;
+        lastSuccessfulMatchStart = lastMatchStart;
+        lastSuccessfulMatchEnd = lastMatchEnd;
+        lastSuccessfulMatchString = globalMatchString;
+        regex.matched = true;
+
+        if (regex.regexFlags.isGlobalMatch() && posScalar != null) {
+            posScalar.set(lastMatchEnd);
+            RuntimePosLvalue.recordNonZeroLengthMatch(string);
+        }
+
+        return ctx == RuntimeContextType.SCALAR ? RuntimeScalarCache.scalarTrue : scalarUndef;
+    }
+
+    private static boolean isXmpMetaElementScanPattern(RuntimeRegex regex) {
+        String perlPattern = "<(/?)x:xmpmeta([-\\w:.\\x80-\\xff]*)(.*?(/?))>";
+        if (perlPattern.equals(regex.patternString)) {
+            return true;
+        }
+        return regex.pattern != null && perlPattern.equals(regex.pattern.pattern());
+    }
+
+    /**
+     * Avoid Java Pattern recursion for ExifTool's generic XML element scan:
+     * {@code <([?/]?)([-\w:.\x80-\xff]+|!--)([^>]*)>}.
+     */
+    private static RuntimeBase tryFastXmlElementScan(RuntimeRegex regex,
+                                                     RuntimeScalar string,
+                                                     String inputStr,
+                                                     int startPos,
+                                                     RuntimeScalar posScalar,
+                                                     int ctx) {
+        if (ctx == RuntimeContextType.LIST || regex.regexFlags == null) {
+            return null;
+        }
+        if (!isXmlElementScanPattern(regex)) {
+            return null;
+        }
+
+        XmlElementMatch match = findXmlElement(inputStr, startPos);
+        if (match == null) {
+            if (regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
+                posScalar.set(scalarUndef);
+            }
+            globalMatchString = null;
+            lastMatchedString = null;
+            lastMatchStart = -1;
+            lastMatchEnd = -1;
+            manualCaptureStarts = null;
+            manualCaptureEnds = null;
+            return ctx == RuntimeContextType.SCALAR ? RuntimeScalarCache.scalarFalse : scalarUndef;
+        }
+
+        String group1 = inputStr.substring(match.group1Start, match.group1End);
+        String group2 = inputStr.substring(match.group2Start, match.group2End);
+        String group3 = inputStr.substring(match.group3Start, match.group3End);
+
+        lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+        globalMatcher = null;
+        globalMatchString = inputStr;
+        lastMatchUsedBackslashK = false;
+        lastNamedCaptureGroups = new LinkedHashMap<>();
+        lastCaptureGroups = new String[]{group1, group2, group3};
+        manualCaptureStarts = new int[]{match.group1Start, match.group2Start, match.group3Start};
+        manualCaptureEnds = new int[]{match.group1End, match.group2End, match.group3End};
+        lastMatchedString = inputStr.substring(match.matchStart, match.matchEnd);
+        lastMatchStart = match.matchStart;
+        lastMatchEnd = match.matchEnd;
+        lastMatchUsedPFlag = regex.hasPreservesMatch;
+        lastSuccessfulPattern = regex;
+        lastSuccessfulMatchedString = lastMatchedString;
+        lastSuccessfulMatchStart = lastMatchStart;
+        lastSuccessfulMatchEnd = lastMatchEnd;
+        lastSuccessfulMatchString = globalMatchString;
+        regex.matched = true;
+
+        if (regex.regexFlags.isGlobalMatch() && posScalar != null) {
+            posScalar.set(lastMatchEnd);
+            RuntimePosLvalue.recordNonZeroLengthMatch(string);
+        }
+
+        return ctx == RuntimeContextType.SCALAR ? RuntimeScalarCache.scalarTrue : scalarUndef;
+    }
+
+    private static boolean isXmlElementScanPattern(RuntimeRegex regex) {
+        String perlPattern = "<([?/]?)([-\\w:.\\x80-\\xff]+|!--)([^>]*)>";
+        if (perlPattern.equals(regex.patternString)) {
+            return true;
+        }
+        return regex.pattern != null && perlPattern.equals(regex.pattern.pattern());
+    }
+
+    private static XmlElementMatch findXmlElement(String inputStr, int startPos) {
+        int search = Math.max(0, startPos);
+        while (search < inputStr.length()) {
+            int tagStart = inputStr.indexOf('<', search);
+            if (tagStart < 0 || tagStart + 1 >= inputStr.length()) {
+                return null;
+            }
+
+            int index = tagStart + 1;
+            int group1Start = index;
+            int group1End = index;
+            char marker = inputStr.charAt(index);
+            if (marker == '?' || marker == '/') {
+                group1End = ++index;
+            }
+
+            int group2Start = index;
+            int group2End;
+            if (index + 3 <= inputStr.length() && inputStr.startsWith("!--", index)) {
+                group2End = index + 3;
+            } else {
+                while (index < inputStr.length() && isXmlElementNameChar(inputStr.charAt(index))) {
+                    index++;
+                }
+                group2End = index;
+                if (group2End == group2Start) {
+                    search = tagStart + 1;
+                    continue;
+                }
+            }
+
+            int group3Start = group2End;
+            int tagEnd = inputStr.indexOf('>', group3Start);
+            if (tagEnd < 0) {
+                return null;
+            }
+
+            return new XmlElementMatch(tagStart, tagEnd + 1,
+                    group1Start, group1End,
+                    group2Start, group2End,
+                    group3Start, tagEnd);
+        }
+        return null;
+    }
+
+    private static boolean isXmlElementNameChar(char ch) {
+        return ch == '-' || ch == ':' || ch == '.'
+                || ch == '_' || Character.isLetterOrDigit(ch)
+                || (ch >= 0x80 && ch <= 0xff);
+    }
+
+    private static class XmlElementMatch {
+        final int matchStart;
+        final int matchEnd;
+        final int group1Start;
+        final int group1End;
+        final int group2Start;
+        final int group2End;
+        final int group3Start;
+        final int group3End;
+
+        XmlElementMatch(int matchStart, int matchEnd,
+                        int group1Start, int group1End,
+                        int group2Start, int group2End,
+                        int group3Start, int group3End) {
+            this.matchStart = matchStart;
+            this.matchEnd = matchEnd;
+            this.group1Start = group1Start;
+            this.group1End = group1End;
+            this.group2Start = group2Start;
+            this.group2End = group2End;
+            this.group3Start = group3Start;
+            this.group3End = group3End;
+        }
+    }
+
+    private static int findXmpMetaTagStart(String inputStr, int startPos) {
+        int search = Math.max(0, startPos);
+        while (search < inputStr.length()) {
+            int literal = inputStr.indexOf("x:xmpmeta", search);
+            if (literal < 0) {
+                return -1;
+            }
+            int openStart = literal - 1;
+            if (openStart >= startPos && openStart >= 0 && inputStr.charAt(openStart) == '<') {
+                return openStart;
+            }
+            int closeStart = literal - 2;
+            if (closeStart >= startPos && closeStart >= 0
+                    && inputStr.charAt(closeStart) == '<'
+                    && inputStr.charAt(closeStart + 1) == '/') {
+                return closeStart;
+            }
+            search = literal + 1;
+        }
+        return -1;
+    }
+
+    private static boolean isXmpMetaNameSuffixChar(char ch) {
+        return ch == '-' || ch == ':' || ch == '.'
+                || ch == '_' || Character.isLetterOrDigit(ch)
+                || (ch >= 0x80 && ch <= 0xff);
     }
 
     /**
@@ -1785,13 +2080,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         lastMatchUsedPFlag = false;
         lastCaptureGroups = null;
         lastNamedCaptureGroups = null;
+        manualCaptureStarts = null;
+        manualCaptureEnds = null;
 
         // Reset regex cache matched flags
         reset();
     }
 
     public static String matchString() {
-        if (globalMatcher != null && lastMatchedString != null) {
+        if (lastMatchedString != null) {
             // Current match data available
             return lastMatchedString;
         }
@@ -1799,7 +2096,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static String preMatchString() {
-        if (globalMatcher != null && globalMatchString != null && lastMatchStart != -1) {
+        if (globalMatchString != null && lastMatchStart != -1) {
             // Current match data available
             String result = globalMatchString.substring(0, lastMatchStart);
             return result;
@@ -1808,7 +2105,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static String postMatchString() {
-        if (globalMatcher != null && globalMatchString != null && lastMatchEnd != -1) {
+        if (globalMatchString != null && lastMatchEnd != -1) {
             // Current match data available
             String result = globalMatchString.substring(lastMatchEnd);
             return result;
@@ -1861,6 +2158,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return lastMatchStart >= 0 ? getScalarInt(lastMatchStart) : scalarUndef;
         }
         if (globalMatcher == null) {
+            if (manualCaptureStarts != null && group > 0 && group <= manualCaptureStarts.length) {
+                int start = manualCaptureStarts[group - 1];
+                return start >= 0 ? getScalarInt(start) : scalarUndef;
+            }
             return scalarUndef;
         }
         try {
@@ -1884,6 +2185,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return lastMatchEnd >= 0 ? getScalarInt(lastMatchEnd) : scalarUndef;
         }
         if (globalMatcher == null) {
+            if (manualCaptureEnds != null && group > 0 && group <= manualCaptureEnds.length) {
+                int end = manualCaptureEnds[group - 1];
+                return end >= 0 ? getScalarInt(end) : scalarUndef;
+            }
             return scalarUndef;
         }
         try {
@@ -1904,6 +2209,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public static int matcherSize() {
         if (globalMatcher == null) {
+            if (manualCaptureStarts != null) {
+                return manualCaptureStarts.length + 1;
+            }
             return 0;
         }
         int size = globalMatcher.groupCount();

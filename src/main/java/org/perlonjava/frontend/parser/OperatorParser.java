@@ -1382,6 +1382,7 @@ public class OperatorParser {
             }
 
             String fileName = NameNormalizer.moduleToFilename(moduleName);
+            GlobalVariable.ensurePackageStash(moduleName);
             operand = ListNode.makeList(new StringNode(fileName, parser.tokenIndex));
         } else {
             // Check for the specific pattern: :: followed by identifier (which is invalid for require)

@@ -87,9 +87,10 @@ public class Time {
      * @return a RuntimeList containing formatted local time components.
      */
     public static RuntimeList localtime(RuntimeList args, int ctx) {
+        ZoneId localZone = localZoneId();
         ZonedDateTime date;
         if (args.isEmpty()) {
-            date = ZonedDateTime.now();
+            date = ZonedDateTime.now(localZone);
         } else {
             double dval = args.getFirst().getDouble();
             if (Double.isNaN(dval) || Double.isInfinite(dval)) {
@@ -97,7 +98,7 @@ public class Time {
             }
             long arg = args.getFirst().getLong();
             try {
-                date = Instant.ofEpochSecond(arg).atZone(ZoneId.systemDefault());
+                date = Instant.ofEpochSecond(arg).atZone(localZone);
             } catch (DateTimeException e) {
                 emitTimeOverflowWarnings("localtime", arg);
                 return returnUndefOrEmptyList(ctx);
@@ -131,6 +132,81 @@ public class Time {
             }
         }
         return getTimeComponents(ctx, date);
+    }
+
+    private static ZoneId localZoneId() {
+        RuntimeScalar tzScalar = getGlobalHash("main::ENV").elements.get("TZ");
+        String tz = tzScalar != null && tzScalar.getDefinedBoolean()
+                ? tzScalar.toString()
+                : System.getenv("TZ");
+        if (tz == null || tz.isEmpty()) {
+            return ZoneId.systemDefault();
+        }
+
+        ZoneOffset posixOffset = parsePosixTzOffset(tz);
+        if (posixOffset != null) {
+            return posixOffset;
+        }
+
+        try {
+            return ZoneId.of(tz);
+        } catch (DateTimeException ignored) {
+            return ZoneId.systemDefault();
+        }
+    }
+
+    private static ZoneOffset parsePosixTzOffset(String tz) {
+        String s = tz.trim();
+        if (s.equals("UTC") || s.equals("GMT")) {
+            return ZoneOffset.UTC;
+        }
+        if (!(s.startsWith("UTC") || s.startsWith("GMT")) || s.length() < 5) {
+            return null;
+        }
+
+        char sign = s.charAt(3);
+        if (sign != '+' && sign != '-') {
+            return null;
+        }
+        int pos = 4;
+        int hourStart = pos;
+        while (pos < s.length() && Character.isDigit(s.charAt(pos))) {
+            pos++;
+        }
+        if (pos == hourStart) {
+            return null;
+        }
+
+        int hours;
+        int minutes = 0;
+        try {
+            hours = Integer.parseInt(s.substring(hourStart, pos));
+            if (pos < s.length()) {
+                if (s.charAt(pos) == ':') {
+                    pos++;
+                }
+                int minuteStart = pos;
+                while (pos < s.length() && Character.isDigit(s.charAt(pos)) && pos - minuteStart < 2) {
+                    pos++;
+                }
+                if (pos > minuteStart) {
+                    minutes = Integer.parseInt(s.substring(minuteStart, pos));
+                }
+            }
+        } catch (NumberFormatException e) {
+            return null;
+        }
+
+        if (hours > 18 || minutes > 59) {
+            return null;
+        }
+
+        int totalSeconds = hours * 3600 + minutes * 60;
+        // POSIX TZ signs are inverted: UTC+9 means local time is UTC-09:00.
+        if (sign == '+') {
+            totalSeconds = -totalSeconds;
+        }
+        return ZoneOffset.ofTotalSeconds(totalSeconds);
     }
 
     // Perl's scalar gmtime/localtime returns ctime(3) format: "Sun Jan  1 00:00:00 1970"

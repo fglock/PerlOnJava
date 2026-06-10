@@ -287,11 +287,32 @@ public class FileSpec extends PerlModuleBase {
      * @return A {@link RuntimeList} containing the temporary directory path.
      */
     public static RuntimeList tmpdir(RuntimeArray args, int ctx) {
-        String tmpDir = System.getenv("TMPDIR");
-        if (tmpDir == null || tmpDir.isEmpty()) {
-            tmpDir = SystemUtils.osIsWindows() ? System.getenv("TEMP") : "/tmp";
+        RuntimeHash perlEnv = GlobalVariable.getGlobalHash("main::ENV");
+        List<String> candidates = new ArrayList<>();
+        if (SystemUtils.osIsWindows()) {
+            candidates.add(perlEnvValue(perlEnv, "TMPDIR", System.getenv("TMPDIR")));
+            candidates.add(perlEnvValue(perlEnv, "TEMP", System.getenv("TEMP")));
+            candidates.add(perlEnvValue(perlEnv, "TMP", System.getenv("TMP")));
+        } else {
+            candidates.add(perlEnvValue(perlEnv, "TMPDIR", System.getenv("TMPDIR")));
+            candidates.add("/tmp");
         }
-        return new RuntimeScalar(tmpDir).getList();
+
+        for (String candidate : candidates) {
+            if (candidate == null || candidate.isEmpty()) {
+                continue;
+            }
+            File dir = new File(candidate);
+            if (dir.isDirectory() && dir.canWrite()) {
+                return new RuntimeScalar(candidate).getList();
+            }
+        }
+        return new RuntimeScalar(".").getList();
+    }
+
+    private static String perlEnvValue(RuntimeHash perlEnv, String key, String fallback) {
+        RuntimeScalar value = perlEnv.elements.get(key);
+        return value != null && value.getDefinedBoolean() ? value.toString() : fallback;
     }
 
     /**

@@ -58,6 +58,10 @@ public class BytecodeCompiler implements Visitor {
     // instead of LOAD_UNDEF + SET_SCALAR, to preserve the RuntimeScalar identity that
     // closures share.
     final Set<String> closureCapturedVarNames = new HashSet<>();
+    // Lexical scalar variables currently used as foreach loop aliases. Assignments
+    // through these variables must update the aliased element in place, matching
+    // Perl's `foreach my $x (@array)` and `foreach $x (@array)` semantics.
+    private final Map<String, Integer> foreachAliasLexicalCounts = new HashMap<>();
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -115,6 +119,8 @@ public class BytecodeCompiler implements Visitor {
     // Nesting depth inside eval blocks (goto &sub from eval is prohibited)
     // 0 = not in eval block, >0 = inside eval block(s)
     int evalBlockDepth;
+    private final ArrayDeque<Integer> evalReturnTargetRegs = new ArrayDeque<>();
+    private final ArrayDeque<List<Integer>> evalReturnGotoPatchPositions = new ArrayDeque<>();
     // Counter tracking nesting depth inside finally blocks (control flow out of finally is prohibited)
     private int finallyBlockDepth;
     // Tracks whether any LOCAL_* or PUSH_LOCAL_VARIABLE opcodes are emitted (for DynamicVariableManager optimization)
@@ -335,6 +341,26 @@ public class BytecodeCompiler implements Visitor {
 
     void registerVariable(String name, int reg) {
         symbolTable.addVariableWithIndex(name, reg, "my");
+    }
+
+    boolean isForeachAliasLexical(String name) {
+        return foreachAliasLexicalCounts.getOrDefault(name, 0) > 0;
+    }
+
+    private void pushForeachAliasLexical(String name) {
+        foreachAliasLexicalCounts.merge(name, 1, Integer::sum);
+    }
+
+    private void popForeachAliasLexical(String name) {
+        Integer count = foreachAliasLexicalCounts.get(name);
+        if (count == null) {
+            return;
+        }
+        if (count <= 1) {
+            foreachAliasLexicalCounts.remove(name);
+        } else {
+            foreachAliasLexicalCounts.put(name, count - 1);
+        }
     }
 
     private void enterScope() {
@@ -742,6 +768,23 @@ public class BytecodeCompiler implements Visitor {
         return null;
     }
 
+    boolean shouldReturnFromInlineEvalBlock() {
+        return evalBlockDepth > 0 && !isInMapGrepBlock;
+    }
+
+    void emitInlineEvalReturn(int exprReg) {
+        if (evalReturnTargetRegs.isEmpty() || evalReturnGotoPatchPositions.isEmpty()) {
+            throwCompilerException("Internal error: return outside eval block has no eval target", currentTokenIndex);
+            return;
+        }
+        emitAliasWithTarget(evalReturnTargetRegs.peek(), exprReg);
+        emit(Opcodes.GOTO);
+        int patchPos = bytecode.size();
+        emitInt(0);
+        evalReturnGotoPatchPositions.peek().add(patchPos);
+        lastResultReg = -1;
+    }
+
     /**
      * Compile an AST node to InterpretedCode.
      *
@@ -1052,17 +1095,11 @@ public class BytecodeCompiler implements Visitor {
         // For eval STRING, runtime values are available via evalRuntimeContext ThreadLocal
         RuntimeCode.EvalRuntimeContext evalCtx = RuntimeCode.getEvalRuntimeContext();
         if (evalCtx != null && evalCtx.runtimeValues() != null) {
-            // Find variable in captured environment
-            String[] capturedEnv = evalCtx.capturedEnv();
-            Object[] runtimeValues = evalCtx.runtimeValues();
-
-            for (int i = 0; i < capturedEnv.length; i++) {
-                if (capturedEnv[i].equals(varName)) {
-                    Object value = runtimeValues[i];
-                    if (value instanceof RuntimeBase) {
-                        return (RuntimeBase) value;
-                    }
-                }
+            // Eval runtime values are packed without the reserved registers
+            // (`this`, `@_`, `wantarray`), while capturedEnv retains them.
+            Object value = evalCtx.getRuntimeValue(varName);
+            if (value instanceof RuntimeBase) {
+                return (RuntimeBase) value;
             }
         }
 
@@ -5656,14 +5693,23 @@ public class BytecodeCompiler implements Visitor {
 
         // Track eval block nesting for "goto &sub from eval" detection
         evalBlockDepth++;
+        evalReturnTargetRegs.push(resultReg);
+        evalReturnGotoPatchPositions.push(new ArrayList<>());
 
         // Compile the eval block body
         compileNode(node.block, resultReg, currentCallContext);
 
+        List<Integer> returnGotoPatchPositions = evalReturnGotoPatchPositions.pop();
+        evalReturnTargetRegs.pop();
         evalBlockDepth--;
 
         if (lastResultReg >= 0) {
             emitAliasWithTarget(resultReg, lastResultReg);
+        }
+
+        int evalEndPc = bytecode.size();
+        for (int patchPos : returnGotoPatchPositions) {
+            patchIntOffset(patchPos, evalEndPc);
         }
 
         // Emit EVAL_END (clears $@)
@@ -5789,6 +5835,29 @@ public class BytecodeCompiler implements Visitor {
             varReg = allocateRegister();
         }
 
+        String lexicalLoopVarName = null;
+        boolean restoreLexicalLoopVar = false;
+        if (globalLoopVarName == null && node.variable instanceof OperatorNode lexicalVarOp) {
+            if (lexicalVarOp.operator.equals("my") && lexicalVarOp.operand instanceof OperatorNode sigilOp
+                    && sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode idNode) {
+                lexicalLoopVarName = "$" + idNode.name;
+            } else if (lexicalVarOp.operator.equals("$") && lexicalVarOp.operand instanceof IdentifierNode idNode) {
+                String varName = "$" + idNode.name;
+                if (hasVariable(varName) && !isOurVariable(varName)) {
+                    lexicalLoopVarName = varName;
+                    restoreLexicalLoopVar = true;
+                }
+            }
+        }
+
+        int savedLexicalLoopVarReg = -1;
+        if (restoreLexicalLoopVar) {
+            savedLexicalLoopVarReg = allocateRegister();
+            emit(Opcodes.ALIAS);
+            emitReg(savedLexicalLoopVarReg);
+            emitReg(varReg);
+        }
+
         // Step 3b: For global loop variable: emit LOCAL_SCALAR_SAVE_LEVEL.
         // This atomically saves getLocalLevel() into levelReg (pre-push), then calls makeLocal.
         // POP_LOCAL_LEVEL(levelReg) after the loop correctly restores $_ for any nesting depth.
@@ -5830,8 +5899,17 @@ public class BytecodeCompiler implements Visitor {
         loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
 
         // Step 8: Execute body
-        if (node.body != null) {
-            node.body.accept(this);
+        if (lexicalLoopVarName != null) {
+            pushForeachAliasLexical(lexicalLoopVarName);
+        }
+        try {
+            if (node.body != null) {
+                node.body.accept(this);
+            }
+        } finally {
+            if (lexicalLoopVarName != null) {
+                popForeachAliasLexical(lexicalLoopVarName);
+            }
         }
 
         // Step 9: Loop check (next/continue jumps here) - the superinstruction
@@ -5871,6 +5949,11 @@ public class BytecodeCompiler implements Visitor {
         if (levelReg >= 0) {
             emit(Opcodes.POP_LOCAL_LEVEL);
             emitReg(levelReg);
+        }
+        if (savedLexicalLoopVarReg >= 0) {
+            emit(Opcodes.ALIAS);
+            emitReg(varReg);
+            emitReg(savedLexicalLoopVarReg);
         }
 
         // Step 12: Patch all last/next/redo jumps

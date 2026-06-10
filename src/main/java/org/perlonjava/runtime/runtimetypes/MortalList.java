@@ -699,7 +699,7 @@ public class MortalList {
         }
     }
 
-    private static boolean containerMayContainCleanupTargets(RuntimeBase base) {
+    static boolean containerMayContainCleanupTargets(RuntimeBase base) {
         if (!(base instanceof RuntimeArray || base instanceof RuntimeHash)) return false;
         ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
         Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());

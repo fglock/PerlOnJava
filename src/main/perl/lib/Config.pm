@@ -96,6 +96,12 @@ sub _perl_launcher_suffix {
     return '.bat';
 }
 
+sub _shell_single_quote {
+    my ($value) = @_;
+    $value =~ s/'/'"'"'/g;
+    return "'$value'";
+}
+
 # Best-effort hostname; falls back to "localhost" if Java doesn't expose it.
 my $host_name = eval {
     require Sys::Hostname;
@@ -135,6 +141,12 @@ my $system_cc = do {
 $os_name = _perl_os_name($os_name);
 my $is_windows = $os_name eq 'MSWin32';
 my $perl_launcher_suffix = _perl_launcher_suffix($is_windows, $^X);
+my $startperl = $is_windows
+    ? '#!' . $^X
+    : "#!/bin/sh\n"
+        . 'eval "exec ' . _shell_single_quote($^X) . ' -x \"\$0\" \"\$@\""' . "\n"
+        . "    if 0;\n"
+        . "#!perl";
 
 # tie returns the object, so the value returned to require will be true.
 %Config = (
@@ -301,7 +313,7 @@ my $perl_launcher_suffix = _perl_launcher_suffix($is_windows, $^X);
     exe_ext => $is_windows ? '.exe' : '',
     _exe => $perl_launcher_suffix,
     perlpath => $^X,  # Path to the perl interpreter (jperl)
-    startperl => '#!' . $^X,  # Shebang line for Perl scripts
+    startperl => $startperl,  # Shebang line for Perl scripts
     sharpbang => '#!',  # Shebang prefix
     eunicefix => ':',   # No-op fixer (only used on EUNICE)
 

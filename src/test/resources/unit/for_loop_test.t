@@ -127,4 +127,30 @@ for (my $j = 0; $j < 3; $j++) {
 }
 is($main::lv2, 'outer', 'local restored after for(;;) loop');
 
+{
+    my @alias = ('', 'a');
+    foreach my $v (@alias) {
+        $v = length($v) ? $v . 'x' : 'header';
+    }
+    is_deeply(\@alias, ['header', 'ax'], 'foreach my loop variable aliases array elements');
+}
+
+{
+    my $ary = [''];
+    foreach my $v (@$ary) {
+        $v = 'abc';
+    }
+    is($ary->[0], 'abc', 'foreach my loop variable aliases dereferenced array elements');
+}
+
+{
+    my $x = 'original';
+    my @alias = ('a', 'b');
+    foreach $x (@alias) {
+        $x = 'z';
+    }
+    is_deeply(\@alias, ['z', 'z'], 'foreach pre-existing lexical aliases array elements');
+    is($x, 'original', 'foreach restores pre-existing lexical loop variable');
+}
+
 done_testing();

@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 /**
@@ -181,8 +182,9 @@ public class PipeInputChannel implements IOHandle {
                 inputStream.close();
             }
 
-            if (process != null && process.isAlive()) {
-                // Give the process a moment to terminate naturally
+            if (process != null) {
+                // Reap the child even if it has already exited so close()
+                // can return false for non-zero pipe status like Perl.
                 try {
                     exitCode = process.waitFor();
                 } catch (InterruptedException e) {
@@ -196,7 +198,7 @@ public class PipeInputChannel implements IOHandle {
             getGlobalVariable("main::?").set(exitCode << 8);
 
             isEOF = true;
-            return scalarTrue;
+            return exitCode == 0 ? scalarTrue : scalarFalse;
         } catch (IOException e) {
             return handleIOException(e, "close pipe failed");
         }

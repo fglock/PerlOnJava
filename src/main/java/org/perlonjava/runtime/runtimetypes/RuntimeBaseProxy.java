@@ -133,6 +133,32 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     }
 
     @Override
+    public RuntimeScalar scalarDeref() {
+        if (this instanceof RuntimeScalarReadOnly || this instanceof ScalarSpecialVariable) {
+            return super.scalarDeref();
+        }
+        vivify();
+        RuntimeScalar result = lvalue.scalarDeref();
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return result;
+    }
+
+    @Override
+    public RuntimeScalar scalarDerefNonStrict(String packageName) {
+        if (this instanceof RuntimeScalarReadOnly || this instanceof ScalarSpecialVariable) {
+            return super.scalarDerefNonStrict(packageName);
+        }
+        vivify();
+        RuntimeScalar result = lvalue.type == RuntimeScalarType.UNDEF
+                ? lvalue.scalarDeref()
+                : lvalue.scalarDerefNonStrict(packageName);
+        this.type = lvalue.type;
+        this.value = lvalue.value;
+        return result;
+    }
+
+    @Override
     public RuntimeArray arrayDerefNonStrict(String packageName) {
         vivify();  // Ensure the scalar exists in parent hash/array
         RuntimeArray result = lvalue.arrayDerefNonStrict(packageName);  // Delegate to the actual scalar

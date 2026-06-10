@@ -141,7 +141,7 @@ public class ScalarGlobOperator {
             // Check if any directory component contains glob wildcards
             // If so, use recursive glob expansion
             if (hasWildcardInDirectoryComponent(normalizedPattern)) {
-                globRecursive(scalarGlobOperator, normalizedPattern, patternIsAbsolute, results);
+                globRecursive(scalarGlobOperator, pattern, normalizedPattern, patternIsAbsolute, results);
             } else {
                 // Original path: only the filename part has wildcards
                 globSimple(scalarGlobOperator, pattern, normalizedPattern, patternIsAbsolute, results);
@@ -204,8 +204,8 @@ public class ScalarGlobOperator {
      * For example, "t/*&#47;*.t" expands the directory wildcard by listing matching
      * subdirectories, then matches "*.t" files within each.
      */
-    private static void globRecursive(ScalarGlobOperator scalarGlobOperator, String normalizedPattern,
-                                       boolean patternIsAbsolute, List<String> results) {
+    private static void globRecursive(ScalarGlobOperator scalarGlobOperator, String originalPattern,
+                                       String normalizedPattern, boolean patternIsAbsolute, List<String> results) {
         // Split the pattern into path segments
         String[] segments = normalizedPattern.split("/", -1);
 
@@ -218,7 +218,7 @@ public class ScalarGlobOperator {
             // Absolute path: start from root
             if (normalizedPattern.startsWith("/")) {
                 startDir = RuntimeIO.resolveFile("/");
-                prefix = "";
+                prefix = "/";
                 startSegment = 1; // Skip the empty segment before leading /
             } else {
                 // Windows drive letter path like C:/...
@@ -232,7 +232,8 @@ public class ScalarGlobOperator {
             startSegment = 0;
         }
 
-        globRecursiveStep(scalarGlobOperator, startDir, segments, startSegment, prefix, results);
+        globRecursiveStep(scalarGlobOperator, startDir, segments, startSegment, prefix,
+                originalPattern, patternIsAbsolute, results);
     }
 
     /**
@@ -240,6 +241,7 @@ public class ScalarGlobOperator {
      */
     private static void globRecursiveStep(ScalarGlobOperator scalarGlobOperator, File currentDir,
                                            String[] segments, int segmentIndex, String prefix,
+                                           String originalPattern, boolean patternIsAbsolute,
                                            List<String> results) {
         if (segmentIndex >= segments.length) {
             return;
@@ -251,15 +253,16 @@ public class ScalarGlobOperator {
         if (!ScalarGlobOperatorHelper.containsGlobChars(segment)) {
             // Literal segment - just descend
             File next = new File(currentDir, segment);
-            String newPrefix = prefix.isEmpty() ? segment : prefix + "/" + segment;
+            String newPrefix = appendPathPrefix(prefix, segment);
 
             if (isLastSegment) {
                 if (next.exists()) {
-                    results.add(newPrefix);
+                    results.add(formatRecursiveResult(next, newPrefix, originalPattern, patternIsAbsolute));
                 }
             } else {
                 if (next.isDirectory()) {
-                    globRecursiveStep(scalarGlobOperator, next, segments, segmentIndex + 1, newPrefix, results);
+                    globRecursiveStep(scalarGlobOperator, next, segments, segmentIndex + 1, newPrefix,
+                            originalPattern, patternIsAbsolute, results);
                 }
             }
         } else {
@@ -289,16 +292,47 @@ public class ScalarGlobOperator {
                 }
 
                 if (regex.matcher(name).matches()) {
-                    String newPrefix = prefix.isEmpty() ? name : prefix + "/" + name;
+                    String newPrefix = appendPathPrefix(prefix, name);
 
                     if (isLastSegment) {
-                        results.add(newPrefix);
+                        results.add(formatRecursiveResult(entry, newPrefix, originalPattern, patternIsAbsolute));
                     } else if (entry.isDirectory()) {
-                        globRecursiveStep(scalarGlobOperator, entry, segments, segmentIndex + 1, newPrefix, results);
+                        globRecursiveStep(scalarGlobOperator, entry, segments, segmentIndex + 1, newPrefix,
+                                originalPattern, patternIsAbsolute, results);
                     }
                 }
             }
         }
+    }
+
+    private static String formatRecursiveResult(File file, String relativePrefix,
+                                                String originalPattern, boolean patternIsAbsolute) {
+        if (patternIsAbsolute) {
+            String absPath = file.getAbsolutePath();
+            if (File.separatorChar == '\\' && originalPattern.indexOf('/') >= 0) {
+                absPath = absPath.replace('\\', '/');
+            }
+            return absPath;
+        }
+
+        if (File.separatorChar == '\\' && originalPattern.indexOf('\\') >= 0
+                && originalPattern.indexOf('/') < 0) {
+            return relativePrefix.replace('/', '\\');
+        }
+        return relativePrefix;
+    }
+
+    private static String appendPathPrefix(String prefix, String name) {
+        if (prefix.isEmpty()) {
+            return name;
+        }
+        if (prefix.equals("/")) {
+            return "/" + name;
+        }
+        if (prefix.endsWith("/")) {
+            return prefix + name;
+        }
+        return prefix + "/" + name;
     }
 
     /**
