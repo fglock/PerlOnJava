@@ -174,6 +174,13 @@ public class TieHandle extends RuntimeIO {
         return tieHandle.tieCall("WRITE", data, length, offset);
     }
 
+    @Override
+    public RuntimeScalar write(String data) {
+        RuntimeIO.lastWrittenHandle = this;
+        RuntimeList args = new RuntimeList(new RuntimeScalar(data));
+        return tiedPrint(this, args);
+    }
+
     /**
      * Unties a filehandle (delegates to UNTIE if exists).
      */

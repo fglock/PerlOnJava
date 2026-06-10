@@ -258,8 +258,11 @@ public class FilterUtilCall extends PerlModuleBase {
         context.sourceLines = sourceCode.split("(?<=\n)", -1);
         context.currentLine = 0;
 
-        // Apply each filter in the stack (LIFO order)
+        // Apply each filter in the stack (LIFO order). Source filters use $_
+        // as a scratch buffer; localize the slot so caller aliases such as
+        // grep's $_ are not modified by filter_read/filter output.
         RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
+        GlobalVariable.aliasGlobalVariable("main::_", new RuntimeScalar(""));
         StringBuilder filteredCode = new StringBuilder();
 
         try {
@@ -270,9 +273,6 @@ public class FilterUtilCall extends PerlModuleBase {
                 RuntimeScalar filterObj = filterEntry.get(0);
                 RuntimeScalar packageName = filterEntry.get(1);
                 RuntimeScalar isCodeRef = filterEntry.get(2);
-
-                // Clear $_
-                GlobalVariable.getGlobalVariable("main::_").set("");
 
                 if (isCodeRef.getBoolean()) {
                     // Closure filter: call the coderef repeatedly
@@ -376,8 +376,8 @@ public class FilterUtilCall extends PerlModuleBase {
             return filteredCode.toString();
 
         } finally {
-            // Restore $_
-            GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
+            // Restore the caller's $_ slot, preserving aliases/tied scalars.
+            GlobalVariable.aliasGlobalVariable("main::_", savedDefaultVar);
 
             // Clean up context
             context.sourceLines = null;
@@ -546,4 +546,3 @@ public class FilterUtilCall extends PerlModuleBase {
         boolean inFilterRead = false;
     }
 }
-

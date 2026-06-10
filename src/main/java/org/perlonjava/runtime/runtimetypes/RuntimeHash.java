@@ -820,7 +820,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (this.refCount == -1) {
             this.refCount = 0;
         }
-        RuntimeScalar result = createReference();
+        RuntimeScalar result = createAnonymousReference();
         for (RuntimeScalar elem : this.elements.values()) {
             RuntimeScalar.incrementRefCountForContainerStore(elem);
         }

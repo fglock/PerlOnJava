@@ -19,7 +19,9 @@ import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
+import java.util.Stack;
 
 import static org.perlonjava.frontend.parser.NumberParser.parseNumber;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.atUnderscoreArgs;
@@ -43,6 +45,24 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * use declarations, and package declarations.
  */
 public class StatementParser {
+    private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
+        Stack<BitSet> copy = new Stack<>();
+        for (BitSet flags : source) {
+            copy.push((BitSet) flags.clone());
+        }
+        return copy;
+    }
+
+    private static Stack<Integer> cloneIntegerStack(Stack<Integer> source) {
+        Stack<Integer> copy = new Stack<>();
+        copy.addAll(source);
+        return copy;
+    }
+
+    private static <T> void restoreStack(Stack<T> target, Stack<T> source) {
+        target.clear();
+        target.addAll(source);
+    }
 
     /**
      * Parses a while or until statement.
@@ -867,10 +887,29 @@ public class StatementParser {
                     }
                 }
 
-                // Execute the argument list immediately in LIST context
+                // Execute the argument list immediately in LIST context.
                 // This is necessary for expressions like: use lib ($path =~ /^(.*)$/);
-                // where the regex match must return captured groups, not just success/failure
-                RuntimeList args = runSpecialBlock(parser, "BEGIN", list, RuntimeContextType.LIST);
+                // where the regex match must return captured groups, not just success/failure.
+                //
+                // The synthetic BEGIN wrapper used for list evaluation has its own compiler
+                // context. Its final lexical pragma state must not be copied back over the
+                // surrounding file scope; the actual pragma effect of a `use` statement happens
+                // below when import()/unimport() is invoked against parser.ctx.symbolTable.
+                Stack<BitSet> savedWarningFlagsStack = cloneBitSetStack(ctx.symbolTable.warningFlagsStack);
+                Stack<BitSet> savedWarningFatalStack = cloneBitSetStack(ctx.symbolTable.warningFatalStack);
+                Stack<BitSet> savedWarningDisabledStack = cloneBitSetStack(ctx.symbolTable.warningDisabledStack);
+                Stack<Integer> savedFeatureFlagsStack = cloneIntegerStack(ctx.symbolTable.featureFlagsStack);
+                Stack<Integer> savedStrictOptionsStack = cloneIntegerStack(ctx.symbolTable.strictOptionsStack);
+                RuntimeList args;
+                try {
+                    args = runSpecialBlock(parser, "BEGIN", list, RuntimeContextType.LIST);
+                } finally {
+                    restoreStack(ctx.symbolTable.warningFlagsStack, savedWarningFlagsStack);
+                    restoreStack(ctx.symbolTable.warningFatalStack, savedWarningFatalStack);
+                    restoreStack(ctx.symbolTable.warningDisabledStack, savedWarningDisabledStack);
+                    restoreStack(ctx.symbolTable.featureFlagsStack, savedFeatureFlagsStack);
+                    restoreStack(ctx.symbolTable.strictOptionsStack, savedStrictOptionsStack);
+                }
 
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list: " + args);
                 if ((hasParentheses || hasEmptyLiteralList) && args.isEmpty()) {
@@ -1352,6 +1391,14 @@ public class StatementParser {
             }
         }
         String remainingSource = sb.toString();
+        boolean consumedLeadingLineBreak = false;
+        if (remainingSource.startsWith("\r\n")) {
+            remainingSource = remainingSource.substring(2);
+            consumedLeadingLineBreak = true;
+        } else if (remainingSource.startsWith("\n") || remainingSource.startsWith("\r")) {
+            remainingSource = remainingSource.substring(1);
+            consumedLeadingLineBreak = true;
+        }
 
         // Step 2: Apply the installed filters
         String filteredSource = FilterUtilCall.applyFilters(remainingSource);
@@ -1368,6 +1415,9 @@ public class StatementParser {
         // Step 3: Re-tokenize the filtered source
         Lexer lexer = new Lexer(filteredSource);
         List<LexerToken> newTokens = lexer.tokenize();
+        if (consumedLeadingLineBreak) {
+            newTokens.add(0, new LexerToken(LexerTokenType.NEWLINE, "\n"));
+        }
 
         // Step 4: Replace remaining tokens with filtered tokens
         // Keep tokens[0..currentPos-1], replace tokens from currentPos onwards with newTokens

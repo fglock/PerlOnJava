@@ -19,6 +19,8 @@ WriteMakefile(
     NAME      => 'Foo::MetaMerge',
     VERSION   => '0.001',
     PREREQ_PM => { 'List::Util' => 0 },
+    BUILD_REQUIRES => { 'Test::More' => 0 },
+    CONFIGURE_REQUIRES => { 'ExtUtils::MakeMaker' => 0 },
     META_MERGE => {
         prereqs => {
             runtime => {
@@ -49,6 +51,21 @@ like(
     $makefile,
     qr/List::Util|PREREQ_PM/,
     'Makefile records prerequisite metadata',
+);
+like(
+    $makefile,
+    qr/(?:_REQUIRES|PREREQ_PM)\s*=>\s*{\s*[^{]*List::Util\s*=>\s*q\[/,
+    'Makefile prereq comments expose runtime requirements in MakeMaker shape',
+);
+like(
+    $makefile,
+    qr/(?:_REQUIRES|PREREQ_PM)\s*=>\s*{\s*[^{]*Test::More\s*=>\s*q\[/,
+    'Makefile prereq comments expose build requirements in MakeMaker shape',
+);
+like(
+    $makefile,
+    qr/(?:_REQUIRES|PREREQ_PM)\s*=>\s*{\s*[^{]*ExtUtils::MakeMaker\s*=>\s*q\[/,
+    'Makefile prereq comments expose configure requirements in MakeMaker shape',
 );
 
 open my $ym, '<', 'MYMETA.yml' or die "open generated MYMETA.yml: $!";

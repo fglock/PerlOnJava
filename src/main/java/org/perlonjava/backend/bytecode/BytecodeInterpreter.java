@@ -62,6 +62,30 @@ public class BytecodeInterpreter {
                 || scalar.type == RuntimeScalarType.READONLY_SCALAR;
     }
 
+    private static boolean returnListContainsTrackedReference(RuntimeList retList) {
+        if (retList == null || retList instanceof RuntimeControlFlowList) return true;
+        for (RuntimeBase elem : retList.elements) {
+            if (runtimeBaseIsTrackedReference(elem)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean runtimeBaseIsTrackedReference(RuntimeBase elem) {
+        if (elem == null) return false;
+        if (elem instanceof RuntimeScalar scalar) {
+            if (!RuntimeScalarType.isReference(scalar)) {
+                return false;
+            }
+            if (!(scalar.value instanceof RuntimeBase base)) {
+                return false;
+            }
+            return base.blessId != 0 || base.refCount >= 0;
+        }
+        return elem.blessId != 0 || elem.refCount >= 0;
+    }
+
     private static void releaseConsumedTemp(RuntimeBase temp, RuntimeBase target) {
         if (!(temp instanceof RuntimeScalar tempScalar)
                 || !(target instanceof RuntimeScalar targetScalar)
@@ -447,6 +471,9 @@ public class BytecodeInterpreter {
                                 RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
                                 returnedClosures = collectReturnedClosures(retList);
+                                if (!returnListContainsTrackedReference(retList)) {
+                                    MortalList.flushAboveMark();
+                                }
 
                                 return retList;
                             }
@@ -1305,28 +1332,14 @@ public class BytecodeInterpreter {
                                 CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
-                                    // Fast path for InterpretedCode: call execute() directly,
-                                    // bypassing RuntimeCode.apply() indirection chain
-                                    if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
-                                        RuntimeCode.requireLvalueCallable(interpCode, context, null);
-                                        int effectiveContext = RuntimeCode.effectiveCallContext(interpCode, context);
-                                        // Direct call to interpreter - skip RuntimeCode.apply overhead
-                                        // Push args to argsStack for getCallerArgs() support (used by List::Util::any/all/etc.)
-                                        RuntimeCode.pushArgs(callArgs);
-                                        try {
-                                            // Pass null for subroutineName to enable frame caching
-                                            result = BytecodeInterpreter.execute(interpCode, callArgs, effectiveContext, null);
-                                        } finally {
-                                            RuntimeCode.popArgs();
-                                        }
+                                    // Route interpreted code through RuntimeCode.apply too. Its wrapper
+                                    // establishes mortal marks, warning/hint stacks, args-stack state,
+                                    // and void-result cleanup. Bypassing it keeps scope temporaries alive
+                                    // in large-code interpreter fallbacks (Net::LDAP ref-loop cleanup).
+                                    if (shareArgs) {
+                                        result = RuntimeCode.apply(codeRef, callArgs, context);
                                     } else {
-                                        // Slow path for JVM-compiled code, symbolic references, etc.
-                                        // For &func (shareArgs), use the apply overload that shares @_
-                                        if (shareArgs) {
-                                            result = RuntimeCode.apply(codeRef, callArgs, context);
-                                        } else {
-                                            result = RuntimeCode.apply(codeRef, "", callArgs, context);
-                                        }
+                                        result = RuntimeCode.apply(codeRef, "", callArgs, context);
                                     }
 
                                     // Handle TAILCALL with trampoline loop (same as JVM backend)
@@ -1337,20 +1350,7 @@ public class BytecodeInterpreter {
                                             codeRef = flow.getTailCallCodeRef();
                                             callArgs = flow.getTailCallArgs();
                                             try {
-                                                // Use fast path for InterpretedCode
-                                                if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
-                                                    RuntimeCode.requireLvalueCallable(interpCode, context, "tailcall");
-                                                    int effectiveContext = RuntimeCode.effectiveCallContext(interpCode, context);
-                                                    // Push args for tail call too
-                                                    RuntimeCode.pushArgs(callArgs);
-                                                    try {
-                                                        result = BytecodeInterpreter.execute(interpCode, callArgs, effectiveContext, null);
-                                                    } finally {
-                                                        RuntimeCode.popArgs();
-                                                    }
-                                                } else {
-                                                    result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
-                                                }
+                                                result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
                                             } finally {
                                                 RuntimeCode.cleanupTailCallArgs(callArgs);
                                                 RuntimeCode.cleanupTailCallCodeRef(codeRef);
@@ -2611,10 +2611,12 @@ public class BytecodeInterpreter {
 
                     // Not in eval block - propagate exception
                     // Re-throw RuntimeExceptions as-is (includes PerlDieException)
-                    propagatingException = e;
                     if (e instanceof RuntimeException re) {
+                        re = WarnDie.maybeInvokeUnhandledDieHandler(re);
+                        propagatingException = re;
                         throw re;
                     }
+                    propagatingException = e;
 
                     // Check if we're running inside an eval STRING context
                     // (sourceName starts with "(eval " when code is from eval STRING)

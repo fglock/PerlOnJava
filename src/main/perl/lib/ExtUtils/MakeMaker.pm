@@ -840,20 +840,7 @@ sub _create_install_makefile {
 
     my $depend_rules_str = _make_depend_rules($args->{depend});
     
-    # Build PREREQ_PM comment (MakeMaker writes these for tools to parse)
-    my $prereq_comment = '';
-    if ($args->{PREREQ_PM} && %{$args->{PREREQ_PM}}) {
-        my @prereqs;
-        for my $mod (sort keys %{$args->{PREREQ_PM}}) {
-            next if $mod eq 'perl';
-            my $ver = $args->{PREREQ_PM}{$mod};
-            $ver = 0 unless defined $ver;
-            push @prereqs, "$mod=>q[$ver]";
-        }
-        if (@prereqs) {
-            $prereq_comment = "#\tPREREQ_PM => { " . join(", ", @prereqs) . " }\n";
-        }
-    }
+    my $prereq_comment = _make_prereq_comment($args);
 
     # Honor user-supplied `macro => { ... }` from WriteMakefile by emitting
     # extra Makefile macro definitions.  LaTeXML and others stuff custom
@@ -994,6 +981,31 @@ MAKEFILE
     }
 
     close $fh;
+}
+
+sub _make_prereq_comment {
+    my ($args) = @_;
+
+    my $comment = '';
+    for my $key (qw(PREREQ_PM BUILD_REQUIRES TEST_REQUIRES CONFIGURE_REQUIRES)) {
+        next unless ref $args->{$key} eq 'HASH' && %{$args->{$key}};
+
+        my @prereqs;
+        for my $mod (sort keys %{$args->{$key}}) {
+            next if $mod eq 'perl';
+            my $ver = $args->{$key}{$mod};
+            $ver = 0 unless defined $ver;
+            push @prereqs, "$mod=>q[$ver]";
+        }
+        next unless @prereqs;
+
+        # MakeMaker writes prerequisite hashes into generated Makefiles for
+        # CPAN tooling to parse. Keep the same recognizable shape for all
+        # supported prereq phases, not just runtime PREREQ_PM.
+        $comment .= "#\t$key => { " . join(", ", @prereqs) . " }\n";
+    }
+
+    return $comment;
 }
 
 # Helper: generate a shell mkdir -p command for Makefile

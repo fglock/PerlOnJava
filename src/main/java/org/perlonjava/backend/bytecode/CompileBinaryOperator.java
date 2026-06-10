@@ -422,7 +422,7 @@ public class CompileBinaryOperator {
             // sub/block arguments and &-prototype calls report the block/arg line.
             int callSiteToken = callerLineCallSiteToken(node);
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
-                    bytecodeCompiler, node.operator, rs1, rs2, callSiteToken,
+                    bytecodeCompiler, node, rs1, rs2, callSiteToken,
                     shareCallerArgs);
             bytecodeCompiler.lastResultReg = rd;
             return;
@@ -635,7 +635,7 @@ public class CompileBinaryOperator {
             }
 
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
-                    bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
+                    bytecodeCompiler, node, rs1, rs2, node.getIndex());
             bytecodeCompiler.lastResultReg = rd;
             return;
         }
@@ -647,7 +647,8 @@ public class CompileBinaryOperator {
             case "+", "-", "*", "/", "%", "**",
                  "&", "|", "^", "<<", ">>",
                  "binary&", "binary|", "binary^",
-                 "&.", "|.", "^." -> true;
+                 "&.", "|.", "^.",
+                 ".." -> true;
             default -> false;
         };
         // For grep/map/sort/all/any, the right operand (list) must always be in LIST context
@@ -673,7 +674,7 @@ public class CompileBinaryOperator {
         int rs2 = bytecodeCompiler.lastResultReg;
 
         // Emit opcode based on operator (delegated to helper method)
-        int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, node.getIndex());
+        int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node, rs1, rs2, node.getIndex());
 
 
         bytecodeCompiler.lastResultReg = rd;

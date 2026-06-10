@@ -48,6 +48,8 @@ public class SocketIO implements IOHandle {
     private DatagramChannel datagramChannel;
     // Last received sender address for recv() return value
     private SocketAddress lastReceivedFrom;
+    private byte[] peekedDatagram;
+    private SocketAddress peekedDatagramFrom;
     // Datagram socketpair peer tracking. Java UDP channels do not report the
     // local peer-closed error that Perl's poll/select tests rely on.
     private SocketIO datagramPeer;
@@ -1116,12 +1118,25 @@ public class SocketIO implements IOHandle {
      * @return the received data as a byte array, or null on error
      */
     public byte[] recvFrom(int maxLength) throws IOException {
+        return recvFrom(maxLength, false);
+    }
+
+    public byte[] recvFrom(int maxLength, boolean peek) throws IOException {
         if (datagramChannel == null) {
             throw new IllegalStateException("Not a datagram socket");
         }
         if (datagramErrorPending) {
             consumeDatagramConnectionRefused();
             return null;
+        }
+        if (peekedDatagram != null) {
+            lastReceivedFrom = peekedDatagramFrom;
+            byte[] data = copyDatagramPrefix(peekedDatagram, maxLength);
+            if (!peek) {
+                peekedDatagram = null;
+                peekedDatagramFrom = null;
+            }
+            return data;
         }
         java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxLength);
         try {
@@ -1137,7 +1152,18 @@ public class SocketIO implements IOHandle {
         buf.flip();
         byte[] data = new byte[buf.remaining()];
         buf.get(data);
+        if (peek) {
+            peekedDatagram = data;
+            peekedDatagramFrom = lastReceivedFrom;
+        }
         return data;
+    }
+
+    private byte[] copyDatagramPrefix(byte[] data, int maxLength) {
+        int length = Math.min(maxLength, data.length);
+        byte[] result = new byte[length];
+        System.arraycopy(data, 0, result, 0, length);
+        return result;
     }
 
     /**

@@ -26,10 +26,11 @@ public class Socket extends PerlModuleBase {
     public static final int AF_INET = 2;
     public static final int AF_INET6 = IS_MAC ? 30 : IS_WINDOWS ? 23 : 10;
     public static final int AF_UNIX = 1;
+    public static final int AF_UNSPEC = 0;
     public static final int PF_INET = 2;
     public static final int PF_INET6 = AF_INET6;
     public static final int PF_UNIX = 1;
-    public static final int PF_UNSPEC = 0;
+    public static final int PF_UNSPEC = AF_UNSPEC;
     public static final int SOMAXCONN = IS_WINDOWS ? 0x7fffffff : 128;
     public static final int SOCK_STREAM = 1;
     public static final int SOCK_DGRAM = 2;
@@ -111,6 +112,7 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("AF_INET", "");
             socket.registerMethod("AF_INET6", "");
             socket.registerMethod("AF_UNIX", "");
+            socket.registerMethod("AF_UNSPEC", "");
             socket.registerMethod("PF_INET", "");
             socket.registerMethod("PF_INET6", "");
             socket.registerMethod("PF_UNIX", "");
@@ -642,6 +644,10 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList AF_UNIX(RuntimeArray args, int ctx) {
         return new RuntimeScalar(AF_UNIX).getList();
+    }
+
+    public static RuntimeList AF_UNSPEC(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(AF_UNSPEC).getList();
     }
 
     public static RuntimeList PF_INET6(RuntimeArray args, int ctx) {

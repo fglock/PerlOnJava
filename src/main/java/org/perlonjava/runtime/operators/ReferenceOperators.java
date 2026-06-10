@@ -298,7 +298,12 @@ public class ReferenceOperators {
                 }
                 break;
             case FORMAT:
-                str = "FORMAT";
+                if (runtimeScalar.value == null) {
+                    str = "FORMAT";
+                } else {
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? "FORMAT" : NameNormalizer.getBlessStr(blessId);
+                }
                 break;
             case READONLY_SCALAR:
                 return ref((RuntimeScalar) runtimeScalar.value);

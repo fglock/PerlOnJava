@@ -31,6 +31,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // values alive independently of later stash deletion, so slot access on
     // the saved scalar must consult these snapshots before global maps.
     private boolean slotSnapshot;
+    // True for detached copies of the current named glob where the HASH slot
+    // did not exist at copy time. A later `%{*$copy}` should vivify/share the
+    // canonical GV hash, matching Perl's behavior for globs passed through @_.
+    private boolean hashSlotAliasesNamedGlob;
     // Dynamic name override set by `*foo = $string` glob-as-scalar assignment.
     // Used to honor the `local *PKG::__ANON__ = 'name'` idiom (see SUPER.pm,
     // Try::Tiny, namespace::clean) — caller()/Sub::Util::subname report this
@@ -103,8 +107,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (GlobalVariable.existsGlobalArray(this.globName)) {
             copy.arraySlot = GlobalVariable.getGlobalArray(this.globName);
         }
-        if (GlobalVariable.existsGlobalHash(this.globName) || this.globName.endsWith("::")) {
+        if (this.hashSlot != null) {
+            copy.hashSlot = this.hashSlot;
+        } else if (GlobalVariable.existsGlobalHash(this.globName) || this.globName.endsWith("::")) {
             copy.hashSlot = GlobalVariable.getGlobalHash(this.globName);
+        } else if (GlobalVariable.peekGlobalIO(this.globName) == this) {
+            copy.hashSlotAliasesNamedGlob = true;
         }
         return copy;
     }
@@ -805,6 +813,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     yield this.hashSlot.createReference();
                 }
                 if (this.slotSnapshot) {
+                    if (this.hashSlot == null && this.hashSlotAliasesNamedGlob
+                            && GlobalVariable.existsGlobalHash(this.globName)) {
+                        this.hashSlot = GlobalVariable.getGlobalHash(this.globName);
+                    }
                     yield this.hashSlot != null
                             ? this.hashSlot.createReference()
                             : new RuntimeScalar();
@@ -857,7 +869,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeHash getGlobHash() {
         if (this.slotSnapshot) {
             if (this.hashSlot == null) {
-                this.hashSlot = new RuntimeHash();
+                this.hashSlot = this.hashSlotAliasesNamedGlob && this.globName != null
+                        ? GlobalVariable.getGlobalHash(this.globName)
+                        : new RuntimeHash();
             }
             return this.hashSlot;
         }

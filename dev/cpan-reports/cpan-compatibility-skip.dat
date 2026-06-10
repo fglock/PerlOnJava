@@ -1,5 +1,6 @@
 AnyDBM_File	SKIP				2026-06-04	distroprefs	
 CGI	SKIP				2026-06-04	distroprefs	
+Digest::MD2	SKIP				2026-06-09	bundled	
 File::Slurp	SKIP				2026-06-04	distroprefs	
 HTTP::CookieJar::LWP	SKIP				2026-06-04	bundled	
 HTTP::Daemon	SKIP				2026-06-03	distroprefs	

@@ -526,16 +526,27 @@ public class SubroutineParser {
                     // Consume the closing brace
                     TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                     
-                    // Parse any additional arguments after the block
-                    // These become arguments to the method call
+                    // Parse any additional arguments after the block.
                     ListNode arguments = consumeArgsWithPrototype(parser, "@");
-                    
-                    // Create method call: (block_result)->method(args)
+
+                    Node invocant = blockExpr;
+                    if (blockExpr instanceof BlockNode block
+                            && block.elements.size() == 1
+                            && block.elements.getFirst() instanceof ListNode list
+                            && !list.elements.isEmpty()) {
+                        invocant = list.elements.getFirst();
+                        List<Node> methodArgs = new ArrayList<>();
+                        methodArgs.addAll(list.elements.subList(1, list.elements.size()));
+                        methodArgs.addAll(arguments.elements);
+                        arguments = new ListNode(methodArgs, currentIndex);
+                    }
+
+                    // Create method call: invocant->method(args)
                     Node methodCall = new BinaryOperatorNode("(",
                             new OperatorNode("&", nameNode, currentIndex),
                             arguments,
                             currentIndex);
-                    return new BinaryOperatorNode("->", blockExpr, methodCall, currentIndex);
+                    return new BinaryOperatorNode("->", invocant, methodCall, currentIndex);
                 }
 
                 ListNode arguments = consumeArgsWithPrototype(parser, "@");
@@ -892,10 +903,23 @@ public class SubroutineParser {
         parser.ctx.symbolTable.setCurrentSubroutine(qualifiedSubName);
         // We are now parsing inside a subroutine body (named or anonymous)
         parser.ctx.symbolTable.setInSubroutineBody(true);
+        java.util.BitSet definitionWarningFlags =
+                (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone();
+        java.util.BitSet definitionWarningFatalFlags =
+                (java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone();
+        java.util.BitSet definitionWarningDisabledFlags =
+                (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();
+        int definitionFeatureFlags = parser.ctx.symbolTable.featureFlagsStack.peek();
+        int definitionStrictOptions = parser.ctx.symbolTable.strictOptionsStack.peek();
 
         try {
             // Parse the block of the subroutine, which contains the actual code.
             BlockNode block = ParseBlock.parseBlock(parser);
+            block.setAnnotation("definitionWarningFlags", definitionWarningFlags);
+            block.setAnnotation("definitionWarningFatalFlags", definitionWarningFatalFlags);
+            block.setAnnotation("definitionWarningDisabledFlags", definitionWarningDisabledFlags);
+            block.setAnnotation("definitionFeatureFlags", definitionFeatureFlags);
+            block.setAnnotation("definitionStrictOptions", definitionStrictOptions);
 
             // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
             // Check if we reached EOF instead of finding the closing brace
@@ -1447,25 +1471,46 @@ public class SubroutineParser {
         // Clone the current subroutine
         filteredSnapshot.setCurrentSubroutine(parser.ctx.symbolTable.getCurrentSubroutine());
 
+        java.util.BitSet definitionWarningFlags =
+                block.getAnnotation("definitionWarningFlags") instanceof java.util.BitSet bits
+                        ? (java.util.BitSet) bits.clone()
+                        : (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone();
+        java.util.BitSet definitionWarningFatalFlags =
+                block.getAnnotation("definitionWarningFatalFlags") instanceof java.util.BitSet bits
+                        ? (java.util.BitSet) bits.clone()
+                        : (java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone();
+        java.util.BitSet definitionWarningDisabledFlags =
+                block.getAnnotation("definitionWarningDisabledFlags") instanceof java.util.BitSet bits
+                        ? (java.util.BitSet) bits.clone()
+                        : (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();
+        int definitionFeatureFlags =
+                block.getAnnotation("definitionFeatureFlags") instanceof Integer value
+                        ? value
+                        : parser.ctx.symbolTable.featureFlagsStack.peek();
+        int definitionStrictOptions =
+                block.getAnnotation("definitionStrictOptions") instanceof Integer value
+                        ? value
+                        : parser.ctx.symbolTable.strictOptionsStack.peek();
+
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
-        filteredSnapshot.warningFlagsStack.push((java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone());
+        filteredSnapshot.warningFlagsStack.push(definitionWarningFlags);
         
         // Clone fatal warning flags (critical for 'use warnings FATAL' pragmas)
         filteredSnapshot.warningFatalStack.pop();
-        filteredSnapshot.warningFatalStack.push((java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone());
+        filteredSnapshot.warningFatalStack.push(definitionWarningFatalFlags);
         
         // Clone disabled warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningDisabledStack.pop();
-        filteredSnapshot.warningDisabledStack.push((java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone());
+        filteredSnapshot.warningDisabledStack.push(definitionWarningDisabledFlags);
 
         // Clone feature flags (critical for 'use feature' pragmas like refaliasing)
         filteredSnapshot.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
-        filteredSnapshot.featureFlagsStack.push(parser.ctx.symbolTable.featureFlagsStack.peek());
+        filteredSnapshot.featureFlagsStack.push(definitionFeatureFlags);
 
         // Clone strict options (critical for 'use strict' pragma)
         filteredSnapshot.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
-        filteredSnapshot.strictOptionsStack.push(parser.ctx.symbolTable.strictOptionsStack.peek());
+        filteredSnapshot.strictOptionsStack.push(definitionStrictOptions);
 
         EmitterContext newCtx = new EmitterContext(
                 new JavaClassInfo(),

@@ -33,6 +33,17 @@ public class Feature extends PerlModuleBase {
             feature.registerMethod("feature_bundle", ";$");
             feature.registerMethod("import", "useFeature", ";$");
             feature.registerMethod("unimport", "noFeature", ";$");
+
+            // Perl exposes feature gates such as indirect, multidimensional,
+            // and bareword::filehandles as pragma packages with import and
+            // unimport methods even when their .pm files are not loaded.
+            // strictures' test suite fakes %INC entries for those packages and
+            // then calls ->unimport directly, so the methods must exist at
+            // startup just like they do on Perl.
+            for (String pragma : new String[]{"indirect", "multidimensional", "bareword::filehandles"}) {
+                feature.registerMethodInPackage(pragma, "import", "useFeaturePragma");
+                feature.registerMethodInPackage(pragma, "unimport", "noFeaturePragma");
+            }
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Feature method: " + e.getMessage());
         }
@@ -114,6 +125,34 @@ public class Feature extends PerlModuleBase {
             featureManager.disableFeatureBundle(featureName);
         }
         return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList useFeaturePragma(RuntimeArray args, int ctx) {
+        String featureName = featureNameFromPragma(args);
+        if (featureName != null) {
+            featureManager.enableFeatureBundle(featureName);
+        }
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList noFeaturePragma(RuntimeArray args, int ctx) {
+        String featureName = featureNameFromPragma(args);
+        if (featureName != null) {
+            featureManager.disableFeatureBundle(featureName);
+        }
+        return new RuntimeScalar().getList();
+    }
+
+    private static String featureNameFromPragma(RuntimeArray args) {
+        if (args.size() == 0) {
+            return null;
+        }
+        String pragma = args.get(0).toString();
+        return switch (pragma) {
+            case "bareword::filehandles" -> "bareword_filehandles";
+            case "indirect", "multidimensional" -> pragma;
+            default -> null;
+        };
     }
 
     /**

@@ -172,12 +172,22 @@ public class ErrorMessageUtil {
         // Use the custom formatter to print the Perl message and stack trace
         StringBuilder sb = new StringBuilder();
 
-        String message = innermostCause.getMessage();
+        String perlDiePayloadMessage = null;
+        if (innermostCause instanceof PerlDieException pde && pde.getPayload() != null) {
+            RuntimeScalar first = pde.getPayload().getFirst();
+            if (first != null && RuntimeScalarType.isReference(first)) {
+                perlDiePayloadMessage = first.toString();
+            }
+        }
+
+        String message = perlDiePayloadMessage != null
+                ? perlDiePayloadMessage
+                : innermostCause.getMessage();
 
         // Use this for debugging
         // t.printStackTrace();
 
-        String message1 = t.getMessage();
+        String message1 = perlDiePayloadMessage != null ? message : t.getMessage();
         // Check if the original message ends with \n - Perl skips stack trace in that case
         boolean suppressStackTrace = (message != null && message.endsWith("\n"))
                 || (message1 != null && message1.endsWith("\n"));

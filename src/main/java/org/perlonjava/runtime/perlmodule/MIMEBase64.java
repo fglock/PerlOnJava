@@ -70,8 +70,7 @@ public class MIMEBase64 extends PerlModuleBase {
 
         // Our custom decoder handles invalid characters and padding internally
         byte[] decodedBytes = Base64Util.decode(encoded);
-        String decoded = new String(decodedBytes, StandardCharsets.ISO_8859_1);
-        return new RuntimeScalar(decoded).getList();
+        return new RuntimeScalar(decodedBytes).getList();
     }
 
     public static RuntimeList encode_base64url(RuntimeArray args, int ctx) {
@@ -103,7 +102,6 @@ public class MIMEBase64 extends PerlModuleBase {
         String encoded = input.toString();
 
         byte[] decodedBytes = Base64Util.decodeUrl(encoded);
-        String decoded = new String(decodedBytes, StandardCharsets.ISO_8859_1);
-        return new RuntimeScalar(decoded).getList();
+        return new RuntimeScalar(decodedBytes).getList();
     }
 }

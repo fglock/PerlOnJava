@@ -1906,7 +1906,6 @@ Data::Object::Try	FAIL				2026-04-21
 Data::Object::Types	FAIL				2026-04-21		
 Data::Object::Vars	FAIL				2026-04-21		
 Data::ObjectDriver	FAIL	79	0	682/79 subtests failed	2026-05-15		
-Data::Perl	FAIL	194	193	1/194 subtests failed	2026-04-12		
 Data::Phrasebook::Loader::Ini	FAIL	12	1	11/12 subtests failed	2026-05-09		
 Data::Printer	FAIL	647	621	26/647 subtests failed	2026-05-21		
 Data::Properties::JSON	FAIL				2026-05-18		
@@ -1989,7 +1988,6 @@ DateTime::Format::Intl	FAIL	2	0	2/2 subtests failed	2026-05-16
 DateTime::Format::Japanese	FAIL	12	0	293/12 subtests failed	2026-05-10		
 DateTime::Format::Lite	FAIL	1	0	1/1 subtests failed	2026-05-10		
 DateTime::Format::RelativeTime	FAIL	2	0	2/2 subtests failed	2026-05-10		
-DateTime::Format::SQLite	FAIL	69	68	1/69 subtests failed	2026-05-16		
 DateTime::Format::Strftimeq	FAIL	1	0	1/1 subtests failed	2026-05-10		
 DateTime::Format::Unicode	FAIL	1	0	1/1 subtests failed	2026-05-18		
 DateTime::Format::Variant	FAIL	1	0	3/1 subtests failed	2026-05-17		
@@ -2380,7 +2378,6 @@ File::Temp	FAIL			Configure failed	2026-04-21
 File::UserConfig	FAIL	2	0	28/2 subtests failed	2026-05-19		
 File::Util	FAIL	395	353	42/395 subtests failed	2026-05-19		
 File::chmod	FAIL	39	30	9/39 subtests failed	2026-04-12		
-File::pushd	FAIL	47	41	6/47 subtests failed	2026-05-21		
 FileHandle::Unget	FAIL	76	53	23/76 subtests failed	2026-05-17		
 FileHash::Base	FAIL			Missing: Fault/Logger.pm	2026-05-11		
 FileSlurp_12	FAIL	280	258	22/280 subtests failed	2026-05-18		
@@ -3786,7 +3783,6 @@ Module::Build::Compat	FAIL			Unknown test outcome	2026-05-20
 Module::Build::Tiny	FAIL	5	0	11/5 subtests failed	2026-05-21		
 Module::Build::XSUtil	FAIL	3	1	2/3 subtests failed; 1/2 test programs failed	2026-06-03		
 Module::CGI::Install	FAIL	3	0	71/3 subtests failed	2026-05-11		
-Module::CPANfile	FAIL			Missing: File/pushd.pm	2026-05-20		
 Module::Collect	FAIL	43	42	1/43 subtests failed	2026-05-19		
 Module::Data	FAIL	54	54		2026-05-17		
 Module::Extract::Namespaces	FAIL	14	10	4/14 subtests failed	2026-04-12		
@@ -3902,7 +3898,6 @@ MooX::ClassAttribute	FAIL	26	24	2/26 subtests failed	2026-05-18
 MooX::Commander	FAIL			Missing: Test/Compile.pm	2026-05-11		
 MooX::Const	FAIL	65	57	8/65 subtests failed	2026-05-12		
 MooX::File::ConfigDir	FAIL	1	0	1/1 subtests failed	2026-05-19		
-MooX::HandlesVia	FAIL	799	797	2/799 subtests failed	2026-05-10		
 MooX::Keyword	FAIL	1	0	1/1 subtests failed	2026-05-19		
 MooX::Keyword::Factory	FAIL	1	0	1/1 subtests failed	2026-05-17		
 MooX::Keyword::Field	FAIL	1	0	1/1 subtests failed	2026-05-19		
@@ -5491,7 +5486,6 @@ SparkX::Form::BasicFields	FAIL	38	0	52/38 subtests failed	2026-05-15
 SpecioX::XS	FAIL	1	0	1/1 subtests failed	2026-05-16		
 Sphinx::Search	FAIL	32	22	10/32 subtests failed	2026-05-17		
 Spica	FAIL	13	2	11/13 subtests failed	2026-05-17		
-Spiffy	FAIL	198	193	5/198 subtests failed; 3/32 test programs failed	2026-06-03		
 Spoon	FAIL	76	47	29/76 subtests failed	2026-05-18		
 SpoorForwardHook	FAIL	86	86	Missing: Test/SetupTeardown.pm	2026-05-13		
 Spp	FAIL	10	2	8/10 subtests failed	2026-05-18		
@@ -5698,7 +5692,6 @@ Test::Assert	FAIL			Missing: Exception/Base.pm	2026-05-19
 Test::Auto	FAIL				2026-04-21		
 Test::BDD::Cucumber	FAIL	357	356	1/357 subtests failed	2026-05-17		
 Test::BDD::Cucumber::StepFile	FAIL	357	356	1/357 subtests failed	2026-05-17		
-Test::Base	FAIL			105/106 test programs failed; 0/0 subtests failed	2026-06-03		
 Test::Base::Less	FAIL	30	26	4/30 subtests failed	2026-05-12		
 Test::Block	FAIL	26	22	4/26 subtests failed; 2/6 test programs failed	2026-06-03		
 Test::CGI::Multipart	FAIL	7	3	4/7 subtests failed	2026-05-12		
@@ -5718,7 +5711,6 @@ Test::Database::Temp	FAIL				2026-05-15
 Test::DatabaseRow	FAIL	320	299	21/320 subtests failed	2026-05-17		
 Test::Deep	FAIL	1268	1267	1/1268 subtests failed	2026-05-20		
 Test::Dependencies	FAIL	2	0	4/2 subtests failed	2026-05-11		
-Test::Differences	FAIL	49	44	5/49 subtests failed; 4/17 test programs failed	2026-06-03		
 Test::Directory	FAIL	50	27	23/50 subtests failed	2026-04-22		
 Test::DistManifest	FAIL	12	4	8/12 subtests failed	2026-05-17		
 Test::Exception	FAIL	9	0	45/9 subtests failed	2026-05-20		
@@ -6931,7 +6923,6 @@ re::engine::RE2	FAIL	2	0	125/2 subtests failed	2026-05-17
 routines	FAIL				2026-04-21		
 sanity	FAIL	22	9	13/22 subtests failed	2026-04-22		
 self	FAIL			Missing: B/Hooks/Parser.pm	2026-04-22		
-strictures	FAIL	5	4	1/5 subtests failed	2026-04-12		
 subs	FAIL	2	0	2/2 subtests failed	2026-05-07		
 superclass	FAIL	49	48	1/49 subtests failed	2026-05-13		
 threads	FAIL			Unknown test outcome	2026-05-20		

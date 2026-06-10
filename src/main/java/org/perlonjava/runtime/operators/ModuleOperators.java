@@ -227,11 +227,12 @@ public class ModuleOperators {
                             }
 
                             if (filterRef != null) {
-                                // Apply filter to the content
+                                // Apply filter to the content. The filter uses
+                                // $_ as scratch space, so swap the slot rather
+                                // than mutating the caller's scalar/alias.
                                 RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
                                 try {
-                                    // Set $_ to the content
-                                    GlobalVariable.getGlobalVariable("main::_").set(code);
+                                    GlobalVariable.aliasGlobalVariable("main::_", new RuntimeScalar(code));
 
                                     // Build filter args: $_[0] = undef, $_[1..N] = state
                                     RuntimeArray filterArgs = new RuntimeArray();
@@ -246,8 +247,7 @@ public class ModuleOperators {
                                     // Get modified content from $_
                                     code = GlobalVariable.getGlobalVariable("main::_").toString();
                                 } finally {
-                                    // Restore $_
-                                    GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
+                                    GlobalVariable.aliasGlobalVariable("main::_", savedDefaultVar);
                                 }
                             }
                         }
@@ -307,7 +307,7 @@ public class ModuleOperators {
                     if (filterRef != null) {
                         RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
                         try {
-                            GlobalVariable.getGlobalVariable("main::_").set(filterableContent.toString());
+                            GlobalVariable.aliasGlobalVariable("main::_", new RuntimeScalar(filterableContent.toString()));
 
                             // Build filter args with remaining elements as state
                             RuntimeArray filterArgs = new RuntimeArray();
@@ -319,7 +319,7 @@ public class ModuleOperators {
                             filterRef.apply(filterArgs, RuntimeContextType.SCALAR);
                             filterableContent = new StringBuilder(GlobalVariable.getGlobalVariable("main::_").toString());
                         } finally {
-                            GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
+                            GlobalVariable.aliasGlobalVariable("main::_", savedDefaultVar);
                         }
                     }
 

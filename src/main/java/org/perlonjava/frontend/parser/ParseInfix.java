@@ -148,11 +148,15 @@ public class ParseInfix {
 
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
 
-            // Annotate arithmetic nodes with 'use integer' state so constant folding
-            // can skip folding when integer semantics are in effect (division truncation,
-            // overflow wrapping, etc.)
-            if (parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
-                node.setAnnotation("useInteger", true);
+            // Annotate integer-sensitive operators with the parse-time `use integer`
+            // state. Lazy sub compilation and interpreter fallback may emit code long
+            // after the parser's lexical hint stack has moved on.
+            switch (operator) {
+                case "/", "%", "<<", ">>", "/=", "%=", "<<=", ">>=" ->
+                        node.setAnnotation("useInteger",
+                                parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER));
+                default -> {
+                }
             }
 
             return node;
