@@ -18,6 +18,17 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runEndBlocks;
  * respectively. These operations can trigger custom signal handlers if defined.
  */
 public class WarnDie {
+    private static final ThreadLocal<java.util.IdentityHashMap<Throwable, Boolean>> unhandledDieHandlerSeen =
+            ThreadLocal.withInitial(java.util.IdentityHashMap::new);
+    private static final ThreadLocal<Boolean> insideUnhandledDieHandler =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    public static boolean isInsideUnhandledDieHandler() {
+        return insideUnhandledDieHandler.get();
+    }
+
+    private record SyntheticDieCallerFrame(String packageName, String filename, int line) {
+    }
 
     /**
      * Returns true when a %SIG slot holds one of Perl 5's reserved string
@@ -63,6 +74,97 @@ public class WarnDie {
             current = cause;
         }
         return throwable;
+    }
+
+    private static SyntheticDieCallerFrame firstPerlFrame(Throwable throwable) {
+        try {
+            ExceptionFormatter.StackTraceResult result = ExceptionFormatter.formatExceptionDetailed(throwable);
+            if (result.frames().isEmpty()) {
+                return null;
+            }
+            var frame = result.frames().getFirst();
+            if (frame.size() < 3 || frame.get(1) == null || frame.get(1).isEmpty()) {
+                return null;
+            }
+            int line = Integer.parseInt(frame.get(2));
+            return new SyntheticDieCallerFrame(frame.get(0), frame.get(1), line);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String signalHandlerSubName(RuntimeScalar sigHandler) {
+        if (sigHandler == null || sigHandler.type != RuntimeScalarType.CODE
+                || !(sigHandler.value instanceof RuntimeCode code)) {
+            return null;
+        }
+        if (code.subName == null || code.subName.isEmpty()) {
+            return null;
+        }
+        if (code.subName.contains("::")) {
+            return code.subName;
+        }
+        String pkg = code.packageName != null && !code.packageName.isEmpty()
+                ? code.packageName
+                : "main";
+        return pkg + "::" + code.subName;
+    }
+
+    public static RuntimeException maybeInvokeUnhandledDieHandler(RuntimeException e) {
+        Throwable unwrapped = unwrapException(e);
+        if (unwrapped instanceof PerlDieException || unwrapped instanceof PerlExitException) {
+            return e;
+        }
+        if (RuntimeCode.evalDepth > 0) {
+            return e;
+        }
+
+        RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
+        if (!sig.getDefinedBoolean() || isReservedSigString(sig)) {
+            return e;
+        }
+
+        var seen = unhandledDieHandlerSeen.get();
+        if (seen.containsKey(unwrapped)) {
+            return e;
+        }
+        seen.put(unwrapped, Boolean.TRUE);
+
+        RuntimeArray args = new RuntimeArray();
+        RuntimeArray.push(args, new RuntimeScalar(ErrorMessageUtil.stringifyException(unwrapped)));
+        RuntimeScalar sigHandler = new RuntimeScalar(sig);
+        SyntheticDieCallerFrame syntheticFrame = firstPerlFrame(unwrapped);
+        String handlerSubName = signalHandlerSubName(sigHandler);
+
+        int level = DynamicVariableManager.getLocalLevel();
+        DynamicVariableManager.pushLocalVariable(sig);
+        boolean wasInsideUnhandledDieHandler = insideUnhandledDieHandler.get();
+        insideUnhandledDieHandler.set(Boolean.TRUE);
+        boolean pushedSyntheticFrame = false;
+        try {
+            if (syntheticFrame != null) {
+                RuntimeCode.pushSyntheticCallerFrame(
+                        syntheticFrame.packageName(),
+                        syntheticFrame.filename(),
+                        syntheticFrame.line(),
+                        handlerSubName);
+                pushedSyntheticFrame = true;
+            }
+            RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+        } catch (Throwable handlerException) {
+            Throwable handled = unwrapException(handlerException);
+            if (handled instanceof RuntimeException re) {
+                return re;
+            }
+            return new RuntimeException(handled);
+        } finally {
+            if (pushedSyntheticFrame) {
+                RuntimeCode.popSyntheticCallerFrame();
+            }
+            insideUnhandledDieHandler.set(wasInsideUnhandledDieHandler);
+            DynamicVariableManager.popToLocalLevel(level);
+        }
+        return e;
     }
 
     /**
@@ -162,20 +264,24 @@ public class WarnDie {
             if (err.type == RuntimeScalarType.TIED_SCALAR) {
                 err = err.tiedFetch();
             }
-            if (err.getDefinedBoolean()) {
+            if (RuntimeScalarType.isReference(err)) {
                 // If $@ is a reference, pass it directly to the signal handler
-                if (RuntimeScalarType.isReference(err)) {
-                    finalMessage = new RuntimeScalar(err);
-                } else {
-                    // String in $@, append "...caught" with location
-                    String errStr = err.toString();
-                    if (!errStr.endsWith("\n")) {
-                        errStr += "\n";
-                    }
-                    finalMessage = new RuntimeScalar(errStr + "\t...caught" + where.toString());
+                finalMessage = new RuntimeScalar(err);
+            } else if (err.getDefinedBoolean() && !err.toString().isEmpty()) {
+                // String in $@, append "...caught" with location. If $@ has no
+                // trailing newline, Perl appends directly after the message.
+                String errStr = err.toString();
+                String caught = errStr.endsWith("\n") ? "\t...caught" : "\t...caught";
+                String out = errStr + caught + where;
+                if (!out.endsWith("\n")) {
+                    out += ".\n";
                 }
+                finalMessage = new RuntimeScalar(out);
             } else {
                 finalMessage = new RuntimeScalar("Warning: something's wrong" + where.toString());
+                if (!finalMessage.toString().endsWith("\n")) {
+                    finalMessage.set(finalMessage + ".\n");
+                }
             }
         } else {
             // Handle non-empty message

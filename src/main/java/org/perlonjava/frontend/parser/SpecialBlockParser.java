@@ -11,8 +11,10 @@ import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalContext.GLOBAL_PHASE;
 import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
@@ -24,6 +26,25 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
 public class SpecialBlockParser {
 
     private static ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
+    private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
+        Stack<BitSet> copy = new Stack<>();
+        for (BitSet flags : source) {
+            copy.push((BitSet) flags.clone());
+        }
+        return copy;
+    }
+
+    private static Stack<Integer> cloneIntegerStack(Stack<Integer> source) {
+        Stack<Integer> copy = new Stack<>();
+        copy.addAll(source);
+        return copy;
+    }
+
+    private static <T> void restoreStack(Stack<T> target, Stack<T> source) {
+        target.clear();
+        target.addAll(source);
+    }
 
     public static ScopedSymbolTable getCurrentScope() {
         return symbolTable;
@@ -325,6 +346,19 @@ public class SpecialBlockParser {
         parsedArgs.compileOnly = false; // Special blocks are always run
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Special block captures " + parser.ctx.symbolTable.getAllVisibleVariables());
         RuntimeList result;
+        boolean preserveCallerPragmas = !blockPhase.equals("BEGIN");
+        Stack<BitSet> savedWarningFlagsStack = null;
+        Stack<BitSet> savedWarningFatalStack = null;
+        Stack<BitSet> savedWarningDisabledStack = null;
+        Stack<Integer> savedFeatureFlagsStack = null;
+        Stack<Integer> savedStrictOptionsStack = null;
+        if (preserveCallerPragmas) {
+            savedWarningFlagsStack = cloneBitSetStack(parser.ctx.symbolTable.warningFlagsStack);
+            savedWarningFatalStack = cloneBitSetStack(parser.ctx.symbolTable.warningFatalStack);
+            savedWarningDisabledStack = cloneBitSetStack(parser.ctx.symbolTable.warningDisabledStack);
+            savedFeatureFlagsStack = cloneIntegerStack(parser.ctx.symbolTable.featureFlagsStack);
+            savedStrictOptionsStack = cloneIntegerStack(parser.ctx.symbolTable.strictOptionsStack);
+        }
         try {
             setCurrentScope(parser.ctx.symbolTable);
             // Mark wrapper infrastructure nodes to skip DEBUG opcodes and source location mapping.
@@ -374,6 +408,14 @@ public class SpecialBlockParser {
             }
             message += blockPhase + " failed--compilation aborted";
             throw new PerlCompilerException(parser.tokenIndex, message, parser.ctx.errorUtil);
+        } finally {
+            if (preserveCallerPragmas) {
+                restoreStack(parser.ctx.symbolTable.warningFlagsStack, savedWarningFlagsStack);
+                restoreStack(parser.ctx.symbolTable.warningFatalStack, savedWarningFatalStack);
+                restoreStack(parser.ctx.symbolTable.warningDisabledStack, savedWarningDisabledStack);
+                restoreStack(parser.ctx.symbolTable.featureFlagsStack, savedFeatureFlagsStack);
+                restoreStack(parser.ctx.symbolTable.strictOptionsStack, savedStrictOptionsStack);
+            }
         }
         GlobalVariable.getGlobalVariable("main::@").set(""); // Reset error variable
 

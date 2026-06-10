@@ -87,6 +87,12 @@ public class ScalarUtil extends PerlModuleBase {
             if (scalar.type == RuntimeScalarType.REGEX) {
                 return new RuntimeScalar("Regexp").getList();
             }
+            // IO slots such as *STDOUT{IO} are internally represented as
+            // RuntimeIO-backed GLOBREFERENCE values, but Perl treats them as
+            // blessed IO objects.
+            if (scalar.type == RuntimeScalarType.GLOBREFERENCE && scalar.value instanceof RuntimeIO) {
+                return new RuntimeScalar("IO::Handle").getList();
+            }
             return new RuntimeScalar().getList();  // undef
         }
         return new RuntimeScalar(NameNormalizer.getBlessStr(blessId)).getList();

@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class CompileBinaryOperatorHelper {
@@ -20,11 +21,33 @@ public class CompileBinaryOperatorHelper {
     }
 
     public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs) {
+        return compileBinaryOperatorSwitch(bytecodeCompiler, operator, rs1, rs2, tokenIndex, shareCallerArgs, null);
+    }
+
+    public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex) {
+        return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, false, integerOverride(node));
+    }
+
+    public static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs) {
+        return compileBinaryOperatorSwitch(bytecodeCompiler, node.operator, rs1, rs2, tokenIndex, shareCallerArgs, integerOverride(node));
+    }
+
+    private static Boolean integerOverride(BinaryOperatorNode node) {
+        Object useInteger = node.getAnnotation("useInteger");
+        return useInteger instanceof Boolean value ? value : null;
+    }
+
+    private static boolean isIntegerEnabled(BytecodeCompiler bytecodeCompiler, Boolean useIntegerOverride) {
+        return useIntegerOverride != null ? useIntegerOverride : bytecodeCompiler.isIntegerEnabled();
+    }
+
+    private static int compileBinaryOperatorSwitch(BytecodeCompiler bytecodeCompiler, String operator, int rs1, int rs2, int tokenIndex, boolean shareCallerArgs, Boolean useIntegerOverride) {
         // Allocate result register
         int rd = bytecodeCompiler.allocateOutputRegister();
 
         // Emit opcode based on operator
         boolean noOverload = bytecodeCompiler.isNoOverloadingEnabled();
+        boolean useInteger = isIntegerEnabled(bytecodeCompiler, useIntegerOverride);
         switch (operator) {
             case "+" -> {
                 bytecodeCompiler.emit(noOverload ? Opcodes.ADD_NO_OVERLOAD : Opcodes.ADD_SCALAR);
@@ -46,14 +69,14 @@ public class CompileBinaryOperatorHelper {
             }
             case "%" -> {
                 bytecodeCompiler.emit(noOverload ? Opcodes.MOD_NO_OVERLOAD
-                        : (bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_MOD : Opcodes.MOD_SCALAR));
+                        : (useInteger ? Opcodes.INTEGER_MOD : Opcodes.MOD_SCALAR));
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "/" -> {
                 bytecodeCompiler.emit(noOverload ? Opcodes.DIV_NO_OVERLOAD
-                        : (bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR));
+                        : (useInteger ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR));
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -427,13 +450,13 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "<<" -> {
-                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT : Opcodes.LEFT_SHIFT);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_LEFT_SHIFT : Opcodes.LEFT_SHIFT);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case ">>" -> {
-                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT : Opcodes.RIGHT_SHIFT);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_RIGHT_SHIFT : Opcodes.RIGHT_SHIFT);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

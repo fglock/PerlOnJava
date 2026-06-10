@@ -156,6 +156,20 @@ subtest 'Edge cases' => sub {
     is(decode_base64('SGVs=bG8='), 'Hel', 'Padding in middle stops decoding');
 };
 
+subtest 'Decoded data is byte string' => sub {
+    plan tests => 3;
+
+    require Encode;
+
+    my $encoded = 'ZG46Y249SMOkZ2FyLG91PXBlb3BsZSxvPW15b3JnLmNvbQ==';
+    my $decoded = decode_base64($encoded);
+
+    ok(!Encode::is_utf8($decoded), 'decoded base64 does not have UTF-8 flag');
+    is(unpack('H*', $decoded), '646e3a636e3d48c3a46761722c6f753d70656f706c652c6f3d6d796f72672e636f6d',
+        'decoded bytes preserve UTF-8 octets');
+    is(encode_base64($decoded, ''), $encoded, 'decoded bytes re-encode without double UTF-8 encoding');
+};
+
 # Test undef handling
 subtest 'Undef and special cases' => sub {
     plan tests => 4;
@@ -185,4 +199,3 @@ subtest 'Undef and special cases' => sub {
 };
 
 done_testing();
-

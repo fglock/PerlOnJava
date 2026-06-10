@@ -371,6 +371,9 @@ public class MortalList {
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (hash.refCount > 0) return;
+        if (hash.type == RuntimeHash.TIED_HASH && hash.elements instanceof TieHash tieHash) {
+            tieHash.releaseTiedObject();
+        }
         // Quick scan: skip if no value could transitively contain blessed/tracked refs.
         boolean needsWalk = false;
         for (RuntimeScalar val : hash.elements.values()) {
@@ -437,6 +440,9 @@ public class MortalList {
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (arr.refCount > 0) return;
+        if (arr.type == RuntimeArray.TIED_ARRAY && arr.elements instanceof TieArray tieArray) {
+            tieArray.releaseTiedObject();
+        }
         // Alias arrays such as @_ do not own their original elements. They can
         // still receive owned inserts via unshift/push before a goto &sub; in
         // that mixed case, release only those inserted elements.

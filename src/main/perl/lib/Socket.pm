@@ -27,7 +27,7 @@ our @EXPORT = qw(
     pack_sockaddr_un unpack_sockaddr_un
     inet_aton inet_ntoa inet_pton inet_ntop getnameinfo getaddrinfo get_addr_info
     sockaddr_in sockaddr_un sockaddr_family
-    AF_INET AF_INET6 AF_UNIX
+    AF_INET AF_INET6 AF_UNIX AF_UNSPEC
     PF_INET PF_INET6 PF_UNIX PF_UNSPEC
     SOCK_STREAM SOCK_DGRAM SOCK_RAW
     SOL_SOCKET SO_REUSEADDR SO_KEEPALIVE SO_BROADCAST SO_LINGER SO_ERROR SO_ACCEPTCONN SO_TYPE SO_REUSEPORT
@@ -90,6 +90,10 @@ essential socket constants and basic address manipulation functions.
 =item AF_INET, PF_INET
 
 IPv4 address family (value: 2)
+
+=item AF_UNSPEC, PF_UNSPEC
+
+Unspecified address family (value: 0)
 
 =item AF_INET6, PF_INET6  
 

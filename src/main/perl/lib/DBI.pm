@@ -954,12 +954,14 @@ sub bind_col {
 
 sub selectrow_array {
     my $arr = selectrow_arrayref(@_);
-    return $arr ? @$arr : ();
+    return unless $arr;
+    return wantarray ? @$arr : $arr->[0];
 }
 
 sub fetchrow_array {
     my $arr = fetchrow_arrayref(@_);
-    return $arr ? @$arr : ();
+    return unless $arr;
+    return wantarray ? @$arr : $arr->[0];
 }
 
 sub fetch {
@@ -1314,7 +1316,8 @@ sub connect_cached {
 
     my $fetchrow_array = sub {
         my $arr = fetchrow_arrayref(@_);
-        return $arr ? @$arr : ();
+        return unless $arr;
+        return wantarray ? @$arr : $arr->[0];
     };
 
     my $fetch = sub {

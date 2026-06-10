@@ -42,6 +42,8 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      */
     private final RuntimeHash previousValue;
 
+    private boolean tiedObjectReleased = false;
+
     /**
      * Creates a new TieHash instance.
      *
@@ -208,6 +210,9 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
      * Decrements refCount and triggers DESTROY if it reaches 0.
      */
     public void releaseTiedObject() {
+        if (tiedObjectReleased) return;
+        tiedObjectReleased = true;
+        if (self == null) return;
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
             if (base.refCount > 0 && --base.refCount == 0) {

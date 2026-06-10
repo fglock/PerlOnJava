@@ -2612,7 +2612,7 @@ public class IOOperator {
 
             // Check if this is a UDP socket
             if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
-                byte[] data = sio.recvFrom(length);
+                byte[] data = sio.recvFrom(length, (flags & Socket.MSG_PEEK) != 0);
                 if (data != null) {
                     buffer.set(new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
                     // Return the sender's packed sockaddr (Perl recv() returns this)

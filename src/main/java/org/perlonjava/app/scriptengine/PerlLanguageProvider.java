@@ -606,21 +606,36 @@ public class PerlLanguageProvider {
                     }
 
                     if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Falling back to bytecode interpreter due to method size");
-                    // Reset strict/feature/warning flags before fallback compilation.
-                    // The JVM compiler already processed BEGIN blocks (use strict, etc.)
-                    // which set these flags on ctx.symbolTable. But the interpreter will
-                    // re-process those pragmas during execution, so inheriting them causes
-                    // false strict violations (e.g. bareword filehandles rejected).
+                    EmitterContext fallbackCtx = ctx;
+                    // The interpreter replays CompilerFlagNodes, so it must not start from
+                    // the parser's final strict state. Do that on a private snapshot: the
+                    // live parser context is still used by lazy sub definitions registered
+                    // while fallback bytecode is compiled.
                     if (ctx.symbolTable != null) {
-                        ctx.symbolTable.strictOptionsStack.pop();
-                        ctx.symbolTable.strictOptionsStack.push(0);
+                        ScopedSymbolTable fallbackSymbolTable = ctx.symbolTable.snapShot();
+                        fallbackSymbolTable.strictOptionsStack.pop();
+                        fallbackSymbolTable.strictOptionsStack.push(0);
+                        fallbackCtx = new EmitterContext(
+                                ctx.javaClassInfo,
+                                fallbackSymbolTable,
+                                ctx.mv,
+                                ctx.cw,
+                                ctx.contextType,
+                                ctx.isBoxed,
+                                ctx.errorUtil,
+                                ctx.compilerOptions,
+                                ctx.unitcheckBlocks
+                        );
                     }
                     BytecodeCompiler compiler = new BytecodeCompiler(
                             ctx.compilerOptions.fileName,
                             1,
                             ctx.errorUtil
                     );
-                    InterpretedCode interpretedCode = compiler.compile(ast, ctx);
+                    InterpretedCode interpretedCode = compiler.compile(ast, fallbackCtx);
+                    if (ctx.symbolTable != null && fallbackCtx.symbolTable != null) {
+                        ctx.symbolTable.copyFlagsFrom(fallbackCtx.symbolTable);
+                    }
 
                     if (ctx.compilerOptions.disassembleEnabled) {
                         System.out.println("=== Interpreter Bytecode ===");

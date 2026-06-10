@@ -815,13 +815,6 @@ public class BytecodeCompiler implements Visitor {
             nextRegister = 3 + capturedVars.length;
         }
 
-        // For non-eval-STRING compilations (special blocks, top-level scripts),
-        // override VOID→LIST so the block tracks its result. eval STRING must
-        // preserve the caller's context so wantarray() works correctly inside.
-        if (!isEvalString && currentCallContext == RuntimeContextType.VOID) {
-            currentCallContext = RuntimeContextType.LIST;
-        }
-
         int returnTargetReg = allocateRegister();
         targetOutputReg = returnTargetReg;
 
@@ -2254,13 +2247,16 @@ public class BytecodeCompiler implements Visitor {
         // Get the left operand register (the variable or expression being assigned to)
         int targetReg = compileLhsForCompoundAssignment(node);
 
+        Object useIntegerAnnotation = node.getAnnotation("useInteger");
+        boolean useInteger = useIntegerAnnotation instanceof Boolean value ? value : isIntegerEnabled();
+
         // Emit the appropriate compound assignment opcode
         switch (op) {
             case "+=" -> emit(Opcodes.ADD_ASSIGN);
             case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
             case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
-            case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
-            case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
+            case "/=" -> emit(useInteger ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
+            case "%=" -> emit(useInteger ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
             case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
             case "&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);              // Bitwise AND (dispatch)
             case "|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);               // Bitwise OR (dispatch)
@@ -2273,8 +2269,8 @@ public class BytecodeCompiler implements Visitor {
             case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
             case "x=" -> emit(Opcodes.REPEAT_ASSIGN);                   // String repetition
             case "**=" -> emit(Opcodes.POW_ASSIGN);                     // Exponentiation
-            case "<<=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_LEFT_SHIFT_ASSIGN : Opcodes.LEFT_SHIFT_ASSIGN);
-            case ">>=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN : Opcodes.RIGHT_SHIFT_ASSIGN);
+            case "<<=" -> emit(useInteger ? Opcodes.INTEGER_LEFT_SHIFT_ASSIGN : Opcodes.LEFT_SHIFT_ASSIGN);
+            case ">>=" -> emit(useInteger ? Opcodes.INTEGER_RIGHT_SHIFT_ASSIGN : Opcodes.RIGHT_SHIFT_ASSIGN);
             default -> {
                 throwCompilerException("Unknown compound assignment operator: " + op);
                 return;

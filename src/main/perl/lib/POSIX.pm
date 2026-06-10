@@ -35,6 +35,9 @@ use constant O_NONBLOCK => 04000;   # 2048
 use constant WNOHANG    => 1;
 use constant WUNTRACED  => 2;
 
+# Floating-point constants
+use constant HUGE_VAL   => 9**9**9;
+
 # Custom import to support legacy foo_h form (without colon)
 # This rewrites locale_h to :locale_h, errno_h to :errno_h, etc.
 sub import {
@@ -56,6 +59,7 @@ our @EXPORT = qw(
     SEEK_CUR SEEK_END SEEK_SET
     F_OK R_OK W_OK X_OK
     LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
+    HUGE_VAL
     localeconv mktime setlocale strftime
 );
 our @EXPORT_OK = qw(
@@ -76,6 +80,7 @@ our @EXPORT_OK = qw(
     # Math functions
     abs acos asin atan atan2 ceil cos cosh exp fabs floor fmod frexp
     ldexp log log10 modf pow sin sinh sqrt tan tanh
+    HUGE_VAL
 
     # String functions
     memchr memcmp memcpy memmove memset strcat strchr strcmp strcoll

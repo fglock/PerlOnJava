@@ -29,4 +29,12 @@ my $hash_row = $dbh->selectrow_hashref($hash_sth);
 is($hash_row->{name}, 'one', 'selectrow_hashref returns the row');
 ok(!$hash_sth->FETCH('Active'), 'selectrow_hashref finishes a successful statement');
 
+my $scalar_select = $dbh->selectrow_array('SELECT name FROM items WHERE id = 1');
+is($scalar_select, 'one', 'selectrow_array returns first column in scalar context');
+
+my $fetch_sth = $dbh->prepare('SELECT name FROM items WHERE id = 1');
+$fetch_sth->execute;
+my $scalar_fetch = $fetch_sth->fetchrow_array;
+is($scalar_fetch, 'one', 'fetchrow_array returns first column in scalar context');
+
 done_testing;

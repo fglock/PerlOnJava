@@ -1315,16 +1315,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static void pushSyntheticEvalCallerFrame(String packageName, String filename, int line) {
+        pushSyntheticCallerFrame(packageName, filename, line, "(eval)", "virtual-eval");
+    }
+
+    public static void pushSyntheticCallerFrame(String packageName, String filename, int line, String subName) {
+        pushSyntheticCallerFrame(packageName, filename, line, subName, "synthetic-own-sub");
+    }
+
+    private static void pushSyntheticCallerFrame(String packageName, String filename, int line, String subName, String marker) {
         ArrayList<String> frame = new ArrayList<>();
         frame.add(packageName != null && !packageName.isEmpty() ? packageName : "main");
         frame.add(filename != null ? filename : "(eval)");
         frame.add(String.valueOf(line));
-        frame.add("(eval)");
-        frame.add("virtual-eval");
+        frame.add(subName);
+        frame.add(marker);
         syntheticCallerFrames.get().addLast(frame);
     }
 
-    private static void popSyntheticEvalCallerFrame() {
+    public static void popSyntheticCallerFrame() {
         ArrayDeque<ArrayList<String>> stack = syntheticCallerFrames.get();
         if (!stack.isEmpty()) {
             stack.removeLast();
@@ -1332,6 +1340,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (stack.isEmpty()) {
             syntheticCallerFrames.remove();
         }
+    }
+
+    private static void popSyntheticEvalCallerFrame() {
+        popSyntheticCallerFrame();
     }
 
     private static void registerEvalRuntimeAlias(EvalRuntimeContext context, char sigil, String fullName, RuntimeBase value) {
@@ -3087,7 +3099,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int insertAt = Math.min(baseSkip + 1, stackTrace.size());
             ArrayList<ArrayList<String>> framesToInsert = new ArrayList<>();
             for (Iterator<ArrayList<String>> it = syntheticFrames.descendingIterator(); it.hasNext(); ) {
-                framesToInsert.add(new ArrayList<>(it.next()));
+                ArrayList<String> syntheticFrame = new ArrayList<>(it.next());
+                if (isSyntheticOwnSubFrame(syntheticFrame)) {
+                    stackTrace.add(syntheticOwnSubInsertAt(stackTrace, syntheticFrame), syntheticFrame);
+                } else {
+                    framesToInsert.add(syntheticFrame);
+                }
             }
             stackTrace.addAll(insertAt, framesToInsert);
         }
@@ -3123,6 +3140,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));
             } else {
                 ArrayList<String> frameInfo = stackTrace.get(frame);
+                int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
+                int trackedOriginalFrame = Math.max(0, originalFrame - syntheticOwnSubFramesBefore);
+                int trackedActiveCodeFrame = activeCodeFrameForCaller(trackedOriginalFrame);
+                int trackedArgsFrame = Math.max(0, argsFrame - syntheticOwnSubFramesBefore);
                 String pkg = frameInfo.get(0);
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
@@ -3138,14 +3159,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String frameSubName = frameInfo.size() > 3 ? frameInfo.get(3) : null;
                 boolean virtualEvalFrame = frameInfo.size() > 4
                         && "virtual-eval".equals(frameInfo.get(4));
+                boolean syntheticOwnSubFrame = frameInfo.size() > 4
+                        && "synthetic-own-sub".equals(frameInfo.get(4));
 
                 // Synthetic frames such as eval blocks describe the frame itself,
                 // not the previous caller, so preserve their own subroutine name.
-                if (virtualEvalFrame && frameSubName != null && frameSubName.startsWith("(")) {
+                if ((syntheticOwnSubFrame || virtualEvalFrame && frameSubName != null && frameSubName.startsWith("("))) {
                     subName = frameSubName;
                 }
 
-                RuntimeCode activeCode = getActiveCodeAt(originalFrame);
+                RuntimeCode activeCode = getActiveCodeAt(trackedActiveCodeFrame);
                 if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
                 }
@@ -3227,7 +3250,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // out from under the caller. Perl preserves the invocation
                         // args here — critical for DBIC TxnScopeGuard double-DESTROY
                         // detection.
-                        RuntimeArray frameArgs = getOriginalArgsAt(argsFrame);
+                        RuntimeArray frameArgs = getOriginalArgsAt(trackedArgsFrame);
+                        if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
+                            RuntimeArray activeFrameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
+                            if (activeFrameArgs != null) {
+                                frameArgs = activeFrameArgs;
+                            }
+                        } else if (frameArgs == null && WarnDie.isInsideUnhandledDieHandler()) {
+                            frameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
+                        }
                         if (frameArgs != null) {
                             dbArgs.setFromListAliased(frameArgs.getList());
                         } else {
@@ -3244,7 +3275,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 //   - apply(String, RuntimeArray, int) pushes true  (fresh args / func())
                 // Fall back to the name-based heuristic for frames outside our tracking
                 // (e.g., top-level code, eval frames).
-                Boolean hasArgsFromStack = getHasArgsAt(originalFrame);
+                Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
+                if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
+                    Boolean activeHasArgs = getHasArgsAt(trackedActiveCodeFrame);
+                    if (activeHasArgs != null) {
+                        hasArgsFromStack = activeHasArgs;
+                    }
+                } else if (hasArgsFromStack == null && WarnDie.isInsideUnhandledDieHandler()) {
+                    hasArgsFromStack = getHasArgsAt(trackedActiveCodeFrame);
+                }
                 if (hasArgsFromStack != null) {
                     res.add(hasArgsFromStack ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
                 } else {
@@ -3324,7 +3363,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } // end if (hasExplicitExpr)
             }
         } else if (frame >= stackTraceSize) {
-            RuntimeCode activeCode = hasExplicitExpr ? getActiveCodeAt(originalFrame) : null;
+            int trackedOriginalFrame = Math.max(0, originalFrame - countSyntheticOwnSubFramesBefore(stackTrace, stackTrace.size()));
+            RuntimeCode activeCode = hasExplicitExpr ? getActiveCodeAt(activeCodeFrameForCaller(trackedOriginalFrame)) : null;
             String activeSubName = activeCode != null
                     ? applyAnonNameOverride(callerSubNameForCode(activeCode))
                     : null;
@@ -3339,7 +3379,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     res.add(new RuntimeScalar(activeCode.cvStartFile != null ? activeCode.cvStartFile : ""));
                     res.add(new RuntimeScalar(activeCode.cvStartLine));
                     res.add(new RuntimeScalar(activeSubName));
-                    Boolean hasArgsFromStack = getHasArgsAt(originalFrame);
+                    Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
                     res.add(hasArgsFromStack != null && hasArgsFromStack
                             ? RuntimeScalarCache.scalarTrue
                             : RuntimeScalarCache.scalarUndef);
@@ -3394,6 +3434,48 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    private static int activeCodeFrameForCaller(int originalFrame) {
+        return originalFrame + (WarnDie.isInsideUnhandledDieHandler() ? 1 : 0);
+    }
+
+    private static boolean isSyntheticOwnSubFrame(ArrayList<String> frame) {
+        return frame.size() > 4 && "synthetic-own-sub".equals(frame.get(4));
+    }
+
+    private static int syntheticOwnSubInsertAt(ArrayList<ArrayList<String>> stackTrace, ArrayList<String> syntheticFrame) {
+        String syntheticPackage = syntheticFrame.isEmpty() ? null : syntheticFrame.get(0);
+        String syntheticFile = syntheticFrame.size() > 1 ? syntheticFrame.get(1) : null;
+        for (int i = 0; i < stackTrace.size(); i++) {
+            ArrayList<String> frame = stackTrace.get(i);
+            String framePackage = !frame.isEmpty() ? frame.get(0) : null;
+            String frameFile = frame.size() > 1 ? frame.get(1) : null;
+            if (Objects.equals(syntheticFile, frameFile)
+                    && (Objects.equals(syntheticPackage, framePackage)
+                    || syntheticPackage == null || syntheticPackage.isEmpty())) {
+                return i;
+            }
+        }
+        for (int i = 0; i < stackTrace.size(); i++) {
+            ArrayList<String> frame = stackTrace.get(i);
+            String frameFile = frame.size() > 1 ? frame.get(1) : null;
+            if (Objects.equals(syntheticFile, frameFile)) {
+                return i;
+            }
+        }
+        return stackTrace.size();
+    }
+
+    private static int countSyntheticOwnSubFramesBefore(ArrayList<ArrayList<String>> stackTrace, int frame) {
+        int count = 0;
+        int end = Math.min(frame, stackTrace.size());
+        for (int i = 0; i < end; i++) {
+            if (isSyntheticOwnSubFrame(stackTrace.get(i))) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static boolean hasExplicitlyRenamedActiveCode() {
@@ -3679,6 +3761,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                 return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
             } catch (RuntimeException e) {
+                e = WarnDie.maybeInvokeUnhandledDieHandler(e);
                 // On die: run scopeExitCleanup for my-variables whose normal
                 // SCOPE_EXIT_CLEANUP bytecodes were skipped by the exception.
                 // PerlExitException (exit()) is excluded — global destruction handles it.
@@ -3966,6 +4049,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                     return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 } catch (RuntimeException e) {
+                    e = WarnDie.maybeInvokeUnhandledDieHandler(e);
                     if (!(e instanceof PerlExitException)) {
                         MyVarCleanupStack.unwindTo(cleanupMark);
                         MortalList.flush();
@@ -4227,6 +4311,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                     return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 } catch (RuntimeException e) {
+                    e = WarnDie.maybeInvokeUnhandledDieHandler(e);
                     if (!(e instanceof PerlExitException)) {
                         MyVarCleanupStack.unwindTo(cleanupMark);
                         MortalList.flush();
@@ -4697,6 +4782,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                         callContext);
+            } catch (RuntimeException e) {
+                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
@@ -4822,6 +4909,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                         callContext);
+            } catch (RuntimeException e) {
+                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();

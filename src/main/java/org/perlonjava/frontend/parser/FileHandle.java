@@ -272,7 +272,7 @@ public class FileHandle {
         // Check if this is a known file handle in the global I/O table
         // This helps distinguish between file handles and other barewords
         if (GlobalVariable.existsGlobalIO(name) || isStandardFilehandle(name)
-                || isAllDigitGlobName(name)) {
+                || isAllDigitGlobName(name) || isPackageDataHandle(name)) {
             // Create a GLOB reference for the file handle, like `\*FH`
             return new OperatorNode("\\",
                     new OperatorNode("*",
@@ -297,6 +297,11 @@ public class FileHandle {
             }
         }
         return true;
+    }
+
+    private static boolean isPackageDataHandle(String normalizedName) {
+        return normalizedName.endsWith("::DATA")
+                && normalizedName.length() > "::DATA".length();
     }
 
     /**

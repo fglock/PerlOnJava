@@ -2072,7 +2072,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Autovivify: create array ref, store back to tied var, re-fetch
                     RuntimeArray arr = new RuntimeArray();
                     arr.strictAutovivify = true;
-                    tiedStore(arr.createReference());
+                    tiedStore(arr.createAnonymousReference());
                     yield arr;
                 }
                 yield fetched.arrayDeref();
@@ -2183,7 +2183,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (fetched.type == RuntimeScalarType.UNDEF) {
                     // Autovivify: create hash ref, store back to tied var
                     RuntimeHash hash = new RuntimeHash();
-                    tiedStore(hash.createReference());
+                    tiedStore(hash.createAnonymousReference());
                     yield hash;
                 }
                 yield fetched.hashDeref();
@@ -2366,7 +2366,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeScalar fetched = tiedFetch();
                 if (fetched.type == RuntimeScalarType.UNDEF) {
                     RuntimeHash hash = new RuntimeHash();
-                    tiedStore(hash.createReference());
+                    tiedStore(hash.createAnonymousReference());
                     yield hash;
                 }
                 yield fetched.hashDerefNonStrict(packageName);
@@ -2441,7 +2441,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (fetched.type == RuntimeScalarType.UNDEF) {
                     RuntimeArray arr = new RuntimeArray();
                     arr.strictAutovivify = true;
-                    tiedStore(arr.createReference());
+                    tiedStore(arr.createAnonymousReference());
                     yield arr;
                 }
                 yield fetched.arrayDerefNonStrict(packageName);

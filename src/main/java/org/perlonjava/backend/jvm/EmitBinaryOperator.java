@@ -19,6 +19,14 @@ import static org.perlonjava.backend.jvm.EmitOperator.emitOperator;
 public class EmitBinaryOperator {
     static final boolean ENABLE_SPILL_BINARY_LHS = true;
 
+    private static boolean isIntegerEnabled(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        Object useInteger = node.getAnnotation("useInteger");
+        if (useInteger instanceof Boolean value) {
+            return value;
+        }
+        return emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+    }
+
     static void handleBinaryOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
@@ -54,7 +62,7 @@ public class EmitBinaryOperator {
         }
 
         // Special case for modulus, division, and shift operators under "use integer"
-        if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
+        if (isIntegerEnabled(emitterVisitor, node)) {
             if (node.operator.equals("%")) {
                 // Use integer modulus when "use integer" is in effect
                 MethodVisitor mv = emitterVisitor.ctx.mv;
@@ -215,7 +223,7 @@ public class EmitBinaryOperator {
 
         // Check if we have an operator handler for this compound operator
         // Under "use integer", use the integer warn variant for /=
-        boolean isInteger = emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+        boolean isInteger = isIntegerEnabled(emitterVisitor, node);
         OperatorHandler operatorHandler;
         if (shouldUseWarnVariant && isInteger && node.operator.equals("/=")) {
             operatorHandler = OperatorHandler.get("/=_int_warn");

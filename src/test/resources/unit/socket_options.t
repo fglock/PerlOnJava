@@ -7,12 +7,13 @@ use IO::Handle;
 use IO::Poll qw(POLLERR POLLIN);
 use Test::More;
 use Socket qw(
-    AF_INET AF_UNIX PF_UNSPEC SOCK_DGRAM SOCK_STREAM
-    SOL_SOCKET SO_ACCEPTCONN SO_REUSEADDR SO_TYPE
+    AF_INET AF_UNSPEC AF_UNIX PF_UNSPEC SOCK_DGRAM SOCK_STREAM
+    SOL_SOCKET SO_ACCEPTCONN SO_REUSEADDR SO_TYPE MSG_PEEK
     INADDR_LOOPBACK IN6ADDR_ANY IN6ADDR_LOOPBACK
     sockaddr_in unpack_sockaddr_in
 );
 
+is AF_UNSPEC, PF_UNSPEC, 'AF_UNSPEC exports the unspecified protocol family value';
 is length(IN6ADDR_ANY), 16, 'IN6ADDR_ANY is a 16-byte packed address';
 is IN6ADDR_LOOPBACK, ("\0" x 15) . "\1", 'IN6ADDR_LOOPBACK is packed ::1';
 
@@ -59,6 +60,25 @@ SKIP: {
     my $empty = recv($left, $buf, 1024, 0);
     ok !defined($empty), 'nonblocking dgram recv returns undef when empty';
     ok $! == EAGAIN || $! == EWOULDBLOCK, 'nonblocking dgram recv reports EAGAIN';
+}
+
+SKIP: {
+    socketpair(my $left, my $right, AF_INET, SOCK_DGRAM, PF_UNSPEC)
+        or skip "inet dgram socketpair unavailable: $!", 3;
+
+    send($right, "peeked", 0);
+    my $buf = "";
+    recv($left, $buf, 1024, MSG_PEEK);
+    is $buf, "peeked", 'MSG_PEEK reads datagram payload';
+
+    $buf = "";
+    recv($left, $buf, 1024, 0);
+    is $buf, "peeked", 'datagram remains available after MSG_PEEK';
+
+    $left->blocking(0);
+    $! = 0;
+    my $empty = recv($left, $buf, 1024, 0);
+    ok !defined($empty), 'datagram is consumed by non-peek recv';
 }
 
 SKIP: {

@@ -46,6 +46,10 @@ public class CoreOperatorResolver {
      */
     public static Node parseCoreOperator(Parser parser, LexerToken token, int startIndex, boolean coreQualified) {
         int currentIndex = parser.tokenIndex;
+        // ParsePrimary has already consumed the operator token. Some parsers use
+        // currentIndex as a post-consume cursor, but die/warn need the actual
+        // operator token for source locations.
+        int sourceIndex = consumedTokenIndex(parser, token, startIndex);
         String operatorName = token.text;
 
         return switch (operatorName) {
@@ -105,7 +109,7 @@ public class CoreOperatorResolver {
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
             case "chomp", "chop" -> OperatorParser.parseChompChop(parser, token, currentIndex);
             case "splice", "mkdir" -> OperatorParser.parseReverse(parser, token, currentIndex);
-            case "die", "warn" -> OperatorParser.parseDieWarn(parser, token, currentIndex);
+            case "die", "warn" -> OperatorParser.parseDieWarn(parser, token, sourceIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
             case "readline", "eof", "tell" -> OperatorParser.parseReadline(parser, token, currentIndex);
             case "binmode" -> OperatorParser.parseBinmodeOperator(parser, token, currentIndex);
@@ -141,6 +145,21 @@ public class CoreOperatorResolver {
                     parseWithPrototype(parser, token, currentIndex, coreQualified);
             default -> parseWithPrototype(parser, token, currentIndex, coreQualified);
         };
+    }
+
+    private static int consumedTokenIndex(Parser parser, LexerToken token, int startIndex) {
+        int upper = Math.min(parser.tokenIndex - 1, parser.tokens.size() - 1);
+        if (upper < 0) {
+            return 0;
+        }
+        int lower = Math.max(0, Math.min(startIndex, upper));
+        for (int i = upper; i >= lower; i--) {
+            LexerToken candidate = parser.tokens.get(i);
+            if (candidate.type == token.type && candidate.text.equals(token.text)) {
+                return i;
+            }
+        }
+        return upper;
     }
 
     private static Node parseWithPrototype(
