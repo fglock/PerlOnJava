@@ -899,10 +899,13 @@ public class CompileAssignment {
                         int targetReg = bytecodeCompiler.getVariableRegister(varName);
 
                         if ((bytecodeCompiler.capturedVarIndices != null && bytecodeCompiler.capturedVarIndices.containsKey(varName))
-                                || bytecodeCompiler.closureCapturedVarNames.contains(varName)) {
-                            // Captured variable - use SET_SCALAR to preserve aliasing.
+                                || bytecodeCompiler.closureCapturedVarNames.contains(varName)
+                                || bytecodeCompiler.isForeachAliasLexical(varName)) {
+                            // Captured variables and active foreach lexical aliases use
+                            // SET_SCALAR to preserve the existing RuntimeScalar identity.
                             // LOAD_UNDEF would replace the register with a new RuntimeScalar,
-                            // breaking the shared reference that closures depend on.
+                            // breaking the shared reference that closures and foreach
+                            // element aliases depend on.
                             bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);

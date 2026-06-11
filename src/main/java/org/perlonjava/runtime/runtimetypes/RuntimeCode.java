@@ -1025,6 +1025,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return GlobalVariable.getLocalizedCodeRefForDirectCall(lookupName, runtimeScalar);
     }
 
+    private static String knownUndefinedSubroutineName(RuntimeScalar runtimeScalar, String subroutineName) {
+        if (runtimeScalar != null
+                && runtimeScalar.globalCodeRefFqn != null
+                && !runtimeScalar.globalCodeRefFqn.isEmpty()) {
+            return runtimeScalar.globalCodeRefFqn;
+        }
+        if (subroutineName != null && !subroutineName.isEmpty() && !"tailcall".equals(subroutineName)) {
+            return subroutineName;
+        }
+        return null;
+    }
+
+    private static RuntimeList undefCodeRefResultOrThrow(RuntimeScalar runtimeScalar, String subroutineName, int callContext) {
+        String fullSubName = knownUndefinedSubroutineName(runtimeScalar, subroutineName);
+        if (fullSubName != null) {
+            throw new PerlCompilerException(gotoErrorPrefix(subroutineName)
+                    + "ndefined subroutine &" + fullSubName + " called");
+        }
+        if (RuntimeContextType.isListLike(callContext)) {
+            return new RuntimeList();
+        }
+        return new RuntimeList(new RuntimeScalar());
+    }
+
     private static RuntimeScalar resolveLateDefinedForwardCodeRef(RuntimeScalar current, RuntimeCode code) {
         if (code == null
                 || code.defined()
@@ -1066,6 +1090,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 continue;
             }
             if (curScalar.type == RuntimeScalarType.UNDEF) {
+                String fullSubName = knownUndefinedSubroutineName(curScalar, subroutineName);
+                if (fullSubName != null) {
+                    throw new PerlCompilerException(gotoErrorPrefix(subroutineName)
+                            + "ndefined subroutine &" + fullSubName + " called");
+                }
                 return;
             }
 
@@ -3960,12 +3989,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // silently return undef so tests can continue running.
         // This is a temporary workaround for the architectural limitation that eval        // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
-            // Return undef in appropriate context
-            if (RuntimeContextType.isListLike(callContext)) {
-                return new RuntimeList();
-            } else {
-                return new RuntimeList(new RuntimeScalar());
-            }
+            return undefCodeRefResultOrThrow(runtimeScalar, subroutineName, callContext);
         }
 
         // Check if the type of this RuntimeScalar is CODE
@@ -4225,12 +4249,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // This is a temporary workaround for the architectural limitation that eval
         // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
-            // Return undef in appropriate context
-            if (RuntimeContextType.isListLike(callContext)) {
-                return new RuntimeList();
-            } else {
-                return new RuntimeList(new RuntimeScalar());
-            }
+            return undefCodeRefResultOrThrow(runtimeScalar, subroutineName, callContext);
         }
 
         // Check if the type of this RuntimeScalar is CODE

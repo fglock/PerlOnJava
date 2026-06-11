@@ -58,11 +58,6 @@ public class ArgumentParser {
                     StringBuilder stdinContent = new StringBuilder();
                     BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
-                    if (isInteractive) {
-                        // Interactive mode - prompt the user and read until EOF (Ctrl+D)
-                        System.err.println("Enter Perl code (press Ctrl+D when done):");
-                    }
-
                     // Read from stdin regardless of whether it's interactive or not
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -318,6 +313,10 @@ public class ArgumentParser {
      * @param index       The current index in the arguments array.
      */
     private static void processShebangLine(String[] args, CompilerOptions parsedArgs, String fileContent, int index) {
+        if (parsedArgs.discardLeadingGarbage) {
+            return;
+        }
+
         String[] lines = fileContent.split("\n", 2);
         if (lines.length == 0 || !lines[0].startsWith("#!")) {
             return;

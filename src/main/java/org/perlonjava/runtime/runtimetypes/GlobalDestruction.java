@@ -1,6 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 /**
  * Handles global destruction at program exit.
@@ -20,6 +23,8 @@ public class GlobalDestruction {
     public static void runGlobalDestruction() {
         // Set ${^GLOBAL_PHASE} to "DESTRUCT"
         GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).set("DESTRUCT");
+        Set<RuntimeBase> visited =
+                Collections.newSetFromMap(new IdentityHashMap<>());
 
         // Snapshot the collections before iterating: a DESTROY callback may
         // mutate GlobalVariable.{globalVariables,globalArrays,globalHashes}
@@ -31,7 +36,7 @@ public class GlobalDestruction {
 
         // Walk all global scalars
         for (RuntimeScalar val : new ArrayList<>(GlobalVariable.globalVariables.values())) {
-            destroyIfTracked(val);
+            destroyIfTracked(val, visited);
         }
 
         // Walk global arrays for blessed ref elements
@@ -42,7 +47,7 @@ public class GlobalDestruction {
             // destruction time (e.g., broken ties from eval+last).
             if (arr.type == RuntimeArray.TIED_ARRAY) continue;
             for (RuntimeScalar elem : new ArrayList<>(arr.elements)) {
-                destroyIfTracked(elem);
+                destroyIfTracked(elem, visited);
             }
         }
 
@@ -53,7 +58,7 @@ public class GlobalDestruction {
             // NEXTKEY/FETCH which may fail if the tie object is already gone.
             if (hash.type == RuntimeHash.TIED_HASH) continue;
             for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
-                destroyIfTracked(elem);
+                destroyIfTracked(elem, visited);
             }
         }
     }
@@ -61,13 +66,33 @@ public class GlobalDestruction {
     /**
      * Call DESTROY on a scalar if it holds a tracked blessed reference.
      */
-    private static void destroyIfTracked(RuntimeScalar val) {
+    private static void destroyIfTracked(RuntimeScalar val, Set<RuntimeBase> visited) {
         if (val != null
                 && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && val.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
-            base.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(base);
+            destroyBaseIfTracked(base, visited);
         }
     }
+
+    private static void destroyBaseIfTracked(RuntimeBase base, Set<RuntimeBase> visited) {
+        if (base == null || base.refCount < 0 || !visited.add(base)) {
+            return;
+        }
+        if (base.blessId != 0 || WeakRefRegistry.hasWeakRefsTo(base) || base instanceof RuntimeCode) {
+            base.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(base);
+            return;
+        }
+        if (base instanceof RuntimeArray arr && MortalList.containerMayContainCleanupTargets(base)) {
+            for (RuntimeScalar elem : new ArrayList<>(arr.elements)) {
+                destroyIfTracked(elem, visited);
+            }
+        } else if (base instanceof RuntimeHash hash && MortalList.containerMayContainCleanupTargets(base)) {
+            for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
+                destroyIfTracked(elem, visited);
+            }
+        }
+    }
+
 }

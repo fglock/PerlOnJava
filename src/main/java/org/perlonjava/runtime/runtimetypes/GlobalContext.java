@@ -294,6 +294,8 @@ public class GlobalContext {
         // JavaSystem.initialize();  // Only for java:: integration
         PerlIO.initialize();
         IOHandle.initialize();  // IO::Handle methods (_sync, _error, etc.)
+        GlobalVariable.ensurePackageStash("IO::File");
+        GlobalVariable.ensurePackageStash("IO::Seekable");
         Version.initialize();   // Initialize version module for version objects
         Attributes.initialize();  // attributes:: XS-equivalent functions (used by attributes.pm)
         // DBI JDBC backend: with the switch to upstream DBI.pm + DBI::PurePerl,

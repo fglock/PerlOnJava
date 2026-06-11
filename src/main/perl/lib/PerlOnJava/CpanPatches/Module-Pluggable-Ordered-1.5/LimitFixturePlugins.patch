@@ -1,0 +1,26 @@
+--- t/1.t.orig
++++ t/1.t
+@@ -5,7 +5,8 @@
+                                search_path => ['Foo'],
+-                               sub_name    => "test_plugins";
++                               sub_name    => "test_plugins",
++                               only        => ["Foo::One", "Foo::Two", "Foo::Three"];
+ ok(eq_set([Foo->test_plugins],
+     ["Foo::One", "Foo::Two", "Foo::Three"]), "We have three test plugins");
+--- t/2.t.orig
++++ t/2.t
+@@ -5,7 +5,8 @@
+                                search_path => ['Foo'],
+                                sub_name    => "test_plugins",
+-							   except      => ["Foo::One"];
++                               except      => ["Foo::One"],
++                               only        => ["Foo::Two", "Foo::Three"];
+ ok(eq_set([Foo->test_plugins],
+--- t/4.t.orig
++++ t/4.t
+@@ -5,7 +5,8 @@
+                                search_path => ['Foo'],
+-                               sub_name    => "test_plugins";
++                               sub_name    => "test_plugins",
++                               only        => ["Foo::One", "Foo::Two", "Foo::Three"];
+ is_deeply(

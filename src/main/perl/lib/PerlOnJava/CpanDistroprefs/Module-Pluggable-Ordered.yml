@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Module::Pluggable::Ordered.
+
+  The upstream tests use a Foo::* fixture while Module::Pluggable
+  intentionally searches configured search_dirs before the rest of @INC.
+  PerlOnJava's CPAN home can contain unrelated installed Foo::* sample
+  modules from other distributions, so patch the tests to constrain the
+  fixture plugins with the module's own only option.
+match:
+  distribution: "^APEIRON/Module-Pluggable-Ordered-1\\.5"
+patches:
+  - "Module-Pluggable-Ordered-1.5/LimitFixturePlugins.patch"

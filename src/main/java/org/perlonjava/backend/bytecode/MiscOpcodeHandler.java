@@ -77,6 +77,7 @@ public class MiscOpcodeHandler {
             case Opcodes.ACCEPT -> IOOperator.accept(ctx, argsArray);
             case Opcodes.SYSSEEK -> IOOperator.sysseek(ctx, argsArray);
             case Opcodes.TRUNCATE -> IOOperator.truncate(ctx, argsArray);
+            case Opcodes.FLOCK -> IOOperator.flock(ctx, argsArray);
             case Opcodes.READ -> IOOperator.read(ctx, argsArray);
             case Opcodes.CHOWN -> ChownOperator.chown(ctx, argsArray);
             case Opcodes.WAITPID -> WaitpidOperator.waitpid(ctx, argsArray);

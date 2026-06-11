@@ -1027,6 +1027,11 @@ public class CompileOperator {
                 }
                 int exprReg = bytecodeCompiler.lastResultReg;
 
+                if (bytecodeCompiler.shouldReturnFromInlineEvalBlock()) {
+                    bytecodeCompiler.emitInlineEvalReturn(exprReg);
+                    break;
+                }
+
                 // Emit scope exit cleanup for all my-scalars, my-hashes, and my-arrays
                 // in the subroutine scope (scope 0). Explicit 'return' bypasses the
                 // normal scope exit cleanup at block end, so we must do it here.

@@ -208,19 +208,18 @@ public class BytecodeInterpreter {
 
         java.util.ArrayDeque<RegexState> regexStateStack = new java.util.ArrayDeque<>();
 
-        // Optimization: only save/restore DynamicVariableManager state if the code uses localization.
-        // This avoids overhead for simple subroutines that don't use `local`.
+        // Only ordinary localized variables are conditional. Regex capture variables
+        // ($1, $&, @-, etc.) are dynamically scoped for every subroutine call, even
+        // when the callee does not use `local`.
         boolean usesLocalization = code.usesLocalization;
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
-        int savedLocalLevel = usesLocalization ? DynamicVariableManager.getLocalLevel() : 0;
+        int savedLocalLevel = DynamicVariableManager.getLocalLevel();
         // Cache the currentPackage RuntimeScalar to avoid ThreadLocal lookups in hot loop
         RuntimeScalar currentPackageScalar = InterpreterState.currentPackage.get();
         String savedPackage = currentPackageScalar.toString();
         currentPackageScalar.set(framePackageName);
-        if (usesLocalization) {
-            RegexState.save();
-        }
+        RegexState.save();
         // Track whether an exception is propagating out of this frame, so the
         // finally block can do scope-exit cleanup for blessed objects in my-variables.
         // Without this, DESTROY doesn't fire for objects in subroutines that are
@@ -2253,7 +2252,7 @@ public class BytecodeInterpreter {
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
                                  Opcodes.LISTEN, Opcodes.PIPE, Opcodes.SOCKETPAIR,
                                  Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,
-                                 Opcodes.SYSSEEK, Opcodes.TRUNCATE, Opcodes.READ, Opcodes.OPENDIR, Opcodes.READDIR,
+                                 Opcodes.SYSSEEK, Opcodes.TRUNCATE, Opcodes.FLOCK, Opcodes.READ, Opcodes.OPENDIR, Opcodes.READDIR,
                                  Opcodes.SEEKDIR -> {
                                 pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);
                             }
@@ -2698,9 +2697,7 @@ public class BytecodeInterpreter {
             // Outer finally: restore interpreter state saved at method entry.
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.
-            if (usesLocalization) {
-                DynamicVariableManager.popToLocalLevel(savedLocalLevel);
-            }
+            DynamicVariableManager.popToLocalLevel(savedLocalLevel);
             currentPackageScalar.set(savedPackage);
             InterpreterState.pop();
             // Release cached registers for reuse
