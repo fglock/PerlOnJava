@@ -1047,27 +1047,22 @@ public class CompileOperator {
                     break;
                 }
 
-                // Emit scope exit cleanup for all my-scalars, my-hashes, and my-arrays
-                // in the subroutine scope (scope 0). Explicit 'return' bypasses the
-                // normal scope exit cleanup at block end, so we must do it here.
-                // Skip the exprReg (return value register) — SCOPE_EXIT_CLEANUP nulls
-                // the register, which would destroy the return value if it's a my-variable.
+                // Explicit 'return' bypasses the normal block-end cleanup.
+                // Use return-specific cleanup opcodes so the returned register remains
+                // readable by RETURN while lexical owner counts are still released.
                 java.util.List<Integer> scalarIdxs = bytecodeCompiler.symbolTable.getMyScalarIndicesInScope(0);
                 for (int idx : scalarIdxs) {
-                    if (idx == exprReg) continue;
-                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP);
+                    bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP);
                     bytecodeCompiler.emitReg(idx);
                 }
                 java.util.List<Integer> hashIdxs = bytecodeCompiler.symbolTable.getMyHashIndicesInScope(0);
                 for (int idx : hashIdxs) {
-                    if (idx == exprReg) continue;
-                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+                    bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP_HASH);
                     bytecodeCompiler.emitReg(idx);
                 }
                 java.util.List<Integer> arrayIdxs = bytecodeCompiler.symbolTable.getMyArrayIndicesInScope(0);
                 for (int idx : arrayIdxs) {
-                    if (idx == exprReg) continue;
-                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+                    bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP_ARRAY);
                     bytecodeCompiler.emitReg(idx);
                 }
 

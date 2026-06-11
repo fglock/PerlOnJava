@@ -93,7 +93,7 @@ public class TieHandle extends RuntimeIO {
                 tieHandle.self,
                 new RuntimeScalar("READLINE"),
                 null,
-                new RuntimeArray(tieHandle.self),
+                new RuntimeArray(),
                 ctx
         );
 

@@ -308,35 +308,81 @@ sub LC_NUMERIC  () { 4 }
 sub LC_TIME     () { 5 }
 sub LC_MESSAGES () { 6 }
 
+my $CURRENT_LOCALE = 'C';
+
+sub _normal_locale_name {
+    my $locale = shift;
+    $locale = $ENV{LC_ALL} || $ENV{LC_MESSAGES} || $ENV{LANG} || 'C'
+        if !defined($locale) || $locale eq '';
+    $locale =~ s/\A\s+|\s+\z//g;
+    $locale =~ s/\..*\z//;
+    $locale =~ s/\@.*\z//;
+    $locale =~ tr/-/_/;
+    return lc $locale;
+}
+
 sub setlocale {
     my ($category, $locale) = @_;
-    # Returning the requested locale (or the current/default one) is enough
-    # for callers that use setlocale() purely for its return value, e.g.
-    # `setlocale(LC_COLLATE, "C")`.
-    return defined $locale ? $locale : 'C';
+    return $CURRENT_LOCALE unless defined $locale;
+    $CURRENT_LOCALE = $locale eq ''
+        ? ($ENV{LC_ALL} || $ENV{LC_MESSAGES} || $ENV{LANG} || 'C')
+        : $locale;
+    return $CURRENT_LOCALE;
+}
+
+sub _localeconv_defaults {
+    return (
+        decimal_point     => '.',
+        thousands_sep     => '',
+        grouping          => '',
+        int_curr_symbol   => '',
+        currency_symbol   => '',
+        mon_decimal_point => '',
+        mon_thousands_sep => '',
+        mon_grouping      => '',
+        positive_sign     => '',
+        negative_sign     => '-',
+        int_frac_digits   => -1,
+        frac_digits       => -1,
+        p_cs_precedes     => -1,
+        p_sep_by_space    => -1,
+        n_cs_precedes     => -1,
+        n_sep_by_space    => -1,
+        p_sign_posn       => -1,
+        n_sign_posn       => -1,
+    );
 }
 
 sub localeconv {
-    return {
-        decimal_point   => '.',
-        thousands_sep   => '',
-        grouping        => '',
-        int_curr_symbol => '',
-        currency_symbol => '',
-        mon_decimal_point => '',
-        mon_thousands_sep => '',
-        mon_grouping    => '',
-        positive_sign   => '',
-        negative_sign   => '-',
-        int_frac_digits => -1,
-        frac_digits     => -1,
-        p_cs_precedes   => -1,
-        p_sep_by_space  => -1,
-        n_cs_precedes   => -1,
-        n_sep_by_space  => -1,
-        p_sign_posn     => -1,
-        n_sign_posn     => -1,
-    };
+    my %conv = _localeconv_defaults();
+    my $locale = _normal_locale_name($CURRENT_LOCALE);
+
+    if ($locale =~ /^de(?:_|$)/) {
+        @conv{qw(
+            decimal_point thousands_sep int_curr_symbol currency_symbol
+            mon_decimal_point mon_thousands_sep int_frac_digits frac_digits
+            p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
+            p_sign_posn n_sign_posn
+        )} = (',', '.', 'EUR ', 'EUR', ',', '.', 2, 2, 0, 1, 0, 1, 1, 1);
+    }
+    elsif ($locale =~ /^ru(?:_|$)/) {
+        @conv{qw(
+            decimal_point thousands_sep int_curr_symbol currency_symbol
+            mon_decimal_point mon_thousands_sep int_frac_digits frac_digits
+            p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
+            p_sign_posn n_sign_posn
+        )} = ('.', ',', 'RUB ', 'RUB', '.', ',', 2, 2, 0, 1, 0, 1, 1, 1);
+    }
+    elsif ($locale =~ /^en_us\z|^en(?:_|$)/) {
+        @conv{qw(
+            decimal_point thousands_sep int_curr_symbol currency_symbol
+            mon_decimal_point mon_thousands_sep int_frac_digits frac_digits
+            p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
+            p_sign_posn n_sign_posn
+        )} = ('.', ',', 'USD', '$', '.', ',', 2, 2, 1, 1, 1, 1, 1, 1);
+    }
+
+    return \%conv;
 }
 
 # User/Group functions

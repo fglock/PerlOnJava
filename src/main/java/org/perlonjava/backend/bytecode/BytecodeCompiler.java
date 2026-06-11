@@ -1622,6 +1622,10 @@ public class BytecodeCompiler implements Visitor {
                     // Barewords ending with :: are package name constants, always allowed
                     // e.g., Tie::RefHash:: is equivalent to "Tie::RefHash"
                     if (varName.endsWith("::")) {
+                        if (currentCallContext == RuntimeContextType.VOID) {
+                            lastResultReg = -1;
+                            return;
+                        }
                         String packageName = varName.substring(0, varName.length() - 2);
                         int rd = allocateOutputRegister();
                         emit(Opcodes.LOAD_STRING);
@@ -1633,6 +1637,10 @@ public class BytecodeCompiler implements Visitor {
                     }
                     String normalizedBarewordName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
                     if (GlobalVariable.hasGlobalPseudoConstant(normalizedBarewordName)) {
+                        if (currentCallContext == RuntimeContextType.VOID) {
+                            lastResultReg = -1;
+                            return;
+                        }
                         int rd = allocateOutputRegister();
                         int nameIdx = addToStringPool(normalizedBarewordName);
                         emit(Opcodes.LOAD_GLOBAL_SCALAR);
@@ -1644,6 +1652,10 @@ public class BytecodeCompiler implements Visitor {
                     // This is a bareword (no sigil)
                     if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
                         throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
+                    }
+                    if (currentCallContext == RuntimeContextType.VOID) {
+                        lastResultReg = -1;
+                        return;
                     }
                     // Not strict - treat bareword as string literal
                     int rd = allocateOutputRegister();

@@ -1267,7 +1267,7 @@ HTTP::ClickHouse::Base	PASS	7	7		2026-05-16		75a25eb21
 HTTP::ClientDetect::Language	PASS	79	79		2026-05-18		bd327bb57
 HTTP::Cookies	PASS	122	122		2026-06-11		959012866
 HTTP::Cookies::ChromeMacOS	PASS	1	1		2026-05-18		b5536d190
-HTTP::Cookies::Guess	PASS	5	5		2026-05-18		bd327bb57
+HTTP::Cookies::Guess	PASS	5	5		2026-06-11		bd9132057
 HTTP::Cookies::PhantomJS	PASS	1490	1490		2026-05-16		d8a8a9f34
 HTTP::Cookies::w3m	PASS	3	3		2026-05-09		d7916b01c
 HTTP::DetectUserAgent	PASS	152	152		2026-05-17		bd327bb57
@@ -1360,6 +1360,7 @@ IM::Engine::Incoming::IRC	PASS	4	4		2026-05-16		d8a8a9f34
 IM::Engine::Plugin::State	PASS	12	12		2026-05-16		75a25eb21
 IMDB::BaseClass	PASS	2	2		2026-05-11		2b8886eec
 IMDB::TitlePage::Extract	PASS	1	1		2026-05-12		93dfa497b
+IO::All	PASS	368	368		2026-06-11		bd9132057
 IO::All::FTP	PASS	8	8		2026-05-17		d8a8a9f34
 IO::Async	PASS	1134	1134		2026-05-12		b5c01ce1c
 IO::Async::Loop	PASS	1134	1134		2026-05-11		b5c01ce1c
@@ -1588,6 +1589,7 @@ LocalConf::Parser	PASS	1	1		2026-05-13		3fe76ed3b
 Locale::BR	PASS	2879	2879		2026-05-14		3fe76ed3b
 Locale::Currency::Format	PASS	28	28		2026-05-19		b5536d190
 Locale::Framework	PASS	5	5		2026-05-12		b5c01ce1c
+Locale::Maketext	PASS	180	180		2026-06-11		bd9132057
 Locale::SubCountry	PASS	15	15		2026-05-17		d8a8a9f34
 Locale::TextDomain::UTF8	PASS	1	1		2026-05-18		bd327bb57
 Locale::Tie	PASS	1	1		2026-05-18		bd327bb57
@@ -1741,6 +1743,7 @@ Module::CoreList	PASS	102	102		2026-05-20		b5536d190
 Module::Depends	PASS	20	20		2026-05-10		1e95a0902
 Module::Depends::Intrusive	PASS	20	20		2026-05-13		3fe76ed3b
 Module::Faker::Dist	PASS	34	34		2026-05-19		b5536d190
+Module::Install	PASS	547	547		2026-06-11		bd9132057
 Module::Install::AutoManifest	PASS	1	1		2026-05-09		d7916b01c
 Module::Install::RTx	PASS	1	1		2026-05-09		d7916b01c
 Module::Install::Repository	PASS	1	1		2026-05-18		bd327bb57
@@ -1856,7 +1859,7 @@ MooseX::Meta::Method::Transactional	PASS	17	17		2026-05-11		2b8886eec
 MooseX::Meta::TypeConstraint::Mooish	PASS	42	42		2026-05-18		b5536d190
 MooseX::MungeHas	PASS	45	45		2026-05-12		b5c01ce1c
 MooseX::NestedAttributesConstructor	PASS	2	2		2026-05-10		1e95a0902
-MooseX::NonMoose	PASS	177	177		2026-06-03		d0f827461
+MooseX::NonMoose	PASS	177	177		2026-06-11		bd9132057
 MooseX::NotRequired	PASS	22	22		2026-05-18		bd327bb57
 MooseX::OneArgNew	PASS	20	20		2026-05-16		d8a8a9f34
 MooseX::POE	PASS	249	249		2026-05-12		312b4f902
@@ -1994,6 +1997,7 @@ Netconf	PASS	1	1		2026-05-16		75a25eb21
 Nullius	PASS	25	25		2026-05-17		bd327bb57
 Number::Bytes::Human	PASS	223	223		2026-05-11		1e95a0902
 Number::Compare	PASS	24	24		2026-06-10		959012866
+Number::Format	PASS	171	171		2026-06-11		bd9132057
 Number::Format::Metric	PASS	2	2		2026-05-08		24f4fb162
 Number::Phone::Normalize	PASS	126	126		2026-05-12		b5c01ce1c
 NumericCodes	PASS	9	9		2026-05-18		bd327bb57
@@ -2628,7 +2632,7 @@ Template::Plugin::Class	PASS	2	2		2026-04-21		73edc8aba
 Template::Plugin::Comma	PASS	28	28		2026-05-11		b5c01ce1c
 Template::Plugin::HTML::SuperForm	PASS	1	1		2026-05-12		312b4f902
 Template::Plugin::JSON::Escape	PASS	14	14		2026-05-15		3fe76ed3b
-Template::Plugin::Number::Format	PASS	29	29		2026-05-11		b5c01ce1c
+Template::Plugin::Number::Format	PASS	29	29		2026-06-11		bd9132057
 Template::Plugin::Page	PASS	51	51		2026-05-16		75a25eb21
 Template::Plugin::VMethods	PASS	12	12		2026-05-16		75a25eb21
 Template::Provider::Encoding	PASS	30	30		2026-05-16		75a25eb21

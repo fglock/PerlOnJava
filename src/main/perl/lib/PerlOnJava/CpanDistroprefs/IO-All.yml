@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for IO::All.
+
+  t/accept.t and t/lock.t depend on POSIX fork() for parent/child
+  socket and lock coordination. PerlOnJava does not implement fork(),
+  so skip only those tests on no-fork platforms while keeping the rest
+  of the upstream suite intact.
+match:
+  distribution: "^FREW/IO-All-0\\.87"
+patches:
+  - "IO-All-0.87/SkipForkTests.patch"

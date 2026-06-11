@@ -38,6 +38,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // INTEGER_PATTERN replaced with isIntegerString() for better performance
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$");
 
+    private RuntimeArray unaryDerefOverloadArgs() {
+        return new RuntimeArray(this, scalarUndef, scalarFalse);
+    }
+
+    private boolean overloadReturnedDifferentObject(RuntimeScalar result) {
+        return result != null && result != this && result.value != this.value;
+    }
+
     // Fast check if string might be a parseable integer
     // Returns true if first char suggests it could be an integer (digit or minus)
     // This avoids exception overhead for strings like "hello" while allowing
@@ -2014,9 +2022,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(@{}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(@{}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.arrayDeref();
                 }
             }
@@ -2130,11 +2138,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try to call the overloaded hash dereference method `(%{}`
-                RuntimeScalar result = ctx.tryOverload("(%{}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(%{}", unaryDerefOverloadArgs());
                 // If the overload method returns a different object (not self),
                 // recursively dereference the returned value
                 // This prevents infinite recursion when the overload returns the same object
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.hashDeref();
                 }
             }
@@ -2205,9 +2213,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(${}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(${}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.scalarDeref();
                 }
             }
@@ -2267,9 +2275,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(${}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(${}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.scalarDerefNonStrict(packageName);
                 }
             }
@@ -2315,9 +2323,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(%{}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(%{}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.hashDerefNonStrict(packageName);
                 }
             }
@@ -2388,9 +2396,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(@{}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(@{}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.arrayDerefNonStrict(packageName);
                 }
             }
@@ -2461,9 +2469,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(*{}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(*{}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.globDeref();
                 }
             }
@@ -2530,9 +2538,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(*{}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(*{}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.globDerefNonStrict(packageName);
                 }
             }
@@ -2602,9 +2610,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(this));
+                RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != this.value.hashCode()) {
+                if (overloadReturnedDifferentObject(result)) {
                     return result.codeDerefNonStrict(packageName);
                 }
             }

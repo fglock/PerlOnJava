@@ -157,7 +157,7 @@ sub new {
 }
 
 sub new_tmpfile {
-    my $class = shift;
+    my $class = shift || 'IO::File';
     @_ == 0 or croak "usage: $class->new_tmpfile()";
     require File::Temp;
     # Use bless+gensym directly instead of $class->new to avoid infinite

@@ -648,14 +648,12 @@ public class EmitLiteral {
      * @throws PerlCompilerException if strict subs is enabled
      */
     public static void emitIdentifier(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
-        // Barewords have no side effects in void context
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            return;
-        }
-
         // Barewords ending with :: are package name constants, always allowed under strict subs
         // e.g., Tie::RefHash:: is equivalent to "Tie::RefHash"
         if (node.name.endsWith("::")) {
+            if (ctx.contextType == RuntimeContextType.VOID) {
+                return;
+            }
             String packageName = node.name.substring(0, node.name.length() - 2);
             new StringNode(packageName, node.tokenIndex).accept(visitor);
             return;
@@ -665,6 +663,9 @@ public class EmitLiteral {
                 node.name,
                 ctx.symbolTable.getCurrentPackage());
         if (GlobalVariable.hasGlobalPseudoConstant(normalizedBarewordName)) {
+            if (ctx.contextType == RuntimeContextType.VOID) {
+                return;
+            }
             ctx.mv.visitLdcInsn(normalizedBarewordName);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/GlobalVariable",
@@ -678,6 +679,9 @@ public class EmitLiteral {
                     node.tokenIndex,
                     "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use",
                     ctx.errorUtil);
+        } else if (ctx.contextType == RuntimeContextType.VOID) {
+            // Non-strict barewords have no side effects in void context.
+            return;
         } else {
             // Treat bareword as a string literal
             new StringNode(node.name, node.tokenIndex).accept(visitor);

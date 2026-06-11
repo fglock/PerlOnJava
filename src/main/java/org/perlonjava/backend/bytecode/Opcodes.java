@@ -2376,6 +2376,27 @@ public class Opcodes {
      */
     public static final short DEFINED_CODE_DYNAMIC = 493;
 
+    /**
+     * Explicit-return cleanup for a my-scalar register.
+     * Releases the lexical owner count but keeps the register readable by RETURN.
+     * Format: RETURN_SCOPE_CLEANUP reg
+     */
+    public static final short RETURN_SCOPE_CLEANUP = 494;
+
+    /**
+     * Explicit-return cleanup for a my-hash register.
+     * Walks hash values for tracked references but keeps the register readable by RETURN.
+     * Format: RETURN_SCOPE_CLEANUP_HASH reg
+     */
+    public static final short RETURN_SCOPE_CLEANUP_HASH = 495;
+
+    /**
+     * Explicit-return cleanup for a my-array register.
+     * Walks array values for tracked references but keeps the register readable by RETURN.
+     * Format: RETURN_SCOPE_CLEANUP_ARRAY reg
+     */
+    public static final short RETURN_SCOPE_CLEANUP_ARRAY = 496;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

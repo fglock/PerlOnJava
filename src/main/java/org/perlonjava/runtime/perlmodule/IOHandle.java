@@ -63,9 +63,11 @@ public class IOHandle extends PerlModuleBase {
             return new RuntimeList(new RuntimeScalar(1)); // Invalid handle has error
         }
 
-        // Check if there's an error in $!
-        String error = GlobalVariable.getGlobalVariable("main::!").toString();
-        return new RuntimeList(new RuntimeScalar(error.isEmpty() ? 0 : 1));
+        // Perl's IO::Handle::error reports the handle's stream error
+        // indicator, not the current global errno.  PerlOnJava does not yet
+        // keep a per-handle stream error flag, so a valid handle has no
+        // pending stream error here.
+        return new RuntimeList(RuntimeScalarCache.scalarFalse);
     }
 
     /**
