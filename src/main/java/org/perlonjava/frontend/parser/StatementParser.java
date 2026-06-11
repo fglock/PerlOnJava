@@ -1283,11 +1283,11 @@ public class StatementParser {
                 parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
                 parser.ctx.symbolTable.exitScope(scopeIndex);
                 HintHashRegistry.exitScope();
-                // Perl reports "Missing right curly ..." for truncated `package Foo {` at EOF;
+                // Perl reports "Missing right curly or square bracket" for truncated `package Foo {` at EOF;
                 // TokenUtils.consume would emit a lexer-style "Expected token ... EOF" message
                 // (uni/package.t, comp/package_block.t).
                 if (token.type == LexerTokenType.EOF) {
-                    parser.throwCleanError("Missing right curly");
+                    parser.throwMissingRightCurlyOrSquareBracketError();
                 }
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
@@ -1340,7 +1340,7 @@ public class StatementParser {
             HintHashRegistry.exitScope(); // Restore compile-time %^H
 
             if (!(TokenUtils.peek(parser).type == LexerTokenType.OPERATOR && TokenUtils.peek(parser).text.equals("}"))) {
-                parser.throwCleanError("Missing right curly");
+                parser.throwMissingRightCurlyOrSquareBracketError();
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             block.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());

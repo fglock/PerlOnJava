@@ -2369,6 +2369,13 @@ public class Opcodes {
      */
     public static final short RELEASE_CONSUMED_TEMP = 492;
 
+    /**
+     * Check if a dynamically named code reference is defined via stash lookup.
+     * Format: DEFINED_CODE_DYNAMIC rd name_reg pkg_string_idx
+     * Effect: rd = GlobalVariable.definedGlobalCodeRefAsScalar(name, package)
+     */
+    public static final short DEFINED_CODE_DYNAMIC = 493;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

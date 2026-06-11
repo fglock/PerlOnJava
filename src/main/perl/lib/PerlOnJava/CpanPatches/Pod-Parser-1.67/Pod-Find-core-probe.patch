@@ -1,0 +1,37 @@
+--- lib/Pod/Find.pm
++++ lib/Pod/Find.pm
+@@ -278,5 +278,7 @@ sub _check_and_extract_name {
+     my ($file, $verbose, $root_rx) = @_;
+ 
++    return if $file =~ /\.orig\z/;
++
+     # check extension or executable flag
+     # this involves testing the .bat extension on Win32!
+     unless(-f $file && -T $file && ($file =~ /\.(pod|pm|plx?)\z/i || -x $file )) {
+@@ -469,6 +471,7 @@ sub pod_where {
+         my $fullext = $fullname . $ext;
+         if (-f $fullext &&
+          contains_pod($fullext, $options{'-verbose'}) ) {
++          $fullext = _perlonjava_core_probe_path($fullext);
+           warn "FOUND: $fullext\n" if $options{'-verbose'};
+           return $fullext;
+         }
+@@ -502,5 +505,17 @@ sub pod_where {
+   return;
+ }
+ 
++sub _perlonjava_core_probe_path {
++  my ($path) = @_;
++  return $path unless $path =~ m{\Ajar:PERL5LIB/(.+)\z};
++
++  require Config;
++  return $path unless $Config::Config{perlonjava};
++
++  my $probe = File::Spec->catfile($Config::Config{privlibexp}, split m{/}, $1);
++  $probe = _unixify($probe);
++  return -f $probe ? $probe : $path;
++}
++
+ =head2 C<contains_pod( $file , $verbose )>
+ 
+ Returns true if the supplied filename (not POD module) contains some pod

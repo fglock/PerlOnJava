@@ -29,6 +29,68 @@ use Scalar::Util qw(blessed);
 our @ISA    = qw(JSON::PP Exporter);
 our @EXPORT = qw(encode_json decode_json to_json from_json);
 
+sub new {
+    my ($class, @args) = @_;
+    Carp::croak('Odd number of arguments for Cpanel::JSON::XS->new')
+        if @args % 2;
+
+    my $self = $class->SUPER::new();
+
+    # JSON::PP enables allow_nonref by default for JSON.pm compatibility.
+    # Cpanel::JSON::XS follows JSON::XS and requires callers to opt in.
+    $self->allow_nonref(0);
+
+    while (@args) {
+        my ($name, $value) = splice @args, 0, 2;
+        Carp::croak("Unsupported Cpanel::JSON::XS option '$name'")
+            unless $self->can($name);
+        $self->$name($value);
+    }
+
+    return $self;
+}
+
+sub encode {
+    my ($self, $value) = @_;
+
+    if (!$self->get_utf8) {
+        $value = _upgrade_byte_strings_as_latin1($value);
+    }
+
+    return $self->SUPER::encode($value);
+}
+
+sub _upgrade_byte_strings_as_latin1 {
+    my ($value) = @_;
+    return $value unless defined $value;
+
+    if (!ref $value) {
+        my $copy = $value;
+        utf8::upgrade($copy)
+            if !utf8::is_utf8($copy) && $copy =~ /[\x80-\xff]/;
+        return $copy;
+    }
+
+    return $value if blessed($value);
+
+    if (ref($value) eq 'ARRAY') {
+        return [ map { _upgrade_byte_strings_as_latin1($_) } @$value ];
+    }
+
+    if (ref($value) eq 'HASH') {
+        my %copy;
+        for my $key (keys %$value) {
+            my $copy_key = $key;
+            utf8::upgrade($copy_key)
+                if !utf8::is_utf8($copy_key) && $copy_key =~ /[\x80-\xff]/;
+            $copy{$copy_key} = _upgrade_byte_strings_as_latin1($value->{$key});
+        }
+        return \%copy;
+    }
+
+    return $value;
+}
+
 sub encode_json {
     my @args = @_;
     if ( @args && blessed( $args[0] ) && $args[0]->isa(__PACKAGE__) ) {

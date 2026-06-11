@@ -4,9 +4,10 @@ comment: |
 
   Pod::Parser supplies Pod::Find and Pod::Parser for Pod::Coverage.  The 1.67
   test suite expects File::Find to resolve to a filesystem core-library path,
-  while PerlOnJava loads bundled core modules from jar:PERL5LIB.  Ignore that
-  packaging-path assertion so downstream CPAN distributions can install.
+  while PerlOnJava loads bundled core modules from jar:PERL5LIB.  Patch
+  Pod::Find to report the matching Config privlib probe path for bundled core
+  modules when that marker exists.
 match:
   distribution: "^MAREKR/Pod-Parser-"
-test:
-  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
+patches:
+  - "Pod-Parser-1.67/Pod-Find-core-probe.patch"

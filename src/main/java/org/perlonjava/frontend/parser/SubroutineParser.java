@@ -925,7 +925,7 @@ public class SubroutineParser {
             // Check if we reached EOF instead of finding the closing brace
             if (parser.tokenIndex >= parser.tokens.size() ||
                     parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
-                parser.throwCleanError("Missing right curly");
+                parser.throwMissingRightCurlyOrSquareBracketError();
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 

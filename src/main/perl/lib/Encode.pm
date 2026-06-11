@@ -68,6 +68,12 @@ my $_java_find_encoding = \&find_encoding;
             }
         }
 
+        if ($key eq 'locale') {
+            my $enc = $_cached_java_find_encoding->('UTF-8');
+            $_encoding_cache{$key} = $enc if defined $enc;
+            return $enc;
+        }
+
         return $_cached_java_find_encoding->($name);
     };
 

@@ -1150,6 +1150,14 @@ public class Disassemble {
                         sb.append("DEFINED_CODE r").append(rd).append(" = defined(&")
                           .append(interpretedCode.stringPool[definedCodeNameIdx]).append(")\n");
                         break;
+                    case Opcodes.DEFINED_CODE_DYNAMIC:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        int definedCodePkgIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DEFINED_CODE_DYNAMIC r").append(rd).append(" = defined(&{r")
+                          .append(rs).append("}) pkg=")
+                          .append(interpretedCode.stringPool[definedCodePkgIdx]).append("\n");
+                        break;
                     case Opcodes.DEFINED_GLOB:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
