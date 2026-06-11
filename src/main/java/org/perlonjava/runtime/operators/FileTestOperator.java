@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -442,7 +443,14 @@ public class FileTestOperator {
         }
 
         // Handle string filenames
-        Path path = resolvePath(filename);
+        Path path;
+        try {
+            path = resolvePath(filename);
+        } catch (InvalidPathException e) {
+            getGlobalVariable("main::!").set(22); // EINVAL
+            updateLastStat(fileHandle, false, 22);
+            return scalarUndef;
+        }
 
         if (path == null) {
             getGlobalVariable("main::!").set(2);  // ENOENT
