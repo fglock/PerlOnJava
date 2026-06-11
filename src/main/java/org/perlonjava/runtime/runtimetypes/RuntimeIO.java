@@ -291,7 +291,9 @@ public class RuntimeIO extends RuntimeScalar {
         List<Integer> candidates = new ArrayList<>();
         Integer recycled;
         while ((recycled = recycledFds.poll()) != null) {
-            candidates.add(recycled);
+            if (recycled >= 3) {
+                candidates.add(recycled);
+            }
         }
         if (candidates.isEmpty()) {
             return -1;
@@ -346,8 +348,12 @@ public class RuntimeIO extends RuntimeScalar {
         Integer fd = ioToFileno.remove(this);
         if (fd != null) {
             filenoToIO.remove(fd);
-            // Return fd to the recycle pool so it can be reused (POSIX: lowest available)
-            recycledFds.add(fd);
+            // Return fd to the recycle pool so it can be reused (POSIX: lowest available).
+            // Descriptors 0, 1, and 2 are reserved for stdin/stdout/stderr and must
+            // never be assigned to lazily-numbered regular filehandles.
+            if (fd >= 3) {
+                recycledFds.add(fd);
+            }
         }
     }
 

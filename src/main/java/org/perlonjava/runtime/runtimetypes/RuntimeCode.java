@@ -3931,9 +3931,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(runtimeScalar));
+                RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(
+                        runtimeScalar, RuntimeScalarCache.scalarUndef, RuntimeScalarCache.scalarFalse));
                 // If the subroutine returns the object itself then it will not be called again
-                if (result != null && result.value.hashCode() != runtimeScalar.value.hashCode()) {
+                if (result != null && result != runtimeScalar && result.value != runtimeScalar.value) {
                     return result;
                 }
             }
@@ -4465,8 +4466,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Has overloading - try to get &{} overload
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {
-                    RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(runtimeScalar));
-                    if (result != null && result.value.hashCode() != runtimeScalar.value.hashCode()) {
+                    RuntimeScalar result = ctx.tryOverload("(&{}", new RuntimeArray(
+                            runtimeScalar, RuntimeScalarCache.scalarUndef, RuntimeScalarCache.scalarFalse));
+                    if (result != null && result != runtimeScalar && result.value != runtimeScalar.value) {
                         // Successfully got a CODE reference via overload, return it
                         if (result.type == RuntimeScalarType.CODE) {
                             return result;

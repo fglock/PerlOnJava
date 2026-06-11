@@ -1,0 +1,32 @@
+--- t/accept.t.orig
++++ t/accept.t
+@@ -1,6 +1,11 @@
+ use strict; use warnings;
+ use lib -e 't' ? 't' : 'test';
+-use Test::More tests => 20;
++use Test::More;
++use Config;
++
++plan skip_all => "fork not implemented on this platform" unless $Config{d_fork};
++plan tests => 20;
++
+ use IO_All_Test;
+ use IO::All;
+ use IO::Socket::INET;
+--- t/lock.t.orig
++++ t/lock.t
+@@ -2,9 +2,13 @@
+ use lib -e 't' ? 't' : 'test';
+ use IO::All;
+ use IO_All_Test;
++use Config;
+ 
+ # XXX This needs to be fixed!!!
+-$^O !~ /^(cygwin|hpux)$/
++$Config{d_fork}
++    ? do {}
++    : do { print "1..0 # skip - fork not implemented on this platform\n"; exit(0) };
++$^O !~ /^(cygwin|hpux)$/
+     ? print "1..3\n"
+     : do { print "1..0 # skip - locking problems on $^O\n"; exit(0) };
+ 

@@ -66,7 +66,13 @@ sub _default_install_base {
 
 sub WriteMakefile {
     my %args = @_;
-    
+
+    my %cli = _parse_makefile_pl_args(@ARGV);
+    my $prereq_print = delete $cli{PREREQ_PRINT};
+    for my $key (keys %cli) {
+        $args{$key} = $cli{$key};
+    }
+
     my $name = $args{NAME} or die "NAME is required\n";
     my $version = $args{VERSION} || ($args{VERSION_FROM} && _extract_version($args{VERSION_FROM})) || '0';
 
@@ -106,6 +112,11 @@ $failed
 Please install these modules first and rerun 'perl Makefile.PL'.
 END
         }
+    }
+
+    if ($prereq_print) {
+        _print_prereq_variables(\%args);
+        exit 0;
     }
     
     # Check for XS files
@@ -509,6 +520,7 @@ sub _install_pure_perl {
     
     # Create Makefile with install commands (actual install deferred to 'make')
     _create_install_makefile($name, $version, $args, \%pm, \%scripts, $mm);
+    _configure_subdirs($args);
 
     # If Build.PL exists in cwd, the distribution was configured via Module::Build
     # (or Module::Install's Build.PL-delegates-to-Makefile.PL trick). CPAN.pm will
@@ -525,6 +537,36 @@ sub _install_pure_perl {
     print "=" x 60, "\n\n";
     
     return $mm;
+}
+
+sub _parse_makefile_pl_args {
+    my @argv = @_;
+    my %args;
+
+    for my $arg (@argv) {
+        if ($arg eq 'PREREQ_PRINT') {
+            $args{PREREQ_PRINT} = 1;
+            next;
+        }
+        if ($arg =~ /^([A-Za-z_]\w*)=(.*)\z/s) {
+            $args{uc $1} = $2;
+        }
+    }
+
+    return %args;
+}
+
+sub _print_prereq_variables {
+    my ($args) = @_;
+
+    my $prereq_pm = ref $args->{PREREQ_PM} eq 'HASH' ? $args->{PREREQ_PM} : {};
+    print "\$PREREQ_PM = " . _perl_hash_literal($prereq_pm) . ";\n";
+    if (defined $args->{MIN_PERL_VERSION}) {
+        print "\$MIN_PERL_VERSION = q[$args->{MIN_PERL_VERSION}];\n";
+    }
+    if (ref $args->{BUILD_REQUIRES} eq 'HASH' && %{$args->{BUILD_REQUIRES}}) {
+        print "\$BUILD_REQUIRES = " . _perl_hash_literal($args->{BUILD_REQUIRES}) . ";\n";
+    }
 }
 
 sub _build_share_file_mapping {
@@ -694,7 +736,8 @@ sub _create_install_makefile {
     }
     
     # Convert module name to dist name (My::Module -> My-Module)
-    (my $distname = $name) =~ s/::/-/g;
+    my $distname = $args->{DISTNAME} || $name;
+    $distname =~ s/::/-/g;
     
     # Get INST_LIB and installation directories
     # Use INSTALL_BASE for consistency with where we actually install modules
@@ -702,6 +745,8 @@ sub _create_install_makefile {
     my $inst_archlib = $args->{INST_ARCHLIB} || 'blib/arch';
     my $installsitelib = $args->{INSTALLSITELIB};
     my $siteprefix = $args->{SITEPREFIX} || $args->{PREFIX};
+    my $install_dirs = defined $args->{INSTALLDIRS} ? $args->{INSTALLDIRS} : 'site';
+    my $inc = defined $args->{INC} ? $args->{INC} : '';
     
     # If INSTALLSITELIB is not set, compute it from PREFIX/SITEPREFIX (standard MakeMaker behavior)
     unless ($installsitelib) {
@@ -810,7 +855,10 @@ sub _create_install_makefile {
     # the module's core functionality). Track generated targets so missing
     # generated PM files do not become hard pm_to_blib prerequisites before
     # pl_files has had a chance to create them.
+    _default_pl_files($args);
+
     my @pl_cmds;
+    my @pl_rules;
     my %pl_targets;
     if ($args->{PL_FILES} && %{$args->{PL_FILES}}) {
         for my $pl (sort keys %{$args->{PL_FILES}}) {
@@ -819,14 +867,17 @@ sub _create_install_makefile {
                 for my $t (@$target) {
                     $pl_targets{$t} = 1;
                     push @pl_cmds, "\t-$perl $pl $t";
+                    push @pl_rules, "$t :: $pl pm_to_blib\n\t-$perl $pl $t\n";
                 }
             } else {
                 $pl_targets{$target} = 1;
                 push @pl_cmds, "\t-$perl $pl $target";
+                push @pl_rules, "$target :: $pl pm_to_blib\n\t-$perl $pl $target\n";
             }
         }
     }
     my $pl_cmds_str = join("\n", @pl_cmds) || "\t\@true";
+    my $pl_rules_str = join("\n", @pl_rules);
 
     my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} && !($pl_targets{$_} && !-e $_) } keys %blib_pm);
     $pm_deps_str = " $pm_deps_str" if length $pm_deps_str;
@@ -840,7 +891,7 @@ sub _create_install_makefile {
 
     my $depend_rules_str = _make_depend_rules($args->{depend});
     
-    my $prereq_comment = _make_prereq_comment($args);
+    my $makefile_comments = _make_makefile_comments($args, $distname, $version);
 
     # Honor user-supplied `macro => { ... }` from WriteMakefile by emitting
     # extra Makefile macro definitions.  LaTeXML and others stuff custom
@@ -862,7 +913,7 @@ sub _create_install_makefile {
 # 'make install' copies ./blib files to INSTALLSITELIB
 # This matches standard ExtUtils::MakeMaker semantics so that 'cpan -t'
 # (test only) does not install, while 'cpan -i' (install) does.
-$prereq_comment
+$makefile_comments
 NAME = $name
 DISTNAME = $distname
 VERSION = $version
@@ -871,7 +922,6 @@ FULLPERL = $perl
 PERLRUN = \$(PERL)
 FULLPERLRUN = \$(FULLPERL)
 PERLRUNINST = \$(PERLRUN) -I\$(INST_ARCHLIB) -I\$(INST_LIB)
-INSTALLDIRS = site
 INST_LIB = $inst_lib
 INST_ARCHLIB = $inst_archlib
 INST_LIBDIR = \$(INST_LIB)
@@ -880,12 +930,20 @@ PERLONJAVA_CPAN_PERL5LIB = \$(shell if test -f blib/.perlonjava-cpan-perl5lib; t
 PERLONJAVA_TEST_PERL5LIB = \$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
 $siteprefix_var
 INSTALLSITELIB = $installsitelib
+INSTALLDIRS = $install_dirs
+INC = $inc
 NOECHO = \@
 RM_F = rm -f
 RM_RF = rm -rf
 CP = cp
 MV = mv
 MKPATH = mkdir -p
+CHMOD = chmod
+PERM_DIR = 755
+PERM_RW = 644
+PERM_RWX = 755
+DISTVNAME = $distname-$version
+SUFFIX = .gz
 SHELL = /bin/sh
 TEST_VERBOSE = 0
 RECORD_REVISION = \@true
@@ -925,6 +983,7 @@ $blib_script_cmds_str
 pl_files::
 $pl_cmds_str
 
+$pl_rules_str
 # Install executable scripts (called only from 'install')
 install_scripts::
 $script_cmds_str
@@ -983,29 +1042,135 @@ MAKEFILE
     close $fh;
 }
 
-sub _make_prereq_comment {
-    my ($args) = @_;
+sub _make_makefile_comments {
+    my ($args, $distname, $version) = @_;
 
     my $comment = '';
-    for my $key (qw(PREREQ_PM BUILD_REQUIRES TEST_REQUIRES CONFIGURE_REQUIRES)) {
-        next unless ref $args->{$key} eq 'HASH' && %{$args->{$key}};
+    $comment .= "#     DISTNAME => q[$distname]\n" if defined $distname;
+    $comment .= "#     VERSION => q[$version]\n" if defined $version;
 
+    for my $key (qw(ABSTRACT AUTHOR LICENSE SIGN MIN_PERL_VERSION)) {
+        next unless exists $args->{$key};
+        my $value = $args->{$key};
+        if ($key eq 'AUTHOR') {
+            $comment .= "#     AUTHOR => [q[$value]]\n";
+        } else {
+            $comment .= "#     $key => q[$value]\n";
+        }
+    }
+
+    if (ref $args->{test} eq 'HASH' && defined $args->{test}{TESTS}) {
+        $comment .= "#     test => { TESTS=>q[$args->{test}{TESTS}] }\n";
+    }
+
+    if (ref $args->{dist} eq 'HASH' && %{$args->{dist}}) {
+        my @pairs;
+        for my $key (sort keys %{$args->{dist}}) {
+            my $value = $args->{dist}{$key};
+            $value = '' unless defined $value;
+            push @pairs, "$key=>q[$value]";
+        }
+        $comment .= "#     dist => { " . join(", ", @pairs) . " }\n";
+    }
+
+    for my $key (qw(PREREQ_PM BUILD_REQUIRES TEST_REQUIRES CONFIGURE_REQUIRES)) {
+        my $hash = ref $args->{$key} eq 'HASH' ? $args->{$key} : {};
         my @prereqs;
-        for my $mod (sort keys %{$args->{$key}}) {
+        for my $mod (sort keys %$hash) {
             next if $mod eq 'perl';
-            my $ver = $args->{$key}{$mod};
+            my $ver = $hash->{$mod};
             $ver = 0 unless defined $ver;
             push @prereqs, "$mod=>q[$ver]";
         }
-        next unless @prereqs;
+        $comment .= "#     $key => { " . join(", ", @prereqs) . " }\n";
+    }
 
-        # MakeMaker writes prerequisite hashes into generated Makefiles for
-        # CPAN tooling to parse. Keep the same recognizable shape for all
-        # supported prereq phases, not just runtime PREREQ_PM.
-        $comment .= "#\t$key => { " . join(", ", @prereqs) . " }\n";
+    if (ref $args->{PL_FILES} eq 'HASH' && %{$args->{PL_FILES}}) {
+        my @pairs;
+        for my $src (sort keys %{$args->{PL_FILES}}) {
+            my $target = $args->{PL_FILES}{$src};
+            if (ref $target eq 'ARRAY') {
+                push @pairs, "$src=>[" . join(",", map { "q[$_]" } @$target) . "]";
+            } else {
+                push @pairs, "$src=>q[$target]";
+            }
+        }
+        $comment .= "#     PL_FILES => { " . join(", ", @pairs) . " }\n";
     }
 
     return $comment;
+}
+
+sub _perl_hash_literal {
+    my ($hash) = @_;
+    my @pairs;
+    for my $key (sort keys %$hash) {
+        next if $key eq 'perl';
+        my $value = $hash->{$key};
+        $value = 0 unless defined $value;
+        push @pairs, "q[$key] => q[$value]";
+    }
+    return "{ " . join(", ", @pairs) . " }";
+}
+
+sub _default_pl_files {
+    my ($args) = @_;
+    return if ref $args->{PL_FILES} eq 'HASH' && %{$args->{PL_FILES}};
+
+    my %pl_files;
+    opendir(my $dh, '.') or return;
+    while (my $file = readdir($dh)) {
+        next unless -f $file && $file =~ /\.PL\z/;
+        next if $file eq 'Makefile.PL' || $file eq 'Build.PL';
+        (my $target = $file) =~ s/\.PL\z//;
+        $pl_files{$file} = $target;
+    }
+    closedir($dh);
+
+    $args->{PL_FILES} = \%pl_files if %pl_files;
+}
+
+sub _configure_subdirs {
+    my ($args) = @_;
+
+    my @dirs;
+    my %seen;
+    if (ref $args->{DIR} eq 'ARRAY') {
+        for my $dir (@{$args->{DIR}}) {
+            next unless defined $dir && length $dir;
+            next unless -f File::Spec->catfile($dir, 'Makefile.PL');
+            push @dirs, $dir unless $seen{$dir}++;
+        }
+    }
+
+    opendir(my $dh, '.') or return;
+    while (my $entry = readdir($dh)) {
+        next if $entry eq '.' || $entry eq '..';
+        next unless -d $entry && -f File::Spec->catfile($entry, 'Makefile.PL');
+        push @dirs, $entry unless $seen{$entry}++;
+    }
+    closedir($dh);
+
+    return unless @dirs;
+
+    my $perl = _current_perl_path();
+    my @inc;
+    for my $inc (@INC) {
+        next if ref $inc;
+        next if $inc eq 'jar:PERL5LIB';
+        push @inc, File::Spec->file_name_is_absolute($inc)
+            ? $inc
+            : File::Spec->rel2abs($inc);
+    }
+
+    my $cwd = getcwd();
+    for my $dir (@dirs) {
+        my $abs_dir = File::Spec->rel2abs($dir, $cwd);
+        next unless chdir $abs_dir;
+        my @cmd = ($perl, map({ "-I$_" } @inc), '-I../inc', 'Makefile.PL');
+        system(@cmd) == 0 or warn "PerlOnJava MakeMaker: subdir $dir configure failed\n";
+        chdir $cwd;
+    }
 }
 
 # Helper: generate a shell mkdir -p command for Makefile

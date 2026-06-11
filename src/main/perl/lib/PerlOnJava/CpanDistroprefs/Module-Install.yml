@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Module::Install.
+
+  Module::Install::Admin discovers extension methods with defined(&symbol).
+  Module::Install::Metadata creates the authors alias before author is
+  generated, so defined(&authors) is false even though ->can("authors") works.
+  Add an explicit authors method so the admin copy path can find it.
+match:
+  distribution: "^ETHER/Module-Install-1\\.21"
+patches:
+  - "Module-Install-1.21/ExplicitAuthorsMethod.patch"

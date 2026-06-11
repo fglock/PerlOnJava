@@ -353,7 +353,7 @@ public class FileSpec extends PerlModuleBase {
      */
     public static RuntimeList case_tolerant(RuntimeArray args, int ctx) {
         boolean caseTolerant = SystemUtils.osIsWindows();
-        return new RuntimeScalar(caseTolerant).getList();
+        return new RuntimeScalar(caseTolerant ? 1 : 0).getList();
     }
 
     /**

@@ -339,6 +339,14 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.RETURN_SCOPE_CLEANUP -> {
+                                int reg = bytecode[pc++];
+                                RuntimeBase slot = registers[reg];
+                                if (slot instanceof RuntimeScalar rs) {
+                                    MortalList.deferDecrementIfNotCaptured(rs);
+                                }
+                            }
+
                             case Opcodes.SCOPE_EXIT_CLEANUP_HASH -> {
                                 // Scope-exit cleanup for a my-hash register.
                                 //
@@ -422,6 +430,14 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.RETURN_SCOPE_CLEANUP_HASH -> {
+                                int reg = bytecode[pc++];
+                                RuntimeBase slot = registers[reg];
+                                if (slot instanceof RuntimeHash rh) {
+                                    MortalList.scopeExitCleanupHash(rh);
+                                }
+                            }
+
                             case Opcodes.SCOPE_EXIT_CLEANUP_ARRAY -> {
                                 // Scope-exit cleanup for a my-array register.
                                 //
@@ -456,6 +472,14 @@ public class BytecodeInterpreter {
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
                                     registers[reg] = null;
+                                }
+                            }
+
+                            case Opcodes.RETURN_SCOPE_CLEANUP_ARRAY -> {
+                                int reg = bytecode[pc++];
+                                RuntimeBase slot = registers[reg];
+                                if (slot instanceof RuntimeArray ra) {
+                                    MortalList.scopeExitCleanupArray(ra);
                                 }
                             }
 

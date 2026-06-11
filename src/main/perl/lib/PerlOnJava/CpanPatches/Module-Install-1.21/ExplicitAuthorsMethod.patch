@@ -1,0 +1,11 @@
+--- lib/Module/Install/Metadata.pm.orig
++++ lib/Module/Install/Metadata.pm
+@@ -44,7 +44,7 @@
+ 	author
+ };
+ 
+-*authors = \&author;
++sub authors { shift->author(@_) }
+ 
+ sub Meta              { shift          }
+ sub Meta_BooleanKeys  { @boolean_keys  }

@@ -2261,7 +2261,7 @@ ExtUtils::F77	FAIL	3	1	2/3 subtests failed; 1/1 test programs failed	2026-06-11
 ExtUtils::H2PM	FAIL	16	8	8/16 subtests failed	2026-05-10		
 ExtUtils::LibBuilder	FAIL	3	0	7/3 subtests failed	2026-05-12		
 ExtUtils::MM_Unix	FAIL	1079	976	103/1079 subtests failed; 20/69 test programs failed	2026-06-11		
-ExtUtils::MakeMaker	FAIL	1257	1118	139/1257 subtests failed; 15/69 test programs failed	2026-06-11
+ExtUtils::MakeMaker	FAIL	1257	1118	139/1257 subtests failed; 15/69 test programs failed	2026-06-11		
 ExtUtils::MakeMaker::Attributes	FAIL	8	8		2026-05-10		
 ExtUtils::MakeMaker::PPPort	FAIL	3	0	3/3 subtests failed	2026-05-17		
 ExtUtils::ModuleMaker::TT	FAIL	12	0	169/12 subtests failed	2026-05-14		
@@ -2367,7 +2367,7 @@ File::PathConvert	FAIL	266	264	2/266 subtests failed	2026-04-12
 File::PathInfo	FAIL	57	57	Missing: Time/Format.pm	2026-05-19		
 File::PathInfo::Ext	FAIL	1	1		2026-05-19		
 File::Raw	FAIL	1	0	1/1 subtests failed	2026-05-11		
-File::Remove	FAIL	218	215	3/218 subtests failed; 2/11 test programs failed	2026-06-10		
+File::Remove	FAIL	218	215	3/218 subtests failed; 2/11 test programs failed	2026-06-11		
 File::RotateLogs	FAIL	1	0	1/1 subtests failed	2026-05-12		
 File::Rules	FAIL	3	0	14/3 subtests failed	2026-04-22		
 File::Save::Home	FAIL	16	0	44/16 subtests failed	2026-04-30		
@@ -3010,7 +3010,7 @@ HTTunnel::Client	FAIL			Missing: Apache/Test.pm	2026-05-15
 Haineko	FAIL	1002	1002	Missing: JSON/Syck.pm	2026-05-11		
 Hardware	FAIL			Missing: Object/Pad.pm	2026-05-17		
 Hash::AsObject	FAIL	93	93	Missing: diagnostics.pm	2026-04-12		
-Hash::FieldHash	FAIL	132	101	31/132 subtests failed; 14/18 test programs failed	2026-06-11
+Hash::FieldHash	FAIL	132	101	31/132 subtests failed; 14/18 test programs failed	2026-06-11		
 Hash::Inflator	FAIL	8	7	1/8 subtests failed	2026-05-20		
 Hash::Merge	FAIL	1	0	1/1 subtests failed	2026-05-20		
 Hash::NoVivify	FAIL				2026-05-16		
@@ -3800,7 +3800,7 @@ Module::MultiConf	FAIL	18	0	20/18 subtests failed	2026-05-10
 Module::Path	FAIL	18	11	7/18 subtests failed	2026-04-22		
 Module::Pluggable::Object	FAIL	192	191	1/192 subtests failed; 1/45 test programs failed	2026-06-11		
 Module::Refresh	FAIL	16	14	2/16 subtests failed	2026-05-17		
-Module::ScanDeps	FAIL	161	156	5/161 subtests failed; 3/21 test programs failed	2026-06-03		
+Module::ScanDeps	FAIL	161	156	5/161 subtests failed; 3/21 test programs failed	2026-06-11		
 Module::ScanDeps::Static	FAIL				2026-04-21		
 Module::Setup	FAIL	1	0	1/1 subtests failed	2026-05-18		
 Module::Signature	FAIL	2	2	Missing: IPC/Run.pm	2026-04-12		
@@ -4213,7 +4213,6 @@ Noose	FAIL	19	9	10/19 subtests failed	2026-05-11
 Norma	FAIL	12	12	Missing: Norma/ORM/Test/DB.pm	2026-05-12		
 Notifications	FAIL	17	0	18/17 subtests failed	2026-05-15		
 NpsSDK::Configuration	FAIL			Unknown test outcome	2026-05-17		
-Number::Format	FAIL	10	10		2026-04-22		
 Number::FormatEng	FAIL	140	139	1/140 subtests failed	2026-05-05		
 Number::Phone	FAIL	1373	1335	38/1373 subtests failed	2026-05-12		
 Number::Phone::JP	FAIL	199	0	66169/199 subtests failed	2026-05-12		
