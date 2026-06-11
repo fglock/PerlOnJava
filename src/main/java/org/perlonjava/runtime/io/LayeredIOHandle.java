@@ -452,7 +452,7 @@ public class LayeredIOHandle implements IOHandle {
                     // Extract charset name from encoding(name)
                     String charsetName = layerSpec.substring(9, layerSpec.length() - 1);
                     try {
-                        Charset charset = Charset.forName(charsetName);
+                        Charset charset = resolveEncodingCharset(charsetName);
                         EncodingLayer layer = new EncodingLayer(charset, layerSpec);
                         activeLayers.add(layer);
                         Function<String, String> inputTransform = s -> layer.processInput(s);
@@ -476,6 +476,13 @@ public class LayeredIOHandle implements IOHandle {
                 }
             }
         }
+    }
+
+    private static Charset resolveEncodingCharset(String charsetName) {
+        if ("locale".equalsIgnoreCase(charsetName)) {
+            return Charset.defaultCharset();
+        }
+        return Charset.forName(charsetName);
     }
 
     private boolean isNoOpLayer(String layerSpec) {

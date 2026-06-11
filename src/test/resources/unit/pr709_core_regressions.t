@@ -38,7 +38,9 @@ my $missing_curly_error = do {
     eval q[package Pr709MissingCurly {];
     $@;
 };
-like $missing_curly_error, qr/^Missing right curly/, "package block reports missing right curly";
+like $missing_curly_error,
+    qr/^Missing right curly or square bracket at [^\n]+ line \d+, at end of line\nsyntax error at [^\n]+ line \d+, at EOF\nExecution of [^\n]+ aborted due to compilation errors\./,
+    "package block reports full missing curly diagnostic";
 
 my $eval_runtime_error = do {
     local $@;

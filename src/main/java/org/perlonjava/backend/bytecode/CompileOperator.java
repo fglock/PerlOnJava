@@ -563,6 +563,21 @@ public class CompileOperator {
                 bc.lastResultReg = rd;
                 return;
             }
+            // defined(&{expr}) - evaluate the symbolic name and do a fresh
+            // CODE-slot lookup. Generic defined() on the returned CODE scalar
+            // would incorrectly treat declared-but-undefined subs as defined.
+            if (operand instanceof OperatorNode opNode && opNode.operator.equals("&")) {
+                bc.compileNode(opNode.operand, -1, RuntimeContextType.SCALAR);
+                int nameReg = bc.lastResultReg;
+                int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+                int rd = bc.allocateOutputRegister();
+                bc.emit(Opcodes.DEFINED_CODE_DYNAMIC);
+                bc.emitReg(rd);
+                bc.emitReg(nameReg);
+                bc.emit(pkgIdx);
+                bc.lastResultReg = rd;
+                return;
+            }
         }
         // Default case: regular defined
         emitSimpleUnary(bc, node, Opcodes.DEFINED);

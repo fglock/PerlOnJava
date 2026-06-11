@@ -13,6 +13,10 @@ sub tid {
     return 0;
 }
 
+sub new {
+    shift->create(@_);
+}
+
 # create() is needed by watchdog in test.pl
 # Returns immediately-detached stub object so watchdog falls through to alarm()
 sub create {
@@ -20,6 +24,22 @@ sub create {
     my $code = shift;
     # Return object marked as detached since we don't actually run threads
     return bless { code => $code, detached => 1 }, $class;
+}
+
+sub list {
+    return;
+}
+
+sub join {
+    return;
+}
+
+sub error {
+    return;
+}
+
+sub is_joinable {
+    return 0;
 }
 
 # kill() is needed by watchdog in test.pl
@@ -58,4 +78,3 @@ sub yield {
 }
 
 1;
-

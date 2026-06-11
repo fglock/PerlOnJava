@@ -277,6 +277,14 @@ public class Parser {
         throw new PerlParserException(cleanMessage);
     }
 
+    public void throwMissingRightCurlyOrSquareBracketError() {
+        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
+        String cleanMessage = "Missing right curly or square bracket at " + loc.fileName() + " line " + loc.lineNumber() + ", at end of line\n" +
+                "syntax error at " + loc.fileName() + " line " + loc.lineNumber() + ", at EOF\n" +
+                "Execution of " + loc.fileName() + " aborted due to compilation errors.";
+        throw new PerlParserException(cleanMessage);
+    }
+
     public void debugHeredocState(String location) {
         if (CompilerOptions.DEBUG_ENABLED) this.ctx.logDebug("HEREDOC_STATE [" + location + "] tokenIndex=" + tokenIndex +
                 " heredocCount=" + heredocNodes.size());

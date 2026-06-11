@@ -3,6 +3,7 @@ CGI	SKIP				2026-06-11	distroprefs
 CGI::Cookie	SKIP				2026-06-10	distroprefs	
 CGI::Simple	SKIP				2026-06-11	distroprefs	
 CGI::Simple::Cookie	SKIP				2026-06-10	distroprefs	
+Class::Load::XS	SKIP				2026-06-11	bundled
 Cwd	SKIP				2026-06-11	bundled	
 Digest::MD2	SKIP				2026-06-09	bundled	
 File::Slurp	SKIP				2026-06-11	distroprefs	

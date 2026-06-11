@@ -195,6 +195,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Net-Server-2.018/Proto.pm.patch' ],
         [ 'CPAN-FindDependencies-3.13/MakeMaker.pm.patch',
           'PerlOnJava/CpanPatches/CPAN-FindDependencies-3.13/MakeMaker.pm.patch' ],
+        [ 'Pod-Parser-1.67/Pod-Find-core-probe.patch',
+          'PerlOnJava/CpanPatches/Pod-Parser-1.67/Pod-Find-core-probe.patch' ],
         [ 'IO-Async-0.805/NoFork.patch',
           'PerlOnJava/CpanPatches/IO-Async-0.805/NoFork.patch' ],
         [ 'IO-Async-0.805/PerlOnJava.patch',

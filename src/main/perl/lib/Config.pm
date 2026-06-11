@@ -74,6 +74,14 @@ my $perlonjava_home = $user_home
 my $core_privlib = _catdir($file_separator, $perlonjava_home, 'core', 'lib', 'perl5', '5.42.0');
 my $core_archlib = _catdir($file_separator, $core_privlib, "java-$java_version-$os_arch");
 _ensure_dir(_catdir($file_separator, $core_archlib, 'CORE'));
+_ensure_core_probe_file(
+    _catdir($file_separator, $core_privlib, 'strict.pm'),
+    "# PerlOnJava core-library probe marker.\n# The real strict.pm is loaded from jar:PERL5LIB.\n1;\n",
+);
+_ensure_core_probe_file(
+    _catdir($file_separator, $core_privlib, 'File', 'Find.pm'),
+    "# PerlOnJava core-library probe marker.\n# The real File::Find is loaded from jar:PERL5LIB.\n1;\n",
+);
 
 sub _perl_os_name {
     my ($name) = @_;
@@ -418,6 +426,21 @@ sub _ensure_dir {
             ? _catdir($sep, $current, $part)
             : $current . $part;
         mkdir $current unless -d $current;
+    }
+}
+
+sub _ensure_core_probe_file {
+    my ($path, $content) = @_;
+    return if -f $path;
+
+    my @parts = split /\Q$file_separator\E/, $path;
+    pop @parts;
+    my $dir = join $file_separator, @parts;
+    _ensure_dir($dir) if length $dir;
+
+    if (open my $fh, '>', $path) {
+        print {$fh} $content;
+        close $fh;
     }
 }
 
