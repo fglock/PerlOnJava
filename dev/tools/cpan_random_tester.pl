@@ -65,6 +65,7 @@ my $skip_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-skip.dat
 my $log_dir      = '/tmp/cpan_random_logs';
 my $KILL_AFTER          = 10;   # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 my $DEFAULT_MAX_RUNTIME = 5400; # 90 minutes — hard cap per target (install or test)
+my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memory
 
 # jcpan -t soft timeouts (seconds): distribution root module -> timeout.
 # Overrides --timeout for that target only (heavy test suites).
@@ -284,14 +285,16 @@ for my $module (@selected) {
         $target_count, scalar @selected, command_label(@cmd), $module_timeout, $activity_grace;
 
     my $start = time();
-    my ($output, $timed_out, $timeout_error) = run_with_timeout(\@cmd, $module_timeout);
+    my $log_path = log_path_for($module);
+    my ($output_tail, $timed_out, $timeout_error) = run_with_timeout(\@cmd, $module_timeout, $log_path);
 
     my $elapsed = sprintf('%.1f', time() - $start);
 
-    save_log($module, $output);
-
     # Parse ALL module results from the output (target + deps)
-    my @all_results = parse_all_module_results($output);
+    my @all_results = parse_all_module_results_from_file($log_path);
+    if (!@all_results && (!defined $log_path || !-s $log_path) && length $output_tail) {
+        @all_results = parse_all_module_results($output_tail);
+    }
 
     # A timed-out target can still have parseable dependency results in the
     # output. Preserve those, but make sure the target itself is recorded too.
@@ -305,24 +308,16 @@ for my $module (@selected) {
 
     # If nothing parsed, check for special cases before recording failure
     if (!@all_results) {
-        if ($output =~ /\Q$module\E is up to date/) {
+        if (output_file_contains($log_path, qr/\Q$module\E is up to date/)
+            || $output_tail =~ /\Q$module\E is up to date/) {
             # Already installed, jcpan skipped it — not a failure
             printf "  (already installed, skipped)\n\n";
             next;
         } else {
             # Check for PerlOnJava-specific errors in the raw output
-            my $error = 'No parseable output';
-            if ($output =~ /Too many registers/) {
-                $error = 'PerlOnJava: register limit exceeded';
-            } elsif ($output =~ /StackOverflowError/) {
-                $error = 'StackOverflowError';
-            } elsif ($output =~ /OutOfMemoryError/) {
-                $error = 'OutOfMemoryError';
-            } elsif ($output =~ /Can't locate (\S+\.pm)/m) {
-                $error = "Missing: $1";
-            } elsif ($output =~ /Syntax error[^\n]*/mi) {
-                $error = 'Syntax error';
-            }
+            my $error = classify_output_error_from_file($log_path);
+            $error = classify_output_error($output_tail)
+                if $error eq 'No parseable output' && length $output_tail;
             push @all_results, {
                 module => $module, status => 'FAIL',
                 tests => undef, pass_count => undef,
@@ -649,6 +644,258 @@ sub parse_all_module_results {
     return @results;
 }
 
+sub parse_all_module_results_from_file {
+    my ($path) = @_;
+    return () unless defined $path && -f $path;
+
+    # Pass 1: map dist paths to module names.
+    my %dist_to_mod;
+    my $last_mod;
+    if (open my $fh, '<', $path) {
+        while (my $line = <$fh>) {
+            if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
+                $last_mod = $1;
+            }
+            if ($last_mod && $line =~ m{Configuring \S+/(\S+)\.tar\.gz}) {
+                $dist_to_mod{$1} = $last_mod;
+            }
+        }
+        close $fh;
+    } else {
+        warn "Cannot read log '$path': $!\n";
+        return ();
+    }
+
+    # Pass 2: parse contiguous "Running make/Build test for ..." blocks
+    # without retaining the whole block in memory.
+    my @results;
+    my %seen;
+    my $block;
+    if (open my $fh, '<', $path) {
+        while (my $line = <$fh>) {
+            if ($line =~ m{Running (?:make|Build) test for \S+/(\S+)\.tar\.gz}) {
+                finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results)
+                    if $block;
+                $block = new_streamed_test_block($1);
+                update_streamed_test_block($block, $line);
+            } elsif ($block) {
+                update_streamed_test_block($block, $line);
+                if ($line =~ /(?:make|Build) test -- (?:OK|NOT OK)/) {
+                    finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results);
+                    $block = undef;
+                }
+            }
+        }
+        finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results)
+            if $block;
+        close $fh;
+    } else {
+        warn "Cannot read log '$path': $!\n";
+        return @results;
+    }
+
+    # Pass 3: catch modules that never reached the test phase.
+    my %pending_skip;
+    $last_mod = undef;
+    if (open my $fh, '<', $path) {
+        while (my $line = <$fh>) {
+            if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
+                $last_mod = $1;
+            }
+
+            if ($last_mod && !$seen{$last_mod}
+                && $line =~ /(?:Makefile\.PL|Build\.PL) -- NOT OK/) {
+                $seen{$last_mod}++;
+                my %r = (
+                    module => $last_mod, status => 'FAIL',
+                    tests => undef, pass_count => undef,
+                    error => 'Configure failed', reason => '',
+                );
+                push @results, \%r;
+            }
+
+            if ($last_mod && !$seen{$last_mod}
+                && $line =~ /(?:jperl|perl) Build -- NOT OK/) {
+                $seen{$last_mod}++;
+                my %r = (
+                    module => $last_mod, status => 'FAIL',
+                    tests => undef, pass_count => undef,
+                    error => 'Build failed', reason => '',
+                );
+                push @results, \%r;
+            }
+
+            $pending_skip{$last_mod} = 'bundled'
+                if $last_mod && !$seen{$last_mod} && is_bundled_skip_output($line);
+
+            $pending_skip{$last_mod} ||= 'distroprefs'
+                if $last_mod && !$seen{$last_mod} && is_perlonjava_distropref_skip_output($line);
+        }
+        close $fh;
+    }
+
+    for my $mod (sort keys %pending_skip) {
+        next if $seen{$mod}++;
+        my %r = (
+            module => $mod, status => 'SKIP',
+            tests => undef, pass_count => undef,
+            error => '', reason => $pending_skip{$mod},
+        );
+        push @results, \%r;
+    }
+
+    return @results;
+}
+
+sub new_streamed_test_block {
+    my ($dist) = @_;
+    return {
+        dist                 => $dist,
+        total_tests          => 0,
+        failure_counts       => {},
+        all_tests_successful => 0,
+        result_pass          => 0,
+        result_fail          => 0,
+        test_not_ok          => 0,
+        bundled_skip         => 0,
+        distropref_skip      => 0,
+        missing_pm           => undef,
+        stack_overflow       => 0,
+        out_of_memory        => 0,
+        syntax_error         => 0,
+    };
+}
+
+sub update_streamed_test_block {
+    my ($block, $line) = @_;
+    return unless $block;
+
+    if ($line =~ /Files=\d+, Tests=(\d+)/) {
+        $block->{total_tests} = $1;
+    }
+
+    update_harness_failure_counts_from_line($block->{failure_counts}, $line);
+
+    $block->{all_tests_successful} = 1 if $line =~ /All tests successful/;
+    $block->{result_pass}          = 1 if $line =~ /Result: PASS/;
+    $block->{result_fail}          = 1 if $line =~ /Result: FAIL/;
+    $block->{test_not_ok}          = 1 if $line =~ /(?:make|Build) test -- NOT OK/;
+    $block->{bundled_skip}         = 1 if is_bundled_skip_output($line);
+    $block->{distropref_skip}      = 1 if is_perlonjava_distropref_skip_output($line);
+    $block->{stack_overflow}       = 1 if $line =~ /StackOverflowError/;
+    $block->{out_of_memory}        = 1 if $line =~ /OutOfMemoryError/;
+    $block->{syntax_error}         = 1 if $line =~ /syntax error/i;
+
+    if (!defined $block->{missing_pm} && $line =~ /Can't locate (\S+\.pm)/) {
+        $block->{missing_pm} = $1;
+    }
+}
+
+sub update_harness_failure_counts_from_line {
+    my ($counts, $line) = @_;
+    my $summary = 0;
+
+    if ($line =~ /Failed\s+(\d+)\/(\d+)\s+test programs?\.\s+(\d+)\/(\d+)\s+subtests failed\./) {
+        @{$counts}{qw(test_programs_failed test_programs_total subtests_failed subtests_total)}
+            = ($1, $2, $3, $4);
+        $summary = 1;
+    } else {
+        if ($line =~ /Failed\s+(\d+)\/(\d+)\s+test programs?\./) {
+            @{$counts}{qw(test_programs_failed test_programs_total)} = ($1, $2);
+        }
+        if ($line =~ /(\d+)\/(\d+)\s+subtests failed\./) {
+            @{$counts}{qw(subtests_failed subtests_total)} = ($1, $2);
+        }
+    }
+
+    if (!$summary && !defined $counts->{subtests_failed}
+        && $line =~ /Failed\s+(\d+)\/(\d+)\s+subtests\b/) {
+        $counts->{subtests_failed_in_files} += $1;
+    }
+}
+
+sub finish_streamed_test_block {
+    my ($block, $dist_to_mod, $seen, $results) = @_;
+    return unless $block && $block->{dist};
+
+    my $dist = $block->{dist};
+    my $mod  = $dist_to_mod->{$dist};
+    unless ($mod) {
+        ($mod = $dist) =~ s/-[\d.]+$//;
+        $mod =~ s/-/::/g;
+    }
+    return if $seen->{$mod}++;
+
+    my %r = (
+        module     => $mod,
+        status     => 'UNKNOWN',
+        tests      => undef,
+        pass_count => undef,
+        error      => '',
+        reason     => '',
+    );
+
+    my $total_tests = $block->{total_tests} || 0;
+
+    if (($block->{all_tests_successful} || $block->{result_pass})
+        && !$block->{result_fail}
+        && !$block->{test_not_ok}) {
+        $r{status}     = 'PASS';
+        $r{tests}      = $total_tests || undef;
+        $r{pass_count} = $total_tests || undef;
+        push @$results, \%r;
+        return;
+    }
+
+    if ($block->{bundled_skip}) {
+        $r{status} = 'SKIP';
+        $r{reason} = 'bundled';
+        push @$results, \%r;
+        return;
+    }
+
+    if ($block->{distropref_skip}) {
+        $r{status} = 'SKIP';
+        $r{reason} = 'distroprefs';
+        push @$results, \%r;
+        return;
+    }
+
+    if ($block->{result_fail} || $block->{test_not_ok}) {
+        $r{status} = 'FAIL';
+        if ($total_tests > 0) {
+            $r{tests} = $total_tests;
+            my $counts = $block->{failure_counts};
+            if (defined $counts->{subtests_failed}
+                && defined $counts->{subtests_total}) {
+                $r{pass_count} = $counts->{subtests_failed} > 0
+                    ? $counts->{subtests_total} - $counts->{subtests_failed}
+                    : undef;
+            }
+        }
+
+        $r{error} = format_harness_failure_error(%{$block->{failure_counts}});
+
+        if (!$r{error}) {
+            if (defined $block->{missing_pm}) {
+                $r{error} = "Missing: $block->{missing_pm}";
+            } elsif ($block->{stack_overflow}) {
+                $r{error} = 'StackOverflowError';
+            } elsif ($block->{out_of_memory}) {
+                $r{error} = 'OutOfMemoryError';
+            } elsif ($block->{syntax_error}) {
+                $r{error} = 'Syntax error';
+            }
+        }
+        push @$results, \%r;
+        return;
+    }
+
+    $r{status} = 'FAIL';
+    $r{error}  = 'Unknown test outcome';
+    push @$results, \%r;
+}
+
 sub is_bundled_skip_output {
     my ($text) = @_;
     return 1 if $text =~ /PerlOnJava:\s+.+?\s+is bundled in the JAR;\s+skipping upstream test suite/i;
@@ -784,7 +1031,7 @@ sub command_arg_label {
 # are mopped up (user-started jperl processes elsewhere are untouched).
 # Returns ($output, $timed_out, $timeout_error).
 sub run_with_timeout {
-    my ($cmd, $secs) = @_;
+    my ($cmd, $secs, $log_path) = @_;
     my @cmd = ref($cmd) eq 'ARRAY' ? @$cmd : ('/bin/sh', '-c', $cmd);
 
     my $output          = '';
@@ -820,6 +1067,16 @@ sub run_with_timeout {
     }
 
     close $writer;
+
+    my $log_fh;
+    if (defined $log_path) {
+        if (open my $fh, '>', $log_path) {
+            binmode $fh;
+            $log_fh = $fh;
+        } else {
+            warn "Cannot write log '$log_path': $!\n";
+        }
+    }
 
     my $selector      = IO::Select->new($pipe);
     my $start         = time();
@@ -882,7 +1139,8 @@ sub run_with_timeout {
                 $pipe_open = 0;
                 last;
             }
-            $output .= $chunk;
+            write_log_chunk($log_fh, $chunk) if $log_fh;
+            $output = append_bounded_output($output, $chunk);
             $last_output = time();
         }
 
@@ -908,6 +1166,7 @@ sub run_with_timeout {
     }
 
     close $pipe;    # always close to avoid FD leak
+    close $log_fh if $log_fh;
     waitpid($pid, WNOHANG) unless $child_done;
 
     if ($timed_out) {
@@ -916,6 +1175,29 @@ sub run_with_timeout {
     }
 
     return ($output // '', $timed_out, $timeout_error);
+}
+
+sub append_bounded_output {
+    my ($output, $chunk) = @_;
+    $output .= $chunk;
+    return $output if length($output) <= $MAX_CAPTURE_BYTES;
+    return substr($output, -$MAX_CAPTURE_BYTES);
+}
+
+sub write_log_chunk {
+    my ($fh, $chunk) = @_;
+    my $offset = 0;
+    my $length = length($chunk);
+
+    while ($offset < $length) {
+        my $written = syswrite($fh, $chunk, $length - $offset, $offset);
+        if (!defined $written) {
+            warn "log write failed: $!\n";
+            last;
+        }
+        last if $written == 0;
+        $offset += $written;
+    }
 }
 
 sub terminate_process_group {
@@ -931,7 +1213,15 @@ sub terminate_process_group {
 # Build pid => ppid map from ps (one snapshot per call).
 sub read_ppid_map {
     my %ppid;
-    open my $ps, '-|', 'ps', '-axo', 'pid=,ppid=' or return %ppid;
+    my $ps;
+    my $ok;
+    {
+        local $SIG{__WARN__} = sub {
+            warn @_ unless $_[0] =~ /^Can't exec "ps":/;
+        };
+        $ok = open $ps, '-|', 'ps', '-axo', 'pid=,ppid=';
+    }
+    return %ppid unless $ok;
     while (<$ps>) {
         my ($p, $pp) = split;
         next unless defined $p && defined $pp;
@@ -967,7 +1257,15 @@ sub note_run_descendants {
 sub is_perlonjava_java_pid {
     my ($pid) = @_;
     return 0 unless $pid && kill 0, $pid;
-    open my $ps, '-|', 'ps', '-p', $pid, '-o', 'command=' or return 0;
+    my $ps;
+    my $ok;
+    {
+        local $SIG{__WARN__} = sub {
+            warn @_ unless $_[0] =~ /^Can't exec "ps":/;
+        };
+        $ok = open $ps, '-|', 'ps', '-p', $pid, '-o', 'command=';
+    }
+    return 0 unless $ok;
     my $cmd = <$ps>;
     close $ps;
     return 0 unless defined $cmd;
@@ -1004,14 +1302,60 @@ sub format_duration {
     return sprintf('%ds', $secs);
 }
 
-sub save_log {
-    my ($module, $output) = @_;
+sub log_path_for {
+    my ($module) = @_;
     (my $safe = $module) =~ s/::/-/g;
-    my $path = "$log_dir/${safe}.log";
-    if (open my $fh, '>', $path) {
-        print $fh $output;
+    $safe =~ s/[^A-Za-z0-9_.-]/_/g;
+    return File::Spec->catfile($log_dir, "${safe}.log");
+}
+
+sub output_file_contains {
+    my ($path, $regex) = @_;
+    return 0 unless defined $path && -f $path;
+    open my $fh, '<', $path or return 0;
+    while (my $line = <$fh>) {
+        if ($line =~ $regex) {
+            close $fh;
+            return 1;
+        }
+    }
+    close $fh;
+    return 0;
+}
+
+sub classify_output_error_from_file {
+    my ($path) = @_;
+    return 'No parseable output' unless defined $path && -f $path;
+
+    my %saw;
+    if (open my $fh, '<', $path) {
+        while (my $line = <$fh>) {
+            $saw{too_many_registers} = 1 if $line =~ /Too many registers/;
+            $saw{stack_overflow}     = 1 if $line =~ /StackOverflowError/;
+            $saw{out_of_memory}      = 1 if $line =~ /OutOfMemoryError/;
+            $saw{syntax_error}       = 1 if $line =~ /Syntax error[^\n]*/i;
+            $saw{missing_pm}       ||= $1 if $line =~ /Can't locate (\S+\.pm)/;
+        }
         close $fh;
     }
+
+    return 'PerlOnJava: register limit exceeded' if $saw{too_many_registers};
+    return 'StackOverflowError'                  if $saw{stack_overflow};
+    return 'OutOfMemoryError'                    if $saw{out_of_memory};
+    return "Missing: $saw{missing_pm}"           if $saw{missing_pm};
+    return 'Syntax error'                        if $saw{syntax_error};
+    return 'No parseable output';
+}
+
+sub classify_output_error {
+    my ($output) = @_;
+    return 'No parseable output' unless defined $output && length $output;
+    return 'PerlOnJava: register limit exceeded' if $output =~ /Too many registers/;
+    return 'StackOverflowError'                  if $output =~ /StackOverflowError/;
+    return 'OutOfMemoryError'                    if $output =~ /OutOfMemoryError/;
+    return "Missing: $1"                         if $output =~ /Can't locate (\S+\.pm)/m;
+    return 'Syntax error'                        if $output =~ /Syntax error[^\n]*/mi;
+    return 'No parseable output';
 }
 
 # ──────────────────────────────────────────────────────────────────────
