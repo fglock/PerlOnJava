@@ -1,0 +1,12 @@
+--- lib/Class/DBI.pm	2007-10-04 23:27:07
++++ lib/Class/DBI.pm	2026-06-11 21:21:09
+@@ -496,7 +496,8 @@
+ 	my $class = shift;
+ 	my $data  = shift || {};
+ 	my $key   = $class->_live_object_key($data);
+-	return $Live_Objects{$key} || $class->_fresh_init($key => $data);
++	return $Live_Objects{$key} if $key && ref $Live_Objects{$key};
++	return $class->_fresh_init($key => $data);
+ }
+ 
+ sub _fresh_init {

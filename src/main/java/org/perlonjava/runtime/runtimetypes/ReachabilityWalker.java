@@ -63,6 +63,13 @@ public class ReachabilityWalker {
         return this;
     }
 
+    private static boolean isNonOwningDebugArgsArray(String name) {
+        // @DB::args aliases caller arguments for debugger/Carp introspection.
+        // It is not an owning root after the source frame has unwound; live
+        // frames are already represented by RuntimeCode.snapshotArgsStack().
+        return "DB::args".equals(name);
+    }
+
     /**
      * Walk from Perl-visible roots and mark reachable objects.
      * <p>
@@ -100,6 +107,7 @@ public class ReachabilityWalker {
             visitScalar(e.getValue(), todo);
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            if (isNonOwningDebugArgsArray(e.getKey())) continue;
             addReachable(e.getValue(), todo);
         }
         for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
@@ -259,6 +267,7 @@ public class ReachabilityWalker {
             seedPath(e.getValue(), "$" + e.getKey(), howReached, todo);
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            if (isNonOwningDebugArgsArray(e.getKey())) continue;
             if (howReached.putIfAbsent(e.getValue(), "@" + e.getKey()) == null) todo.add(e.getValue());
         }
         for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
@@ -293,6 +302,8 @@ public class ReachabilityWalker {
                 if (sc == null) continue;
                 if (sc.captureCount > 0) continue;
                 if (WeakRefRegistry.isweak(sc)) continue;
+                if (MortalList.isDeferredCapture(sc)) continue;
+                if (!MyVarCleanupStack.isLive(sc)) continue;
                 if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && sc.value instanceof RuntimeBase b) {
                     String label = "<live-lexical#" + (scIdx++)
@@ -302,6 +313,29 @@ public class ReachabilityWalker {
                     if (howReached.putIfAbsent(b, label) == null) {
                         todo.add(b);
                     }
+                }
+            }
+            int liveVarIdx = 0;
+            for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+                String label = "<my-var#" + (liveVarIdx++)
+                        + " id=" + System.identityHashCode(liveVar)
+                        + " type=" + liveVar.getClass().getSimpleName() + ">";
+                if (liveVar instanceof RuntimeScalar sc) {
+                    seedPath(sc, label, howReached, todo);
+                } else if (liveVar instanceof RuntimeBase rb) {
+                    if (howReached.putIfAbsent(rb, label) == null) todo.add(rb);
+                }
+            }
+            int argsIdx = 0;
+            for (RuntimeArray args : RuntimeCode.snapshotArgsStack()) {
+                if (howReached.putIfAbsent(args, "<args#" + (argsIdx++) + ">") == null) {
+                    todo.add(args);
+                }
+            }
+            int tempIdx = 0;
+            for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
+                if (howReached.putIfAbsent(tempRoot, "<temp-root#" + (tempIdx++) + ">") == null) {
+                    todo.add(tempRoot);
                 }
             }
         }
@@ -654,6 +688,7 @@ public class ReachabilityWalker {
             if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            if (isNonOwningDebugArgsArray(e.getKey())) continue;
             if (seen.add(e.getValue())) todo.addLast(e.getValue());
         }
         for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
@@ -761,6 +796,7 @@ public class ReachabilityWalker {
             if (seen.contains(target)) return true;
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            if (isNonOwningDebugArgsArray(e.getKey())) continue;
             if (e.getValue() == target) return true;
             if (seen.add(e.getValue())) todo.addLast(e.getValue());
         }
@@ -991,6 +1027,7 @@ public class ReachabilityWalker {
                 seedNonLexicalScalar(e.getValue(), todo);
             }
             for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+                if (isNonOwningDebugArgsArray(e.getKey())) continue;
                 addNonLexical(e.getValue(), todo);
             }
             for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
@@ -1334,7 +1371,11 @@ public class ReachabilityWalker {
                 ? collectStrongCycleProtected()
                 : Collections.emptySet();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
-            if (!live.contains(referent)) {
+            boolean liveReferent = live.contains(referent);
+            boolean localBinding = (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                    && referent.localBindingExists;
+            boolean cycleProtected = quiet && strongCycleProtected.contains(referent);
+            if (!liveReferent) {
                 // A named hash/array lexical (`my %h`, `my @a`) is NOT a
                 // walker root — the walker only seeds from globals and
                 // ScalarRefRegistry (scalars). If `\%h` was weakened,
@@ -1346,8 +1387,7 @@ public class ReachabilityWalker {
                 // Scope exit (scopeExitCleanupHash/Array) will clear
                 // the flag and let a later sweep reap it if truly dead.
                 // Fixes op/hashassign.t 218 (bug #76716).
-                if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
-                        && referent.localBindingExists) {
+                if (localBinding) {
                     continue;
                 }
                 // Phase I (52leaks/60core): skip clearing weak refs to
@@ -1388,7 +1428,7 @@ public class ReachabilityWalker {
                 // Perl's refcounting keeps such cycle islands alive. This
                 // covers callback-retained futures where the outer future is
                 // cyclic and inner sequence futures are strong children.
-                if (quiet && strongCycleProtected.contains(referent)) {
+                if (cycleProtected) {
                     continue;
                 }
                 toClear.add(referent);

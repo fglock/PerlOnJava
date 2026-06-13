@@ -1182,8 +1182,12 @@ sub header {
 sub bind_columns {
     my ($self, @refs) = @_;
 
-    @refs or
-        return defined $self->{_BOUND_COLUMNS} ? @{$self->{_BOUND_COLUMNS}} : undef;
+    @refs or do {
+        return undef unless defined $self->{_BOUND_COLUMNS};
+        return wantarray
+            ? @{$self->{_BOUND_COLUMNS}}
+            : scalar @{$self->{_BOUND_COLUMNS}};
+    };
     if (@refs == 1 && !defined $refs[0]) {
         $self->{_COLUMN_NAMES} = undef;
         return $self->{_BOUND_COLUMNS} = undef;
@@ -1429,7 +1433,10 @@ sub _csv_attr {
     }
 
     if ($out) {
-        if (ref $out and ("ARRAY" eq ref $out or "HASH" eq ref $out)) {
+        if (ref $out eq "REF") {
+            croak("Not a GLOB reference");
+        }
+        elsif (ref $out and ("ARRAY" eq ref $out or "HASH" eq ref $out)) {
             delete $attr{out};
             $sink = 1;
         }
@@ -1439,6 +1446,9 @@ sub _csv_attr {
         elsif (ref $out and "SCALAR" eq ref $out and defined ${$out} and ${$out} eq "skip") {
             delete $attr{out};
             $sink = 1;
+        }
+        elsif (ref $out and "SCALAR" eq ref $out and ref ${$out}) {
+            croak("Not a GLOB reference");
         }
         else {
             open $fh, ">", $out or croak("$out: $!");

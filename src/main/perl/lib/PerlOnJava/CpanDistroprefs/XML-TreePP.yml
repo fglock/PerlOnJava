@@ -1,0 +1,19 @@
+---
+comment: |
+  PerlOnJava distroprefs for XML::TreePP.
+
+  XML::TreePP 0.43 parses XML with one large global regex. PerlOnJava runs
+  that pattern through java.util.regex, which can overflow the JVM regex stack
+  on the distribution's bundled 150 KB RDF fixture. Patch the parser to scan
+  tags incrementally.
+
+  PerlOnJava also marks some generated XML strings as UTF-8 even when the
+  upstream module is operating on byte-oriented input. Patch write() to
+  downgrade generated XML when the source tree contains no UTF-8 flagged values,
+  preserving XML::TreePP's octet/string behavior while keeping utf8_flag parse
+  output intact. The distribution's own t/03_parsefile.t, t/17_output_encoding.t,
+  t/34_utf8_flag.t, and t/41_writefile_encode.t cover these cases.
+match:
+  distribution: "^.*/XML-TreePP-"
+patches:
+  - "XML-TreePP-0.43/TreePP.pm.patch"

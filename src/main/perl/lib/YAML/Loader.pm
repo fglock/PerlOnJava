@@ -440,7 +440,7 @@ sub _parse_seq {
 sub _parse_inline {
     my $self = shift;
     my ($top, $top_implicit, $top_explicit) = (@_, '', '', '');
-    $self->{inline} =~ s/^\s*(.*)\s*$/$1/; # OUCH - mugwump
+    $self->{inline} = _trim_inline($self->{inline}); # OUCH - mugwump
     my ($node, $anchor, $alias, $explicit, $implicit) = ('') x 5;
     ($anchor, $alias, $explicit, $implicit, $self->{inline}) =
       $self->_parse_qualifiers($self->inline);
@@ -507,6 +507,15 @@ sub _parse_inline {
     return $node;
 }
 
+sub _trim_inline {
+    my $value = shift;
+    my $start = 0;
+    my $end = length($value);
+    $start++ while $start < $end && substr($value, $start, 1) =~ /\s/;
+    $end-- while $end > $start && substr($value, $end - 1, 1) =~ /\s/;
+    return substr($value, $start, $end - $start);
+}
+
 # Parse the inline YAML mapping into a Perl hash
 sub _parse_inline_mapping {
     my $self = shift;
@@ -557,18 +566,36 @@ sub _parse_inline_seq {
 sub _parse_inline_double_quoted {
     my $self = shift;
     my $inline = $self->inline;
-    if ($inline =~ s/^"//) {
+    if (substr($inline, 0, 1) eq '"') {
         my $node = '';
+        my $pos = 1;
+        my $length = length($inline);
 
-        while ($inline =~ s/^(\\.|[^"\\]+)//) {
-            my $capture = $1;
-            $capture =~ s/^\\"/"/;
-            $node .= $capture;
-            last unless length $inline;
-        }
-        if ($inline =~ s/^"(?:\s+#.*|\s*)//) {
-            $self->inline($inline);
-            return $node;
+        while ($pos < $length) {
+            my $char = substr($inline, $pos, 1);
+            if ($char eq '"') {
+                my $rest = _consume_inline_quote_suffix(substr($inline, $pos + 1));
+                $self->inline($rest);
+                return $node;
+            }
+            if ($char eq '\\') {
+                if ($pos + 1 >= $length) {
+                    $node .= $char;
+                    $pos++;
+                    next;
+                }
+                my $escaped = substr($inline, $pos + 1, 1);
+                $node .= $escaped eq '"' ? '"' : "\\$escaped";
+                $pos += 2;
+                next;
+            }
+            my $next_quote = index($inline, '"', $pos);
+            my $next_escape = index($inline, '\\', $pos);
+            my $next = $length;
+            $next = $next_quote if $next_quote >= 0 && $next_quote < $next;
+            $next = $next_escape if $next_escape >= 0 && $next_escape < $next;
+            $node .= substr($inline, $pos, $next - $pos);
+            $pos = $next;
         }
     }
     $self->die('YAML_PARSE_ERR_BAD_DOUBLE');
@@ -579,20 +606,39 @@ sub _parse_inline_double_quoted {
 sub _parse_inline_single_quoted {
     my $self = shift;
     my $inline = $self->inline;
-    if ($inline =~ s/^'//) {
+    if (substr($inline, 0, 1) eq "'") {
         my $node = '';
-        while ($inline =~ s/^(''|[^']+)//) {
-            my $capture = $1;
-            $capture =~ s/^''/'/;
-            $node .= $capture;
-            last unless length $inline;
-        }
-        if ($inline =~ s/^'(?:\s+#.*|\s*)//) {
-            $self->inline($inline);
-            return $node;
+        my $pos = 1;
+        my $length = length($inline);
+
+        while ($pos < $length) {
+            my $char = substr($inline, $pos, 1);
+            if ($char eq "'") {
+                if ($pos + 1 < $length && substr($inline, $pos + 1, 1) eq "'") {
+                    $node .= "'";
+                    $pos += 2;
+                    next;
+                }
+                my $rest = _consume_inline_quote_suffix(substr($inline, $pos + 1));
+                $self->inline($rest);
+                return $node;
+            }
+            my $next = index($inline, "'", $pos);
+            $next = $length if $next < 0;
+            $node .= substr($inline, $pos, $next - $pos);
+            $pos = $next;
         }
     }
     $self->die('YAML_PARSE_ERR_BAD_SINGLE');
+}
+
+sub _consume_inline_quote_suffix {
+    my $rest = shift;
+    if ($rest =~ s/^\s+#.*//) {
+        return $rest;
+    }
+    $rest =~ s/^\s*//;
+    return $rest;
 }
 
 # Parse the inline unquoted string and do implicit typing.

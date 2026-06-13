@@ -2609,6 +2609,7 @@ public class BytecodeInterpreter {
                                     MortalList.scopeExitCleanupArray(ra);
                                     needsFlush = true;
                                 }
+                                MyVarCleanupStack.unregister(reg);
                                 registers[i] = null;
                             }
                             if (needsFlush) {

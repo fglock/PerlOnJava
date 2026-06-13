@@ -64,6 +64,17 @@ XSLoader::load( 'DBI' );
 @DBD::_::db::ISA = ('DBI::db');
 @DBD::_::st::ISA = ('DBI::st');
 
+sub DBD::_::st::finish {
+    my ($sth) = @_;
+    $sth->{_fbav} = undef;
+    if ($sth->{Active} && $sth->{Database}) {
+        my $active = $sth->{Database}{ActiveKids} || 0;
+        $sth->{Database}{ActiveKids} = $active > 0 ? $active - 1 : 0;
+    }
+    $sth->{Active} = 0;
+    return 1;
+}
+
 # Wrap Java DBI methods with HandleError support and DBI attribute tracking.
 # In real DBI, HandleError is called from C before RaiseError/die.
 # Since our Java methods just die with RaiseError, we wrap them in Perl
@@ -319,9 +330,9 @@ sub _append_isa {
 
 sub setup_driver {
     my ($class, $driver_class) = @_;
-    _append_isa("${driver_class}::dr", 'DBI::dr');
-    _append_isa("${driver_class}::db", 'DBI::db');
-    _append_isa("${driver_class}::st", 'DBI::st');
+    _append_isa("${driver_class}::dr", 'DBD::_::dr');
+    _append_isa("${driver_class}::db", 'DBD::_::db');
+    _append_isa("${driver_class}::st", 'DBD::_::st');
     return 1;
 }
 
@@ -343,6 +354,7 @@ sub install_driver {
     my $driver_class = "DBD::$driver";
     eval "require $driver_class";
     die $@ if $@;
+    $class->setup_driver($driver_class);
     _patch_sqlengine_store_aliases();
     _patch_anydata_table_destroy();
     _patch_sqlstatement_term_owner();
@@ -473,6 +485,14 @@ sub _new_sth {
 
     my $sth = {};
     _init_handle_attrs($sth, $attr);
+    for my $key (qw(
+        RaiseError PrintError RaiseWarn PrintWarn HandleError HandleSetErr
+        Warn LongTruncOk ChopBlanks AutoCommit ReadOnly ShowErrorStatement
+        FetchHashKeyName LongReadLen CompatMode Taint TaintIn TaintOut
+        RootClass
+    )) {
+        $sth->{$key} = $dbh->{$key} if exists $dbh->{$key} && !exists $sth->{$key};
+    }
     $sth->{Type} = 'st';
     $sth->{Active} = 0;
     $sth->{Database} = $dbh;
@@ -695,6 +715,7 @@ use constant {
             my $drh = $class->install_driver($driver);
             my $dbh = $drh->connect($rest, $user, $pass, $attr);
             if ($dbh) {
+                _init_handle_attrs($dbh, $attr);
                 $dbh->{Name} = $rest if !exists $dbh->{Name};
                 $dbh->{Driver} = $drh if !exists $dbh->{Driver};
                 _apply_root_class($dbh, $attr);
@@ -826,6 +847,18 @@ sub bind_param {
     $sth->{_bind_params} ||= {};
     $sth->{_bind_params}{$param_num} = $value;
     return 1;
+}
+
+sub DBI::st::bind_param {
+    my ($sth, $param_num, $value, $attr) = @_;
+    if (!_is_jdbc_handle($sth)) {
+        my $impl = $sth->{ImplementorClass} || ref($sth);
+        no strict 'refs';
+        if (my $code = *{"${impl}::bind_param"}{CODE}) {
+            return $code->($sth, $param_num, $value, $attr);
+        }
+    }
+    return DBI::bind_param($sth, $param_num, $value, $attr);
 }
 
 sub clone {
@@ -1262,7 +1295,17 @@ sub _prepare_as_cached {
 sub connect_cached {
     my ($class, $dsn, $user, $pass, $attr) = @_;
 
-    my $cache_key = "$dsn:$user";
+    my @attr_parts;
+    if (ref $attr eq 'HASH') {
+        for my $key (sort keys %$attr) {
+            my $value = $attr->{$key};
+            if (ref $value) {
+                $value = ref($value) . '(' . (Scalar::Util::refaddr($value) || 0) . ')';
+            }
+            push @attr_parts, "$key=$value";
+        }
+    }
+    my $cache_key = join "\x1e", $dsn || '', $user || '', $pass || '', @attr_parts;
 
     if (exists $CACHED_CONNECTIONS{$cache_key}) {
         my $dbh = $CACHED_CONNECTIONS{$cache_key};

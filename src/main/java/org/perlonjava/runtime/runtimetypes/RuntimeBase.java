@@ -163,10 +163,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public int reachableOwnerCount() {
         if (activeOwners == null) return 0;
         int count = 0;
-        for (RuntimeScalar sc : activeOwners) {
+        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
+        while (it.hasNext()) {
+            RuntimeScalar sc = it.next();
             if (sc != null && sc.refCountOwned && sc.value == this
                     && ReachabilityWalker.isScalarReachable(sc)) {
                 count++;
+            } else if (sc == null || !sc.refCountOwned || sc.value != this) {
+                it.remove();
             }
         }
         return count;

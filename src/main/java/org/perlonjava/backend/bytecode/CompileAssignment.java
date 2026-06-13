@@ -1433,7 +1433,7 @@ public class CompileAssignment {
                         ArrayLiteralNode indicesNode = (ArrayLiteralNode) leftBin.right;
                         List<Integer> indexRegs = new ArrayList<>();
                         for (Node indexNode : indicesNode.elements) {
-                            bytecodeCompiler.compileNode(indexNode, -1, rhsContext);
+                            bytecodeCompiler.compileNode(indexNode, -1, RuntimeContextType.LIST);
                             indexRegs.add(bytecodeCompiler.lastResultReg);
                         }
 
@@ -1446,13 +1446,20 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(indexReg);
                         }
 
-                        // Emit direct opcode ARRAY_SLICE_SET (use valueReg from line 729)
+                        int sliceValuesReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
+                        bytecodeCompiler.emitReg(sliceValuesReg);
+                        bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                        bytecodeCompiler.emitReg(sliceValuesReg);
+                        bytecodeCompiler.emitReg(valueReg);
+
+                        // Emit direct opcode ARRAY_SLICE_SET using the materialized RHS values.
                         bytecodeCompiler.emit(Opcodes.ARRAY_SLICE_SET);
                         bytecodeCompiler.emitReg(arrayReg);
                         bytecodeCompiler.emitReg(indicesReg);
-                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.emitReg(sliceValuesReg);
 
-                        bytecodeCompiler.lastResultReg = arrayReg;
+                        bytecodeCompiler.lastResultReg = sliceValuesReg;
                         
                         return;
                     }
@@ -1628,8 +1635,8 @@ public class CompileAssignment {
                                     bytecodeCompiler.emit(keyIdx);
                                     keyRegs.add(keyReg);
                                 } else {
-                                    // Expression key - use default context to allow arrays to expand
-                                    keyElement.accept(bytecodeCompiler);
+                                    // Expression key - list context lets @keys and list-returning subs expand.
+                                    bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.LIST);
                                     keyRegs.add(bytecodeCompiler.lastResultReg);
                                 }
                             }
@@ -1643,13 +1650,20 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(keyReg);
                             }
 
-                            // Emit direct opcode HASH_SLICE_SET (use valueReg from line 729)
+                            int sliceValuesReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
+                            bytecodeCompiler.emitReg(sliceValuesReg);
+                            bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                            bytecodeCompiler.emitReg(sliceValuesReg);
+                            bytecodeCompiler.emitReg(valueReg);
+
+                            // Emit direct opcode HASH_SLICE_SET using the materialized RHS values.
                             bytecodeCompiler.emit(Opcodes.HASH_SLICE_SET);
                             bytecodeCompiler.emitReg(hashReg);
                             bytecodeCompiler.emitReg(keysListReg);
-                            bytecodeCompiler.emitReg(valueReg);
+                            bytecodeCompiler.emitReg(sliceValuesReg);
 
-                            bytecodeCompiler.lastResultReg = valueReg;
+                            bytecodeCompiler.lastResultReg = sliceValuesReg;
                             
                             return;
                         } else if (hashOp.operator.equals("$")) {
