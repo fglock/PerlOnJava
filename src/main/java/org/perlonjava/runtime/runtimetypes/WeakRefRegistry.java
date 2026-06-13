@@ -96,6 +96,7 @@ public class WeakRefRegistry {
         referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
+        base.activateOwnerTracking();
         ref.releaseClosureCaptureReferentsForWeaken(base);
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKEN] ref=" + System.identityHashCode(ref)

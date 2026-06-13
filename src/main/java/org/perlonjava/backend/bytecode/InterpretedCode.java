@@ -337,10 +337,18 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (warningBitsString != null) {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
+        int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             return RuntimeCode.coerceScalarCallResult(
                     BytecodeInterpreter.execute(this, args, effectiveContext), effectiveContext, callContext);
+        } catch (RuntimeException e) {
+            if (!(e instanceof PerlExitException)) {
+                MyVarCleanupStack.unwindTo(cleanupMark);
+                MortalList.flush();
+            }
+            throw e;
         } finally {
+            MyVarCleanupStack.popMark(cleanupMark);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }
@@ -365,11 +373,19 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (warningBitsString != null) {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
+        int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             return RuntimeCode.coerceScalarCallResult(
                     BytecodeInterpreter.execute(this, args, effectiveContext, subroutineName),
                     effectiveContext, callContext);
+        } catch (RuntimeException e) {
+            if (!(e instanceof PerlExitException)) {
+                MyVarCleanupStack.unwindTo(cleanupMark);
+                MortalList.flush();
+            }
+            throw e;
         } finally {
+            MyVarCleanupStack.popMark(cleanupMark);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }

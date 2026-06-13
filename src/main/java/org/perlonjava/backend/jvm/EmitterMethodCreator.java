@@ -959,6 +959,11 @@ public class EmitterMethodCreator implements Opcodes {
                                 "org/perlonjava/runtime/runtimetypes/MortalList",
                                 "evalExceptionScopeCleanup",
                                 "(Ljava/lang/Object;)V", false);
+                        mv.visitVarInsn(Opcodes.ALOAD, localIdx);
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                                "unregister",
+                                "(Ljava/lang/Object;)V", false);
                         mv.visitInsn(Opcodes.ACONST_NULL);
                         mv.visitVarInsn(Opcodes.ASTORE, localIdx);
                     }

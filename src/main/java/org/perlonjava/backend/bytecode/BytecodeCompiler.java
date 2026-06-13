@@ -1899,8 +1899,8 @@ public class BytecodeCompiler implements Visitor {
         // The ArrayLiteralNode might contain a range operator (..) or multiple elements
         List<Integer> indexRegs = new ArrayList<>();
         for (Node indexExpr : indicesNode.elements) {
-            // Each element could be a simple value or a range expression
-            indexExpr.accept(this);
+            // Each element could be a simple value, an expanding array, or a range expression.
+            compileNode(indexExpr, -1, RuntimeContextType.LIST);
             indexRegs.add(lastResultReg);
         }
 
@@ -2113,8 +2113,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                // Expression key - use default context to allow arrays to expand
-                keyElement.accept(this);
+                // Expression key - list context lets @keys and list-returning subs expand.
+                compileNode(keyElement, -1, RuntimeContextType.LIST);
                 keyRegs.add(lastResultReg);
             }
         }
@@ -2221,8 +2221,8 @@ public class BytecodeCompiler implements Visitor {
                 emit(keyIdx);
                 keyRegs.add(keyReg);
             } else {
-                // Expression key - use default context to allow arrays to expand
-                keyElement.accept(this);
+                // Expression key - list context lets @keys and list-returning subs expand.
+                compileNode(keyElement, -1, RuntimeContextType.LIST);
                 keyRegs.add(lastResultReg);
             }
         }

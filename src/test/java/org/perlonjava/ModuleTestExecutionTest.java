@@ -74,7 +74,11 @@ public class ModuleTestExecutionTest {
         // Combinatorial CSV round-trip stress (~13k cases). Pre-existing
         // edge-case mismatch in PerlOnJava's CSV quoting/escaping for a
         // narrow combination of options; not blocking real users.
-        "module/Text-CSV/t/55_combi.t"
+        "module/Text-CSV/t/55_combi.t",
+        // IO::Pipe path requires POSIX fork, which PerlOnJava does not
+        // implement. The IO::File coverage in the same test is not separable
+        // without editing the upstream module test.
+        "module/YAML/t/io-handle.t"
     );
 
     /**

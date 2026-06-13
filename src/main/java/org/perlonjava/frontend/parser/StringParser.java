@@ -8,6 +8,8 @@ import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +19,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
+import static org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
 
 /*
@@ -712,6 +715,16 @@ public class StringParser {
                 // before passing to glob(). This ensures variables are interpolated.
                 Node interpolated = StringDoubleQuoted.parseDoubleQuotedString(
                         parser.ctx, rawStr, true, true, false, parser.getHeredocNodes(), parser);
+                RuntimeScalar globOverride = findGlobOverride(parser);
+                if (globOverride != null) {
+                    OperatorNode codeRefNode = new OperatorNode("&",
+                            new IdentifierNode("glob", rawStr.index),
+                            rawStr.index);
+                    codeRefNode.setAnnotation("parseTimeCodeRef", globOverride);
+                    ListNode arguments = new ListNode(rawStr.index);
+                    arguments.elements.add(interpolated);
+                    return new BinaryOperatorNode("(", codeRefNode, arguments, rawStr.index);
+                }
                 ListNode diamondList = new ListNode(rawStr.index);
                 diamondList.elements.add(interpolated);
                 return new OperatorNode("<>", diamondList, rawStr.index);
@@ -724,6 +737,17 @@ public class StringParser {
             list.elements.add(new StringNode(rawStr.buffers.get(i), rawStr.index));
         }
         return new OperatorNode(operator, list, rawStr.index);
+    }
+
+    private static RuntimeScalar findGlobOverride(Parser parser) {
+        String currentGlob = normalizeVariableName("glob", parser.ctx.symbolTable.getCurrentPackage());
+        if (GlobalVariable.existsGlobalCodeRef(currentGlob)) {
+            return GlobalVariable.getGlobalCodeRef(currentGlob);
+        }
+        if (GlobalVariable.existsGlobalCodeRef("CORE::GLOBAL::glob")) {
+            return GlobalVariable.getGlobalCodeRef("CORE::GLOBAL::glob");
+        }
+        return null;
     }
 
     static StringNode parseVstring(Parser parser, String vStringPart, int currentIndex) {

@@ -1,0 +1,147 @@
+--- lib/XML/TreePP.pm.orig
++++ lib/XML/TreePP.pm
+@@ -549,6 +549,11 @@
+     }
+ 
+     my $text = $self->hash_to_xml( undef, $tree );
++    if ( $ALLOW_UTF8_FLAG
++        && ! &_tree_has_utf8_flag($tree)
++        && utf8::is_utf8($text) ) {
++        utf8::downgrade($text, 1);
++    }
+     if ( $from && $to ) {
+         my $stat = $self->encode_from_to( \$text, $from, $to );
+         return $self->die( "Unsupported encoding: $to" ) unless $stat;
+@@ -784,27 +789,60 @@
+         }
+     }
+ 
+-    while ( $$textref =~ m{
+-        ([^<]*) <
+-        ((
+-            \? ([^<>]*) \?
+-        )|(
+-            \!\[CDATA\[(.*?)\]\]
+-        )|(
+-            \!DOCTYPE\s+([^\[\]<>]*(?:\[.*?\]\s*)?)
+-        )|(
+-            \!--(.*?)--
+-        )|(
+-            ([^\!\?\s<>](?:"[^"]*"|'[^']*'|[^"'<>])*)
+-        ))
+-        > ([^<]*)
+-    }sxg ) {
+-        my (
+-            $ahead,     $match,    $typePI,   $contPI,   $typeCDATA,
+-            $contCDATA, $typeDocT, $contDocT, $typeCmnt, $contCmnt,
+-            $typeElem,  $contElem, $follow
+-          )
+-          = ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13 );
++    my $pos = 0;
++    while (1) {
++        my $lt = index( $$textref, '<', $pos );
++        last if $lt < 0;
++
++        my $ahead = substr( $$textref, $pos, $lt - $pos );
++        my ( $end, $match, $typePI, $contPI, $typeCDATA, $contCDATA,
++             $typeDocT, $contDocT, $typeCmnt, $contCmnt, $typeElem,
++             $contElem );
++
++        if ( substr( $$textref, $lt, 9 ) eq '<![CDATA[' ) {
++            $end = index( $$textref, ']]>', $lt + 9 );
++            last if $end < 0;
++            $contCDATA = substr( $$textref, $lt + 9, $end - $lt - 9 );
++            $end += 2;
++            $match = '![CDATA[' . $contCDATA . ']]';
++            $typeCDATA = $match;
++        }
++        elsif ( substr( $$textref, $lt, 4 ) eq '<!--' ) {
++            $end = index( $$textref, '-->', $lt + 4 );
++            last if $end < 0;
++            $contCmnt = substr( $$textref, $lt + 4, $end - $lt - 4 );
++            $end += 2;
++            $match = '!--' . $contCmnt . '--';
++            $typeCmnt = $match;
++        }
++        elsif ( substr( $$textref, $lt, 2 ) eq '<?' ) {
++            $end = index( $$textref, '?>', $lt + 2 );
++            last if $end < 0;
++            $contPI = substr( $$textref, $lt + 2, $end - $lt - 2 );
++            $end += 1;
++            $match = '?' . $contPI . '?';
++            $typePI = $match;
++        }
++        else {
++            $end = &_xml_tag_end( $textref, $lt );
++            last if $end < 0;
++            $match = substr( $$textref, $lt + 1, $end - $lt - 1 );
++            if ( $match =~ /^!DOCTYPE\s+([^\[\]<>]*(?:\[.*?\]\s*)?)$/s ) {
++                $typeDocT = $match;
++                $contDocT = $1;
++            }
++            elsif ( $match =~ /^[^\!\?\s<>]/s ) {
++                $typeElem = $match;
++                $contElem = $match;
++            }
++        }
++
++        my $next = index( $$textref, '<', $end + 1 );
++        my $follow = $next < 0
++            ? substr( $$textref, $end + 1 )
++            : substr( $$textref, $end + 1, $next - $end - 1 );
++        $pos = $end + 1 + length($follow);
++
+         if ( defined $ahead && $ahead =~ /\S/ ) {
+             $ahead =~ s/([^\040-\076])/sprintf("\\x%02X",ord($1))/eg;
+             $self->warn( "Invalid string: [$ahead] before <$match>" );
+@@ -864,6 +902,50 @@
+     $flat;
+ }
+ 
++sub _xml_tag_end {
++    my $textref = shift;
++    my $lt      = shift;
++    my $len     = length($$textref);
++    my $quote;
++    my $pos = $lt + 1;
++    while ( $pos < $len ) {
++        my $char = substr( $$textref, $pos, 1 );
++        if ($quote) {
++            $quote = undef if $char eq $quote;
++        }
++        elsif ( $char eq '"' || $char eq "'" ) {
++            $quote = $char;
++        }
++        elsif ( $char eq '>' ) {
++            return $pos;
++        }
++        $pos++;
++    }
++    return -1;
++}
++
++sub _tree_has_utf8_flag {
++    my $value = shift;
++    if ( ref $value ) {
++        if ( UNIVERSAL::isa( $value, 'HASH' ) ) {
++            foreach my $key ( keys %$value ) {
++                return 1 if utf8::is_utf8($key);
++                return 1 if &_tree_has_utf8_flag( $value->{$key} );
++            }
++        }
++        elsif ( UNIVERSAL::isa( $value, 'ARRAY' ) ) {
++            foreach my $item (@$value) {
++                return 1 if &_tree_has_utf8_flag($item);
++            }
++        }
++        elsif ( UNIVERSAL::isa( $value, 'SCALAR' ) ) {
++            return utf8::is_utf8($$value);
++        }
++        return;
++    }
++    return utf8::is_utf8($value);
++}
++
+ sub flat_to_tree {
+     my $self   = shift;
+     my $source = shift;

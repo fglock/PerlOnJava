@@ -74,6 +74,10 @@ public class MortalList {
         return new java.util.ArrayList<>(temporaryRoots.get());
     }
 
+    public static boolean hasTemporaryRoots() {
+        return !temporaryRoots.get().isEmpty();
+    }
+
     /**
      * Phase I: O(1) check whether the given scalar is in
      * {@link #deferredCaptures}. Used by the reachability walker to
@@ -245,9 +249,10 @@ public class MortalList {
      * Release a scope-exited closure capture. This is normally the same as
      * {@link #deferDecrementIfTracked}, but DBIC's leak tracer can wrap
      * Try::Tiny blocks with {@code goto} and weak refs, making a captured
-     * temporary consume the counted owner of an outer lexical that is still
-     * live. In that case, transfer the counted owner to the still-live scalar
-     * by clearing this capture's ownership without decrementing the referent.
+     * temporary consume the counted owner of package-global metadata. In that
+     * case, transfer ownership only when the referent is still reachable from a
+     * non-lexical root; stack-local temporaries must release normally so
+     * DESTROY fires at lexical scope exit.
      */
     public static void releaseCapturedDecrement(RuntimeScalar scalar) {
         if (!active || scalar == null) return;
@@ -256,7 +261,7 @@ public class MortalList {
                 && scalar.value instanceof RuntimeBase base
                 && base.blessId != 0
                 && WeakRefRegistry.hasWeakRefsTo(base)
-                && isReachableFromLiveRootForCaptureRelease(base)) {
+                && isReachableFromNonLexicalRootForCaptureRelease(base)) {
             scalar.refCountOwned = false;
             if (base.refCountTrace) {
                 base.traceRefCount(0, "MortalList.releaseCapturedDecrement (transferred to live scalar)");
@@ -942,17 +947,14 @@ public class MortalList {
         invalidateLiveRootSnapshot();
     }
 
-    private static boolean isReachableFromLiveRootForCaptureRelease(RuntimeBase base) {
-        if (liveRootSnapshot == null) {
-            liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
-        }
-        if (liveRootSnapshot.isReachable(base)) {
+    private static boolean isReachableFromNonLexicalRootForCaptureRelease(RuntimeBase base) {
+        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
             return true;
         }
-        // Compatibility fallback for uncommon non-flush callers. The hot
-        // releaseCaptures path runs while MortalList is flushing and must not
-        // force a JVM GC for every captured scalar.
-        return !flushing && ReachabilityWalker.isReachableFromLiveScalarRegistry(base);
+        if (externalRootSnapshot == null) {
+            externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
+        }
+        return externalRootSnapshot.isReachableFromNonLexicalRoot(base);
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
@@ -1069,6 +1071,7 @@ public class MortalList {
         // defined until the init completes.
         if (ModuleInitGuard.inModuleInit()) return;
         if (RuntimeCode.argsStackDepth() > 1) return;
+        if (hasTemporaryRoots()) return;
         if (!FORCE_SWEEP_EVERY_FLUSH && !immediateSweep) {
             long now = System.nanoTime();
             if (now - lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;

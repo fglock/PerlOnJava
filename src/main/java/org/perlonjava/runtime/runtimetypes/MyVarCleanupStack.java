@@ -170,6 +170,11 @@ public class MyVarCleanupStack {
     private static void noteVarLeftScope(Object var) {
         if (var instanceof RuntimeBase base && WeakRefRegistry.hasWeakRefsTo(base)) {
             MortalList.requestImmediateWeakSweep();
+        } else if (var instanceof RuntimeScalar scalar
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && WeakRefRegistry.hasWeakRefsTo(base)) {
+            MortalList.requestImmediateWeakSweep();
         }
     }
 

@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Class::DBI.
+
+  Class::DBI live objects can overload boolean context while still being valid
+  cached objects. Test cached entries with ref(), matching Class::DBI's own
+  HasA cache lookup, so a false-overloaded live object is not treated as a
+  cache miss.
+match:
+  distribution: "^.*/Class-DBI-"
+patches:
+  - "Class-DBI-v3.0.17/Class-DBI.pm.patch"
