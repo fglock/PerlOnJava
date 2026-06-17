@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Device::SerialPort.
+
+  Device::SerialPort is an XS distribution. PerlOnJava cannot load the XS
+  helper that only exposes system termios/ioctl constants, and the upstream
+  suite skips real serial-port tests unless Makefile.PL created t/DefaultPort.pm.
+  Provide a small pure-Perl constants fallback so the distribution can load and
+  run its no-hardware timing test without claiming JVM serial I/O support.
+match:
+  distribution: "^COOK/Device-SerialPort-"
+patches:
+  - "Device-SerialPort-1.04/NoXsBitsFallback.patch"

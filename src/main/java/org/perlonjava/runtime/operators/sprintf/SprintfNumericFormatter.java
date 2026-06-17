@@ -2,6 +2,11 @@ package org.perlonjava.runtime.operators.sprintf;
 
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 
 /**
  * Handles numeric formatting for sprintf operations.
@@ -319,6 +324,18 @@ public class SprintfNumericFormatter {
         return result;
     }
 
+    public String formatFloatingPoint(RuntimeScalar value, String flags, int width,
+                                      int precision, char conversion) {
+        if (conversion == 'g' || conversion == 'G') {
+            String decimalResult = formatDecimalTextGFloatingPoint(value, flags, width, precision, conversion);
+            if (decimalResult != null) {
+                return decimalResult;
+            }
+        }
+
+        return formatFloatingPoint(value.getDouble(), flags, width, precision, conversion);
+    }
+
     /**
      * Special formatting for %g and %G conversions.
      *
@@ -455,5 +472,122 @@ public class SprintfNumericFormatter {
             result = result.replaceAll("\\.$", "");
             return result;
         }
+    }
+
+    private String formatDecimalTextGFloatingPoint(RuntimeScalar value, String flags, int width,
+                                                   int precision, char conversion) {
+        int effectivePrecision = precision < 0 ? 6 : precision;
+        if (effectivePrecision == 0) {
+            effectivePrecision = 1;
+        }
+
+        String decimalText = value.numericLiteralText;
+        if (decimalText == null && (value.type == RuntimeScalarType.STRING || value.type == RuntimeScalarType.BYTE_STRING)) {
+            decimalText = value.toString();
+        }
+        if (decimalText == null) {
+            return null;
+        }
+
+        String normalized = decimalText.trim().replace("_", "");
+        if (normalized.isEmpty()) {
+            return null;
+        }
+
+        int sourceSignificantDigits = countSignificantDigits(normalized);
+        if (sourceSignificantDigits < 16 || sourceSignificantDigits < effectivePrecision) {
+            return null;
+        }
+
+        BigDecimal decimalValue;
+        try {
+            decimalValue = new BigDecimal(normalized);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        if (decimalValue.signum() == 0) {
+            return null;
+        }
+
+        BigDecimal rounded = decimalValue.round(new MathContext(effectivePrecision, RoundingMode.HALF_UP));
+        String result = formatRoundedBigDecimalG(rounded.abs(), flags.contains("#"), effectivePrecision, conversion);
+        if (rounded.signum() < 0) {
+            result = "-" + result;
+        } else if (flags.contains("+")) {
+            result = "+" + result;
+        } else if (flags.contains(" ")) {
+            result = " " + result;
+        }
+
+        return SprintfPaddingHelper.applyWidth(result, width, flags);
+    }
+
+    private int countSignificantDigits(String decimalText) {
+        String coefficient = decimalText;
+        int exponentIndex = Math.max(coefficient.indexOf('e'), coefficient.indexOf('E'));
+        if (exponentIndex >= 0) {
+            coefficient = coefficient.substring(0, exponentIndex);
+        }
+        if (coefficient.startsWith("+") || coefficient.startsWith("-")) {
+            coefficient = coefficient.substring(1);
+        }
+
+        String digits = coefficient.replace(".", "").replaceFirst("^0+", "");
+        return digits.isEmpty() ? 1 : digits.length();
+    }
+
+    private String formatRoundedBigDecimalG(BigDecimal value, boolean alternateForm,
+                                            int precision, char conversion) {
+        int exponent = adjustedExponent(value);
+        boolean exponential = exponent < -4 || exponent >= precision;
+        String result;
+
+        if (exponential) {
+            String digits = value.unscaledValue().abs().toString();
+            if (alternateForm && digits.length() < precision) {
+                digits = digits + "0".repeat(precision - digits.length());
+            }
+
+            String mantissa;
+            if (digits.length() == 1) {
+                mantissa = digits;
+            } else {
+                mantissa = digits.charAt(0) + "." + digits.substring(1);
+            }
+
+            if (alternateForm && !mantissa.contains(".")) {
+                mantissa += ".";
+            }
+            if (!alternateForm) {
+                mantissa = stripTrailingFractionZeros(mantissa);
+            }
+
+            String exponentMarker = conversion == 'G' ? "E" : "e";
+            String exponentSign = exponent >= 0 ? "+" : "-";
+            String exponentDigits = String.format("%02d", Math.abs(exponent));
+            result = mantissa + exponentMarker + exponentSign + exponentDigits;
+        } else {
+            int decimalPlaces = Math.max(0, precision - (exponent + 1));
+            result = value.setScale(decimalPlaces, RoundingMode.UNNECESSARY).toPlainString();
+            if (!alternateForm) {
+                result = stripTrailingFractionZeros(result);
+            } else if (!result.contains(".")) {
+                result += ".";
+            }
+        }
+
+        return result;
+    }
+
+    private int adjustedExponent(BigDecimal value) {
+        return value.precision() - value.scale() - 1;
+    }
+
+    private String stripTrailingFractionZeros(String result) {
+        if (!result.contains(".")) {
+            return result;
+        }
+        result = result.replaceAll("(\\.\\d*?)0+$", "$1");
+        return result.replaceAll("\\.$", "");
     }
 }

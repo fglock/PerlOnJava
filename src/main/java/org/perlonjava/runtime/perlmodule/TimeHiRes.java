@@ -41,13 +41,13 @@ public class TimeHiRes extends PerlModuleBase {
     }
 
     public static RuntimeList usleep(RuntimeArray args, int ctx) {
-        return Time.sleep(
+        return Time.sleepPrecise(
                 MathOperators.divide(args.get(0), new RuntimeScalar(1E6))
         ).getList();
     }
 
     public static RuntimeList nanosleep(RuntimeArray args, int ctx) {
-        return Time.sleep(
+        return Time.sleepPrecise(
                 MathOperators.divide(args.get(0), new RuntimeScalar(1E9))
         ).getList();
     }
@@ -81,7 +81,7 @@ public class TimeHiRes extends PerlModuleBase {
     }
 
     public static RuntimeList sleep(RuntimeArray args, int ctx) {
-        return Time.sleep(args.get(0)).getList();
+        return Time.sleepPrecise(args.get(0)).getList();
     }
 
     public static RuntimeList alarm(RuntimeArray args, int ctx) {

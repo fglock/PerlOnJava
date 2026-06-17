@@ -264,6 +264,14 @@ public class Time {
     }
 
     public static RuntimeScalar sleep(RuntimeScalar runtimeScalar) {
+        return sleepInternal(runtimeScalar, false);
+    }
+
+    public static RuntimeScalar sleepPrecise(RuntimeScalar runtimeScalar) {
+        return sleepInternal(runtimeScalar, true);
+    }
+
+    private static RuntimeScalar sleepInternal(RuntimeScalar runtimeScalar, boolean preciseReturn) {
         RuntimeIO.flushAllHandles();
 
         long s = (long) (runtimeScalar.getDouble() * 1000);
@@ -289,7 +297,8 @@ public class Time {
         }
         long endTime = System.nanoTime();
         long actualSleepTime = endTime - startTime;
-        return new RuntimeScalar(actualSleepTime / 1_000_000_000.0);
+        double sleptSeconds = actualSleepTime / 1_000_000_000.0;
+        return new RuntimeScalar(preciseReturn ? sleptSeconds : Math.floor(sleptSeconds));
     }
 
     /**

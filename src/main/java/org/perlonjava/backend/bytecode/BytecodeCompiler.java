@@ -1421,7 +1421,7 @@ public class BytecodeCompiler implements Visitor {
                 emit(constIdx);
             } else {
                 // Floating-point number - create RuntimeScalar with double value
-                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
+                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value), value);
                 int constIdx = addToConstantPool(doubleScalar);
                 emit(Opcodes.LOAD_CONST);
                 emitReg(rd);

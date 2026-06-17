@@ -38,6 +38,7 @@ public class InlineOpcodeHandler {
             RuntimeScalar copy = new RuntimeScalar();
             copy.type = ro.type;
             copy.value = ro.value;
+            copy.numericLiteralText = ro.numericLiteralText;
             return copy;
         }
         if (val instanceof ScalarSpecialVariable sv) {
@@ -45,6 +46,7 @@ public class InlineOpcodeHandler {
             RuntimeScalar copy = new RuntimeScalar();
             copy.type = src.type;
             copy.value = src.value;
+            copy.numericLiteralText = src.numericLiteralText;
             return copy;
         }
         return (RuntimeScalar) val;

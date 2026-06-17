@@ -3,8 +3,14 @@ package org.perlonjava.runtime.regex;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class RegexQuoteMeta {
+    private static final ThreadLocal<List<String>> WARNINGS_ON_USE = ThreadLocal.withInitial(ArrayList::new);
+
     public static String escapeQ(String s) {
+        WARNINGS_ON_USE.get().clear();
         StringBuilder sb = new StringBuilder();
         int len = s.length();
         int offset = 0;
@@ -19,6 +25,7 @@ public class RegexQuoteMeta {
             char c = s.charAt(offset);
             if (escaped) {
                 if (inCharClass && (c == 'Q' || c == 'E')) {
+                    warnUnrecognizedCharClassEscape(c);
                     sb.append(c);
                     if (charClassFirst && c != '^') {
                         charClassFirst = false;
@@ -36,6 +43,7 @@ public class RegexQuoteMeta {
 
             if (c == '\\' && offset + 1 < len && s.charAt(offset + 1) == 'Q') {
                 if (inCharClass) {
+                    warnUnrecognizedCharClassEscape('Q');
                     sb.append('Q');
                     if (charClassFirst) {
                         charClassFirst = false;
@@ -87,10 +95,13 @@ public class RegexQuoteMeta {
         return sb.toString();
     }
 
+    public static List<String> getWarningsOnUse() {
+        return new ArrayList<>(WARNINGS_ON_USE.get());
+    }
+
     private static void warnUnrecognizedCharClassEscape(char c) {
-        WarnDie.warn(
-                new RuntimeScalar("Unrecognized escape \\" + c
-                        + " in character class passed through in regex\n"),
-                new RuntimeScalar(""));
+        String message = "Unrecognized escape \\" + c + " in character class passed through in regex";
+        WARNINGS_ON_USE.get().add(message);
+        WarnDie.warnWithCategory(new RuntimeScalar(message), new RuntimeScalar(""), "regexp");
     }
 }

@@ -151,6 +151,8 @@ our @EXPORT_OK = qw(
     F_OK R_OK W_OK X_OK
 
     # Constants - termios (termios_h)
+    B0 B50 B75 B110 B134 B150 B200 B300 B600 B1200 B1800 B2400
+    B4800 B9600 B19200 B38400
     BRKINT
     CS5 CS6 CS7 CS8 CSIZE CSTOPB CREAD PARENB PARODD HUPCL CLOCAL
     ECHO ECHOE ECHOK ECHONL
@@ -159,6 +161,8 @@ our @EXPORT_OK = qw(
     OPOST
     TCSADRAIN TCSAFLUSH TCSANOW
     VEOF VEOL VERASE VINTR VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
+    cfgetispeed cfgetospeed cfsetispeed cfsetospeed
+    tcgetattr tcsetattr
 
     # Constants - sysconf (subset, used by POE etc.)
     _SC_ARG_MAX _SC_CHILD_MAX _SC_CLK_TCK _SC_NGROUPS_MAX _SC_OPEN_MAX
@@ -360,26 +364,61 @@ sub localeconv {
     if ($locale =~ /^de(?:_|$)/) {
         @conv{qw(
             decimal_point thousands_sep int_curr_symbol currency_symbol
-            mon_decimal_point mon_thousands_sep int_frac_digits frac_digits
+            mon_decimal_point mon_thousands_sep mon_grouping
+            int_frac_digits frac_digits
             p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
             p_sign_posn n_sign_posn
-        )} = (',', '.', 'EUR ', 'EUR', ',', '.', 2, 2, 0, 1, 0, 1, 1, 1);
+        )} = (',', '.', 'EUR ', "\x{20ac}", ',', '.', '3', 2, 2, 0, 1, 0, 1, 1, 1);
     }
     elsif ($locale =~ /^ru(?:_|$)/) {
         @conv{qw(
             decimal_point thousands_sep int_curr_symbol currency_symbol
-            mon_decimal_point mon_thousands_sep int_frac_digits frac_digits
+            mon_decimal_point mon_thousands_sep mon_grouping
+            int_frac_digits frac_digits
             p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
             p_sign_posn n_sign_posn
-        )} = ('.', ',', 'RUB ', 'RUB', '.', ',', 2, 2, 0, 1, 0, 1, 1, 1);
+        )} = (',', ' ', 'RUB ', "\x{20bd}", ',', ' ', '3', 2, 2, 0, 1, 0, 1, 1, 1);
     }
-    elsif ($locale =~ /^en_us\z|^en(?:_|$)/) {
+    elsif ($locale =~ /^en_gb(?:_|$)|^en_gb\z/) {
         @conv{qw(
             decimal_point thousands_sep int_curr_symbol currency_symbol
-            mon_decimal_point mon_thousands_sep int_frac_digits frac_digits
+            mon_decimal_point mon_thousands_sep mon_grouping
+            int_frac_digits frac_digits
             p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
             p_sign_posn n_sign_posn
-        )} = ('.', ',', 'USD', '$', '.', ',', 2, 2, 1, 1, 1, 1, 1, 1);
+        )} = ('.', ',', 'GBP ', "\x{00a3}", '.', ',', '3', 2, 2, 1, 0, 1, 0, 1, 1);
+    }
+    elsif ($locale =~ /^en_us(?:_|$)|^en(?:_|$)/) {
+        @conv{qw(
+            decimal_point thousands_sep int_curr_symbol currency_symbol
+            mon_decimal_point mon_thousands_sep mon_grouping
+            int_frac_digits frac_digits
+            p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
+            p_sign_posn n_sign_posn
+        )} = ('.', ',', 'USD ', '$', '.', ',', '3', 2, 2, 1, 0, 1, 0, 1, 1);
+    }
+    elsif ($locale =~ /^ja(?:_|$)/) {
+        @conv{qw(
+            decimal_point thousands_sep int_curr_symbol currency_symbol
+            mon_decimal_point mon_thousands_sep mon_grouping
+            int_frac_digits frac_digits
+            p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
+            p_sign_posn n_sign_posn
+        )} = ('.', ',', 'JPY ', "\x{00a5}", '.', ',', '3', 0, 0, 1, 0, 1, 0, 4, 4);
+    }
+    elsif ($locale =~ /^zh(?:_|$)/) {
+        @conv{qw(
+            decimal_point thousands_sep int_curr_symbol currency_symbol
+            mon_decimal_point mon_thousands_sep mon_grouping
+            int_frac_digits frac_digits
+            p_cs_precedes p_sep_by_space n_cs_precedes n_sep_by_space
+            p_sign_posn n_sign_posn
+        )} = ('.', ',', 'CNY ', "\x{ffe5}", '.', ',', '3', 2, 2, 1, 0, 1, 0, 1, 1);
+    }
+
+    for my $key (keys %conv) {
+        utf8::upgrade($conv{$key})
+            if defined($conv{$key}) && $conv{$key} =~ /[^\x00-\x7f]/;
     }
 
     return \%conv;
@@ -433,9 +472,49 @@ sub ttyname {
     my $fd = ref($_[0]) ? fileno($_[0]) : $_[0];
     return POSIX::_ttyname($fd);
 }
+sub tcgetattr {
+    my ($fd, $termios) = @_;
+    croak "tcgetattr requires a POSIX::Termios object"
+        unless ref($termios) && $termios->can('getattr');
+    return $termios->getattr($fd);
+}
+sub tcsetattr {
+    my ($fd, $action, $termios) = @_;
+    croak "tcsetattr requires a POSIX::Termios object"
+        unless ref($termios) && $termios->can('setattr');
+    return $termios->setattr($fd, $action);
+}
+sub cfgetispeed {
+    my ($termios) = @_;
+    croak "cfgetispeed requires a POSIX::Termios object"
+        unless ref($termios) && $termios->can('getispeed');
+    return $termios->getispeed;
+}
+sub cfgetospeed {
+    my ($termios) = @_;
+    croak "cfgetospeed requires a POSIX::Termios object"
+        unless ref($termios) && $termios->can('getospeed');
+    return $termios->getospeed;
+}
+sub cfsetispeed {
+    my ($termios, $speed) = @_;
+    croak "cfsetispeed requires a POSIX::Termios object"
+        unless ref($termios) && $termios->can('setispeed');
+    return $termios->setispeed($speed);
+}
+sub cfsetospeed {
+    my ($termios, $speed) = @_;
+    croak "cfsetospeed requires a POSIX::Termios object"
+        unless ref($termios) && $termios->can('setospeed');
+    return $termios->setospeed($speed);
+}
 
 # Time functions
 sub time { POSIX::_time() }
+sub times {
+    my $ticks = POSIX::sysconf(POSIX::_SC_CLK_TCK()) || 100;
+    return (CORE::int(CORE::time() * $ticks), 0, 0, 0, 0);
+}
 sub sleep { POSIX::_sleep(@_) }
 sub alarm { POSIX::_alarm(@_) }
 sub strftime { POSIX::_strftime(@_) }
@@ -614,6 +693,23 @@ sub setospeed {
 }
 
 package POSIX;
+
+use constant B0     => 0;
+use constant B50    => 50;
+use constant B75    => 75;
+use constant B110   => 110;
+use constant B134   => 134;
+use constant B150   => 150;
+use constant B200   => 200;
+use constant B300   => 300;
+use constant B600   => 600;
+use constant B1200  => 1200;
+use constant B1800  => 1800;
+use constant B2400  => 2400;
+use constant B4800  => 4800;
+use constant B9600  => 9600;
+use constant B19200 => 19200;
+use constant B38400 => 38400;
 
 # Constants - generate subs for each constant that has Java implementation
 # Note: O_* and WNOHANG/WUNTRACED are defined with 'use constant' above

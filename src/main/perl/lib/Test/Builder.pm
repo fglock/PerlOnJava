@@ -145,7 +145,7 @@ sub new {
         # Non-TB tools normally expect 0 added to the level. $Level is normally 1. So
         # we only want the level to change if $Level != 1.
         # TB->ctx compensates for this later.
-        Test2::API::test2_add_callback_context_aquire(sub { $_[0]->{level} += $Level - 1 });
+        Test2::API::test2_add_callback_context_aquire(sub { $_[0]->{level} += $Test::Builder::Level - 1 });
 
         Test2::API::test2_add_callback_exit(sub { $Test->_ending(@_) });
 

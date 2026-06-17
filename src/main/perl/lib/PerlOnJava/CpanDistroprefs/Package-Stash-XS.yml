@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for Package::Stash::XS.
+
+  This distribution is an XS acceleration layer for Package::Stash.
+  PerlOnJava uses the pure-Perl Package::Stash implementation and cannot
+  load the XS object, so the upstream test suite fails at require-time.
+  Moose declares Package::Stash::XS as a prerequisite, but the bundled
+  Moose-as-Moo shim does not need it. Skip this dependency cleanly so
+  `jcpan -t Moose` does not burn random-tester time on an unbuildable XS
+  module.
+match:
+  distribution: "^ETHER/Package-Stash-XS-"
+test:
+  commandline: "PERLONJAVA_SKIP"
+install:
+  commandline: "PERLONJAVA_SKIP"

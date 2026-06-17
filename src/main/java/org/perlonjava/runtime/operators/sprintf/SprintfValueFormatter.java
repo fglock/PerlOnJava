@@ -86,8 +86,8 @@ public class SprintfValueFormatter {
             case 'X' -> numericFormatter.formatHex(value.getLong(), flags, width, precision, true);
             case 'b', 'B' -> numericFormatter.formatBinary(value.getLong(), flags, width, precision, conversion);
             case 'e', 'E', 'g', 'G', 'a', 'A' ->
-                    numericFormatter.formatFloatingPoint(value.getDouble(), flags, width, precision, conversion);
-            case 'f', 'F' -> numericFormatter.formatFloatingPoint(value.getDouble(), flags, width, precision, 'f');
+                    numericFormatter.formatFloatingPoint(value, flags, width, precision, conversion);
+            case 'f', 'F' -> numericFormatter.formatFloatingPoint(value, flags, width, precision, 'f');
 
             // Uppercase variants (synonyms)
             case 'D' -> numericFormatter.formatInteger(value.getLong(), flags, width, precision, 10, false);

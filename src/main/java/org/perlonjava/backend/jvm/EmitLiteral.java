@@ -610,9 +610,10 @@ public class EmitLiteral {
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
                 mv.visitLdcInsn(Double.valueOf(value));
+                mv.visitLdcInsn(value);
                 mv.visitMethodInsn(
                         Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "<init>", "(D)V", false);
+                        "<init>", "(DLjava/lang/String;)V", false);
             }
         } else {
             // Unboxed context: push primitive values

@@ -187,7 +187,7 @@ public class ConstantFoldingVisitor implements Visitor {
                     // to preserve precision (32-bit Perl emulation)
                     return new RuntimeScalar(value);
                 } else {
-                    return new RuntimeScalar(Double.parseDouble(value));
+                    return new RuntimeScalar(Double.parseDouble(value), value);
                 }
             } catch (NumberFormatException e) {
                 // Fallback to string for unusual number formats

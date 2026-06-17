@@ -689,10 +689,10 @@ public class ReachabilityWalker {
         }
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
             if (isNonOwningDebugArgsArray(e.getKey())) continue;
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
         }
         for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
         }
 
         // D-W6.16: live my-vars (currently-active lexical scopes).
@@ -798,11 +798,11 @@ public class ReachabilityWalker {
         for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
             if (isNonOwningDebugArgsArray(e.getKey())) continue;
             if (e.getValue() == target) return true;
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
         }
         for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
             if (e.getValue() == target) return true;
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
         }
         // Seed: ScalarRefRegistry-tracked scalars whose declaration
         // scope is still live (per MyVarCleanupStack). This is what

@@ -8,6 +8,8 @@ import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,10 +73,19 @@ public class RegexPreprocessor {
     static java.util.Set<String> seenNamedCaptures = new java.util.HashSet<>();
     static java.util.Map<String, java.util.List<String>> emittedNamedCaptures = new java.util.LinkedHashMap<>();
     static int duplicateNameCounter;
+    static List<String> warningsOnUse = new ArrayList<>();
     private static final ThreadLocal<Boolean> EMIT_WARNINGS = ThreadLocal.withInitial(() -> true);
 
     static boolean shouldEmitWarnings() {
         return EMIT_WARNINGS.get();
+    }
+
+    static void recordWarningOnUse(String message) {
+        warningsOnUse.add(message);
+    }
+
+    static List<String> getWarningsOnUse() {
+        return new ArrayList<>(warningsOnUse);
     }
 
     static void markDeferredUnicodePropertyEncountered() {
@@ -137,6 +148,7 @@ public class RegexPreprocessor {
         seenNamedCaptures.clear();
         emittedNamedCaptures.clear();
         duplicateNameCounter = 0;
+        warningsOnUse.clear();
 
         // First, escape invalid quantifier braces (Perl compatibility)
         // DISABLED: Causes test regressions - needs more work
