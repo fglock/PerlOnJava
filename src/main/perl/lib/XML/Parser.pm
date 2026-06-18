@@ -221,11 +221,13 @@ sub parsefile {
     my $old_base = $self->{Base};
     $self->{Base} = $file;
 
+    # Pass an old-style typeglob for compatibility with subclasses that
+    # identify filehandles by probing *{$arg}{IO}.
     if (wantarray) {
-        eval { @ret = $self->parse( $fh, @_ ); };
+        eval { @ret = $self->parse( *{$fh}, @_ ); };
     }
     else {
-        eval { $ret = $self->parse( $fh, @_ ); };
+        eval { $ret = $self->parse( *{$fh}, @_ ); };
     }
     my $err = $@;
     $self->{Base} = $old_base;

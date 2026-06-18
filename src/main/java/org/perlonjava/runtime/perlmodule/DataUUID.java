@@ -211,19 +211,19 @@ public class DataUUID extends PerlModuleBase {
     // --- Exported NameSpace constants ---------------------------------------
 
     public static RuntimeList NameSpace_DNS(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(NS_DNS).getList();
+        return byteStringScalar(NS_DNS).getList();
     }
 
     public static RuntimeList NameSpace_URL(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(NS_URL).getList();
+        return byteStringScalar(NS_URL).getList();
     }
 
     public static RuntimeList NameSpace_OID(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(NS_OID).getList();
+        return byteStringScalar(NS_OID).getList();
     }
 
     public static RuntimeList NameSpace_X500(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(NS_X500).getList();
+        return byteStringScalar(NS_X500).getList();
     }
 
     // --- Internal helpers ---------------------------------------------------
@@ -296,7 +296,7 @@ public class DataUUID extends PerlModuleBase {
     private static RuntimeList makeRet(byte[] u, int type) {
         switch (type) {
             case F_BIN:
-                return new RuntimeScalar(bytesToLatin1(u)).getList();
+                return byteStringScalar(bytesToLatin1(u)).getList();
             case F_STR: {
                 String hex = bytesToUpperHex(u);
                 StringBuilder sb = new StringBuilder(36);
@@ -380,6 +380,12 @@ public class DataUUID extends PerlModuleBase {
 
     private static String bytesToLatin1(byte[] bytes) {
         return new String(bytes, StandardCharsets.ISO_8859_1);
+    }
+
+    private static RuntimeScalar byteStringScalar(String value) {
+        RuntimeScalar scalar = new RuntimeScalar(value);
+        scalar.type = RuntimeScalarType.BYTE_STRING;
+        return scalar;
     }
 
     private static String bytesToUpperHex(byte[] bytes) {

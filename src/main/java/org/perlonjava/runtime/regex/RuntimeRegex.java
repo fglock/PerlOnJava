@@ -972,7 +972,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
         // Use resolveRegex to properly handle qr objects and qr overloading
-        RuntimeRegex resolvedRegex = resolveRegex(patternString);
+        ResolvedRegex resolved = resolveRegexWithOrigin(patternString);
+        RuntimeRegex resolvedRegex = resolved.regex();
         String modifierStr = modifiers.toString();
 
         // Create a new regex instance with the replacement
@@ -995,7 +996,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Only recompile if we have new modifiers that actually change the flags
         if (!modifierStr.isEmpty()) {
-            RegexFlags newFlags = mergeRegexFlags(resolvedRegex.regexFlags, modifierStr, resolvedRegex.patternString);
+            RegexFlags newFlags = resolved.fromCompiledRegex()
+                    ? mergeOperationFlags(resolvedRegex.regexFlags, modifierStr, resolvedRegex.patternString)
+                    : mergeRegexFlags(resolvedRegex.regexFlags, modifierStr, resolvedRegex.patternString);
 
             // Check if the merged flags are actually different
             boolean flagsChanged = false;
@@ -1006,7 +1009,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             // Only recompile if flags actually changed (this is needed for /x preprocessing)
-            if (flagsChanged) {
+            if (flagsChanged && !resolved.fromCompiledRegex()) {
                 RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString, newFlags.toFlagString());
                 regex.pattern = recompiledRegex.pattern;
                 regex.patternUnicode = recompiledRegex.patternUnicode;
@@ -1022,7 +1025,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.hasCodeBlockCaptures = recompiledRegex.hasCodeBlockCaptures;
                 regex.warningsOnUse = new ArrayList<>(recompiledRegex.warningsOnUse);
             } else {
-                // Just update the flags without recompiling
+                // Just update the flags without recompiling.  A compiled qr// used
+                // as the whole substitution pattern keeps its own pattern flags;
+                // outer s/// flags like /x or /i must not reinterpret its source.
                 regex.regexFlags = newFlags;
                 regex.hasPreservesMatch = regex.hasPreservesMatch || newFlags.preservesMatch();
                 regex.useGAssertion = newFlags.useGAssertion();
@@ -2441,6 +2446,32 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return false;
     }
 
+    private record ResolvedRegex(RuntimeRegex regex, boolean fromCompiledRegex) {}
+
+    private static RegexFlags mergeOperationFlags(RegexFlags baseFlags, String modifiers, String patternString) {
+        RegexFlags base = baseFlags != null ? baseFlags : fromModifiers("", patternString);
+        RegexFlags operation = fromModifiers(modifiers == null ? "" : modifiers, patternString);
+
+        return new RegexFlags(
+                base.isGlobalMatch() || operation.isGlobalMatch(),
+                base.keepCurrentPosition() || operation.keepCurrentPosition(),
+                base.isNonDestructive() || operation.isNonDestructive(),
+                base.isMatchExactlyOnce(),
+                base.useGAssertion(),
+                base.isExtendedWhitespace(),
+                base.isNonCapturing(),
+                base.isOptimized() || operation.isOptimized(),
+                base.isCaseInsensitive(),
+                base.isMultiLine(),
+                base.isDotAll(),
+                base.isExtended(),
+                base.preservesMatch() || operation.preservesMatch(),
+                base.isUnicode(),
+                base.isAscii(),
+                base.allowEvalGroup() || operation.allowEvalGroup()
+        );
+    }
+
     /**
      * Resolves a scalar to a RuntimeRegex, handling qr overloading if necessary.
      *
@@ -2449,11 +2480,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @throws PerlCompilerException if qr overload doesn't return proper regex
      */
     private static RuntimeRegex resolveRegex(RuntimeScalar quotedRegex) {
+        return resolveRegexWithOrigin(quotedRegex).regex();
+    }
+
+    private static ResolvedRegex resolveRegexWithOrigin(RuntimeScalar quotedRegex) {
         // Unwrap readonly scalar
         if (quotedRegex.type == RuntimeScalarType.READONLY_SCALAR) quotedRegex = (RuntimeScalar) quotedRegex.value;
 
         if (quotedRegex.type == RuntimeScalarType.REGEX) {
-            return (RuntimeRegex) quotedRegex.value;
+            return new ResolvedRegex((RuntimeRegex) quotedRegex.value, true);
         }
 
         // Check if the object has qr overloading
@@ -2466,7 +2501,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (overloadedResult != null) {
                     // The result must be a compiled regex
                     if (overloadedResult.type == RuntimeScalarType.REGEX) {
-                        return (RuntimeRegex) overloadedResult.value;
+                        return new ResolvedRegex((RuntimeRegex) overloadedResult.value, true);
                     }
                     throw new PerlCompilerException("Overloaded qr did not return a REGEXP");
                 }
@@ -2474,13 +2509,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Try fallback to string conversion
                 RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(quotedRegex, "(\"\"");
                 if (fallbackResult != null) {
-                    return compile(fallbackResult.toString(), "");
+                    return new ResolvedRegex(compile(fallbackResult.toString(), ""), false);
                 }
             }
         }
 
         // Default: compile as string
-        return compile(quotedRegex.toString(), "");
+        return new ResolvedRegex(compile(quotedRegex.toString(), ""), false);
     }
 
     @Override

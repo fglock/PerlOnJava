@@ -31,6 +31,7 @@ public class BytecodeInterpreter {
             copy.type = ro.type;
             copy.value = ro.value;
             copy.numericLiteralText = ro.numericLiteralText;
+            copy.numericContextSeen = ro.numericContextSeen;
             return copy;
         }
         if (val instanceof ScalarSpecialVariable sv) {
@@ -39,6 +40,7 @@ public class BytecodeInterpreter {
             copy.type = src.type;
             copy.value = src.value;
             copy.numericLiteralText = src.numericLiteralText;
+            copy.numericContextSeen = src.numericContextSeen;
             return copy;
         }
         return (RuntimeScalar) val;

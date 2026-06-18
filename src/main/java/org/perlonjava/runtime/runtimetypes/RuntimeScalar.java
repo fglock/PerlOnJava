@@ -81,6 +81,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public String numericLiteralText;
 
     /**
+     * True once a string scalar has been used in numeric context. Perl keeps a
+     * numeric slot alongside the string slot on the same SV; this lightweight
+     * bit is enough for compatibility code that needs to distinguish an
+     * untouched numeric-looking string from a numified string.
+     */
+    public boolean numericContextSeen;
+
+    /**
      * True if this scalar was the direct target of an {@code open()} call that
      * created a new anonymous filehandle glob. Used by {@link #scopeExitCleanup}
      * to distinguish "owned" filehandles (should be closed at scope exit) from
@@ -344,6 +352,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
         this.tainted = scalar.tainted;
         this.numericLiteralText = scalar.numericLiteralText;
+        this.numericContextSeen = scalar.numericContextSeen;
         if (this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
             glob.ioHolderCount++;
@@ -422,6 +431,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
                 this.tainted = scalar.tainted;
                 this.numericLiteralText = scalar.numericLiteralText;
+                this.numericContextSeen = scalar.numericContextSeen;
             }
             case Long longValue -> initializeWithLong(longValue);
             default -> {
@@ -492,8 +502,43 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return t == STRING || t == BYTE_STRING || t == VSTRING;
     }
 
+    private void markNumericContextSeen() {
+        int t = this.type;
+        if (t == STRING || t == BYTE_STRING || t == VSTRING) {
+            this.numericContextSeen = true;
+        } else if (t == READONLY_SCALAR) {
+            ((RuntimeScalar) this.value).markNumericContextSeen();
+        } else if (t == TIED_SCALAR) {
+            this.tiedFetch().markNumericContextSeen();
+        }
+    }
+
+    public boolean isDataDumperNumifiedSafeDecimal() {
+        RuntimeScalar scalar = this;
+        if (scalar instanceof ScalarSpecialVariable ssv) {
+            scalar = ssv.getValueAsScalar();
+        }
+        if (scalar.type == READONLY_SCALAR) {
+            scalar = (RuntimeScalar) scalar.value;
+        }
+        if (scalar.type != INTEGER && scalar.type != DOUBLE
+                && (!scalar.numericContextSeen || !(scalar.type == STRING || scalar.type == BYTE_STRING))) {
+            return false;
+        }
+        String s = scalar.toString();
+        if (s.length() != 10) return false;
+        char first = s.charAt(0);
+        if (first < '1' || first > '9') return false;
+        for (int i = 1; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < '0' || c > '9') return false;
+        }
+        return true;
+    }
+
     private void initializeWithLong(Long value) {
         this.tainted = false;
+        this.numericContextSeen = false;
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             // Java double can only exactly represent integers up to 2^53.
             // Beyond that, storing as DOUBLE loses precision and breaks exact pack/unpack
@@ -540,6 +585,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         // For string types, pass operation context so warnings include "in <operation>"
         if (type == STRING || type == BYTE_STRING || type == VSTRING) {
+            markNumericContextSeen();
             return NumberParser.parseNumber(this, operation);
         }
         return getNumberLarge();
@@ -550,9 +596,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER, DOUBLE -> this;
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this);
+            case STRING, BYTE_STRING -> {
+                markNumericContextSeen();
+                yield NumberParser.parseNumber(this);
+            }
             case UNDEF -> scalarZero;
-            case VSTRING -> NumberParser.parseNumber(this);
+            case VSTRING -> {
+                markNumericContextSeen();
+                yield NumberParser.parseNumber(this);
+            }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
             case GLOB -> scalarOne;  // Assuming globs are truthy, so 1
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
@@ -577,9 +629,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar getNumberNoOverload() {
         return switch (type) {
             case INTEGER, DOUBLE -> this;
-            case STRING, BYTE_STRING -> NumberParser.parseNumber(this);
+            case STRING, BYTE_STRING -> {
+                markNumericContextSeen();
+                yield NumberParser.parseNumber(this);
+            }
             case UNDEF -> scalarZero;
-            case VSTRING -> NumberParser.parseNumber(this);
+            case VSTRING -> {
+                markNumericContextSeen();
+                yield NumberParser.parseNumber(this);
+            }
             case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
             case GLOB -> scalarOne;
             case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
@@ -621,6 +679,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         // For string types, pass operation context so "isn't numeric" warnings include it
         if (type == STRING || type == BYTE_STRING || type == VSTRING) {
+            markNumericContextSeen();
             return NumberParser.parseNumber(this, operation);
         }
         // All other types are defined, just convert to number
@@ -659,6 +718,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case INTEGER -> (int) value;
             case DOUBLE -> (int) ((double) value);
             case STRING, BYTE_STRING -> {
+                markNumericContextSeen();
                 // Avoid recursion when NumberParser.parseNumber() returns a cached scalar
                 // that is also STRING. Add fast-path for plain integer strings.
                 String s = (String) value;
@@ -709,6 +769,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (type == RuntimeScalarType.UNDEF) {
             return BigInteger.ZERO;
         } else {
+            markNumericContextSeen();
             // String types - parse exactly without precision loss
             String str = this.toString().trim();
 
@@ -781,6 +842,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (type == RuntimeScalarType.UNDEF) {
             return BigInteger.ZERO;
         } else {
+            markNumericContextSeen();
             // String types - parse carefully to preserve precision
             String str = this.toString().trim();
 
@@ -830,6 +892,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case INTEGER -> (int) value;
             case DOUBLE -> (long) ((double) value);
             case STRING, BYTE_STRING -> {
+                markNumericContextSeen();
                 // Avoid recursion when large integer strings are preserved as STRING to keep
                 // precision (e.g. values > 2^53). NumberParser.parseNumber() may return a scalar
                 // that is also STRING, and calling getLong() on it would recurse indefinitely.
@@ -873,6 +936,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case INTEGER -> (int) value;
             case DOUBLE -> (double) value;
             case STRING, BYTE_STRING -> {
+                markNumericContextSeen();
                 // Avoid recursion when numeric values are preserved as STRING and also stored in
                 // NumberParser's numification cache. If parseNumber() returns a scalar whose
                 // conversion path leads back to getDouble(), this can recurse indefinitely.
@@ -1215,6 +1279,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
+                this.numericContextSeen = value.numericContextSeen;
                 RuntimePosLvalue.invalidatePos(this);
             } else {
                 this.type = value.type;
@@ -1222,6 +1287,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
+                this.numericContextSeen = value.numericContextSeen;
             }
             return this;
         }
@@ -1274,6 +1340,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.value = null;
             this.tainted = false;
             this.numericLiteralText = null;
+            this.numericContextSeen = false;
             return this;
         }
         // Unwrap source special types via switch dispatcher
@@ -1313,6 +1380,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
+        this.numericContextSeen = value.numericContextSeen;
         return this;
     }
 
@@ -1356,6 +1424,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                     this.tainted = value.tainted;
                     this.numericLiteralText = value.numericLiteralText;
+                    this.numericContextSeen = value.numericContextSeen;
                     return this;
                 }
             }
@@ -1478,6 +1547,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
+        this.numericContextSeen = value.numericContextSeen;
         if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
             code.hadStashRef = true;
         }
@@ -1671,6 +1741,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = value;
         this.tainted = false;
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
         return this;
     }
 
@@ -1684,6 +1755,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.initializeWithLong(value);
         this.tainted = false;
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
         return this;
     }
 
@@ -1722,6 +1794,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         this.tainted = false;
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
         return this;
     }
 
@@ -1736,6 +1809,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = value;
         this.tainted = false;
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
         return this;
     }
 
@@ -1755,6 +1829,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.utf8UncheckedOctets = false;
         this.tainted = false;
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
         return this;
     }
 
@@ -2260,6 +2335,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.value = newScalar;
                 this.type = RuntimeScalarType.REFERENCE;
                 this.numericLiteralText = null;
+                this.numericContextSeen = false;
                 yield newScalar;
             }
             case REFERENCE -> (RuntimeScalar) value;
@@ -2745,6 +2821,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.value = new RuntimeCode((String) null, null);
             this.tainted = false;
             this.numericLiteralText = null;
+            this.numericContextSeen = false;
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
             if (releasedCode && WeakRefRegistry.weakRefsExist && !ModuleInitGuard.inModuleInit()) {
@@ -2772,6 +2849,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = null;
         this.tainted = false;
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
         boolean undefOnBlessedWithDestroy = false;
@@ -3119,6 +3197,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar preAutoIncrement() {
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
@@ -3238,6 +3317,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeScalar old = this.type == RuntimeScalarType.UNDEF ?
                 new RuntimeScalar(0) : new RuntimeScalar(this);
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
@@ -3338,6 +3418,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar preAutoDecrement() {
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> // 0
@@ -3441,6 +3522,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar postAutoDecrement() {
         RuntimeScalar old = new RuntimeScalar(this);
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
@@ -3588,6 +3670,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.referencedByScalarReference = this.referencedByScalarReference;
         currentState.tainted = this.tainted;
         currentState.numericLiteralText = this.numericLiteralText;
+        currentState.numericContextSeen = this.numericContextSeen;
         // Push the current state onto the stack
         dynamicStateStack.push(currentState);
         // Clear the current type and value
@@ -3597,6 +3680,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.ownsScalarReferenceContents = false;
         this.tainted = false;
         this.numericLiteralText = null;
+        this.numericContextSeen = false;
     }
 
     /**
@@ -3628,6 +3712,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     previousState.referencedByScalarReference || referencedDuringLocal;
             this.tainted = previousState.tainted;
             this.numericLiteralText = previousState.numericLiteralText;
+            this.numericContextSeen = previousState.numericContextSeen;
 
             releaseScalarReferenceContents(scalarReferenceContents);
 
