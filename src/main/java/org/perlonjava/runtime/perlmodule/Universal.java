@@ -331,7 +331,8 @@ public class Universal extends PerlModuleBase {
                     || (argString.equals("ARRAY") && baseValue instanceof RuntimeArray)
                     || (argString.equals("SCALAR") && baseValue instanceof RuntimeScalar)
                     || (argString.equals("GLOB") && baseValue instanceof RuntimeGlob)
-                    || (argString.equals("FORMAT") && baseValue instanceof RuntimeFormat)) {
+                    || (argString.equals("FORMAT") && baseValue instanceof RuntimeFormat)
+                    || (argString.equals("CODE") && baseValue instanceof RuntimeCode)) {
                 return getScalarBoolean(true).getList();
             }
         }

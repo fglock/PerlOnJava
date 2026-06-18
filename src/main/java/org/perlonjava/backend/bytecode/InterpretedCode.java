@@ -331,6 +331,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         // This matches what RuntimeCode.apply() does for JVM-compiled subs
         RuntimeCode.pushArgs(args);
+        RuntimeCode.pushCallContext(callContext);
         RuntimeCode.pushActiveCode(this);
         // Push warning bits for FATAL warnings support
         // This allows runtime code to check current warning context
@@ -368,6 +369,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         int effectiveContext = RuntimeCode.effectiveCallContext(this, callContext);
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         RuntimeCode.pushArgs(args);
+        RuntimeCode.pushCallContext(callContext);
         RuntimeCode.pushActiveCode(this);
         // Push warning bits for FATAL warnings support
         if (warningBitsString != null) {

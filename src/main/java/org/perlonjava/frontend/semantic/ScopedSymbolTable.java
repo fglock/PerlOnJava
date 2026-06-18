@@ -981,25 +981,45 @@ public class ScopedSymbolTable {
             throw new IllegalArgumentException("Source ScopedSymbolTable cannot be null.");
         }
 
+        copyFlagsFrom(source, source.currentScopeIndex());
+    }
+
+    /**
+     * Copies flags from a specific source scope depth into this table's current scope.
+     *
+     * BEGIN/eval execution can temporarily leave the execution symbol table inside a
+     * nested scope after a caught parse error. Copying from the caller's original
+     * scope depth preserves pragma changes made in that lexical block without
+     * importing flags from an abandoned inner scope.
+     *
+     * @param source The source ScopedSymbolTable from which to copy the flags.
+     * @param sourceScopeIndex The lexical scope index to copy from.
+     */
+    public void copyFlagsFrom(ScopedSymbolTable source, int sourceScopeIndex) {
+        if (source == null) {
+            throw new IllegalArgumentException("Source ScopedSymbolTable cannot be null.");
+        }
+        int index = Math.max(0, Math.min(sourceScopeIndex, source.warningFlagsStack.size() - 1));
+
         // Copy warning flags
         this.warningFlagsStack.pop();
-        this.warningFlagsStack.push((BitSet) source.warningFlagsStack.peek().clone());
+        this.warningFlagsStack.push((BitSet) source.warningFlagsStack.get(index).clone());
 
         // Copy disabled warnings flags
         this.warningDisabledStack.pop();
-        this.warningDisabledStack.push((BitSet) source.warningDisabledStack.peek().clone());
+        this.warningDisabledStack.push((BitSet) source.warningDisabledStack.get(index).clone());
 
         // Copy fatal warnings flags
         this.warningFatalStack.pop();
-        this.warningFatalStack.push((BitSet) source.warningFatalStack.peek().clone());
+        this.warningFatalStack.push((BitSet) source.warningFatalStack.get(index).clone());
 
         // Copy feature flags
         this.featureFlagsStack.pop();
-        this.featureFlagsStack.push(source.featureFlagsStack.peek());
+        this.featureFlagsStack.push(source.featureFlagsStack.get(index));
 
         // Copy strict options
         this.strictOptionsStack.pop();
-        this.strictOptionsStack.push(source.strictOptionsStack.peek());
+        this.strictOptionsStack.push(source.strictOptionsStack.get(index));
     }
 
     public record PackageInfo(String packageName, boolean isClass, String version) {

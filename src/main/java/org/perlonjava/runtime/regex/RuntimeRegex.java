@@ -1916,6 +1916,77 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @param ctx         The context LIST, SCALAR, VOID.
      * @return A RuntimeScalar or RuntimeList.
      */
+    private static Pattern compileNonEmptySubstitutionPattern(Pattern pattern) {
+        try {
+            return Pattern.compile("(?:" + pattern.pattern() + ")(?<=[\\s\\S])", pattern.flags());
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static int bumpGlobalMatchPosition(String inputStr, int offset) {
+        if (offset >= inputStr.length()) {
+            return inputStr.length() + 1;
+        }
+        return offset + Character.charCount(inputStr.codePointAt(offset));
+    }
+
+    private static void setSubstitutionRegion(Matcher matcher, int start, int end, boolean transparentBounds) {
+        matcher.region(start, end);
+        // The substitution loop drives the matcher by changing regions. Keep
+        // ^/$ anchored to the real input, not to each artificial region start.
+        matcher.useAnchoringBounds(false);
+        // Lookbehind/lookahead assertions should still inspect the full input
+        // around the current search start, matching Perl's pos()-style scan.
+        matcher.useTransparentBounds(transparentBounds);
+    }
+
+    private static void updateReplacementMatchState(RuntimeRegex regex, Matcher matcher,
+                                                    String inputStr, RuntimeScalar string) {
+        lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+
+        // Initialize $1, $2, @+, @- only when we have a match
+        globalMatcher = matcher;
+        globalMatchString = inputStr;
+        lastMatchUsedBackslashK = regex.hasBackslashK;
+        updateLastNamedCaptureGroups(matcher);
+        if (matcher.groupCount() > 0) {
+            if (regex.hasBackslashK) {
+                // Skip the internal perlK capture group when populating $1, $2, etc.
+                int perlKGroup = getPerlKGroup(matcher);
+                int userGroupCount = matcher.groupCount() - 1;
+                if (userGroupCount > 0) {
+                    lastCaptureGroups = new String[userGroupCount];
+                    int destIdx = 0;
+                    for (int i = 1; i <= matcher.groupCount(); i++) {
+                        if (i == perlKGroup) continue;
+                        lastCaptureGroups[destIdx++] = matcher.group(i);
+                    }
+                } else {
+                    lastCaptureGroups = null;
+                }
+            } else {
+                lastCaptureGroups = new String[matcher.groupCount()];
+                for (int i = 0; i < matcher.groupCount(); i++) {
+                    lastCaptureGroups[i] = matcher.group(i + 1);
+                }
+            }
+        } else {
+            lastCaptureGroups = null;
+        }
+
+        // For \K, adjust match start so $& is only the post-\K portion
+        if (regex.hasBackslashK) {
+            int keepEnd = matcher.end("perlK");
+            lastMatchStart = keepEnd;
+            lastMatchedString = inputStr.substring(keepEnd, matcher.end());
+        } else {
+            lastMatchStart = matcher.start();
+            lastMatchedString = matcher.group(0);
+        }
+        lastMatchEnd = matcher.end();
+    }
+
     public static RuntimeBase replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         // Convert the input string to a Java string
         String inputStr = string.toString();
@@ -2007,6 +2078,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
+        Pattern nonEmptySubstitutionPattern = regex.regexFlags != null && regex.regexFlags.isGlobalMatch()
+                ? compileNonEmptySubstitutionPattern(pattern)
+                : null;
+        int searchStart = 0;
 
         // Honor pos() when \G is used. `s/\G.../.../` should anchor at
         // pos($string) so a substitution inserted right after a previous /g
@@ -2019,10 +2094,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (posScalar.getDefinedBoolean()) {
                 int startPos = posScalar.getInt();
                 if (startPos >= 0 && startPos <= inputStr.length()) {
-                    matcher.region(startPos, inputStr.length());
-                    // Same rationale as matchRegex: keep ^/$ from anchoring
-                    // at the artificial region boundary under /m.
-                    matcher.useAnchoringBounds(false);
+                    searchStart = startPos;
                 }
             }
         }
@@ -2043,52 +2115,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Track position for manual replacement when \K is used
         int lastAppendEnd = 0;
 
-        // Perform the substitution
+        // Perform the substitution. Java's Matcher.find() skips ahead after a
+        // zero-length match; Perl's global substitution first retries at the
+        // same offset with a non-empty match. Track append/search positions
+        // explicitly so nullable patterns like /(.*?)(x)?/g behave like Perl.
         try {
-            while (matcher.find()) {
+            while (searchStart <= inputStr.length()) {
+                setSubstitutionRegion(matcher, searchStart, inputStr.length(), true);
+                if (!matcher.find()) {
+                    break;
+                }
+
                 found++;
-                lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
-
-                // Initialize $1, $2, @+, @- only when we have a match
-                globalMatcher = matcher;
-                globalMatchString = inputStr;
-                lastMatchUsedBackslashK = regex.hasBackslashK;
-                updateLastNamedCaptureGroups(matcher);
-                if (matcher.groupCount() > 0) {
-                    if (regex.hasBackslashK) {
-                        // Skip the internal perlK capture group when populating $1, $2, etc.
-                        int perlKGroup = getPerlKGroup(matcher);
-                        int userGroupCount = matcher.groupCount() - 1;
-                        if (userGroupCount > 0) {
-                            lastCaptureGroups = new String[userGroupCount];
-                            int destIdx = 0;
-                            for (int i = 1; i <= matcher.groupCount(); i++) {
-                                if (i == perlKGroup) continue;
-                                lastCaptureGroups[destIdx++] = matcher.group(i);
-                            }
-                        } else {
-                            lastCaptureGroups = null;
-                        }
-                    } else {
-                        lastCaptureGroups = new String[matcher.groupCount()];
-                        for (int i = 0; i < matcher.groupCount(); i++) {
-                            lastCaptureGroups[i] = matcher.group(i + 1);
-                        }
-                    }
-                } else {
-                    lastCaptureGroups = null;
-                }
-
-                // For \K, adjust match start so $& is only the post-\K portion
-                if (regex.hasBackslashK) {
-                    int keepEnd = matcher.end("perlK");
-                    lastMatchStart = keepEnd;
-                    lastMatchedString = inputStr.substring(keepEnd, matcher.end());
-                } else {
-                    lastMatchStart = matcher.start();
-                    lastMatchedString = matcher.group(0);
-                }
-                lastMatchEnd = matcher.end();
+                updateReplacementMatchState(regex, matcher, inputStr, string);
 
                 String replacementStr;
                 if (replacementIsCode) {
@@ -2117,7 +2156,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         lastAppendEnd = matcher.end();
                     } else {
                         // Normal replacement: replace the entire match
-                        matcher.appendReplacement(resultBuffer, Matcher.quoteReplacement(replacementStr));
+                        resultBuffer.append(inputStr, lastAppendEnd, matcher.start());
+                        resultBuffer.append(replacementStr);
+                        lastAppendEnd = matcher.end();
                     }
                 }
 
@@ -2125,17 +2166,67 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (!regex.regexFlags.isGlobalMatch()) {
                     break;
                 }
+
+                if (matcher.end() > matcher.start()) {
+                    searchStart = matcher.end();
+                    continue;
+                }
+
+                int zeroLengthOffset = matcher.end();
+                boolean consumedNonEmptyRetry = false;
+                if (nonEmptySubstitutionPattern != null && zeroLengthOffset <= inputStr.length()) {
+                    Matcher retryMatcher = nonEmptySubstitutionPattern.matcher(matchInput);
+                    // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
+                    // so a zero-length match at the region start is rejected.
+                    setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
+                    if (retryMatcher.find()
+                            && retryMatcher.start() == zeroLengthOffset
+                            && retryMatcher.end() > zeroLengthOffset) {
+                        found++;
+                        updateReplacementMatchState(regex, retryMatcher, inputStr, string);
+
+                        String retryReplacementStr;
+                        if (replacementIsCode) {
+                            RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
+                            RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
+                            if (Utf8.isUtf8(result.scalar())) {
+                                resultNeedsUtf8 = true;
+                            }
+                            retryReplacementStr = result.toString();
+                        } else {
+                            if (Utf8.isUtf8(replacement)) {
+                                resultNeedsUtf8 = true;
+                            }
+                            retryReplacementStr = replacement.toString();
+                        }
+
+                        if (retryReplacementStr != null) {
+                            if (regex.hasBackslashK) {
+                                int keepEnd = retryMatcher.end("perlK");
+                                resultBuffer.append(inputStr, lastAppendEnd, keepEnd);
+                                resultBuffer.append(retryReplacementStr);
+                                lastAppendEnd = retryMatcher.end();
+                            } else {
+                                resultBuffer.append(inputStr, lastAppendEnd, retryMatcher.start());
+                                resultBuffer.append(retryReplacementStr);
+                                lastAppendEnd = retryMatcher.end();
+                            }
+                        }
+                        searchStart = retryMatcher.end();
+                        consumedNonEmptyRetry = true;
+                    }
+                }
+
+                if (!consumedNonEmptyRetry) {
+                    searchStart = bumpGlobalMatchPosition(inputStr, zeroLengthOffset);
+                }
             }
         } catch (RegexTimeoutException e) {
             WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
             found = 0;
         }
         // Append the remaining text after the last match to the result buffer
-        if (regex.hasBackslashK) {
-            resultBuffer.append(inputStr, lastAppendEnd, inputStr.length());
-        } else {
-            matcher.appendTail(resultBuffer);
-        }
+        resultBuffer.append(inputStr, lastAppendEnd, inputStr.length());
 
         // Release captures from the replacement closure to unblock DESTROY.
         // The s///eg replacement is compiled as an anonymous sub that captures

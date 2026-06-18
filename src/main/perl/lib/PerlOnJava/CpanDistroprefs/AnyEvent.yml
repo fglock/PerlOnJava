@@ -1,15 +1,18 @@
 ---
 comment: |
-  PerlOnJava distroprefs for AnyEvent when testing AnyEvent::STOMP.
+  PerlOnJava distroprefs for AnyEvent.
 
-  AnyEvent::STOMP's own CPAN suite is a load smoke test. Its AnyEvent
-  prerequisite suite covers fork, local socket, SSL, and live-network surfaces
-  that are broader than that downstream load test and are not stable under
-  PerlOnJava or this sandbox. Keep direct `jcpan -t AnyEvent` honest by only
-  skipping this prerequisite test phase for the AnyEvent::STOMP target.
+  AnyEvent's upstream suite covers fork, local socket, SSL, signal, and live
+  event-loop surfaces that are broader than the pure-Perl module load/install
+  surface. PerlOnJava does not implement fork, and several watcher tests can
+  hang after the fork-only child test fails.
+
+  Suppress Canary::Stability's interactive Makefile.PL prompt, then build and
+  install the module while skipping the upstream test phase. Downstream modules
+  that depend on AnyEvent remain their own compatibility gates.
 match:
   distribution: "^MLEHMANN/AnyEvent-"
-  env:
-    PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])AnyEvent::STOMP($|[[:space:]])"
+pl:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::AnyEvent -e "PerlOnJava::Distroprefs::AnyEvent::pl_phase()"'
 test:
   commandline: "PERLONJAVA_SKIP"

@@ -7,9 +7,11 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.operators.OperatorHandler;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 public class EmitOperatorDeleteExists {
     // Handles the 'delete' and 'exists' operators for hash elements.
@@ -197,7 +199,11 @@ public class EmitOperatorDeleteExists {
                     if (operator.equals("defined") && operatorNode.operator.equals("&")) {
                         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("defined & " + operatorNode.operand);
                         if (operatorNode.operand instanceof IdentifierNode identifierNode) {
-                            // exists &sub
+                            if (operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
+                                handleDefinedSubroutineCodeRef(emitterVisitor, codeRef);
+                                return;
+                            }
+                            // defined &sub
                             handleExistsSubroutine(emitterVisitor, operator, identifierNode);
                             return;
                         }
@@ -254,6 +260,25 @@ public class EmitOperatorDeleteExists {
                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
                 operator + "GlobalCodeRefAsScalar",
                 "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
+    private static void handleDefinedSubroutineCodeRef(EmitterVisitor emitterVisitor, RuntimeScalar codeRef) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        int codeRefId = GlobalVariable.registerCompiledCodeRef(codeRef);
+        mv.visitLdcInsn(codeRefId);
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "getCompiledCodeRef",
+                "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "definedGlobalCodeRefAsScalar",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }
