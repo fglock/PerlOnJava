@@ -26,7 +26,9 @@ PerlOnJava (`jcpan`). The data is used to:
 
 The `.dat` files are updated by the automated CPAN tester
 (`dev/tools/cpan_random_tester.pl` or similar). Do not edit them by hand
-unless correcting an obvious error — they are append-only logs.
+unless correcting an obvious error. The random tester serializes report
+updates with a lock, reloads current state before writing, and rewrites the
+files atomically so multiple tester instances can safely run at once.
 
 When a module's status changes (e.g. newly passing after a fix), update the
 corresponding per-module `.md` note as well.

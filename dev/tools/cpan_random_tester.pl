@@ -31,7 +31,7 @@
 #   - dev/cpan-reports/cpan-compatibility-pass.dat  (machine-readable pass list)
 #   - dev/cpan-reports/cpan-compatibility-fail.dat  (machine-readable fail list)
 #   - dev/cpan-reports/cpan-compatibility-skip.dat  (machine-readable skip list)
-#   - Per-module logs to /tmp/cpan_random_logs/
+#   - Per-module logs to /tmp/cpan_random_logs/<Run-ID>/
 #
 # Run with `perl` (not jperl) because this script uses fork.
 #
@@ -46,6 +46,7 @@ $| = 1;  # autoflush STDOUT so progress is visible when redirected to a file
 use File::Basename;
 use File::Spec;
 use File::Path qw(make_path);
+use Fcntl qw(:flock);
 use Getopt::Long;
 use IO::Select;
 use POSIX qw(strftime WNOHANG);
@@ -62,7 +63,10 @@ my $report_md    = File::Spec->catfile($report_dir, 'cpan-compatibility.md');
 my $pass_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-pass.dat');
 my $fail_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-fail.dat');
 my $skip_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-skip.dat');
-my $log_dir      = '/tmp/cpan_random_logs';
+my $report_lock  = File::Spec->catfile(File::Spec->tmpdir, report_lock_name($project_root));
+my $log_root     = '/tmp/cpan_random_logs';
+my $run_id       = strftime('%Y%m%d-%H%M%S', localtime) . "-$$";
+my $log_dir      = File::Spec->catdir($log_root, $run_id);
 my $KILL_AFTER          = 10;   # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 my $DEFAULT_MAX_RUNTIME = 5400; # 90 minutes — hard cap per target (install or test)
 my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memory
@@ -133,7 +137,6 @@ sub effective_timeout_for {
 # Setup
 # ──────────────────────────────────────────────────────────────────────
 make_path($report_dir) unless -d $report_dir;
-make_path($log_dir)    unless -d $log_dir;
 
 srand($seed) if defined $seed;
 
@@ -143,12 +146,16 @@ chomp $git_commit;
 $git_commit ||= 'unknown';
 
 # Load existing results
-my %pass_modules = load_dat($pass_dat);
-my %fail_modules = load_dat($fail_dat);
-my %skip_modules = load_dat($skip_dat);
+my (%pass_modules, %fail_modules, %skip_modules);
+with_report_lock(sub {
+    reload_report_state();
+});
 
 if ($report_only) {
-    generate_report();
+    with_report_lock(sub {
+        reload_report_state();
+        generate_report();
+    });
     print "Report updated: $report_md\n";
     exit 0;
 }
@@ -235,7 +242,10 @@ for my $i (0 .. scalar(@candidates) - 1) {
 
 if (!@candidates) {
     print "All modules have been tested! Use --report-only to regenerate the report.\n";
-    generate_report();
+    with_report_lock(sub {
+        reload_report_state();
+        generate_report();
+    });
     exit 0;
 }
 
@@ -257,6 +267,8 @@ if ($modules_arg) {
     @selected = @pool[0 .. $count - 1];
 }
 
+make_path($log_dir) unless -d $log_dir;
+
 printf "\nTesting %d randomly selected modules (soft timeout: %ds, activity grace: %ds, max runtime: %ds, jcpan jobs: %d, commit: %s):\n",
     scalar @selected, $timeout, $activity_grace, $max_runtime, $jcpan_jobs, $git_commit;
 if (%MODULE_TIMEOUT_SECONDS) {
@@ -270,6 +282,7 @@ print "=" x 70, "\n\n";
 # Test each module and harvest results for all deps too
 # ──────────────────────────────────────────────────────────────────────
 my $target_count = 0;
+my $selected_index = 0;
 my $new_pass     = 0;
 my $new_fail     = 0;
 my $new_skip     = 0;
@@ -278,11 +291,19 @@ my $regressed    = 0;   # PASS→FAIL transitions from explicit re-tests
 my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
 
 for my $module (@selected) {
+    $selected_index++;
+    my ($skip_target, $skip_reason) = should_skip_selected_module($module);
+    if ($skip_target) {
+        printf "[%d/%d] %s (%s; skipped)\n\n",
+            $selected_index, scalar @selected, $module, $skip_reason;
+        next;
+    }
+
     $target_count++;
     my $module_timeout = effective_timeout_for($module);
     my @cmd = jcpan_command_for($module);
     printf "[%d/%d] %s (soft timeout %ds, activity grace %ds)\n",
-        $target_count, scalar @selected, command_label(@cmd), $module_timeout, $activity_grace;
+        $selected_index, scalar @selected, command_label(@cmd), $module_timeout, $activity_grace;
 
     my $start = time();
     my $log_path = log_path_for($module);
@@ -326,101 +347,25 @@ for my $module (@selected) {
         }
     }
 
-    # Record each discovered module
-    for my $r (@all_results) {
-        my $mod = $r->{module};
-        next unless $mod;
-
-        $r->{date} = strftime('%Y-%m-%d', localtime);
-
-        if ($r->{status} eq 'PASS') {
-            $r->{git_commit} = $git_commit;
-            delete $skip_modules{$mod};
-
-            # Was it previously a FAIL? That's an upgrade.
-            if ($fail_modules{$mod}) {
-                delete $fail_modules{$mod};
-                $upgraded++;
-                printf "  ^ UPGRADE %-38s FAIL -> PASS", $mod;
-            } elsif ($pass_modules{$mod}) {
-                # Already known PASS — update date/commit silently
-                $pass_modules{$mod} = $r;
-                next;
-            } else {
-                $new_pass++;
-                printf "  + PASS    %-38s", $mod;
-            }
-            printf " (%s subtests)", $r->{tests} if $r->{tests};
-            print "\n";
-            $pass_modules{$mod} = $r;
-
-        } elsif ($r->{status} eq 'SKIP') {
-            delete $pass_modules{$mod};
-            delete $fail_modules{$mod};
-            if ($skip_modules{$mod}) {
-                $skip_modules{$mod} = $r;
-                next;
-            }
-            $skip_modules{$mod} = $r;
-            $new_skip++;
-            printf "  - SKIP    %-38s (%s)\n", $mod, $r->{reason} // '';
-
-        } else {
-            delete $skip_modules{$mod};
-            # Default runs can observe transient dependency failures while
-            # testing another target, so keep known PASS entries stable there.
-            # Explicit module/retest-age runs are intentional re-tests and
-            # should record regressions.
-            if ($pass_modules{$mod}) {
-                next unless $record_pass_regressions;
-
-                delete $pass_modules{$mod};
-                $fail_modules{$mod} = $r;
-                $regressed++;
-                printf "  ! REGRESS %-38s PASS -> FAIL", $mod;
-                if (my $counts = result_count_label($r)) {
-                    printf " (%s)", $counts;
-                }
-                if ($r->{error}) {
-                    my $err = $r->{error};
-                    $err = substr($err, 0, 45) . '...' if length($err) > 48;
-                    printf " [%s]", $err;
-                }
-                print "\n";
-                next;
-            }
-            # Already a known FAIL — update silently
-            if ($fail_modules{$mod}) {
-                $fail_modules{$mod} = $r;
-                next;
-            }
-            $new_fail++;
-            $fail_modules{$mod} = $r;
-            printf "  - FAIL    %-38s", $mod;
-            if (my $counts = result_count_label($r)) {
-                printf " (%s)", $counts;
-            }
-            if ($r->{error}) {
-                my $err = $r->{error};
-                $err = substr($err, 0, 45) . '...' if length($err) > 48;
-                printf " [%s]", $err;
-            }
-            print "\n";
-        }
-    }
+    my ($changes, $events) = persist_module_results(\@all_results, $record_pass_regressions);
+    $new_pass  += $changes->{new_pass};
+    $new_fail  += $changes->{new_fail};
+    $new_skip  += $changes->{new_skip};
+    $upgraded  += $changes->{upgraded};
+    $regressed += $changes->{regressed};
+    print "$_\n" for @$events;
 
     printf "  (%ss, %d modules in output)\n\n", $elapsed, scalar @all_results;
-
-    # Save after each target (crash-safe)
-    save_dat($pass_dat, \%pass_modules);
-    save_dat($fail_dat, \%fail_modules);
-    save_dat($skip_dat, \%skip_modules);
-    generate_report();  # keep .md in sync with .dat files
 }
 
 # ──────────────────────────────────────────────────────────────────────
 # Summary
 # ──────────────────────────────────────────────────────────────────────
+with_report_lock(sub {
+    reload_report_state();
+    generate_report();
+});
+
 print "=" x 70, "\n";
 printf "This run:   %d targets | +%d pass | +%d fail | +%d skip | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
     $target_count, $new_pass, $new_fail, $new_skip, $upgraded, $regressed;
@@ -429,7 +374,6 @@ printf "Cumulative: %d pass | %d fail | %d skip | %d total\n",
     scalar keys %skip_modules,
     scalar(keys %pass_modules) + scalar(keys %fail_modules) + scalar(keys %skip_modules);
 
-generate_report();
 print "\nReport: $report_md\n";
 print "Logs:   $log_dir/\n";
 
@@ -1362,6 +1306,212 @@ sub classify_output_error {
 # Persistent .dat file I/O
 # Format: module<TAB>status<TAB>tests<TAB>pass_count<TAB>error<TAB>date<TAB>reason<TAB>git_commit
 # ──────────────────────────────────────────────────────────────────────
+sub report_lock_name {
+    my ($root) = @_;
+    my $name = File::Spec->rel2abs($root);
+    $name =~ s/[^A-Za-z0-9_.-]+/_/g;
+    $name =~ s/^_+//;
+    $name = substr($name, -140) if length($name) > 140;
+    return "cpan-random-tester-$name.lock";
+}
+
+sub with_report_lock {
+    my ($code) = @_;
+    open my $lock_fh, '>>', $report_lock
+        or die "Cannot open report lock $report_lock: $!\n";
+    flock($lock_fh, LOCK_EX)
+        or die "Cannot lock report state $report_lock: $!\n";
+
+    my $ok = eval {
+        $code->();
+        1;
+    };
+    my $err = $@;
+
+    flock($lock_fh, LOCK_UN);
+    close $lock_fh;
+
+    die $err unless $ok;
+}
+
+sub reload_report_state {
+    %pass_modules = load_dat($pass_dat);
+    %fail_modules = load_dat($fail_dat);
+    %skip_modules = load_dat($skip_dat);
+}
+
+sub save_report_state {
+    save_dat($pass_dat, \%pass_modules);
+    save_dat($fail_dat, \%fail_modules);
+    save_dat($skip_dat, \%skip_modules);
+    generate_report();
+}
+
+sub persist_module_results {
+    my ($results, $record_pass_regressions) = @_;
+    my %changes = (
+        new_pass  => 0,
+        new_fail  => 0,
+        new_skip  => 0,
+        upgraded  => 0,
+        regressed => 0,
+    );
+    my @events;
+
+    with_report_lock(sub {
+        reload_report_state();
+
+        for my $raw (@$results) {
+            my $mod = $raw->{module};
+            next unless $mod;
+
+            my $r = { %$raw };
+            $r->{date} = strftime('%Y-%m-%d', localtime);
+
+            if (($r->{status} // '') eq 'PASS') {
+                $r->{git_commit} = $git_commit;
+                delete $skip_modules{$mod};
+
+                if ($fail_modules{$mod}) {
+                    delete $fail_modules{$mod};
+                    $changes{upgraded}++;
+                    my $line = sprintf "  ^ UPGRADE %-38s FAIL -> PASS", $mod;
+                    $line .= sprintf " (%s subtests)", $r->{tests} if $r->{tests};
+                    push @events, $line;
+                } elsif ($pass_modules{$mod}) {
+                    $pass_modules{$mod} = $r;
+                    next;
+                } else {
+                    $changes{new_pass}++;
+                    my $line = sprintf "  + PASS    %-38s", $mod;
+                    $line .= sprintf " (%s subtests)", $r->{tests} if $r->{tests};
+                    push @events, $line;
+                }
+                $pass_modules{$mod} = $r;
+
+            } elsif (($r->{status} // '') eq 'SKIP') {
+                delete $pass_modules{$mod};
+                delete $fail_modules{$mod};
+                if ($skip_modules{$mod}) {
+                    $skip_modules{$mod} = $r;
+                    next;
+                }
+                $skip_modules{$mod} = $r;
+                $changes{new_skip}++;
+                push @events, sprintf "  - SKIP    %-38s (%s)", $mod, $r->{reason} // '';
+
+            } else {
+                delete $skip_modules{$mod};
+
+                # Default runs can observe transient dependency failures while
+                # testing another target, so keep known PASS entries stable there.
+                # Explicit module/retest-age runs are intentional re-tests and
+                # should record regressions.
+                if ($pass_modules{$mod}) {
+                    next unless $record_pass_regressions;
+
+                    delete $pass_modules{$mod};
+                    $fail_modules{$mod} = $r;
+                    $changes{regressed}++;
+                    push @events, fail_event_line('  ! REGRESS', $mod, $r, 'PASS -> FAIL');
+                    next;
+                }
+
+                if ($fail_modules{$mod}) {
+                    $fail_modules{$mod} = $r;
+                    next;
+                }
+
+                $changes{new_fail}++;
+                $fail_modules{$mod} = $r;
+                push @events, fail_event_line('  - FAIL   ', $mod, $r, undef);
+            }
+        }
+
+        save_report_state();
+    });
+
+    return (\%changes, \@events);
+}
+
+sub fail_event_line {
+    my ($prefix, $mod, $r, $transition) = @_;
+    my $line = sprintf "%s %-38s", $prefix, $mod;
+    $line .= " $transition" if defined $transition;
+    if (my $counts = result_count_label($r)) {
+        $line .= " ($counts)";
+    }
+    if ($r->{error}) {
+        my $err = $r->{error};
+        $err = substr($err, 0, 45) . '...' if length($err) > 48;
+        $line .= " [$err]";
+    }
+    return $line;
+}
+
+sub should_skip_selected_module {
+    my ($module) = @_;
+    return (0, '') if $modules_arg ne '';
+
+    my $reason = '';
+    with_report_lock(sub {
+        reload_report_state();
+
+        if ($retest_age > 0) {
+            if (my $r = $skip_modules{$module}) {
+                $reason = 'already skipped by another instance';
+                return;
+            }
+
+            my $record = $pass_modules{$module} || $fail_modules{$module};
+            return unless $record;
+            my $date = $record->{date} // '';
+            return if !$date || $date le cutoff_date_for_days_ago($retest_age);
+
+            $reason = "already tested on $date by another instance";
+            return;
+        }
+
+        if ($pass_modules{$module}) {
+            $reason = 'already marked PASS by another instance';
+        } elsif ($skip_modules{$module}) {
+            $reason = 'already marked SKIP by another instance';
+        }
+    });
+
+    return ($reason ne '' ? 1 : 0, $reason);
+}
+
+sub write_file_atomic {
+    my ($file, $writer) = @_;
+    my ($volume, $dir, $base) = File::Spec->splitpath($file);
+    my $tmp = File::Spec->catpath(
+        $volume,
+        $dir,
+        ".$base.$$." . time() . "." . int(rand(1_000_000)) . ".tmp"
+    );
+
+    open my $fh, '>', $tmp or die "Cannot write $tmp: $!\n";
+    my $ok = eval {
+        $writer->($fh);
+        close $fh or die "Cannot close $tmp: $!\n";
+        1;
+    };
+    my $err = $@;
+
+    if (!$ok) {
+        close $fh if fileno($fh);
+        unlink $tmp;
+        die $err;
+    }
+
+    rename $tmp, $file or do {
+        my $rename_error = $!;
+        unlink $tmp;
+        die "Cannot replace $file with $tmp: $rename_error\n";
+    };
+}
+
 sub load_dat {
     my ($file) = @_;
     my %data;
@@ -1389,20 +1539,21 @@ sub load_dat {
 
 sub save_dat {
     my ($file, $data) = @_;
-    open my $fh, '>', $file or die "Cannot write $file: $!\n";
-    for my $mod (sort keys %$data) {
-        my $r = $data->{$mod};
-        printf $fh "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-            $mod,
-            $r->{status}     // '',
-            $r->{tests}      // '',
-            $r->{pass_count} // '',
-            $r->{error}      // '',
-            $r->{date}       // '',
-            $r->{reason}     // '',
-            $r->{git_commit} // '';
-    }
-    close $fh;
+    write_file_atomic($file, sub {
+        my ($fh) = @_;
+        for my $mod (sort keys %$data) {
+            my $r = $data->{$mod};
+            printf $fh "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+                $mod,
+                $r->{status}     // '',
+                $r->{tests}      // '',
+                $r->{pass_count} // '',
+                $r->{error}      // '',
+                $r->{date}       // '',
+                $r->{reason}     // '',
+                $r->{git_commit} // '';
+        }
+    });
 }
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1416,9 +1567,10 @@ sub generate_report {
     my $total      = $total_pass + $total_fail + $total_skip;
     my $pass_pct   = $total > 0 ? sprintf('%.1f', $total_pass / $total * 100) : '0.0';
 
-    open my $fh, '>', $report_md or die "Cannot write $report_md: $!\n";
+    write_file_atomic($report_md, sub {
+        my ($fh) = @_;
 
-    print $fh <<HEADER;
+        print $fh <<HEADER;
 # CPAN Module Compatibility Report for PerlOnJava
 
 > Auto-generated by `dev/tools/cpan_random_tester.pl` on $now
@@ -1438,65 +1590,65 @@ sub generate_report {
 
 HEADER
 
-    # ── Pass list ──
-    print $fh "## Modules That Pass All Tests\n\n";
-    if ($total_pass > 0) {
-        print $fh "| Module | Subtests | Date | Git Commit |\n";
-        print $fh "|--------|----------|------|------------|\n";
-        for my $mod (sort keys %pass_modules) {
-            my $r = $pass_modules{$mod};
-            my $tests  = defined $r->{tests} ? $r->{tests} : '-';
-            my $date   = $r->{date}       // '';
-            my $commit = $r->{git_commit} // '';
-            print $fh "| $mod | $tests | $date | $commit |\n";
+        # ── Pass list ──
+        print $fh "## Modules That Pass All Tests\n\n";
+        if ($total_pass > 0) {
+            print $fh "| Module | Subtests | Date | Git Commit |\n";
+            print $fh "|--------|----------|------|------------|\n";
+            for my $mod (sort keys %pass_modules) {
+                my $r = $pass_modules{$mod};
+                my $tests  = defined $r->{tests} ? $r->{tests} : '-';
+                my $date   = $r->{date}       // '';
+                my $commit = $r->{git_commit} // '';
+                print $fh "| $mod | $tests | $date | $commit |\n";
+            }
+        } else {
+            print $fh "_No modules have passed yet._\n";
         }
-    } else {
-        print $fh "_No modules have passed yet._\n";
-    }
-    print $fh "\n";
+        print $fh "\n";
 
-    # ── Fail list grouped by error type ──
-    print $fh "## Modules That Fail Tests\n\n";
-    if ($total_fail > 0) {
-        my %by_error;
-        for my $mod (sort keys %fail_modules) {
-            my $r = $fail_modules{$mod};
-            my $cat = categorize_error($r);
-            push @{$by_error{$cat}}, $r;
+        # ── Fail list grouped by error type ──
+        print $fh "## Modules That Fail Tests\n\n";
+        if ($total_fail > 0) {
+            my %by_error;
+            for my $mod (sort keys %fail_modules) {
+                my $r = $fail_modules{$mod};
+                my $cat = categorize_error($r);
+                push @{$by_error{$cat}}, $r;
+            }
+
+            for my $cat (sort keys %by_error) {
+                my @mods = @{$by_error{$cat}};
+                printf $fh "### %s (%d modules)\n\n", $cat, scalar @mods;
+                print $fh "| Module | Pass/Total | Error | Date |\n";
+                print $fh "|--------|-----------|-------|------|\n";
+                for my $r (sort { $a->{module} cmp $b->{module} } @mods) {
+                    my $tests = result_count_label($r) // '';
+                    my $error = $r->{error} // '';
+                    $error =~ s/\|/\\|/g;
+                    my $date = $r->{date} // '';
+                    print $fh "| $r->{module} | $tests | $error | $date |\n";
+                }
+                print $fh "\n";
+            }
+        } else {
+            print $fh "_No failures recorded yet._\n";
         }
 
-        for my $cat (sort keys %by_error) {
-            my @mods = @{$by_error{$cat}};
-            printf $fh "### %s (%d modules)\n\n", $cat, scalar @mods;
-            print $fh "| Module | Pass/Total | Error | Date |\n";
-            print $fh "|--------|-----------|-------|------|\n";
-            for my $r (sort { $a->{module} cmp $b->{module} } @mods) {
-                my $tests = result_count_label($r) // '';
-                my $error = $r->{error} // '';
-                $error =~ s/\|/\\|/g;
-                my $date = $r->{date} // '';
-                print $fh "| $r->{module} | $tests | $error | $date |\n";
+        # ── Skip list ──
+        if ($total_skip > 0) {
+            print $fh "## Skipped Modules\n\n";
+            print $fh "These modules were recognized as intentionally skipped by the tester.\n\n";
+            print $fh "| Module | Reason | Date |\n";
+            print $fh "|--------|--------|------|\n";
+            for my $mod (sort keys %skip_modules) {
+                my $r = $skip_modules{$mod};
+                print $fh "| $mod | $r->{reason} | $r->{date} |\n";
             }
             print $fh "\n";
         }
-    } else {
-        print $fh "_No failures recorded yet._\n";
-    }
 
-    # ── Skip list ──
-    if ($total_skip > 0) {
-        print $fh "## Skipped Modules\n\n";
-        print $fh "These modules were recognized as intentionally skipped by the tester.\n\n";
-        print $fh "| Module | Reason | Date |\n";
-        print $fh "|--------|--------|------|\n";
-        for my $mod (sort keys %skip_modules) {
-            my $r = $skip_modules{$mod};
-            print $fh "| $mod | $r->{reason} | $r->{date} |\n";
-        }
-        print $fh "\n";
-    }
-
-    print $fh <<FOOTER;
+        print $fh <<FOOTER;
 ## How to Reproduce
 
 ```bash
@@ -1524,10 +1676,9 @@ perl dev/tools/cpan_random_tester.pl --seed 42 --count 20
 - `dev/cpan-reports/cpan-compatibility-pass.dat` — Pass list (TSV, includes git commit)
 - `dev/cpan-reports/cpan-compatibility-fail.dat` — Fail list (TSV)
 - `dev/cpan-reports/cpan-compatibility-skip.dat` — Skip list (TSV)
-- `/tmp/cpan_random_logs/<Module-Name>.log` — Per-module test output
+- `/tmp/cpan_random_logs/<Run-ID>/<Module-Name>.log` — Per-module test output
 FOOTER
-
-    close $fh;
+    });
 }
 
 sub categorize_error {
@@ -1606,8 +1757,11 @@ Behavior:
     installed), the record is upgraded from FAIL to PASS.
   - PASS results include the git commit hash for regression bisecting.
   - Results accumulate across runs (never discarded).
-  - Multiple instances can run concurrently; random selection minimizes
-    duplicate work. Each instance updates .dat files after each target.
+  - Multiple instances can run concurrently. Report updates are protected
+    by a lock, reload the latest shared state before each write, and replace
+    files atomically so results from parallel runs are not lost.
+  - Random/default runs re-check each selected target before starting it and
+    skip targets another instance has already marked PASS or SKIP.
 
 Examples:
   perl dev/tools/cpan_random_tester.pl                   # 10 targets
@@ -1625,14 +1779,14 @@ Output:
   dev/cpan-reports/cpan-compatibility-pass.dat   Pass list (TSV)
   dev/cpan-reports/cpan-compatibility-fail.dat   Fail list (TSV)
   dev/cpan-reports/cpan-compatibility-skip.dat   Skip list (TSV)
-  /tmp/cpan_random_logs/                    Per-module logs
+  /tmp/cpan_random_logs/<Run-ID>/           Per-module logs
 
 Concurrent Execution:
   Yes, multiple instances can run simultaneously. They will:
   - Independently randomize which modules to test
-  - Each write results to the shared .dat files
-  - Minimize duplicate work (low probability of picking the same module)
-  - Share results across instances (each reads the latest .dat on startup)
+  - Lock, reload, merge, and atomically rewrite the shared report files
+  - Re-check random/default targets before starting to reduce duplicate work
+  - Write logs under separate run-specific directories
 
 USAGE
 }
