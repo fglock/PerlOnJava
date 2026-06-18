@@ -1144,6 +1144,17 @@ public class RuntimeIO extends RuntimeScalar {
             }
         }
 
+        if (runtimeScalar.type == RuntimeScalarType.REFERENCE
+                && runtimeScalar.value instanceof RuntimeScalar inner) {
+            while (inner.type == RuntimeScalarType.READONLY_SCALAR) {
+                inner = (RuntimeScalar) inner.value;
+            }
+            if (inner.type == RuntimeScalarType.GLOB
+                    || inner.type == RuntimeScalarType.GLOBREFERENCE) {
+                runtimeScalar = inner;
+            }
+        }
+
         if (runtimeScalar.isString()) {
             String name = runtimeScalar.toString();
             String packageName = "main";  // XXX TODO: get the current package name

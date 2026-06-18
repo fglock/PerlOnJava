@@ -1250,7 +1250,7 @@ public class ArgumentParser {
             for (String line : lines) {
                 if (perlCodeStarted) {
                     perlCode.append(line).append("\n");
-                } else if (line.trim().equals("#!perl")) {
+                } else if (line.trim().matches("^#!.*\\bperl\\b.*")) {
                     perlCodeStarted = true;
                 }
             }

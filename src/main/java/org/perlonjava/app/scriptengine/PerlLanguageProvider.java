@@ -283,6 +283,7 @@ public class PerlLanguageProvider {
 
         // Save the current scope so we can restore it after execution.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+        int savedCurrentScopeIndex = savedCurrentScope != null ? savedCurrentScope.currentScopeIndex() : -1;
 
         // Save and clear the eval runtime context (same reason as executePerlCode)
         RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
@@ -293,24 +294,12 @@ public class PerlLanguageProvider {
         globalSymbolTable.addVariable("this", "", null);
         globalSymbolTable.addVariable("@_", "our", null);
         globalSymbolTable.addVariable("wantarray", "", null);
+        int executionFlagScopeIndex = globalSymbolTable.currentScopeIndex();
 
-        // Inherit $^H (strictOptions) from the caller's scope so BEGIN blocks
-        // can see and modify the enclosing scope's compile-time hints
+        // Inherit lexical pragma flags from the caller's scope so BEGIN blocks
+        // can see and modify the enclosing scope's compile-time hints.
         if (savedCurrentScope != null) {
-            globalSymbolTable.setStrictOptions(savedCurrentScope.getStrictOptions());
-            // Inherit warning flags so ${^WARNING_BITS} returns correct values in BEGIN blocks
-            if (!savedCurrentScope.warningFlagsStack.isEmpty()) {
-                globalSymbolTable.warningFlagsStack.pop();
-                globalSymbolTable.warningFlagsStack.push((java.util.BitSet) savedCurrentScope.warningFlagsStack.peek().clone());
-            }
-            if (!savedCurrentScope.warningDisabledStack.isEmpty()) {
-                globalSymbolTable.warningDisabledStack.pop();
-                globalSymbolTable.warningDisabledStack.push((java.util.BitSet) savedCurrentScope.warningDisabledStack.peek().clone());
-            }
-            if (!savedCurrentScope.warningFatalStack.isEmpty()) {
-                globalSymbolTable.warningFatalStack.pop();
-                globalSymbolTable.warningFatalStack.push((java.util.BitSet) savedCurrentScope.warningFatalStack.peek().clone());
-            }
+            globalSymbolTable.copyFlagsFrom(savedCurrentScope, savedCurrentScopeIndex);
         }
 
         EmitterContext ctx = new EmitterContext(
@@ -346,12 +335,12 @@ public class PerlLanguageProvider {
 
             return executeCode(runtimeCode, ast, ctx, false, contextType);
         } finally {
-            // Propagate $^H changes back to the caller's scope so subsequent
-            // code in the same lexical block sees the updated hints
+            // Propagate pragma changes back to the caller's scope so subsequent
+            // code in the same lexical block sees BEGIN-time feature/warning hints.
             if (savedCurrentScope != null) {
-                savedCurrentScope.setStrictOptions(ctx.symbolTable.getStrictOptions());
+                savedCurrentScope.copyFlagsFrom(ctx.symbolTable, executionFlagScopeIndex);
                 // Also update per-call-site hints so caller()[8] and caller()[10] are correct
-                WarningBitsRegistry.setCallSiteHints(ctx.symbolTable.getStrictOptions());
+                WarningBitsRegistry.setCallSiteHints(savedCurrentScope.getStrictOptions());
                 WarningBitsRegistry.snapshotCurrentHintHash();
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }

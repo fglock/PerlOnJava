@@ -553,6 +553,19 @@ public class CompileOperator {
             // defined(&name) - use stash lookup to match JVM backend/Perl 5 behavior
             if (operand instanceof OperatorNode opNode && opNode.operator.equals("&")
                     && opNode.operand instanceof IdentifierNode idNode) {
+                if (opNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar) {
+                    bc.compileNode(opNode, -1, RuntimeContextType.SCALAR);
+                    int codeRefReg = bc.lastResultReg;
+                    int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+                    int rd = bc.allocateOutputRegister();
+                    bc.emit(Opcodes.DEFINED_CODE_DYNAMIC);
+                    bc.emitReg(rd);
+                    bc.emitReg(codeRefReg);
+                    bc.emit(pkgIdx);
+                    bc.lastResultReg = rd;
+                    return;
+                }
+
                 String subName = NameNormalizer.normalizeVariableName(
                         idNode.name, bc.getCurrentPackage());
                 int nameIdx = bc.addToStringPool(subName);

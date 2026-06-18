@@ -193,6 +193,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Thread-local stack tracking the context each active subroutine was called in.
+     * Perl exposes this as caller(EXPR)[5]: undef for void, false for scalar, true
+     * for list context.
+     */
+    private static final ThreadLocal<Deque<Integer>> callContextStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
      * Get the current subroutine's @_ array.
      * Used by Java-implemented functions (like List::Util::any) that need to pass
      * the caller's @_ to code blocks.
@@ -281,6 +289,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 args != null ? new java.util.ArrayList<>(args.elements) : new java.util.ArrayList<>());
     }
 
+    public static void pushCallContext(int callContext) {
+        callContextStack.get().push(callContext);
+    }
+
     /**
      * Pop @_ and hasargs flag from their respective stacks when exiting a subroutine.
      * Both stacks are pushed in the instance apply() methods and must be popped together.
@@ -298,6 +310,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<Boolean> haStack = hasArgsStack.get();
         if (!haStack.isEmpty()) {
             haStack.pop();
+        }
+        Deque<Integer> ctxStack = callContextStack.get();
+        if (!ctxStack.isEmpty()) {
+            ctxStack.pop();
         }
     }
 
@@ -343,6 +359,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             i++;
         }
         return null;
+    }
+
+    public static Integer getCallContextAt(int depth) {
+        Deque<Integer> stack = callContextStack.get();
+        int i = 0;
+        for (Integer callContext : stack) {
+            if (i == depth) return callContext;
+            i++;
+        }
+        return null;
+    }
+
+    private static RuntimeScalar callerWantarrayScalar(Integer callContext) {
+        if (callContext == null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
+        if (RuntimeContextType.isListLike(callContext)) {
+            return RuntimeScalarCache.scalarTrue;
+        }
+        if (callContext == RuntimeContextType.SCALAR || callContext == RuntimeContextType.LVALUE) {
+            return RuntimeScalarCache.scalarFalse;
+        }
+        return RuntimeScalarCache.scalarUndef;
     }
 
     /**
@@ -572,6 +611,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (holdBase.refCount > 0 && holdBase.refCount != Integer.MIN_VALUE && !holdBase.currentlyDestroying) {
             holdBase.refCount--;
         }
+    }
+
+    private static boolean isReferenceToGlobInvocant(RuntimeScalar invocant) {
+        if (invocant.type != REFERENCE || !(invocant.value instanceof RuntimeScalar inner)) {
+            return false;
+        }
+        while (inner.type == READONLY_SCALAR) {
+            inner = (RuntimeScalar) inner.value;
+        }
+        return inner.type == GLOB || inner.type == GLOBREFERENCE;
     }
 
     public static boolean isLvalueCode(RuntimeCode code) {
@@ -2891,7 +2940,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
             int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
-                if (invocant.type == GLOBREFERENCE) {
+                if (invocant.type == GLOBREFERENCE || isReferenceToGlobInvocant(invocant)) {
                     // Auto-bless file handler to IO::File which inherits from both IO::Handle and IO::Seekable
                     // This allows GLOBs to call methods like seek, tell, etc.
                     perlClassName = "IO::File";
@@ -3322,10 +3371,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     res.add(hasArgs ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
                 }
 
-                // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list
-                // We don't currently track this per-frame, so return undef
-                // TODO: Track call context per frame to return accurate wantarray
-                res.add(RuntimeScalarCache.scalarUndef);
+                // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list.
+                Integer frameCallContext = getCallContextAt(trackedOriginalFrame);
+                if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
+                    Integer activeCallContext = getCallContextAt(trackedActiveCodeFrame);
+                    if (activeCallContext != null) {
+                        frameCallContext = activeCallContext;
+                    }
+                } else if (frameCallContext == null && WarnDie.isInsideUnhandledDieHandler()) {
+                    frameCallContext = getCallContextAt(trackedActiveCodeFrame);
+                }
+                res.add(callerWantarrayScalar(frameCallContext));
 
                 // Add evaltext (element 6): The eval text if inside eval STRING
                 // For eval {...}, this is undef; for eval "...", this is the string
@@ -4770,6 +4826,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
+            pushCallContext(callContext);
             pushActiveCode(this);
 
             // hasArgs tracking for caller()[4]:
@@ -4898,6 +4955,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
+            pushCallContext(callContext);
             pushActiveCode(this);
 
             // hasArgs tracking for caller()[4]:
