@@ -42,7 +42,7 @@ perl dev/tools/cpan_random_tester.pl --report-only
 
 5. **Git commit tracking**: Every PASS records the git commit hash. If a future run detects a PASS→FAIL regression, you can bisect between the known-good commit and HEAD.
 
-6. **Crash-safe persistence**: Results are saved to `.dat` files after each target module, so partial runs are never lost.
+6. **Incremental/concurrent persistence**: Results are saved after each target. Shared report writes are lock-protected, merged with the latest `.dat` state, and replaced atomically so parallel tester instances do not drop each other's results.
 
 7. **Report**: A Markdown report is generated at `dev/cpan-reports/cpan-compatibility.md`.
 
@@ -55,7 +55,7 @@ perl dev/tools/cpan_random_tester.pl --report-only
 | `dev/cpan-reports/cpan-compatibility-pass.dat` | Pass list (TSV, includes git commit) |
 | `dev/cpan-reports/cpan-compatibility-fail.dat` | Fail list (TSV) |
 | `dev/cpan-reports/cpan-compatibility-skip.dat` | Skip list (TSV) |
-| `/tmp/cpan_random_logs/` | Per-module test output logs |
+| `/tmp/cpan_random_logs/<Run-ID>/` | Per-module test output logs |
 
 ## Workflow for Growing the Report
 
@@ -124,5 +124,5 @@ When a module transitions from PASS to FAIL:
 - Run with `perl` (not `jperl`) since the script uses `fork` and backticks.
 - The CPAN index must exist at `~/.cpan/sources/modules/02packages.details.txt.gz`. Run `./jcpan` once interactively if it's missing.
 - Use `--seed N` for reproducible random selection.
-- Logs for individual modules are in `/tmp/cpan_random_logs/<Module-Name>.log`.
+- Logs for individual modules are in `/tmp/cpan_random_logs/<Run-ID>/<Module-Name>.log`.
 - The existing `dev/tools/cpan_smoke_test.pl` tests a curated list of known modules. This script complements it by discovering new compatible modules from the full CPAN index.
