@@ -326,6 +326,25 @@ public class ArgumentParser {
             return;
         }
 
+        if (processPerlShebangSwitches(shebangLine, parsedArgs)) {
+            return;
+        }
+
+        // Alternate interpreter (perlrun): if there is no word "perl"/"indir", exec the named program.
+        // Example: Inline's TestML tests start with "#!inc/bin/testml-cpan".
+        String[] tokens = shebangLine.split("\\s+");
+        if (tokens.length == 0) {
+            return;
+        }
+        if (isPerlOnJavaExecutable(Paths.get(tokens[0]))) {
+            // Same binary as this runtime (e.g. "#!/path/to/jperl"): compile here; do not re-exec.
+            return;
+        }
+        List<String> cmd = buildShebangCommand(tokens);
+        delegateToShebangInterpreter(args, cmd, index);
+    }
+
+    private static boolean processPerlShebangSwitches(String shebangLine, CompilerOptions parsedArgs) {
         // perlrun: parsing of #! switches starts at a *word* "perl" or "indir".
         // Substrings like "jperl" must NOT match (matches stock perl behavior).
         Matcher perlWord = Pattern.compile("\\b(?:perl|indir)\\b", Pattern.CASE_INSENSITIVE).matcher(shebangLine);
@@ -348,21 +367,10 @@ public class ArgumentParser {
                     .filter(arg -> !arg.isEmpty())
                     .toArray(String[]::new);
             processArgs(nonEmptyArgs, parsedArgs);
-            return;
+            return true;
         }
 
-        // Alternate interpreter (perlrun): if there is no word "perl"/"indir", exec the named program.
-        // Example: Inline's TestML tests start with "#!inc/bin/testml-cpan".
-        String[] tokens = shebangLine.split("\\s+");
-        if (tokens.length == 0) {
-            return;
-        }
-        if (isPerlOnJavaExecutable(Paths.get(tokens[0]))) {
-            // Same binary as this runtime (e.g. "#!/path/to/jperl"): compile here; do not re-exec.
-            return;
-        }
-        List<String> cmd = buildShebangCommand(tokens);
-        delegateToShebangInterpreter(args, cmd, index);
+        return false;
     }
 
     /**
@@ -1242,6 +1250,10 @@ public class ArgumentParser {
 
         if (parsedArgs.discardLeadingGarbage) {
             // '-x' extract Perl code after discarding leading garbage
+            if ("-e".equals(parsedArgs.fileName)) {
+                System.err.println("No Perl script found in input");
+                System.exit(1);
+            }
             String fileContent = parsedArgs.code;
             String[] lines = fileContent.split("\n");
             boolean perlCodeStarted = false;
@@ -1250,8 +1262,12 @@ public class ArgumentParser {
             for (String line : lines) {
                 if (perlCodeStarted) {
                     perlCode.append(line).append("\n");
-                } else if (line.trim().matches("^#!.*\\bperl\\b.*")) {
-                    perlCodeStarted = true;
+                } else {
+                    String trimmedLine = line.trim();
+                    if (trimmedLine.startsWith("#!")
+                            && processPerlShebangSwitches(trimmedLine.substring(2).trim(), parsedArgs)) {
+                        perlCodeStarted = true;
+                    }
                 }
             }
 

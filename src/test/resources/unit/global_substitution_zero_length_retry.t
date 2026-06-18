@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 3;
+use Test::More tests => 5;
 
 my $s = 'abc';
 my $count = ($s =~ s{(.*?)(x)?}{'<' . (defined($1) ? $1 : 'undef') . '>'}ge);
@@ -23,3 +23,9 @@ $pattern =~ s{
 }gsex;
 
 is $pattern, 'trailing\ space', 'nullable s///g replacement sees skipped characters';
+
+my $lines = "ab\ncd\n";
+my $anchor_count = ($lines =~ s/^(.*)/[$1]/mg);
+
+is $anchor_count, 2, 's///g with regions does not treat region starts as ^ anchors';
+is $lines, "[ab]\n[cd]\n", 's///g with regions preserves multiline anchor semantics';

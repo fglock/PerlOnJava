@@ -1931,6 +1931,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return offset + Character.charCount(inputStr.codePointAt(offset));
     }
 
+    private static void setSubstitutionRegion(Matcher matcher, int start, int end, boolean transparentBounds) {
+        matcher.region(start, end);
+        // The substitution loop drives the matcher by changing regions. Keep
+        // ^/$ anchored to the real input, not to each artificial region start.
+        matcher.useAnchoringBounds(false);
+        // Lookbehind/lookahead assertions should still inspect the full input
+        // around the current search start, matching Perl's pos()-style scan.
+        matcher.useTransparentBounds(transparentBounds);
+    }
+
     private static void updateReplacementMatchState(RuntimeRegex regex, Matcher matcher,
                                                     String inputStr, RuntimeScalar string) {
         lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
@@ -2111,12 +2121,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // explicitly so nullable patterns like /(.*?)(x)?/g behave like Perl.
         try {
             while (searchStart <= inputStr.length()) {
-                matcher.region(searchStart, inputStr.length());
-                if (regex.useGAssertion) {
-                    // Same rationale as matchRegex: keep ^/$ from anchoring
-                    // at the artificial region boundary under /m.
-                    matcher.useAnchoringBounds(false);
-                }
+                setSubstitutionRegion(matcher, searchStart, inputStr.length(), true);
                 if (!matcher.find()) {
                     break;
                 }
@@ -2171,10 +2176,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 boolean consumedNonEmptyRetry = false;
                 if (nonEmptySubstitutionPattern != null && zeroLengthOffset <= inputStr.length()) {
                     Matcher retryMatcher = nonEmptySubstitutionPattern.matcher(matchInput);
-                    retryMatcher.region(zeroLengthOffset, inputStr.length());
-                    if (regex.useGAssertion) {
-                        retryMatcher.useAnchoringBounds(false);
-                    }
+                    // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
+                    // so a zero-length match at the region start is rejected.
+                    setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
                     if (retryMatcher.find()
                             && retryMatcher.start() == zeroLengthOffset
                             && retryMatcher.end() > zeroLengthOffset) {
