@@ -1,0 +1,41 @@
+--- SerialPort.pm.orig
++++ SerialPort.pm
+@@ -56,8 +56,39 @@ Exporter::export_ok_tags('STAT', 'PARAM');
+ $EXPORT_TAGS{ALL} = \@EXPORT_OK;
+ 
+ require XSLoader;
+-XSLoader::load('Device::SerialPort', $VERSION);
++my $xs_loaded = eval { XSLoader::load('Device::SerialPort', $VERSION); 1 };
++unless ($xs_loaded) {
++    package Device::SerialPort::Bits;
++    sub get_hash {
++        return {
++            _SC_CLK_TCK => POSIX::_SC_CLK_TCK(),
++            B0     => POSIX::B0(),
++            B50    => POSIX::B50(),
++            B75    => POSIX::B75(),
++            B110   => POSIX::B110(),
++            B134   => POSIX::B134(),
++            B150   => POSIX::B150(),
++            B200   => POSIX::B200(),
++            B300   => POSIX::B300(),
++            B600   => POSIX::B600(),
++            B1200  => POSIX::B1200(),
++            B1800  => POSIX::B1800(),
++            B2400  => POSIX::B2400(),
++            B4800  => POSIX::B4800(),
++            B9600  => POSIX::B9600(),
++            B19200 => POSIX::B19200(),
++            B38400 => POSIX::B38400(),
++            TIOCM_RTS => 0,
++            TIOCM_DTR => 0,
++            TIOCM_CTS => 0,
++            TIOCM_DSR => 0,
++            TIOCM_CD  => 0,
++            TIOCM_RI  => 0,
++        };
++    }
++    package Device::SerialPort;
++}
+ 
+ #### Package variable declarations ####

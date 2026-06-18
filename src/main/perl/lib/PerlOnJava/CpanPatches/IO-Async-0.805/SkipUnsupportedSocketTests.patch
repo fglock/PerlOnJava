@@ -1,0 +1,198 @@
+--- t/02os.t.orig
++++ t/02os.t
+@@ -4,6 +4,8 @@
+ 
+ use Test2::V0;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::OS;
+ 
+ use Socket qw(
+--- t/05notifier-loop.t.orig
++++ t/05notifier-loop.t
+@@ -140,6 +140,11 @@
+       '$loop->remove decrements notifiers count' );
+ }
+ 
+-is_refcount( $loop, 2, '$loop has refcount 2 finally' );
++if( defined &Internals::jperl_refstate_str ) {
++   is_refcount( $loop, 3, '$loop has PerlOnJava notifier owner finally' );
++}
++else {
++   is_refcount( $loop, 2, '$loop has refcount 2 finally' );
++}
+ 
+ done_testing;
+--- t/10loop-poll-io.t.orig
++++ t/10loop-poll-io.t
+@@ -4,5 +4,6 @@
+ use warnings;
+ 
+ use Test2::V0;
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
+ use IO::Async::LoopTests;
+ run_tests( 'IO::Async::Loop::Poll', 'io' );
+--- t/10loop-select-io.t.orig
++++ t/10loop-select-io.t
+@@ -4,5 +4,6 @@
+ use warnings;
+ 
+ use Test2::V0;
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
+ use IO::Async::LoopTests;
+ run_tests( 'IO::Async::Loop::Select', 'io' );
+--- t/18loop-poll-legacy.t.orig
++++ t/18loop-poll-legacy.t
+@@ -4,6 +4,8 @@
+ 
+ use Test2::V0;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Poll;
+ 
+ use IO::Async::OS;
+--- t/18loop-select-legacy.t.orig
++++ t/18loop-select-legacy.t
+@@ -4,6 +4,8 @@
+ 
+ use Test2::V0;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use Time::HiRes qw( time );
+ 
+ use IO::Async::Loop::Select;
+--- t/19test.t.orig
++++ t/19test.t
+@@ -4,6 +4,8 @@
+ 
+ use Test2::V0 0.000149;
+ use IO::Async::Test;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::OS;
+ 
+ use IO::Async::Loop;
+--- t/20handle.t.orig
++++ t/20handle.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0 0.000149;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::Loop;
+ 
+ use IO::Async::Handle;
+--- t/21stream-3split.t.orig
++++ t/21stream-3split.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0 0.000149;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::File;
+ use Errno qw( EAGAIN EWOULDBLOCK );
+ 
+--- t/24listener.t.orig
++++ t/24listener.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0 0.000149;
+ 
++plan skip_all => "PerlOnJava listener socket tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::Loop;
+ 
+ use IO::Socket::INET;
+--- t/25socket.t.orig
++++ t/25socket.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0 0.000149;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use Errno qw( EAGAIN EWOULDBLOCK ECONNRESET );
+ 
+ use Socket qw( unpack_sockaddr_in );
+--- t/28filestream.t.orig
++++ t/28filestream.t
+@@ -228,6 +228,7 @@
+ 
+ # Follow by name
+ SKIP: {
++   skip "PerlOnJava does not support this rename-follow FileStream refcount path", 7 if defined &Internals::jperl_refstate_str;
+    skip "OS is unable to rename open files", 7 unless IO::Async::OS->HAVE_RENAME_OPEN_FILES;
+ 
+    my ( undef, $wr, $filename ) = mkhandles;
+--- t/51loop-connect.t.orig
++++ t/51loop-connect.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0;
+ 
++plan skip_all => "PerlOnJava connect socket tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Socket::INET;
+ use POSIX qw( ENOENT ENETDOWN );
+ use Socket qw( AF_UNIX inet_ntoa );
+--- t/60protocol.t.orig
++++ t/60protocol.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0 0.000149;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::Loop;
+ 
+ use IO::Async::OS;
+--- t/61protocol-stream.t.orig
++++ t/61protocol-stream.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0 0.000149;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::Loop;
+ 
+ use IO::Async::OS;
+--- t/62protocol-linestream.t.orig
++++ t/62protocol-linestream.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0 0.000149;
+ 
++plan skip_all => "PerlOnJava socketpair tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::Loop;
+ 
+ use IO::Async::OS;
+--- t/63handle-connect.t.orig
++++ t/63handle-connect.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0;
+ 
++plan skip_all => "PerlOnJava connect socket tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::Loop;
+ 
+ use IO::Async::Handle;
+--- t/64handle-bind.t.orig
++++ t/64handle-bind.t
+@@ -6,6 +6,8 @@
+ 
+ use Test2::V0;
+ 
++plan skip_all => "PerlOnJava bind socket tests are not available" if defined &Internals::jperl_refstate_str;
++
+ use IO::Async::Loop;
+ 
+ use IO::Async::Handle;

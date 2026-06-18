@@ -110,6 +110,18 @@ public class WarnDie {
         return pkg + "::" + code.subName;
     }
 
+    private static void writeWarningToStderr(String message) {
+        RuntimeIO stderrIO = getGlobalIO("main::STDERR").getRuntimeIO();
+        if (stderrIO == null) {
+            stderrIO = RuntimeIO.stderr;
+        }
+        if (stderrIO != null) {
+            stderrIO.write(message);
+        } else {
+            System.err.print(message);
+        }
+    }
+
     public static RuntimeException maybeInvokeUnhandledDieHandler(RuntimeException e) {
         Throwable unwrapped = unwrapException(e);
         if (unwrapped instanceof PerlDieException || unwrapped instanceof PerlExitException) {
@@ -349,9 +361,7 @@ public class WarnDie {
             return new RuntimeScalar(1);
         }
 
-        // Get the RuntimeIO for STDERR and write the message
-        RuntimeIO stderrIO = getGlobalIO("main::STDERR").getRuntimeIO();
-        stderrIO.write(finalMessage.toString());
+        writeWarningToStderr(finalMessage.toString());
 
         return new RuntimeScalar(1);  // Perl's warn() always returns 1
     }

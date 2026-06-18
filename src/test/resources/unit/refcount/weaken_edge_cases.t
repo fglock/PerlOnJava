@@ -181,6 +181,18 @@ SKIP: {
     ok(defined($ok), "weaken on undef doesn't crash (may warn or no-op)");
 }
 
+# --- Weak ref to a sub-return temporary inside a sub ---
+{
+    sub WE_return_scalar { return 42 }
+    sub WE_weaken_return_scalar_ref {
+        my $ref = \(WE_return_scalar());
+        weaken($ref);
+        return defined($ref) ? "defined" : "undef";
+    }
+    is(WE_weaken_return_scalar_ref(), "undef",
+        "weak ref to sub-return temporary clears inside sub");
+}
+
 # --- Weak ref to same object from different code paths ---
 {
     my @log;

@@ -1070,6 +1070,9 @@ public class MortalList {
         // Those paths depend on weak-refed intermediate state staying
         // defined until the init completes.
         if (ModuleInitGuard.inModuleInit()) return;
+        // Sweeps must stay out of nested calls. Active call frames can hold
+        // temporaries and closure metadata through JVM locals that are not
+        // complete Perl-visible walker roots yet.
         if (RuntimeCode.argsStackDepth() > 1) return;
         if (hasTemporaryRoots()) return;
         if (!FORCE_SWEEP_EVERY_FLUSH && !immediateSweep) {
@@ -1103,6 +1106,12 @@ public class MortalList {
 
     private static void maybeAutoSweepIfRequested() {
         if (immediateWeakSweepRequested) {
+            maybeAutoSweep();
+        }
+    }
+
+    private static void maybeAutoSweepAtStatementBoundary(boolean topLevel) {
+        if (topLevel) {
             maybeAutoSweep();
         }
     }
@@ -1199,18 +1208,14 @@ public class MortalList {
         boolean topLevel = marks.isEmpty();
         if (pending.isEmpty() && pendingTiedReleases.isEmpty()) {
             processReadyDeferredCaptures();
-            if (topLevel) {
-                maybeAutoSweep();
-            }
+            maybeAutoSweepAtStatementBoundary(topLevel);
             return;
         }
         int mark = marks.isEmpty() ? 0 : marks.getLast();
         int tiedMark = tiedReleaseMarks.isEmpty() ? 0 : tiedReleaseMarks.getLast();
         if (pending.size() <= mark && pendingTiedReleases.size() <= tiedMark) {
             processReadyDeferredCaptures();
-            if (topLevel) {
-                maybeAutoSweep();
-            }
+            maybeAutoSweepAtStatementBoundary(topLevel);
             return;
         }
         invalidateDrainReachabilityCaches();
@@ -1229,9 +1234,7 @@ public class MortalList {
             invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures();
-        if (topLevel) {
-            maybeAutoSweep();
-        }
+        maybeAutoSweepAtStatementBoundary(topLevel);
     }
 
     /**

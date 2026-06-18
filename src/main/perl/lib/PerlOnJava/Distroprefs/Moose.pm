@@ -65,13 +65,33 @@ sub _touch_makefile {
 # 'PerlOnJava::Distroprefs::Moose::noop()'`.
 sub noop { 0 }
 
-# Run upstream Moose t/ with prove+jperl, but always exit 0 so CPAN.pm records
-# the test phase as OK. The Moose-as-Moo shim is not full upstream Moose; many
-# .t files are expected to fail (see dev/modules/moose_support.md). This mirrors
-# the PERLONJAVA_TEST_IGNORE_FAILURES path for EU::MM dists, but for prove.
+my @SMOKE_TESTS = qw(
+  t/000_load.t
+  t/basics/basic_class_setup.t
+  t/basics/buildargs.t
+  t/basics/create.t
+  t/basics/methods.t
+  t/basics/destruction.t
+  t/attributes/attribute_accessor_generation.t
+  t/attributes/attribute_lazy_initializer.t
+  t/attributes/attribute_required.t
+  t/attributes/attribute_triggers.t
+  t/bugs/DEMOLISHALL.t
+  t/bugs/moo_delegation.t
+  t/examples/example1.t
+);
+
+# Run a bounded upstream Moose smoke set with prove+jperl, but always exit 0 so
+# CPAN.pm records the test phase as OK. The Moose-as-Moo shim is not full
+# upstream Moose; many .t files are expected to fail (see
+# dev/modules/moose_support.md). Set PERLONJAVA_MOOSE_FULL_TESTS=1 to run the
+# full upstream t/ tree manually.
 sub test_phase {
     my $exec = $ENV{JPERL_BIN} || $ENV{PERLONJAVA_EXECUTABLE} || 'jperl';
-    my @cmd  = ( 'prove', '--exec', $exec, '-r', 't/' );
+    my @tests = grep { -f $_ } @SMOKE_TESTS;
+    my @cmd = $ENV{PERLONJAVA_MOOSE_FULL_TESTS}
+        ? ( 'prove', '--exec', $exec, '-r', 't/' )
+        : ( 'prove', '--exec', $exec, @tests );
     print "PerlOnJava::Distroprefs::Moose: running @cmd (failures ignored for distropref)\n";
     my $rc = system(@cmd);
     if ( $rc == -1 ) {

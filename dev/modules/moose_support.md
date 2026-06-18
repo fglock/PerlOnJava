@@ -304,7 +304,9 @@ through helper subs `Moose::Exporter::_set_flag`/`_get_flag`.
   path doesn't kick in (also done by the same helper);
 - skips `make` and `install` (`PerlOnJava::Distroprefs::Moose::noop`,
   cross-platform replacement for POSIX `true`);
-- runs `prove --exec jperl -r t/` against the unpacked tarball.
+- runs a bounded smoke set with `prove --exec jperl` against the unpacked
+  tarball. Set `PERLONJAVA_MOOSE_FULL_TESTS=1` to run the full upstream
+  `t/` tree manually.
 
 `jcpan` / `jcpan.bat` prepend the project directory to `PATH` so
 shell-spawned subprocesses (CPAN's distroprefs commandlines, prove's
@@ -325,13 +327,16 @@ helper installs only `Moo`, the real runtime dependency of the shim.
 
 Because `prove --exec` invokes `jperl` per test file without adding
 `lib/` or `blib/lib/` to `@INC`, the **bundled shim from the jar** wins
-over the unpacked upstream `lib/Moose.pm`. So you can run the entire
-upstream suite end-to-end and see honestly which tests pass, without
-patching Moose's `Makefile.PL` or shipping a fragile diff.
+over the unpacked upstream `lib/Moose.pm`. The default smoke set keeps
+`jcpan -t Moose` inside the random tester timeout while still exercising
+the shim's common surfaces. The full upstream suite remains available for
+baseline collection with `PERLONJAVA_MOOSE_FULL_TESTS=1`, without patching
+Moose's `Makefile.PL` or shipping a fragile diff.
 
 The same recipe is the model for any future "test against shim, don't
 install" scenario — define a distroprefs entry that overrides `pl` /
-`make` / `install` with no-ops and `test` with a `prove --exec` line.
+`make` / `install` with no-ops and `test` with a bounded `prove --exec`
+line plus an opt-in full-suite mode.
 
 ### Quick-path baseline (Moose 2.4000)
 

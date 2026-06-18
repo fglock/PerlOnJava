@@ -889,6 +889,10 @@ public class RegexPreprocessorHelper {
                         afterCaret = false;
                         wasEscape = true;
                         break;
+                    } else if (s.codePointAt(offset) == 'Q' || s.codePointAt(offset) == 'E') {
+                        warnUnrecognizedCharacterClassEscape((char) s.codePointAt(offset));
+                        sb.append(Character.toChars(s.codePointAt(offset)));
+                        lastChar = s.codePointAt(offset);
                     } else {
                         int c2 = s.codePointAt(offset);
                         if (c2 >= '0' && c2 <= '7') {
@@ -1035,6 +1039,18 @@ public class RegexPreprocessorHelper {
             offset++;
         }
         return offset;
+    }
+
+    private static void warnUnrecognizedCharacterClassEscape(char escape) {
+        String message = "Unrecognized escape \\" + escape + " in character class passed through in regex";
+        RegexPreprocessor.recordWarningOnUse(message);
+        if (!RegexPreprocessor.shouldEmitWarnings()) {
+            return;
+        }
+        WarnDie.warnWithCategory(
+                new RuntimeScalar(message),
+                new RuntimeScalar(""),
+                "regexp");
     }
 
     static int handleFlagModifiers(String s, int offset, StringBuilder sb, RegexFlags regexFlags) {

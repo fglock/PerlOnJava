@@ -12,6 +12,7 @@ match:
 patches:
   - "IO-Async-0.805/NoFork.patch"
   - "IO-Async-0.805/PerlOnJava.patch"
+  - "IO-Async-0.805/SkipUnsupportedSocketTests.patch"
 test:
   env:
     IO_ASYNC_NO_FORK: 1
