@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 public class DataDumper extends PerlModuleBase {
 
@@ -22,6 +23,7 @@ public class DataDumper extends PerlModuleBase {
         DataDumper dataDumper = new DataDumper();
         try {
             dataDumper.registerMethod("Dumpxs", null);
+            dataDumper.registerMethod("_perlonjava_numified_safe_decimal", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Data::Dumper method: " + e.getMessage());
         }
@@ -39,5 +41,12 @@ public class DataDumper extends PerlModuleBase {
     public static RuntimeList Dumpxs(RuntimeArray args, int ctx) {
         return RuntimeCode.apply(
                 GlobalVariable.getGlobalCodeRef("Data::Dumper::Dumpperl"), args, ctx);
+    }
+
+    public static RuntimeList _perlonjava_numified_safe_decimal(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalStateException("Bad number of arguments for _perlonjava_numified_safe_decimal() method");
+        }
+        return new RuntimeScalar(args.get(0).isDataDumperNumifiedSafeDecimal()).getList();
     }
 }
