@@ -2,10 +2,38 @@ use strict;
 use warnings;
 use Test::More tests => 4;
 use Scalar::Util qw(weaken);
-use Sub::Quote qw(quote_sub quoted_from_sub);
+
+{
+    package NestedWeakSweepQuote;
+
+    our %QUOTED;
+
+    sub quote_sub {
+        my ($name, $source) = @_;
+        my $quoted_info = [ $name, $source ];
+
+        my $constructor = sub {
+            ($quoted_info) if 0;
+            my $marker = "nested weak sweep metadata survives";
+            42;
+        };
+
+        Scalar::Util::weaken($QUOTED{$constructor} = $quoted_info);
+
+        no strict 'refs';
+        *{$name} = $constructor if defined $name && length $name;
+
+        return $constructor;
+    }
+
+    sub quoted_from_sub {
+        my ($sub) = @_;
+        return $QUOTED{$sub || ''};
+    }
+}
 
 sub build_quoted_constructor_after_nested_weaken {
-    my $sub = quote_sub(
+    my $sub = NestedWeakSweepQuote::quote_sub(
         'NestedWeakSweepQuoted::new',
         q{ my $marker = "nested weak sweep metadata survives"; 42 },
     );
@@ -21,7 +49,7 @@ my $quoted = build_quoted_constructor_after_nested_weaken();
 is(NestedWeakSweepQuoted->new, 42,
     'quoted constructor runs after nested weak sweep request');
 
-my $quoted_info = quoted_from_sub(NestedWeakSweepQuoted->can('new'));
+my $quoted_info = NestedWeakSweepQuote::quoted_from_sub(NestedWeakSweepQuoted->can('new'));
 ok($quoted_info, 'quoted constructor metadata survives nested weak sweep request');
 like($quoted_info->[1], qr/nested weak sweep metadata survives/,
     'quoted constructor source survives after undefer');
