@@ -521,18 +521,43 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (scalar.type == READONLY_SCALAR) {
             scalar = (RuntimeScalar) scalar.value;
         }
-        if (scalar.type != INTEGER && scalar.type != DOUBLE
-                && (!scalar.numericContextSeen || !(scalar.type == STRING || scalar.type == BYTE_STRING))) {
+
+        // If the scalar is stored as a number (like Perl5's IOK/NOK flags),
+        // it should be dumped as a number
+        if (scalar.type == INTEGER || scalar.type == DOUBLE) {
+            return true;
+        }
+
+        // For strings, only dump as number if they've been numified
+        // and look like a safe decimal (matching Data::Dumper's behavior)
+        if (!scalar.numericContextSeen || !(scalar.type == STRING || scalar.type == BYTE_STRING)) {
             return false;
         }
+
+        // Check if the string representation is a safe decimal number
+        // This matches any integer that can be safely represented
         String s = scalar.toString();
-        if (s.length() != 10) return false;
-        char first = s.charAt(0);
+        if (s.isEmpty()) return false;
+
+        int start = 0;
+        if (s.charAt(0) == '-') {
+            if (s.length() == 1) return false;
+            start = 1;
+        }
+
+        // First digit must be non-zero (except for "0" itself)
+        char first = s.charAt(start);
+        if (first == '0') {
+            return s.length() == start + 1; // Only "0" or "-0"
+        }
         if (first < '1' || first > '9') return false;
-        for (int i = 1; i < s.length(); i++) {
+
+        // All remaining characters must be digits
+        for (int i = start + 1; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c < '0' || c > '9') return false;
         }
+
         return true;
     }
 
