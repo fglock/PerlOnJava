@@ -588,6 +588,7 @@ imports:
   # From core distribution (has built-in pure Perl fallback when XS unavailable)
   - source: perl5/dist/Data-Dumper/Dumper.pm
     target: src/main/perl/lib/Data/Dumper.pm
+    patch: Data-Dumper.pm.patch
 
   # Tests for distribution
   - source: perl5/dist/Data-Dumper/t
