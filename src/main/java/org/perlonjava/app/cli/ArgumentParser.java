@@ -9,6 +9,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1405,6 +1406,13 @@ public class ArgumentParser {
      * @param parsedArgs The CompilerOptions object to configure.
      */
     private static void processRudimentarySwitch(String arg, CompilerOptions parsedArgs) {
+        // PerlOnJava carries raw process-argument bytes in the corresponding
+        // Latin-1 code points. -CA asks Perl to decode those bytes as UTF-8;
+        // without it, the byte-oriented representation must remain unchanged.
+        if (parsedArgs.unicodeArgs) {
+            arg = new String(arg.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+        }
+
         String varName;
         String varValue = "1"; // Default value
 
@@ -1434,12 +1442,34 @@ public class ArgumentParser {
         if (parsedArgs.rudimentarySwitchAssignments == null) {
             parsedArgs.rudimentarySwitchAssignments = new StringBuilder();
         }
-        parsedArgs.rudimentarySwitchAssignments
-                .append("$main::")
-                .append(varName)
-                .append(" = '")
-                .append(varValue.replace("'", "\\'"))
-                .append("';\n");
+        if (varName.codePoints().anyMatch(codePoint -> codePoint > 0x7f)) {
+            parsedArgs.rudimentarySwitchAssignments
+                    .append("${")
+                    .append(toPerlHexString("main::" + varName))
+                    .append("}");
+        } else {
+            parsedArgs.rudimentarySwitchAssignments.append("$main::").append(varName);
+        }
+
+        parsedArgs.rudimentarySwitchAssignments.append(" = ");
+        if (varValue.codePoints().anyMatch(codePoint -> codePoint > 0x7f)) {
+            parsedArgs.rudimentarySwitchAssignments.append(toPerlHexString(varValue));
+        } else {
+            parsedArgs.rudimentarySwitchAssignments
+                    .append("'")
+                    .append(varValue.replace("'", "\\'"))
+                    .append("'");
+        }
+        parsedArgs.rudimentarySwitchAssignments.append(";\n");
+    }
+
+    private static String toPerlHexString(String value) {
+        StringBuilder expression = new StringBuilder("qq(");
+        value.codePoints().forEach(codePoint -> expression
+                .append("\\x{")
+                .append(Integer.toHexString(codePoint))
+                .append("}"));
+        return expression.append(")").toString();
     }
 
     private static void processRudimentarySwitchArguments(String[] args, CompilerOptions parsedArgs, int startIndex) {
