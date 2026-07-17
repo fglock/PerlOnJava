@@ -40,7 +40,7 @@ cd PerlOnJava
 make
 ```
 
-The `make` command builds the project and runs all unit tests. The complete build with tests typically completes in ~30 seconds.
+The `make` command builds the runnable JAR and runs the fast unit test suite.
 
 **Build troubleshooting:**
 
@@ -67,7 +67,8 @@ make clean
 make
 ```
 
-The project uses Gradle 9.0+ (configured in the wrapper) which supports Java 22-25+.
+Use the Gradle version configured in `gradle/wrapper/gradle-wrapper.properties`;
+the checked-in wrapper is kept aligned with the project's JDK requirement.
 </details>
 
 For more troubleshooting: See [Installation Guide](docs/getting-started/installation.md#troubleshooting)

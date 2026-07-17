@@ -4,7 +4,7 @@ use Test::More;
 use File::Temp qw(tempfile);
 
 my $skip_launcher = $^O eq 'MSWin32'
-    || ($^X eq 'jperl' && !-f 'target/perlonjava-5.42.0.jar');
+    || ($^X eq 'jperl' && !-f 'target/perlonjava-5.44.0.jar');
 
 sub run_interpreter_child {
     my ($code) = @_;

@@ -13,17 +13,16 @@
 - GitHub Discussions: General questions and community interaction
 - Stack Overflow: Use the tags `perl` and eventually `perlonjava`
 
-## Long-term Support
+## Version Support
 
-PerlOnJava follows semantic versioning (MAJOR.MINOR.PATCH):
-- Major versions (X.0.0): Significant features or breaking changes
-- Minor versions (X.Y.0): New features and enhancements
-- Patch versions (X.Y.Z): Bug fixes and minor improvements
+PerlOnJava version numbers track the compatible Perl language version. For
+example, PerlOnJava 5.44.0 targets Perl 5.44, and later patch releases use the
+final component for PerlOnJava fixes.
 
-### Version Support Timeline
-- Current stable version receives regular updates and bug fixes
-- Previous major version receives security updates for 12 months
-- LTS versions are marked explicitly and supported for 24 months
+The project does not currently publish a formal LTS or fixed-duration support
+policy. Bug fixes and security updates target the current development and
+release branches; see the [Security Policy](../../SECURITY.md) for reporting a
+vulnerability.
 
 ## Contributing Guidelines
 
@@ -70,17 +69,9 @@ Include:
 
 ## Release Process
 
-### Release Channels
-- Main: Stable releases
-- Development: Preview features
-- LTS: Long-term support versions
-
-### Version Lifecycle
-1. Development in feature branches
-2. Integration into development branch
-3. Testing and documentation
-4. Release candidate
-5. Stable release
+Changes are developed on feature branches, reviewed through pull requests, and
+merged after testing. Release notes are maintained in the
+[Changelog](changelog.md).
 
 ## Security
 

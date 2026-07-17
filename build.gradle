@@ -69,7 +69,7 @@ tasks.buildDeb {
 
 // Project metadata
 group = 'org.perlonjava'
-version = '5.42.0'
+version = '5.44.0'
 
 // CycloneDX SBOM generation configuration
 cyclonedxBom {

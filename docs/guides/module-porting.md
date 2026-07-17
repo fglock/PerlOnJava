@@ -164,8 +164,7 @@ This is transparent to users — they just `use Module::Name` and it works.
 ### Build and Test
 
 ```bash
-make dev    # Quick build (no tests) — for iteration
-make        # Full build + all unit tests — before committing
+make        # Build and run the fast unit suite
 ./jperl -e 'use Module::Name; ...'   # Quick smoke test
 ```
 
@@ -212,7 +211,6 @@ To add tests for a new bundled module:
 - [ ] Preserve original author/copyright attribution
 - [ ] Register all methods in `initialize()`
 - [ ] Create `src/test/resources/module/Module-Name/t/` with test files
-- [ ] `make dev` compiles without errors
 - [ ] Compare output with system Perl
 - [ ] `make` passes all unit tests
 - [ ] `make test-bundled-modules` passes module-specific tests
@@ -515,7 +513,6 @@ Files:
 Create test files in `src/test/resources/` for bundled modules:
 
 ```bash
-make dev                          # Quick build
 ./jperl src/test/resources/module_name.t
 make                              # Full build + all tests
 ```

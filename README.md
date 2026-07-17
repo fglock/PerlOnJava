@@ -16,7 +16,7 @@ PerlOnJava compiles Perl to JVM bytecode — run existing Perl scripts on any pl
 - **Install more with jcpan** — [pure-Perl CPAN modules](docs/guides/using-cpan-modules.md) work out of the box
 - **JDBC database access** — [PostgreSQL, MySQL, SQLite, Oracle](docs/guides/database-access.md) via standard JDBC drivers
 - **Embed in Java apps** — [JSR-223 ScriptEngine](docs/guides/java-integration.md) integration
-- **Perl 5.42 language compatibility** — [see feature matrix](docs/reference/feature-matrix.md)
+- **Perl 5.44 language compatibility** — [see feature matrix](docs/reference/feature-matrix.md)
 
 ## Quick Start
 

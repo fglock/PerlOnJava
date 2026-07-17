@@ -24,8 +24,8 @@
 10. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
-- Java 22 or higher (Java 22, 23, 24, 25+ are all supported)
-- Maven or Gradle (Gradle wrapper included - recommended)
+- JDK 22 or later
+- Maven, or the included Gradle wrapper (recommended)
 - Optional: JDBC drivers for database connectivity
 
 ## Build Options
@@ -36,7 +36,6 @@ The project includes a Makefile that wraps Gradle commands for a familiar build 
 ```bash
 make          # same as 'make build'
 make build    # builds the project and runs unit tests
-make dev      # force clean rebuild (use during active development)
 make test     # runs fast unit tests
 make clean    # cleans build artifacts
 make deb      # creates a Debian package (Linux only)
@@ -64,8 +63,8 @@ make deb
 ```
 
 This creates a Debian package in `build/distributions/` with:
-- PerlOnJava JAR installed to `/usr/share/perlonjava/`
-- `jperl` command installed to `/usr/bin/`
+- PerlOnJava installed under `/opt/perlonjava/`
+- `jperl`, `jcpan`, `jperldoc`, and `jprove` linked into `/usr/local/bin/`
 - All dependencies bundled
 - Systemwide availability
 
@@ -128,7 +127,7 @@ jperl myscript.pl
 
 1. Using Configure.pl:
 ```bash
-./jperl Configure.pl --search mysql-connector-java
+./Configure.pl --search mysql-connector-java
 ```
 
 2. Using Java classpath (shown in platform-specific examples above)
@@ -149,7 +148,7 @@ See [Database Access Guide](../guides/database-access.md) for detailed connectio
 
 ## Build Notes
 - Maven builds use `maven-shade-plugin` for creating the shaded JAR
-- Gradle builds use `com.github.johnrengelman.shadow` plugin
+- Gradle builds use the Shadow plugin
 - Both configurations target Java 22
 
 ## Java Library Upgrades
@@ -166,37 +165,37 @@ See [Database Access Guide](../guides/database-access.md) for detailed connectio
 
 The `Configure.pl` script manages configuration settings and dependencies for PerlOnJava.
 
-> **Tip:** Using `./jperl` to run Configure.pl is recommended because it includes
-> built-in HTTPS support. System Perl may require additional modules
-> (`IO::Socket::SSL`, `Net::SSLeay`) for the Maven Central search to work.
+Run `Configure.pl` directly from the repository root. It uses the system Perl
+specified by its shebang and requires the Perl modules imported at the top of the
+script.
 
 ### Common Tasks
 
 **View current configuration:**
 ```bash
-./jperl Configure.pl
+./Configure.pl
 ```
 
 **Add JDBC driver (search):**
 ```bash
-./jperl Configure.pl --search mysql
+./Configure.pl --search mysql
 make  # Rebuild to include driver
 ```
 
 **Add JDBC driver (direct):**
 ```bash
-./jperl Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
+./Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
 make  # Rebuild to include driver
 ```
 
 **Update configuration:**
 ```bash
-./jperl Configure.pl -D perlVersion=v5.42.0
+./Configure.pl -D version=5.44.0
 ```
 
 **Upgrade all dependencies:**
 ```bash
-./jperl Configure.pl --upgrade
+./Configure.pl --upgrade
 ```
 
 ### Available Options
@@ -220,7 +219,7 @@ make  # Rebuild to include driver
 
 ## Troubleshooting
 
-### "Unsupported class file major version 69" (Java 25+)
+### "Unsupported class file major version" errors
 
 **Problem:** When building with Java 25 or later, you see:
 ```
@@ -228,37 +227,28 @@ BUG! exception in phase 'semantic analysis' in source unit '_BuildScript_' Unsup
 > Unsupported class file major version 69
 ```
 
-**Cause:** An old cached Gradle version (8.x) doesn't support Java 25. Java 25 uses class file version 69, which requires Gradle 9.0+.
+**Cause:** The build is using an older Gradle installation that cannot run on
+your JDK.
 
-**Solution:** Clear the old Gradle cache and rebuild:
+**Solution:** Use the repository's Gradle wrapper instead of a system-installed
+Gradle. Confirm the configured version, then rebuild:
 
 ```bash
-# Linux/macOS
-rm -rf ~/.gradle/wrapper/dists/gradle-8.*
+./gradlew --version
+make wrapper
 make clean
-make
-
-# Windows (PowerShell)
-Remove-Item -Recurse -Force "$env:USERPROFILE\.gradle\wrapper\dists\gradle-8.*"
-gradlew.bat clean
 make
 ```
 
-The project includes a Gradle wrapper configured for Gradle 9.0+, which supports Java 22 through Java 26.
+On Windows, use `gradlew.bat --version`. The wrapper version is defined in
+`gradle/wrapper/gradle-wrapper.properties`; that file is the source of truth.
 
 ### Java Version Compatibility
 
-Based on [Gradle's official compatibility matrix](https://docs.gradle.org/current/userguide/compatibility.html):
-
-| Java Version | Class File Version | Gradle Required |
-|--------------|-------------------|-----------------|
-| Java 22      | 66                | 8.8+            |
-| Java 23      | 67                | 8.10+           |
-| Java 24      | 68                | 8.14+           |
-| Java 25      | 69                | 9.1.0+          |
-| Java 26      | 70                | 9.4.0+          |
-
-The Makefile automatically detects Java 25+ and upgrades the Gradle wrapper to 9.1.0 if needed. It also clears any incompatible cached Gradle distributions (8.x and 9.0.x).
+PerlOnJava compiles for Java 22 and requires JDK 22 or later. Use the included
+wrapper so the Gradle version stays aligned with the project. For compatibility
+details beyond the checked-in wrapper, consult Gradle's
+[Java compatibility matrix](https://docs.gradle.org/current/userguide/compatibility.html).
 
 ### "JAVA_HOME is not set"
 
@@ -274,8 +264,6 @@ set JAVA_HOME=C:\path\to\jdk
 
 ### Build Takes Too Long
 
-Use `make dev` instead of `make` for faster builds during development - it skips tests:
-
-```bash
-make dev  # Compiles only, no tests
-```
+The default `make` target builds the runnable JAR and runs the fast unit suite.
+For a targeted test during development, run the relevant `.t` file with
+`./jperl`, then run `make` before committing.

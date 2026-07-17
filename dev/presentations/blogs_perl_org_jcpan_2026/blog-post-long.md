@@ -212,4 +212,4 @@ The project is at [github.com/fglock/PerlOnJava](https://github.com/fglock/PerlO
 
 ---
 
-*PerlOnJava implements Perl 5.42 semantics and is validated against the Perl test suite. It's been in development since 2024, building on nearly 30 years of prior work on Perl-JVM integration.*
+*PerlOnJava implements Perl 5.44 semantics and is validated against the Perl test suite. It's been in development since 2024, building on nearly 30 years of prior work on Perl-JVM integration.*

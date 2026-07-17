@@ -159,11 +159,8 @@ src/test/resources/
 # 1. Make changes
 vim src/main/java/org/perlonjava/...
 
-# 2. Build
-make dev
-
-# 3. Run fast tests
-make test-unit
+# 2. Build and run the fast unit suite
+make
 ```
 
 ### Before Committing (Comprehensive Validation)

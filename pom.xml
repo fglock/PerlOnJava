@@ -5,7 +5,7 @@
 
     <groupId>org.perlonjava</groupId>
     <artifactId>perlonjava</artifactId>
-    <version>5.42.0</version>
+    <version>5.44.0</version>
     <packaging>jar</packaging>
 
     <name>perlonjava</name>
@@ -14,6 +14,7 @@
     <properties>
         <maven.compiler.source>22</maven.compiler.source>
         <maven.compiler.target>22</maven.compiler.target>
+        <jperl.launcher>${project.basedir}/jperl</jperl.launcher>
     </properties>
 
     <dependencies>
@@ -114,6 +115,27 @@
         </resources>
 
         <plugins>
+            <!-- Write the runtime classpath before tests so the repository
+                 launcher can run from target/classes before package creates
+                 the shaded JAR. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <id>write-jperl-test-classpath</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>build-classpath</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputFile>${project.build.directory}/jperl-test-classpath.txt</outputFile>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
@@ -204,8 +226,14 @@
                     <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     <groups>unit</groups>
                     <excludedGroups>full</excludedGroups>
-                    <!-- Use in-process execution to avoid fork crashes -->
-                    <forkCount>0</forkCount>
+                    <!-- A fork lets Surefire provide the launcher environment
+                         inherited by Perl tests and their child processes. -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <environmentVariables>
+                        <PERLONJAVA_EXECUTABLE>${jperl.launcher}</PERLONJAVA_EXECUTABLE>
+                        <PATH>${project.basedir}${path.separator}${env.PATH}</PATH>
+                    </environmentVariables>
                 </configuration>
             </plugin>
             <!-- CycloneDX SBOM generation -->
@@ -370,6 +398,9 @@ fi
                     <family>windows</family>
                 </os>
             </activation>
+            <properties>
+                <jperl.launcher>${project.basedir}/jperl.bat</jperl.launcher>
+            </properties>
             <build>
                 <plugins>
                     <plugin>
@@ -400,4 +431,3 @@ fi
         </profile>
     </profiles>
 </project>
-

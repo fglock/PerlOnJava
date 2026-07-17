@@ -27,10 +27,10 @@ PerlOnJava offers a unique solution for JVM-based environments or use cases wher
 ### Why Not Use PerlOnJava?
 
 1. **Mature Ecosystem of Traditional Perl**:  
-   Perl’s implementation in C is stable, mature, and battle-tested over decades, offering extensive support for CPAN modules, including XS (C extensions), which are not supported by PerlOnJava.
+   Perl’s implementation in C is stable, mature, and battle-tested over decades, offering extensive CPAN support. PerlOnJava cannot load native XS (C extension) binaries directly, although it bundles Java implementations for a growing set of commonly used XS modules.
 
 2. **Feature Limitations**:  
-   PerlOnJava currently does not support some advanced Perl features, modules, and syntax extensions. For instance, CPAN compatibility is limited, and XS modules are unavailable.
+   PerlOnJava does not yet support every advanced Perl feature or CPAN module. Pure-Perl modules have the best compatibility; XS modules require a bundled or separately developed Java implementation.
 
 3. **Portability Concerns**:  
    While JVM provides cross-platform support, running PerlOnJava requires a JVM installation, which might not be available in lightweight or resource-constrained environments where traditional Perl could run natively.
@@ -40,5 +40,4 @@ PerlOnJava offers a unique solution for JVM-based environments or use cases wher
 
 5. **Community and Ecosystem**:  
    The community and ecosystem around PerlOnJava are smaller than those of traditional Perl, potentially limiting support and available resources.
-
 

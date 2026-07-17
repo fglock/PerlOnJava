@@ -16,7 +16,7 @@ use Java::System qw(getProperty getenv);
 
 our ( %Config, $VERSION );
 
-$VERSION = "5.042000";
+$VERSION = "5.044000";
 
 # Skip @Config::EXPORT because it only contains %Config, which we special
 # case below as it's not a function. @Config::EXPORT won't change in the
@@ -49,11 +49,11 @@ sub import {
     return;
 }
 
-die "$0: Perl lib version (5.42.0) doesn't match executable '$^X' version ($])"
+die "$0: Perl lib version (5.44.0) doesn't match executable '$^X' version ($])"
     unless $^V;
 
-$^V eq 5.42.0
-    or die sprintf "%s: Perl lib version (5.42.0) doesn't match executable '$^X' version (%vd)", $0, $^V;
+$^V eq 5.44.0
+    or die sprintf "%s: Perl lib version (5.44.0) doesn't match executable '$^X' version (%vd)", $0, $^V;
 
 
 # Get Java system properties using Java::System module
@@ -71,7 +71,7 @@ my $user_name = getProperty('user.name') || 'unknown';
 my $perlonjava_home = $user_home
     ? _catdir($file_separator, $user_home, '.perlonjava')
     : '.perlonjava';
-my $core_privlib = _catdir($file_separator, $perlonjava_home, 'core', 'lib', 'perl5', '5.42.0');
+my $core_privlib = _catdir($file_separator, $perlonjava_home, 'core', 'lib', 'perl5', '5.44.0');
 my $core_archlib = _catdir($file_separator, $core_privlib, "java-$java_version-$os_arch");
 _ensure_dir(_catdir($file_separator, $core_archlib, 'CORE'));
 _ensure_core_probe_file(
@@ -164,7 +164,7 @@ my $startperl = $is_windows
     osvers => $os_version,
 
     # PerlOnJava specific
-    perlonjava => '5.42.0',
+    perlonjava => '5.44.0',
     java_version => $java_version,
     java_vendor => $java_vendor,
     java_home => $java_home,
@@ -208,10 +208,10 @@ my $startperl = $is_windows
     # CPAN build helpers such as ExtUtils::CBuilder probe $archlibexp/CORE.
     archlibexp => $core_archlib,
     privlibexp => $core_privlib,
-    sitearchexp => 'perlonjava/lib/perl5/site_perl/5.42.0/' . "java-$java_version-$os_arch",
-    sitelibexp => 'perlonjava/lib/perl5/site_perl/5.42.0',
-    vendorarchexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0/' . "java-$java_version-$os_arch",
-    vendorlibexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0',
+    sitearchexp => 'perlonjava/lib/perl5/site_perl/5.44.0/' . "java-$java_version-$os_arch",
+    sitelibexp => 'perlonjava/lib/perl5/site_perl/5.44.0',
+    vendorarchexp => 'perlonjava/lib/perl5/vendor_perl/5.44.0/' . "java-$java_version-$os_arch",
+    vendorlibexp => 'perlonjava/lib/perl5/vendor_perl/5.44.0',
 
     # Script directory (JAR-embedded scripts at /bin/)
     scriptdir => 'jar:PERL5BIN',
@@ -326,11 +326,11 @@ my $startperl = $is_windows
     eunicefix => ':',   # No-op fixer (only used on EUNICE)
 
     # Version info
-    version => '5.42.0',
-    version_patchlevel_string => 'version 42 patchlevel 0',
-    api_version => '42',
+    version => '5.44.0',
+    version_patchlevel_string => 'version 44 patchlevel 0',
+    api_version => '44',
     api_subversion => '0',
-    api_versionstring => '5.42.0',
+    api_versionstring => '5.44.0',
 
     # Build configuration
     dont_use_nlink => undef,
@@ -446,7 +446,7 @@ sub _ensure_core_probe_file {
 
 # Return a string describing the perl configuration (like perl -V)
 sub myconfig {
-    my $config = "Summary of my perl5 (revision 5 version 42 subversion 0) configuration:\n";
+    my $config = "Summary of my perl5 (revision 5 version 44 subversion 0) configuration:\n";
     $config .= "   \n";  # Blank line with leading spaces (matches Perl format)
     $config .= "  Platform:\n";
     $config .= "    osname=$Config{osname}\n";

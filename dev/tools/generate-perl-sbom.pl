@@ -9,7 +9,7 @@
 #   perl dev/tools/generate-perl-sbom.pl > build/reports/perl-bom.json
 #
 # Environment variables:
-#   VERSION - Override the version string (default: 5.42.0)
+#   VERSION - Override the version string (default: 5.44.0)
 
 use strict;
 use warnings;
@@ -26,7 +26,7 @@ my $lib_dir = "$project_root/src/main/perl/lib";
 die "Error: Perl library directory not found: $lib_dir\n" unless -d $lib_dir;
 
 # Configuration
-my $version = $ENV{VERSION} // '5.42.0';
+my $version = $ENV{VERSION} // '5.44.0';
 my $timestamp = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime());
 my $serial_number = generate_uuid();
 
