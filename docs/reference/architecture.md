@@ -13,7 +13,7 @@ Both backends share 100% of the same runtime APIs and can call each other seamle
 - Compile-time transformation from Perl to JVM bytecode
 - Direct bytecode interpretation with register-based VM
 - Direct access to Java libraries via JDBC, JSR-223, and standard JVM tools
-- Implements most Perl 5.40+ features including references, closures, and regular expressions
+- Targets Perl 5.44 language compatibility, including references, closures, and regular expressions
 - Includes 150+ core Perl modules
 - Bidirectional calling between compiled and interpreted code
 

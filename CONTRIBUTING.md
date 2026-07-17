@@ -22,7 +22,6 @@ cd PerlOnJava
 
 # Build and run tests
 make        # Build + run all unit tests
-make dev    # Build only, skip tests (for quick iteration during debugging)
 
 # Run comprehensive tests
 make test-all
@@ -102,9 +101,6 @@ perl5_t/ (at project root)
 ```bash
 # Build + run all unit tests (default)
 make
-
-# Build only, skip tests (for quick iteration during debugging)
-make dev
 
 # Run all tests including Perl 5 core tests
 make test-all

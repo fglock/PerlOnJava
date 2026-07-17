@@ -25,7 +25,7 @@ Publishing to Maven Central provides:
 |-------------|--------|
 | GroupId (`org.perlonjava`) | ✅ Valid |
 | ArtifactId (`perlonjava`) | ✅ Valid |
-| Version (`5.42.0`) | ✅ Valid (not -SNAPSHOT) |
+| Version (`5.44.0`) | ✅ Valid (not -SNAPSHOT) |
 | POM `<name>` | ✅ Present |
 | POM `<description>` | ❌ **Missing** |
 | POM `<url>` | ⚠️ Placeholder (`http://maven.apache.org`) |
@@ -55,7 +55,7 @@ Reference: [Sonatype Requirements](https://central.sonatype.org/publish/requirem
 <!-- Project coordinates (already present) -->
 <groupId>org.perlonjava</groupId>
 <artifactId>perlonjava</artifactId>
-<version>5.42.0</version>
+<version>5.44.0</version>
 <packaging>jar</packaging>
 
 <!-- Human-readable info (MISSING) -->
@@ -100,10 +100,10 @@ For each release, Maven Central requires:
 
 | Artifact | Description |
 |----------|-------------|
-| `perlonjava-5.42.0.jar` | Main JAR (already built) |
-| `perlonjava-5.42.0.pom` | POM file with metadata |
-| `perlonjava-5.42.0-sources.jar` | Source code JAR |
-| `perlonjava-5.42.0-javadoc.jar` | Javadoc JAR |
+| `perlonjava-5.44.0.jar` | Main JAR (already built) |
+| `perlonjava-5.44.0.pom` | POM file with metadata |
+| `perlonjava-5.44.0-sources.jar` | Source code JAR |
+| `perlonjava-5.44.0-javadoc.jar` | Javadoc JAR |
 | `*.asc` | GPG signatures for all above |
 | `*.md5`, `*.sha1` | Checksums for all above |
 

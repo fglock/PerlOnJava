@@ -325,7 +325,7 @@ The build creates multiple JAR files in target/:
 
 ```
 target/
-  perlonjava-5.42.0.jar          # Core runtime
+  perlonjava-5.44.0.jar          # Core runtime
   perlonjava-module-dbi-3.0.0.jar   # DBI module
 ```
 

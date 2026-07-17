@@ -29,9 +29,9 @@ guide: **[Database Access Guide](../guides/database-access.md)**.
 | Database   | Driver setup |
 |------------|-------------|
 | SQLite     | Built-in — nothing to install |
-| MySQL      | `./jperl Configure.pl --search mysql-connector-java` |
-| PostgreSQL | `./jperl Configure.pl --search postgresql` |
-| Oracle     | `./jperl Configure.pl --search ojdbc` |
+| MySQL      | `./Configure.pl --search mysql-connector-java` |
+| PostgreSQL | `./Configure.pl --search postgresql` |
+| Oracle     | `./Configure.pl --search ojdbc` |
 
 ### Image::Magick — Image Processing
 

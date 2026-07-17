@@ -4,7 +4,7 @@ use Test::More;
 use File::Temp qw(tempdir);
 use IPC::Open3;
 
-my $skip_launcher = $^X eq 'jperl' && !-f 'target/perlonjava-5.42.0.jar';
+my $skip_launcher = $^X eq 'jperl' && !-f 'target/perlonjava-5.44.0.jar';
 
 my $tmpdir = tempdir(CLEANUP => 1);
 my $seq = 0;

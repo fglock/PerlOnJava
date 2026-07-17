@@ -594,7 +594,7 @@ Object result = perl.eval("process_data($data)");
 
 ### 5.2 Current Development & Roadmap (3 minutes)
 
-**Recently Completed (v5.42.3)**:
+**Recently Completed (v5.44.0)**:
 - ✅ Interpreter backend production-ready
 - ✅ Full Perl 5.38+ class features
 - ✅ System V IPC operators (msgctl, semctl, shmctl)

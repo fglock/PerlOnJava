@@ -24,15 +24,15 @@ SQLite works out of the box. For other databases, JDBC drivers can be added in t
 
 Examples:
 ```bash
-./jperl Configure.pl --search mysql-connector-java
-./jperl Configure.pl --search aws-mysql-jdbc
+./Configure.pl --search mysql-connector-java
+./Configure.pl --search aws-mysql-jdbc
 ```
 
 Then build with the drivers included:
 ```bash
 mvn clean package
 # or
-gradle clean build
+./gradlew clean build
 ```
 
 2. Using Java classpath:
@@ -52,7 +52,7 @@ gradle clean build
    
     Calling java directly with the classpath is also possible:
     ```bash
-    java --enable-native-access=ALL-UNNAMED -cp "jdbc-drivers/mysql-connector-j-8.2.0.jar:target/perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main myscript.pl
+    java --enable-native-access=ALL-UNNAMED -cp "jdbc-drivers/mysql-connector-j-8.2.0.jar:target/perlonjava-5.44.0.jar" org.perlonjava.app.cli.Main myscript.pl
     ```
 
 ## Database Connection Examples

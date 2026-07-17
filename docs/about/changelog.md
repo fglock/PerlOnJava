@@ -3,8 +3,9 @@
 Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 
-## v5.42.3: Unreleased - Next minor version
+## v5.44.0: Named Parameters in Signatures
 
+- Add named parameters in method and subroutine signatures.
 - Security: added `SECURITY.md` and CycloneDX SBOM generation (`make sbom`)
 - Tools: added `jcpan`, `jperldoc`, and `jprove`
 - Perl debugger with `-d` command line option
@@ -35,8 +36,6 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - New command line option: `--interpreter` to run PerlOnJava as an interpreter instead of JVM compiler.
     - `./jperl --interpreter --disassemble -e 'print "Hello, World!\n"'`
   - The interpreter mode excels at dynamic eval STRING operations (46x faster than compilation for unique strings, matching Perl 5 performance). For general code, it runs only 15% slower than Perl 5. It is also useful for implementing debugging, handling "Method too large" errors, and enabling Android and GraalVM compatibility.
-- Planned release date: 2026-04-10.
-
 - Add `attributes` pragma with `MODIFY_*_ATTRIBUTES`/`FETCH_*_ATTRIBUTES` callbacks for subroutines and variables.
 - Add modules: `Filter::Simple` with `FILTER` and `FILTER_ONLY` support.
 - Add `DESTROY` method support with selective reference counting on blessed objects, cascading destruction, closure capture tracking, and global destruction phase.
@@ -71,10 +70,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - utf8 pragma
   - bytes pragma
   - threads pragma
-  - warnings pragma
   - vmsish pragma
   - Constant folding - in ConstantFoldingVisitor.java
-  - `method` keyword
   - Overload operators: `++`, `--`.
   - String interpolation fixes.
   - Command line option `-C`
@@ -369,5 +366,3 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - Enhanced statements, data types, and call context
 
 ## v1.0.0: Initial proof of concept for the parser and execution engine.
-
-

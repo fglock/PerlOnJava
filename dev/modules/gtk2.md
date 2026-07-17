@@ -392,7 +392,7 @@ set FX_LIBS=%SCRIPT_DIR%lib\javafx
 java %JVM_OPTS% %JPERL_OPTS% ^
   --module-path "%FX_LIBS%" ^
   --add-modules javafx.controls,javafx.graphics,javafx.base ^
-  -cp "%SCRIPT_DIR%target\perlonjava-5.42.0.jar" ^
+  -cp "%SCRIPT_DIR%target\perlonjava-5.44.0.jar" ^
   org.perlonjava.app.cli.Main %*
 ```
 

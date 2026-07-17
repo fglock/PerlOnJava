@@ -374,7 +374,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
 - ✅  **Unicode Properties**: Matching with `\p{...}` and `\P{...}` (e.g., `\p{L}` for letters).
 - ✅  **Unicode Properties**: Add regex properties supported by Perl but missing in Java regex.
-- ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, or `{n,m}+`, which disable backtracking, are not supported.
+- ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, and `{n,m}+`, which disable backtracking, are supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
 - ✅  **`\K` assertion**: Keep left — in `s///`, text before `\K` is preserved; match variables reflect only the portion after `\K`.
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
@@ -384,7 +384,7 @@ my @copy = @{$z};         # ERROR
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - ❌  **Recursive Patterns**: Features like `(?R)`, `(?0)` or `(??{ code })` for recursive matching are not supported.
-- ❌  **Backtracking Control**: Features like `(?>...)`, `(?(DEFINE)...)`, or `(?>.*)` to prevent or control backtracking are not supported.
+- ❌  **Backtracking Control Verbs and Definitions**: Features such as `(*PRUNE)`, `(*SKIP)`, and `(?(DEFINE)...)` are not supported. Atomic groups `(?>...)` are supported as noted above.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
 - ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.
 - ❌  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)`, `(?&name)` are not supported.
@@ -807,4 +807,3 @@ The DBI module provides seamless integration with JDBC drivers:
 - ❌  **Overload optimization**: Preprocessing in overload should be cached.
 - ❌  **I/O optimization**: Use low-level readline to optimize input.
 - ❌  **I/O optimization**: Extract I/O buffering code (StandardIO.java) into a new layer, and add it at the top before other layers.
-

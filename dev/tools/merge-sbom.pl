@@ -30,7 +30,7 @@ my $timestamp = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime());
 my $serial_number = generate_uuid();
 
 # Get version from Java BOM metadata
-my $version = $java_bom->{metadata}{component}{version} // '5.42.0';
+my $version = $java_bom->{metadata}{component}{version} // '5.44.0';
 
 # Build merged SBOM
 my $merged = {

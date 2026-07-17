@@ -10,13 +10,13 @@ use URI::Escape;
 # PerlOnJava Configuration Script
 #
 # This script manages configuration settings and dependencies for the PerlOnJava project.
-# It updates Configuration.java (the single source of truth for version info) and
+# It updates Configuration.java.in (the single source of truth for version info) and
 # propagates version changes to all relevant files in the repository.
 #
 # USAGE:
 #
 #   ./Configure.pl                      # Show current configuration
-#   ./Configure.pl -D version=5.43.0    # Update version everywhere
+#   ./Configure.pl -D version=5.44.0    # Update version everywhere
 #   ./Configure.pl --upgrade            # Upgrade dependencies to latest versions
 #
 # VERSION UPDATE BEHAVIOR:
@@ -50,7 +50,7 @@ my $upgrade = 0;  # Flag to upgrade dependencies to their latest versions
 my %config;       # Hash to store key-value pairs for configuration updates
 my $help = 0;     # Flag to show help message
 
-my $java_config_filename = 'src/main/java/org/perlonjava/core/Configuration.java';
+my $java_config_filename = 'src/main/java/org/perlonjava/core/Configuration.java.in';
 
 # Parse command-line options
 Getopt::Long::Configure("no_ignore_case");
@@ -88,8 +88,8 @@ Configuration Options:
     -D key=value                    Set configuration value
 
     Supported configuration keys:
-      version     - PerlOnJava version (e.g., 5.43.0)
-                    Updates Configuration.java, build files, and all JAR references
+      version     - PerlOnJava version (e.g., 5.44.0)
+                    Updates Configuration.java.in, build files, and all JAR references
 
     Read-only keys (managed by build system):
       gitCommitId   - Git commit hash (set during build)
@@ -103,7 +103,7 @@ Dependency Management Options:
 
 Examples:
     ./Configure.pl                              # Show current configuration
-    ./Configure.pl -D version=5.43.0            # Update version everywhere
+    ./Configure.pl -D version=5.44.0            # Update version everywhere
     ./Configure.pl --search org.h2.Driver       # Search for JDBC driver
     ./Configure.pl --direct com.h2database:h2:2.2.224
     ./Configure.pl --upgrade                    # Upgrade all dependencies
@@ -170,7 +170,29 @@ sub update_configuration {
     }
 
     write_file($file, $content);
+    sync_generated_configuration($config);
     print "\nConfiguration updated successfully\n";
+}
+
+# Keep an existing local generated file in sync with the tracked template.
+# The build recreates this file on a fresh checkout, but developers commonly
+# retain it between builds.
+sub sync_generated_configuration {
+    my ($config) = @_;
+    (my $generated_file = $java_config_filename) =~ s/\.in$//;
+    return if $generated_file eq $java_config_filename || !-f $generated_file;
+
+    my $content = read_file($generated_file);
+    my $updated = 0;
+    for my $key (keys %$config) {
+        next if $key eq 'gitCommitId' || $key eq 'gitCommitDate';
+        my $value = $config->{$key};
+        my $quoted_value = $value =~ /^(?:true|false|\d+)$/ ? $value : qq{"$value"};
+        $updated = 1
+            if $content =~ s/(public static final \w+\s+\Q$key\E\s*=\s*)("[^"]*"|[^;]+);/${1}$quoted_value;/;
+    }
+
+    write_file($generated_file, $content) if $updated;
 }
 
 # Function to validate version changes before applying them
@@ -206,6 +228,7 @@ sub update_version_everywhere {
     my @excluded_dirs = (
         './src/main/perl',      # Perl modules with historical version docs
         './dev',                # Design documents and development notes
+        './perl5',              # Nested upstream Perl checkout
     );
 
     # Files to exclude from version updates (relative to project root)
@@ -217,7 +240,7 @@ sub update_version_everywhere {
     # First pass: Update JAR filename references in ALL files (always safe)
     # This includes: jperl, jperl.bat, docs, examples, src/main/perl comments, etc.
     # Matches both perlonjava-X.Y.Z.jar and perlonjava-X.Y.Z-all.jar
-    my @all_files = `find . -type f -not -path "*/\\.*" -not -path "*/build/*" -not -path "*/target/*"`;
+    my @all_files = `find . -type f -not -path "*/\\.*" -not -path "*/build/*" -not -path "*/target/*" -not -path "./perl5/*"`;
     foreach my $file (@all_files) {
         chomp $file;
         next if -B $file;  # Skip binary files
@@ -246,7 +269,7 @@ sub update_version_everywhere {
         my $updated = 0;
 
         # Update version in build.gradle (project version only)
-        if ($file =~ /build\.gradle$/ && $file_content =~ s/^(version\s*=\s*')$old_version(')\s*$/$1$new_version$2/m) {
+        if ($file =~ /build\.gradle$/ && $file_content =~ s/^(version\s*=\s*')$old_version(')[ \t]*$/$1$new_version$2/m) {
             $updated = 1;
             print "Updated version in $file\n";
         }
@@ -262,7 +285,9 @@ sub update_version_everywhere {
 
         # Update version in README.md (feature support line)
         if ($file =~ /README\.md$/) {
-            if ($file_content =~ s/(Supports most Perl )$old_version( features)/$1$new_version$2/g) {
+            (my $old_feature_version = $old_version) =~ s/\.0$//;
+            (my $new_feature_version = $new_version) =~ s/\.0$//;
+            if ($file_content =~ s/(Perl )\Q$old_feature_version\E( language compatibility)/$1$new_feature_version$2/g) {
                 $updated = 1;
                 print "Updated version in $file\n";
             }
@@ -316,7 +341,7 @@ sub update_config_pm {
         $updated = 1;
     }
     
-    # Pattern: path components like /5.42.0/
+    # Pattern: path components like /X.Y.Z/
     if ($content =~ s|(/perl5/)$old_version(/)|$1$new_version$2|g) {
         $updated = 1;
     }
@@ -324,6 +349,34 @@ sub update_config_pm {
         $updated = 1;
     }
     if ($content =~ s|(/vendor_perl/)$old_version(/)|$1$new_version$2|g) {
+        $updated = 1;
+    }
+
+    # Config.pm also contains versioned paths assembled from quoted components
+    # and paths whose version is immediately followed by a quote.
+    if ($content =~ s|('perl5',\s*')$old_version(')|$1$new_version$2|g) {
+        $updated = 1;
+    }
+    if ($content =~ s{((?:site|vendor)_perl/)\Q$old_version\E(?=['/])}{$1$new_version}g) {
+        $updated = 1;
+    }
+
+    my ($new_major, $new_minor, $new_patch) = split /\./, $new_version;
+    $new_patch //= 0;
+    my $new_decimal_version = sprintf '%d.%03d%03d', $new_major, $new_minor, $new_patch;
+    if ($content =~ s/(\$VERSION\s*=\s*")\d+\.\d+(")/$1$new_decimal_version$2/) {
+        $updated = 1;
+    }
+    if ($content =~ s/(version_patchlevel_string\s*=>\s*'version\s+)\d+(\s+patchlevel\s+)\d+(')/$1$new_minor$2$new_patch$3/) {
+        $updated = 1;
+    }
+    if ($content =~ s/(api_version\s*=>\s*')\d+(')/$1$new_minor$2/) {
+        $updated = 1;
+    }
+    if ($content =~ s/(api_subversion\s*=>\s*')\d+(')/$1$new_patch$2/) {
+        $updated = 1;
+    }
+    if ($content =~ s/(revision\s+)\d+(\s+version\s+)\d+(\s+subversion\s+)\d+/$1$new_major$2$new_minor$3$new_patch/) {
         $updated = 1;
     }
     

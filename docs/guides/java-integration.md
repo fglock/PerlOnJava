@@ -143,23 +143,34 @@ public class DirectExample {
 
 ## Building with PerlOnJava
 
+PerlOnJava is not yet published to Maven Central. You can use the runnable JAR
+directly, or install the artifact into your local Maven repository:
+
+```bash
+mvn clean install
+```
+
 ### Maven
 
-Add PerlOnJava as a dependency:
+After installing it locally, add PerlOnJava as a dependency:
 
 ```xml
 <dependency>
     <groupId>org.perlonjava</groupId>
     <artifactId>perlonjava</artifactId>
-    <version>5.42.2</version>
+    <version>5.44.0</version>
 </dependency>
 ```
 
 ### Gradle
 
 ```gradle
+repositories {
+    mavenLocal()
+}
+
 dependencies {
-    implementation 'org.perlonjava:perlonjava:5.42.2'
+    implementation 'org.perlonjava:perlonjava:5.44.0'
 }
 ```
 
@@ -170,12 +181,12 @@ dependencies {
    make
    ```
 
-2. Find JAR in `build/libs/perlonjava-*-all.jar`
+2. Find the runnable JAR in `target/perlonjava-*.jar`
 
 3. Add to your classpath:
    ```bash
-   javac -cp perlonjava-5.42.0-all.jar YourApp.java
-   java --enable-native-access=ALL-UNNAMED -cp .:perlonjava-5.42.0-all.jar YourApp
+   javac -cp target/perlonjava-5.44.0.jar YourApp.java
+   java --enable-native-access=ALL-UNNAMED -cp .:target/perlonjava-5.44.0.jar YourApp
    ```
 
 ## Use Cases
