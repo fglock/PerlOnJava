@@ -1,10 +1,10 @@
 [versions]
 asm = "9.10.1"
-bouncycastle = "1.84"
+bouncycastle = "1.85"
 commons-compress = "1.28.0"
 commons-csv = "1.14.1"
 icu4j = "78.3"
-junit-jupiter = "6.1.1"
+junit-jupiter = "6.1.2"
 snakeyaml-engine = "3.0.1"
 sqlite-jdbc = "3.53.2.0"
 tomlj = "1.1.1"
