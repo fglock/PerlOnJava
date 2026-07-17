@@ -911,6 +911,19 @@ not permitted.
 (F) Similar to above, but involving a C<finally> block at the end of a
 C<try>/C<catch> construction rather than a C<defer> block.
 
+=item Can't assign reference to %s into a GLOB
+
+(F) An attempt was made to assign a reference to something into a GLOB, but
+the thing being referred to by that reference is not something that can be
+stored in a GLOB.  Typically this is because you attempted to store an object
+(as created by C<use feature 'class'>) directly in the GLOB, rather than
+storing a scalar containing a reference to the object.
+
+  *xyz = My::Object::Class->new;   # incorrect, will cause this error
+
+  *xyz = \My::Object::Class->new;  # correct, $xyz will now store the
+                                   # object reference
+
 =item Can't bless an object reference
 
 (F) You attempted to call C<bless> on a value that already refers to a real
@@ -1790,12 +1803,11 @@ The required syntax is
     try { ... }
     catch ($var) { ... }
 
-=item Changing use VERSION while another use VERSION is in scope is now deprecated
+=item Changing use VERSION while another use VERSION is in scope is not permitted
 
-(W deprecated) Once you have a C<use VERSION> statement in scope, any
-C<use VERSION> statement that requests a different version is now deprecated,
-due to the increasing complexity of swapping from one prevailing version to
-another.
+(F) Once you have a C<use VERSION> statement in scope, any C<use VERSION>
+statement that requests a different version is not permitted, due to the
+increasing complexity of swapping from one prevailing version to another.
 
 It is suggested that you do not try to mix multiple different version
 declarations within the same file as it leads to complex behaviours about the
@@ -6452,6 +6464,13 @@ so there can't be any left to fill later parameters.
 (F) You should not use the C<~~> operator on an object that does not
 overload it: Perl refuses to use the object's underlying structure
 for the smart match.
+
+=item Socket address truncated in %s()
+
+(W io) The operating system reported a socket address length larger than
+Perl's supplied buffer for the C<%s()> call.  Perl truncated the address
+to the buffer size to avoid reading or writing past the end of that
+buffer.
 
 =item Sorry, hash keys must be smaller than 2**31 bytes
 
