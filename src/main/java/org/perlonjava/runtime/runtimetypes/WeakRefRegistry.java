@@ -141,7 +141,9 @@ public class WeakRefRegistry {
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else if (hasWeakRefsTo(base)
+                } else if (!(base instanceof RuntimeScalar scalar
+                        && scalar.ephemeralScalarReferenceReferent)
+                        && hasWeakRefsTo(base)
                         && (ReachabilityWalker.isReachableFromRoots(base)
                         || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
                         || ReachabilityWalker.isReachableFromLiveCodeCaptures(base))) {
