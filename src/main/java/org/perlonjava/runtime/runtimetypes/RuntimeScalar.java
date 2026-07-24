@@ -281,6 +281,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean referencedByScalarReference;
 
+    /**
+     * True when {@link #createReference()} promoted an otherwise-unbound
+     * scalar temporary into selective reference counting. Such a referent has
+     * no hidden lexical, closure, global, or aggregate owner, so weakening its
+     * sole reference can clear it without a reachability walk.
+     */
+    boolean ephemeralScalarReferenceReferent;
+
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
@@ -2780,11 +2788,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
         referencedByScalarReference = true;
+        boolean isRegisteredLexical =
+                this.refCount == -1 && MyVarCleanupStack.isRegistered(this);
         if (this.refCount == -1
-                && MyVarCleanupStack.isRegistered(this)
+                && isRegisteredLexical
                 && !RuntimeCode.hasActiveCode()) {
             this.refCount = 0;
             this.localBindingExists = true;
+        } else if (this.refCount == -1
+                && !isRegisteredLexical
+                && captureCount == 0
+                && !isPackageGlobalRoot
+                && containerOwner == null) {
+            // An unbound scalar value returned from a subroutine is an
+            // ephemeral Perl SV. Birth-track it so weaken(\(sub_return()))
+            // consumes its sole owner immediately. Bound lexicals, closure
+            // captures, globals, aggregate elements, and active @_ arguments
+            // retain the established untracked/WEAKLY_TRACKED behavior.
+            this.refCount = 0;
+            this.ephemeralScalarReferenceReferent = true;
         }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.REFERENCE;

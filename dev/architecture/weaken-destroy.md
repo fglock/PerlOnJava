@@ -1,6 +1,6 @@
 # Weaken & DESTROY - Architecture Guide
 
-**Last Updated:** 2026-04-30
+**Last Updated:** 2026-07-24
 **Status:** PRODUCTION READY
 - 841/841 Moo subtests (100%)
 - 13858/13858 DBIx::Class subtests across 314 test files (100%, 0 Dubious) — measured on branch `perf/dbic-safe-port` at `2ef41907d`
@@ -134,6 +134,18 @@ back-references) and cascade to break Moo's accessor inlining.
 | `> 0` | **Tracked.** N strong references exist in named variables. Each `setLarge()` assignment increments; each scope exit or reassignment decrements. |
 | `-2` | **WEAKLY_TRACKED.** Entered when `weaken()` is called on an untracked non-CODE object (refCount == -1). A heuristic allowing weak ref clearing when a strong ref is explicitly dropped via `undefine()`. `setLarge()` and `scopeExitCleanup()` do NOT clear weak refs for this state — only explicit `undefine()`. |
 | `MIN_VALUE` | **Destroyed.** DESTROY has been called (or is in progress). Prevents double-destruction. |
+
+### Scalar-reference temporaries
+
+`RuntimeScalar.createReference()` birth-tracks an unbound scalar return value
+when it has no lexical registration, closure capture, package-global root, or
+aggregate owner. This makes `weaken(\(sub_return()))` clear immediately, as in
+Perl, while references to named scalars and aggregate elements remain alive.
+
+The promoted scalar is marked `ephemeralScalarReferenceReferent`. When its sole
+counted reference is weakened, `WeakRefRegistry` can clear it directly without
+calling `ReachabilityWalker`: the ownership checks performed at promotion prove
+there is no hidden strong owner. This keeps the hot operation constant-time.
 
 ### Ownership: `refCountOwned`
 
@@ -966,8 +978,10 @@ decrement per reference assignment), but this is by design.
 
 - **Per-referent:** `refCount` (int, 4 bytes) and `blessId` (int, 4 bytes) on
   `RuntimeBase`. Always present but unused when untracked.
-- **Per-scalar:** `refCountOwned` (boolean, 1 byte) and `captureCount` (int,
-  4 bytes) on `RuntimeScalar`. Always present.
+- **Per-scalar:** `refCountOwned` and
+  `ephemeralScalarReferenceReferent` (booleans), plus `captureCount` (int,
+  4 bytes), on `RuntimeScalar`. Always present; the JVM may pack the booleans
+  into existing object-alignment padding.
 - **WeakRefRegistry:** External identity maps. Only allocated when `weaken()`
   is called. Zero memory when no weak refs exist.
 - **DestroyDispatch caches:** `BitSet` + `ConcurrentHashMap`. Negligible.

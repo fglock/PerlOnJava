@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -453,6 +454,11 @@ public class LayeredIOHandle implements IOHandle {
                     String charsetName = layerSpec.substring(9, layerSpec.length() - 1);
                     try {
                         Charset charset = resolveEncodingCharset(charsetName);
+                        // Perl's :encoding(...) layer is provided by PerlIO::encoding
+                        // and loads Encode as a visible side effect. Some CPAN modules
+                        // (including Pod::Spell) rely on Encode::* being available
+                        // after an encoded handle has been opened.
+                        ModuleOperators.require(new RuntimeScalar("Encode.pm"));
                         EncodingLayer layer = new EncodingLayer(charset, layerSpec);
                         activeLayers.add(layer);
                         Function<String, String> inputTransform = s -> layer.processInput(s);
