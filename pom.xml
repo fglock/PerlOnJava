@@ -365,22 +365,25 @@
                                     <arguments>
                                         <argument>-c</argument>
                                         <argument><![CDATA[
+set -e
 CONFIG_FILE="src/main/java/org/perlonjava/core/Configuration.java"
 TEMPLATE_FILE="src/main/java/org/perlonjava/core/Configuration.java.in"
-# Configuration.java is gitignored; recreate from template on a fresh clone.
-if [ ! -f "$CONFIG_FILE" ] && [ -f "$TEMPLATE_FILE" ]; then
-    cp "$TEMPLATE_FILE" "$CONFIG_FILE"
-    echo "Created Configuration.java from template"
+# Configuration.java is gitignored; always regenerate it so an existing
+# checkout cannot retain stale version or configuration values.
+if [ ! -f "$TEMPLATE_FILE" ]; then
+    echo "Configuration template not found: $TEMPLATE_FILE" >&2
+    exit 1
 fi
-if [ -f "$CONFIG_FILE" ]; then
-    GIT_COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
-    GIT_COMMIT_DATE=$(git log -1 --format=%cs HEAD 2>/dev/null || echo "unknown")
-    if [ "$GIT_COMMIT_ID" != "dev" ]; then
-        perl -i -pe "s/(gitCommitId\\s*=\\s*)\"[^\"]*\"/\$1\"$GIT_COMMIT_ID\"/" "$CONFIG_FILE"
-        perl -i -pe "s/(gitCommitDate\\s*=\\s*)\"[^\"]*\"/\$1\"$GIT_COMMIT_DATE\"/" "$CONFIG_FILE"
-        echo "Injected git info: $GIT_COMMIT_ID ($GIT_COMMIT_DATE)"
-    fi
+cp "$TEMPLATE_FILE" "$CONFIG_FILE"
+GIT_COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
+GIT_COMMIT_DATE=$(git log -1 --format=%cs HEAD 2>/dev/null || echo "unknown")
+BUILD_TIMESTAMP=$(LC_ALL=C date "+%b %e %Y %H:%M:%S")
+if [ "$GIT_COMMIT_ID" != "dev" ]; then
+    perl -i -pe "s/(gitCommitId\\s*=\\s*)\"[^\"]*\"/\$1\"$GIT_COMMIT_ID\"/" "$CONFIG_FILE"
+    perl -i -pe "s/(gitCommitDate\\s*=\\s*)\"[^\"]*\"/\$1\"$GIT_COMMIT_DATE\"/" "$CONFIG_FILE"
+    perl -i -pe "s/(buildTimestamp\\s*=\\s*)\"[^\"]*\"/\$1\"$BUILD_TIMESTAMP\"/" "$CONFIG_FILE"
 fi
+echo "Regenerated Configuration.java and injected git info: $GIT_COMMIT_ID ($GIT_COMMIT_DATE)"
                                         ]]></argument>
                                     </arguments>
                                 </configuration>

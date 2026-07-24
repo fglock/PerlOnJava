@@ -92,32 +92,31 @@ cyclonedxBom {
 //
 // Configuration.java is NOT tracked by git (it is listed in .gitignore).
 // The canonical template is Configuration.java.in, which is tracked and contains
-// placeholder values.  This task copies the template to Configuration.java when
-// the file is absent (e.g. after a fresh clone) and then patches in the real
-// git hash, commit date, and build timestamp.
+// placeholder values.  Always regenerate from that template so version and other
+// configuration changes cannot leave a stale generated source in an existing
+// checkout, then patch in the real git hash, commit date, and build timestamp.
 def configFilePath    = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java')
 def configTemplPath   = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java.in')
 
 tasks.register('injectGitInfo') {
-    description = 'Copies Configuration.java.in → Configuration.java (if needed) and injects git info'
+    description = 'Regenerates Configuration.java from its template and injects build metadata'
     group = 'build'
     
-    // Declare inputs/outputs for configuration cache compatibility
     def configFile  = configFilePath.asFile
     def templateFile = configTemplPath.asFile
+
+    inputs.file(configTemplPath)
+    outputs.file(configFilePath)
+    // The build timestamp and current git revision are dynamic inputs.
+    outputs.upToDateWhen { false }
     
     doLast {
-        // If Configuration.java is absent (fresh clone, gitignored), recreate it
-        // from the committed template so the compiler has a valid source file.
-        if (!configFile.exists()) {
-            if (templateFile.exists()) {
-                configFile.text = templateFile.text
-                logger.lifecycle("Created Configuration.java from template")
-            } else {
-                logger.warn("Neither Configuration.java nor Configuration.java.in found; skipping git info injection")
-                return
-            }
+        if (!templateFile.exists()) {
+            throw new GradleException("Configuration template not found: ${templateFile}")
         }
+
+        // Never carry configuration values forward from a previous build.
+        def content = templateFile.text
         
         // Get git commit info using Runtime.exec
         def gitCommitId = 'dev'
@@ -141,8 +140,6 @@ tasks.register('injectGitInfo') {
         
         // Only update if we got valid values
         if (gitCommitId && gitCommitId != 'dev') {
-            def content = configFile.text
-            
             // Use safe pattern matching for quoted string values
             content = content.replaceAll(
                 /(gitCommitId\s*=\s*)"[^"]*"/,
@@ -162,10 +159,10 @@ tasks.register('injectGitInfo') {
                 /(buildTimestamp\s*=\s*)"[^"]*"/,
                 "\$1\"${buildTimestamp}\""
             )
-            
-            configFile.text = content
-            logger.lifecycle("Injected git info: ${gitCommitId} (${gitCommitDate})")
         }
+
+        configFile.text = content
+        logger.lifecycle("Regenerated Configuration.java and injected git info: ${gitCommitId} (${gitCommitDate})")
     }
 }
 
