@@ -1,40 +1,39 @@
 # inject-git-info.ps1
-# Injects git commit ID and date into Configuration.java for Windows builds.
-# Configuration.java is gitignored; this script recreates it from
-# Configuration.java.in when the file is absent (e.g. after a fresh clone).
+# Regenerates Configuration.java and injects build metadata for Windows builds.
+# Configuration.java is gitignored; always recreate it from the tracked template
+# so an existing checkout cannot retain stale version or configuration values.
 
 $ConfigFile   = "src/main/java/org/perlonjava/core/Configuration.java"
 $TemplateFile = "src/main/java/org/perlonjava/core/Configuration.java.in"
 
-# Recreate from template if absent (fresh clone / gitignored)
-if (-not (Test-Path $ConfigFile)) {
-    if (Test-Path $TemplateFile) {
-        Copy-Item $TemplateFile $ConfigFile
-        Write-Host "Created Configuration.java from template"
-    } else {
-        Write-Host "Neither Configuration.java nor Configuration.java.in found; skipping"
-        exit 0
-    }
+if (-not (Test-Path $TemplateFile)) {
+    Write-Error "Configuration template not found: $TemplateFile"
+    exit 1
 }
 
-if (Test-Path $ConfigFile) {
-    try {
-        $GitCommitId = git rev-parse --short HEAD 2>$null
-        $GitCommitDate = git log -1 --format=%cs HEAD 2>$null
-        
-        if ($GitCommitId -and $GitCommitId -ne "dev") {
-            $content = Get-Content $ConfigFile -Raw
-            
-            # Replace gitCommitId value
-            $content = $content -replace '(gitCommitId\s*=\s*)"[^"]*"', ('$1"' + $GitCommitId + '"')
-            
-            # Replace gitCommitDate value
-            $content = $content -replace '(gitCommitDate\s*=\s*)"[^"]*"', ('$1"' + $GitCommitDate + '"')
-            
-            Set-Content $ConfigFile -Value $content -NoNewline
-            Write-Host "Injected git info: $GitCommitId ($GitCommitDate)"
-        }
-    } catch {
-        Write-Host "Git info injection skipped: $_"
+Copy-Item $TemplateFile $ConfigFile -Force -ErrorAction Stop
+
+try {
+    $GitCommitId = git rev-parse --short HEAD 2>$null
+    $GitCommitDate = git log -1 --format=%cs HEAD 2>$null
+
+    if ($GitCommitId -and $GitCommitId -ne "dev") {
+        $BuildTimestamp = (Get-Date).ToString(
+            "MMM dd yyyy HH:mm:ss",
+            [System.Globalization.CultureInfo]::InvariantCulture
+        ) -replace '^(\w{3}) 0', '$1  '
+        $content = Get-Content $ConfigFile -Raw
+
+        $content = $content -replace '(gitCommitId\s*=\s*)"[^"]*"', ('$1"' + $GitCommitId + '"')
+        $content = $content -replace '(gitCommitDate\s*=\s*)"[^"]*"', ('$1"' + $GitCommitDate + '"')
+        $content = $content -replace '(buildTimestamp\s*=\s*)"[^"]*"', ('$1"' + $BuildTimestamp + '"')
+
+        Set-Content $ConfigFile -Value $content -NoNewline
     }
+} catch {
+    $GitCommitId = "dev"
+    $GitCommitDate = "unknown"
+    Write-Host "Git info injection skipped: $_"
 }
+
+Write-Host "Regenerated Configuration.java and injected git info: $GitCommitId ($GitCommitDate)"

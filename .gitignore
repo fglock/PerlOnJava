@@ -119,8 +119,8 @@ test-*.html
 
 # Configuration.java is auto-generated at build time from Configuration.java.in.
 # It is NOT tracked by git to avoid constant rebase conflicts on the injected
-# git hash / date / build timestamp.  The build (Gradle / Maven) recreates it
-# automatically from the template on a fresh clone.
+# git hash / date / build timestamp.  The build (Gradle / Maven) regenerates it
+# from the template before compilation.
 # To capture a specific build's version info: git add -f <path>/Configuration.java
 src/main/java/org/perlonjava/core/Configuration.java
 

@@ -51,7 +51,7 @@ public final class Configuration {
 
     /**
      * Build timestamp in Perl 5 "Compiled at" format (e.g., "Apr  7 2026 11:20:00").
-     * Automatically populated by Gradle during build.
+     * Automatically populated by Gradle/Maven during build.
      * Parsed by App::perlbrew and other tools via: perl -V | grep "Compiled at"
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
