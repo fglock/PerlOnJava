@@ -237,7 +237,10 @@ public class WeakRefRegistry {
         if (!weakScalars.remove(ref)) return;
         if (ref.value instanceof RuntimeBase base) {
             Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(base);
-            if (weakRefs != null) weakRefs.remove(ref);
+            if (weakRefs != null) {
+                weakRefs.remove(ref);
+                if (weakRefs.isEmpty()) referentToWeakRefs.remove(base);
+            }
             if (base.refCount >= 0) {
                 base.refCount++;  // restore strong count
                 ref.refCountOwned = true;  // restore ownership
