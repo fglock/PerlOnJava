@@ -3,12 +3,17 @@ comment: |
   PerlOnJava distroprefs for Exception::Class.
 
   Exception::Class is pure Perl and is needed by Params::ValidationCompiler.
-  Its t/ignore.t suite has one PerlOnJava stack-frame-filter mismatch, but
-  the module otherwise builds and installs.
+  Its t/ignore.t suite has one PerlOnJava stack-frame-filter mismatch. It
+  also assigns generated exception classes version 1.1 while mapping their
+  %INC entries to Exception/Class.pm (version 1.45). This makes consumers
+  such as DBIx::Class report false module/file version mismatches. Keep the
+  generated class version aligned with the file registered in %INC.
 
   Keep the test output visible for signal, but allow CPAN to install it as
   a DateTime prerequisite.
 match:
   distribution: "^DROLSKY/Exception-Class-"
+patches:
+  - "Exception-Class-1.45/GeneratedSubclassVersion.patch"
 test:
   commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

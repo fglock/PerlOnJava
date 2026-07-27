@@ -13,7 +13,7 @@ package DynaLoader;
 # XSLoader, so DynaLoader's bootstrap() is not needed for normal use.
 #
 
-our $VERSION = '1.54';
+our $VERSION = '1.56';
 
 # Only define bootstrap if not already registered by Java
 BEGIN {

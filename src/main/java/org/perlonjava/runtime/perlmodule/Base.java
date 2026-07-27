@@ -126,7 +126,6 @@ public class Base extends PerlModuleBase {
                         // Java bridge stubs for IO::Handle::_sync, or DBIC's
                         // eval-created classes).
                         if (!GlobalVariable.isPackageLoaded(baseClassName)) {
-                            System.err.println("Base class package \"" + baseClassName + "\" is empty.");
                             throw new PerlCompilerException("Base class package \"" + baseClassName + "\" is empty.");
                         }
                     } else {

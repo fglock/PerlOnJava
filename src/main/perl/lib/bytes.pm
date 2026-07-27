@@ -1,5 +1,6 @@
 package bytes;
 
+our $VERSION = '1.08';
 our $hint_bits = 0x00000008;
 
 sub import {
