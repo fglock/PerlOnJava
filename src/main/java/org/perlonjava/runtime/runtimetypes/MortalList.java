@@ -985,6 +985,16 @@ public class MortalList {
                 // generation is wiring Moo metadata. Clearing then makes
                 // nested dispatch call undefer_sub(undef).
                 base.refCount = 1;
+            } else if (base instanceof RuntimeScalarReadOnly
+                    && hasWeakRefs
+                    && RuntimeCode.isInstalledPadConstant(base)) {
+                // A readonly scalar referenced through \("literal") belongs to
+                // its defining subroutine's pad. Constructor/call temporaries
+                // are selectively counted, but that pad ownership is not.
+                // Preserve the weak ref while the sub remains installed;
+                // RuntimeCode.clearPadConstantWeakRefs() clears it when the
+                // sub's glob is replaced, matching Perl optree reaping.
+                base.refCount = 1;
             } else if (base.blessId == 0
                     && hasWeakRefs
                     && (ReachabilityWalker.isReachableFromLiveCodeCaptures(base)

@@ -16,6 +16,22 @@ All 841/841 Moo subtests now pass across all 71 test files.
 
 ## Completed Fixes
 
+### Readonly Pad Constants Passed Through Constructors — FIXED (2026-07-27)
+
+**2 test files, 6 subtests fixed (tests 17-19 in each accessor-weaken file).**
+
+Root cause: a readonly scalar created by `\ "literal"` is strongly owned by
+the defining subroutine's pad until that subroutine is replaced. Selective
+refcounting cannot see that pad edge. When Moo passed the reference through
+its constructor and weakened the attribute, the constructor temporary reached
+zero and mortal processing cleared the weak reference immediately.
+
+Fix: detect readonly scalars present in the pad constants of currently
+installed named subroutines. Both immediate `weaken()` processing and deferred
+mortal cleanup preserve those references. Replacing the subroutine continues
+to clear them through the existing `clearPadConstantWeakRefs()` optree-reaping
+hook.
+
 ### Category C: Optree Reaping — FIXED (2025-04-09)
 
 **2 test files, 2 subtests fixed (test 19 in each accessor-weaken file).**
