@@ -1,3 +1,8 @@
+---
+name: port-native-module
+description: Port CPAN modules that require native system calls to PerlOnJava using Java's Foreign Function and Memory API. Use for modules involving POSIX functions, ioctl, terminal control, libc calls, or platform-specific native behavior, including Windows compatibility.
+---
+
 # Port Native/FFM CPAN Module to PerlOnJava
 
 ## When to Use This Skill

@@ -1,3 +1,8 @@
+---
+name: port-cpan-module
+description: Port CPAN modules, especially distributions with XS or C components, to PerlOnJava using minimal pure-Perl adaptations and Java replacements. Use when adding a CPAN module, replacing XSLoader functionality, or implementing Perl module behavior in Java.
+---
+
 # Port CPAN Module to PerlOnJava
 
 ## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️

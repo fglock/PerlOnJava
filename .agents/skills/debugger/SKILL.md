@@ -1,3 +1,8 @@
+---
+name: debugger
+description: Implement and debug PerlOnJava's Perl debugger support, including the -d flag, DEBUG opcodes, stepping, breakpoints, source display, and debugger command behavior. Use when extending or diagnosing the bytecode interpreter's debugger implementation.
+---
+
 # Perl Debugger Implementation Skill
 
 ## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
