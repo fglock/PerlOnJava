@@ -119,10 +119,8 @@ sub _bootstrap_prefs {
         'WWW-Suffit.yml'             => 'PerlOnJava/CpanDistroprefs/WWW-Suffit.yml',
         'WWW-Suffit-UserAgent.yml'   => 'PerlOnJava/CpanDistroprefs/WWW-Suffit-UserAgent.yml',
         'XML-FromPerl.yml'           => 'PerlOnJava/CpanDistroprefs/XML-FromPerl.yml',
-        'Test-FailWarnings.yml'       => 'PerlOnJava/CpanDistroprefs/Test-FailWarnings.yml',
         'Term-ANSIColor-Markup.yml'   => 'PerlOnJava/CpanDistroprefs/Term-ANSIColor-Markup.yml',
         'LRU-Cache.yml'               => 'PerlOnJava/CpanDistroprefs/LRU-Cache.yml',
-        'DateTime-Format-CLDR.yml'    => 'PerlOnJava/CpanDistroprefs/DateTime-Format-CLDR.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -150,6 +148,20 @@ sub _bootstrap_prefs {
     unless (-d $prefs_dir) {
         require File::Path;
         File::Path::make_path($prefs_dir);
+    }
+
+    # Bundled prefs are copied outside the JAR and survive upgrades. Retire
+    # entries whose compatibility workaround moved into the runtime, but only
+    # when the on-disk file still carries PerlOnJava's signature so user-owned
+    # CPAN preferences are never removed.
+    for my $file (qw(
+        Test-FailWarnings.yml
+        DateTime-Format-CLDR.yml
+    )) {
+        my $dest = File::Spec->catfile($prefs_dir, $file);
+        next unless -f $dest;
+        my $existing = $slurp->($dest);
+        unlink $dest if defined($existing) && $existing =~ /PerlOnJava/;
     }
 
     for my $file (sort keys %pref_install) {
@@ -269,15 +281,21 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap.pm.patch' ],
         [ 'Graph-0.9735/AdjacencyMap-Light.pm.patch',
           'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap-Light.pm.patch' ],
-        [ 'Test-FailWarnings-0.008/CallerOrigin.patch',
-          'PerlOnJava/CpanPatches/Test-FailWarnings-0.008/CallerOrigin.patch' ],
         [ 'Term-ANSIColor-Markup-0.06/PortableAccessors.patch',
           'PerlOnJava/CpanPatches/Term-ANSIColor-Markup-0.06/PortableAccessors.patch' ],
         [ 'LRU-Cache-1.00/PurePerl.patch',
           'PerlOnJava/CpanPatches/LRU-Cache-1.00/PurePerl.patch' ],
-        [ 'DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch',
-          'PerlOnJava/CpanPatches/DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch' ],
     );
+
+    # Like prefs, extracted patch files persist after an upgrade. These paths
+    # are owned by PerlOnJava and no current distropref references them.
+    for my $rel (
+        'Test-FailWarnings-0.008/CallerOrigin.patch',
+        'DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch',
+    ) {
+        my $retired = File::Spec->catfile($patches_dir, $rel);
+        unlink $retired if -f $retired;
+    }
 
     my $slurp = sub {
         my ($path) = @_;

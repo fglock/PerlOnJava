@@ -1,6 +1,6 @@
 --- lib/LRU/Cache.pm
 +++ lib/LRU/Cache.pm
-@@ -2,8 +2,115 @@
+@@ -2,8 +2,118 @@
  use strict;
  use warnings;
  our $VERSION = '1.00';
@@ -24,8 +24,11 @@
 +}
 +
 +sub new {
-+    my ($class, $capacity) = @_;
-+    $class = __PACKAGE__ unless defined($class) && $class eq __PACKAGE__;
++    my ($invocant, $maybe_capacity) = @_;
++    my ($class, $capacity) = defined($maybe_capacity)
++        ? ($invocant, $maybe_capacity)
++        : (__PACKAGE__, $invocant);
++
 +    die "capacity must be a positive integer\n"
 +        unless defined($capacity) && $capacity =~ /^\d+$/ && $capacity > 0;
 +
