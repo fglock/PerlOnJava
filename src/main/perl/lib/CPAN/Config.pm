@@ -197,6 +197,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/DBI-1.647/DBI.pm.patch' ],
         [ 'DBI-1.647/PurePerl.pm.patch',
           'PerlOnJava/CpanPatches/DBI-1.647/PurePerl.pm.patch' ],
+        [ 'Exception-Class-1.45/GeneratedSubclassVersion.patch',
+          'PerlOnJava/CpanPatches/Exception-Class-1.45/GeneratedSubclassVersion.patch' ],
         [ 'Net-Server-2.018/Proto.pm.patch',
           'PerlOnJava/CpanPatches/Net-Server-2.018/Proto.pm.patch' ],
         [ 'Device-SerialPort-1.04/NoXsBitsFallback.patch',

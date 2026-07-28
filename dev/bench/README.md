@@ -23,6 +23,7 @@ under PerlOnJava (and optionally system Perl for comparison). Use them to:
 | `benchmark_memory_delta.pl` | Memory growth / leak detection |
 | `benchmark_method.pl` | Method dispatch (class, inheritance) |
 | `benchmark_regex.pl` | Regex compilation and matching |
+| `benchmark_refcount_store.pl` | Tracked reference stores after `weaken()` activates lifecycle bookkeeping |
 | `benchmark_string.pl` | String operations (concat, substr, etc.) |
 
 ## Running

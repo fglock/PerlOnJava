@@ -1,10 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.lang.ref.WeakReference;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
@@ -31,7 +28,7 @@ public class ScalarRefRegistry {
     // hashCode/equals — RuntimeScalar uses Object's defaults, so this
     // is effectively IdentityHashMap-with-weak-keys.
     private static final Map<RuntimeScalar, Boolean> scalarRegistry =
-            Collections.synchronizedMap(new WeakHashMap<>());
+            new WeakHashMap<>();
 
     // Phase E: optional per-scalar registerRef call-site stacks.
     // Populated only when JPERL_REGISTER_STACKS=1 is set. Uses a
@@ -39,7 +36,7 @@ public class ScalarRefRegistry {
     // automatically when the scalar is JVM-GC'd. Lookup via
     // stackFor() is O(1).
     private static final Map<RuntimeScalar, Throwable> registerStacks =
-            Collections.synchronizedMap(new WeakHashMap<>());
+            new WeakHashMap<>();
 
     // Phase B1 performance toggle: when set, skip all registry
     // maintenance. Useful for benchmarks; does NOT affect correctness
@@ -109,9 +106,7 @@ public class ScalarRefRegistry {
      * unreachable entries first (e.g., freshly-exited lexical scopes).
      */
     public static java.util.List<RuntimeScalar> snapshot() {
-        synchronized (scalarRegistry) {
-            return new java.util.ArrayList<>(scalarRegistry.keySet());
-        }
+        return new java.util.ArrayList<>(scalarRegistry.keySet());
     }
 
     /**
@@ -149,8 +144,6 @@ public class ScalarRefRegistry {
      * hold? (Subject to JVM GC between calls.)
      */
     public static int approximateSize() {
-        synchronized (scalarRegistry) {
-            return scalarRegistry.size();
-        }
+        return scalarRegistry.size();
     }
 }

@@ -146,7 +146,8 @@ public class WeakRefRegistry {
                         && hasWeakRefsTo(base)
                         && (ReachabilityWalker.isReachableFromRoots(base)
                         || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
-                        || ReachabilityWalker.isReachableFromLiveCodeCaptures(base))) {
+                        || ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
+                        || RuntimeCode.isInstalledPadConstant(base))) {
                     // A temporary probe can be weakened without owning the last
                     // strong Perl reference. Test::Refcount does this when it
                     // weakens a local copy before calling B::svref_2object().
@@ -170,6 +171,12 @@ public class WeakRefRegistry {
             // (new RuntimeScalar(RuntimeScalar)) is mitigated by the fact that such
             // copies don't decrement refCount on cleanup (refCountOwned=false), so
             // they can't cause false-positive refCount==0 destruction.
+        } else if (base.refCount == -1
+                && base instanceof RuntimeScalarReadOnly
+                && RuntimeCode.isInstalledPadConstant(base)) {
+            // The defining subroutine's pad is the strong owner. Its ownership
+            // is not represented in selective refCount, and glob replacement
+            // clears the weak ref explicitly via clearPadConstantWeakRefs().
         } else if (base.refCount == -1 && !(base instanceof RuntimeCode)) {
             // Untracked non-CODE object: transition to WEAKLY_TRACKED so that
             // undefine() and scopeExitCleanup() can clear weak refs
@@ -237,7 +244,10 @@ public class WeakRefRegistry {
         if (!weakScalars.remove(ref)) return;
         if (ref.value instanceof RuntimeBase base) {
             Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(base);
-            if (weakRefs != null) weakRefs.remove(ref);
+            if (weakRefs != null) {
+                weakRefs.remove(ref);
+                if (weakRefs.isEmpty()) referentToWeakRefs.remove(base);
+            }
             if (base.refCount >= 0) {
                 base.refCount++;  // restore strong count
                 ref.refCountOwned = true;  // restore ownership

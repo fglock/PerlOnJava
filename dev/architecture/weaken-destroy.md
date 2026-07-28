@@ -974,6 +974,33 @@ the `classHasDestroy()` check at bless time, which is cached per class. Code
 that actually uses DESTROY classes pays the full tracking cost (increment/
 decrement per reference assignment), but this is by design.
 
+### Tracked-store optimization (2026-07-27)
+
+`RuntimeScalar.setLargeRefCounted()` registered each newly owned reference
+twice in `ScalarRefRegistry`. Once `weaken()` had activated the registry, each
+registration was a synchronized `WeakHashMap.put()`, so tracked stores paid for
+two monitor/map operations even though the second put replaced the same entry.
+
+The optimized path:
+
+- registers the scalar once, after DESTROY-rescue handling;
+- uses the registry without a synchronization wrapper, consistent with
+  PerlOnJava's documented single-threaded runtime model;
+- removes empty reverse weak-reference buckets during `unweaken()`;
+- includes `dev/bench/benchmark_refcount_store.pl` for repeatable measurement.
+
+Median CPU time over three fresh JVM runs of the tracked-store benchmark:
+
+| Revision | CPU time | Change |
+|----------|----------|--------|
+| `master` (`168466619`) | 2.71 s | baseline |
+| optimized branch | 2.41 s | **-11.1%** |
+
+The ordinary method benchmark was unchanged at approximately 2.35 CPU seconds,
+showing no measurable regression before weak-reference bookkeeping is active.
+Correctness validation completed with `make` and the full DBIx::Class suite:
+314 files, 13,121 tests, all successful in 679 wall-clock seconds.
+
 ### Memory Overhead
 
 - **Per-referent:** `refCount` (int, 4 bytes) and `blessId` (int, 4 bytes) on
@@ -983,7 +1010,8 @@ decrement per reference assignment), but this is by design.
   4 bytes), on `RuntimeScalar`. Always present; the JVM may pack the booleans
   into existing object-alignment padding.
 - **WeakRefRegistry:** External identity maps. Only allocated when `weaken()`
-  is called. Zero memory when no weak refs exist.
+  is called. Zero memory when no weak refs exist. Empty per-referent reverse
+  buckets are removed by overwrite, clear, and `unweaken()` paths.
 - **DestroyDispatch caches:** `BitSet` + `ConcurrentHashMap`. Negligible.
 
 ---

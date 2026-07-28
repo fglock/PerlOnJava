@@ -1540,12 +1540,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // Phase B1 (refcount_alignment_52leaks_plan.md): track this
-        // scalar so the reachability walker can enumerate live lexicals.
-        if (newOwned) {
-            ScalarRefRegistry.registerRef(this);
-        }
-
         int preAssignType = this.type;
         Object preAssignValue = this.value;
 
@@ -1597,10 +1591,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             newOwned = true;
         }
 
-        // Phase B1 (refcount_alignment_52leaks_plan.md): register this
-        // scalar in ScalarRefRegistry so the reachability walker can
-        // enumerate live ref-holding RuntimeScalars on demand. No-op
-        // when no weaken() has ever been called.
+        // Phase B1 (refcount_alignment_52leaks_plan.md): register this scalar
+        // once, after rescue handling has had a chance to acquire ownership.
+        // This used to run both before and after the assignment, causing two
+        // WeakHashMap.put() calls for every ordinary tracked reference store.
         if (newOwned) {
             ScalarRefRegistry.registerRef(this);
         }

@@ -16,8 +16,6 @@ public class DynaLoader extends PerlModuleBase {
         DynaLoader dynaLoader = new DynaLoader();
         dynaLoader.initializeExporter();
         dynaLoader.defineExport("EXPORT", "bootstrap");
-        // Set $DynaLoader::VERSION so CPAN dependency checks are satisfied
-        GlobalVariable.getGlobalVariable("DynaLoader::VERSION").set("1.54");
         try {
             dynaLoader.registerMethod("bootstrap", null);
             dynaLoader.registerMethod("boot_DynaLoader", null);
@@ -36,7 +34,8 @@ public class DynaLoader extends PerlModuleBase {
             dynaLoader.registerMethod("dl_undef_symbols", "dl_empty", null);
             dynaLoader.registerMethod("dl_error", "dl_error", null);
 
-            // Set $DynaLoader::VERSION so CPAN dependency checking works
+            // Match the bundled DynaLoader.pm so runtime and file-based
+            // dependency/version checks report the same value.
             GlobalVariable.getGlobalVariable("DynaLoader::VERSION").set("1.56");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DynaLoader method: " + e.getMessage());

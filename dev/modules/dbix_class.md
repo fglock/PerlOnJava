@@ -543,9 +543,21 @@ can't ship a regression behind that flag.
 
 ---
 
-## Non-Bug Warnings (informational)
+## Environment Warning Fixes (2026-07-27)
 
-- **`Mismatch of versions '1.1' and '1.45'`** in `t/00describe_environment.t` for `Params::ValidationCompiler::Exception::Named::Required`: Not a PerlOnJava bug. `Exception::Class` deliberately sets `$INC{$subclass.pm} = __FILE__` on every generated subclass.
+- **Generated Exception::Class version mismatches**: Exception::Class 1.45
+  gives generated subclasses version 1.1 while registering
+  `Exception/Class.pm` (version 1.45) as their `%INC` source. The bundled CPAN
+  patch now aligns generated subclass versions with the registered file.
+- **Optional Getopt::Long::Descriptive base classes**: `base::import` still
+  throws the normal catchable "Base class package ... is empty" exception, but
+  no longer prints a duplicate message directly to stderr before throwing.
+- **DynaLoader and bytes version mismatches**: bundled module files now expose
+  the same versions as their Java runtime implementations.
+- Verified `t/00describe_environment.t` has none of these warnings.
+
+## Remaining Non-Bug Warnings (informational)
+
 - **`Subroutine is_bool redefined at Cpanel::JSON::XS line 2429`**: Triggered when Cpanel::JSON::XS loads through `@ISA` fallback. Cosmetic only.
 
 ---

@@ -891,6 +891,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Return whether a readonly scalar is owned by the optree/pad of a
+     * currently installed named subroutine.
+     *
+     * <p>Pad constants are JVM references that selective refcounting cannot
+     * observe. This targeted lookup lets mortal processing preserve a weak
+     * reference until the owning glob is replaced, when
+     * {@link #clearPadConstantWeakRefs()} performs Perl-compatible optree
+     * reaping.</p>
+     */
+    public static boolean isInstalledPadConstant(RuntimeBase target) {
+        if (target == null) return false;
+        for (RuntimeScalar codeScalar : GlobalVariable.globalCodeRefs.values()) {
+            if (codeScalar == null || !(codeScalar.value instanceof RuntimeCode code)
+                    || code.padConstants == null) {
+                continue;
+            }
+            for (RuntimeBase constant : code.padConstants) {
+                if (constant == target) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Release captured variable references. Called when this closure is being
      * discarded (scope exit, undef, or reassignment of the variable holding
      * this CODE ref). Decrements {@code captureCount} on each captured scalar,
