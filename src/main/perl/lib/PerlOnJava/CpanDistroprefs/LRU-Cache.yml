@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava distroprefs for LRU::Cache.
+
+  LRU::Cache 1.00 is XS-only. Replace its loader with a pure-Perl fallback
+  preserving the public method and function APIs and least-recently-used
+  ordering semantics.
+match:
+  distribution: "^LNATION/LRU-Cache-"
+patches:
+  - "LRU-Cache-1.00/PurePerl.patch"

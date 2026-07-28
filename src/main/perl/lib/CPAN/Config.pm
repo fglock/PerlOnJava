@@ -119,6 +119,10 @@ sub _bootstrap_prefs {
         'WWW-Suffit.yml'             => 'PerlOnJava/CpanDistroprefs/WWW-Suffit.yml',
         'WWW-Suffit-UserAgent.yml'   => 'PerlOnJava/CpanDistroprefs/WWW-Suffit-UserAgent.yml',
         'XML-FromPerl.yml'           => 'PerlOnJava/CpanDistroprefs/XML-FromPerl.yml',
+        'Test-FailWarnings.yml'       => 'PerlOnJava/CpanDistroprefs/Test-FailWarnings.yml',
+        'Term-ANSIColor-Markup.yml'   => 'PerlOnJava/CpanDistroprefs/Term-ANSIColor-Markup.yml',
+        'LRU-Cache.yml'               => 'PerlOnJava/CpanDistroprefs/LRU-Cache.yml',
+        'DateTime-Format-CLDR.yml'    => 'PerlOnJava/CpanDistroprefs/DateTime-Format-CLDR.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -265,6 +269,14 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap.pm.patch' ],
         [ 'Graph-0.9735/AdjacencyMap-Light.pm.patch',
           'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap-Light.pm.patch' ],
+        [ 'Test-FailWarnings-0.008/CallerOrigin.patch',
+          'PerlOnJava/CpanPatches/Test-FailWarnings-0.008/CallerOrigin.patch' ],
+        [ 'Term-ANSIColor-Markup-0.06/PortableAccessors.patch',
+          'PerlOnJava/CpanPatches/Term-ANSIColor-Markup-0.06/PortableAccessors.patch' ],
+        [ 'LRU-Cache-1.00/PurePerl.patch',
+          'PerlOnJava/CpanPatches/LRU-Cache-1.00/PurePerl.patch' ],
+        [ 'DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch',
+          'PerlOnJava/CpanPatches/DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch' ],
     );
 
     my $slurp = sub {

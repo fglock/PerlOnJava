@@ -2,7 +2,10 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.VersionHelper;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
+
+import java.math.BigInteger;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRef;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -199,6 +202,9 @@ public class Version extends PerlModuleBase {
             // Parse components
             String normalized = normalizeDottedVersion(version);
             versionObj.put("version", new RuntimeScalar(normalized));
+            if (normalized.contains("Inf")) {
+                originalVersionStr = new RuntimeScalar("v.Inf");
+            }
         } else {
             // Decimal format
             boolean isAlpha = version.contains("_");
@@ -228,7 +234,14 @@ public class Version extends PerlModuleBase {
         StringBuilder dotted = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
             if (i > 0) dotted.append(".");
-            dotted.append(Integer.parseInt(parts[i]));
+            BigInteger component = new BigInteger(parts[i]);
+            if (component.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                WarnDie.warn(new RuntimeScalar("Integer overflow in version"),
+                        RuntimeScalarCache.scalarEmptyString);
+                return "Inf";
+            } else {
+                dotted.append(component.intValue());
+            }
         }
         return dotted.toString();
     }
@@ -471,6 +484,17 @@ public class Version extends PerlModuleBase {
         // Check if arguments were swapped (third argument from overload)
         boolean swapped = args.size() > 2 && args.get(2).getBoolean();
 
+        // Perl's version XS normalizes any overflowing dotted component to
+        // v.Inf. Overload dispatch may pass the peer either as the original
+        // version object or as its stringified "v.Inf" value, so handle the
+        // sentinel before attempting ordinary numeric version parsing.
+        boolean v1Infinite = isInfiniteVersion(v1);
+        boolean v2Infinite = isInfiniteVersion(v2);
+        if (v1Infinite || v2Infinite) {
+            int cmp = v1Infinite == v2Infinite ? 0 : (v1Infinite ? 1 : -1);
+            return new RuntimeScalar(swapped ? -cmp : cmp).getList();
+        }
+
         // Handle non-version objects - treat undef/empty as version 0
         if (!v1.isBlessed() || !NameNormalizer.getBlessStr(v1.blessId).equals("version")) {
             String v1Str = v1.toString().trim();
@@ -521,6 +545,14 @@ public class Version extends PerlModuleBase {
         }
 
         return new RuntimeScalar(cmp).getList();
+    }
+
+    private static boolean isInfiniteVersion(RuntimeScalar value) {
+        if (value.isBlessed() && "version".equals(NameNormalizer.getBlessStr(value.blessId))) {
+            return "Inf".equals(value.hashDeref().get("version").toString());
+        }
+        String stringValue = value.toString().trim();
+        return "v.Inf".equals(stringValue) || "Inf".equals(stringValue);
     }
 
     /**

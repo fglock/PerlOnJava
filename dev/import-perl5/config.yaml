@@ -308,6 +308,17 @@ imports:
   - source: perl5/cpan/Locale-Maketext-Simple/lib/Locale/Maketext/Simple.pm
     target: src/main/perl/lib/Locale/Maketext/Simple.pm
 
+  # Core language-tag name table used by Data::Identifier
+  - source: perl5/dist/I18N-LangTags/lib/I18N/LangTags/List.pm
+    target: src/main/perl/lib/I18N/LangTags/List.pm
+
+  # Core named-field wrapper around localtime(), used by Date::Utils tests
+  - source: perl5/lib/Time/localtime.pm
+    target: src/main/perl/lib/Time/localtime.pm
+
+  - source: perl5/lib/Time/tm.pm
+    target: src/main/perl/lib/Time/tm.pm
+
   # Tests for distribution
   - source: perl5/cpan/Locale-Maketext-Simple/t
     target: perl5_t/Locale-Maketext-Simple

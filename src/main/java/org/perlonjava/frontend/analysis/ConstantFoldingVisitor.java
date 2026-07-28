@@ -742,6 +742,20 @@ public class ConstantFoldingVisitor implements Visitor {
             }
         }
 
+        // Warning-producing numeric conversions must remain runtime operations.
+        // Constant folding runs outside an emitted Perl frame, so it cannot
+        // faithfully apply the expression's lexical warning bits. Leaving the
+        // operation intact also lets an earlier BEGIN/use-installed __WARN__
+        // handler observe the warning, as it does in Perl.
+        switch (operator) {
+            case "+": case "-": case "*": case "/": case "%": case "**":
+                if (!ScalarUtils.looksLikeNumber(leftValue)
+                        || !ScalarUtils.looksLikeNumber(rightValue)) {
+                    return null;
+                }
+                break;
+        }
+
         try {
             RuntimeScalar result;
             switch (operator) {

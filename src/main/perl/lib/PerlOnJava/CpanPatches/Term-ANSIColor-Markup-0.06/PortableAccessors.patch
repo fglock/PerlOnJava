@@ -1,0 +1,94 @@
+--- Makefile.PL
++++ Makefile.PL
+@@ -6,11 +6,12 @@
+ license  'MIT';
+ all_from 'lib/Term/ANSIColor/Markup.pm';
+ 
+-requires 'Class::Accessor::Lvalue::Fast';
++requires 'Class::Accessor';
+ requires 'HTML::Parser';
+ 
+ build_requires 'Test::More';
+ build_requires 'Test::Exception';
++build_requires 'Test::Base';
+ use_test_base;
+ author_tests   'xt';
+ auto_include_deps;
+--- lib/Term/ANSIColor/Markup.pm
++++ lib/Term/ANSIColor/Markup.pm
+@@ -3,7 +3,7 @@
+ use strict;
+ use warnings;
+ use Term::ANSIColor::Markup::Parser;
+-use base qw(Class::Accessor::Lvalue::Fast);
++use base qw(Class::Accessor::Fast);
+ 
+ our $VERSION = '0.06';
+ 
+@@ -21,7 +21,7 @@
+     my ($self, $text) = @_;
+     $self->parser->parse($text);
+     $self->parser->eof;
+-    $self->text = $self->parser->text;
++    $self->text($self->parser->text);
+ }
+ 
+ sub colorize {
+--- lib/Term/ANSIColor/Markup/Parser.pm
++++ lib/Term/ANSIColor/Markup/Parser.pm
+@@ -4,7 +4,7 @@
+ use Carp qw(croak);
+ use base qw(
+     HTML::Parser
+-    Class::Accessor::Lvalue::Fast
++    Class::Accessor::Fast
+ );
+ 
+ # copied from Term::ANSIColor
+@@ -35,8 +35,8 @@
+ sub new {
+     my $class = shift;
+     my $self  = $class->SUPER::new(@_);
+-       $self->result = '';
+-       $self->stack = [];
++       $self->result('');
++       $self->stack([]);
+        $self;
+ }
+ 
+@@ -44,29 +44,29 @@
+     my ($self, $tagname, $attr, $attrseq, $text) = @_;
+     if (my $escape_sequence = $self->get_escape_sequence($tagname)) {
+         push @{$self->stack}, $tagname;
+-        $self->result .= $escape_sequence;
++        $self->result($self->result . $escape_sequence);
+     }
+     else {
+-        $self->result .= $text;
++        $self->result($self->result . $text);
+     }
+ }
+ 
+ sub text {
+     my ($self, $text) = @_;
+-    $self->result .= $self->unescape($text);
++    $self->result($self->result . $self->unescape($text));
+ }
+ 
+ sub end {
+     my ($self, $tagname, $text) = @_;
+     if (my $color = $self->get_escape_sequence($tagname)) {
+         my $top = pop @{$self->stack};
+         croak "Invalid end tag was found: $text" if $top ne $tagname;
+-        $self->result .= $self->get_escape_sequence('reset');
++        $self->result($self->result . $self->get_escape_sequence('reset'));
+         if (scalar @{$self->stack}) {
+-            $self->result .= $self->get_escape_sequence($self->stack->[-1]);
++            $self->result($self->result . $self->get_escape_sequence($self->stack->[-1]));
+         }
+     }
+     else {
+-        $self->result .= $text;
++        $self->result($self->result . $text);
+     }
+ }

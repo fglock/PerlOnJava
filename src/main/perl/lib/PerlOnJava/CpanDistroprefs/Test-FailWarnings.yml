@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::FailWarnings.
+
+  warnings::warn is implemented by a Java-backed core module, so warning
+  handlers see its synthetic Warnings.java dispatch frame before the actual
+  Perl caller. Teach Test::FailWarnings' source walker to ignore that internal
+  frame so -allow_from continues to match the originating package.
+match:
+  distribution: "^DAGOLDEN/Test-FailWarnings-"
+patches:
+  - "Test-FailWarnings-0.008/CallerOrigin.patch"
