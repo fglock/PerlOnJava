@@ -1,3 +1,8 @@
+---
+name: profile-perlonjava
+description: Profile and optimize PerlOnJava runtime performance with Java Flight Recorder. Use when investigating runtime bottlenecks, identifying CPU or allocation hotspots, measuring optimizations, or diagnosing performance regressions.
+---
+
 # Profile PerlOnJava
 
 ## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️

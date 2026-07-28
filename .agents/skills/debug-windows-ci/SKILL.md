@@ -1,3 +1,8 @@
+---
+name: debug-windows-ci
+description: Debug PerlOnJava test and build failures that occur on Windows CI but pass on macOS or Linux. Use for Windows-specific path handling, shell differences, file I/O behavior, and GitHub Actions failures on windows-latest.
+---
+
 # Debug PerlOnJava Windows CI Failures
 
 ## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
