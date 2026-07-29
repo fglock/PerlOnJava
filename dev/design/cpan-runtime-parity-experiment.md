@@ -140,6 +140,10 @@ Runtime outcome:
   expression's first line through scoped compiler metadata. Constant folding
   carries that metadata onto the surviving AST without changing runtime
   execution. Defined-or (`//`) retains its distinct RHS-line behavior.
+- The interpreter unwraps one-element parenthesized lvalues before compiling
+  increment/decrement operations. This fixes Test2::Hub's
+  `++($self->{+COUNT})` pattern and lets the MRO regression use Test::More on
+  both backends.
 - `mro::get_linear_isa` hides the implicit `UNIVERSAL` fallback and its parents
   when introspecting other classes, while preserving explicit introspection of
   `UNIVERSAL` itself.
@@ -181,7 +185,9 @@ Runtime outcome:
   - Added mutation-aware `@ISA` generation tracking and reverse-MRO refresh.
   - Moved anonymous CODE attribute dispatch to compile-time source order.
   - Preserved Perl caller lines across boolean short-circuit compilation.
-  - Added standard-Perl-validated units for all three behaviors.
+  - Fixed interpreter increment/decrement of parenthesized lvalues used by
+    Test2::Hub.
+  - Added standard-Perl-validated units for all runtime behaviors.
   - Removed and retired `Test-Class.yml`.
   - Verified unmodified Test::Class: 57 files, 191 tests.
 

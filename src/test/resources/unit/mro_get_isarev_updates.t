@@ -1,31 +1,14 @@
 use strict;
 use warnings;
+use Test::More;
 use mro;
-
-my $test = 0;
-sub check {
-    my ($pass, $name) = @_;
-    ++$test;
-    print(($pass ? 'ok' : 'not ok'), " $test - $name\n");
-}
-
-sub check_array {
-    my ($got, $expected, $name) = @_;
-    check(
-        @$got == @$expected
-            && join("\0", @$got) eq join("\0", @$expected),
-        $name,
-    );
-}
-
-print "1..6\n";
 
 {
     package IsarevBase;
     our $VERSION = 1;
 }
 
-check_array(
+is_deeply(
     mro::get_isarev('IsarevBase'),
     [],
     'initial reverse inheritance lookup is empty',
@@ -37,7 +20,7 @@ eval q{
     1;
 } or die $@;
 
-check_array(
+is_deeply(
     mro::get_isarev('IsarevBase'),
     ['IsarevChild'],
     'reverse inheritance lookup sees a class added after the cache was read',
@@ -49,7 +32,7 @@ eval q{
     1;
 } or die $@;
 
-check_array(
+is_deeply(
     [sort @{mro::get_isarev('IsarevBase')}],
     [qw(IsarevChild IsarevGrandchild)],
     'reverse inheritance lookup includes newly added indirect subclasses',
@@ -66,18 +49,20 @@ check_array(
 {
     local @UNIVERSAL::ISA = ('IsarevUniversalParent');
 
-    check_array(
+    is_deeply(
         mro::get_linear_isa('IsarevLinearChild'),
         [qw(IsarevLinearChild IsarevBase)],
         'implicit UNIVERSAL parents are hidden from another class linearization',
     );
-    check_array(
+    is_deeply(
         mro::get_linear_isa('UNIVERSAL'),
         [qw(UNIVERSAL IsarevUniversalParent)],
         'UNIVERSAL exposes its own explicit parents',
     );
-    check(
+    ok(
         IsarevLinearChild->can('marker'),
         'UNIVERSAL parent remains available to method lookup',
     );
 }
+
+done_testing;
