@@ -136,6 +136,10 @@ Runtime outcome:
 - Anonymous subs with non-builtin attributes receive a compile-time CODE
   placeholder, so `MODIFY_CODE_ATTRIBUTES` runs in Perl source order. Both
   backends attach the executable definition to that same CODE reference.
+- Built-in attributes applied by a custom handler to that placeholder are
+  carried to the executable CODE. In particular, `:const` evaluation is
+  deferred until the body and any closure captures exist, matching
+  `op/attrs.t` without warning or source patching.
 - Calls inside `&&`, `and`, `||`, and `or` report the outer logical
   expression's first line through scoped compiler metadata. Constant folding
   carries that metadata onto the surviving AST without changing runtime
@@ -187,6 +191,8 @@ Runtime outcome:
   - Preserved Perl caller lines across boolean short-circuit compilation.
   - Fixed interpreter increment/decrement of parenthesized lvalues used by
     Test2::Hub.
+  - Deferred custom-handler `:const` evaluation until anonymous CODE
+    definitions and captures are complete, fixing the `op/attrs.t` regression.
   - Added standard-Perl-validated units for all runtime behaviors.
   - Removed and retired `Test-Class.yml`.
   - Verified unmodified Test::Class: 57 files, 191 tests.

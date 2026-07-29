@@ -437,6 +437,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.subName = this.subName;
         copy.packageName = this.packageName;
         copy.isTryExpressionWrapper = this.isTryExpressionWrapper;
+        copy.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
+        copy.deferredConstAttribute = this.deferredConstAttribute;
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.usesLocalization = this.usesLocalization;

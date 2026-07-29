@@ -202,21 +202,15 @@ public class Attributes extends PerlModuleBase {
                         }
                         // const: invoke and store result if callable, else warn "useless"
                         if ("const".equals(attrName) && !hadAttr) {
+                            if (code.definitionPending) {
+                                // Perl lets an attribute handler apply :const
+                                // to an anonymous closure prototype before its
+                                // executable body and captures are finalized.
+                                code.deferredConstAttribute = true;
+                                return ATTR_APPLIED;
+                            }
                             if (hasCallableBody) {
-                                // Const folding: call the sub with no args and store the result
-                                // Deep-copy: the result may contain aliases to mutable variables
-                                // (e.g. sub :const { $_ } — the result aliases $_, which may change later)
-                                RuntimeArray emptyArgs = new RuntimeArray();
-                                RuntimeList result = code.apply(emptyArgs, RuntimeContextType.LIST);
-                                RuntimeList frozen = new RuntimeList();
-                                for (RuntimeBase elem : result.elements) {
-                                    if (elem instanceof RuntimeScalar rs) {
-                                        frozen.elements.add(new RuntimeScalar(rs));
-                                    } else {
-                                        frozen.elements.add(elem);
-                                    }
-                                }
-                                code.constantValue = frozen;
+                                cacheConstantValue(code);
                                 return ATTR_APPLIED;
                             }
                             // No callable body — const is useless
@@ -438,7 +432,21 @@ public class Attributes extends PerlModuleBase {
         }
         RuntimeCode compiled = (RuntimeCode) compiledRef.value;
         RuntimeCode placeholder = (RuntimeCode) compileTimeRef.value;
+        List<String> compileTimeAttributes = placeholder.attributes == null
+                ? List.of() : new ArrayList<>(placeholder.attributes);
+        boolean deferredConst = placeholder.deferredConstAttribute;
+        if (compiled instanceof org.perlonjava.backend.bytecode.InterpretedCode) {
+            transferCompileTimeBuiltinAttributes(
+                    compiled, compileTimeAttributes, deferredConst);
+            compiled.__SUB__ = compileTimeRef;
+            compileTimeRef.value = compiled;
+            finalizeCompileTimeAttributes(compiled);
+            return compileTimeRef;
+        }
         placeholder.adoptDefinitionFrom(compiled);
+        transferCompileTimeBuiltinAttributes(
+                placeholder, compileTimeAttributes, deferredConst);
+        finalizeCompileTimeAttributes(placeholder);
         placeholder.__SUB__ = compileTimeRef;
 
         if (placeholder.codeObject instanceof RuntimeCode nested) {
@@ -457,6 +465,65 @@ public class Attributes extends PerlModuleBase {
             }
         }
         return compileTimeRef;
+    }
+
+    /**
+     * Transfer built-in effects applied by a compile-time attribute handler to
+     * an interpreter closure template. Non-built-in source attributes are not
+     * installed as built-in CV flags.
+     */
+    public static void transferCompileTimeAttributes(
+            RuntimeCode target, RuntimeCode compileTimePrototype) {
+        List<String> compileTimeAttributes = compileTimePrototype.attributes == null
+                ? List.of() : new ArrayList<>(compileTimePrototype.attributes);
+        transferCompileTimeBuiltinAttributes(
+                target, compileTimeAttributes,
+                compileTimePrototype.deferredConstAttribute);
+    }
+
+    private static void transferCompileTimeBuiltinAttributes(
+            RuntimeCode target, List<String> compileTimeAttributes,
+            boolean deferredConst) {
+        Set<String> builtinAttrs = Set.of("lvalue", "method", "const");
+        if (target.attributes == null) {
+            target.attributes = new ArrayList<>();
+        }
+        target.attributes.removeIf(attr -> builtinAttrs.contains(attr));
+        for (String attr : compileTimeAttributes) {
+            if (builtinAttrs.contains(attr) && !target.attributes.contains(attr)) {
+                target.attributes.add(attr);
+            }
+        }
+        target.definitionPending = false;
+        target.attributesDispatchedAtCompileTime = true;
+        target.deferredConstAttribute = deferredConst;
+    }
+
+    /**
+     * Finalize deferred built-in attributes after a closure has captured its
+     * runtime environment.
+     */
+    public static void finalizeCompileTimeAttributes(RuntimeCode code) {
+        if (code.deferredConstAttribute) {
+            code.deferredConstAttribute = false;
+            cacheConstantValue(code);
+        }
+    }
+
+    private static void cacheConstantValue(RuntimeCode code) {
+        // Deep-copy because a const body may return an alias to a mutable
+        // variable (for example sub :const { $_ }).
+        RuntimeArray emptyArgs = new RuntimeArray();
+        RuntimeList result = code.apply(emptyArgs, RuntimeContextType.LIST);
+        RuntimeList frozen = new RuntimeList();
+        for (RuntimeBase elem : result.elements) {
+            if (elem instanceof RuntimeScalar rs) {
+                frozen.elements.add(new RuntimeScalar(rs));
+            } else {
+                frozen.elements.add(elem);
+            }
+        }
+        code.constantValue = frozen;
     }
 
     /**

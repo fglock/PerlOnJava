@@ -5667,6 +5667,7 @@ public class BytecodeCompiler implements Visitor {
             if (compileTimeAttributeCodeRef != null
                     && compileTimeAttributeCodeRef.value instanceof RuntimeCode prototype) {
                 prototype.isClosurePrototype = true;
+                Attributes.transferCompileTimeAttributes(subCode, prototype);
             }
             int templateIdx = addToConstantPool(subCode);
             emit(Opcodes.CREATE_CLOSURE);

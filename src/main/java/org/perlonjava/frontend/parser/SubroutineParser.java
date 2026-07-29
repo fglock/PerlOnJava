@@ -1819,6 +1819,8 @@ public class SubroutineParser {
         if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
             RuntimeCode placeholder = new RuntimeCode(prototype, new ArrayList<>(attributes));
             placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
+            placeholder.definitionPending = true;
+            placeholder.attributesDispatchedAtCompileTime = true;
             if (parser.ctx.errorUtil != null) {
                 var loc = parser.ctx.errorUtil.getSourceLocationAccurate(currentIndex);
                 placeholder.cvStartFile = loc.fileName();
