@@ -80,6 +80,9 @@ public class BytecodeCompiler implements Visitor {
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
+    // Perl attributes calls inside boolean short-circuit expressions to the
+    // outermost expression's first line.
+    int callerLineTokenOverride = -1;
     // Callsite ID counter for /o modifier support (unique across all compilations)
     private static int nextCallsiteId = 1;
     // Track last result register for expression chaining
@@ -5641,9 +5644,15 @@ public class BytecodeCompiler implements Visitor {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference
-            // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
-            if (subCode.attributes != null && !subCode.attributes.isEmpty()
+            RuntimeScalar compileTimeAttributeCodeRef =
+                    node.getAnnotation("compileTimeAttributeCodeRef") instanceof RuntimeScalar ref
+                            ? ref : null;
+            if (compileTimeAttributeCodeRef != null) {
+                codeScalar = Attributes.adoptCompileTimeCodeRef(
+                        codeScalar, compileTimeAttributeCodeRef);
+            } else if (subCode.attributes != null && !subCode.attributes.isEmpty()
                     && subCode.packageName != null) {
+                // Legacy fallback for ASTs created outside the parser.
                 Attributes.runtimeDispatchModifyCodeAttributes(subCode.packageName, codeScalar);
             }
             int constIdx = addToConstantPool(codeScalar);
@@ -5652,6 +5661,13 @@ public class BytecodeCompiler implements Visitor {
             emit(constIdx);
         } else {
             // Has closures - emit CREATE_CLOSURE
+            RuntimeScalar compileTimeAttributeCodeRef =
+                    node.getAnnotation("compileTimeAttributeCodeRef") instanceof RuntimeScalar ref
+                            ? ref : null;
+            if (compileTimeAttributeCodeRef != null
+                    && compileTimeAttributeCodeRef.value instanceof RuntimeCode prototype) {
+                prototype.isClosurePrototype = true;
+            }
             int templateIdx = addToConstantPool(subCode);
             emit(Opcodes.CREATE_CLOSURE);
             emitReg(codeReg);

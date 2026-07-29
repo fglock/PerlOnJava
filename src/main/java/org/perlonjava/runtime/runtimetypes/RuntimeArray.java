@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.Stack;
 
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
@@ -49,6 +50,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public Set<RuntimeScalar> ownedAliasElements;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
+    // Package arrays named @ISA participate in method resolution.  All writes
+    // to their element list must invalidate MRO caches.
+    private boolean isaArray;
 
 
     // Constructor
@@ -92,6 +96,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean add(RuntimeScalar value) {
+            owner.noteIsaMutation();
             owner.notePackageRootMutation(null, value);
             if (value != null) value.markContainerOwner(owner);
             owner.markPackageRootedValue(value);
@@ -100,6 +105,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public void add(int index, RuntimeScalar element) {
+            owner.noteIsaMutation();
             owner.notePackageRootMutation(null, element);
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
@@ -108,6 +114,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean addAll(java.util.Collection<? extends RuntimeScalar> c) {
+            if (!c.isEmpty()) owner.noteIsaMutation();
             owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
                 if (value != null) value.markContainerOwner(owner);
@@ -118,6 +125,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean addAll(int index, java.util.Collection<? extends RuntimeScalar> c) {
+            if (!c.isEmpty()) owner.noteIsaMutation();
             owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
                 if (value != null) value.markContainerOwner(owner);
@@ -129,6 +137,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar set(int index, RuntimeScalar element) {
             RuntimeScalar previous = super.get(index);
+            owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, element);
             if (element != null) element.markContainerOwner(owner);
             owner.markPackageRootedValue(element);
@@ -138,6 +147,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar remove(int index) {
             RuntimeScalar previous = super.remove(index);
+            owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
             return previous;
         }
@@ -146,6 +156,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         public boolean remove(Object o) {
             boolean removed = super.remove(o);
             if (removed && o instanceof RuntimeScalar scalar) {
+                owner.noteIsaMutation();
                 owner.notePackageRootMutation(scalar, null);
             }
             return removed;
@@ -153,8 +164,21 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public void clear() {
-            if (!isEmpty()) owner.notePackageRootClear(this);
+            if (!isEmpty()) {
+                owner.noteIsaMutation();
+                owner.notePackageRootClear(this);
+            }
             super.clear();
+        }
+    }
+
+    public void markIsaArray() {
+        isaArray = true;
+    }
+
+    private void noteIsaMutation() {
+        if (isaArray) {
+            InheritanceResolver.noteIsaMutation();
         }
     }
 

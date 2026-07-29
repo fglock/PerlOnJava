@@ -9,6 +9,23 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 public class CompileBinaryOperator {
     static void visitBinaryOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
+        boolean booleanShortCircuit = node.operator.equals("&&") || node.operator.equals("and")
+                || node.operator.equals("||") || node.operator.equals("or");
+        if (booleanShortCircuit && savedCallerLineOverride <= 0) {
+            bytecodeCompiler.callerLineTokenOverride =
+                    node.left != null && node.left.getIndex() > 0
+                            ? node.left.getIndex() - 1
+                            : node.getIndex();
+        }
+        try {
+            visitBinaryOperatorBody(bytecodeCompiler, node);
+        } finally {
+            bytecodeCompiler.callerLineTokenOverride = savedCallerLineOverride;
+        }
+    }
+
+    private static void visitBinaryOperatorBody(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
 
@@ -185,7 +202,8 @@ public class CompileBinaryOperator {
                 // Emit CALL_SUB opcode
                 // Use emitWithToken so pcToTokenIndex maps the call instruction to the
                 // coderef's token index (call-site line), not the closing ')' line.
-                int callSiteToken = node.left.getIndex();
+                int callSiteToken = effectiveCallerLineToken(
+                        bytecodeCompiler, node, node.left.getIndex());
                 if (callSiteToken > 0) {
                     bytecodeCompiler.emitWithToken(Opcodes.CALL_SUB, callSiteToken);
                 } else {
@@ -256,7 +274,9 @@ public class CompileBinaryOperator {
                     // Emit CALL_METHOD. Perl reports ordinary method calls at
                     // the expression start, but literal anon sub/block
                     // arguments report the block/arg line.
-                    int callSiteToken = methodCallerLineCallSiteToken(node, argsNode);
+                    int callSiteToken = effectiveCallerLineToken(
+                            bytecodeCompiler, node,
+                            methodCallerLineCallSiteToken(node, argsNode));
                     if (callSiteToken > 0) {
                         bytecodeCompiler.emitWithToken(Opcodes.CALL_METHOD, callSiteToken);
                     } else {
@@ -420,7 +440,8 @@ public class CompileBinaryOperator {
             // Emit CALL_SUB or CALL_SUB_SHARE_ARGS opcode. Perl reports the
             // expression start for ordinary multi-line calls, but literal anon
             // sub/block arguments and &-prototype calls report the block/arg line.
-            int callSiteToken = callerLineCallSiteToken(node);
+            int callSiteToken = effectiveCallerLineToken(
+                    bytecodeCompiler, node, callerLineCallSiteToken(node));
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
                     bytecodeCompiler, node, rs1, rs2, callSiteToken,
                     shareCallerArgs);
@@ -788,6 +809,17 @@ public class CompileBinaryOperator {
             return node.right.getIndex();
         }
         return expressionStartIndex(node);
+    }
+
+    private static int effectiveCallerLineToken(
+            BytecodeCompiler bytecodeCompiler, Node node, int normalToken) {
+        Object annotated = node.getAnnotation("callerLineTokenOverride");
+        if (annotated instanceof Integer token && token > 0) {
+            return token;
+        }
+        return bytecodeCompiler.callerLineTokenOverride > 0
+                ? bytecodeCompiler.callerLineTokenOverride
+                : normalToken;
     }
 
     private static int expressionStartIndex(BinaryOperatorNode node) {

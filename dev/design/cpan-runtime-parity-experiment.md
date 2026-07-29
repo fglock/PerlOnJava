@@ -121,6 +121,32 @@ Experiment result:
   `LRU::Cache::new($capacity)` and `LRU::Cache->new($capacity)` now work.
 - The patched distribution passes 14 test files and 190 assertions.
 
+### Test::Class
+
+The removed distropref ignored upstream test failures caused by three runtime
+parity gaps: stale reverse inheritance after `@ISA` mutation, anonymous CODE
+attributes dispatched after later named-sub attributes, and caller lines on
+the right side of multi-line boolean expressions.
+
+Runtime outcome:
+
+- Package arrays named `@ISA` are marked as inheritance-sensitive. Structural
+  mutations increment a monotonic generation and invalidate method/MRO caches;
+  `mro::get_isarev` rebuilds only when that generation changes.
+- Anonymous subs with non-builtin attributes receive a compile-time CODE
+  placeholder, so `MODIFY_CODE_ATTRIBUTES` runs in Perl source order. Both
+  backends attach the executable definition to that same CODE reference.
+- Calls inside `&&`, `and`, `||`, and `or` report the outer logical
+  expression's first line through scoped compiler metadata. Constant folding
+  carries that metadata onto the surviving AST without changing runtime
+  execution. Defined-or (`//`) retains its distinct RHS-line behavior.
+- `mro::get_linear_isa` hides the implicit `UNIVERSAL` fallback and its parents
+  when introspecting other classes, while preserving explicit introspection of
+  `UNIVERSAL` itself.
+- The signed extracted Test::Class preference is retired on upgrade; user-owned
+  CPAN preferences are not removed.
+- The unmodified Test::Class 0.52 suite passes 57 files and 191 assertions.
+
 ## Guardrails
 
 - Never modify upstream test files.
@@ -132,7 +158,7 @@ Experiment result:
 
 ## Progress Tracking
 
-### Current Status: Runtime-first experiment complete (2026-07-28)
+### Current Status: Test::Class runtime parity complete (2026-07-29)
 
 ### Completed Phases
 
@@ -151,6 +177,13 @@ Experiment result:
   - Validated native Want and bundled LRU prototypes.
   - Kept them experimental after detecting unrelated global-state coupling.
   - Fixed the existing LRU fallback's function-style constructor.
+- [x] Phase 4: Remove the Test::Class failure override (2026-07-29)
+  - Added mutation-aware `@ISA` generation tracking and reverse-MRO refresh.
+  - Moved anonymous CODE attribute dispatch to compile-time source order.
+  - Preserved Perl caller lines across boolean short-circuit compilation.
+  - Added standard-Perl-validated units for all three behaviors.
+  - Removed and retired `Test-Class.yml`.
+  - Verified unmodified Test::Class: 57 files, 191 tests.
 
 ### Next Steps
 

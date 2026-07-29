@@ -20,6 +20,7 @@ public class Mro extends PerlModuleBase {
 
     // Reverse ISA cache (which classes inherit from a given class)
     private static final Map<String, Set<String>> isaRevCache = new HashMap<>();
+    private static long isaRevGeneration = -1;
 
     /**
      * Constructor for Mro.
@@ -165,9 +166,17 @@ public class Mro extends PerlModuleBase {
                 throw new PerlCompilerException("Invalid mro name: '" + mroType + "'");
             }
 
-            // Remove UNIVERSAL from the list as per spec
             linearized = new ArrayList<>(linearized);
-            linearized.remove("UNIVERSAL");
+            // UNIVERSAL and its parents participate in method dispatch, but
+            // Perl does not expose that implicit fallback through another
+            // class's mro::get_linear_isa().  Keep it when UNIVERSAL itself is
+            // the requested class.
+            if (!className.equals("UNIVERSAL")) {
+                int universalIndex = linearized.indexOf("UNIVERSAL");
+                if (universalIndex >= 0) {
+                    linearized = new ArrayList<>(linearized.subList(0, universalIndex));
+                }
+            }
         }
 
         // Convert to RuntimeArray
@@ -273,13 +282,13 @@ public class Mro extends PerlModuleBase {
 
         String className = args.get(0).toString();
 
-        // Build reverse ISA cache if empty
-        if (isaRevCache.isEmpty()) {
+        long currentGeneration = InheritanceResolver.getIsaGeneration();
+        if (isaRevGeneration != currentGeneration) {
             buildIsaRevCache();
+            isaRevGeneration = currentGeneration;
         }
 
         RuntimeArray result = new RuntimeArray();
-        Set<String> inheritors = isaRevCache.getOrDefault(className, new HashSet<>());
 
         // Add all classes that inherit from this one, including indirectly
         Set<String> allInheritors = new HashSet<>();
@@ -349,6 +358,7 @@ public class Mro extends PerlModuleBase {
     public static RuntimeList invalidate_all_method_caches(RuntimeArray args, int ctx) {
         InheritanceResolver.invalidateCache();
         isaRevCache.clear();
+        isaRevGeneration = -1;
 
         // Increment all package generations
         for (String pkg : new HashSet<>(packageGenerations.keySet())) {

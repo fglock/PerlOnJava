@@ -47,7 +47,6 @@ sub _bootstrap_prefs {
         'CGI-Widget-Tabs.yml'        => 'PerlOnJava/CpanDistroprefs/CGI-Widget-Tabs.yml',
         'Devel-Symdump.yml'          => 'PerlOnJava/CpanDistroprefs/Devel-Symdump.yml',
         'Pod-Parser.yml'             => 'PerlOnJava/CpanDistroprefs/Pod-Parser.yml',
-        'Test-Class.yml'             => 'PerlOnJava/CpanDistroprefs/Test-Class.yml',
         'ExtUtils-CBuilder.yml'      => 'PerlOnJava/CpanDistroprefs/ExtUtils-CBuilder.yml',
         'ExtUtils-ParseXS.yml'       => 'PerlOnJava/CpanDistroprefs/ExtUtils-ParseXS.yml',
         'Module-Build.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Build.yml',
@@ -157,6 +156,7 @@ sub _bootstrap_prefs {
     for my $file (qw(
         Test-FailWarnings.yml
         DateTime-Format-CLDR.yml
+        Test-Class.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;

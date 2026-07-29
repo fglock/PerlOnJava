@@ -1810,9 +1810,41 @@ public class SubroutineParser {
             // Throw an exception indicating a syntax error.
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
-        // Finally, we return a new 'SubroutineNode' object with the parsed data: the name, prototype, attributes, block,
-        // `useTryCatch` flag, and token position.
-        return new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
+        // Perl creates anonymous CVs during compilation and dispatches their
+        // attributes immediately, in source order relative to named subs.  Keep
+        // a compile-time CODE placeholder on the AST; the JVM/interpreter
+        // compiler attaches the executable body to it later.
+        SubroutineNode node =
+                new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
+        if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
+            RuntimeCode placeholder = new RuntimeCode(prototype, new ArrayList<>(attributes));
+            placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
+            if (parser.ctx.errorUtil != null) {
+                var loc = parser.ctx.errorUtil.getSourceLocationAccurate(currentIndex);
+                placeholder.cvStartFile = loc.fileName();
+                placeholder.cvStartLine = loc.lineNumber();
+            }
+            RuntimeScalar codeRef = new RuntimeScalar(placeholder);
+            placeholder.__SUB__ = codeRef;
+            callModifyCodeAttributes(
+                    placeholder.packageName, codeRef, attributes, parser, currentIndex);
+            node.setAnnotation("compileTimeAttributeCodeRef", codeRef);
+        }
+        return node;
+    }
+
+    private static boolean hasNonBuiltinCodeAttribute(List<String> attributes) {
+        java.util.Set<String> builtinAttrs =
+                java.util.Set.of("lvalue", "method", "const");
+        for (String attr : attributes) {
+            String name = attr.startsWith("-") ? attr.substring(1) : attr;
+            int parenIdx = name.indexOf('(');
+            String baseName = parenIdx >= 0 ? name.substring(0, parenIdx) : name;
+            if (!builtinAttrs.contains(baseName) && !baseName.equals("prototype")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

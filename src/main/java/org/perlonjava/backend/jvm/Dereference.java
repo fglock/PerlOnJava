@@ -973,7 +973,12 @@ public class Dereference {
             int callsiteId = nextMethodCallsiteId++;
             // Perl reports the method expression start for ordinary multi-line
             // calls, but literal anon sub/block arguments report the block line.
-            int callSiteIndex = node.left.getIndex();
+            Object annotatedCallerLine = node.getAnnotation("callerLineTokenOverride");
+            int callSiteIndex = annotatedCallerLine instanceof Integer token && token > 0
+                    ? token
+                    : (emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride > 0
+                            ? emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride
+                            : node.left.getIndex());
             if (node.right instanceof BinaryOperatorNode callNode
                     && "(".equals(callNode.operator)
                     && firstMethodArgumentIsLiteralSub(callNode)

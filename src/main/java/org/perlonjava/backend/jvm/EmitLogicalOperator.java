@@ -197,6 +197,24 @@ public class EmitLogicalOperator {
      * @param getBoolean     The method name to convert the result to a boolean.
      */
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
+        int savedCallerLineOverride = emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride;
+        if (!"getDefinedBoolean".equals(getBoolean) && savedCallerLineOverride <= 0) {
+            emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride =
+                    node.left != null && node.left.getIndex() > 0
+                            // Operand nodes point just after their final token.
+                            // Stepping back keeps a newline-followed literal on
+                            // the literal's line rather than the operator line.
+                            ? node.left.getIndex() - 1
+                            : node.getIndex();
+        }
+        try {
+            emitLogicalOperatorBody(emitterVisitor, node, compareOpcode, getBoolean);
+        } finally {
+            emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride = savedCallerLineOverride;
+        }
+    }
+
+    private static void emitLogicalOperatorBody(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
         // Constant folding: if LHS is a compile-time constant, eliminate the branch entirely.
         // This matches Perl's behavior where e.g. `1 && expr` is folded to `expr` at compile time,
         // enabling patterns like `my $c = 1 && my $d = 42`.

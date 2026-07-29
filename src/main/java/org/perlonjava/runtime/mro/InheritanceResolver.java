@@ -21,6 +21,9 @@ public class InheritanceResolver {
     private static final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
     // Track ISA array states for change detection
     private static final Map<String, List<String>> isaStateCache = new HashMap<>();
+    // Monotonic generation for reverse-inheritance consumers such as
+    // mro::get_isarev().  @ISA arrays notify us at their mutation point.
+    private static long isaGeneration;
     public static boolean autoloadEnabled = true;
     // Default MRO algorithm
     private static MROAlgorithm currentMRO = MROAlgorithm.DFS;
@@ -182,6 +185,22 @@ public class InheritanceResolver {
         RuntimeCode.clearInlineMethodCache();
         // Clear DESTROY-related caches (destroyClasses BitSet and destroyMethodCache)
         DestroyDispatch.invalidateCache();
+    }
+
+    /**
+     * Records a mutation to any package's {@code @ISA}.
+     *
+     * <p>Unlike ordinary arrays, {@code @ISA} changes Perl's method lookup
+     * graph.  RuntimeArray marks package arrays ending in {@code ::ISA} and
+     * calls this hook for every structural mutation.
+     */
+    public static void noteIsaMutation() {
+        isaGeneration++;
+        invalidateCache();
+    }
+
+    public static long getIsaGeneration() {
+        return isaGeneration;
     }
 
     /**
