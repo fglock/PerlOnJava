@@ -696,12 +696,16 @@ public class CompileOperator {
     private static void visitIncrDecr(BytecodeCompiler bc, OperatorNode node, String op) {
         boolean isPostfix = op.endsWith("postfix");
         boolean isIncrement = op.startsWith("++");
-        if (node.operand == null) {
+        Node operand = node.operand;
+        while (operand instanceof ListNode list && list.elements.size() == 1) {
+            operand = list.elements.getFirst();
+        }
+        if (operand == null) {
             bc.throwCompilerException("Increment/decrement operator requires operand");
             return;
         }
-        if (node.operand instanceof IdentifierNode) {
-            String varName = ((IdentifierNode) node.operand).name;
+        if (operand instanceof IdentifierNode) {
+            String varName = ((IdentifierNode) operand).name;
             if (bc.hasVariable(varName)) {
                 int varReg = bc.getVariableRegister(varName);
                 if (isPostfix) {
@@ -718,7 +722,7 @@ public class CompileOperator {
                 return;
             }
         }
-        bc.compileNode(node.operand, -1, RuntimeContextType.LVALUE);
+        bc.compileNode(operand, -1, RuntimeContextType.LVALUE);
         int operandReg = bc.lastResultReg;
         if (isPostfix) {
             int resultReg = bc.allocateRegister();

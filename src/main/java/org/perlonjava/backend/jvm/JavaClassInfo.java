@@ -17,6 +17,14 @@ import java.util.*;
 public class JavaClassInfo {
 
     /**
+     * Outermost boolean short-circuit expression token used for caller().
+     * Perl attributes calls anywhere in an &&/and/||/or expression to the
+     * expression's first line. This state is shared by all context-specific
+     * emitter visitors for the current generated method.
+     */
+    public int callerLineTokenOverride = -1;
+
+    /**
      * The name of the Java class.
      */
     public String javaClassName;

@@ -388,7 +388,7 @@ public class GlobalVariable {
         SpecialBlock.checkBlocks.elements.clear();
 
         // Method resolution caches can grow across test scripts.
-        InheritanceResolver.invalidateCache();
+        InheritanceResolver.noteIsaMutation();
 
         // Debug/source mapping cache grows with every compilation; clear it between test scripts.
         ByteCodeSourceMapper.resetAll();
@@ -829,11 +829,15 @@ public class GlobalVariable {
      * @return The RuntimeArray representing the global array.
      */
     public static RuntimeArray getGlobalArray(String key) {
+        boolean isaArray = key.endsWith("::ISA");
         if (!stashAliases.isEmpty()) {
             String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
                 RuntimeArray resolved = globalArrays.get(resolvedKey);
                 if (resolved != null) {
+                    if (isaArray || resolvedKey.endsWith("::ISA")) {
+                        resolved.markIsaArray();
+                    }
                     return resolved;
                 }
             }
@@ -875,6 +879,9 @@ public class GlobalVariable {
         } else {
             markPackageGlobalRoot(var);
         }
+        if (isaArray) {
+            var.markIsaArray();
+        }
         return var;
     }
 
@@ -902,7 +909,12 @@ public class GlobalVariable {
      */
     public static RuntimeArray removeGlobalArray(String key) {
         RuntimeArray removed = globalArrays.remove(key);
-        if (removed != null) invalidatePackageRootSnapshot();
+        if (removed != null) {
+            invalidatePackageRootSnapshot();
+            if (key.endsWith("::ISA")) {
+                InheritanceResolver.noteIsaMutation();
+            }
+        }
         return removed;
     }
 

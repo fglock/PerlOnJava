@@ -707,6 +707,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
     // Calling a closure prototype should die with "Closure prototype called".
     public boolean isClosurePrototype = false;
+    // Anonymous CODE attributes are dispatched before backend compilation.
+    // These flags carry built-in effects until the executable definition and
+    // (for closures) captured environment are available.
+    public boolean definitionPending = false;
+    public boolean attributesDispatchedAtCompileTime = false;
+    public boolean deferredConstAttribute = false;
     // Flag to indicate this code is a map/grep block - non-local return should propagate through it
     public boolean isMapGrepBlock = false;
     // Flag to indicate this code is an eval BLOCK - non-local return should propagate through it
@@ -1041,6 +1047,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.isDeclared = this.isDeclared;
         clone.constantValue = this.constantValue;
         clone.compilerSupplier = this.compilerSupplier;
+        clone.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
+        clone.deferredConstAttribute = this.deferredConstAttribute;
         // isClosurePrototype stays false for the clone (it's callable)
         return clone;
     }
@@ -1547,6 +1555,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isBuiltin = codeFrom.isBuiltin;
         this.isDeclared = codeFrom.isDeclared;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
+        this.definitionPending = codeFrom.definitionPending;
+        this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
+        this.deferredConstAttribute = codeFrom.deferredConstAttribute;
         this.isMapGrepBlock = codeFrom.isMapGrepBlock;
         this.isEvalBlock = codeFrom.isEvalBlock;
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;

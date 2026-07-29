@@ -515,40 +515,35 @@ public class StringOperators {
             return stringConcatBytes(aStr, bStr);
         }
 
+        // Match stringConcat(): the UTF-8 flag propagates only from an
+        // explicitly UTF-8 scalar.  Special variables such as $1 are PROXY
+        // scalars whose toString() delegates to the current capture; treating
+        // every non-BYTE_STRING proxy as UTF-8 upgraded byte captures during
+        // s///e replacement evaluation.
         if (aResolved.type == RuntimeScalarType.STRING || bResolved.type == RuntimeScalarType.STRING) {
             return new RuntimeScalar(aStr + bStr);
         }
 
-        if (aResolved.type == BYTE_STRING || bResolved.type == BYTE_STRING) {
-            boolean aIsByte = aResolved.type == BYTE_STRING
-                    || aResolved.type == RuntimeScalarType.UNDEF
-                    || (aStr.isEmpty() && aResolved.type != RuntimeScalarType.STRING);
-            boolean bIsByte = bResolved.type == BYTE_STRING
-                    || bResolved.type == RuntimeScalarType.UNDEF
-                    || (bStr.isEmpty() && bResolved.type != RuntimeScalarType.STRING);
-            if (aIsByte && bIsByte) {
-                boolean safe = true;
-                for (int i = 0; safe && i < aStr.length(); i++) {
-                    if (aStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
-                    }
-                }
-                for (int i = 0; safe && i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
-                    }
-                }
-                if (safe) {
-                    byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] out = new byte[aBytes.length + bBytes.length];
-                    System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                    System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                    return new RuntimeScalar(out);
-                }
+        // No operand carries the UTF-8 flag.  Preserve byte semantics whenever
+        // both Java strings can be represented as octets.
+        boolean safe = true;
+        for (int i = 0; safe && i < aStr.length(); i++) {
+            if (aStr.charAt(i) > 255) {
+                safe = false;
             }
+        }
+        for (int i = 0; safe && i < bStr.length(); i++) {
+            if (bStr.charAt(i) > 255) {
+                safe = false;
+            }
+        }
+        if (safe) {
+            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] out = new byte[aBytes.length + bBytes.length];
+            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+            return new RuntimeScalar(out);
         }
 
         return new RuntimeScalar(aStr + bStr);

@@ -1,0 +1,123 @@
+--- lib/LRU/Cache.pm
++++ lib/LRU/Cache.pm
+@@ -2,8 +2,118 @@
+ use strict;
+ use warnings;
+ our $VERSION = '1.00';
+-require XSLoader;
+-XSLoader::load('LRU::Cache', $VERSION);
++
++my @FUNCTIONS = qw(
++    lru_get lru_set lru_exists lru_peek lru_delete
++    lru_oldest lru_newest
++);
++
++sub import {
++    my ($class, @requested) = @_;
++    return unless @requested;
++
++    my $caller = caller;
++    no strict 'refs';
++    for my $name (@FUNCTIONS) {
++        *{"${caller}::$name"} = \&{$name};
++    }
++}
++
++sub new {
++    my ($invocant, $maybe_capacity) = @_;
++    my ($class, $capacity) = defined($maybe_capacity)
++        ? ($invocant, $maybe_capacity)
++        : (__PACKAGE__, $invocant);
++
++    die "capacity must be a positive integer\n"
++        unless defined($capacity) && $capacity =~ /^\d+$/ && $capacity > 0;
++
++    return bless {
++        capacity => 0 + $capacity,
++        data     => {},
++        order    => [],
++    }, $class;
++}
++
++sub _promote {
++    my ($self, $key) = @_;
++    @{$self->{order}} = ($key, grep { $_ ne $key } @{$self->{order}});
++}
++
++sub set {
++    my ($self, $key, $value) = @_;
++    $key = "$key";
++    $self->{data}{$key} = $value;
++    $self->_promote($key);
++
++    if (@{$self->{order}} > $self->{capacity}) {
++        my $evicted = pop @{$self->{order}};
++        delete $self->{data}{$evicted};
++    }
++    return $value;
++}
++
++sub get {
++    my ($self, $key) = @_;
++    $key = "$key";
++    return undef unless exists $self->{data}{$key};
++    $self->_promote($key);
++    return $self->{data}{$key};
++}
++
++sub peek {
++    my ($self, $key) = @_;
++    $key = "$key";
++    return exists($self->{data}{$key}) ? $self->{data}{$key} : undef;
++}
++
++sub exists {
++    my ($self, $key) = @_;
++    return CORE::exists $self->{data}{"$key"};
++}
++
++sub delete {
++    my ($self, $key) = @_;
++    $key = "$key";
++    return undef unless exists $self->{data}{$key};
++    my $value = delete $self->{data}{$key};
++    @{$self->{order}} = grep { $_ ne $key } @{$self->{order}};
++    return $value;
++}
++
++sub size     { scalar keys %{$_[0]{data}} }
++sub capacity { $_[0]{capacity} }
++sub keys     { @{$_[0]{order}} }
++
++sub clear {
++    my ($self) = @_;
++    %{$self->{data}} = ();
++    @{$self->{order}} = ();
++    return;
++}
++
++sub oldest {
++    my ($self) = @_;
++    return () unless @{$self->{order}};
++    my $key = $self->{order}[-1];
++    return ($key, $self->{data}{$key});
++}
++
++sub newest {
++    my ($self) = @_;
++    return () unless @{$self->{order}};
++    my $key = $self->{order}[0];
++    return ($key, $self->{data}{$key});
++}
++
++sub lru_set    { $_[0]->set($_[1], $_[2]) }
++sub lru_get    { $_[0]->get($_[1]) }
++sub lru_exists { $_[0]->exists($_[1]) }
++sub lru_peek   { $_[0]->peek($_[1]) }
++sub lru_delete { $_[0]->delete($_[1]) }
++sub lru_oldest { $_[0]->oldest }
++sub lru_newest { $_[0]->newest }
++
+ 1;
+ 
+ __END__

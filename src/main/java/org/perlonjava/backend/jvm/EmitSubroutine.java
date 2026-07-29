@@ -507,10 +507,37 @@ public class EmitSubroutine {
                     "Ljava/util/List;");
         }
 
-        // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes.
-        // Named subs have their dispatch in SubroutineParser.handleNamedSub at compile time.
-        // Anonymous subs need runtime dispatch because the code ref only exists at runtime.
-        if (node.name == null && node.attributes != null && !node.attributes.isEmpty()) {
+        RuntimeScalar compileTimeAttributeCodeRef =
+                node.getAnnotation("compileTimeAttributeCodeRef") instanceof RuntimeScalar ref
+                        ? ref : null;
+        if (compileTimeAttributeCodeRef != null) {
+            String key = "compile_time_attr_"
+                    + System.identityHashCode(compileTimeAttributeCodeRef);
+            RuntimeCode.interpretedSubs.put(key, compileTimeAttributeCodeRef);
+
+            // Stack: [compiledRef]
+            mv.visitFieldInsn(Opcodes.GETSTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "interpretedSubs",
+                    "Ljava/util/HashMap;");
+            mv.visitLdcInsn(key);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "java/util/HashMap",
+                    "get",
+                    "(Ljava/lang/Object;)Ljava/lang/Object;",
+                    false);
+            mv.visitTypeInsn(Opcodes.CHECKCAST,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            // Stack: [compiledRef, compileTimeRef]
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/perlmodule/Attributes",
+                    "adoptCompileTimeCodeRef",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        } else if (node.name == null && node.attributes != null && !node.attributes.isEmpty()) {
+            // Legacy fallback for ASTs created outside the parser.
             java.util.Set<String> builtinAttrs = java.util.Set.of("lvalue", "method", "const");
             boolean hasNonBuiltin = false;
             for (String attr : node.attributes) {
@@ -815,7 +842,12 @@ public class EmitSubroutine {
         // Set debug line number to the call site. Perl reports the expression
         // start for ordinary multi-line calls, but literal anon sub/block
         // arguments and &-prototype calls report the block/arg line.
-        int callSiteIndex = callerLineCallSiteIndex(node);
+        Object annotatedCallerLine = node.getAnnotation("callerLineTokenOverride");
+        int callSiteIndex = annotatedCallerLine instanceof Integer token && token > 0
+                ? token
+                : (emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride > 0
+                        ? emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride
+                        : callerLineCallSiteIndex(node));
         if (callSiteIndex > 0) {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
         }

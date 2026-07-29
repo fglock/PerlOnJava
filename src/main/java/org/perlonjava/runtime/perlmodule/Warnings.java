@@ -473,6 +473,15 @@ public class Warnings extends PerlModuleBase {
         } else {
             bits = getWarningBitsAtLevel(0);
         }
+        if (bits == null || !WarningFlags.isEnabledInBits(bits, category)) {
+            ScopedSymbolTable compileScope = getCurrentScope();
+            if (compileScope != null) {
+                String compileBits = compileScope.getWarningBitsString();
+                if (compileBits != null && WarningFlags.isEnabledInBits(compileBits, category)) {
+                    bits = compileBits;
+                }
+            }
+        }
         // Check scope-based runtime suppression first (from "no warnings 'category'" blocks)
         if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
             return new RuntimeScalar(false).getList();
@@ -529,6 +538,15 @@ public class Warnings extends PerlModuleBase {
         } else {
             bits = getWarningBitsAtLevel(0);
         }
+        if (bits == null || !WarningFlags.isFatalInBits(bits, category)) {
+            ScopedSymbolTable compileScope = getCurrentScope();
+            if (compileScope != null) {
+                String compileBits = compileScope.getWarningBitsString();
+                if (compileBits != null && WarningFlags.isFatalInBits(compileBits, category)) {
+                    bits = compileBits;
+                }
+            }
+        }
         // Check scope-based runtime suppression first
         if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
             return new RuntimeScalar(false).getList();
@@ -567,8 +585,7 @@ public class Warnings extends PerlModuleBase {
         if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for warn()");
         }
-        String message = args.get(0).toString();
-        System.err.println("Warning: " + message);
+        WarnDie.warn(args.get(0), getCallerLocation(0));
         return new RuntimeScalar().getList();
     }
 

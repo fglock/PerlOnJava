@@ -297,6 +297,8 @@ public class ConstantFoldingVisitor implements Visitor {
                     case "&&": case "and":
                         // true && expr → expr; false && expr → false constant
                         if (leftVal.getBoolean()) {
+                            annotateCallerLine(
+                                    foldedRight, logicalExpressionStartIndex(node));
                             result = foldedRight;
                             isConstant = isConstantNode(foldedRight);
                         } else {
@@ -314,6 +316,8 @@ public class ConstantFoldingVisitor implements Visitor {
                             result = foldedLeft;
                             isConstant = true;
                         } else {
+                            annotateCallerLine(
+                                    foldedRight, logicalExpressionStartIndex(node));
                             result = foldedRight;
                             isConstant = isConstantNode(foldedRight);
                         }
@@ -352,6 +356,49 @@ public class ConstantFoldingVisitor implements Visitor {
             result = node;
         }
         isConstant = false;
+    }
+
+    private static int logicalExpressionStartIndex(BinaryOperatorNode node) {
+        return node.left != null && node.left.getIndex() > 0
+                ? node.left.getIndex() - 1
+                : node.getIndex();
+    }
+
+    /**
+     * Constant folding removes the logical node, so carry its caller-line
+     * metadata onto every surviving descendant that might emit a call.
+     */
+    private static void annotateCallerLine(Node root, int tokenIndex) {
+        annotateCallerLine(
+                root, tokenIndex,
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
+    }
+
+    private static void annotateCallerLine(
+            Node node, int tokenIndex, java.util.Set<Node> visited) {
+        if (node == null || !visited.add(node)) {
+            return;
+        }
+        node.setAnnotation("callerLineTokenOverride", tokenIndex);
+        for (java.lang.reflect.Field field : node.getClass().getFields()) {
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
+            try {
+                Object value = field.get(node);
+                if (value instanceof Node child) {
+                    annotateCallerLine(child, tokenIndex, visited);
+                } else if (value instanceof Iterable<?> iterable) {
+                    for (Object item : iterable) {
+                        if (item instanceof Node child) {
+                            annotateCallerLine(child, tokenIndex, visited);
+                        }
+                    }
+                }
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("Unable to annotate folded AST", e);
+            }
+        }
     }
 
     @Override
@@ -740,6 +787,20 @@ public class ConstantFoldingVisitor implements Visitor {
                 case "+": case "-": case "*": case "/": case "%": case "**":
                     return null;
             }
+        }
+
+        // Warning-producing numeric conversions must remain runtime operations.
+        // Constant folding runs outside an emitted Perl frame, so it cannot
+        // faithfully apply the expression's lexical warning bits. Leaving the
+        // operation intact also lets an earlier BEGIN/use-installed __WARN__
+        // handler observe the warning, as it does in Perl.
+        switch (operator) {
+            case "+": case "-": case "*": case "/": case "%": case "**":
+                if (!ScalarUtils.looksLikeNumber(leftValue)
+                        || !ScalarUtils.looksLikeNumber(rightValue)) {
+                    return null;
+                }
+                break;
         }
 
         try {

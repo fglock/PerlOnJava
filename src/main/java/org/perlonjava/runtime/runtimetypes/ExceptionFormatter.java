@@ -263,6 +263,20 @@ public class ExceptionFormatter {
 
                     var entry = new ArrayList<String>();
                     String pkgName = loc.packageName();
+                    // Java-backed Perl module methods do not have source-mapper
+                    // metadata, so parseStackTraceElement() returns an empty
+                    // package and caller() historically exposed them as main.
+                    // The active RuntimeCode stack is aligned with the Perl
+                    // frames collected here and retains the registered Perl
+                    // package (for example, Warnings.java -> warnings).
+                    if ((pkgName == null || pkgName.isEmpty())
+                            && element.getClassName().contains("org.perlonjava.runtime.perlmodule")) {
+                        RuntimeCode nativeCode = RuntimeCode.getActiveCodeAt(stackTrace.size());
+                        if (nativeCode != null && nativeCode.packageName != null
+                                && !nativeCode.packageName.isEmpty()) {
+                            pkgName = nativeCode.packageName;
+                        }
+                    }
                     entry.add(pkgName != null ? pkgName : "main");
                     entry.add(loc.sourceFileName());
                     entry.add(String.valueOf(loc.lineNumber()));
