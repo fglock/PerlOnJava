@@ -255,8 +255,12 @@ public class EmitSubroutine {
                 cvStartFile = ctx.compilerOptions.fileName;
             }
             int deparseSourceOffset = -1;
-            if (ctx.errorUtil != null && node.block != null) {
-                deparseSourceOffset = ctx.errorUtil.getSourceOffset(node.block.getIndex());
+            if (ctx.errorUtil != null) {
+                // The subroutine node carries the lexer token index.  The
+                // block's index is the first AST child index and can point at
+                // a later enclosing block for adjacent anonymous subs,
+                // causing Storable::Deparse to retain the wrong source.
+                deparseSourceOffset = ctx.errorUtil.getSourceOffset(node.getIndex());
             }
             String deparseSourceText = null;
             if (ctx.compilerOptions != null) {
