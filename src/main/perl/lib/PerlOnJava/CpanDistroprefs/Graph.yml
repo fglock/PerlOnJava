@@ -11,6 +11,6 @@ comment: |
 match:
   distribution: "^.*/Graph-[0-9]"
 patches:
-  - "Graph-0.9735/Graph.pm.patch"
-  - "Graph-0.9735/AdjacencyMap.pm.patch"
-  - "Graph-0.9735/AdjacencyMap-Light.pm.patch"
+  - "Graph/Graph.pm.patch"
+  - "Graph/AdjacencyMap.pm.patch"
+  - "Graph/AdjacencyMap-Light.pm.patch"

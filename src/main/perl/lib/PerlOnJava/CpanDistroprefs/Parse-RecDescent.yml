@@ -9,5 +9,5 @@ comment: |
 match:
   distribution: "^JTBRAUN/Parse-RecDescent-"
 patches:
-  - "Parse-RecDescent-1.967015/SkipStandalonePrecompile.patch"
-  - "Parse-RecDescent-1.967015/SkipReproducibleStandalone.patch"
+  - "Parse-RecDescent/SkipStandalonePrecompile.patch"
+  - "Parse-RecDescent/SkipReproducibleStandalone.patch"

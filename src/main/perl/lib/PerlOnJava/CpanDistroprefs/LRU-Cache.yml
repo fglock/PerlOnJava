@@ -8,4 +8,4 @@ comment: |
 match:
   distribution: "^LNATION/LRU-Cache-"
 patches:
-  - "LRU-Cache-1.00/PurePerl.patch"
+  - "LRU-Cache/PurePerl.patch"

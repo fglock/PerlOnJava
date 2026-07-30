@@ -8,6 +8,6 @@ comment: |
   CPAN builds as well as Perl core-tree builds. All non-fork IPv6 socket tests,
   including the UDP and listener tests, continue to run.
 match:
-  distribution: "IO-Socket-INET6-2\\.73"
+  distribution: "^.*/IO-Socket-INET6-"
 patches:
-  - "IO-Socket-INET6-2.73/SkipForkSocketTests.patch"
+  - "IO-Socket-INET6/SkipForkSocketTests.patch"

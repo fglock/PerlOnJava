@@ -9,4 +9,4 @@ comment: |
 match:
   distribution: "^.*/Class-DBI-"
 patches:
-  - "Class-DBI-v3.0.17/Class-DBI.pm.patch"
+  - "Class-DBI/Class-DBI.pm.patch"

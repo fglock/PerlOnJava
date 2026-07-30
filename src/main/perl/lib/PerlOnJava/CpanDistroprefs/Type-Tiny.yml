@@ -9,4 +9,4 @@ comment: |
 match:
   distribution: "^TOBYINK/Type-Tiny-"
 patches:
-  - "Type-Tiny-2.010001/SkipRegexCallbackTests.patch"
+  - "Type-Tiny/SkipRegexCallbackTests.patch"

@@ -201,10 +201,15 @@ comment: |
 match:
   distribution: "^.*/Image-BMP-"
 patches:
-  - "Image-BMP-1.26/BMP.pm.patch"
+  - "Image-BMP/BMP.pm.patch"
 ```
 
-Patch paths are relative to `src/main/perl/lib/PerlOnJava/CpanPatches/`. Keep
+Patch paths are relative to the installed patch cache, and should use the
+version-independent form `<Distribution>/<PatchName>.patch`. The bundled
+source may remain under `<Distribution-Version>/` to record which upstream
+release was used when the patch was written; `CPAN::Config` maps that source to
+the stable installed path. This lets a broad distropref try the same patch
+against a later CPAN release without changing its YAML or cache path. Keep
 patches narrow and readable. The distropref comment should explain why the
 patch belongs in PerlOnJava instead of upstream, or note if it is a candidate
 for upstreaming.

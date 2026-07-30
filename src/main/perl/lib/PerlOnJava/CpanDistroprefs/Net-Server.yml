@@ -15,4 +15,4 @@ comment: |
 match:
   distribution: "^BBB/Net-Server-"
 patches:
-  - "Net-Server-2.018/Proto.pm.patch"
+  - "Net-Server/Proto.pm.patch"

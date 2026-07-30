@@ -16,4 +16,4 @@ comment: |
 match:
   distribution: "^.*/XML-TreePP-"
 patches:
-  - "XML-TreePP-0.43/TreePP.pm.patch"
+  - "XML-TreePP/TreePP.pm.patch"

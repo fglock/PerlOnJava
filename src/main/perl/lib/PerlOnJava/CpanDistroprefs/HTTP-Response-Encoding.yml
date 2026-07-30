@@ -9,4 +9,4 @@ comment: |
 match:
   distribution: "^DANKOGAI/HTTP-Response-Encoding-"
 patches:
-  - "HTTP-Response-Encoding-0.06/Makefile.PL.patch"
+  - "HTTP-Response-Encoding/Makefile.PL.patch"

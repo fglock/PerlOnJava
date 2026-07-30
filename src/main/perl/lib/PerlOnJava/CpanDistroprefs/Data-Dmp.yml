@@ -9,4 +9,4 @@ comment: |
 match:
   distribution: "^.*/Data-Dmp-"
 patches:
-  - "Data-Dmp-0.242/PerlOnJava.patch"
+  - "Data-Dmp/PerlOnJava.patch"

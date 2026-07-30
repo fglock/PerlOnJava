@@ -9,4 +9,4 @@ comment: |
 match:
   distribution: "^SHLOMIF/Error-"
 patches:
-  - "Error-0.17030/SkipForkWarndie.patch"
+  - "Error/SkipForkWarndie.patch"

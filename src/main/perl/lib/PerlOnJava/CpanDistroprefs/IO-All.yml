@@ -7,6 +7,6 @@ comment: |
   so skip only those tests on no-fork platforms while keeping the rest
   of the upstream suite intact.
 match:
-  distribution: "^FREW/IO-All-0\\.87"
+  distribution: "^FREW/IO-All-"
 patches:
-  - "IO-All-0.87/SkipForkTests.patch"
+  - "IO-All/SkipForkTests.patch"

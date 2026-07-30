@@ -8,6 +8,6 @@ comment: |
   modules from other distributions, so patch the tests to constrain the
   fixture plugins with the module's own only option.
 match:
-  distribution: "^APEIRON/Module-Pluggable-Ordered-1\\.5"
+  distribution: "^APEIRON/Module-Pluggable-Ordered-"
 patches:
-  - "Module-Pluggable-Ordered-1.5/LimitFixturePlugins.patch"
+  - "Module-Pluggable-Ordered/LimitFixturePlugins.patch"

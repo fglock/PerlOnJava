@@ -8,5 +8,5 @@ comment: |
 match:
   distribution: "^NFERRAZ/OpenAI-API-"
 patches:
-  - "OpenAI-API-0.37/EventLoop.patch"
-  - "OpenAI-API-0.37/NoNetworkTests.patch"
+  - "OpenAI-API/EventLoop.patch"
+  - "OpenAI-API/NoNetworkTests.patch"

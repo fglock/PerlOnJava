@@ -9,4 +9,4 @@ comment: |
 match:
   distribution: "^.*/Image-BMP-"
 patches:
-  - "Image-BMP-1.26/BMP.pm.patch"
+  - "Image-BMP/BMP.pm.patch"

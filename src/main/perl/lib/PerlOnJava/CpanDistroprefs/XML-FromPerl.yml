@@ -6,6 +6,6 @@ comment: |
   Makefile.PL only declares XML::LibXML. Patch the metadata so CPAN installs
   XML::SAX before running the target test.
 match:
-  distribution: "^SALVA/XML-FromPerl-0\\.01"
+  distribution: "^SALVA/XML-FromPerl-"
 patches:
-  - "XML-FromPerl-0.01/Makefile.PL.patch"
+  - "XML-FromPerl/Makefile.PL.patch"

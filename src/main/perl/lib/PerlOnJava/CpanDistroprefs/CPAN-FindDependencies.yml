@@ -10,4 +10,4 @@ comment: |
 match:
   distribution: "^DCANTRELL/CPAN-FindDependencies-"
 patches:
-  - "CPAN-FindDependencies-3.13/MakeMaker.pm.patch"
+  - "CPAN-FindDependencies/MakeMaker.pm.patch"

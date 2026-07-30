@@ -13,4 +13,4 @@ comment: |
 match:
   distribution: "^SRSHAH/CGI-Widget-Tabs-"
 patches:
-  - "CGI-Widget-Tabs-1.14/OptionalAuthorAndCGITests.patch"
+  - "CGI-Widget-Tabs/OptionalAuthorAndCGITests.patch"

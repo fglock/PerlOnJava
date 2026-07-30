@@ -12,6 +12,6 @@ comment: |
   no longer used by the PerlOnJava test phase and otherwise pulls in
   Test::SharedFork/fork-only test suites.
 match:
-  distribution: "^DAMS/PerlIO-via-Timeout-0\\.32"
+  distribution: "^DAMS/PerlIO-via-Timeout-"
 patches:
-  - "PerlIO-via-Timeout-0.32/SkipViaRuntimeTest.patch"
+  - "PerlIO-via-Timeout/SkipViaRuntimeTest.patch"
