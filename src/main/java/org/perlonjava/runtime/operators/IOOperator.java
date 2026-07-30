@@ -1863,11 +1863,11 @@ public class IOOperator {
 
             // Map Perl socket constants to Java
             ProtocolFamily family;
-            if (domain == 2) { // AF_INET
+            if (domain == Socket.AF_INET) {
                 family = StandardProtocolFamily.INET;
-            } else if (domain == 10) { // AF_INET6
+            } else if (domain == Socket.AF_INET6) {
                 family = StandardProtocolFamily.INET6;
-            } else if (domain == 1) { // AF_UNIX
+            } else if (domain == Socket.AF_UNIX) {
                 family = StandardProtocolFamily.UNIX;
             } else {
                 getGlobalVariable("main::!").set("Unsupported socket domain: " + domain);
@@ -1937,27 +1937,25 @@ public class IOOperator {
             byte[] bytes = packedAddress.getBytes(StandardCharsets.ISO_8859_1); // Get raw bytes
 
             if (bytes.length < 8) {
-                return null; // Too short for sockaddr_in
+                return null;
             }
 
-            // Check if first 2 bytes indicate AF_INET (family = 2)
             int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
-            if (family != 2) { // AF_INET = 2
-                return null; // Not a valid sockaddr_in structure
-            }
-
-            // Extract port (bytes 2-3, network byte order)
             int port = ((bytes[2] & 0xFF) << 8) | (bytes[3] & 0xFF);
 
-            // Extract IP address (bytes 4-7)
-            int ip1 = bytes[4] & 0xFF;
-            int ip2 = bytes[5] & 0xFF;
-            int ip3 = bytes[6] & 0xFF;
-            int ip4 = bytes[7] & 0xFF;
-
-            String host = ip1 + "." + ip2 + "." + ip3 + "." + ip4;
-
-            return new String[]{host, String.valueOf(port)};
+            if (family == Socket.AF_INET) {
+                String host = (bytes[4] & 0xFF) + "."
+                        + (bytes[5] & 0xFF) + "."
+                        + (bytes[6] & 0xFF) + "."
+                        + (bytes[7] & 0xFF);
+                return new String[]{host, String.valueOf(port)};
+            }
+            if (family == Socket.AF_INET6 && bytes.length >= 24) {
+                byte[] address = Arrays.copyOfRange(bytes, 8, 24);
+                String host = InetAddress.getByAddress(address).getHostAddress();
+                return new String[]{host, String.valueOf(port)};
+            }
+            return null;
 
         } catch (Exception e) {
             return null;
@@ -2553,15 +2551,21 @@ public class IOOperator {
             if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
                 byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
                 if (args.length >= 4) {
-                    // 4th arg is packed sockaddr_in (destination address)
                     String packedAddr = args[3].toString();
-                    byte[] addrBytes = packedAddr.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-                    if (addrBytes.length >= 8) {
-                        int port = ((addrBytes[2] & 0xFF) << 8) | (addrBytes[3] & 0xFF);
-                        String ip = String.format("%d.%d.%d.%d",
-                                addrBytes[4] & 0xFF, addrBytes[5] & 0xFF,
-                                addrBytes[6] & 0xFF, addrBytes[7] & 0xFF);
-                        InetSocketAddress target = new InetSocketAddress(ip, port);
+                    String[] targetParts = parseSockaddrIn(packedAddr);
+                    if (targetParts != null) {
+                        InetAddress targetAddress = InetAddress.getByName(targetParts[0]);
+                        // Legacy socket code such as Net-ext reuses a
+                        // wildcard getsockname() value as a local datagram
+                        // destination. Route that local-only convention
+                        // explicitly; Java channels otherwise drop it.
+                        if (targetAddress.isAnyLocalAddress()) {
+                            targetAddress = targetAddress instanceof java.net.Inet6Address
+                                    ? InetAddress.getByName("::1")
+                                    : InetAddress.getByName("127.0.0.1");
+                        }
+                        InetSocketAddress target = new InetSocketAddress(
+                                targetAddress, Integer.parseInt(targetParts[1]));
                         int sent = sio.sendTo(data, target);
                         return new RuntimeScalar(sent);
                     }

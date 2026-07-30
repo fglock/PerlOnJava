@@ -1,0 +1,27 @@
+--- t/blocking.t.orig
++++ t/blocking.t
+@@ -9,2 +9,6 @@
+ BEGIN {
++    if (! $Config{'d_fork'}) {
++        print "1..0 # Skip: no fork\n";
++        exit 0;
++    }
+     if (-d "lib" && -f "TEST") {
+--- t/io_sock6.t.orig
++++ t/io_sock6.t
+@@ -14,2 +14,6 @@
+ BEGIN {
++    if (! $Config{'d_fork'}) {
++        print "1..0 # Skip: no fork\n";
++        exit 0;
++    }
+     if (-d "lib" && -f "TEST") {
+--- t/io_multihomed6.t.orig
++++ t/io_multihomed6.t
+@@ -15,2 +15,6 @@
+ BEGIN {
++    if (! $Config{'d_fork'}) {
++        print "1..0 # SKIP no fork\n";
++        exit 0;
++    }
+     if(-d "lib" && -f "TEST") {

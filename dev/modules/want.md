@@ -229,14 +229,25 @@ The port is "done enough" when:
 
 ## Progress Tracking
 
-### Current Status: scoping / design
+### Current Status: JSONP compatibility subset implemented; A1 remains planned
 
 ### Completed Steps
-- [ ] Design doc reviewed
+- [x] Design doc reviewed (2026-07-29)
+- [x] Added a focused pure-Perl compatibility subset for JSONP (2026-07-29)
+  - Implements `OBJECT`, `RVALUE`, `BOOL`, scalar/list/void queries, and
+    conservative non-lvalue defaults.
+  - File: `src/main/perl/lib/Want.pm`
 - [ ] A1 proof-of-concept on a feature branch
 - [ ] Class::Accessor::Lvalue passes
 - [ ] ActiveResource passes (sans network I/O)
 - [ ] Want.pm shim merged
+
+### Next Steps
+
+1. Add the per-call-frame lvalue context described in A1.
+2. Replace the conservative `OBJECT`/`RVALUE` answers with compiler-provided
+   call-site metadata.
+3. Add `want_basics.t` and validate Class::Accessor::Lvalue.
 
 ### Open Questions
 - A1 vs A2 vs B: confirm A1 (runtime hook + Perl shim) is the right

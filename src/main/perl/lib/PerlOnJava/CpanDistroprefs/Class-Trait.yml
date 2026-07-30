@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Class::Trait 0.33.
+
+  t/070_Trait_mod_perl_test.t expects loading Class::Trait to emit no warning,
+  but Class::Trait 0.33 itself now deliberately emits a deprecation warning.
+  The assertion fails under current standard Perl as well. Skip only that
+  obsolete mod_perl startup assertion while retaining the other 404 functional
+  trait tests needed by Graph::PetriNet.
+match:
+  distribution: "^OVID/Class-Trait-0\\.33"
+patches:
+  - "Class-Trait-0.33/SkipObsoleteModPerlWarningTest.patch"

@@ -192,6 +192,17 @@ public abstract class StringSegmentParser {
     protected void flushCurrentSegment() {
         if (!currentSegment.isEmpty()) {
             String value = currentSegment.toString();
+            if (currentSegmentHasSourceNonAscii
+                    && !ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                    && !ctx.compilerOptions.isUnicodeSource
+                    && !ctx.compilerOptions.isByteStringSource) {
+                byte[] utf8 = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                StringBuilder octets = new StringBuilder(utf8.length);
+                for (byte b : utf8) {
+                    octets.append((char) (b & 0xff));
+                }
+                value = octets.toString();
+            }
             boolean forceByteString = shouldForceByteStringLiteral(value);
             addStringSegment(new StringNode(value, false, forceByteString, tokenIndex));
             currentSegment.setLength(0);

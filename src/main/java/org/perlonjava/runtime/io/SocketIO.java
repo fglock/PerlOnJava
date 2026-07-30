@@ -517,7 +517,9 @@ public class SocketIO implements IOHandle {
                 }
 
                 // Create a new ServerSocketChannel and bind to the same address
-                serverSocketChannel = ServerSocketChannel.open();
+                serverSocketChannel = protocolFamily != null
+                        ? ServerSocketChannel.open(protocolFamily)
+                        : ServerSocketChannel.open();
                 // Transfer non-blocking mode from the original socket
                 if (!blocking) {
                     serverSocketChannel.configureBlocking(false);
@@ -1045,25 +1047,34 @@ public class SocketIO implements IOHandle {
      */
     private RuntimeScalar packSockaddrIn(InetSocketAddress address) {
         try {
+            byte[] ipBytes = address.getAddress().getAddress();
+            if (ipBytes.length == 16) {
+                byte[] sockaddr = new byte[28];
+                sockaddr[0] = 0;
+                sockaddr[1] = (byte) org.perlonjava.runtime.perlmodule.Socket.AF_INET6;
+
+                int port = address.getPort();
+                sockaddr[2] = (byte) ((port >> 8) & 0xFF);
+                sockaddr[3] = (byte) (port & 0xFF);
+                System.arraycopy(ipBytes, 0, sockaddr, 8, 16);
+
+                int scopeId = address.getAddress() instanceof Inet6Address inet6
+                        ? inet6.getScopeId()
+                        : 0;
+                sockaddr[24] = (byte) ((scopeId >> 24) & 0xFF);
+                sockaddr[25] = (byte) ((scopeId >> 16) & 0xFF);
+                sockaddr[26] = (byte) ((scopeId >> 8) & 0xFF);
+                sockaddr[27] = (byte) (scopeId & 0xFF);
+                return new RuntimeScalar(new String(sockaddr, StandardCharsets.ISO_8859_1));
+            }
+
             byte[] sockaddr = new byte[16];
-
-            // Family: AF_INET = 2 (network byte order)
             sockaddr[0] = 0;
-            sockaddr[1] = 2;
-
-            // Port (network byte order - big endian)
+            sockaddr[1] = (byte) org.perlonjava.runtime.perlmodule.Socket.AF_INET;
             int port = address.getPort();
             sockaddr[2] = (byte) ((port >> 8) & 0xFF);
             sockaddr[3] = (byte) (port & 0xFF);
-
-            // IP address (4 bytes)
-            byte[] ipBytes = address.getAddress().getAddress();
             System.arraycopy(ipBytes, 0, sockaddr, 4, 4);
-
-            // Padding (8 bytes of zeros)
-            for (int i = 8; i < 16; i++) {
-                sockaddr[i] = 0;
-            }
 
             return new RuntimeScalar(new String(sockaddr, StandardCharsets.ISO_8859_1));
         } catch (Exception e) {

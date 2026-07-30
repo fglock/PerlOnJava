@@ -710,6 +710,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **IO::Socket** module.
 - ✅  **IO::Socket::INET** module.
 - ✅  **IO::Socket::UNIX** module.
+- ✅  **Socket6** compatibility module backed by the core `Socket` IPv6 implementation.
+- ✅  **Net::Gen** XS compatibility bridge for the Net-ext socket modules.
 - ✅  **IO::Zlib** module.
 - ✅  **List::Util**: module.
 - ✅  **MIME::Base64** module
@@ -732,7 +734,12 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Time::Local** module.
 - ✅  **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
 - ✅  **URI::Escape** module.
-- ✅  **Socket** module: socket constants and functions (`pack_sockaddr_in`, `unpack_sockaddr_in`, `sockaddr_in`, `inet_aton`, `inet_ntoa`, `gethostbyname`).
+- ✅  **Socket** module: IPv4/IPv6 socket constants and functions, including
+  sockaddr packing, address presentation conversion, `getaddrinfo`, and
+  `getnameinfo`.
+- ⚠️  **Want** compatibility subset: scalar/list/void and the non-lvalue
+  predicates needed by JSONP; full lvalue/op-tree introspection remains planned.
+- ✅  **Email::Address::XS** compatibility subset used by Email::Sender.
 - ✅  **Unicode::UCD** module.
 - ✅  **XSLoader** module.
 - 🚧  **DynaLoader** placeholder module.
