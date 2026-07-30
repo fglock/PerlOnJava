@@ -2,6 +2,28 @@
 
 Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
+## Work in progress
+
+- Add compatibility modules for `Socket6`, `Email::Address::XS`, and the
+  JSONP-used subset of `Want`; add a Java `Net::Gen` XS bridge for Net-ext.
+- Bugfix: subroutine return values are rvalue copies instead of aliases to
+  reusable scalar containers.
+- Bugfix: interpreter `map` now inherits the caller's scalar/list context.
+- Bugfix: valid UTF-8 octets in interpolated source strings compile without
+  `use utf8` while retaining byte-string semantics.
+- Bugfix: inherited AutoSplit forward declarations now participate in method
+  resolution, allowing parent `.al` methods to load before child `AUTOLOAD`
+  fallbacks.
+- Bugfix: nested typeglob hash/code dereferences and numeric or byte-string
+  `AUTOLOAD` method names retain their Perl symbol-table semantics.
+- Bugfix: IPv6 bind/listen/send/receive, socket-name packing, and
+  `getnameinfo` work through Java NIO; UDP sends to wildcard local addresses
+  are routed consistently.
+- Bugfix: generated `jperl` shebang commands work in piped opens without being
+  misclassified as shell syntax.
+- CPAN: `HTML::Diff`, `Graph::PetriNet`, `MIME::Lite`,
+  `File::Path::Tiny`, `Net::UDP`, `IO::Socket::INET6`,
+  `Email::Sender`, and `JSONP` pass their installation test suites.
 
 ## v5.44.0: Named Parameters in Signatures
 

@@ -7,6 +7,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
@@ -575,13 +576,21 @@ public class Socket extends PerlModuleBase {
 
             byte[] sockBytes = sockaddr.getBytes(StandardCharsets.ISO_8859_1);
 
-            // Extract port (bytes 2-3, big endian)
+            int family = ((sockBytes[0] & 0xFF) << 8) | (sockBytes[1] & 0xFF);
             int port = ((sockBytes[2] & 0xFF) << 8) | (sockBytes[3] & 0xFF);
 
-            // Extract IP address (bytes 4-7)
-            String ipAddress = String.format("%d.%d.%d.%d",
-                    sockBytes[4] & 0xFF, sockBytes[5] & 0xFF,
-                    sockBytes[6] & 0xFF, sockBytes[7] & 0xFF);
+            byte[] addressBytes;
+            if (family == AF_INET6 && sockBytes.length >= 24) {
+                addressBytes = Arrays.copyOfRange(sockBytes, 8, 24);
+            } else if (family == AF_INET) {
+                addressBytes = Arrays.copyOfRange(sockBytes, 4, 8);
+            } else {
+                RuntimeList result = new RuntimeList();
+                result.add(new RuntimeScalar("Unsupported address family"));
+                return result;
+            }
+            InetAddress inetAddress = InetAddress.getByAddress(addressBytes);
+            String ipAddress = inetAddress.getHostAddress();
 
             // Resolve hostname based on NI_NUMERICHOST flag
             String hostname;
@@ -589,8 +598,7 @@ public class Socket extends PerlModuleBase {
                 hostname = ipAddress;
             } else {
                 try {
-                    InetAddress addr = InetAddress.getByName(ipAddress);
-                    hostname = addr.getHostName();
+                    hostname = inetAddress.getHostName();
                 } catch (Exception e) {
                     hostname = ipAddress;  // Fall back to IP if resolution fails
                 }
@@ -793,14 +801,14 @@ public class Socket extends PerlModuleBase {
             InetAddress[] addresses;
             if (host == null || host.isEmpty()) {
                 if ((hintFlags & AI_PASSIVE) != 0) {
-                    // Passive: use wildcard addresses
-                    addresses = new InetAddress[]{
-                            InetAddress.getByName("0.0.0.0")
-                    };
+                    // Passive: use a wildcard matching the requested family.
+                    addresses = hintFamily == AF_INET6
+                            ? new InetAddress[]{InetAddress.getByName("::")}
+                            : new InetAddress[]{InetAddress.getByName("0.0.0.0")};
                 } else {
-                    addresses = new InetAddress[]{
-                            InetAddress.getByName("127.0.0.1")
-                    };
+                    addresses = hintFamily == AF_INET6
+                            ? new InetAddress[]{InetAddress.getByName("::1")}
+                            : new InetAddress[]{InetAddress.getByName("127.0.0.1")};
                 }
             } else {
                 addresses = InetAddress.getAllByName(host);

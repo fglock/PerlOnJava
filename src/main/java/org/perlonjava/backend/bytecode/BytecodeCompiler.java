@@ -2682,7 +2682,18 @@ public class BytecodeCompiler implements Visitor {
      */
     void handleGeneralHashAccess(BinaryOperatorNode node) {
         // Compile the left side (the expression that should yield a hash or hashref)
-        node.left.accept(this);
+        // `${EXPR}{key}` applies the hash subscript directly to EXPR. It must
+        // not first compile `${EXPR}` as an independent scalar dereference:
+        // when EXPR is a typeglob, that would select its SCALAR slot instead
+        // of the HASH slot. This mirrors the JVM backend's `${BLOCK}{}` path.
+        if (node.left instanceof OperatorNode sigilNode
+                && sigilNode.operator.equals("$")
+                && sigilNode.operand instanceof BlockNode block
+                && block.elements.size() == 1) {
+            compileNode(block.elements.getFirst(), -1, RuntimeContextType.SCALAR);
+        } else {
+            node.left.accept(this);
+        }
         int baseReg = lastResultReg;
 
         // Compile the key expression (right side)

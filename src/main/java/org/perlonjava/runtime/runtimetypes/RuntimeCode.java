@@ -525,8 +525,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         for (RuntimeBase value : result.elements) {
             if (value instanceof RuntimeScalar scalar
-                    && !isCodeScalar(scalar)
-                    && (RuntimeScalarType.isReference(scalar) || scalar.captureCount > 0)) {
+                    && !isCodeScalar(scalar)) {
                 return result.cloneScalars();
             }
         }
@@ -1089,6 +1088,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return rc.packageName + "::AUTOLOAD";
         }
         return lookupPackage + "::AUTOLOAD";
+    }
+
+    /**
+     * Preserve the byte/Unicode flag of a dynamically named method in
+     * $AUTOLOAD. Perl treats that flag as part of string regex semantics.
+     */
+    private static void setAutoloadMethodName(
+            String variableName, String fullMethodName, RuntimeScalar methodName) {
+        RuntimeScalar value = new RuntimeScalar(fullMethodName);
+        if (methodName.type == RuntimeScalarType.BYTE_STRING) {
+            value.type = RuntimeScalarType.BYTE_STRING;
+        }
+        getGlobalVariable(variableName).set(value);
+    }
+
+    private static String qualifyAutoloadMethodName(String methodName, String perlClassName) {
+        return methodName.contains("::")
+                ? methodName
+                : perlClassName + "::" + methodName;
     }
 
     public static boolean isCodeDefined(RuntimeScalar codeRef) {
@@ -2860,8 +2878,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                         // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
                                         // even when AUTOLOAD is inherited from Base.
                                         String perlClassName = NameNormalizer.getBlessStr(blessId);
-                                        String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-                                        getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                        String fullMethodName =
+                                                qualifyAutoloadMethodName(methodName, perlClassName);
+                                        setAutoloadMethodName(
+                                                autoloadVariableName, fullMethodName, method);
                                     }
                                 }
                                 
@@ -2910,8 +2930,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             String autoloadVariableName = code.autoloadVariableName;
                             if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
                                 // Use the original calling class, not where AUTOLOAD was found
-                                String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-                                getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                String fullMethodName =
+                                        qualifyAutoloadMethodName(methodName, perlClassName);
+                                setAutoloadMethodName(
+                                        autoloadVariableName, fullMethodName, method);
                             }
                             MortalList.pushMark();
                             try {
@@ -3118,9 +3140,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Extract class name from the original calling class (perlClassName),
                 // not from the AUTOLOAD variable name. In Perl, $AUTOLOAD is set to
                 // OriginalClass::method even when AUTOLOAD is inherited from a parent.
-                String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+                String fullMethodName =
+                        qualifyAutoloadMethodName(methodName, perlClassName);
                 // Set the $AUTOLOAD variable to the fully qualified name of the method
-                getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
             }
 
             return apply(method, args, callContext);

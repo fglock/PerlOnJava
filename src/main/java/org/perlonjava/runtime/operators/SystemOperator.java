@@ -199,7 +199,7 @@ public class SystemOperator {
      * Java's ProcessBuilder does not reliably perform execvp-style PATH lookup
      * for argv-list commands. Perl's system LIST, exec LIST, and simple qx// do.
      */
-    private static List<String> resolveCommandForProcessBuilder(List<String> commandArgs) {
+    public static List<String> resolveCommandForProcessBuilder(List<String> commandArgs) {
         if (commandArgs.isEmpty()) {
             return commandArgs;
         }

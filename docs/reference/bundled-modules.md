@@ -7,6 +7,15 @@ Additional pure-Perl modules can be installed from CPAN with
 This page lists every bundled module, grouped by category, and documents
 modules that have **external requirements** or **special instructions**.
 
+Recent CPAN compatibility additions include:
+
+| Module | Implementation | Notes |
+|--------|----------------|-------|
+| `Socket6` | Pure Perl over Java-backed `Socket` | Legacy Socket6 flat-result API and IPv6 sockaddr helpers |
+| `Email::Address::XS` | Pure Perl compatibility subset | Address parsing/object API used by `Email::Sender` |
+| `Want` | Pure Perl compatibility subset | Non-lvalue predicates used by `JSONP`; full op-tree introspection is not yet available |
+| `Net::Gen` | Java XS bridge | Net-ext constants and sockaddr helpers used by `Net::UDP` |
+
 ---
 
 ## Modules with External Requirements

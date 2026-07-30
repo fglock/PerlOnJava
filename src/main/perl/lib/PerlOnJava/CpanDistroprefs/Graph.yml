@@ -9,7 +9,7 @@ comment: |
   Graph::Directed and the rest of Graph's test suite exercise the same logic
   without depending on that fragile control-flow shape.
 match:
-  distribution: "^.*/Graph-"
+  distribution: "^.*/Graph-[0-9]"
 patches:
   - "Graph-0.9735/Graph.pm.patch"
   - "Graph-0.9735/AdjacencyMap.pm.patch"

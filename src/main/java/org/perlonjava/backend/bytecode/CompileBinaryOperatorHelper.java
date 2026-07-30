@@ -284,7 +284,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs2);       // List register
                 bytecodeCompiler.emitReg(rs1);       // Closure register
-                bytecodeCompiler.emit(RuntimeContextType.LIST);  // Map always uses list context
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             }
             case "grep" -> {
                 // Grep operator: grep { block } list

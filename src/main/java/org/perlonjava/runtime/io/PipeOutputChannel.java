@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.operators.SystemOperator;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -52,7 +53,7 @@ public class PipeOutputChannel implements IOHandle {
     /**
      * Pattern to detect shell metacharacters
      */
-    private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\\\$\\s]");
+    private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\\\$]");
 
     /**
      * The external process
@@ -139,7 +140,8 @@ public class PipeOutputChannel implements IOHandle {
      * @throws IOException if an I/O error occurs starting the process
      */
     private void startProcessDirect(List<String> commandArgs) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                SystemOperator.resolveCommandForProcessBuilder(commandArgs));
         setupProcess(processBuilder);
     }
 

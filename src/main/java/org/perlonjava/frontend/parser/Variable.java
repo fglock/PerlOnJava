@@ -1019,6 +1019,18 @@ public class Variable {
         }
 
         if (bracedVarName != null) {
+            // In a dereference such as `%{ $ {*$glob}{Keys} }`, the `$`
+            // starts a nested scalar expression; it is not the name of a
+            // global hash `%$`. Fall back to block parsing so the glob-slot
+            // expression remains intact.
+            if ((sigil.equals("%") || sigil.equals("@") || sigil.equals("&"))
+                    && bracedVarName.equals("$")) {
+                bracedVarName = null;
+                parser.tokenIndex = savedIndex;
+            }
+        }
+
+        if (bracedVarName != null) {
             // Check if this might be ambiguous with an operator
             boolean isAmbiguous = isAmbiguousOperatorName(bracedVarName);
 

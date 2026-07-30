@@ -1,0 +1,4 @@
+# Index created by AutoSplit for InheritedAutoLoaderParent.pm
+package InheritedAutoLoaderParent;
+sub from_parent;
+1;

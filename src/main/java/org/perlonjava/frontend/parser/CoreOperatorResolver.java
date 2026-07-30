@@ -130,7 +130,11 @@ public class CoreOperatorResolver {
             case "method" -> parseAnonymousMethodExpression(parser, startIndex);
             case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" ->
                     OperatorParser.parseSpecialQuoted(parser, token, startIndex);
-            case "dump", "dbmclose", "dbmopen" ->
+            // CORE::dump is an obsolete process/core-dump primitive. Parse it
+            // as a harmless false value so legacy modules can compile guarded
+            // diagnostics without terminating the JVM.
+            case "dump" -> new NumberNode("0", parser.tokenIndex);
+            case "dbmclose", "dbmopen" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "format" ->
                 // Format statements should be handled by StatementResolver, not as operators

@@ -146,6 +146,29 @@ public class StringDoubleQuoted extends StringSegmentParser {
         var isRegex = !parseEscapes;
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parseDoubleQuotedString isRegex:" + isRegex);
 
+        // StringParser represents non-utf8 source text as UTF-8 octets stored in
+        // Java chars. Decode those octets while tokenizing interpolation syntax;
+        // otherwise continuation bytes (for example 0x80 in a curly quote) are
+        // interpreted as source tokens and rejected. Literal segments are encoded
+        // back to octets by StringSegmentParser.flushCurrentSegment().
+        if (!ctx.symbolTable.isStrictOptionEnabled(org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
+                && !ctx.compilerOptions.isUnicodeSource
+                && !ctx.compilerOptions.isByteStringSource) {
+            byte[] octets = new byte[input.length()];
+            boolean allOctets = true;
+            for (int i = 0; i < input.length(); i++) {
+                char ch = input.charAt(i);
+                if (ch > 0xff) {
+                    allOctets = false;
+                    break;
+                }
+                octets[i] = (byte) ch;
+            }
+            if (allOctets) {
+                input = new String(octets, java.nio.charset.StandardCharsets.UTF_8);
+            }
+        }
+
         // Tokenize the string content
         var lexer = new Lexer(input);
         var tokens = lexer.tokenize();

@@ -433,7 +433,16 @@ public class InheritanceResolver {
 
                 if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                     RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-                    if (!RuntimeCode.isCodeDefined(codeRef)) {
+                    // A forward declaration is a real method-table entry even
+                    // before it has a body. AutoSplit relies on this: the stub
+                    // in a parent class must win method lookup so invoking it
+                    // reaches that package's AUTOLOAD and corresponding .al
+                    // file. Ignore only incidental undefined code slots that
+                    // were never declared.
+                    boolean isDeclaredForward = codeRef != null
+                            && codeRef.value instanceof RuntimeCode code
+                            && code.isDeclared;
+                    if (!RuntimeCode.isCodeDefined(codeRef) && !isDeclaredForward) {
                         continue;
                     }
                     cacheMethod(cacheKey, codeRef);
