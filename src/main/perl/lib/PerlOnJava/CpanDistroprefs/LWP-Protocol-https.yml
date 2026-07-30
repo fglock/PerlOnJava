@@ -8,4 +8,4 @@ comment: |
 match:
   distribution: "^OALDERS/LWP-Protocol-https-"
 patches:
-  - "LWP-Protocol-https-6.15/SkipForkProxyTest.patch"
+  - "LWP-Protocol-https/SkipForkProxyTest.patch"

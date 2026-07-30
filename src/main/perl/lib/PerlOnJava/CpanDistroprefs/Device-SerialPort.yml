@@ -10,4 +10,4 @@ comment: |
 match:
   distribution: "^COOK/Device-SerialPort-"
 patches:
-  - "Device-SerialPort-1.04/NoXsBitsFallback.patch"
+  - "Device-SerialPort/NoXsBitsFallback.patch"

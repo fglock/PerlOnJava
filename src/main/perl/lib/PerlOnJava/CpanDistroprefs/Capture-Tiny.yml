@@ -8,4 +8,4 @@ comment: |
 match:
   distribution: "^DAGOLDEN/Capture-Tiny-"
 patches:
-  - "Capture-Tiny-0.50/NoForkTeeCatchErrors.patch"
+  - "Capture-Tiny/NoForkTeeCatchErrors.patch"

@@ -12,4 +12,4 @@ comment: |
 match:
   distribution: "^YOSEFM/Javascript-Menu-Full-"
 patches:
-  - "Javascript-Menu-Full-2.02/NoCGIDependency.patch"
+  - "Javascript-Menu-Full/NoCGIDependency.patch"

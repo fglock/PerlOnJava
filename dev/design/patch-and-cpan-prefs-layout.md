@@ -33,7 +33,7 @@ flowchart LR
   end
 ```
 
-**Why not one physical `patches/` tree?** Import patches apply to paths already in the repo and use `-p0` layout from `sync.pl`. CPAN patches apply to unpacked tarballs under the CPAN build directory and paths are recorded as `Distribution-Version/file.patch` under `patches_dir`. Merging the directories would confuse tooling and docs without real benefit.
+**Why not one physical `patches/` tree?** Import patches apply to paths already in the repo and use `-p0` layout from `sync.pl`. CPAN patches apply to unpacked tarballs under the CPAN build directory. Their source files are kept under `Distribution-Version/` for provenance, but bootstrap exposes them as `Distribution/file.patch` under `patches_dir` so release upgrades reuse a stable reference. Merging the directories would confuse tooling and docs without real benefit.
 
 ## Where to add what (contributor checklist)
 
@@ -44,7 +44,8 @@ flowchart LR
    - See [`dev/import-perl5/README.md`](../import-perl5/README.md).
 
 2. **CPAN distribution needs a patch during `jcpan -i` / CPAN test**  
-   - Add `Something-1.23/Foo.pm.patch` under [`PerlOnJava/CpanPatches/`](../../src/main/perl/lib/PerlOnJava/CpanPatches/) (mirror the relative path CPAN.pm will apply).  
+   - Add `Something-1.23/Foo.pm.patch` under [`PerlOnJava/CpanPatches/`](../../src/main/perl/lib/PerlOnJava/CpanPatches/) (the version records the source release used to author the diff).
+   - Reference it from distroprefs as `Something/Foo.pm.patch`; `CPAN::Config` installs that stable distribution-level path so a later release can try the same patch.
    - Reference it from a distropref YAML under [`PerlOnJava/CpanDistroprefs/`](../../src/main/perl/lib/PerlOnJava/CpanDistroprefs/) (`patches:` list).  
    - Register the patch file in [`CPAN::Config::_bootstrap_patches`](../../src/main/perl/lib/CPAN/Config.pm) so it is copied to `~/.perlonjava/cpan/patches/` on startup (same pattern as existing DBI / IO::Async entries).
 
@@ -66,6 +67,12 @@ On load, PerlOnJava:
 2. **Patches** — Copies each listed patch from `@INC` into `~/.perlonjava/cpan/patches/` when content is missing or out of date.
 
 **Note on `.dd` distroprefs:** CPAN.pm only registers the `.dd` reader when YAML is unavailable ([`CPAN::Distribution::_find_prefs`](../../src/main/perl/lib/CPAN/Distribution.pm)). PerlOnJava always ships YAML; duplicate `Foo.dd` files next to `Foo.yml` are unnecessary and were removed from bootstrap.
+
+Patch cache paths are intentionally version-independent (`<Distribution>/<patch>`).
+The source files retain versioned directories for provenance, while the bootstrap
+map copies them to stable paths. A patch is still applied with CPAN's normal
+context/fuzz checks; a changed upstream layout fails visibly instead of being
+silently treated as compatible.
 
 ## Stale `src/main/perl/lib/CPAN/Prefs/`
 
@@ -101,3 +108,4 @@ when working on LibXML parity.
 | Date | Change |
 |------|--------|
 | 2026-05-12 | Added `make test-cpan-distroprefs` + `dev/tools/test-cpan-distroprefs.sh` for bundled pref smoke. |
+| 2026-07-30 | Made installed CPAN patch paths distribution-level and version-independent; added a unit guard against version-pinned distropref references. |

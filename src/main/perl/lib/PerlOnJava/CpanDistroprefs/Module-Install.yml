@@ -7,6 +7,6 @@ comment: |
   generated, so defined(&authors) is false even though ->can("authors") works.
   Add an explicit authors method so the admin copy path can find it.
 match:
-  distribution: "^ETHER/Module-Install-1\\.21"
+  distribution: "^ETHER/Module-Install-"
 patches:
-  - "Module-Install-1.21/ExplicitAuthorsMethod.patch"
+  - "Module-Install/ExplicitAuthorsMethod.patch"

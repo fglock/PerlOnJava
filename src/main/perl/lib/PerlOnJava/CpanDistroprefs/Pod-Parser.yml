@@ -10,4 +10,4 @@ comment: |
 match:
   distribution: "^MAREKR/Pod-Parser-"
 patches:
-  - "Pod-Parser-1.67/Pod-Find-core-probe.patch"
+  - "Pod-Parser/Pod-Find-core-probe.patch"

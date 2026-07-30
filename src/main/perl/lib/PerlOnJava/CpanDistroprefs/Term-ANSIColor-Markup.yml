@@ -10,4 +10,4 @@ comment: |
 match:
   distribution: "^KENTARO/Term-ANSIColor-Markup-"
 patches:
-  - "Term-ANSIColor-Markup-0.06/PortableAccessors.patch"
+  - "Term-ANSIColor-Markup/PortableAccessors.patch"

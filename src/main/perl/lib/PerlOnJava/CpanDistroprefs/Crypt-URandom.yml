@@ -8,6 +8,6 @@ comment: |
   sysopen}; those overrides are not meaningful when getrandom is available.
   Patch only those test files and keep the rest of the suite active.
 match:
-  distribution: "^DDICK/Crypt-URandom-0\\.55"
+  distribution: "^DDICK/Crypt-URandom-"
 patches:
-  - "Crypt-URandom-0.55/PerlOnJavaTests.patch"
+  - "Crypt-URandom/PerlOnJavaTests.patch"

@@ -9,4 +9,4 @@ comment: |
 match:
   distribution: "^ROSCH/String-ShellQuote-"
 patches:
-  - "String-ShellQuote-1.04/SkipForkScriptTests.patch"
+  - "String-ShellQuote/SkipForkScriptTests.patch"

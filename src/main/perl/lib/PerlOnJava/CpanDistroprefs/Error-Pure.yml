@@ -11,6 +11,6 @@ comment: |
 match:
   distribution: "^SKIM/Error-Pure-[0-9]"
 patches:
-  - "Error-Pure-0.34/PlainLexicalConstants.patch"
+  - "Error-Pure/PlainLexicalConstants.patch"
 test:
   commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

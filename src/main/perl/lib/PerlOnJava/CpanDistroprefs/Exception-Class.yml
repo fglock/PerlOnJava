@@ -14,6 +14,6 @@ comment: |
 match:
   distribution: "^DROLSKY/Exception-Class-"
 patches:
-  - "Exception-Class-1.45/GeneratedSubclassVersion.patch"
+  - "Exception-Class/GeneratedSubclassVersion.patch"
 test:
   commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

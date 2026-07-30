@@ -8,6 +8,6 @@ comment: |
   obsolete mod_perl startup assertion while retaining the other 404 functional
   trait tests needed by Graph::PetriNet.
 match:
-  distribution: "^OVID/Class-Trait-0\\.33"
+  distribution: "^OVID/Class-Trait-"
 patches:
-  - "Class-Trait-0.33/SkipObsoleteModPerlWarningTest.patch"
+  - "Class-Trait/SkipObsoleteModPerlWarningTest.patch"
