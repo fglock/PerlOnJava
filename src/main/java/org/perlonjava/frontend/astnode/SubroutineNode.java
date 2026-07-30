@@ -29,6 +29,9 @@ public class SubroutineNode extends AbstractNode {
      */
     public final boolean useTryCatch;
 
+    /** Token immediately after the closing brace, when parsed from source. */
+    public int sourceEndTokenIndex = -1;
+
     /**
      * Constructs a new SubroutineNode with the specified parts.
      *
@@ -48,6 +51,12 @@ public class SubroutineNode extends AbstractNode {
                 abstractNode.setAnnotation("subroutineIsLvalue", true);
             }
         }
+    }
+
+    public SubroutineNode(String name, String prototype, List<String> attributes, Node block,
+                          boolean useTryCatch, int tokenIndex, int sourceEndTokenIndex) {
+        this(name, prototype, attributes, block, useTryCatch, tokenIndex);
+        this.sourceEndTokenIndex = sourceEndTokenIndex;
     }
 
     /**

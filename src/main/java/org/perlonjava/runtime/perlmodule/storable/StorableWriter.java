@@ -198,29 +198,14 @@ public final class StorableWriter {
     /** Return the source for this anonymous sub rather than the complete
      * compilation unit.  CompilerOptions retains the unit for diagnostics;
      * using that whole string made every anonymous sub serialize identically.
-     * The block offset is the opening brace recorded by EmitSubroutine. */
+     * The compiler records the exact token span, so runtime serialization does
+     * not need to parse Perl's delimiter syntax. */
     private static String codeSource(RuntimeCode code) {
         String source = code.deparseSourceText;
         int start = code.deparseSourceOffset;
-        if (source == null || start < 0 || start >= source.length()) return source;
-        int open = source.indexOf('{', start);
-        if (open < 0) return source;
-        int depth = 0;
-        boolean escaped = false;
-        char quote = 0;
-        for (int i = open; i < source.length(); i++) {
-            char ch = source.charAt(i);
-            if (quote != 0) {
-                if (escaped) escaped = false;
-                else if (ch == '\\') escaped = true;
-                else if (ch == quote) quote = 0;
-                continue;
-            }
-            if (ch == '\'' || ch == '"') { quote = ch; continue; }
-            if (ch == '{') depth++;
-            else if (ch == '}' && --depth == 0) return source.substring(open, i + 1);
-        }
-        return source;
+        int end = code.deparseSourceEnd;
+        if (source == null || start < 0 || end <= start || start >= source.length()) return source;
+        return source.substring(start, Math.min(end, source.length()));
     }
 
     /** Mirrors {@code store_hook} (Storable.xs L3574). Returns true if we
