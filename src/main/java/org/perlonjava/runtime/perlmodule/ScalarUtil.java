@@ -149,11 +149,15 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for reftype() method");
         }
         RuntimeScalar scalar = magicallyDeref(args.get(0));
+        if (scalar instanceof RuntimeSubstrLvalue) {
+            return new RuntimeScalar("LVALUE").getList();
+        }
         String type = switch (scalar.type) {
             case REFERENCE -> {
                 // Inspect the referent to distinguish SCALAR refs from REF (ref-to-ref)
                 if (scalar.value instanceof RuntimeScalar inner) {
                     if (inner.type == READONLY_SCALAR) inner = (RuntimeScalar) inner.value;
+                    if (inner instanceof RuntimeSubstrLvalue) yield "LVALUE";
                     yield switch (inner.type) {
                         case VSTRING -> "VSTRING";
                         case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";

@@ -407,8 +407,26 @@ public class POSIX extends PerlModuleBase {
         int actualMon = mon + 1;
 
         try {
-            LocalDateTime ldt = LocalDateTime.of(actualYear, actualMon, mday, hour, min, sec);
+            // mktime normalizes out-of-range fields (Time::Simple deliberately
+            // passes hour-1 during DST), so construct from midnight and add the
+            // supplied hour instead of rejecting hour == -1.
+            LocalDateTime ldt = LocalDateTime.of(actualYear, actualMon, mday, 0, 0, 0)
+                    .plusHours(hour).plusMinutes(min).plusSeconds(sec);
             ZonedDateTime zdt = ldt.atZone(ZoneId.systemDefault());
+            // Perl's mktime honors an explicitly supplied isdst flag.  Time::Simple
+            // passes isdst=0 after subtracting the current DST hour; Java's default
+            // resolution otherwise leaves the value one hour early during DST.
+            if (args.size() >= 9) {
+                int isdst = args.get(8).getInt();
+                if (isdst == 0) {
+                    ZoneId zone = ZoneId.systemDefault();
+                    int daylightSeconds = zdt.getOffset().getTotalSeconds()
+                            - zone.getRules().getStandardOffset(zdt.toInstant()).getTotalSeconds();
+                    if (daylightSeconds > 0) {
+                        zdt = zdt.plusSeconds(daylightSeconds);
+                    }
+                }
+            }
             return new RuntimeScalar(zdt.toEpochSecond()).getList();
         } catch (Exception e) {
             return new RuntimeScalar(-1).getList();

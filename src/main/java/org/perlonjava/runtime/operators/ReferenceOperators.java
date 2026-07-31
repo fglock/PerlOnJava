@@ -254,13 +254,17 @@ public class ReferenceOperators {
                 // Handle nested references
                 String ref = "REF";
                 if (runtimeScalar.value instanceof RuntimeScalar scalar) {
-                    ref = switch (scalar.type) {
-                        case VSTRING -> "VSTRING";
-                        case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
-                        case GLOB -> "GLOB";
-                        case READONLY_SCALAR -> ref((RuntimeScalar) scalar.value).toString();
-                        default -> "SCALAR";
-                    };
+                    if (scalar instanceof RuntimeSubstrLvalue) {
+                        ref = "LVALUE";
+                    } else {
+                        ref = switch (scalar.type) {
+                            case VSTRING -> "VSTRING";
+                            case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";
+                            case GLOB -> "GLOB";
+                            case READONLY_SCALAR -> ref((RuntimeScalar) scalar.value).toString();
+                            default -> "SCALAR";
+                        };
+                    }
                 }
                 if (runtimeScalar.value == null) {
                     str = ref;
