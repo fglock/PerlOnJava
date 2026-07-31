@@ -935,7 +935,8 @@ public class SubroutineParser {
             }
 
             if (subName == null) {
-                return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex);
+                return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex,
+                        parser.tokenIndex);
             } else {
                 return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
@@ -1802,7 +1803,8 @@ public class SubroutineParser {
         throw new PerlCompilerException(parser.tokenIndex, attrMsg, parser.ctx.errorUtil);
     }
 
-    private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, int currentIndex) {
+    private static SubroutineNode handleAnonSub(Parser parser, String subName, String prototype,
+            List<String> attributes, BlockNode block, int currentIndex, int sourceEndTokenIndex) {
         // Now we check if the next token is one of the illegal characters that cannot follow a subroutine.
         // These are '(', '{', and '['. If any of these follow, we throw a syntax error.
         LexerToken token = peek(parser);
@@ -1815,7 +1817,8 @@ public class SubroutineParser {
         // a compile-time CODE placeholder on the AST; the JVM/interpreter
         // compiler attaches the executable body to it later.
         SubroutineNode node =
-                new SubroutineNode(subName, prototype, attributes, block, false, currentIndex);
+                new SubroutineNode(subName, prototype, attributes, block, false, currentIndex,
+                        sourceEndTokenIndex);
         if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
             RuntimeCode placeholder = new RuntimeCode(prototype, new ArrayList<>(attributes));
             placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();

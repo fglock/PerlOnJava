@@ -732,6 +732,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String deparseSourceText;
     public int deparseFlags;
     public int deparseSourceOffset = -1;
+    /** Exclusive source offset for the compiler-recorded subroutine span. */
+    public int deparseSourceEnd = -1;
     public static final int DEPARSE_FLAG_STRICT = 1;
     public static final int DEPARSE_FLAG_WARNINGS = 2;
     /**
@@ -1041,6 +1043,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.deparseSourceText = this.deparseSourceText;
         clone.deparseFlags = this.deparseFlags;
         clone.deparseSourceOffset = this.deparseSourceOffset;
+        clone.deparseSourceEnd = this.deparseSourceEnd;
         clone.isConstantCv = this.isConstantCv;
         clone.isStatic = this.isStatic;
         clone.isDeclared = this.isDeclared;
@@ -2677,6 +2680,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             String deparseSourceText,
             int deparseFlags,
             int deparseSourceOffset) throws Exception {
+        return makeCodeObject(codeObject, prototype, packageName, cvStartFile, cvStartLine,
+                deparseSourceText, deparseFlags, deparseSourceOffset, -1);
+    }
+
+    public static RuntimeScalar makeCodeObject(
+            Object codeObject,
+            String prototype,
+            String packageName,
+            String cvStartFile,
+            int cvStartLine,
+            String deparseSourceText,
+            int deparseFlags,
+            int deparseSourceOffset,
+            int deparseSourceEnd) throws Exception {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
@@ -2699,6 +2716,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.deparseSourceText = deparseSourceText;
         code.deparseFlags = deparseFlags;
         code.deparseSourceOffset = deparseSourceOffset;
+        code.deparseSourceEnd = deparseSourceEnd;
 
         // Look up pad constants registered at compile time for this class.
         // These track cached string literals referenced via \ inside the sub,

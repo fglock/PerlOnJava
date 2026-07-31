@@ -452,11 +452,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public void put(String key, RuntimeScalar value) {
         switch (type) {
             case PLAIN_HASH -> {
-                elements.put(key, value);
+                // Each hash key owns an independent scalar slot. The referent
+                // may be shared (e.g. two references to the same scalar), but
+                // assigning one hash entry must not overwrite another entry's
+                // slot container. This matters for pure-Perl deep-cloners
+                // which preserve referent identity while populating hashes.
+                elements.put(key, independentSlot(key, value));
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                elements.put(key, value);
+                elements.put(key, independentSlot(key, value));
             }
             case TIED_HASH -> {
                 notePackageRootMutation(null, value);
@@ -466,6 +471,20 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
+    }
+
+    private RuntimeScalar independentSlot(String key, RuntimeScalar value) {
+        if (value == null) return new RuntimeScalar();
+        // A scalar slot may be shared by a pure-Perl map operation while its
+        // referent is intentionally shared. Keep the referent, but allocate a
+        // new slot whenever this wrapper already belongs to another hash (or
+        // another key in this hash). This preserves independent hash-element
+        // assignment without disturbing local-hash restoration.
+        if (value.containerOwner != null
+                && (value.containerOwner != this || elements.containsValue(value))) {
+            return new RuntimeScalar(value);
+        }
+        return value;
     }
 
     /**

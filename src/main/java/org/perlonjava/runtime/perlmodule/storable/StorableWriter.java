@@ -10,6 +10,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -165,7 +166,23 @@ public final class StorableWriter {
                 dispatch(c, (RuntimeScalar) refScalar.value);
                 break;
             case RuntimeScalarType.CODE:
-                throw new StorableFormatException("Can't store CODE items");
+                // Storable's $Deparse flag enables code-reference storage by
+                // writing the source text produced by B::Deparse.  RuntimeCode
+                // keeps the source text specifically for this purpose.  The
+                // old implementation unconditionally rejected CODE values,
+                // which made otherwise pure-Perl users of Storable::freeze
+                // fail (Struct::Diff is one such consumer).
+                if (!GlobalVariable.getGlobalVariable("Storable::Deparse").getBoolean()) {
+                    throw new StorableFormatException("Can't store CODE items");
+                }
+                RuntimeCode code = (RuntimeCode) refScalar.value;
+                String source = codeSource(code);
+                if (source == null) {
+                    throw new StorableFormatException("Can't store CODE items");
+                }
+                c.writeByte(Opcodes.SX_CODE);
+                writeStringBody(c, source.getBytes(StandardCharsets.UTF_8), true);
+                break;
             case RuntimeScalarType.REGEX:
                 // SX_REGEXP encoder. Foundation delegates to RegexpEncoder
                 // which the regexp agent fills in.
@@ -176,6 +193,19 @@ public final class StorableWriter {
             default:
                 throw new StorableFormatException("don't know how to store reference of type " + refScalar.type);
         }
+    }
+
+    /** Return the source for this anonymous sub rather than the complete
+     * compilation unit.  CompilerOptions retains the unit for diagnostics;
+     * using that whole string made every anonymous sub serialize identically.
+     * The compiler records the exact token span, so runtime serialization does
+     * not need to parse Perl's delimiter syntax. */
+    private static String codeSource(RuntimeCode code) {
+        String source = code.deparseSourceText;
+        int start = code.deparseSourceOffset;
+        int end = code.deparseSourceEnd;
+        if (source == null || start < 0 || end <= start || start >= source.length()) return source;
+        return source.substring(start, Math.min(end, source.length()));
     }
 
     /** Mirrors {@code store_hook} (Storable.xs L3574). Returns true if we
