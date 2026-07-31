@@ -1785,6 +1785,10 @@ public class EmitOperator {
                     // *{EXPR} — EXPR is evaluated in scalar context (e.g. Symbol::qualify_to_ref's
                     // \*{ qualify $_[0], ... }). LIST context breaks the comma/ternary inside braces.
                     contextType = RuntimeContextType.SCALAR;
+                } else if (node.operand instanceof OperatorNode op && op.operator.equals("substr")) {
+                    // \substr(...) must retain the substring proxy so reftype()
+                    // and assignment observe Perl's LVALUE reference.
+                    contextType = RuntimeContextType.SCALAR;
                 } else if (node.operand instanceof BinaryOperatorNode binOp && binOp.operator.equals("=")) {
                     contextType = RuntimeContextType.SCALAR;
                 }
