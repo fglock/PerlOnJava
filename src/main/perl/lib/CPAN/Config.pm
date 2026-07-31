@@ -64,6 +64,8 @@ sub _bootstrap_prefs {
         'Exception-Class.yml'        => 'PerlOnJava/CpanDistroprefs/Exception-Class.yml',
         'Module-Pluggable.yml'       => 'PerlOnJava/CpanDistroprefs/Module-Pluggable.yml',
         'Module-Pluggable-Ordered.yml' => 'PerlOnJava/CpanDistroprefs/Module-Pluggable-Ordered.yml',
+        'Object-InsideOut.yml'     => 'PerlOnJava/CpanDistroprefs/Object-InsideOut.yml',
+        'Logger-Simple.yml'        => 'PerlOnJava/CpanDistroprefs/Logger-Simple.yml',
         'Object-Event.yml'           => 'PerlOnJava/CpanDistroprefs/Object-Event.yml',
         'Path-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Path-Tiny.yml',
         'Test2-Plugin-NoWarnings.yml' => 'PerlOnJava/CpanDistroprefs/Test2-Plugin-NoWarnings.yml',
