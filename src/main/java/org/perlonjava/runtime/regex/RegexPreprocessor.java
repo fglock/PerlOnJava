@@ -1543,6 +1543,15 @@ public class RegexPreprocessor {
                 if (s.startsWith(RegexMarkers.RECURSIVE_PATTERN, offset)) {
                     regexUnimplementedSoft(s, offset + 3,
                             "(??{...}) recursive/dynamic regex patterns not implemented");
+                    if (isUnimplementedWarnMode()) {
+                        // The marker includes the source construct's closing
+                        // parenthesis. Emit a complete empty-group fallback
+                        // and return its closing position so the dynamic
+                        // construct is not parsed a second time below.
+                        sb.append("(?:)");
+                        offset += RegexMarkers.RECURSIVE_PATTERN.length() - 1;
+                        return offset;
+                    }
                 }
                 // Handle (??{ ... }) recursive/dynamic regex patterns
                 // These insert a regex pattern at runtime based on code execution

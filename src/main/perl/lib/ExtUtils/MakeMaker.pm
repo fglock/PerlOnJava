@@ -375,6 +375,11 @@ sub _install_pure_perl {
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^blib/lib/}{};
                     return if $pm_rel_seen{$rel};
+                    # A root-level source file is authoritative even when a
+                    # previous configure/build left a stale blib copy with
+                    # the old NAME-derived destination.
+                    (my $root_file = $rel) =~ s{.*/}{};
+                    return if -f $root_file;
                     $pm{$src} = _install_dest($INSTALL_BASE, $rel);
                     $pm_rel_seen{$rel} = 1;
                 },
@@ -399,9 +404,15 @@ sub _install_pure_perl {
             if ($dh) {
                 while (my $file = readdir($dh)) {
                     next unless -f $file && $file =~ /\.pm$/i;
-                    my $dest_rel = $parent_dir
-                        ? File::Spec->catfile($parent_dir, $file)
-                        : $file;
+                    # A few older distributions keep several nested modules
+                    # as flat files next to Makefile.PL (for example,
+                    # Net::IRC has Connection.pm declaring
+                    # Net::IRC::Connection).  MakeMaker's NAME-derived
+                    # mapping puts those files in Net/, where require cannot
+                    # find the declared package.  Prefer the package path
+                    # when it belongs to this distribution, and retain the
+                    # historical NAME-based mapping for files without one.
+                    my $dest_rel = _root_pm_install_path($file, $name, $parent_dir);
                     $pm{$file} = _install_dest($INSTALL_BASE, $dest_rel)
                         unless exists $pm{$file};
                 }
@@ -537,6 +548,25 @@ sub _install_pure_perl {
     print "=" x 60, "\n\n";
     
     return $mm;
+}
+
+sub _root_pm_install_path {
+    my ($file, $name, $parent_dir) = @_;
+    my $fallback = $parent_dir
+        ? File::Spec->catfile($parent_dir, $file)
+        : $file;
+
+    open my $fh, '<', $file or return $fallback;
+    while (my $line = <$fh>) {
+        if ($line =~ /^\s*package\s+([A-Za-z_]\w*(?:::\w+)*)\s*[,;]/) {
+            my $package = $1;
+            return $fallback unless index($package, "$name::") == 0 || $package eq $name;
+            (my $path = $package) =~ s{::}{/}g;
+            return "$path.pm";
+        }
+    }
+    close $fh;
+    return $fallback;
 }
 
 sub _parse_makefile_pl_args {
