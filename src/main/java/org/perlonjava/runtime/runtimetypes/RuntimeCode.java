@@ -3344,7 +3344,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ArrayList<String> frameInfo = stackTrace.get(frame);
                 int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
                 int trackedOriginalFrame = Math.max(0, originalFrame - syntheticOwnSubFramesBefore);
-                int trackedActiveCodeFrame = activeCodeFrameForCaller(trackedOriginalFrame);
+                // Interpreter stack traces may contain a synthetic entry for the
+                // current subroutine.  That entry is already represented by the
+                // active-code stack, so do not subtract it when selecting the
+                // logical caller frame.
+                int trackedActiveCodeFrame = activeCodeFrameForCaller(
+                        result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
                 int trackedArgsFrame = Math.max(0, argsFrame - syntheticOwnSubFramesBefore);
                 String pkg = frameInfo.get(0);
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
@@ -3370,7 +3375,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     subName = frameSubName;
                 }
 
-                RuntimeCode activeCode = getActiveCodeAt(trackedActiveCodeFrame);
+                RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
                 if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
                 }
@@ -3573,7 +3578,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else if (frame >= stackTraceSize) {
             int trackedOriginalFrame = Math.max(0, originalFrame - countSyntheticOwnSubFramesBefore(stackTrace, stackTrace.size()));
-            RuntimeCode activeCode = hasExplicitExpr ? getActiveCodeAt(activeCodeFrameForCaller(trackedOriginalFrame)) : null;
+            RuntimeCode activeCode = hasExplicitExpr
+                    ? activeCodeAtCallerFrame(activeCodeFrameForCaller(
+                            result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame))
+                    : null;
             String activeSubName = activeCode != null
                     ? applyAnonNameOverride(callerSubNameForCode(activeCode))
                     : null;
@@ -3647,6 +3655,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static int activeCodeFrameForCaller(int originalFrame) {
         return originalFrame + (WarnDie.isInsideUnhandledDieHandler() ? 1 : 0);
+    }
+
+    /**
+     * Return the active code for a logical Perl caller frame.
+     *
+     * The interpreter can enter the same InterpretedCode through both the
+     * compiler-supplied wrapper and the interpreted body.  That leaves
+     * adjacent duplicate RuntimeCode entries on activeCodeStack, even though
+     * Perl sees one call frame.  Collapse only adjacent duplicates here so
+     * caller(N) remains expressed in Perl frames without changing the stack
+     * used by lifetime tracking.
+     */
+    private static RuntimeCode activeCodeAtCallerFrame(int logicalFrame) {
+        if (logicalFrame < 0) {
+            return null;
+        }
+        RuntimeCode previous = null;
+        int logicalIndex = 0;
+        for (RuntimeCode active : activeCodeStack.get()) {
+            if (active == previous || isCompilerWrapperPair(active, previous)) {
+                continue;
+            }
+            if (logicalIndex++ == logicalFrame) {
+                return active;
+            }
+            previous = active;
+        }
+        return null;
+    }
+
+    private static boolean isCompilerWrapperPair(RuntimeCode left, RuntimeCode right) {
+        return left != null && right != null
+                && Objects.equals(left.packageName, right.packageName)
+                && Objects.equals(left.subName, right.subName)
+                && (left instanceof org.perlonjava.backend.bytecode.InterpretedCode)
+                        != (right instanceof org.perlonjava.backend.bytecode.InterpretedCode);
     }
 
     private static boolean isSyntheticOwnSubFrame(ArrayList<String> frame) {
