@@ -562,7 +562,7 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
 
 ## Progress Tracking
 
-### Current Status: Compile-scope hooks fixed; CPAN smoke verification complete (2026-08-03)
+### Current Status: Test::Deep memory lifetime fixed; CPAN smoke verification complete (2026-08-03)
 
 ### Completed Phases
 
@@ -575,12 +575,14 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
   - Files: `GlobalRuntimeHash.java`, `GlobalRuntimeArray.java`, `GlobalRuntimeScalar.java`.
 - [x] Regression coverage
   - The upstream `namespace::clean` suite now covers nested compile-scope hooks and passes 2,099/2,099 subtests.
+- [x] `t/memory.t` temporary comparison owner cleanup
+  - Recursive cleanup of discarded comparator/container values and a package-global reachability check on scalar overwrite prevent temporary call-frame aliases from retaining weak referents.
+  - Added `src/test/resources/unit/test_deep_memory_regression.t`, validated with system Perl and PerlOnJava's JVM backend.
 
 ### Next Steps
 
-1. Trace the remaining `Test::Deep` `t/memory.t` second-argument weak-owner edge case.
-2. Add `Test::Fatal`/`Test::Requires` dependency handling or narrow the Type::Tiny optional suite when validating `Config::Locale`.
+1. Add `Test::Fatal`/`Test::Requires` dependency handling or narrow the Type::Tiny optional suite when validating `Config::Locale`.
 
 ### Open Questions
 
-- Which temporary owner in the indirect `Test::Deep` call should be released at subroutine return while preserving live `@_` and closure captures?
+- The interpreter backend still cannot run this regression because its bundled `Exporter` path reports an undefined `Exporter::Heavy::heavy_as_heavy` subroutine.

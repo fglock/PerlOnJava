@@ -302,27 +302,12 @@ public class MortalList {
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
         if (!active) return;
         for (RuntimeScalar scalar : elements) {
-            if (scalar != null && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value instanceof RuntimeBase base) {
-                if (scalar.refCountOwned && base.refCount > 0) {
-                    // Tracked object with owned refCount: defer decrement
-                    scalar.refCountOwned = false;
-                    if (base.refCountTrace) {
-                        base.traceRefCount(0, "MortalList.deferDestroyForContainerClear (queued)");
-                    }
-                    base.releaseActiveOwner(scalar);
-                    pending.add(base);
-                } else if (base.blessId != 0 && base.refCount == 0) {
-                    // Never-stored blessed object: bump to 1 so flush triggers DESTROY
-                    if (base.refCountTrace) {
-                        base.traceRefCount(+1, "MortalList.deferDestroyForContainerClear (refCount=1 bump for never-stored)");
-                    }
-                    base.refCount = 1;
-                    pending.add(base);
-                }
-                // Note: WEAKLY_TRACKED (-2) objects are not scheduled here.
-                // See deferDecrementIfTracked() for rationale.
-            }
+            // Use the recursive path so a discarded wrapper/container also
+            // releases references stored in its fields.  Test::Deep's
+            // temporary comparator is a blessed hash whose `val` field can
+            // otherwise keep the compared array alive after local %WrapCache
+            // is restored.
+            deferDecrementRecursive(scalar);
         }
     }
 
