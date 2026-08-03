@@ -50,7 +50,9 @@ public class CompileBinaryOperatorHelper {
         boolean useInteger = isIntegerEnabled(bytecodeCompiler, useIntegerOverride);
         switch (operator) {
             case "+" -> {
-                bytecodeCompiler.emit(noOverload ? Opcodes.ADD_NO_OVERLOAD : Opcodes.ADD_SCALAR);
+                bytecodeCompiler.emit(noOverload ? Opcodes.ADD_NO_OVERLOAD
+                        : (bytecodeCompiler.isUninitializedWarningsEnabled()
+                            ? Opcodes.ADD_SCALAR_WARN : Opcodes.ADD_SCALAR));
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

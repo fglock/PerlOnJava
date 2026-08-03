@@ -39,6 +39,10 @@ public class WarningBitsRegistry {
     // This provides per-statement warning bits (like Perl 5's per-COP bits).
     private static final ThreadLocal<String> callSiteBits = 
         ThreadLocal.withInitial(() -> null);
+
+    // Runtime override installed by ${^WARNING_BITS}; scoped by eval STRING.
+    private static final ThreadLocal<String> runtimeWarningBits =
+        ThreadLocal.withInitial(() -> null);
     
     // ThreadLocal stack saving caller's call-site bits across subroutine calls.
     // Each apply() pushes the current callSiteBits before calling the subroutine,
@@ -164,6 +168,14 @@ public class WarningBitsRegistry {
     public static String getCallSiteBits() {
         return callSiteBits.get();
     }
+
+    public static void setRuntimeWarningBits(String bits) {
+        runtimeWarningBits.set(bits);
+    }
+
+    public static String getRuntimeWarningBits() {
+        return runtimeWarningBits.get();
+    }
     
     /**
      * Saves the current call-site bits onto the caller stack.
@@ -172,6 +184,13 @@ public class WarningBitsRegistry {
      */
     public static void pushCallerBits() {
         String bits = callSiteBits.get();
+        // The interpreter has no emitted runtime instruction for every
+        // compile-time pragma node. When no per-call-site value is available,
+        // the active caller code's bits are the correct fallback for
+        // caller()[9] and eval-generated warning restoration.
+        if (bits == null) {
+            bits = getCurrent();
+        }
         callerBitsStack.get().push(bits != null ? bits : "");
     }
     

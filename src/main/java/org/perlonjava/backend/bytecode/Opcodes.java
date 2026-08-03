@@ -2397,6 +2397,9 @@ public class Opcodes {
      */
     public static final short RETURN_SCOPE_CLEANUP_ARRAY = 496;
 
+    /** Addition with lexical uninitialized-value warning checks. */
+    public static final short ADD_SCALAR_WARN = 497;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

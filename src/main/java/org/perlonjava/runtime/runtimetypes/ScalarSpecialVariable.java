@@ -115,6 +115,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             if (symbolTable != null) {
                 String bits = value.toString();
                 WarningFlags.setWarningBitsFromString(symbolTable, bits);
+                org.perlonjava.runtime.WarningBitsRegistry.setRuntimeWarningBits(bits);
             }
             return value;
         }

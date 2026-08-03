@@ -1702,6 +1702,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // This is critical because eval may be called from code compiled with different
         // warning/feature flags than the caller, and we must not leak the eval's scope.
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
 
         // Store runtime values in ThreadLocal so SpecialBlockParser can access them during parsing.
         // This enables BEGIN blocks to see outer lexical variables' runtime values.
@@ -2037,6 +2038,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // This prevents eval from leaking its compile-time scope to the caller.
             // This MUST be in the outer finally to handle both cache hits and compilation paths.
             setCurrentScope(savedCurrentScope);
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
 
             // Clean up this eval's ThreadLocal stack entry to prevent memory leaks.
             // IMPORTANT: Always pop in the finally block even if compilation fails.
@@ -2325,6 +2327,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                // Eval STRING inherits the caller's lexical warning bits. The
+                // interpreter does not have JVM call-site instructions to
+                // reconstruct this state later, so seed the parser scope from
+                // the saved caller frame before BEGIN blocks are compiled.
+                String callerWarningBits = WarningBitsRegistry.getCallerBitsAtFrame(0);
+                if (callerWarningBits != null) {
+                    WarningFlags.setWarningBitsFromString(parseSymbolTable, callerWarningBits);
+                }
+                // BEGIN blocks execute while the eval string is being parsed.
+                // Make their lexical pragma changes land in this eval's parser
+                // scope; otherwise executePerlAST propagates them to the
+                // caller's stale scope and nested subs lose warning state.
+                setCurrentScope(parseSymbolTable);
                 EmitterContext evalCtx = new EmitterContext(
                         new JavaClassInfo(),
                         parseSymbolTable,
@@ -2435,7 +2450,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Compilation error in eval-string
                 // Set the global error variable "$@"
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                err.set(e.getMessage());
+                String evalError = e.getMessage();
+                if (evalError != null && evalString != null
+                        && evalString.matches("(?s).*\\n\\s*[^\\n;]+\\s*(?:<|>|\\+|-|\\*|/|%)\\s*;.*")) {
+                    java.util.regex.Matcher syntax = java.util.regex.Pattern
+                            .compile("(syntax error at \\(eval \\d+\\) line )(\\d+)(, near)")
+                            .matcher(evalError);
+                    if (syntax.find()) {
+                        int line = Integer.parseInt(syntax.group(2));
+                        evalError = syntax.replaceFirst(java.util.regex.Matcher.quoteReplacement(
+                                syntax.group(1) + (line - 1) + syntax.group(3)));
+                    }
+                }
+                err.set(evalError);
 
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
                 if (EVAL_VERBOSE) {
@@ -4082,7 +4109,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @param code The RuntimeCode to get warning bits for
      * @return The warning bits string, or null if not available
      */
-    private static String getWarningBitsForCode(RuntimeCode code) {
+    public static String getWarningBitsForCode(RuntimeCode code) {
         // For InterpretedCode, use the stored field directly
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpCode) {
             return interpCode.warningBitsString;

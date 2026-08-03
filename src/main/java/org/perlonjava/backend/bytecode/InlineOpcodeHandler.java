@@ -76,6 +76,18 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    public static int executeAddScalarWarn(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase val1 = registers[rs1];
+        RuntimeBase val2 = registers[rs2];
+        RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+        RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+        registers[rd] = MathOperators.addWarn(s1, s2);
+        return pc;
+    }
+
     /**
      * Subtraction: rd = rs1 - rs2
      * Format: SUB_SCALAR rd rs1 rs2
