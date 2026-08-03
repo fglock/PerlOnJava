@@ -77,6 +77,12 @@ public class GlobalRuntimeArray implements DynamicState {
                 }
 
                 // Restore the original array reference in the global map
+                // Release references held by the temporary localized array
+                // before discarding it, matching RuntimeArray's local-scope
+                // restoration path.
+                if (localArray != null && localArray != saved.originalArray) {
+                    MortalList.deferDestroyForContainerClear(localArray.elements);
+                }
                 GlobalVariable.globalArrays.put(saved.fullName, saved.originalArray);
 
                 // Restore glob aliases

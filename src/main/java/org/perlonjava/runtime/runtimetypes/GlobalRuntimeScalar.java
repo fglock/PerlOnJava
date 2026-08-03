@@ -126,6 +126,15 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 RuntimeScalar localVar = saved.localizedVariable;
                 RuntimeBase displacedBase = null;
                 RuntimeScalar scalarReferenceContents = null;
+                // A localized package scalar can hold a blessed hash/array
+                // object (for example Test::Deep's local $CompareCache).
+                // Release container-owned values before the temporary scalar
+                // is discarded, just as lexical-scope cleanup does.
+                if (localVar != null && localVar.value instanceof RuntimeHash localHash) {
+                    MortalList.deferDestroyForContainerClear(localHash.elements.values());
+                } else if (localVar != null && localVar.value instanceof RuntimeArray localArray) {
+                    MortalList.deferDestroyForContainerClear(localArray.elements);
+                }
                 if (localVar != null
                         && localVar.refCountOwned
                         && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
