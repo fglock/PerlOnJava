@@ -2138,9 +2138,12 @@ public class BytecodeCompiler implements Visitor {
             emitReg(keyReg);
         }
 
-        // Emit direct opcode HASH_SLICE
+        // local @hash{...} needs key-aware proxies so dynamic restore can
+        // re-resolve entries after hash mutation and remove newly-created keys.
         int rdSlice = allocateRegister();
-        emit(Opcodes.HASH_SLICE);
+        emit(shouldEmitHashFetchForLocal()
+                ? Opcodes.HASH_SLICE_FOR_LOCAL
+                : Opcodes.HASH_SLICE);
         emitReg(rdSlice);
         emitReg(hashReg);
         emitReg(keysListReg);

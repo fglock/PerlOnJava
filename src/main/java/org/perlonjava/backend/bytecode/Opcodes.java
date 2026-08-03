@@ -2400,6 +2400,14 @@ public class Opcodes {
     /** Addition with lexical uninitialized-value warning checks. */
     public static final short ADD_SCALAR_WARN = 497;
 
+    /**
+     * Hash slice access for local(): rd = hash.getForLocalSlice(keys_list).
+     * Returns key-aware proxy entries so assignment and scope restoration both
+     * operate on the parent hash, including keys which did not exist before.
+     * Format: HASH_SLICE_FOR_LOCAL rd hashReg keysListReg
+     */
+    public static final short HASH_SLICE_FOR_LOCAL = 498;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

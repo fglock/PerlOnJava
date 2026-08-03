@@ -3339,7 +3339,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         java.util.ArrayList<String> javaClassNames = extractJavaClassNames(t);
         int stackTraceSize = stackTrace.size();
-
         // Skip the first frame for JVM-compiled code, where the first frame represents
         // the sub's own location (not the call site). For interpreter code, the first
         // frame from CallerStack already IS the call site, so no skip is needed.
@@ -3405,6 +3404,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
                 if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
+                    if (subName == null && !activeCode.explicitlyRenamed
+                            && activeCode.packageName != null) {
+                        subName = normalizeCallerPackage(activeCode.packageName) + "::__ANON__";
+                    }
                 }
                 
                 // For the innermost frame (frame == 1 after skip), check currentSub first

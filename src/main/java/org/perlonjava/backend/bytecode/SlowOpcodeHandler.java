@@ -988,6 +988,25 @@ public class SlowOpcodeHandler {
     }
 
     /**
+     * HASH_SLICE_FOR_LOCAL: rd = hash.getForLocalSlice(keys_list)
+     * Format: [HASH_SLICE_FOR_LOCAL] [rd] [hashReg] [keysListReg]
+     */
+    public static int executeHashSliceForLocal(
+            int[] bytecode,
+            int pc,
+            RuntimeBase[] registers) {
+
+        int rd = bytecode[pc++];
+        int hashReg = bytecode[pc++];
+        int keysListReg = bytecode[pc++];
+
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
+        RuntimeList keysList = (RuntimeList) registers[keysListReg];
+        registers[rd] = hash.getForLocalSlice(keysList);
+        return pc;
+    }
+
+    /**
      * SLOW_HASH_SLICE_DELETE: rd = hash.deleteSlice(keys_list)
      * Format: [SLOW_HASH_SLICE_DELETE] [rd] [hashReg] [keysListReg]
      * Effect: rd = RuntimeList of deleted values

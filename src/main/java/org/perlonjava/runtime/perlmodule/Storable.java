@@ -501,7 +501,7 @@ public class Storable extends PerlModuleBase {
                 } else {
                     // Regular (untied) array: deep-clone each element
                     for (RuntimeScalar element : origArray.elements) {
-                        newArray.add(deepClone(element, cloned));
+                        newArray.addClonedElement(deepClone(element, cloned));
                     }
                 }
                 yield newRef;

@@ -36,6 +36,16 @@ Class::XSAccessor::Array->import(
 
 package main;
 
+require B;
+ok(B::svref_2object(XSAHash->can('foo'))->XSUB,
+    'hash accessor is exposed as an emulated XSUB through B');
+ok(B::svref_2object(XSAArray->can('foo'))->XSUB,
+    'array accessor is exposed as an emulated XSUB through B');
+
+sub ordinary_perl_sub { 1 }
+ok(!B::svref_2object(\&ordinary_perl_sub)->XSUB,
+    'ordinary Perl sub is not exposed as an XSUB');
+
 my $hash = XSAHash->new(foo => 'a', bar => undef);
 isa_ok($hash, 'XSAHash');
 is($hash->foo, 'a', 'hash accessor reads');

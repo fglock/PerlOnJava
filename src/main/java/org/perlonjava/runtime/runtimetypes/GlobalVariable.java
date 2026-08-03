@@ -8,6 +8,7 @@ import org.perlonjava.runtime.mro.InheritanceResolver;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -37,6 +38,8 @@ public class GlobalVariable {
     static final Map<String, RuntimeGlob> globalIORefs = new StashSlotMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new StashSlotMap<>();
     private static final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
+    private static final IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs =
+            new IdentityHashMap<>();
     private static final Set<String> hiddenIORefsAfterStashDelete = new HashSet<>();
 
     // Pinned code references: RuntimeScalars that were accessed at compile time
@@ -1259,11 +1262,17 @@ public class GlobalVariable {
         }
     }
 
-    static void enterLocalizedCodeRef(String key) {
+    static void enterLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         localizedCodeRefDepth.merge(key, 1, Integer::sum);
+        if (displacedCodeRef != null) {
+            displacedLocalizedCodeRefs.put(displacedCodeRef, key);
+        }
     }
 
-    static void exitLocalizedCodeRef(String key) {
+    static void exitLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
+        if (displacedCodeRef != null) {
+            displacedLocalizedCodeRefs.remove(displacedCodeRef);
+        }
         Integer depth = localizedCodeRefDepth.get(key);
         if (depth == null) {
             return;
@@ -1276,6 +1285,9 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar getLocalizedCodeRefForDirectCall(String key, RuntimeScalar fallback) {
+        if ((key == null || key.isEmpty()) && fallback != null) {
+            key = displacedLocalizedCodeRefs.get(fallback);
+        }
         if (key == null || key.isEmpty() || !localizedCodeRefDepth.containsKey(key)) {
             return fallback;
         }

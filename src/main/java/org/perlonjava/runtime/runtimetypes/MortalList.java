@@ -622,6 +622,7 @@ public class MortalList {
             if (!visited.add(base)) continue;  // already visited — cycle
 
             if (base.blessId != 0) {
+                boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
                     s.refCountOwned = false;
                     if (base.refCountTrace) {
@@ -629,6 +630,10 @@ public class MortalList {
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
                     }
                     base.releaseActiveOwner(s);
+                    // refCount is the authoritative ownership count here.
+                    // activeOwners is diagnostic and can retain a stale
+                    // call-frame alias until the enclosing sub returns.
+                    releasingLastOwner = base.refCount == 1;
                     pending.add(base);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {
@@ -636,6 +641,27 @@ public class MortalList {
                     }
                     base.refCount = 1;
                     pending.add(base);
+                    // A zero-count blessed container returned from a helper
+                    // has no counted owner to release, but its fields still
+                    // disappear when this temporary dies.
+                    releasingLastOwner = true;
+                }
+                // A blessed hash/array is still a container.  When this slot
+                // releases its final counted owner, its fields disappear with
+                // it and must release their own referents too.  Do not walk a
+                // shared object: another strong owner may still use its fields
+                // (Sub::Quote keeps exactly this kind of external metadata
+                // owner while its registry entry is weak).
+                if (releasingLastOwner) {
+                    if (base instanceof RuntimeArray arr) {
+                        for (RuntimeScalar elem : arr.elements) {
+                            if (elem != null) work.add(elem);
+                        }
+                    } else if (base instanceof RuntimeHash hash) {
+                        for (RuntimeScalar val : hash.elements.values()) {
+                            if (val != null) work.add(val);
+                        }
+                    }
                 }
             } else {
                 boolean hasDirectWeakElementRefs = containerHasWeakElementRefs(base);

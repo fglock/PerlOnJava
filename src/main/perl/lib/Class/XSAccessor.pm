@@ -4,10 +4,11 @@ use 5.008;
 use strict;
 use warnings;
 use Carp qw(croak);
-use Scalar::Util qw(reftype);
+use Scalar::Util qw(refaddr reftype);
 use Class::XSAccessor::Heavy;
 
 our $VERSION = '1.19';
+our %_is_emulated_xsub;
 
 sub _make_hash {
     my $ref = shift;
@@ -128,6 +129,7 @@ sub _check_hash_invocant {
 
 sub _install {
     my ($name, $code) = @_;
+    $_is_emulated_xsub{refaddr($code)} = 1;
     no strict 'refs';
     no warnings 'redefine';
     *{$name} = $code;

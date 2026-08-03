@@ -337,6 +337,16 @@ public class Universal extends PerlModuleBase {
             }
         }
 
+        // A plain string is only a class invocant when its package stash
+        // exists.  Treating every arbitrary string as its own class makes
+        // UNIVERSAL::isa("ARRAY", "ARRAY") true and defeats the common
+        // reference-type guard `UNIVERSAL::isa($value, "ARRAY")`.
+        if (!RuntimeScalarType.isReference(object)
+                && !GlobalVariable.isPackageLoaded(perlClassName)
+                && !GlobalVariable.existsGlobalArray(perlClassName + "::ISA")) {
+            return getScalarBoolean(false).getList();
+        }
+
         // Get the linearized inheritance hierarchy using C3.
         // Also compute the canonical (stash-alias-resolved) form of the
         // object's class and linearise that too. We have to check BOTH

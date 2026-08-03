@@ -1,7 +1,9 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.lang.reflect.Field;
 import java.util.Map;
 
 /**
@@ -66,6 +68,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_cv_deparse_info", "jperlCvDeparseInfo", "$");
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
+            internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -76,6 +79,96 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList jperlEndAvRef(RuntimeArray args, int ctx) {
         return SpecialBlock.endBlocks.createReference().getList();
+    }
+
+    /**
+     * Rebind a closure's captured lexical slots to the referents supplied by
+     * PadWalker::set_closed_over.  The environment hash maps names including
+     * their sigil (for example {@code $value} or {@code @items}) to references
+     * to the replacement lexical containers.
+     */
+    public static RuntimeList jperlSetClosedOver(RuntimeArray args, int ctx) {
+        if (args.size() != 2 || args.get(0).type != RuntimeScalarType.CODE) {
+            throw new IllegalArgumentException("Usage: PadWalker::set_closed_over(CODEREF, HASHREF)");
+        }
+
+        RuntimeCode code = (RuntimeCode) args.get(0).value;
+        RuntimeHash environment = args.get(1).hashDerefRaw();
+        for (Map.Entry<String, RuntimeScalar> entry : environment.elements.entrySet()) {
+            String variableName = entry.getKey();
+            RuntimeScalar reference = entry.getValue();
+            if (!RuntimeScalarType.isReference(reference)
+                    || !(reference.value instanceof RuntimeBase replacement)) {
+                throw new IllegalArgumentException(
+                        "PadWalker::set_closed_over environment value for "
+                                + variableName + " is not a reference");
+            }
+            rebindCapturedVariable(code, variableName, replacement);
+        }
+        return new RuntimeList();
+    }
+
+    private static void rebindCapturedVariable(
+            RuntimeCode code, String variableName, RuntimeBase replacement) {
+        if (code instanceof InterpretedCode interpreted) {
+            Integer register = interpreted.variableRegistry.get(variableName);
+            int capturedIndex = register == null ? -1 : register - 3;
+            if (capturedIndex < 0 || interpreted.capturedVars == null
+                    || capturedIndex >= interpreted.capturedVars.length) {
+                throw new IllegalArgumentException(
+                        "PadWalker::set_closed_over cannot find lexical " + variableName);
+            }
+            RuntimeBase previous = interpreted.capturedVars[capturedIndex];
+            interpreted.capturedVars[capturedIndex] = replacement;
+            replaceCaptureTracking(code, previous, replacement);
+            return;
+        }
+
+        Object closure = code.codeObject != null ? code.codeObject : code.subroutine;
+        if (closure == null) {
+            throw new IllegalArgumentException(
+                    "PadWalker::set_closed_over cannot inspect this coderef");
+        }
+        try {
+            Field field = closure.getClass().getField(variableName);
+            RuntimeBase previous = (RuntimeBase) field.get(closure);
+            field.set(closure, replacement);
+            replaceCaptureTracking(code, previous, replacement);
+        } catch (NoSuchFieldException e) {
+            throw new IllegalArgumentException(
+                    "PadWalker::set_closed_over cannot find lexical " + variableName);
+        } catch (IllegalAccessException | ClassCastException e) {
+            throw new IllegalArgumentException(
+                    "PadWalker::set_closed_over cannot rebind lexical " + variableName, e);
+        }
+    }
+
+    private static void replaceCaptureTracking(
+            RuntimeCode code, RuntimeBase previous, RuntimeBase replacement) {
+        if (previous == replacement) return;
+
+        if (previous != null) previous.releaseClosureCapture();
+        replacement.retainClosureCapture();
+
+        if (previous instanceof RuntimeScalar && replacement instanceof RuntimeScalar scalar
+                && code.capturedScalars != null) {
+            for (int i = 0; i < code.capturedScalars.length; i++) {
+                if (code.capturedScalars[i] == previous) {
+                    code.capturedScalars[i] = scalar;
+                    return;
+                }
+            }
+        }
+        if ((previous instanceof RuntimeArray || previous instanceof RuntimeHash)
+                && (replacement instanceof RuntimeArray || replacement instanceof RuntimeHash)
+                && code.capturedAggregates != null) {
+            for (int i = 0; i < code.capturedAggregates.length; i++) {
+                if (code.capturedAggregates[i] == previous) {
+                    code.capturedAggregates[i] = replacement;
+                    return;
+                }
+            }
+        }
     }
 
     /**

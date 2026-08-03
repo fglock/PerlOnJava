@@ -585,6 +585,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         RuntimeScalar.incrementRefCountForContainerStore(copy);
     }
 
+    /**
+     * Add a scalar produced by a deep-clone operation without invoking Perl
+     * assignment semantics.  Assignment normally FETCHes a tied scalar, but
+     * Storable must retain the cloned scalar's tie magic in the destination
+     * array slot.
+     */
+    public void addClonedElement(RuntimeScalar value) {
+        elements.add(value);
+        if (value != null) {
+            value.markContainerOwner(this);
+            RuntimeScalar.incrementRefCountForContainerStore(value);
+        }
+    }
+
     public void add(RuntimeArray value) {
         value.addToArray(this);
     }

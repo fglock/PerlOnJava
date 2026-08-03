@@ -9,11 +9,11 @@ This document tracks all errors found when running `./jcpan -t Test::Deep` and t
 
 ## Test Results Summary
 
-### Current Status: 41/42 test files passing (after Phases 1-6)
+### Current Status: 42/42 test files passing (verified 2026-08-03)
 
-Only `t/memory.t` still fails one assertion. `weaken` is implemented in the
-runtime, but the second-argument capture case remains an open selective
-reference-counting edge case.
+The selective reference-counting fixes now cover the temporary comparison
+owner path exercised by `t/memory.t`. The full CPAN distribution passes under
+PerlOnJava: 42 files and 1,268 tests.
 
 | Test File | Status | Notes |
 |-----------|--------|-------|
@@ -42,7 +42,7 @@ reference-counting edge case.
 | t/isa.t | PASS | Fixed: Phase 1 (isa keyword parsing) |
 | t/leaf-wrapper.t | PASS | - |
 | t/listmethods.t | PASS | - |
-| t/memory.t | **FAIL** | `weaken` unimplemented (known limitation) |
+| t/memory.t | PASS | Fixed: temporary comparison owner cleanup |
 | t/methods.t | PASS | - |
 | t/no-clobber-globals.t | PASS | - |
 | t/none.t | PASS | Fixed: Phase 1 (overload) + Phase 3 (bitwise | overload) |
@@ -320,7 +320,7 @@ Phase 1 fixes applied:
 
 **Summary: 17 failing files -> 7 failing files. ~83 failures resolved.**
 
-### Remaining Failures (17 total across 7 files)
+### Historical Remaining Failures After Phase 1 (17 total across 7 files)
 
 | Test File | Failures | Root Cause |
 |-----------|----------|------------|
@@ -548,7 +548,7 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
 
 ---
 
-## Remaining Failures Summary (excluding weaken)
+## Historical Phase 3-6 Worklist (now completed)
 
 | Phase | Issue | Tests | Failures | Priority |
 |-------|-------|-------|----------|----------|
@@ -558,11 +558,12 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
 | 6 | `/=` tokenization after regex | t/regexp.t, t/regexpref.t | 2 files blocked | MEDIUM |
 | — | `weaken` unimplemented | t/memory.t | 2 | LOW (known) |
 
-**Expected outcome**: Fixing phases 3-6 should bring Test::Deep to **41/42 passing** (only t/memory.t remaining due to `weaken`).
+**Historical target**: Phases 3-6 targeted 41/42 passing. The later memory
+lifetime fix completed the final file; current validation is 42/42.
 
 ## Progress Tracking
 
-### Current Status: Test::Deep memory lifetime fixed; CPAN smoke verification complete (2026-08-03)
+### Current Status: Test::Deep fully passing (2026-08-03)
 
 ### Completed Phases
 
@@ -578,11 +579,13 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
 - [x] `t/memory.t` temporary comparison owner cleanup
   - Recursive cleanup of discarded comparator/container values and a package-global reachability check on scalar overwrite prevent temporary call-frame aliases from retaining weak referents.
   - Added `src/test/resources/unit/test_deep_memory_regression.t`, validated with system Perl and PerlOnJava's JVM backend.
+- [x] Full CPAN distribution validation
+  - `timeout 2400 ./jcpan -t Test::Deep` passes all 42 files and 1,268 tests.
 
 ### Next Steps
 
-1. Add `Test::Fatal`/`Test::Requires` dependency handling or narrow the Type::Tiny optional suite when validating `Config::Locale`.
+1. Keep `Test::Deep` in the CPAN compatibility acceptance set.
 
 ### Open Questions
 
-- The interpreter backend still cannot run this regression because its bundled `Exporter` path reports an undefined `Exporter::Heavy::heavy_as_heavy` subroutine.
+- None for the Test::Deep distribution.

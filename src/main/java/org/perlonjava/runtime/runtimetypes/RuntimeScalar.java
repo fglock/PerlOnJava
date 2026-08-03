@@ -1599,6 +1599,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             ScalarRefRegistry.registerRef(this);
         }
 
+        // A returned blessed container may have no selective count even though
+        // this scalar is its final Perl owner.  It will not enter the counted
+        // decrement branch below, so release nested objects explicitly before
+        // an undef overwrite discards the container.
+        if (oldBase != null && oldBase.blessId != 0 && oldBase.refCount == 0
+                && !thisWasWeak && value.type == UNDEF) {
+            if (oldBase instanceof RuntimeArray array) {
+                MortalList.deferDestroyForContainerClear(array.elements);
+            } else if (oldBase instanceof RuntimeHash hash) {
+                MortalList.deferDestroyForContainerClear(hash.elements.values());
+            }
+        }
+
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak && this.refCountOwned) {
@@ -1654,16 +1667,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // A call-frame alias can remain visible to the general reachability
-        // walk briefly after the callee returns.  Once this scalar slot is
-        // overwritten, package-global reachability is the authoritative
-        // check for an untracked referent; any counted lexical owner is
-        // handled by the refCountOwned path above.
-        if (oldBase != null && !thisWasWeak
+        // A returned call-frame alias can leave the selective count one owner
+        // high after the caller overwrites its last real reference. Clear weak
+        // observers only when the referent has no independent package/lexical
+        // root and is not retained by a live closure. ExternalRootSnapshot
+        // deliberately treats a named lexical's own slot as non-external while
+        // preserving nested metadata owners such as Sub::Quote's saved info.
+        if ((oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
+                && !thisWasWeak
                 && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                && !ReachabilityWalker.isReachableFromRoots(oldBase, true)) {
+                && !ReachabilityWalker.isReachableFromExternalRoot(oldBase)
+                && !ReachabilityWalker.isReachableFromLiveCodeCaptures(oldBase)) {
             WeakRefRegistry.clearWeakRefsTo(oldBase);
         }
+
         if (undefAssignmentOfDestroyableRef) {
             if (!DestroyDispatch.isInsideDestroy()) {
                 shouldClearRescuedAfterUndefAssignment = true;
