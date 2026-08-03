@@ -640,6 +640,10 @@ public class BytecodeCompiler implements Visitor {
         return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_INTEGER);
     }
 
+    boolean isUninitializedWarningsEnabled() {
+        return getEffectiveSymbolTable().isWarningCategoryEnabled("uninitialized");
+    }
+
     boolean isNoOverloadingEnabled() {
         return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
     }
@@ -896,11 +900,14 @@ public class BytecodeCompiler implements Visitor {
         int featureFlags = 0;
         BitSet warningFlags = new BitSet();
         String warningBitsString = null;
-        if (emitterContext != null && emitterContext.symbolTable != null) {
-            strictOptions = emitterContext.symbolTable.strictOptionsStack.peek();
-            featureFlags = emitterContext.symbolTable.featureFlagsStack.peek();
-            warningFlags = (BitSet) emitterContext.symbolTable.warningFlagsStack.peek().clone();
-            warningBitsString = emitterContext.symbolTable.getWarningBitsString();
+        ScopedSymbolTable metadataScope = emitterContext != null && emitterContext.symbolTable != null
+                ? emitterContext.symbolTable
+                : symbolTable;
+        if (metadataScope != null) {
+            strictOptions = metadataScope.strictOptionsStack.peek();
+            featureFlags = metadataScope.featureFlagsStack.peek();
+            warningFlags = (BitSet) metadataScope.warningFlagsStack.peek().clone();
+            warningBitsString = metadataScope.getWarningBitsString();
         }
 
         // Populate debug source lines if in debug mode

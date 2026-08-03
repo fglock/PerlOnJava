@@ -260,7 +260,11 @@ public class Parser {
     }
 
     public void throwError(String message) {
-        throw new PerlCompilerException(this.tokenIndex, message, this.ctx.errorUtil);
+        int errorIndex = this.tokenIndex;
+        if (errorIndex > 1 && tokens.get(errorIndex - 1).type == LexerTokenType.NEWLINE) {
+            errorIndex -= 2;
+        }
+        throw new PerlCompilerException(errorIndex, message, this.ctx.errorUtil);
     }
 
     public void throwError(int index, String message) {

@@ -943,6 +943,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeAddScalar(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ADD_SCALAR_WARN -> {
+                                pc = InlineOpcodeHandler.executeAddScalarWarn(bytecode, pc, registers);
+                            }
+
                             case Opcodes.SUB_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeSubScalar(bytecode, pc, registers);
                             }
