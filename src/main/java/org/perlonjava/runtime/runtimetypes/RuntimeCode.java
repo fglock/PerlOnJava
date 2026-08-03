@@ -1955,7 +1955,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Set the global error variable "$@"
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                err.set(e.getMessage());
+                // A BEGIN block can die with a blessed error object (for
+                // example Error::TypeTiny).  Compilation currently catches
+                // that exception here, so retain its payload instead of
+                // converting it through Throwable.getMessage(), which uses
+                // the Java object's identity string.
+                PerlDieException die = null;
+                Throwable current = e;
+                while (current != null) {
+                    if (current instanceof PerlDieException pde) {
+                        die = pde;
+                        break;
+                    }
+                    Throwable next = current.getCause();
+                    if (next == current) break;
+                    current = next;
+                }
+                if (die != null && die.getPayload() != null) {
+                    err.set(die.getPayload().getFirst());
+                } else {
+                    err.set(e.getMessage());
+                }
 
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
                 if (EVAL_VERBOSE) {
@@ -2445,7 +2465,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Compilation error in eval-string
                 // Set the global error variable "$@"
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                err.set(e.getMessage());
+                // Preserve blessed die payloads thrown by BEGIN blocks.  The
+                // Java exception message is only a diagnostic and may be the
+                // object's identity string rather than its Perl overload.
+                PerlDieException die = null;
+                Throwable current = e;
+                while (current != null) {
+                    if (current instanceof PerlDieException pde) {
+                        die = pde;
+                        break;
+                    }
+                    Throwable next = current.getCause();
+                    if (next == current) break;
+                    current = next;
+                }
+                if (die != null && die.getPayload() != null) {
+                    err.set(die.getPayload().getFirst());
+                } else {
+                    err.set(e.getMessage());
+                }
 
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
                 if (EVAL_VERBOSE) {
