@@ -117,7 +117,6 @@ sub _generate_method {
 
 sub _usage {
     my ($name, $args) = @_;
-    $name =~ s/^.*:://;
     croak("Usage: $name($args)");
 }
 
