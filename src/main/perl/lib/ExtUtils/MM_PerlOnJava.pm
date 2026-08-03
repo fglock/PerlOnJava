@@ -110,7 +110,7 @@ sub test {
     # matching standard ExtUtils::MakeMaker behavior (MM_Any::test_via_harness)
     return <<"MAKE_FRAG";
 PERLONJAVA_CPAN_PERL5LIB = \$(shell if test -f blib/.perlonjava-cpan-perl5lib; then cat blib/.perlonjava-cpan-perl5lib; elif test -f .perlonjava-cpan-perl5lib; then cat .perlonjava-cpan-perl5lib; fi)
-PERLONJAVA_TEST_PERL5LIB = \$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
+PERLONJAVA_TEST_PERL5LIB = inc:\$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
 
 test :: pure_all
 	PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
