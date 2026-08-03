@@ -717,7 +717,8 @@ public class Internals extends PerlModuleBase {
         RuntimeScalar source = code.deparseSourceText != null
                 ? new RuntimeScalar(code.deparseSourceText)
                 : new RuntimeScalar();
-        return new RuntimeList(source, new RuntimeScalar(code.deparseFlags), new RuntimeScalar(code.deparseSourceOffset));
+        return new RuntimeList(source, new RuntimeScalar(code.deparseFlags),
+                new RuntimeScalar(code.deparseSourceOffset), new RuntimeScalar(code.deparseSourceEnd));
     }
 
     /**

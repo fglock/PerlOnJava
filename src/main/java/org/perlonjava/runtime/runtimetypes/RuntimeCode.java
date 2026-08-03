@@ -1552,6 +1552,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.subroutine = codeFrom.subroutine;
         code.isStatic = codeFrom.isStatic;
         code.codeObject = codeFrom.codeObject;
+        code.cvStartFile = codeFrom.cvStartFile;
+        code.cvStartLine = codeFrom.cvStartLine;
+        code.deparseSourceText = codeFrom.deparseSourceText;
+        code.deparseFlags = codeFrom.deparseFlags;
+        code.deparseSourceOffset = codeFrom.deparseSourceOffset;
+        code.deparseSourceEnd = codeFrom.deparseSourceEnd;
     }
 
     public void adoptDefinitionFrom(RuntimeCode codeFrom) {
@@ -1584,6 +1590,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
         this.cvStartFile = codeFrom.cvStartFile;
         this.cvStartLine = codeFrom.cvStartLine;
+        this.deparseSourceText = codeFrom.deparseSourceText;
+        this.deparseFlags = codeFrom.deparseFlags;
+        this.deparseSourceOffset = codeFrom.deparseSourceOffset;
+        this.deparseSourceEnd = codeFrom.deparseSourceEnd;
         this.isConstantCv = codeFrom.isConstantCv;
         this.stashInstallPackage = codeFrom.stashInstallPackage;
         this.stashInstallSub = codeFrom.stashInstallSub;

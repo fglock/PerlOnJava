@@ -56,12 +56,66 @@ sub coderef2text {
         }
     }
 
+    # Runtime-created CVs may not expose a B::CV START op, but the compiler
+    # still retains an exact source span for them.
+    my ($runtime_source, $runtime_flags, $runtime_offset, $runtime_end)
+        = _runtime_deparse_info($coderef);
+    my $runtime_span = _extract_runtime_source_span(
+        $runtime_source, $runtime_flags, $runtime_offset, $runtime_end);
+    return $runtime_span if defined $runtime_span;
+    if (defined $runtime_source && length $runtime_source) {
+        my ($runtime_file, $runtime_line) =
+            eval { Internals::jperl_cv_start_info($coderef) };
+        my $block = _extract_source_visible_block(
+            $runtime_source, $runtime_line || 0, $runtime_flags, $runtime_offset);
+        return $block if defined $block;
+    }
+
     my $source = _source_visible_anon_sub($coderef);
     return $source if defined $source;
     
     # Fallback: return a placeholder
     # In real Perl, B::Deparse would decompile the optree
     return '{ "DUMMY" }';
+}
+
+sub _extract_runtime_source_span {
+    my ($source, $flags, $offset, $end) = @_;
+    return unless defined $source && length $source;
+    return unless defined $offset && $offset >= 0;
+    return if $offset >= length($source);
+    if (!defined($end) || $end <= $offset) {
+        my $open = index($source, '{', $offset);
+        return if $open < 0;
+        my ($depth, $quote, $escaped) = (0, '', 0);
+        for (my $i = $open; $i < length($source); $i++) {
+            my $ch = substr($source, $i, 1);
+            if ($quote ne '') {
+                if ($escaped) { $escaped = 0 }
+                elsif ($ch eq '\\') { $escaped = 1 }
+                elsif ($ch eq $quote) { $quote = '' }
+                next;
+            }
+            if ($ch eq '"' || $ch eq "'") { $quote = $ch; next }
+            $depth++ if $ch eq '{';
+            if ($ch eq '}' && --$depth == 0) { $end = $i + 1; last }
+        }
+    }
+    return unless defined $end && $end > $offset;
+    my $span = substr($source, $offset, $end - $offset);
+    $span =~ s/^.*?(\{)/$1/s;
+    $span =~ s/\s+$//;
+    return unless $span =~ /\A\{(.*)\}\z/s;
+    my $body = $1;
+    $body =~ s/^\s+//;
+    $body =~ s/\s+$//;
+    $body .= ';' if length($body) && $body !~ /[;} ]\z/;
+    return "{ $body }" unless $flags;
+    my @lines;
+    push @lines, 'use warnings;' if $flags & 2;
+    push @lines, 'use strict;' if $flags & 1;
+    push @lines, split /\n/, $body;
+    return "{\n" . join('', map { "    $_\n" } @lines) . "}";
 }
 
 sub _source_visible_anon_sub {
@@ -74,8 +128,29 @@ sub _source_visible_anon_sub {
     my $line = eval { $cop->line } || 0;
     return if $line <= 0;
 
-    my ($runtime_source, $flags, $source_offset) = _runtime_deparse_info($coderef);
+    my ($runtime_source, $flags, $source_offset, $source_end) = _runtime_deparse_info($coderef);
     if (defined $runtime_source && length $runtime_source) {
+        if (defined $source_end && $source_offset >= 0 && $source_end > $source_offset
+                && $source_offset < length($runtime_source)) {
+            my $span = substr($runtime_source, $source_offset,
+                $source_end - $source_offset);
+            $span =~ s/^.*?(\{)/$1/s;
+            $span =~ s/\s+$//;
+            if ($span =~ /\A\{(.*)\}\z/s) {
+                my $body = $1;
+                $body =~ s/^\s+//;
+                $body =~ s/\s+$//;
+                $body .= ';' if length($body) && $body !~ /[;} ]\z/;
+                if ($flags) {
+                    my @lines;
+                    push @lines, 'use warnings;' if $flags & 2;
+                    push @lines, 'use strict;' if $flags & 1;
+                    push @lines, split /\n/, $body;
+                    return "{\n" . join('', map { "    $_\n" } @lines) . "}";
+                }
+                return "{ $body }";
+            }
+        }
         my $block = _extract_source_visible_block($runtime_source, $line, $flags, $source_offset);
         return $block if defined $block;
     }
