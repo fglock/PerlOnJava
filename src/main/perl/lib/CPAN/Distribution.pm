@@ -591,12 +591,29 @@ See also http://rt.cpan.org/Ticket/Display.html?id=38932\n");
     my $packagedir;
     my $eexist = ($CPAN::META->has_usable("Errno") && defined &Errno::EEXIST)
         ? &Errno::EEXIST : undef;
-    for(my $suffix = 0; ; $suffix++) {
+    my $suffix = 0;
+    my $unique_suffix = 0;
+    while (1) {
         $packagedir = File::Spec->catdir($builddir, "$tdir_base-$suffix");
         my $parent = $builddir;
         mkdir($packagedir, 0777) and last;
-        if((defined($eexist) && $! != $eexist) || $suffix == 999) {
+        if(defined($eexist) && $! != $eexist) {
             $CPAN::Frontend->mydie("Cannot create directory $packagedir: $!\n");
+        }
+        # CPAN normally leaves completed build directories in the cache and
+        # uses a bounded numeric suffix to avoid overwriting them.  A long
+        # sequence of interrupted or repeated builds can exhaust -0 .. -999,
+        # though, making an otherwise healthy CPAN cache unusable.  Continue
+        # with a collision-safe suffix instead of failing at an arbitrary
+        # limit.  mkdir remains the atomic operation, so concurrent CPAN
+        # clients cannot select the same directory.
+        if ($suffix == 999) {
+            $unique_suffix = 1;
+        }
+        if ($unique_suffix) {
+            $suffix = join '-', time, $$, int(rand(1_000_000));
+        } else {
+            $suffix++;
         }
     }
     my $f;
