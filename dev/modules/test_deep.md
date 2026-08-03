@@ -11,7 +11,9 @@ This document tracks all errors found when running `./jcpan -t Test::Deep` and t
 
 ### Current Status: 41/42 test files passing (after Phases 1-6)
 
-Only `t/memory.t` fails due to `weaken` being unimplemented.
+Only `t/memory.t` still fails one assertion. `weaken` is implemented in the
+runtime, but the second-argument capture case remains an open selective
+reference-counting edge case.
 
 | Test File | Status | Notes |
 |-----------|--------|-------|
@@ -224,7 +226,7 @@ Files to change:
 
 ---
 
-### 6. LOW: `Scalar::Util::weaken` is unimplemented (placeholder)
+### 6. LOW: `Scalar::Util::weaken` edge case
 
 **Affected tests**: t/memory.t (2 fail)
 
@@ -234,7 +236,9 @@ Failed test 'left didn't capture'
 Failed test 'right didn't capture'
 ```
 
-**Root Cause**: `weaken()` in `ScalarUtil.java` is a no-op placeholder. The test creates a weak reference, removes the strong reference, and expects the weak ref to become undef. Since `weaken()` does nothing, the weak ref stays alive.
+**Root Cause**: The runtime's selective reference-counting implementation
+handles ordinary weak references, but this test's indirect-call path retains
+the expected (second) argument longer than Perl does.
 
 **Java feasibility note**: Java has `java.lang.ref.WeakReference`, but its semantics differ fundamentally from Perl's. Perl weak refs become `undef` **immediately and deterministically** when the last strong reference is removed (reference counting). Java weak refs are cleared by the GC **non-deterministically** -- the timing is unpredictable and depends on GC pressure. Replicating Perl's exact semantics would require building a reference-counting layer on top of Java's GC in `RuntimeScalar`, which is a significant architectural change. This is feasible but expensive to implement and maintain, and may not be worth it for the small number of affected tests.
 
@@ -555,3 +559,28 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
 | — | `weaken` unimplemented | t/memory.t | 2 | LOW (known) |
 
 **Expected outcome**: Fixing phases 3-6 should bring Test::Deep to **41/42 passing** (only t/memory.t remaining due to `weaken`).
+
+## Progress Tracking
+
+### Current Status: Compile-scope hooks fixed; CPAN smoke verification complete (2026-08-03)
+
+### Completed Phases
+
+- [x] Lexical `B::Hooks::EndOfScope` dispatch
+  - Added parser-visible compile-scope callback stacks.
+  - `namespace::clean` now passes all 2,099 subtests, including its nested-scope test.
+  - Files: `BHooksEndOfScope.java`, `ParseBlock.java`.
+- [x] Localized container cleanup
+  - Release temporary localized hash/array contents during global local restoration.
+  - Files: `GlobalRuntimeHash.java`, `GlobalRuntimeArray.java`, `GlobalRuntimeScalar.java`.
+- [x] Regression coverage
+  - The upstream `namespace::clean` suite now covers nested compile-scope hooks and passes 2,099/2,099 subtests.
+
+### Next Steps
+
+1. Trace the remaining `Test::Deep` `t/memory.t` second-argument weak-owner edge case.
+2. Add `Test::Fatal`/`Test::Requires` dependency handling or narrow the Type::Tiny optional suite when validating `Config::Locale`.
+
+### Open Questions
+
+- Which temporary owner in the indirect `Test::Deep` call should be released at subroutine return while preserving live `@_` and closure captures?
