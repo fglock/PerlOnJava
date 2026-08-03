@@ -105,17 +105,11 @@ sub _extract_runtime_source_span {
     my $span = substr($source, $offset, $end - $offset);
     $span =~ s/^.*?(\{)/$1/s;
     $span =~ s/\s+$//;
-    return unless $span =~ /\A\{(.*)\}\z/s;
-    my $body = $1;
-    $body =~ s/^\s+//;
-    $body =~ s/\s+$//;
-    $body .= ';' if length($body) && $body !~ /[;} ]\z/;
-    return "{ $body }" unless $flags;
-    my @lines;
-    push @lines, 'use warnings;' if $flags & 2;
-    push @lines, 'use strict;' if $flags & 1;
-    push @lines, split /\n/, $body;
-    return "{\n" . join('', map { "    $_\n" } @lines) . "}";
+    return unless $span =~ /\A\{.*\}\z/s;
+
+    # Reuse the normal source-block formatter. The synthetic `sub` prefix
+    # makes its existing AST/source-block detection select this exact span.
+    return _extract_source_visible_block("sub $span", 1, $flags, 4);
 }
 
 sub _source_visible_anon_sub {
@@ -130,27 +124,9 @@ sub _source_visible_anon_sub {
 
     my ($runtime_source, $flags, $source_offset, $source_end) = _runtime_deparse_info($coderef);
     if (defined $runtime_source && length $runtime_source) {
-        if (defined $source_end && $source_offset >= 0 && $source_end > $source_offset
-                && $source_offset < length($runtime_source)) {
-            my $span = substr($runtime_source, $source_offset,
-                $source_end - $source_offset);
-            $span =~ s/^.*?(\{)/$1/s;
-            $span =~ s/\s+$//;
-            if ($span =~ /\A\{(.*)\}\z/s) {
-                my $body = $1;
-                $body =~ s/^\s+//;
-                $body =~ s/\s+$//;
-                $body .= ';' if length($body) && $body !~ /[;} ]\z/;
-                if ($flags) {
-                    my @lines;
-                    push @lines, 'use warnings;' if $flags & 2;
-                    push @lines, 'use strict;' if $flags & 1;
-                    push @lines, split /\n/, $body;
-                    return "{\n" . join('', map { "    $_\n" } @lines) . "}";
-                }
-                return "{ $body }";
-            }
-        }
+        my $span = _extract_runtime_source_span(
+            $runtime_source, $flags, $source_offset, $source_end);
+        return $span if defined $span;
         my $block = _extract_source_visible_block($runtime_source, $line, $flags, $source_offset);
         return $block if defined $block;
     }
