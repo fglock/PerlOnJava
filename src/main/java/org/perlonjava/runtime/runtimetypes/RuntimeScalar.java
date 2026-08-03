@@ -1653,6 +1653,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
             }
         }
+
+        // A call-frame alias can remain visible to the general reachability
+        // walk briefly after the callee returns.  Once this scalar slot is
+        // overwritten, package-global reachability is the authoritative
+        // check for an untracked referent; any counted lexical owner is
+        // handled by the refCountOwned path above.
+        if (oldBase != null && !thisWasWeak
+                && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                && !ReachabilityWalker.isReachableFromRoots(oldBase, true)) {
+            WeakRefRegistry.clearWeakRefsTo(oldBase);
+        }
         if (undefAssignmentOfDestroyableRef) {
             if (!DestroyDispatch.isInsideDestroy()) {
                 shouldClearRescuedAfterUndefAssignment = true;
