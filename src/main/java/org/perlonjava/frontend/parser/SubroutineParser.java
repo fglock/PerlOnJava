@@ -518,6 +518,27 @@ public class SubroutineParser {
                 // The block is evaluated and its result becomes the method invocant.
                 // Any following expressions become arguments to the method call.
                 if (nextTok.text.equals("{")) {
+                    // A known subroutine followed by a block is the common
+                    // callback form, e.g. Test::Fatal's
+                    //     exception { compile()->(1) }
+                    // The braces introduce an anonymous CODE argument; they
+                    // are not an indirect-object invocant.  Without this
+                    // distinction the parser associates the inner ->() call
+                    // with the outer exception call and passes the callback's
+                    // argument to exception itself.
+                    if (subExists) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+                        Node callbackBody = ParseBlock.parseBlock(parser);
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        Node callback = new SubroutineNode(null, null, null,
+                                callbackBody, false, currentIndex);
+                        ListNode arguments = new ListNode(List.of(callback), currentIndex);
+                        return new BinaryOperatorNode("(",
+                                new OperatorNode("&", nameNode, currentIndex),
+                                arguments,
+                                currentIndex);
+                    }
+
                     // Consume the opening brace
                     TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
                     // Parse the block as an expression - it will be evaluated at runtime
