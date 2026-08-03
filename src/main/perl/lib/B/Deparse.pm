@@ -60,8 +60,10 @@ sub coderef2text {
     # still retains an exact source span for them.
     my ($runtime_source, $runtime_flags, $runtime_offset, $runtime_end)
         = _runtime_deparse_info($coderef);
+    my $runtime_format_flags = $self->{ambient_pragmas} ? 0 : $runtime_flags;
     my $runtime_span = _extract_runtime_source_span(
-        $runtime_source, $runtime_flags, $runtime_offset, $runtime_end);
+        $runtime_source, $runtime_flags, $runtime_offset, $runtime_end,
+        $runtime_format_flags);
     return $runtime_span if defined $runtime_span;
     if (defined $runtime_source && length $runtime_source) {
         my ($runtime_file, $runtime_line) =
@@ -71,7 +73,7 @@ sub coderef2text {
         return $block if defined $block;
     }
 
-    my $source = _source_visible_anon_sub($coderef);
+    my $source = _source_visible_anon_sub($coderef, $runtime_format_flags);
     return $source if defined $source;
     
     # Fallback: return a placeholder
@@ -80,7 +82,7 @@ sub coderef2text {
 }
 
 sub _extract_runtime_source_span {
-    my ($source, $flags, $offset, $end) = @_;
+    my ($source, $flags, $offset, $end, $format_flags) = @_;
     return unless defined $source && length $source;
     return unless defined $offset && $offset >= 0;
     return if $offset >= length($source);
@@ -102,18 +104,29 @@ sub _extract_runtime_source_span {
         }
     }
     return unless defined $end && $end > $offset;
-    my $span = substr($source, $offset, $end - $offset);
+    # Some AST nodes report the first expression in the body rather than the
+    # `sub` token.  The end offset is still the compiler's exact boundary, so
+    # anchor the slice at the nearest preceding block opener.
+    my $span_offset = $offset;
+    if (substr($source, $span_offset, 1) ne '{') {
+        my $open = rindex($source, '{', $span_offset);
+        $span_offset = $open if $open >= 0;
+    }
+    my $span = substr($source, $span_offset, $end - $span_offset);
     $span =~ s/^.*?(\{)/$1/s;
     $span =~ s/\s+$//;
+    my $close = rindex($span, '}');
+    $span = substr($span, 0, $close + 1) if $close >= 0;
     return unless $span =~ /\A\{.*\}\z/s;
 
     # Reuse the normal source-block formatter. The synthetic `sub` prefix
     # makes its existing AST/source-block detection select this exact span.
-    return _extract_source_visible_block("sub $span", 1, $flags, 4);
+    $format_flags = $flags unless defined $format_flags;
+    return _extract_source_visible_block("sub $span", 1, $format_flags, 4);
 }
 
 sub _source_visible_anon_sub {
-    my ($coderef) = @_;
+    my ($coderef, $format_flags) = @_;
 
     require B;
     my $cv = eval { B::svref_2object($coderef) } or return;
@@ -125,7 +138,8 @@ sub _source_visible_anon_sub {
     my ($runtime_source, $flags, $source_offset, $source_end) = _runtime_deparse_info($coderef);
     if (defined $runtime_source && length $runtime_source) {
         my $span = _extract_runtime_source_span(
-            $runtime_source, $flags, $source_offset, $source_end);
+            $runtime_source, $flags, $source_offset, $source_end,
+            $format_flags);
         return $span if defined $span;
         my $block = _extract_source_visible_block($runtime_source, $line, $flags, $source_offset);
         return $block if defined $block;
@@ -138,7 +152,8 @@ sub _source_visible_anon_sub {
     close $fh;
 
     my $source = join '', @lines;
-    return _extract_source_visible_block($source, $line, $flags, $source_offset);
+    $format_flags = $flags unless defined $format_flags;
+    return _extract_source_visible_block($source, $line, $format_flags, $source_offset);
 }
 
 sub _runtime_deparse_info {
@@ -223,7 +238,11 @@ sub _looks_like_code_block_open {
 }
 
 # Additional methods that might be called
-sub ambient_pragmas { }
+sub ambient_pragmas {
+    my ($self, %pragmas) = @_;
+    $self->{ambient_pragmas} = 1 if %pragmas;
+    return $self;
+}
 sub indent_size { $_[0]->{indent_size} // 4 }
 
 1;
