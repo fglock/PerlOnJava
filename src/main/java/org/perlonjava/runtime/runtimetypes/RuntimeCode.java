@@ -3401,11 +3401,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     subName = frameSubName;
                 }
 
+                // The active-code stack can describe the anonymous wrapper
+                // used to execute an eval.  Preserve the stack trace's Perl
+                // `(eval)` marker before applying the generic __ANON__
+                // fallback, otherwise caller()[3] and caller()[4] both acquire
+                // ordinary-sub semantics for eval BLOCK and eval STRING.
+                String previousFrameSubName = null;
+                if (frame > 0 && frame - 1 < stackTraceSize) {
+                    ArrayList<String> previousFrame = stackTrace.get(frame - 1);
+                    if (previousFrame.size() > 3) {
+                        previousFrameSubName = previousFrame.get(3);
+                    }
+                }
+                boolean previousFrameIsEval = previousFrameSubName != null
+                        && previousFrameSubName.startsWith("(eval");
+
                 RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
                 if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
                     if (subName == null && !activeCode.explicitlyRenamed
-                            && activeCode.packageName != null) {
+                            && activeCode.packageName != null && !previousFrameIsEval) {
                         subName = normalizeCallerPackage(activeCode.packageName) + "::__ANON__";
                     }
                 }
@@ -3431,11 +3446,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 
                 // Fall back to stack trace info
-                if (subName == null && frame > 0 && frame - 1 < stackTraceSize) {
-                    ArrayList<String> prevFrame = stackTrace.get(frame - 1);
-                    if (prevFrame.size() > 3) {
-                        subName = prevFrame.get(3);
-                    }
+                if (subName == null && previousFrameSubName != null) {
+                    subName = previousFrameSubName;
                 }
 
                 // In Perl, caller() always returns a defined subroutine name.

@@ -26,4 +26,12 @@ is(
     'caller sees anonymous callback through nested prototype blocks and goto',
 );
 
+my @eval_block_caller = eval { caller(0) };
+is($eval_block_caller[3], '(eval)', 'caller preserves eval BLOCK name');
+ok(!$eval_block_caller[4], 'caller reports no arguments for eval BLOCK');
+
+my @eval_string_caller = eval q{ caller(0) };
+is($eval_string_caller[3], '(eval)', 'caller preserves eval STRING name');
+ok(!$eval_string_caller[4], 'caller reports no arguments for eval STRING');
+
 done_testing;

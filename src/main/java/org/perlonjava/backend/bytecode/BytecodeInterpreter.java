@@ -203,6 +203,11 @@ public class BytecodeInterpreter {
         // DESTROY fires for blessed objects that went out of scope during die.
         java.util.ArrayDeque<Integer> evalBaseRegStack = new java.util.ArrayDeque<>();
 
+        // Interpreted eval BLOCKs execute inline, so caller() needs a virtual
+        // frame for each active EVAL_TRY. Track the depth explicitly so normal,
+        // exceptional, and non-local exits all unwind the synthetic frames.
+        int virtualEvalFrameDepth = 0;
+
         // Labeled block stack for non-local last/next/redo handling.
         // When a function call returns a RuntimeControlFlowList, we check this stack
         // to see if the label matches an enclosing labeled block.
@@ -1979,6 +1984,10 @@ public class BytecodeInterpreter {
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth++;
 
+                                if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
+                                    virtualEvalFrameDepth++;
+                                }
+
                                 // Clear $@ at start of eval block
                                 GlobalVariable.setGlobalVariable("main::@", "");
 
@@ -2009,6 +2018,11 @@ public class BytecodeInterpreter {
 
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth--;
+
+                                if (virtualEvalFrameDepth > 0) {
+                                    InterpreterState.pop();
+                                    virtualEvalFrameDepth--;
+                                }
                             }
 
                             case Opcodes.EVAL_CATCH -> {
@@ -2583,6 +2597,10 @@ public class BytecodeInterpreter {
                             DynamicVariableManager.popToLocalLevel(savedLevel);
                         }
                         RuntimeCode.evalDepth--;
+                        if (virtualEvalFrameDepth > 0) {
+                            InterpreterState.pop();
+                            virtualEvalFrameDepth--;
+                        }
                         WarnDie.catchEval(e);
                         pc = catchPc;
                         continue outer;
@@ -2656,6 +2674,11 @@ public class BytecodeInterpreter {
 
                         // Track eval depth for $^S
                         RuntimeCode.evalDepth--;
+
+                        if (virtualEvalFrameDepth > 0) {
+                            InterpreterState.pop();
+                            virtualEvalFrameDepth--;
+                        }
 
                         // Call WarnDie.catchEval() to set $@
                         WarnDie.catchEval(e);
@@ -2755,6 +2778,10 @@ public class BytecodeInterpreter {
             // the current package, and pops the InterpreterState call stack.
             DynamicVariableManager.popToLocalLevel(savedLocalLevel);
             currentPackageScalar.set(savedPackage);
+            while (virtualEvalFrameDepth > 0) {
+                InterpreterState.pop();
+                virtualEvalFrameDepth--;
+            }
             InterpreterState.pop();
             // Release cached registers for reuse
             code.releaseRegisters();
