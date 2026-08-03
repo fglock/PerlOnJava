@@ -217,15 +217,11 @@ public class GlobalContext {
                 inc.add(new RuntimeScalar(directory)); // add from env PERL5LIB
             }
         }
-        // Add user library path (~/.perlonjava/lib) for ExtUtils::MakeMaker installed modules
-        String userHome = System.getProperty("user.home");
-        if (userHome != null && !userHome.isEmpty()) {
-            String userLib = userHome + "/.perlonjava/lib";
-            java.io.File userLibDir = new java.io.File(userLib);
-            if (userLibDir.isDirectory()) {
-                inc.add(new RuntimeScalar(userLib));
-            }
-        }
+        // Keep the user installation path in @INC even before it exists. A
+        // clean jcpan run creates ~/.perlonjava/lib in a child make process;
+        // the long-lived parent must be able to discover those newly-installed
+        // prerequisites without restarting.
+        addUserLibraryPath(inc, System.getProperty("user.home"));
         inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib (lowest priority)
 
         // Honor PERL_USE_UNSAFE_INC=1 (required by CPAN.pm / Module::Install-based
@@ -307,6 +303,14 @@ public class GlobalContext {
 
         // Reset method cache after initializing UNIVERSAL
         InheritanceResolver.invalidateCache();
+    }
+
+    static void addUserLibraryPath(List<RuntimeScalar> inc, String userHome) {
+        if (userHome == null || userHome.isEmpty()) {
+            return;
+        }
+        String userLib = java.nio.file.Path.of(userHome, ".perlonjava", "lib").toString();
+        inc.add(new RuntimeScalar(userLib));
     }
 
     public static String encodeSpecialVar(String name) {
