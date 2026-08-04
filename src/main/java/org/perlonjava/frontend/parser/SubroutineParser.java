@@ -1364,6 +1364,7 @@ public class SubroutineParser {
 
         ArrayList<Class> classList = new ArrayList<>();
         ArrayList<Object> paramList = new ArrayList<>();
+        ArrayList<String> capturedNames = new ArrayList<>();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
                 // Skip field declarations - they are not closure variables
@@ -1436,6 +1437,7 @@ public class SubroutineParser {
                     default -> throw new IllegalStateException("Unexpected value: " + sigil);
                 };
                 paramList.add(capturedVar);
+                capturedNames.add(entry.decl().equals("our") ? null : entry.name());
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
             }
         }
@@ -1443,7 +1445,7 @@ public class SubroutineParser {
         // owns captured lexicals at definition time. Weak-ref cleanup must be
         // able to see those captures before the first call (Sub::Defer's named
         // lvalue wrapper queries its weak metadata before invoking the wrapper).
-        installClosureCaptureMetadata(placeholder, paramList);
+        installClosureCaptureMetadata(placeholder, capturedNames, paramList);
 
         // Create a new EmitterContext for generating bytecode
         // Create a filtered snapshot that excludes field declarations and code references
@@ -1680,6 +1682,11 @@ public class SubroutineParser {
     }
 
     private static void installClosureCaptureMetadata(RuntimeCode code, List<Object> capturedValues) {
+        installClosureCaptureMetadata(code, null, capturedValues);
+    }
+
+    private static void installClosureCaptureMetadata(
+            RuntimeCode code, List<String> capturedNames, List<Object> capturedValues) {
         if (code == null || capturedValues == null || capturedValues.isEmpty()
                 || code.capturedScalars != null) {
             return;
@@ -1687,7 +1694,15 @@ public class SubroutineParser {
 
         ArrayList<RuntimeScalar> capturedScalars = new ArrayList<>();
         ArrayList<RuntimeBase> capturedAggregates = new ArrayList<>();
-        for (Object value : capturedValues) {
+        for (int i = 0; i < capturedValues.size(); i++) {
+            Object value = capturedValues.get(i);
+            if (capturedNames != null && i < capturedNames.size()
+                    && capturedNames.get(i) != null && value instanceof RuntimeBase runtimeValue) {
+                if (code.closedOverVariables == null) {
+                    code.closedOverVariables = new HashMap<>();
+                }
+                code.closedOverVariables.put(capturedNames.get(i), runtimeValue);
+            }
             if (value instanceof RuntimeScalar scalar) {
                 capturedScalars.add(scalar);
                 scalar.retainClosureCapture();

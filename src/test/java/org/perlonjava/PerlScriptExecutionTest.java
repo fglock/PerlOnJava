@@ -208,6 +208,11 @@ public class PerlScriptExecutionTest {
 
         // Replace RuntimeIO.stdout with a new instance
         RuntimeIO.stdout = new RuntimeIO(newStdout);
+        // Tests can apply persistent PerlIO layers to STDERR (for example via
+        // `open ':std'`). Give every script a fresh standard handle so those
+        // layers cannot leak into later parameterized cases.
+        RuntimeIO.stderr = new RuntimeIO(new StandardIO(System.err, false));
+        RuntimeIO.stderr.setAutoFlush(true);
         // Keep Perl's global *STDOUT/*STDERR in sync with the RuntimeIO static fields.
         // Some tests call `binmode STDOUT/STDERR` and expect it to affect the real globals.
         GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
@@ -224,6 +229,8 @@ public class PerlScriptExecutionTest {
     void tearDown() {
         // Restore original stdout
         RuntimeIO.stdout = new RuntimeIO(new StandardIO(originalOut, true));
+        RuntimeIO.stderr = new RuntimeIO(new StandardIO(System.err, false));
+        RuntimeIO.stderr.setAutoFlush(true);
         GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
         GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
         System.setOut(originalOut);

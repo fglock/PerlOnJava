@@ -142,6 +142,7 @@ public class WarningBitsRegistry {
         registry.clear();
         currentBitsStack.get().clear();
         callSiteBits.remove();
+        runtimeWarningBits.remove();
         callerBitsStack.get().clear();
         callSiteHints.remove();
         callerHintsStack.get().clear();

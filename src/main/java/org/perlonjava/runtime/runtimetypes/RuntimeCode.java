@@ -856,6 +856,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public RuntimeBase[] capturedAggregates;
 
+    /** Live lexical containers keyed by their Perl pad names for PadWalker. */
+    public Map<String, RuntimeBase> closedOverVariables;
+
     /**
      * Tracks the number of stash (glob) entries that reference this CODE object.
      * Stash entries created via {@code *Foo::bar = $coderef} are invisible to the
@@ -1615,6 +1618,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.__SUB__ = codeFrom.__SUB__;
         this.capturedScalars = codeFrom.capturedScalars;
         this.capturedAggregates = codeFrom.capturedAggregates;
+        this.closedOverVariables = codeFrom.closedOverVariables;
         this.padConstants = codeFrom.padConstants;
     }
 

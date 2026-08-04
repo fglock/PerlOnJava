@@ -45,7 +45,13 @@ public class GlobalRuntimeArray implements DynamicState {
 
         // Install a fresh empty array in the global map
         RuntimeArray newLocal = new RuntimeArray();
+        if (fullName.endsWith("::ISA")) {
+            newLocal.markIsaArray();
+        }
         GlobalVariable.globalArrays.put(fullName, newLocal);
+        if (fullName.endsWith("::ISA")) {
+            org.perlonjava.runtime.mro.InheritanceResolver.noteIsaMutation();
+        }
 
         // Update glob aliases so they all point to the new local array
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
@@ -84,6 +90,12 @@ public class GlobalRuntimeArray implements DynamicState {
                     MortalList.deferDestroyForContainerClear(localArray.elements);
                 }
                 GlobalVariable.globalArrays.put(saved.fullName, saved.originalArray);
+                if (saved.fullName.endsWith("::ISA")) {
+                    if (saved.originalArray != null) {
+                        saved.originalArray.markIsaArray();
+                    }
+                    org.perlonjava.runtime.mro.InheritanceResolver.noteIsaMutation();
+                }
 
                 // Restore glob aliases
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);

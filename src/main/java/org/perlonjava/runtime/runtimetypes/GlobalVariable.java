@@ -381,6 +381,9 @@ public class GlobalVariable {
         declaredGlobalHashes.clear();
         clearPackageCache();
 
+        org.perlonjava.runtime.WarningBitsRegistry.clear();
+        WarningFlags.resetRuntimeState();
+
         RuntimeCode.clearCaches();
 
         // Clear special blocks (INIT, END, CHECK, UNITCHECK) to prevent stale code references.

@@ -612,6 +612,14 @@ public class WarningFlags {
     public static boolean isGlobalWarningsEnabled() {
         return globalWarningsEnabled;
     }
+
+    /** Clear warning state that belongs to one top-level compilation. */
+    public static void resetRuntimeState() {
+        globalWarningsEnabled = false;
+        scopeDisabledWarnings.clear();
+        scopeIdCounter.set(0);
+        lastScopeId = 0;
+    }
     
     // ==================== Scope-based Warning Suppression ====================
     // These methods support lexical "no warnings" that propagates through calls.

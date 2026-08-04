@@ -69,6 +69,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
+            internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -108,6 +109,63 @@ public class Internals extends PerlModuleBase {
         return new RuntimeList();
     }
 
+    /**
+     * Return references to the live lexical containers captured by a closure.
+     * This is the runtime half of the bundled PadWalker::closed_over shim.
+     */
+    public static RuntimeList jperlClosedOver(RuntimeArray args, int ctx) {
+        RuntimeHash result = new RuntimeHash();
+        if (args.size() != 1 || args.get(0).type != RuntimeScalarType.CODE) {
+            return result.createReference().getList();
+        }
+
+        RuntimeCode code = (RuntimeCode) args.get(0).value;
+        if (code.closedOverVariables != null) {
+            for (Map.Entry<String, RuntimeBase> entry : code.closedOverVariables.entrySet()) {
+                RuntimeBase captured = entry.getValue();
+                if (captured != null) {
+                    result.put(entry.getKey(), captured.createReference());
+                }
+            }
+            return result.createReference().getList();
+        }
+        if (code instanceof InterpretedCode interpreted) {
+            if (interpreted.capturedVars != null) {
+                for (Map.Entry<String, Integer> entry : interpreted.variableRegistry.entrySet()) {
+                    int capturedIndex = entry.getValue() - 3;
+                    if (capturedIndex >= 0 && capturedIndex < interpreted.capturedVars.length) {
+                        RuntimeBase captured = interpreted.capturedVars[capturedIndex];
+                        if (captured != null) {
+                            result.put(entry.getKey(), captured.createReference());
+                        }
+                    }
+                }
+            }
+            return result.createReference().getList();
+        }
+
+        Object closure = code.codeObject != null ? code.codeObject : code.subroutine;
+        if (closure != null) {
+            for (Field field : closure.getClass().getDeclaredFields()) {
+                if ("__SUB__".equals(field.getName())
+                        || !RuntimeBase.class.isAssignableFrom(field.getType())) {
+                    continue;
+                }
+                try {
+                    field.trySetAccessible();
+                    RuntimeBase captured = (RuntimeBase) field.get(closure);
+                    if (captured != null) {
+                        result.put(field.getName(), captured.createReference());
+                    }
+                } catch (IllegalAccessException e) {
+                    throw new IllegalArgumentException(
+                            "PadWalker::closed_over cannot inspect lexical " + field.getName(), e);
+                }
+            }
+        }
+        return result.createReference().getList();
+    }
+
     private static void rebindCapturedVariable(
             RuntimeCode code, String variableName, RuntimeBase replacement) {
         if (code instanceof InterpretedCode interpreted) {
@@ -130,7 +188,8 @@ public class Internals extends PerlModuleBase {
                     "PadWalker::set_closed_over cannot inspect this coderef");
         }
         try {
-            Field field = closure.getClass().getField(variableName);
+            Field field = closure.getClass().getDeclaredField(variableName);
+            field.trySetAccessible();
             RuntimeBase previous = (RuntimeBase) field.get(closure);
             field.set(closure, replacement);
             replaceCaptureTracking(code, previous, replacement);

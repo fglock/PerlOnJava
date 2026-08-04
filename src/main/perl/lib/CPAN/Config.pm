@@ -72,11 +72,8 @@ sub _bootstrap_prefs {
         'Params-ValidationCompiler.yml' => 'PerlOnJava/CpanDistroprefs/Params-ValidationCompiler.yml',
         'Test-Deep.yml'              => 'PerlOnJava/CpanDistroprefs/Test-Deep.yml',
         'Test-Deep-JSON.yml'         => 'PerlOnJava/CpanDistroprefs/Test-Deep-JSON.yml',
-        'Test-Warnings.yml'          => 'PerlOnJava/CpanDistroprefs/Test-Warnings.yml',
-        'File-Copy-Recursive.yml'    => 'PerlOnJava/CpanDistroprefs/File-Copy-Recursive.yml',
         'Test-File-ShareDir.yml'     => 'PerlOnJava/CpanDistroprefs/Test-File-ShareDir.yml',
         'DateTime-Locale.yml'        => 'PerlOnJava/CpanDistroprefs/DateTime-Locale.yml',
-        'Test-File.yml'              => 'PerlOnJava/CpanDistroprefs/Test-File.yml',
         'Test-SharedFork.yml'        => 'PerlOnJava/CpanDistroprefs/Test-SharedFork.yml',
         'UNIVERSAL-can.yml'          => 'PerlOnJava/CpanDistroprefs/UNIVERSAL-can.yml',
         'UNIVERSAL-isa.yml'          => 'PerlOnJava/CpanDistroprefs/UNIVERSAL-isa.yml',
@@ -161,6 +158,9 @@ sub _bootstrap_prefs {
         Test-FailWarnings.yml
         DateTime-Format-CLDR.yml
         Test-Class.yml
+        Test-Warnings.yml
+        File-Copy-Recursive.yml
+        Test-File.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;
