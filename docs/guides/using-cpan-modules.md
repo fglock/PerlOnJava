@@ -44,9 +44,9 @@ Set `PERLONJAVA_HOME` to keep an installation separate from the default
 
 ```bash
 isolated_root=$(mktemp -d /tmp/perlonjava-home.XXXXXX)
-PERLONJAVA_HOME="$isolated_root" timeout 1200 jcpan install Try::Tiny
+PERLONJAVA_HOME="$isolated_root" timeout 1200 jcpan install Text::Glob
 PERLONJAVA_HOME="$isolated_root" timeout 60 jperl \
-  -MTry::Tiny -e 'print "ok\n"'
+  -MText::Glob -e 'print "$Text::Glob::VERSION\n"'
 ```
 
 The selected root supplies the user module library (`lib/`), CPAN metadata and

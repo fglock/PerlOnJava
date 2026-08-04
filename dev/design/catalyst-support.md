@@ -119,11 +119,17 @@ Acceptance test:
 
 ```bash
 isolated_root=$(mktemp -d /tmp/perlonjava-catalyst.XXXXXX)
-PERLONJAVA_HOME="$isolated_root" timeout 1200 ./jcpan install Try::Tiny \
+PERLONJAVA_HOME="$isolated_root" timeout 1200 ./jcpan install Text::Glob \
   > /tmp/catalyst-isolated-cpan.log 2>&1
-PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl -MTry::Tiny -e 'print "ok\n"' \
+PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl -MText::Glob \
+  -e 'print "$Text::Glob::VERSION\n$INC{q(Text/Glob.pm)}\n"' \
   >> /tmp/catalyst-isolated-cpan.log 2>&1
 ```
+
+`Try::Tiny` is not a valid isolation probe because version 0.32 is bundled in
+the JAR; CPAN reports it up to date without installing into the selected home.
+`Text::Glob` is deliberately used because it is a small, pure-Perl,
+non-bundled distribution whose `%INC` origin proves the install location.
 
 `PerlOnJavaHomeIntegrationTest` runs the native launcher selected for the host
 OS, loads `Config`, `CPAN::Config`, and `CPAN::HandleConfig`, and verifies that
@@ -152,20 +158,20 @@ incorrectly classified, or exposes a reusable PerlOnJava defect.
 
 ## Current Handoff State
 
-Milestone 0 implementation and the full `make` gate pass. Its live CPAN
-acceptance remains pending because the restricted agent network could not fetch
-CPAN indexes, and permission to download and execute a CPAN installer was not
-granted. Resume by running the documented fresh-root `Try::Tiny` install after
-explicit approval; once it succeeds, mark Milestone 0 complete and begin
-Milestone 1's inherited attributed-method reduction. Use the dependency table
-as the baseline; use commit history and the PR for chronological progress.
+Milestone 0 completed on 2026-08-04. In a fresh root, `Text-Glob-0.11`
+downloaded with a verified checksum, passed both upstream files and all 74
+tests, installed without force beneath `$PERLONJAVA_HOME/lib`, and loaded from
+that exact path. The full `make` gate also passes. Milestone 1 is now active:
+reduce the inherited attributed-method failure while retaining the
+MooseX::MethodAttributes metaroles described below. Use the dependency table as
+the baseline; use commit history and the PR for chronological progress.
 
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.
 
 ## Milestone Plan
 
-### Milestone 0: Isolated CPAN state
+### Milestone 0: Isolated CPAN state (completed 2026-08-04)
 
 Deliverables:
 
@@ -178,6 +184,21 @@ Exit criteria:
 
 - A known-small CPAN distribution installs and loads from an isolated root.
 - The default `~/.perlonjava` remains untouched by the test.
+
+Completion:
+
+- Runtime `@INC`, `Config`, CPAN state and `MyConfig` discovery, MakeMaker
+  install paths, core probes, scripts, and manpages derive from
+  `PERLONJAVA_HOME`; the unset default remains `~/.perlonjava`.
+- `PerlOnJavaHomeIntegrationTest` selects `jperl` or `jperl.bat` for the host
+  OS and proves the temporary override does not write to the default home.
+- Files: `GlobalContext.java`, `Config.pm`, `CPAN/Config.pm`,
+  `CPAN/HandleConfig.pm`, both MakeMaker implementations, launcher integration
+  tests, and the CPAN usage guide.
+- Acceptance: `Text-Glob-0.11`, 2/2 files and 74/74 tests, installed and loaded
+  from a fresh `/tmp/perlonjava-catalyst.*` root without force.
+- Next step: Milestone 1's MooseX::MethodAttributes Catalyst reduction. No
+  isolated-home blocker remains.
 
 ### Milestone 1: Catalyst method attributes
 
