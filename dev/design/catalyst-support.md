@@ -144,27 +144,39 @@ therefore exercises `jperl` on Unix and `jperl.bat` on Windows CI.
 | HTTP-Body 1.23 | runtime | 13/13 files, 250/250 assertions pass; installs normally | cleared | retain regression coverage |
 | Moose 2.4000 | runtime | bundled; broad upstream/DBIx::Class coverage already exists | monitor | investigate only Catalyst-relevant failures |
 | MooseX-MethodAttributes 0.32 | runtime | 22/22 files, 144/144 tests pass unchanged | cleared | retain package-generation regression coverage |
-| Catalyst-Runtime 5.90132 | runtime | downloaded, not successfully installed | blocking | run clean isolated installation and classify failures |
-| Plack 1.0054 | runtime | dependency installation incomplete | blocking later | classify runtime versus test-only prerequisites |
-| Class-C3-Adopt-NEXT 0.14 | runtime | functional tests mostly pass; warning differences remain | non-blocking until proven otherwise | defer |
-| Encode-Locale 1.05 | transitive runtime | tied `%ENV` mutation tests fail | risk | verify whether Catalyst runtime path exercises mutation |
-| POSIX-strftime-Compiler 0.46 | Plack logging | timezone and `POSIX::tzset` differences | non-blocking for initial dispatch | fix before logging acceptance gate |
+| Catalyst-Runtime 5.90132 | runtime | builds 56 files, but cannot install because required dependencies fail; aggregate suite reached the one-hour guard | blocking | clear direct runtime prerequisites before rerunning the suite |
+| Plack 1.0054 | runtime | builds 71 files; install is blocked by six required distributions and its suite consequently cannot load request modules | blocking | clear `Stream::Buffered` and URL encoding first, then rerun Plack |
+| Socket `NI_NAMEREQD` | core API | constant/export added; system Perl, JVM, interpreter, and full `make` pass; `Catalyst::Request` now advances to `Stream::Buffered` | cleared | retain regression coverage |
+| Stream-Buffered 0.03 | Catalyst and Plack runtime | `t/print.t` and `t/subclass.t` lose printed values (4/18 assertions fail) | blocking | reduce tied/filehandle print behavior |
+| WWW-Form-UrlEncoded 0.26 | Plack runtime | Unicode value is emitted literally instead of UTF-8 percent-encoded (2/199 assertions fail) | blocking | reduce byte/UTF-8 URI escaping |
+| HTTP-Entity-Parser 0.25 | Plack runtime | cannot load because `Stream::Buffered` and `WWW::Form::UrlEncoded` did not install | downstream blocking | rerun after its two prerequisites clear |
+| Filesys-Notify-Simple 0.14 | Plack runtime, reloader use | move/recreate tests emit duplicate plans and no assertions | classify | determine whether the non-forking runtime path works; reloader support is deferred |
+| Test-TCP 2.22 | Plack runtime metadata | process/fork-oriented suite fails broadly and distribution does not install | classify | separate runtime helpers usable without `fork` from unsupported tests |
+| Class-C3-Adopt-NEXT 0.14 | Catalyst runtime | 24/26 assertions pass; warning text/count differences prevent installation | blocking | reduce warning-category and formatting differences |
+| Encode-Locale 1.05 | HTTP-Message runtime | tied `%ENV` byte-key/value mutation fails 3/28 assertions and prevents installation | blocking | reduce byte-string hash key/value behavior |
+| POSIX-strftime-Compiler 0.46 | Plack logging runtime | timezone expectation and missing `POSIX::tzset` prevent installation | blocking | implement `tzset` and normalize timezone behavior |
 | AnyDBM_File | optional/transitive | missing bundled core module makes CPAN suggest installing Perl | tooling defect | add/import core module or correct capability metadata |
-| MooseX-Getopt 0.78 | runtime/development boundary | force-installed for discovery; help and trapped-exit tests fail | classify | determine which Catalyst runtime code requires it |
-| Test-Trap 0.3.5 | test/development | force-installed for discovery; many failures | deferred | do not block runtime installation if only test-time |
+| MooseX-Getopt 0.78 | Catalyst runtime | functional tests mostly pass, but missing failed `Test::Trap` prevents a clean install | blocking/tooling | preserve runtime installability without claiming fork/exit test support |
+| CGI-Struct 1.21 | Catalyst runtime | tests shell out through `env perl5` and fail with permission denied | blocking/tooling | route subprocess Perl selection through the PerlOnJava executable |
+| Text-SimpleTable 2.07 | Catalyst runtime | 11/12 assertions pass; one backend-selection assertion prevents installation | blocking | reduce optional visual-width selection |
+| Test-Trap 0.3.5 | test/development | label/exit/fork tests fail; blocks MooseX-Getopt's test prerequisite | deferred capability, install blocker | fix prerequisite-phase handling or narrowly classify unsupported tests |
 
 When a new dependency appears, add it here only if it is blocking, forced,
 incorrectly classified, or exposes a reusable PerlOnJava defect.
 
 ## Current Handoff State
 
-Milestones 0 and 1 completed on 2026-08-04. MooseX-MethodAttributes 0.32 now
-passes all 22 upstream files and 144 tests unchanged; both Catalyst-focused
-files pass, the package-generation regression passes on both PerlOnJava
-backends, and `make` passes. Milestone 2 is active: install Catalyst-Runtime
-5.90132 without force in a new isolated home and classify every remaining
-prerequisite failure. Use the dependency table as the baseline; use commit
-history and the PR for chronological progress.
+Milestones 0 and 1 completed on 2026-08-04. Milestone 2 is active. A clean
+isolated install under `/tmp/perlonjava-catalyst-runtime.T2Kb69` enumerated the
+full runtime graph, built Catalyst-Runtime 5.90132, and reached its aggregate
+suite without force before the one-hour guard expired. The run proved that
+Plack's six failed prerequisites and the additional Catalyst prerequisites in
+the dependency table are real clean-install blockers. The direct Catalyst
+compile blocker `Socket::NI_NAMEREQD` is fixed: its standard-Perl-validated
+test passes on both PerlOnJava backends, `make` passes, and loading
+`Catalyst::Request` now proceeds to the next missing runtime dependency,
+`Stream::Buffered`. Next reduce `Stream::Buffered`, then the Unicode escaping
+failure in `WWW::Form::UrlEncoded`, before rerunning Plack and Catalyst.
 
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.

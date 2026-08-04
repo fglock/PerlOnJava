@@ -64,6 +64,7 @@ public class Socket extends PerlModuleBase {
     public static final int AI_ADDRCONFIG = 0x0400;
     public static final int NI_NUMERICHOST = 1;
     public static final int NI_NUMERICSERV = 2;
+    public static final int NI_NAMEREQD = 4;
     public static final int NI_DGRAM = 16;
     public static final int NIx_NOHOST = 1;
     public static final int NIx_NOSERV = 2;
@@ -152,6 +153,7 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("AI_ADDRCONFIG", "");
             socket.registerMethod("NI_NUMERICHOST", "");
             socket.registerMethod("NI_NUMERICSERV", "");
+            socket.registerMethod("NI_NAMEREQD", "");
             socket.registerMethod("NI_DGRAM", "");
             socket.registerMethod("NIx_NOHOST", "");
             socket.registerMethod("NIx_NOSERV", "");
@@ -1074,6 +1076,10 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList NI_NUMERICSERV(RuntimeArray args, int ctx) {
         return new RuntimeScalar(NI_NUMERICSERV).getList();
+    }
+
+    public static RuntimeList NI_NAMEREQD(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(NI_NAMEREQD).getList();
     }
 
     public static RuntimeList NI_DGRAM(RuntimeArray args, int ctx) {
