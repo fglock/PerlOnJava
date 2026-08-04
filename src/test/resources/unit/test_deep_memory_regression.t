@@ -1,20 +1,34 @@
 use strict;
 use warnings;
 
-use lib 'perl5/cpan/Test-Deep/lib';
-use Scalar::Util qw(weaken);
-use Test::Deep qw(eq_deeply);
+use Scalar::Util qw(refaddr weaken);
 use Test::More;
+
+our %WRAP_CACHE;
+
+# Reduced from Test::Deep's cmp_details/descend/wrap lifetime pattern.  Keep
+# this test self-contained: perl5/cpan is an ignored developer checkout and is
+# intentionally absent from clean CI workspaces.
+sub compare_deeply {
+    my ($got, $expected) = @_;
+
+    local %WRAP_CACHE;
+    my $wrapper = bless { val => $expected }, 'Local::Comparator';
+    $WRAP_CACHE{refaddr($expected)} = $wrapper;
+
+    my $stack = [{ exp => $wrapper, got => $got }];
+    return ref($got) eq ref($expected) && @$got == @$expected;
+}
 
 sub left {
     my ($ref) = @_;
-    eq_deeply($ref, []);
+    compare_deeply($ref, []);
     return 'left';
 }
 
 sub right {
     my ($ref) = @_;
-    eq_deeply([], $ref);
+    compare_deeply([], $ref);
     return 'right';
 }
 

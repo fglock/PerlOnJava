@@ -579,6 +579,7 @@ lifetime fix completed the final file; current validation is 42/42.
 - [x] `t/memory.t` temporary comparison owner cleanup
   - Recursive cleanup of discarded comparator/container values and a package-global reachability check on scalar overwrite prevent temporary call-frame aliases from retaining weak referents.
   - Added `src/test/resources/unit/test_deep_memory_regression.t`, validated with system Perl and PerlOnJava's JVM backend.
+  - Made the regression self-contained on 2026-08-04 by reducing Test::Deep's localized wrapper-cache and temporary-stack lifetime pattern in the test; clean CI checkouts do not contain the ignored `perl5/cpan/Test-Deep` developer tree.
 - [x] Full CPAN distribution validation
   - `timeout 2400 ./jcpan -t Test::Deep` passes all 42 files and 1,268 tests.
 
