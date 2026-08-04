@@ -1285,6 +1285,16 @@ public class SubroutineParser {
             declaredCode.isDeclared = true;
         }
 
+        // Perl increments a package's mro generation whenever a named sub is
+        // installed or replaced. Class::MOP uses this generation to decide
+        // whether its local method map must be rebuilt; leaving it unchanged
+        // makes namespace::autoclean treat newly compiled methods as imports.
+        int lastSep = fullName.lastIndexOf("::");
+        String definitionPackage = lastSep >= 0
+                ? fullName.substring(0, lastSep)
+                : packageToUse;
+        org.perlonjava.runtime.perlmodule.Mro.incrementPackageGeneration(definitionPackage);
+
         // Register subroutine location for %DB::sub (only in debug mode)
         if (DebugState.debugMode && parser.ctx.errorUtil != null && block != null) {
             int startLine = parser.ctx.errorUtil.getLineNumber(block.tokenIndex);
@@ -1311,7 +1321,6 @@ public class SubroutineParser {
         // `sub Dst::foo { }` arrives here with subName="Dst::foo"), and fullName
         // may have been rewritten by a stash alias — always derive both halves
         // from fullName so caller()/set_subname see a consistent pair.
-        int lastSep = fullName.lastIndexOf("::");
         placeholder.subName = lastSep >= 0 ? fullName.substring(lastSep + 2) : subName;
         // For `sub X::foo { }` in package main, packageName should be "X",
         // not "main". Set this before MODIFY_CODE_ATTRIBUTES so attribute

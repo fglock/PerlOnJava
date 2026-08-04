@@ -143,8 +143,8 @@ therefore exercises `jperl` on Unix and `jperl.bat` on Windows CI.
 |---|---|---|---|---|
 | HTTP-Body 1.23 | runtime | 13/13 files, 250/250 assertions pass; installs normally | cleared | retain regression coverage |
 | Moose 2.4000 | runtime | bundled; broad upstream/DBIx::Class coverage already exists | monitor | investigate only Catalyst-relevant failures |
-| MooseX-MethodAttributes 0.32 | runtime | 20/22 files pass; Catalyst-specific inherited modifier failure | blocking | reduce and fix at Moose/MOP/runtime layer |
-| Catalyst-Runtime 5.90132 | runtime | downloaded, not successfully installed | blocking | resume after method attributes and isolation |
+| MooseX-MethodAttributes 0.32 | runtime | 22/22 files, 144/144 tests pass unchanged | cleared | retain package-generation regression coverage |
+| Catalyst-Runtime 5.90132 | runtime | downloaded, not successfully installed | blocking | run clean isolated installation and classify failures |
 | Plack 1.0054 | runtime | dependency installation incomplete | blocking later | classify runtime versus test-only prerequisites |
 | Class-C3-Adopt-NEXT 0.14 | runtime | functional tests mostly pass; warning differences remain | non-blocking until proven otherwise | defer |
 | Encode-Locale 1.05 | transitive runtime | tied `%ENV` mutation tests fail | risk | verify whether Catalyst runtime path exercises mutation |
@@ -158,13 +158,13 @@ incorrectly classified, or exposes a reusable PerlOnJava defect.
 
 ## Current Handoff State
 
-Milestone 0 completed on 2026-08-04. In a fresh root, `Text-Glob-0.11`
-downloaded with a verified checksum, passed both upstream files and all 74
-tests, installed without force beneath `$PERLONJAVA_HOME/lib`, and loaded from
-that exact path. The full `make` gate also passes. Milestone 1 is now active:
-reduce the inherited attributed-method failure while retaining the
-MooseX::MethodAttributes metaroles described below. Use the dependency table as
-the baseline; use commit history and the PR for chronological progress.
+Milestones 0 and 1 completed on 2026-08-04. MooseX-MethodAttributes 0.32 now
+passes all 22 upstream files and 144 tests unchanged; both Catalyst-focused
+files pass, the package-generation regression passes on both PerlOnJava
+backends, and `make` passes. Milestone 2 is active: install Catalyst-Runtime
+5.90132 without force in a new isolated home and classify every remaining
+prerequisite failure. Use the dependency table as the baseline; use commit
+history and the PR for chronological progress.
 
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.
@@ -200,7 +200,7 @@ Completion:
 - Next step: Milestone 1's MooseX::MethodAttributes Catalyst reduction. No
   isolated-home blocker remains.
 
-### Milestone 1: Catalyst method attributes
+### Milestone 1: Catalyst method attributes (completed 2026-08-04)
 
 Deliverables:
 
@@ -215,6 +215,21 @@ Exit criteria:
   `t/catalyst_role.t` pass unchanged.
 - The complete upstream MooseX-MethodAttributes suite has no regressions.
 - Relevant local tests pass on both PerlOnJava backends.
+
+Completion:
+
+- Reduction showed the earliest failure was a local attributed method with a
+  `before` modifier; inherited `after` lookup failed later for the same reason.
+- PerlOnJava did not increment `mro::get_pkg_gen` for named sub definitions or
+  redefinitions. Class::MOP therefore reused an empty local method map, and
+  `namespace::autoclean` deleted real methods as if they were imports.
+- `SubroutineParser` now increments the defining package's generation whenever
+  it installs or replaces a named sub.
+- `mro_pkg_gen_sub_definition.t` was validated unchanged with system Perl and
+  passes with both PerlOnJava backends.
+- Acceptance: `t/catalyst.t` 13/13, `t/catalyst_role.t` 21/21, full upstream
+  suite 22/22 files and 144/144 tests, and the full `make` gate all pass.
+- Next step: Milestone 2's clean isolated Catalyst-Runtime installation.
 
 ### Milestone 2: Clean Catalyst runtime installation
 
@@ -295,7 +310,7 @@ Exit criteria:
 - All items in Definition of Done are satisfied.
 - The PR contains exact test commands and results.
 
-## Current Blocker: MooseX-MethodAttributes
+## Resolved Blocker: MooseX-MethodAttributes
 
 ### Reproduction source
 
@@ -324,20 +339,26 @@ timeout 60 /path/to/PerlOnJava4/jperl -Ilib -It/lib t/catalyst_role.t \
   > /tmp/moosex-methodattributes-role.log 2>&1
 ```
 
-### Observed behavior
+### Resolution
 
-- `t/catalyst.t` aborts while compiling/loading the Catalyst-like subclass:
+- Before the fix, `t/catalyst.t` aborted while loading the first Catalyst-like
+  Moose class with:
 
   ```text
   Moose::Exception::MethodNameNotFoundInInheritanceHierarchy=HASH(...)
   Compilation failed in require
   ```
 
-- The failure occurs around an `after get_attribute => sub { ... }` modifier
-  wrapping an inherited method carrying a custom `:Local` attribute.
-- `t/catalyst_role.t` completes but reports one method-list count mismatch.
-- Ordinary inherited Moose modifiers pass in a smaller probe. The reduction
-  must preserve MooseX::MethodAttributes metaroles and attributed methods.
+- The first failing operation was actually `before get_foo => sub { ... }` on
+  a local attributed method. At scope end, Class::MOP saw a stale package
+  generation and returned only its pre-sub-definition method map;
+  `namespace::autoclean` then removed `get_foo`, `get_attribute`, and `other`.
+- The same stale map caused the later inherited `after get_attribute` lookup
+  failure and the role test's local-method count mismatch.
+- Incrementing `mro::get_pkg_gen` in `SubroutineParser` at each named sub
+  definition or redefinition restores ordinary Perl cache semantics without
+  any Catalyst- or Moose-specific branch.
+- The unchanged upstream suite now passes all 22 files and 144 tests.
 
 ### Relevant upstream files
 
@@ -363,25 +384,9 @@ src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java
 src/main/java/org/perlonjava/backend/bytecode/OpcodeHandlerExtended.java
 ```
 
-### Investigation order
-
-1. Provision a standard-Perl Catalyst/Moose environment; the workstation's
-   current system Perl does not have Moose installed.
-2. Reduce the upstream package hierarchy while retaining:
-   - an inherited attributed method;
-   - `MooseX::MethodAttributes` inheritable metaroles;
-   - an `after` modifier in the subclass.
-3. Compare the class precedence list, `@ISA`, local method map, and
-   `find_next_method_by_name` immediately before the failing modifier.
-4. Determine whether the parent method is absent, stale in a method/MRO cache,
-   or represented by the wrong metaclass.
-5. Test both JVM and interpreter backends.
-6. Add the reduced test under `src/test/resources/unit/` only after standard
-   Perl validates it.
-7. Run the full MooseX-MethodAttributes suite and `make`.
-
-Do not add Catalyst names to generic cache invalidation or method lookup code.
-The fix must be driven by ordinary Perl/Moose semantics.
+The fix deliberately contains no Catalyst- or Moose-specific cache or lookup
+branch. The local regression uses only core `mro` behavior so system Perl can
+validate the expected semantics without a separate Moose installation.
 
 ## Standard Command Set
 
