@@ -175,6 +175,7 @@ my %stats = (
     files_unchanged => 0,
     files_only_in_old => 0,
     files_only_in_new => 0,
+    files_total_changed => 0,
     files_skipped_flake => 0,
     tests_skipped_flake => 0,
     tests_lost => 0,
@@ -229,9 +230,16 @@ foreach my $test (keys %all_tests) {
         $stats{total_new_passed} += $new->{passed};
         
         my $diff = $new->{passed} - $old->{passed};
+        my $total_changed = $new->{total} != $old->{total};
         my $is_flake = !$show_flakes && exists $FLAKE_BY_FILE{$test};
         
-        if ($diff > 0) {
+        # A pass-count delta is only comparable when both runs executed the
+        # same number of tests.  Different totals can mean that the test corpus
+        # changed or that one run stopped early; the aggregate logs cannot tell
+        # those cases apart, so do not assert a compiler regression/progression.
+        if ($total_changed) {
+            $stats{files_total_changed}++;
+        } elsif ($diff > 0) {
             $stats{files_with_progress}++;
             $stats{tests_gained} += $diff;
         } elsif ($diff < 0) {
@@ -253,7 +261,8 @@ foreach my $test (keys %all_tests) {
             new_passed => $new->{passed},
             new_total => $new->{total},
             diff => $diff,
-            type => $diff > 0 ? 'progress'
+            type => $total_changed ? 'total-change'
+                 : $diff > 0 ? 'progress'
                  : ($diff < 0 && $is_flake) ? 'flake'
                  : $diff < 0 ? 'regression' : 'unchanged',
         };
@@ -289,16 +298,20 @@ print "\n";
 
 my $net_change = $stats{total_new_passed} - $stats{total_old_passed};
 my $change_symbol = $net_change >= 0 ? '+' : '';
-printf "Net change:              %s%6d passing tests  (%s%5.2f%%)\n",
+printf "Raw net change:          %s%6d passing tests  (%s%5.2f%%)\n",
     $change_symbol, $net_change,
     $change_symbol, 
     $stats{total_old_passed} ? 100 * $net_change / $stats{total_old_passed} : 0;
+print "                         (includes files with changed test totals)\n"
+    if $stats{files_total_changed};
 print "\n";
 printf "Files with regressions:  %4d files  (-%6d tests)\n",
     $stats{files_with_regressions}, $stats{tests_lost};
 printf "Files with progress:     %4d files  (+%6d tests)\n",
     $stats{files_with_progress}, $stats{tests_gained};
 printf "Files unchanged:         %4d files\n", $stats{files_unchanged};
+printf "Files with changed totals:%4d files  (not comparable)\n",
+    $stats{files_total_changed} if $stats{files_total_changed};
 printf "Files only in old log:   %4d files\n", $stats{files_only_in_old} if $stats{files_only_in_old};
 printf "Files only in new log:   %4d files\n", $stats{files_only_in_new} if $stats{files_only_in_new};
 if ($stats{files_skipped_flake}) {
@@ -334,7 +347,8 @@ if (@to_show) {
     print "-" x 90 . "\n";
     
     foreach my $c (@to_show) {
-        my $symbol = $c->{diff} > 0 ? '✓' : $c->{diff} < 0 ? '✗' : '=';
+        my $symbol = $c->{type} eq 'total-change' ? '~'
+                   : $c->{diff} > 0 ? '✓' : $c->{diff} < 0 ? '✗' : '=';
         my $change_str = $c->{diff} >= 0 ? sprintf("+%d", $c->{diff}) : sprintf("%d", $c->{diff});
         
         printf "%s %-47s %6d/%-6d %6d/%-6d %10s\n",
@@ -350,6 +364,24 @@ if (@to_show) {
     
     if (@to_show < @changes) {
         print "(Use --min-diff and --min-total to adjust filters)\n";
+    }
+}
+
+my @total_changes = grep { $_->{type} eq 'total-change' } @changes;
+if (@total_changes) {
+    print "\n";
+    print "=" x 90 . "\n";
+    print "CHANGED TEST TOTALS (NOT CLASSIFIED AS REGRESSIONS OR PROGRESS)\n";
+    print "=" x 90 . "\n";
+    print "A changed total means the test inventory differs or one execution\n";
+    print "stopped early. Compare the test sources and raw TAP before drawing\n";
+    print "a compiler conclusion.\n\n";
+    for my $c (sort { $a->{test} cmp $b->{test} } @total_changes) {
+        printf "  %-40s  %d/%d → %d/%d  (%+d passing, %+d total)\n",
+            $c->{test},
+            $c->{old_passed}, $c->{old_total},
+            $c->{new_passed}, $c->{new_total},
+            $c->{diff}, $c->{new_total} - $c->{old_total};
     }
 }
 

@@ -214,6 +214,12 @@ perl dev/tools/compare_test_logs.pl \
 - New tests added or removed
 - Summary of improvements or regressions
 
+Pass-count changes are classified as progress or regressions only when the
+two runs report the same total for that file. A changed total can mean either
+that the test corpus changed or that one execution stopped early, so those
+rows are reported separately as not comparable. Check the test sources and
+raw TAP before drawing a compiler conclusion from them.
+
 **Use cases:**
 - Before/after implementing a feature
 - Daily progress tracking on a branch
