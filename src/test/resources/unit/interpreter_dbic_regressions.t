@@ -3,8 +3,10 @@ use warnings;
 use Test::More;
 use File::Temp qw(tempfile);
 
-my $skip_launcher = $^O eq 'MSWin32'
-    || ($^X eq 'jperl' && !-f 'target/perlonjava-5.44.0.jar');
+my $is_jperl = $^X eq 'jperl' || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?$};
+my $skip_launcher = !$is_jperl
+    || $^O eq 'MSWin32'
+    || !-f 'target/perlonjava-5.44.0.jar';
 
 sub run_interpreter_child {
     my ($code) = @_;

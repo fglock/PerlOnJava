@@ -26,4 +26,8 @@ my @dbic_like = map {
 } ($dbic_generated, $dbic_expected);
 
 is($dbic_like[0], $dbic_like[1], 'pragma-wrapped eval snippets do not compare raw source');
-is($dbic_like[0], '{ "DUMMY" }', 'complex eval source falls back to placeholder');
+SKIP: {
+    skip 'PerlOnJava compiler-retained source fallback', 1
+        unless B::Deparse->can('_extract_source_visible_block');
+    is($dbic_like[0], '{ "DUMMY" }', 'complex eval source falls back to placeholder');
+}
