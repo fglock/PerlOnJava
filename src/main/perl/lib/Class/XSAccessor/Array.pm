@@ -102,9 +102,7 @@ sub _usage {
 
 sub _install {
     my ($name, $code) = @_;
-    no strict 'refs';
-    no warnings 'redefine';
-    *{$name} = $code;
+    Class::XSAccessor::_install($name, $code);
 }
 
 sub newxs_getter {

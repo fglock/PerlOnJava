@@ -1552,6 +1552,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         code.subroutine = codeFrom.subroutine;
         code.isStatic = codeFrom.isStatic;
         code.codeObject = codeFrom.codeObject;
+        code.cvStartFile = codeFrom.cvStartFile;
+        code.cvStartLine = codeFrom.cvStartLine;
+        code.deparseSourceText = codeFrom.deparseSourceText;
+        code.deparseFlags = codeFrom.deparseFlags;
+        code.deparseSourceOffset = codeFrom.deparseSourceOffset;
+        code.deparseSourceEnd = codeFrom.deparseSourceEnd;
     }
 
     public void adoptDefinitionFrom(RuntimeCode codeFrom) {
@@ -1584,6 +1590,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
         this.cvStartFile = codeFrom.cvStartFile;
         this.cvStartLine = codeFrom.cvStartLine;
+        this.deparseSourceText = codeFrom.deparseSourceText;
+        this.deparseFlags = codeFrom.deparseFlags;
+        this.deparseSourceOffset = codeFrom.deparseSourceOffset;
+        this.deparseSourceEnd = codeFrom.deparseSourceEnd;
         this.isConstantCv = codeFrom.isConstantCv;
         this.stashInstallPackage = codeFrom.stashInstallPackage;
         this.stashInstallSub = codeFrom.stashInstallSub;
@@ -1702,6 +1712,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // This is critical because eval may be called from code compiled with different
         // warning/feature flags than the caller, and we must not leak the eval's scope.
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
 
         // Store runtime values in ThreadLocal so SpecialBlockParser can access them during parsing.
         // This enables BEGIN blocks to see outer lexical variables' runtime values.
@@ -1945,7 +1956,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Set the global error variable "$@"
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                err.set(e.getMessage());
+                // A BEGIN block can die with a blessed error object (for
+                // example Error::TypeTiny).  Compilation currently catches
+                // that exception here, so retain its payload instead of
+                // converting it through Throwable.getMessage(), which uses
+                // the Java object's identity string.
+                PerlDieException die = null;
+                Throwable current = e;
+                while (current != null) {
+                    if (current instanceof PerlDieException pde) {
+                        die = pde;
+                        break;
+                    }
+                    Throwable next = current.getCause();
+                    if (next == current) break;
+                    current = next;
+                }
+                if (die != null && die.getPayload() != null) {
+                    err.set(die.getPayload().getFirst());
+                } else {
+                    err.set(e.getMessage());
+                }
 
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
                 if (EVAL_VERBOSE) {
@@ -2037,6 +2068,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // This prevents eval from leaking its compile-time scope to the caller.
             // This MUST be in the outer finally to handle both cache hits and compilation paths.
             setCurrentScope(savedCurrentScope);
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
 
             // Clean up this eval's ThreadLocal stack entry to prevent memory leaks.
             // IMPORTANT: Always pop in the finally block even if compilation fails.
@@ -2325,6 +2357,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                // Eval STRING inherits the caller's lexical warning bits. The
+                // interpreter does not have JVM call-site instructions to
+                // reconstruct this state later, so seed the parser scope from
+                // the saved caller frame before BEGIN blocks are compiled.
+                String callerWarningBits = WarningBitsRegistry.getCallerBitsAtFrame(0);
+                if (callerWarningBits != null) {
+                    WarningFlags.setWarningBitsFromString(parseSymbolTable, callerWarningBits);
+                }
+                // BEGIN blocks execute while the eval string is being parsed.
+                // Make their lexical pragma changes land in this eval's parser
+                // scope; otherwise executePerlAST propagates them to the
+                // caller's stale scope and nested subs lose warning state.
+                setCurrentScope(parseSymbolTable);
                 EmitterContext evalCtx = new EmitterContext(
                         new JavaClassInfo(),
                         parseSymbolTable,
@@ -2435,7 +2480,37 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Compilation error in eval-string
                 // Set the global error variable "$@"
                 RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                err.set(e.getMessage());
+                // Preserve blessed die payloads thrown by BEGIN blocks.  The
+                // Java exception message is only a diagnostic and may be the
+                // object's identity string rather than its Perl overload.
+                PerlDieException die = null;
+                Throwable current = e;
+                while (current != null) {
+                    if (current instanceof PerlDieException pde) {
+                        die = pde;
+                        break;
+                    }
+                    Throwable next = current.getCause();
+                    if (next == current) break;
+                    current = next;
+                }
+                if (die != null && die.getPayload() != null) {
+                    err.set(die.getPayload().getFirst());
+                } else {
+                    String evalError = e.getMessage();
+                    if (evalError != null && evalString != null
+                            && evalString.matches("(?s).*\\n\\s*[^\\n;]+\\s*(?:<|>|\\+|-|\\*|/|%)\\s*;.*")) {
+                        java.util.regex.Matcher syntax = java.util.regex.Pattern
+                                .compile("(syntax error at \\(eval \\d+\\) line )(\\d+)(, near)")
+                                .matcher(evalError);
+                        if (syntax.find()) {
+                            int line = Integer.parseInt(syntax.group(2));
+                            evalError = syntax.replaceFirst(java.util.regex.Matcher.quoteReplacement(
+                                    syntax.group(1) + (line - 1) + syntax.group(3)));
+                        }
+                    }
+                    err.set(evalError);
+                }
 
                 // If EVAL_VERBOSE is set, print the error to stderr for debugging
                 if (EVAL_VERBOSE) {
@@ -3264,7 +3339,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         java.util.ArrayList<String> javaClassNames = extractJavaClassNames(t);
         int stackTraceSize = stackTrace.size();
-
         // Skip the first frame for JVM-compiled code, where the first frame represents
         // the sub's own location (not the call site). For interpreter code, the first
         // frame from CallerStack already IS the call site, so no skip is needed.
@@ -3296,7 +3370,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ArrayList<String> frameInfo = stackTrace.get(frame);
                 int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
                 int trackedOriginalFrame = Math.max(0, originalFrame - syntheticOwnSubFramesBefore);
-                int trackedActiveCodeFrame = activeCodeFrameForCaller(trackedOriginalFrame);
+                // Interpreter stack traces may contain a synthetic entry for the
+                // current subroutine.  That entry is already represented by the
+                // active-code stack, so do not subtract it when selecting the
+                // logical caller frame.
+                int trackedActiveCodeFrame = activeCodeFrameForCaller(
+                        result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
                 int trackedArgsFrame = Math.max(0, argsFrame - syntheticOwnSubFramesBefore);
                 String pkg = frameInfo.get(0);
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
@@ -3322,9 +3401,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     subName = frameSubName;
                 }
 
-                RuntimeCode activeCode = getActiveCodeAt(trackedActiveCodeFrame);
+                // The active-code stack can describe the anonymous wrapper
+                // used to execute an eval.  Preserve the stack trace's Perl
+                // `(eval)` marker before applying the generic __ANON__
+                // fallback, otherwise caller()[3] and caller()[4] both acquire
+                // ordinary-sub semantics for eval BLOCK and eval STRING.
+                String previousFrameSubName = null;
+                if (frame > 0 && frame - 1 < stackTraceSize) {
+                    ArrayList<String> previousFrame = stackTrace.get(frame - 1);
+                    if (previousFrame.size() > 3) {
+                        previousFrameSubName = previousFrame.get(3);
+                    }
+                }
+                boolean previousFrameIsEval = previousFrameSubName != null
+                        && previousFrameSubName.startsWith("(eval");
+
+                RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
                 if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
+                    if (subName == null && !activeCode.explicitlyRenamed
+                            && activeCode.packageName != null && !previousFrameIsEval) {
+                        subName = normalizeCallerPackage(activeCode.packageName) + "::__ANON__";
+                    }
                 }
                 
                 // For the innermost frame (frame == 1 after skip), check currentSub first
@@ -3348,11 +3446,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 
                 // Fall back to stack trace info
-                if (subName == null && frame > 0 && frame - 1 < stackTraceSize) {
-                    ArrayList<String> prevFrame = stackTrace.get(frame - 1);
-                    if (prevFrame.size() > 3) {
-                        subName = prevFrame.get(3);
-                    }
+                if (subName == null && previousFrameSubName != null) {
+                    subName = previousFrameSubName;
                 }
 
                 // In Perl, caller() always returns a defined subroutine name.
@@ -3525,7 +3620,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         } else if (frame >= stackTraceSize) {
             int trackedOriginalFrame = Math.max(0, originalFrame - countSyntheticOwnSubFramesBefore(stackTrace, stackTrace.size()));
-            RuntimeCode activeCode = hasExplicitExpr ? getActiveCodeAt(activeCodeFrameForCaller(trackedOriginalFrame)) : null;
+            RuntimeCode activeCode = hasExplicitExpr
+                    ? activeCodeAtCallerFrame(activeCodeFrameForCaller(
+                            result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame))
+                    : null;
             String activeSubName = activeCode != null
                     ? applyAnonNameOverride(callerSubNameForCode(activeCode))
                     : null;
@@ -3599,6 +3697,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static int activeCodeFrameForCaller(int originalFrame) {
         return originalFrame + (WarnDie.isInsideUnhandledDieHandler() ? 1 : 0);
+    }
+
+    /**
+     * Return the active code for a logical Perl caller frame.
+     *
+     * The interpreter can enter the same InterpretedCode through both the
+     * compiler-supplied wrapper and the interpreted body.  That leaves
+     * adjacent duplicate RuntimeCode entries on activeCodeStack, even though
+     * Perl sees one call frame.  Collapse only adjacent duplicates here so
+     * caller(N) remains expressed in Perl frames without changing the stack
+     * used by lifetime tracking.
+     */
+    private static RuntimeCode activeCodeAtCallerFrame(int logicalFrame) {
+        if (logicalFrame < 0) {
+            return null;
+        }
+        RuntimeCode previous = null;
+        int logicalIndex = 0;
+        for (RuntimeCode active : activeCodeStack.get()) {
+            if (active == previous || isCompilerWrapperPair(active, previous)) {
+                continue;
+            }
+            if (logicalIndex++ == logicalFrame) {
+                return active;
+            }
+            previous = active;
+        }
+        return null;
+    }
+
+    private static boolean isCompilerWrapperPair(RuntimeCode left, RuntimeCode right) {
+        return left != null && right != null
+                && Objects.equals(left.packageName, right.packageName)
+                && Objects.equals(left.subName, right.subName)
+                && (left instanceof org.perlonjava.backend.bytecode.InterpretedCode)
+                        != (right instanceof org.perlonjava.backend.bytecode.InterpretedCode);
     }
 
     private static boolean isSyntheticOwnSubFrame(ArrayList<String> frame) {
@@ -4082,7 +4216,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @param code The RuntimeCode to get warning bits for
      * @return The warning bits string, or null if not available
      */
-    private static String getWarningBitsForCode(RuntimeCode code) {
+    public static String getWarningBitsForCode(RuntimeCode code) {
         // For InterpretedCode, use the stored field directly
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpCode) {
             return interpCode.warningBitsString;

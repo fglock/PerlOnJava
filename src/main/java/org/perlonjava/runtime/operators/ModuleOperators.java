@@ -874,6 +874,10 @@ public class ModuleOperators {
             if (err.isEmpty() && ioErr.isEmpty()) {
                 // File executed but returned undef
                 message = fileName + " did not return a true value";
+                // A module that did not return true was not loaded.  Remove
+                // the optimistic entry installed by doFile so a later
+                // require retries it instead of treating it as successful.
+                incHash.elements.remove(fileName);
                 throw new PerlCompilerException(message);
             } else if (err.isEmpty()) {
                 // Derive module name from filename for helpful error message

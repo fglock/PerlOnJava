@@ -302,27 +302,12 @@ public class MortalList {
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
         if (!active) return;
         for (RuntimeScalar scalar : elements) {
-            if (scalar != null && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value instanceof RuntimeBase base) {
-                if (scalar.refCountOwned && base.refCount > 0) {
-                    // Tracked object with owned refCount: defer decrement
-                    scalar.refCountOwned = false;
-                    if (base.refCountTrace) {
-                        base.traceRefCount(0, "MortalList.deferDestroyForContainerClear (queued)");
-                    }
-                    base.releaseActiveOwner(scalar);
-                    pending.add(base);
-                } else if (base.blessId != 0 && base.refCount == 0) {
-                    // Never-stored blessed object: bump to 1 so flush triggers DESTROY
-                    if (base.refCountTrace) {
-                        base.traceRefCount(+1, "MortalList.deferDestroyForContainerClear (refCount=1 bump for never-stored)");
-                    }
-                    base.refCount = 1;
-                    pending.add(base);
-                }
-                // Note: WEAKLY_TRACKED (-2) objects are not scheduled here.
-                // See deferDecrementIfTracked() for rationale.
-            }
+            // Use the recursive path so a discarded wrapper/container also
+            // releases references stored in its fields.  Test::Deep's
+            // temporary comparator is a blessed hash whose `val` field can
+            // otherwise keep the compared array alive after local %WrapCache
+            // is restored.
+            deferDecrementRecursive(scalar);
         }
     }
 
@@ -637,6 +622,7 @@ public class MortalList {
             if (!visited.add(base)) continue;  // already visited — cycle
 
             if (base.blessId != 0) {
+                boolean releasingLastOwner = false;
                 if (s.refCountOwned && base.refCount > 0) {
                     s.refCountOwned = false;
                     if (base.refCountTrace) {
@@ -644,6 +630,10 @@ public class MortalList {
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
                     }
                     base.releaseActiveOwner(s);
+                    // refCount is the authoritative ownership count here.
+                    // activeOwners is diagnostic and can retain a stale
+                    // call-frame alias until the enclosing sub returns.
+                    releasingLastOwner = base.refCount == 1;
                     pending.add(base);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {
@@ -651,6 +641,27 @@ public class MortalList {
                     }
                     base.refCount = 1;
                     pending.add(base);
+                    // A zero-count blessed container returned from a helper
+                    // has no counted owner to release, but its fields still
+                    // disappear when this temporary dies.
+                    releasingLastOwner = true;
+                }
+                // A blessed hash/array is still a container.  When this slot
+                // releases its final counted owner, its fields disappear with
+                // it and must release their own referents too.  Do not walk a
+                // shared object: another strong owner may still use its fields
+                // (Sub::Quote keeps exactly this kind of external metadata
+                // owner while its registry entry is weak).
+                if (releasingLastOwner) {
+                    if (base instanceof RuntimeArray arr) {
+                        for (RuntimeScalar elem : arr.elements) {
+                            if (elem != null) work.add(elem);
+                        }
+                    } else if (base instanceof RuntimeHash hash) {
+                        for (RuntimeScalar val : hash.elements.values()) {
+                            if (val != null) work.add(val);
+                        }
+                    }
                 }
             } else {
                 boolean hasDirectWeakElementRefs = containerHasWeakElementRefs(base);

@@ -45,9 +45,13 @@ public class CompileAssignment {
         // General fallback for any BinaryOperatorNode lvalue (matches JVM backend behavior)
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
+            boolean hashSlice = binOp.operator.equals("{")
+                    && binOp.left instanceof OperatorNode sliceOp
+                    && sliceOp.operator.equals("@");
             bc.beginLocalHashLvalueCompile();
             try {
-                bc.compileNode(binOp, -1, rhsContext);
+                bc.compileNode(binOp, -1,
+                        hashSlice ? RuntimeContextType.LIST : rhsContext);
             } finally {
                 bc.endLocalHashLvalueCompile();
             }
@@ -56,10 +60,19 @@ public class CompileAssignment {
             bc.emitReg(elemReg);
             bc.compileNode(node.right, -1, rhsContext);
             int valueReg = bc.lastResultReg;
-            bc.emit(Opcodes.SET_SCALAR);
-            bc.emitReg(elemReg);
-            bc.emitReg(valueReg);
-            bc.lastResultReg = elemReg;
+            if (hashSlice) {
+                int resultReg = bc.allocateOutputRegister();
+                bc.emit(Opcodes.SET_FROM_LIST);
+                bc.emitReg(resultReg);
+                bc.emitReg(elemReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = resultReg;
+            } else {
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(elemReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = elemReg;
+            }
             return true;
         }
         if (localOperand instanceof OperatorNode sigilOp) {

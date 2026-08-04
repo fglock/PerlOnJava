@@ -590,7 +590,9 @@ public class Socket extends PerlModuleBase {
                 return result;
             }
             InetAddress inetAddress = InetAddress.getByAddress(addressBytes);
-            String ipAddress = inetAddress.getHostAddress();
+            String ipAddress = family == AF_INET6
+                    ? formatIpv6Address(addressBytes)
+                    : inetAddress.getHostAddress();
 
             // Resolve hostname based on NI_NUMERICHOST flag
             String hostname;
@@ -619,6 +621,49 @@ public class Socket extends PerlModuleBase {
             result.add(new RuntimeScalar(e.getMessage()));
             return result;
         }
+    }
+
+    /**
+     * Format an IPv6 address using the canonical compressed representation
+     * returned by Perl's Socket::getnameinfo with NI_NUMERICHOST.  The JDK's
+     * Inet6Address formatter is platform-dependent and may expand every zero
+     * word (for example, {@code 0:0:0:0:0:0:0:1}).
+     */
+    private static String formatIpv6Address(byte[] address) {
+        int[] words = new int[8];
+        for (int i = 0; i < words.length; i++) {
+            words[i] = ((address[i * 2] & 0xff) << 8) | (address[i * 2 + 1] & 0xff);
+        }
+
+        int bestStart = -1;
+        int bestLength = 0;
+        for (int i = 0; i < words.length; ) {
+            if (words[i] != 0) {
+                i++;
+                continue;
+            }
+            int start = i;
+            while (i < words.length && words[i] == 0) i++;
+            int length = i - start;
+            if (length >= 2 && length > bestLength) {
+                bestStart = start;
+                bestLength = length;
+            }
+        }
+
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < words.length; ) {
+            if (i == bestStart) {
+                result.append("::");
+                i += bestLength;
+                continue;
+            }
+            if (!result.isEmpty() && result.charAt(result.length() - 1) != ':') {
+                result.append(':');
+            }
+            result.append(Integer.toHexString(words[i++]));
+        }
+        return result.toString();
     }
 
     // Constant methods

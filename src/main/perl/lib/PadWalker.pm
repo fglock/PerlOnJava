@@ -22,6 +22,6 @@ sub peek_my         { _unsupported('peek_my') }
 sub peek_our        { _unsupported('peek_our') }
 sub peek_sub        { _unsupported('peek_sub') }
 sub var_name        { _unsupported('var_name') }
-sub set_closed_over { _unsupported('set_closed_over') }
+sub set_closed_over { Internals::jperl_set_closed_over(@_) }
 
 1;

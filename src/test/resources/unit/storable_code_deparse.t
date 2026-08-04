@@ -1,11 +1,11 @@
 use strict;
 use warnings;
-use Test::More tests => 4;
+ use Test::More tests => 4;
 use Storable qw(freeze);
 
 my $code = sub { return 42 };
 local $Storable::Deparse = 1;
-local $Storable::Eval = 1;
+ local $Storable::Eval = 1;
 my $frozen = eval { freeze($code) };
 
 ok(!$@, 'Storable can freeze a code reference with Deparse enabled');

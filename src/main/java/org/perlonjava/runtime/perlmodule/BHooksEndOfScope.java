@@ -31,6 +31,15 @@ public class BHooksEndOfScope extends PerlModuleBase {
      */
     private static final ThreadLocal<Deque<String>> loadingFileStack = ThreadLocal.withInitial(ArrayDeque::new);
 
+    /**
+     * Compile-time lexical scopes currently being parsed.  Perl's
+     * B::Hooks::EndOfScope fires at the end of the lexical scope in which
+     * on_scope_end was called, which can be earlier than the end of the file
+     * (for example, a namespace::clean pragma inside an eval block).
+     */
+    private static final ThreadLocal<Deque<Deque<RuntimeScalar>>> compileScopes =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
     public BHooksEndOfScope() {
         super("B::Hooks::EndOfScope", false);
     }
@@ -116,6 +125,33 @@ public class BHooksEndOfScope extends PerlModuleBase {
         return stack.isEmpty() ? null : stack.peek();
     }
 
+    /** Enter a parser-visible lexical scope. */
+    public static void beginCompileScope() {
+        compileScopes.get().push(new ArrayDeque<>());
+    }
+
+    /**
+     * Leave a parser-visible lexical scope and run callbacks registered in it
+     * in LIFO order, matching the native hook's ordering.
+     */
+    public static void endCompileScope() {
+        Deque<Deque<RuntimeScalar>> scopes = compileScopes.get();
+        if (scopes.isEmpty()) {
+            return;
+        }
+        Deque<RuntimeScalar> callbacks = scopes.pop();
+        while (!callbacks.isEmpty()) {
+            RuntimeScalar codeRef = callbacks.pop();
+            try {
+                if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
+                    code.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                }
+            } catch (Exception e) {
+                System.err.println("Warning: on_scope_end callback error: " + e.getMessage());
+            }
+        }
+    }
+
     /**
      * Registers a callback to be executed when the calling file finishes loading.
      * 
@@ -142,6 +178,14 @@ public class BHooksEndOfScope extends PerlModuleBase {
             throw new RuntimeException("on_scope_end requires a code reference, got " + codeRef.type);
         }
         
+        // Prefer the innermost parser-visible lexical scope.  This is the
+        // behavior required by namespace::clean for nested blocks.
+        Deque<Deque<RuntimeScalar>> scopes = compileScopes.get();
+        if (!scopes.isEmpty()) {
+            scopes.peek().push(codeRef);
+            return new RuntimeList();
+        }
+
         // Find which file is currently being loaded
         String currentFile = getCurrentLoadingFile();
         

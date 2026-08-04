@@ -211,6 +211,9 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
     public void releaseTiedObject() {
         if (tiedObjectReleased) return;
         tiedObjectReleased = true;
+        // Array/hash element proxy entries delegate to their parent tied
+        // container and intentionally have no handler of their own.
+        if (self == null) return;
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
             if (base.refCount > 0 && --base.refCount == 0) {

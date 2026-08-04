@@ -1875,6 +1875,14 @@ public class Disassemble {
                                 .append("{r").append(hsKeysReg).append("}\n");
                         break;
                     }
+                    case Opcodes.HASH_SLICE_FOR_LOCAL: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int hslHashReg = interpretedCode.bytecode[pc++];
+                        int hslKeysReg = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_SLICE_FOR_LOCAL r").append(rd).append(" = local r")
+                                .append(hslHashReg).append("{r").append(hslKeysReg).append("}\n");
+                        break;
+                    }
                     case Opcodes.HASH_SLICE_SET: {
                         // Format: HASH_SLICE_SET hashReg keysListReg valuesListReg
                         int hssHashReg = interpretedCode.bytecode[pc++];

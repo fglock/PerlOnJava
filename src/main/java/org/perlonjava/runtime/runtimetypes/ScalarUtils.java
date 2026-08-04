@@ -172,7 +172,12 @@ public class ScalarUtils {
             } catch (NumberFormatException e) {
                 return false;
             }
-        } else if (t == BOOLEAN || t == DUALVAR) {
+        } else if (t == BOOLEAN) {
+            // Perl's boolean scalars retain their boolean/string dualvar
+            // semantics for looks_like_number(): false is not numeric, while
+            // true is represented as the numeric string "1".
+            return (boolean) runtimeScalar.value;
+        } else if (t == DUALVAR) {
             return true;
         } else if (t == TIED_SCALAR) {
             return looksLikeNumber(runtimeScalar.tiedFetch());

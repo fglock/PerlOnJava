@@ -1325,7 +1325,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // assignments during the local scope would mutate the saved snapshot instead
         // of the new empty code, making the restore a no-op.
         GlobalVariable.replacePinnedCodeRef(this.globName, newCode);
-        GlobalVariable.enterLocalizedCodeRef(this.globName);
+        GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
 
         // Create a NEW RuntimeGlob for the local scope and install it in globalIORefs.
@@ -1448,7 +1448,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.
         GlobalVariable.replacePinnedCodeRef(snap.globName, snap.code);
-        GlobalVariable.exitLocalizedCodeRef(snap.globName);
+        GlobalVariable.exitLocalizedCodeRef(snap.globName, snap.code);
         InheritanceResolver.invalidateCache();
 
         GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();

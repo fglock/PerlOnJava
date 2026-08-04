@@ -121,7 +121,26 @@ public class ParseInfix {
 
             right = parser.parseExpression(precedence);
             if (right == null) {
-                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+                // Report an incomplete infix expression at its operator.  By
+                // the time parseExpression returns null, tokenIndex points at
+                // the terminator (or the next statement), which shifts Perl's
+                // diagnostic to the following source line.
+                int errorIndex = Math.max(0, parser.tokenIndex - 1);
+                // If parsing crossed a statement boundary while looking for
+                // the missing operand, back up to the final token before the
+                // newline rather than blaming the first token of the next
+                // statement.
+                if (parser.tokenIndex < parser.tokens.size()
+                        && parser.tokens.get(parser.tokenIndex).type != LexerTokenType.OPERATOR) {
+                    int scan = errorIndex;
+                    while (scan > 0 && parser.tokens.get(scan).type != LexerTokenType.NEWLINE) {
+                        scan--;
+                    }
+                    if (parser.tokens.get(scan).type == LexerTokenType.NEWLINE && scan > 0) {
+                        errorIndex = scan - 1;
+                    }
+                }
+                throw new PerlCompilerException(errorIndex, "syntax error", parser.ctx.errorUtil);
             }
 
             if (operator.equals("..") || operator.equals("...")) {
@@ -403,7 +422,12 @@ public class ParseInfix {
                     parser.tokenIndex--;
                     return left;
                 }
-                throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
+                int errorIndex = parser.tokenIndex - 1;
+                if (token.type != LexerTokenType.OPERATOR && errorIndex > 1
+                        && parser.tokens.get(errorIndex - 1).type == LexerTokenType.NEWLINE) {
+                    errorIndex -= 2;
+                }
+                throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
     }
 

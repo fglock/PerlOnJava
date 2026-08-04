@@ -1,8 +1,12 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 8;
+use Test::More;
 use B::Deparse;
+
+plan skip_all => 'PerlOnJava compiler-retained source extension'
+    unless B::Deparse->can('_extract_source_visible_block');
+plan tests => 8;
 
 my $deparse = B::Deparse->new;
 my $one = $deparse->coderef2text(sub { 1 });

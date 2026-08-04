@@ -278,8 +278,16 @@ package B::CV {
     }
 
     sub XSUB {
-        # PerlOnJava has no XSUBs (all code is Java bytecode or interpreted Perl).
-        # Return 0 (false) so callers like Type::Tiny::_has_xsub() get the right answer.
+        my $self = shift;
+        my $ref = $self->{ref};
+        if ($ref && ref($ref) eq 'CODE') {
+            local $@;
+            if (eval { require Scalar::Util; require Class::XSAccessor; 1 }) {
+                my $address = Scalar::Util::refaddr($ref);
+                return 1 if $Class::XSAccessor::_is_emulated_xsub{$address};
+            }
+        }
+        # Other PerlOnJava code is Java bytecode or interpreted Perl, not XS.
         return 0;
     }
 }

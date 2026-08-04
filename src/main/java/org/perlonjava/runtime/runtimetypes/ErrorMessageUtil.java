@@ -297,9 +297,14 @@ public class ErrorMessageUtil {
      * @return the formatted error message with context
      */
     public String errorMessage(int index, String message) {
-        SourceLocation loc = getSourceLocationAccurate(index);
+        int effectiveIndex = index;
+        if ("syntax error".equals(message) && index > 1
+                && tokens.get(index - 1).type == LexerTokenType.NEWLINE) {
+            effectiveIndex = index - 2;
+        }
+        SourceLocation loc = getSourceLocationAccurate(effectiveIndex);
 
-        String nearString = buildNearString(index, message);
+        String nearString = buildNearString(effectiveIndex, message);
 
         return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ", near " + errorMessageQuote(nearString) + "\n";
     }

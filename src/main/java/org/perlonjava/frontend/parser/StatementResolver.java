@@ -1252,7 +1252,13 @@ public class StatementResolver {
     public static void parseStatementTerminator(Parser parser) {
         LexerToken token = peek(parser);
         if (token.type != LexerTokenType.EOF && !token.text.equals("}") && !token.text.equals(";")) {
-            parser.throwError("syntax error");
+            // If the next token starts on a new line, an incomplete expression
+            // on the preceding line is the actual syntax error location.
+            int errorIndex = parser.tokenIndex;
+            if (errorIndex > 1 && parser.tokens.get(errorIndex - 1).type == LexerTokenType.NEWLINE) {
+                errorIndex -= 2;
+            }
+            parser.throwError(errorIndex, "syntax error");
         }
         if (token.text.equals(";")) {
             consume(parser);

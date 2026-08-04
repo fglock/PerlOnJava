@@ -9,9 +9,11 @@ This document tracks all errors found when running `./jcpan -t Test::Deep` and t
 
 ## Test Results Summary
 
-### Current Status: 41/42 test files passing (after Phases 1-6)
+### Current Status: 42/42 test files passing (verified 2026-08-03)
 
-Only `t/memory.t` fails due to `weaken` being unimplemented.
+The selective reference-counting fixes now cover the temporary comparison
+owner path exercised by `t/memory.t`. The full CPAN distribution passes under
+PerlOnJava: 42 files and 1,268 tests.
 
 | Test File | Status | Notes |
 |-----------|--------|-------|
@@ -40,7 +42,7 @@ Only `t/memory.t` fails due to `weaken` being unimplemented.
 | t/isa.t | PASS | Fixed: Phase 1 (isa keyword parsing) |
 | t/leaf-wrapper.t | PASS | - |
 | t/listmethods.t | PASS | - |
-| t/memory.t | **FAIL** | `weaken` unimplemented (known limitation) |
+| t/memory.t | PASS | Fixed: temporary comparison owner cleanup |
 | t/methods.t | PASS | - |
 | t/no-clobber-globals.t | PASS | - |
 | t/none.t | PASS | Fixed: Phase 1 (overload) + Phase 3 (bitwise | overload) |
@@ -224,7 +226,7 @@ Files to change:
 
 ---
 
-### 6. LOW: `Scalar::Util::weaken` is unimplemented (placeholder)
+### 6. LOW: `Scalar::Util::weaken` edge case
 
 **Affected tests**: t/memory.t (2 fail)
 
@@ -234,7 +236,9 @@ Failed test 'left didn't capture'
 Failed test 'right didn't capture'
 ```
 
-**Root Cause**: `weaken()` in `ScalarUtil.java` is a no-op placeholder. The test creates a weak reference, removes the strong reference, and expects the weak ref to become undef. Since `weaken()` does nothing, the weak ref stays alive.
+**Root Cause**: The runtime's selective reference-counting implementation
+handles ordinary weak references, but this test's indirect-call path retains
+the expected (second) argument longer than Perl does.
 
 **Java feasibility note**: Java has `java.lang.ref.WeakReference`, but its semantics differ fundamentally from Perl's. Perl weak refs become `undef` **immediately and deterministically** when the last strong reference is removed (reference counting). Java weak refs are cleared by the GC **non-deterministically** -- the timing is unpredictable and depends on GC pressure. Replicating Perl's exact semantics would require building a reference-counting layer on top of Java's GC in `RuntimeScalar`, which is a significant architectural change. This is feasible but expensive to implement and maintain, and may not be worth it for the small number of affected tests.
 
@@ -316,7 +320,7 @@ Phase 1 fixes applied:
 
 **Summary: 17 failing files -> 7 failing files. ~83 failures resolved.**
 
-### Remaining Failures (17 total across 7 files)
+### Historical Remaining Failures After Phase 1 (17 total across 7 files)
 
 | Test File | Failures | Root Cause |
 |-----------|----------|------------|
@@ -544,7 +548,7 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
 
 ---
 
-## Remaining Failures Summary (excluding weaken)
+## Historical Phase 3-6 Worklist (now completed)
 
 | Phase | Issue | Tests | Failures | Priority |
 |-------|-------|-------|----------|----------|
@@ -554,4 +558,35 @@ Alternative: fix the lexer to not greedily form `/=` after a regex close delimit
 | 6 | `/=` tokenization after regex | t/regexp.t, t/regexpref.t | 2 files blocked | MEDIUM |
 | — | `weaken` unimplemented | t/memory.t | 2 | LOW (known) |
 
-**Expected outcome**: Fixing phases 3-6 should bring Test::Deep to **41/42 passing** (only t/memory.t remaining due to `weaken`).
+**Historical target**: Phases 3-6 targeted 41/42 passing. The later memory
+lifetime fix completed the final file; current validation is 42/42.
+
+## Progress Tracking
+
+### Current Status: Test::Deep fully passing (2026-08-03)
+
+### Completed Phases
+
+- [x] Lexical `B::Hooks::EndOfScope` dispatch
+  - Added parser-visible compile-scope callback stacks.
+  - `namespace::clean` now passes all 2,099 subtests, including its nested-scope test.
+  - Files: `BHooksEndOfScope.java`, `ParseBlock.java`.
+- [x] Localized container cleanup
+  - Release temporary localized hash/array contents during global local restoration.
+  - Files: `GlobalRuntimeHash.java`, `GlobalRuntimeArray.java`, `GlobalRuntimeScalar.java`.
+- [x] Regression coverage
+  - The upstream `namespace::clean` suite now covers nested compile-scope hooks and passes 2,099/2,099 subtests.
+- [x] `t/memory.t` temporary comparison owner cleanup
+  - Recursive cleanup of discarded comparator/container values and a package-global reachability check on scalar overwrite prevent temporary call-frame aliases from retaining weak referents.
+  - Added `src/test/resources/unit/test_deep_memory_regression.t`, validated with system Perl and PerlOnJava's JVM backend.
+  - Made the regression self-contained on 2026-08-04 by reducing Test::Deep's localized wrapper-cache and temporary-stack lifetime pattern in the test; clean CI checkouts do not contain the ignored `perl5/cpan/Test-Deep` developer tree.
+- [x] Full CPAN distribution validation
+  - `timeout 2400 ./jcpan -t Test::Deep` passes all 42 files and 1,268 tests.
+
+### Next Steps
+
+1. Keep `Test::Deep` in the CPAN compatibility acceptance set.
+
+### Open Questions
+
+- None for the Test::Deep distribution.

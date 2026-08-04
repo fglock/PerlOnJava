@@ -71,6 +71,14 @@ public class GlobalRuntimeHash implements DynamicState {
                 }
 
                 // Restore the original hash reference in the global map
+                // The localized hash is a fresh container.  Drop the values
+                // it accumulated before making it unreachable; otherwise a
+                // local %hash (notably Test::Deep's %WrapCache) can retain
+                // weakly-referenced arguments past the scope that localized
+                // it.
+                if (localHash != null && localHash != saved.originalHash) {
+                    MortalList.deferDestroyForContainerClear(localHash.elements.values());
+                }
                 GlobalVariable.globalHashes.put(saved.fullName, saved.originalHash);
 
                 // Restore glob aliases

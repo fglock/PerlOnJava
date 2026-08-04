@@ -394,14 +394,15 @@ public class WarnDie {
         // persists across function calls and would leak the caller's warning scope into
         // the callee (e.g., pack.t's "use warnings" would leak into test.pl's skip()
         // function even with "local $^W = 0"). callSiteBits is only for caller()[9].
-        String warningBits = getWarningBitsFromCurrentContext();
+        String warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
+        if (warningBits == null) {
+            warningBits = getWarningBitsFromCurrentContext();
+        }
         
         // If no bits from direct stack scan, check the current context stack (pushed on sub entry)
         if (warningBits == null) {
             warningBits = org.perlonjava.runtime.WarningBitsRegistry.getCurrent();
         }
-
-        
         // If warning bits are available, check if this category is enabled
         if (WarningFlags.areWarningsForcedOn()) {
             if (warningBits != null && WarningFlags.isFatalInBits(warningBits, category)) {

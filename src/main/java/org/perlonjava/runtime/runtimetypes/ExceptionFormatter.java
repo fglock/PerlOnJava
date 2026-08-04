@@ -231,10 +231,17 @@ public class ExceptionFormatter {
                         entry.add(subName);
                         if (frame.virtualEvalFrame()) {
                             entry.add("virtual-eval");
+                            // Unlike an ordinary interpreter frame, this
+                            // synthetic inline-eval entry already is the Perl
+                            // frame caller(0) must return. Do not apply the
+                            // normal own-frame skip in RuntimeCode.caller().
+                            if (stackTrace.isEmpty()) {
+                                firstFrameFromInterpreter = true;
+                            }
                         }
-                        // Interpreter frames from tokenIndex/PC represent the sub's OWN
-                        // location (like JVM frames), so firstFrameFromInterpreter stays
-                        // false and caller() will skip this frame to reach the actual caller.
+                        // Ordinary interpreter frames from tokenIndex/PC represent
+                        // the sub's OWN location (like JVM frames), so caller()
+                        // skips them to reach the actual caller.
                         stackTrace.add(entry);
                         lastFileName = filename != null ? filename : "";
                         addedFrameForCurrentLevel = true;

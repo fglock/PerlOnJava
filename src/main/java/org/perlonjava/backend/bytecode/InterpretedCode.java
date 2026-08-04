@@ -250,6 +250,23 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         return !new java.io.File(sourceName).isFile();
     }
 
+    /**
+     * Attach the source span recorded for a subroutine by the parser.
+     *
+     * The interpreter normally avoids retaining source text when compiling a
+     * real file because the file can be read on demand.  Deparse needs the
+     * exact compiler span, however, and the ErrorMessageUtil already owns the
+     * source used by the parser.  Keep that bounded source text here when the
+     * compiler provides a span so both backends expose the same CV metadata.
+     */
+    public void setDeparseSourceSpan(int startOffset, int endOffset) {
+        this.deparseSourceOffset = startOffset;
+        this.deparseSourceEnd = endOffset;
+        if (this.deparseSourceText == null) {
+            this.deparseSourceText = sourceTextFromErrorUtil(this.errorUtil);
+        }
+    }
+
     // Legacy constructor for backward compatibility
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
                            int maxRegisters, RuntimeBase[] capturedVars,
@@ -439,6 +456,12 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.isTryExpressionWrapper = this.isTryExpressionWrapper;
         copy.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         copy.deferredConstAttribute = this.deferredConstAttribute;
+        copy.cvStartFile = this.cvStartFile;
+        copy.cvStartLine = this.cvStartLine;
+        copy.deparseSourceText = this.deparseSourceText;
+        copy.deparseFlags = this.deparseFlags;
+        copy.deparseSourceOffset = this.deparseSourceOffset;
+        copy.deparseSourceEnd = this.deparseSourceEnd;
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.usesLocalization = this.usesLocalization;

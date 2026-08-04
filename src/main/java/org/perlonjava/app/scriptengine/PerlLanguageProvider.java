@@ -426,6 +426,14 @@ public class PerlLanguageProvider {
             // checks to the first call, so we have to catch again here. BEGIN /
             // CHECK / INIT have already run, and the main body has not, so
             // re-executing apply() on the interpreted form is safe.
+            String executionWarningBits = ctx.symbolTable.getWarningBitsString();
+            String compiledWarningBits = RuntimeCode.getWarningBitsForCode(runtimeCode);
+            if (compiledWarningBits != null) {
+                executionWarningBits = compiledWarningBits;
+            }
+            String savedCallSiteBits = WarningBitsRegistry.getCallSiteBits();
+            WarningBitsRegistry.setCallSiteBits(executionWarningBits);
+            WarningBitsRegistry.pushCurrent(executionWarningBits);
             try {
                 result = runtimeCode.apply(new RuntimeArray(), executionContext);
             } catch (Throwable t) {
@@ -445,6 +453,9 @@ public class PerlLanguageProvider {
                 } else {
                     throw t;
                 }
+            } finally {
+                WarningBitsRegistry.popCurrent();
+                WarningBitsRegistry.setCallSiteBits(savedCallSiteBits);
             }
 
             try {

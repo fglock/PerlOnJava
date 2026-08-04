@@ -8,6 +8,7 @@ import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +54,12 @@ public class ParseBlock {
     public static BlockWithScope parseBlock(Parser parser, boolean exitScope) {
         // Store the starting position of the block for backtracking
         int currentIndex = parser.tokenIndex;
+
+        // B::Hooks::EndOfScope callbacks are compile-time lexical-scope
+        // callbacks.  Track the parser scope independently of runtime local
+        // levels so pragmas such as namespace::clean run before a following
+        // BEGIN block in the enclosing scope.
+        BHooksEndOfScope.beginCompileScope();
 
         // Create new scope for variables declared in this block
         int scopeIndex = parser.ctx.symbolTable.enterScope();
@@ -116,6 +123,12 @@ public class ParseBlock {
         }
 
         Integer postBlockStrictOptions = null;
+
+        // Run compile-time end-of-scope callbacks while this block is still
+        // the innermost parser scope.  This must happen before returning to
+        // the enclosing block, but after all statements in this block have
+        // been parsed.
+        BHooksEndOfScope.endCompileScope();
 
         // Exit the current scope before returning (unless delayed)
         if (exitScope) {

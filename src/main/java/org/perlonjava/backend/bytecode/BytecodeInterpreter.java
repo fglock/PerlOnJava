@@ -203,6 +203,11 @@ public class BytecodeInterpreter {
         // DESTROY fires for blessed objects that went out of scope during die.
         java.util.ArrayDeque<Integer> evalBaseRegStack = new java.util.ArrayDeque<>();
 
+        // Interpreted eval BLOCKs execute inline, so caller() needs a virtual
+        // frame for each active EVAL_TRY. Track the depth explicitly so normal,
+        // exceptional, and non-local exits all unwind the synthetic frames.
+        int virtualEvalFrameDepth = 0;
+
         // Labeled block stack for non-local last/next/redo handling.
         // When a function call returns a RuntimeControlFlowList, we check this stack
         // to see if the label matches an enclosing labeled block.
@@ -911,6 +916,15 @@ public class BytecodeInterpreter {
                                     rdScalar = (RuntimeScalar) rdVal;
                                 } else {
                                     rdScalar = rdVal.scalar();
+                                    // Lists and other aggregate expression
+                                    // results can scalarize to a cached
+                                    // read-only constant. SET_SCALAR replaces
+                                    // the destination register; it must not
+                                    // attempt to mutate that shared constant.
+                                    if (isImmutableProxy(rdScalar)) {
+                                        rdScalar = new RuntimeScalar();
+                                        registers[rd] = rdScalar;
+                                    }
                                 }
                                 registers[rs].addToScalar(rdScalar);
                             }
@@ -922,11 +936,21 @@ public class BytecodeInterpreter {
                                 RuntimeScalar targetScalar;
                                 if (lexicalAssignmentMustPreserveSlot(target)) {
                                     targetScalar = (RuntimeScalar) target;
+                                    registers[rs].addToScalar(targetScalar);
                                 } else {
+                                    RuntimeBase source = registers[rs];
                                     targetScalar = new RuntimeScalar();
+                                    source.addToScalar(targetScalar);
+                                    // Replacing the register object must still
+                                    // release the value owned by the old lexical
+                                    // slot. This is especially important for
+                                    // `my $x = $object; $x = "$x"`, where a
+                                    // stale owner otherwise delays DESTROY.
+                                    if (target instanceof RuntimeScalar oldTarget) {
+                                        MortalList.deferDecrementIfNotCaptured(oldTarget);
+                                    }
                                     registers[rd] = targetScalar;
                                 }
-                                registers[rs].addToScalar(targetScalar);
                             }
 
                             case Opcodes.RELEASE_CONSUMED_TEMP -> {
@@ -941,6 +965,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.ADD_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeAddScalar(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.ADD_SCALAR_WARN -> {
+                                pc = InlineOpcodeHandler.executeAddScalarWarn(bytecode, pc, registers);
                             }
 
                             case Opcodes.SUB_SCALAR -> {
@@ -1260,6 +1288,10 @@ public class BytecodeInterpreter {
                                 RuntimeHash hash = (RuntimeHash) registers[hashReg];
                                 RuntimeScalar key = (RuntimeScalar) registers[keyReg];
                                 registers[rd] = hash.getForLocal(key);
+                            }
+
+                            case Opcodes.HASH_SLICE_FOR_LOCAL -> {
+                                pc = SlowOpcodeHandler.executeHashSliceForLocal(bytecode, pc, registers);
                             }
 
                             case Opcodes.HASH_SET -> {
@@ -1952,6 +1984,10 @@ public class BytecodeInterpreter {
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth++;
 
+                                if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
+                                    virtualEvalFrameDepth++;
+                                }
+
                                 // Clear $@ at start of eval block
                                 GlobalVariable.setGlobalVariable("main::@", "");
 
@@ -1982,6 +2018,11 @@ public class BytecodeInterpreter {
 
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth--;
+
+                                if (virtualEvalFrameDepth > 0) {
+                                    InterpreterState.pop();
+                                    virtualEvalFrameDepth--;
+                                }
                             }
 
                             case Opcodes.EVAL_CATCH -> {
@@ -2556,6 +2597,10 @@ public class BytecodeInterpreter {
                             DynamicVariableManager.popToLocalLevel(savedLevel);
                         }
                         RuntimeCode.evalDepth--;
+                        if (virtualEvalFrameDepth > 0) {
+                            InterpreterState.pop();
+                            virtualEvalFrameDepth--;
+                        }
                         WarnDie.catchEval(e);
                         pc = catchPc;
                         continue outer;
@@ -2629,6 +2674,11 @@ public class BytecodeInterpreter {
 
                         // Track eval depth for $^S
                         RuntimeCode.evalDepth--;
+
+                        if (virtualEvalFrameDepth > 0) {
+                            InterpreterState.pop();
+                            virtualEvalFrameDepth--;
+                        }
 
                         // Call WarnDie.catchEval() to set $@
                         WarnDie.catchEval(e);
@@ -2728,6 +2778,10 @@ public class BytecodeInterpreter {
             // the current package, and pops the InterpreterState call stack.
             DynamicVariableManager.popToLocalLevel(savedLocalLevel);
             currentPackageScalar.set(savedPackage);
+            while (virtualEvalFrameDepth > 0) {
+                InterpreterState.pop();
+                virtualEvalFrameDepth--;
+            }
             InterpreterState.pop();
             // Release cached registers for reuse
             code.releaseRegisters();

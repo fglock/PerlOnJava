@@ -640,6 +640,10 @@ public class BytecodeCompiler implements Visitor {
         return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_INTEGER);
     }
 
+    boolean isUninitializedWarningsEnabled() {
+        return getEffectiveSymbolTable().isWarningCategoryEnabled("uninitialized");
+    }
+
     boolean isNoOverloadingEnabled() {
         return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
     }
@@ -896,11 +900,14 @@ public class BytecodeCompiler implements Visitor {
         int featureFlags = 0;
         BitSet warningFlags = new BitSet();
         String warningBitsString = null;
-        if (emitterContext != null && emitterContext.symbolTable != null) {
-            strictOptions = emitterContext.symbolTable.strictOptionsStack.peek();
-            featureFlags = emitterContext.symbolTable.featureFlagsStack.peek();
-            warningFlags = (BitSet) emitterContext.symbolTable.warningFlagsStack.peek().clone();
-            warningBitsString = emitterContext.symbolTable.getWarningBitsString();
+        ScopedSymbolTable metadataScope = emitterContext != null && emitterContext.symbolTable != null
+                ? emitterContext.symbolTable
+                : symbolTable;
+        if (metadataScope != null) {
+            strictOptions = metadataScope.strictOptionsStack.peek();
+            featureFlags = metadataScope.featureFlagsStack.peek();
+            warningFlags = (BitSet) metadataScope.warningFlagsStack.peek().clone();
+            warningBitsString = metadataScope.getWarningBitsString();
         }
 
         // Populate debug source lines if in debug mode
@@ -2131,9 +2138,12 @@ public class BytecodeCompiler implements Visitor {
             emitReg(keyReg);
         }
 
-        // Emit direct opcode HASH_SLICE
+        // local @hash{...} needs key-aware proxies so dynamic restore can
+        // re-resolve entries after hash mutation and remove newly-created keys.
         int rdSlice = allocateRegister();
-        emit(Opcodes.HASH_SLICE);
+        emit(shouldEmitHashFetchForLocal()
+                ? Opcodes.HASH_SLICE_FOR_LOCAL
+                : Opcodes.HASH_SLICE);
         emitReg(rdSlice);
         emitReg(hashReg);
         emitReg(keysListReg);
@@ -5509,6 +5519,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        attachDeparseSourceSpan(subCode, node);
 
         if (RuntimeCode.DISASSEMBLE) {
             System.out.println(Disassemble.disassemble(subCode));
@@ -5633,6 +5644,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        attachDeparseSourceSpan(subCode, node);
         subCode.prototype = node.prototype;
         subCode.attributes = node.attributes;
         subCode.packageName = getCurrentPackage();
@@ -5691,6 +5703,31 @@ public class BytecodeCompiler implements Visitor {
         }
 
         lastResultReg = codeReg;
+    }
+
+    /**
+     * Keep interpreter-created CVs in parity with JVM-created CVs for source
+     * location and exact B::Deparse source extraction.
+     */
+    private void attachDeparseSourceSpan(InterpretedCode code, SubroutineNode node) {
+        if (errorUtil == null) {
+            return;
+        }
+        // Eval strings intentionally retain their historical DUMMY fallback
+        // for source that cannot be mapped back to a file.  File-backed
+        // compilation, including CPAN test files, has a stable source unit
+        // and can safely expose the exact parser span.
+        if (sourceName == null || !new java.io.File(sourceName).isFile()) {
+            return;
+        }
+        var loc = errorUtil.getSourceLocationAccurate(node.block.getIndex());
+        code.cvStartLine = loc.lineNumber();
+        if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+            code.cvStartFile = loc.fileName();
+        }
+        int endOffset = node.sourceEndTokenIndex >= 0
+                ? errorUtil.getSourceOffset(node.sourceEndTokenIndex) : -1;
+        code.setDeparseSourceSpan(errorUtil.getSourceOffset(node.getIndex()), endOffset);
     }
 
     /**

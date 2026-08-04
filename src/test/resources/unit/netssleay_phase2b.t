@@ -6,6 +6,8 @@ use strict;
 use warnings;
 use Test::More;
 BEGIN {
+    Test::More::plan(skip_all => 'tests PerlOnJava Net::SSLeay implementation')
+        unless $^X eq 'jperl' || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?$};
     eval { require Net::SSLeay; Net::SSLeay->import; 1 }
         or do {
             require Test::More;
