@@ -31,7 +31,7 @@ public class ParserTables {
             "die", "do", "dump",
             "exec", "exit",
             "fork",
-            "gethostbyname", "getpwuid", "glob",
+            "getgrgid", "gethostbyname", "getpwuid", "glob",
             "hex",
             "kill",
             "localtime", "log",
@@ -41,7 +41,7 @@ public class ParserTables {
             "sleep",
             "stat", "system",
             "time", "gmtime",
-            "uc",
+            "uc", "unlink",
             "warn"
     );
     // Set of operators that are right associative.

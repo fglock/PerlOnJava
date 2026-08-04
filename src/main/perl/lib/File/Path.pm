@@ -3,6 +3,7 @@ package File::Path;
 use strict;
 use warnings;
 use Carp;
+use File::Spec ();
 
 our $VERSION = '2.18';
 
@@ -47,19 +48,28 @@ sub _make_path_perl {
         next unless defined $path && length $path;
         next if -d $path;
 
-        # Simple mkdir -p implementation
-        my @parts = split m{/}, $path;
-        my $current = '';
-        my $is_absolute = ($path =~ m{^/});
+        # Build each directory with File::Spec so drive-letter paths use the
+        # native Windows separator and their parent directories are created in
+        # order. Splitting only on '/' made make_path('C:\\...\\cpan\\prefs')
+        # try to create the complete leaf before C:\\...\\cpan existed.
+        my ($volume, $directory) = File::Spec->splitpath($path, 1);
+        if ($^O eq 'MSWin32'
+                && $path =~ m{\A([\\/]{2}[^\\/]+[\\/][^\\/]+)(.*)\z}) {
+            # PerlOnJava's File::Spec Java implementation handles drive
+            # volumes, while this preserves a UNC server/share as the volume.
+            ($volume, $directory) = ($1, $2);
+        }
+        my @parts = File::Spec->splitdir($directory);
+        my $current_dir = File::Spec->file_name_is_absolute($path)
+            ? File::Spec->rootdir
+            : '';
 
         for my $part (@parts) {
             next unless length $part;
-            if ($current eq '' && !$is_absolute) {
-                # Relative path - start without leading /
-                $current = $part;
-            } else {
-                $current .= '/' . $part;
-            }
+            $current_dir = length($current_dir)
+                ? File::Spec->catdir($current_dir, $part)
+                : $part;
+            my $current = File::Spec->catpath($volume, $current_dir, '');
 
             next if -d $current;
 

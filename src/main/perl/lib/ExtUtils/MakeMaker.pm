@@ -59,9 +59,12 @@ sub _default_install_base {
         my $jar_dir = dirname($ENV{PERLONJAVA_JAR});
         return File::Spec->catdir($jar_dir, 'lib');
     }
-    # Use ~/.perlonjava/lib as default user library path
+    # Use $PERLONJAVA_HOME/lib (or ~/.perlonjava/lib) as the user library path.
     my $home = $ENV{HOME} || $ENV{USERPROFILE} || '.';
-    return File::Spec->catdir($home, '.perlonjava', 'lib');
+    my $perlonjava_home = defined($ENV{PERLONJAVA_HOME}) && length($ENV{PERLONJAVA_HOME})
+        ? $ENV{PERLONJAVA_HOME}
+        : File::Spec->catdir($home, '.perlonjava');
+    return File::Spec->catdir($perlonjava_home, 'lib');
 }
 
 sub WriteMakefile {
@@ -294,7 +297,7 @@ sub _handle_xs_module {
     # in the JAR (jar:PERL5LIB).  The JAR shim provides proper fallback logic
     # (e.g. inheriting from a pure-Perl parent), while the CPAN version would
     # call XSLoader::load at the top level and die fatally.  Since
-    # ~/.perlonjava/lib/ comes before jar:PERL5LIB in @INC, installing the
+    # The selected PerlOnJava home lib/ comes before jar:PERL5LIB in @INC, installing the
     # CPAN version would shadow the working shim.
     $args->{_xs_module} = 1;
     
@@ -449,7 +452,7 @@ sub _install_pure_perl {
     }
     
     # Skip .pm files that already exist in PerlOnJava's bundled JAR.
-    # ~/.perlonjava/lib/ has higher @INC priority than jar:PERL5LIB, so
+    # The selected PerlOnJava home lib/ has higher @INC priority than jar:PERL5LIB, so
     # installing a CPAN version would shadow the bundled module.  This
     # protects Java-backed shims (IO::Socket::SSL, Net::SSLeay, etc.)
     # from being overwritten by incompatible CPAN versions, while still

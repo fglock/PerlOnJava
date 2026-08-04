@@ -431,7 +431,15 @@ public class CompileBinaryOperator {
             bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
 
-            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
+            int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
+            if (savedCallerLineOverride <= 0 && node.left != null && node.left.getIndex() > 0) {
+                bytecodeCompiler.callerLineTokenOverride = node.left.getIndex();
+            }
+            try {
+                bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
+            } finally {
+                bytecodeCompiler.callerLineTokenOverride = savedCallerLineOverride;
+            }
             int rs2 = bytecodeCompiler.lastResultReg;
 
             // Check if this is a &func (no parens) call that should share caller's @_

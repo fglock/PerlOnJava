@@ -1285,6 +1285,16 @@ public class SubroutineParser {
             declaredCode.isDeclared = true;
         }
 
+        // Perl increments a package's mro generation whenever a named sub is
+        // installed or replaced. Class::MOP uses this generation to decide
+        // whether its local method map must be rebuilt; leaving it unchanged
+        // makes namespace::autoclean treat newly compiled methods as imports.
+        int lastSep = fullName.lastIndexOf("::");
+        String definitionPackage = lastSep >= 0
+                ? fullName.substring(0, lastSep)
+                : packageToUse;
+        org.perlonjava.runtime.perlmodule.Mro.incrementPackageGeneration(definitionPackage);
+
         // Register subroutine location for %DB::sub (only in debug mode)
         if (DebugState.debugMode && parser.ctx.errorUtil != null && block != null) {
             int startLine = parser.ctx.errorUtil.getLineNumber(block.tokenIndex);
@@ -1311,7 +1321,6 @@ public class SubroutineParser {
         // `sub Dst::foo { }` arrives here with subName="Dst::foo"), and fullName
         // may have been rewritten by a stash alias — always derive both halves
         // from fullName so caller()/set_subname see a consistent pair.
-        int lastSep = fullName.lastIndexOf("::");
         placeholder.subName = lastSep >= 0 ? fullName.substring(lastSep + 2) : subName;
         // For `sub X::foo { }` in package main, packageName should be "X",
         // not "main". Set this before MODIFY_CODE_ATTRIBUTES so attribute
@@ -1364,6 +1373,7 @@ public class SubroutineParser {
 
         ArrayList<Class> classList = new ArrayList<>();
         ArrayList<Object> paramList = new ArrayList<>();
+        ArrayList<String> capturedNames = new ArrayList<>();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
                 // Skip field declarations - they are not closure variables
@@ -1436,6 +1446,7 @@ public class SubroutineParser {
                     default -> throw new IllegalStateException("Unexpected value: " + sigil);
                 };
                 paramList.add(capturedVar);
+                capturedNames.add(entry.decl().equals("our") ? null : entry.name());
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
             }
         }
@@ -1443,7 +1454,7 @@ public class SubroutineParser {
         // owns captured lexicals at definition time. Weak-ref cleanup must be
         // able to see those captures before the first call (Sub::Defer's named
         // lvalue wrapper queries its weak metadata before invoking the wrapper).
-        installClosureCaptureMetadata(placeholder, paramList);
+        installClosureCaptureMetadata(placeholder, capturedNames, paramList);
 
         // Create a new EmitterContext for generating bytecode
         // Create a filtered snapshot that excludes field declarations and code references
@@ -1680,6 +1691,11 @@ public class SubroutineParser {
     }
 
     private static void installClosureCaptureMetadata(RuntimeCode code, List<Object> capturedValues) {
+        installClosureCaptureMetadata(code, null, capturedValues);
+    }
+
+    private static void installClosureCaptureMetadata(
+            RuntimeCode code, List<String> capturedNames, List<Object> capturedValues) {
         if (code == null || capturedValues == null || capturedValues.isEmpty()
                 || code.capturedScalars != null) {
             return;
@@ -1687,7 +1703,15 @@ public class SubroutineParser {
 
         ArrayList<RuntimeScalar> capturedScalars = new ArrayList<>();
         ArrayList<RuntimeBase> capturedAggregates = new ArrayList<>();
-        for (Object value : capturedValues) {
+        for (int i = 0; i < capturedValues.size(); i++) {
+            Object value = capturedValues.get(i);
+            if (capturedNames != null && i < capturedNames.size()
+                    && capturedNames.get(i) != null && value instanceof RuntimeBase runtimeValue) {
+                if (code.closedOverVariables == null) {
+                    code.closedOverVariables = new HashMap<>();
+                }
+                code.closedOverVariables.put(capturedNames.get(i), runtimeValue);
+            }
             if (value instanceof RuntimeScalar scalar) {
                 capturedScalars.add(scalar);
                 scalar.retainClosureCapture();

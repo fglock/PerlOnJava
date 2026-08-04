@@ -802,30 +802,41 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
-        for (int index = 0; index < argCount; index++) {
-            int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooledArg = argSlot >= 0;
-            if (!pooledArg) {
-                argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            }
+        int savedArgumentCallerLineOverride =
+                emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride;
+        if (savedArgumentCallerLineOverride <= 0
+                && node.left != null && node.left.getIndex() > 0) {
+            emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride = node.left.getIndex();
+        }
+        try {
+            for (int index = 0; index < argCount; index++) {
+                int argSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                boolean pooledArg = argSlot >= 0;
+                if (!pooledArg) {
+                    argSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
 
-            paramList.elements.get(index).accept(listVisitor);
-            mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+                paramList.elements.get(index).accept(listVisitor);
+                mv.visitVarInsn(Opcodes.ASTORE, argSlot);
 
-            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-            if (index <= 5) {
-                mv.visitInsn(Opcodes.ICONST_0 + index);
-            } else if (index <= 127) {
-                mv.visitIntInsn(Opcodes.BIPUSH, index);
-            } else {
-                mv.visitIntInsn(Opcodes.SIPUSH, index);
-            }
-            mv.visitVarInsn(Opcodes.ALOAD, argSlot);
-            mv.visitInsn(Opcodes.AASTORE);
+                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                if (index <= 5) {
+                    mv.visitInsn(Opcodes.ICONST_0 + index);
+                } else if (index <= 127) {
+                    mv.visitIntInsn(Opcodes.BIPUSH, index);
+                } else {
+                    mv.visitIntInsn(Opcodes.SIPUSH, index);
+                }
+                mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                mv.visitInsn(Opcodes.AASTORE);
 
-            if (pooledArg) {
-                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                if (pooledArg) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                }
             }
+        } finally {
+            emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride =
+                    savedArgumentCallerLineOverride;
         }
 
         // Undefined direct-call diagnostics report the line containing the
