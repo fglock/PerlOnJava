@@ -178,6 +178,28 @@ test passes on both PerlOnJava backends, `make` passes, and loading
 `Stream::Buffered`. Next reduce `Stream::Buffered`, then the Unicode escaping
 failure in `WWW::Form::UrlEncoded`, before rerunning Plack and Catalyst.
 
+## Immediate Next Steps
+
+Execute these in order; do not skip ahead by force-installing a failed
+distribution:
+
+1. Reduce `Stream-Buffered-0.03` failures in `t/print.t` and `t/subclass.t`.
+   Validate the reduction with system Perl, add shared-runtime regression
+   coverage, and verify both PerlOnJava backends.
+2. Reduce the Unicode percent-encoding failure in
+   `WWW-Form-UrlEncoded-0.26` (`foo=%E5&bar=☺` versus
+   `foo=%E5&bar=%E2%98%BA`) and rerun its complete upstream suite unchanged.
+3. In a new isolated `PERLONJAVA_HOME`, install those two distributions, then
+   rerun `HTTP-Entity-Parser-0.25` and the complete `Plack-1.0054` install.
+4. Classify the remaining Plack/Catalyst blockers in the dependency table.
+   For fork, process, watcher, or reloader tests, prove that the required
+   single-process runtime path works before adding any narrow test policy.
+5. Rerun a fresh, unforced `jcpan install Catalyst::Runtime`, followed by the
+   `-MCatalyst` load gate. Record exact versions and results in this document.
+6. Run `make`, push the unified PR, and wait for Ubuntu and Windows CI to pass.
+   Leave the PR unmerged so the user can run the isolated install and approve
+   it explicitly.
+
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.
 
