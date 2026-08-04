@@ -185,6 +185,22 @@ sub read {
     return CORE::read($self->{_fh}, $_[0], $_[1], defined $_[2] ? $_[2] : 0);
 }
 
+sub write {
+    my $self = shift;
+    my $buf = shift;
+    my $len = @_ ? shift : length($buf);
+    my $offset = @_ ? shift : 0;
+
+    my $data;
+    {
+        use bytes;
+        $data = substr($buf, $offset, $len);
+    }
+    utf8::encode($data) if utf8::is_utf8($data);
+    local $\;
+    return print { $self->{_fh} } $data;
+}
+
 sub binmode {
     my $self = shift;
     return @_ ? CORE::binmode($self->{_fh}, $_[0]) : CORE::binmode($self->{_fh});
@@ -594,8 +610,7 @@ sub _parse_args {
 }
 
 sub _generate_template {
-    my $base = "temp" . sprintf("%04d", $TEMPLATE_COUNTER++ % 10000);
-    return $base . "XXXXXX";
+    return "XXXXXXXXXX";
 }
 
 # Wrapper for File::Spec->tmpdir for compatibility
