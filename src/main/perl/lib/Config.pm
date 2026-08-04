@@ -68,9 +68,12 @@ my $user_home = getProperty('user.home') || '';
 my $user_dir = getProperty('user.dir') || '';
 my $java_home = getProperty('java.home') || '';
 my $user_name = getProperty('user.name') || 'unknown';
-my $perlonjava_home = $user_home
+my $perlonjava_override = getenv('PERLONJAVA_HOME');
+my $perlonjava_home = defined($perlonjava_override) && length($perlonjava_override)
+    ? $perlonjava_override
+    : ($user_home
     ? _catdir($file_separator, $user_home, '.perlonjava')
-    : '.perlonjava';
+    : '.perlonjava');
 my $core_privlib = _catdir($file_separator, $perlonjava_home, 'core', 'lib', 'perl5', '5.44.0');
 my $core_archlib = _catdir($file_separator, $core_privlib, "java-$java_version-$os_arch");
 _ensure_dir(_catdir($file_separator, $core_archlib, 'CORE'));
@@ -355,32 +358,32 @@ my $startperl = $is_windows
     installprefixexp => '/usr/local',
     
     # Site installation paths (for user-installed modules via jcpan)
-    siteprefix => $user_home . '/.perlonjava',
-    siteprefixexp => $user_home . '/.perlonjava',
-    installsitelib => $user_home . '/.perlonjava/lib',
-    installsitearch => $user_home . '/.perlonjava/lib',
-    installsitebin => $user_home . '/.perlonjava/bin',
-    installsitescript => $user_home . '/.perlonjava/bin',
-    installsiteman1dir => $user_home . '/.perlonjava/man/man1',
-    installsiteman3dir => $user_home . '/.perlonjava/man/man3',
+    siteprefix => $perlonjava_home,
+    siteprefixexp => $perlonjava_home,
+    installsitelib => _catdir($file_separator, $perlonjava_home, 'lib'),
+    installsitearch => _catdir($file_separator, $perlonjava_home, 'lib'),
+    installsitebin => _catdir($file_separator, $perlonjava_home, 'bin'),
+    installsitescript => _catdir($file_separator, $perlonjava_home, 'bin'),
+    installsiteman1dir => _catdir($file_separator, $perlonjava_home, 'man', 'man1'),
+    installsiteman3dir => _catdir($file_separator, $perlonjava_home, 'man', 'man3'),
     
     # Core installation paths (read-only, in JAR)
     installprivlib => 'jar:PERL5LIB',
     installarchlib => 'jar:PERL5LIB',
     installbin => 'jar:PERL5BIN',
     installscript => 'jar:PERL5BIN',
-    installman1dir => $user_home . '/.perlonjava/man/man1',
-    installman3dir => $user_home . '/.perlonjava/man/man3',
+    installman1dir => _catdir($file_separator, $perlonjava_home, 'man', 'man1'),
+    installman3dir => _catdir($file_separator, $perlonjava_home, 'man', 'man3'),
 
     # Man page directories
-    man1dir => $user_home . '/.perlonjava/man/man1',
-    man3dir => $user_home . '/.perlonjava/man/man3',
-    man1direxp => $user_home . '/.perlonjava/man/man1',
-    man3direxp => $user_home . '/.perlonjava/man/man3',
-    siteman1dir => $user_home . '/.perlonjava/man/man1',
-    siteman3dir => $user_home . '/.perlonjava/man/man3',
-    siteman1direxp => $user_home . '/.perlonjava/man/man1',
-    siteman3direxp => $user_home . '/.perlonjava/man/man3',
+    man1dir => _catdir($file_separator, $perlonjava_home, 'man', 'man1'),
+    man3dir => _catdir($file_separator, $perlonjava_home, 'man', 'man3'),
+    man1direxp => _catdir($file_separator, $perlonjava_home, 'man', 'man1'),
+    man3direxp => _catdir($file_separator, $perlonjava_home, 'man', 'man3'),
+    siteman1dir => _catdir($file_separator, $perlonjava_home, 'man', 'man1'),
+    siteman3dir => _catdir($file_separator, $perlonjava_home, 'man', 'man3'),
+    siteman1direxp => _catdir($file_separator, $perlonjava_home, 'man', 'man1'),
+    siteman3direxp => _catdir($file_separator, $perlonjava_home, 'man', 'man3'),
 
     # Man page section suffixes
     man1ext => '1',

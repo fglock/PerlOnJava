@@ -102,10 +102,10 @@ other prerequisites were installed incrementally. Do not use the current
 Do not delete, clean, restore, or replace `~/.perlonjava` in place. It may
 contain unrelated user state.
 
-### Required tooling improvement
+### Isolated-home tooling
 
-Before the final installation gate, add a supported isolated home override,
-provisionally named `PERLONJAVA_HOME`, with these semantics:
+`PERLONJAVA_HOME` is implemented on the Catalyst support branch with these
+semantics:
 
 - default remains `~/.perlonjava`;
 - library, CPAN metadata, sources, build directories, preferences, patches,
@@ -125,10 +125,11 @@ PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl -MTry::Tiny -e 'print "ok\n"
   >> /tmp/catalyst-isolated-cpan.log 2>&1
 ```
 
-The implementation must include a regression test that verifies no files were
-written beneath the default user home. Temporary-directory cleanup should be
-left to the test harness or performed only on the exact validated temporary
-path.
+`PerlOnJavaHomeIntegrationTest` runs the native launcher selected for the host
+OS, loads `Config`, `CPAN::Config`, and `CPAN::HandleConfig`, and verifies that
+runtime, core-probe, preferences, patches, and install paths remain under a
+temporary override while the default user home stays untouched. The same test
+therefore exercises `jperl` on Unix and `jperl.bat` on Windows CI.
 
 ## Dependency Status
 
@@ -151,10 +152,13 @@ incorrectly classified, or exposes a reusable PerlOnJava defect.
 
 ## Current Handoff State
 
-Start with Milestone 0, then Milestone 1. The shared CPAN state cannot support
-a trustworthy clean-install result, while the known framework blocker is the
-inherited attributed-method case described below. Use the dependency table as
-the baseline; use commit history and the PR for chronological progress.
+Milestone 0 implementation and the full `make` gate pass. Its live CPAN
+acceptance remains pending because the restricted agent network could not fetch
+CPAN indexes, and permission to download and execute a CPAN installer was not
+granted. Resume by running the documented fresh-root `Try::Tiny` install after
+explicit approval; once it succeeds, mark Milestone 0 complete and begin
+Milestone 1's inherited attributed-method reduction. Use the dependency table
+as the baseline; use commit history and the PR for chronological progress.
 
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.

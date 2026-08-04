@@ -10,8 +10,9 @@ Some distributions need environment overrides, skipped phases, or small
 unified diffs before `make test`. PerlOnJava ships **distroprefs** as YAML under
 `src/main/perl/lib/PerlOnJava/CpanDistroprefs/` and **patch files** under
 `src/main/perl/lib/PerlOnJava/CpanPatches/`. When CPAN loads, `CPAN::Config`
-copies them into `~/.perlonjava/cpan/prefs/` and `~/.perlonjava/cpan/patches/`
-respectively (see `_bootstrap_prefs` / `_bootstrap_patches` in
+copies them into the selected PerlOnJava home's `cpan/prefs/` and
+`cpan/patches/` directories (by default `~/.perlonjava/cpan/`; see
+`_bootstrap_prefs` / `_bootstrap_patches` in
 `src/main/perl/lib/CPAN/Config.pm`). Contributor-facing documentation:
 [CPAN Distroprefs for PerlOnJava](cpan-distroprefs.md) and
 [dev/design/patch-and-cpan-prefs-layout.md](../../dev/design/patch-and-cpan-prefs-layout.md).
@@ -35,6 +36,24 @@ jcpan
 ```
 
 Modules are installed to `~/.perlonjava/lib/`, which is automatically included in `@INC`.
+
+### Isolated installations
+
+Set `PERLONJAVA_HOME` to keep an installation separate from the default
+`~/.perlonjava` tree. Both the Unix and Windows launchers inherit the setting:
+
+```bash
+isolated_root=$(mktemp -d /tmp/perlonjava-home.XXXXXX)
+PERLONJAVA_HOME="$isolated_root" timeout 1200 jcpan install Try::Tiny
+PERLONJAVA_HOME="$isolated_root" timeout 60 jperl \
+  -MTry::Tiny -e 'print "ok\n"'
+```
+
+The selected root supplies the user module library (`lib/`), CPAN metadata and
+build state (`cpan/`), generated core probes (`core/`), scripts (`bin/`), and
+manpages (`man/`). When the variable is unset or empty, the existing
+`~/.perlonjava` default is unchanged. `PERLONJAVA_LIB` remains a more specific
+MakeMaker install-library override for compatibility.
 
 ## Manual Installation
 

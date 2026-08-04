@@ -1,6 +1,6 @@
 # CPAN Configuration for PerlOnJava
 # This provides sensible defaults that work out of the box
-# Users can override with ~/.perlonjava/cpan/CPAN/MyConfig.pm
+# Users can override with $PERLONJAVA_HOME/cpan/CPAN/MyConfig.pm
 
 package CPAN::Config;
 use strict;
@@ -9,19 +9,22 @@ use File::Spec;
 
 # Determine home directory cross-platform
 my $home = $ENV{HOME} || $ENV{USERPROFILE} || '.';
+my $perlonjava_home = defined($ENV{PERLONJAVA_HOME}) && length($ENV{PERLONJAVA_HOME})
+    ? $ENV{PERLONJAVA_HOME}
+    : File::Spec->catdir($home, '.perlonjava');
 
-# Use .perlonjava/cpan for CPAN data (consistent with PerlOnJava conventions)
-my $cpan_home = File::Spec->catdir($home, '.perlonjava', 'cpan');
+# Keep all CPAN data below the selected PerlOnJava home.
+my $cpan_home = File::Spec->catdir($perlonjava_home, 'cpan');
 
 # Determine OS-specific tools
 my $is_windows = $^O eq 'MSWin32' || $^O eq 'cygwin';
 
 # Bootstrap bundled distroprefs to the user's prefs directory.
 # CPAN reads prefs from the filesystem, so we write bundled YAML files
-# to ~/.perlonjava/cpan/prefs/ on first run.
+# to $PERLONJAVA_HOME/cpan/prefs/ (or the default equivalent) on first run.
 # Canonical sources live under lib/PerlOnJava/CpanDistroprefs/ in the JAR
 # (see dev/design/patch-and-cpan-prefs-layout.md).
-# Note: ~/.perlonjava/cpan/CPAN/MyConfig.pm is created by HandleConfig.pm.
+# Note: $PERLONJAVA_HOME/cpan/CPAN/MyConfig.pm is created by HandleConfig.pm.
 sub _bootstrap_prefs {
     my $prefs_dir = File::Spec->catdir($cpan_home, 'prefs');
 
@@ -200,7 +203,7 @@ _bootstrap_prefs();
 # CPAN::Distribution applies these via /usr/bin/patch before make/test/
 # install runs. We ship the patch sources bundled in the JAR under
 # lib/PerlOnJava/CpanPatches/ and copy them out to
-# ~/.perlonjava/cpan/patches/ on first run so the external `patch`
+# $PERLONJAVA_HOME/cpan/patches/ on first run so the external `patch`
 # binary (which operates on the filesystem) can reach them.
 #
 # Patches are exposed under "<Distribution>/<filename>.patch" relative to
@@ -451,12 +454,13 @@ CPAN::Config - Default CPAN configuration for PerlOnJava
 =head1 DESCRIPTION
 
 This module provides default CPAN configuration for PerlOnJava.
-It uses C<~/.perlonjava/cpan> as the CPAN home directory for consistency
-with other PerlOnJava conventions.
+It uses C<$PERLONJAVA_HOME/cpan> as the CPAN home directory when the
+C<PERLONJAVA_HOME> environment variable is set. Otherwise it defaults to
+C<~/.perlonjava/cpan>.
 
 Users can override these settings by creating their own config file at:
 
-    ~/.perlonjava/cpan/CPAN/MyConfig.pm
+    $PERLONJAVA_HOME/cpan/CPAN/MyConfig.pm
 
 =head1 SEE ALSO
 
