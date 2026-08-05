@@ -1043,6 +1043,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return tainted;
     }
 
+    /** Mark a value returned by an external input source in Perl taint mode. */
+    public RuntimeScalar taintFromExternalInput() {
+        if (GlobalContext.isTaintModeActive()) {
+            tainted = true;
+        }
+        return this;
+    }
+
     // Add itself to a RuntimeArray.
     //
     // ─── WARNING: refCount accounting is intentionally asymmetric here ───

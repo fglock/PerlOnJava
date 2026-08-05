@@ -57,6 +57,7 @@ public class DBI extends PerlModuleBase {
             dbi.registerMethod("table_info", null);
             dbi.registerMethod("column_info", null);
             dbi.registerMethod("primary_key_info", null);
+            dbi.registerMethod("primary_key", null);
             dbi.registerMethod("foreign_key_info", null);
             dbi.registerMethod("type_info", null);
             dbi.registerMethod("ping", null);
@@ -1208,8 +1209,8 @@ public class DBI extends PerlModuleBase {
             Connection conn = (Connection) dbh.get("connection").value;
             DatabaseMetaData metaData = conn.getMetaData();
 
-            String catalog = args.get(1).toString();
-            String schema = args.get(2).toString();
+            String catalog = metadataPattern(args.get(1));
+            String schema = metadataPattern(args.get(2));
             String table = args.get(3).toString();
 
             ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
@@ -1218,6 +1219,39 @@ public class DBI extends PerlModuleBase {
             RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "primary_key_info");
+    }
+
+    /**
+     * DBI convenience method returning only the primary-key column names.
+     * Unlike JDBC, DBI callers conventionally pass undef for catalog and
+     * schema; those values must reach DatabaseMetaData as null rather than
+     * the empty string.
+     */
+    public static RuntimeList primary_key(RuntimeArray args, int ctx) {
+        RuntimeHash dbh = args.get(0).hashDeref();
+
+        return executeWithErrorHandling(() -> {
+            if (args.size() < 4) {
+                throw new IllegalStateException("Bad number of arguments for DBI->primary_key");
+            }
+
+            Connection conn = (Connection) dbh.get("connection").value;
+            DatabaseMetaData metaData = conn.getMetaData();
+            try (ResultSet rs = metaData.getPrimaryKeys(
+                    metadataPattern(args.get(1)),
+                    metadataPattern(args.get(2)),
+                    args.get(3).toString())) {
+                RuntimeList columns = new RuntimeList();
+                while (rs.next()) {
+                    columns.add(new RuntimeScalar(rs.getString("COLUMN_NAME")));
+                }
+                return columns;
+            }
+        }, dbh, "primary_key");
+    }
+
+    private static String metadataPattern(RuntimeScalar value) {
+        return value == null || value.value == null ? null : value.toString();
     }
 
     public static RuntimeList foreign_key_info(RuntimeArray args, int ctx) {

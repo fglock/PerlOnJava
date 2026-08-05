@@ -93,7 +93,7 @@ public class DFS {
         visiting.add(className);
 
         // Get current @ISA array - FORCE fresh read
-        RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
+        RuntimeArray isaArray = InheritanceResolver.getIsaArrayForClass(className);
         List<String> parents = new ArrayList<>();
         for (RuntimeBase entity : isaArray.elements) {
             String parentName = entity.toString();

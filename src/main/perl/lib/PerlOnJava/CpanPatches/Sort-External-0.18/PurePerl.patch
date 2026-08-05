@@ -1,0 +1,144 @@
+--- lib/Sort/External.pm
++++ lib/Sort/External.pm
+@@ -6,9 +6,134 @@
+ 
+ our $VERSION = '0.18';
+ 
+-use XSLoader;
+-XSLoader::load( 'Sort::External', $VERSION );
++# PerlOnJava pure-Perl backend.  The upstream implementation keeps object
++# state and its temporary-file codec in XS; this backend preserves that API
++# so the distribution remains installable on a runtime without native XS.
++
++sub _new {
++    my ($class, $working_dir, $sortsub, $cache_size, $mem_threshold,
++        $tempfile_fh) = @_;
++    return bless {
++        working_dir   => $working_dir,
++        sortsub       => $sortsub,
++        cache_size    => $cache_size,
++        mem_threshold => $mem_threshold,
++        tempfile_fh   => $tempfile_fh,
++        item_cache    => [],
++        runs          => [],
++        mem_bytes     => 0,
++        fetch_tick    => 0,
++    }, $class;
++}
++
++sub feed {
++    my $self = shift;
++    for my $item (@_) {
++        push @{$self->{item_cache}}, $item;
++        $self->{mem_bytes} += length("$item") + 32;
++    }
++
++    if (($self->{cache_size} && @{$self->{item_cache}} >= $self->{cache_size})
++        || (!$self->{cache_size}
++            && $self->{mem_bytes} > $self->{mem_threshold})) {
++        $self->_write_item_cache_to_tempfile;
++    }
++    return;
++}
++
++sub fetch {
++    my $self = shift;
++    if ($self->{fetch_tick} > $#{$self->{item_cache}}) {
++        $self->_gatekeeper;
++    }
++    return if $self->{fetch_tick} > $#{$self->{item_cache}};
++    return delete $self->{item_cache}[$self->{fetch_tick}++];
++}
++
++sub _get_sortsub     { $_[0]{sortsub} }
++sub _get_item_cache  { $_[0]{item_cache} }
++sub _get_runs        { $_[0]{runs} }
++sub _get_tempfile_fh { $_[0]{tempfile_fh} }
++sub _get_working_dir { $_[0]{working_dir} }
++sub _set_mem_bytes   { $_[0]{mem_bytes} = $_[1]; return }
++sub _set_fetch_tick  { $_[0]{fetch_tick} = $_[1]; return }
++sub _set_temp_fh     { $_[0]{tempfile_fh} = $_[1]; return }
++
++sub _print_to_sortfile {
++    my ($self, $items, $fh) = @_;
++    for my $item (@$items) {
++        die "can't handle anything other than plain scalars\n"
++            if ref($item) || ref(\$item) eq 'GLOB';
++
++        my $utf8 = utf8::is_utf8($item) ? 1 : 0;
++        my $bytes = "$item";
++        utf8::encode($bytes) if $utf8;
++        my $header = pack('N C', length($bytes), $utf8);
++
++        print $fh $header, $bytes
++            or die "PerlIO error writing external sort data: $!\n";
++    }
++    return;
++}
++
++sub _utf8_on {
++    utf8::upgrade($_[0]);
++    return;
++}
++
++package Sort::External::SortExRun;
++
++sub _new {
++    my ($class, $tempfile_fh, $start, $end) = @_;
++    return bless {
++        tempfile_fh => $tempfile_fh,
++        buffarray   => [],
++        start       => $start,
++        pos         => $start,
++        end         => $end,
++    }, $class;
++}
++
++sub _get_buffarray { $_[0]{buffarray} }
++sub _set_buffarray { $_[0]{buffarray} = $_[1]; return }
++
++sub _read_exact {
++    my ($fh, $length) = @_;
++    my $value = '';
++    while (length($value) < $length) {
++        my $read = read($fh, my $chunk, $length - length($value));
++        die "PerlIO error reading external sort data: $!\n"
++            unless defined $read;
++        die "Unexpected end of external sort data\n" unless $read;
++        $value .= $chunk;
++    }
++    return $value;
++}
+ 
++sub _refill_buffer {
++    my $self = shift;
++    my $fh = $self->{tempfile_fh};
++    my $limit = $self->{end} - $self->{pos} < 32768
++        ? $self->{end}
++        : $self->{pos} + 32768;
++    seek($fh, $self->{pos}, 0)
++        or die "PerlIO error seeking external sort data: $!\n";
++
++    my $count = 0;
++    while ($self->{pos} < $limit) {
++        my $header = _read_exact($fh, 5);
++        my ($length, $utf8) = unpack('N C', $header);
++        my $item = _read_exact($fh, $length);
++        utf8::decode($item) if $utf8;
++        push @{$self->{buffarray}}, $item;
++        $self->{pos} += 5 + $length;
++        $count++;
++    }
++    return $count;
++}
++
++package Sort::External;
++
+ use File::Temp;
+ use Fcntl qw( :DEFAULT );
+ use Carp;
+@@ -415,4 +540,3 @@
+ modified under the same terms as Perl itself.
+ 
+ =cut
+-

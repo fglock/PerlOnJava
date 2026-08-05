@@ -123,11 +123,12 @@ public class DirectoryIO {
             }
             String entry = allEntries.get(currentPosition);
             currentPosition++;
-            return new RuntimeScalar(entry);
+            return new RuntimeScalar(entry).taintFromExternalInput();
         } else {
             RuntimeList result = new RuntimeList();
             while (currentPosition >= 0 && currentPosition < allEntries.size()) {
-                result.elements.add(new RuntimeScalar(allEntries.get(currentPosition)));
+                result.elements.add(new RuntimeScalar(allEntries.get(currentPosition))
+                        .taintFromExternalInput());
                 currentPosition++;
             }
             return result;

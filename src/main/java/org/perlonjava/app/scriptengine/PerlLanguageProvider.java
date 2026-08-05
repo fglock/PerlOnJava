@@ -1,6 +1,7 @@
 package org.perlonjava.app.scriptengine;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.app.cli.ArgumentParser;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
@@ -57,6 +58,7 @@ public class PerlLanguageProvider {
 
     public static void resetAll() {
         globalInitialized = false;
+        GlobalContext.setThreadTaintMode(false);
         resetAllGlobals();
         DataSection.reset();
     }
@@ -85,6 +87,16 @@ public class PerlLanguageProvider {
     public static RuntimeList executePerlCode(CompilerOptions compilerOptions,
                                               boolean isTopLevelScript,
                                               int callerContext) throws Exception {
+
+        if (isTopLevelScript) {
+            ArgumentParser.applyPerlShebangSwitches(compilerOptions.code, compilerOptions);
+            GlobalContext.setThreadTaintMode(compilerOptions.taintMode);
+        } else if (compilerOptions.taintMode) {
+            // A nested require/do inherits its caller's runtime taint mode.
+            // It may enable taint explicitly, but default nested options must
+            // not disable a top-level -T program.
+            GlobalContext.setThreadTaintMode(true);
+        }
 
         // Save the current scope so we can restore it after execution.
         // This is critical because require/do should not leak their scope to the caller.
@@ -280,6 +292,10 @@ public class PerlLanguageProvider {
                                              List<LexerToken> tokens,
                                              CompilerOptions compilerOptions,
                                              int contextType) throws Exception {
+
+        if (compilerOptions.taintMode) {
+            GlobalContext.setThreadTaintMode(true);
+        }
 
         // Save the current scope so we can restore it after execution.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
@@ -684,6 +700,8 @@ public class PerlLanguageProvider {
      * @throws Exception if compilation fails
      */
     public static Object compilePerlCode(CompilerOptions compilerOptions) throws Exception {
+        ArgumentParser.applyPerlShebangSwitches(compilerOptions.code, compilerOptions);
+        GlobalContext.setThreadTaintMode(compilerOptions.taintMode);
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();
         globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0

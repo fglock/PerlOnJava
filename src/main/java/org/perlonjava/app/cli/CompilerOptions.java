@@ -71,6 +71,7 @@ public class CompilerOptions implements Cloneable {
     public boolean isEvalbytes = false; // Set to true for evalbytes context - treats strings as raw bytes
     public boolean isByteStringSource = false; // Set to true when parsing source that originates from a BYTE_STRING scalar (raw bytes)
     public boolean taintMode = false; // For -T
+    public boolean perlShebangProcessed = false;
     public boolean allowUnsafeOperations = false; // For -U
     public boolean runUnderDebugger = false; // For -d
     public boolean taintWarnings = false; // For -t

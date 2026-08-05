@@ -42,6 +42,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         this.type = (parent.type == RuntimeScalarType.BYTE_STRING)
                 ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
         this.value = str;
+        this.tainted = parent.isTainted();
     }
 
     /**

@@ -318,16 +318,16 @@ public class ArgumentParser {
             return;
         }
 
+        if (applyPerlShebangSwitches(fileContent, parsedArgs)) {
+            return;
+        }
+
         String[] lines = fileContent.split("\n", 2);
         if (lines.length == 0 || !lines[0].startsWith("#!")) {
             return;
         }
         String shebangLine = lines[0].substring(2).trim();
         if (shebangLine.isEmpty()) {
-            return;
-        }
-
-        if (processPerlShebangSwitches(shebangLine, parsedArgs)) {
             return;
         }
 
@@ -343,6 +343,25 @@ public class ArgumentParser {
         }
         List<String> cmd = buildShebangCommand(tokens);
         delegateToShebangInterpreter(args, cmd, index);
+    }
+
+    /** Apply Perl switches from an in-memory script's shebang without invoking an alternate interpreter. */
+    public static boolean applyPerlShebangSwitches(String fileContent, CompilerOptions parsedArgs) {
+        if (parsedArgs.perlShebangProcessed) {
+            return true;
+        }
+        if (fileContent == null) {
+            return false;
+        }
+        String[] lines = fileContent.split("\n", 2);
+        if (lines.length == 0 || !lines[0].startsWith("#!")) {
+            return false;
+        }
+        String shebangLine = lines[0].substring(2).trim();
+        boolean processed = !shebangLine.isEmpty()
+                && processPerlShebangSwitches(shebangLine, parsedArgs);
+        parsedArgs.perlShebangProcessed = processed;
+        return processed;
     }
 
     private static boolean processPerlShebangSwitches(String shebangLine, CompilerOptions parsedArgs) {
