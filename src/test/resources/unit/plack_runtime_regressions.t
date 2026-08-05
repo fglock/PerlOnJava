@@ -5,6 +5,32 @@ use File::Temp qw(tempfile tempdir);
 use File::Spec;
 use IO::Handle;
 
+{
+    package Local::CookieURI;
+    sub new { bless {}, shift }
+    sub host { 'localhost' }
+    sub port { 80 }
+    sub path { '/' }
+
+    package Local::CookieRequest;
+    sub new { bless { uri => Local::CookieURI->new }, shift }
+    sub uri { $_[0]{uri} }
+    sub header { undef }
+
+    package Local::CookieResponse;
+    sub new {
+        bless {
+            request => Local::CookieRequest->new,
+            headers => { 'Set-Cookie' => 'ID=123; path=/' },
+        }, shift;
+    }
+    sub request { $_[0]{request} }
+    sub header { $_[0]{headers}{$_[1]} }
+    sub _header { $_[0]{headers}{$_[1]} }
+}
+
+package main;
+
 my $dir = tempdir(CLEANUP => 1);
 my $path = "$dir/file.txt";
 open my $out, '>', $path or die $!;
@@ -26,12 +52,7 @@ ok($scalar_fh->can('getline'), 'scalar-backed filehandle can getline');
 ok(*{$scalar_fh}{IO}->can('getline'), 'IO slot object can getline');
 
 use HTTP::Cookies;
-use HTTP::Request;
-use HTTP::Response;
-my $request = HTTP::Request->new(GET => 'http://localhost/');
-my $response = HTTP::Response->new(200);
-$response->request($request);
-$response->header('Set-Cookie' => 'ID=123; path=/');
+my $response = Local::CookieResponse->new;
 my $jar = HTTP::Cookies->new;
 is($jar->extract_cookies($response), $response, 'extract_cookies returns the response');
 my @cookies;
