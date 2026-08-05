@@ -49,6 +49,17 @@ sub import {
     Exporter::import($pkg, @list);
 }
 
+# libc-style conversion used by older pure-Perl CPAN modules.  Return the
+# numeric prefix and the unparsed suffix, matching Perl's POSIX::strtod API.
+sub strtod {
+    my ($input) = @_;
+    my $text = defined($input) ? "$input" : '';
+    $text =~ s/^\s+//;
+    return (0, $text)
+        unless $text =~ /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(.*)$/s;
+    return (0 + $1, $2);
+}
+
 # Export tags for different groups of functions/constants
 # Native Perl's POSIX exports many constants by default
 # Only export constants that are actually implemented in this module
@@ -79,7 +90,7 @@ our @EXPORT_OK = qw(
 
     # Math functions
     abs acos asin atan atan2 ceil cos cosh exp fabs floor fmod frexp
-    ldexp log log10 modf pow sin sinh sqrt tan tanh
+    ldexp log log10 modf pow sin sinh sqrt tan tanh strtod
     HUGE_VAL
 
     # String functions

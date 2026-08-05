@@ -1,0 +1,12 @@
+---
+comment: |
+  NetAddr::IP normally builds an optional XS accelerator.  PerlOnJava cannot
+  compile XS, but the distribution ships a complete pure-Perl implementation.
+  Select that mode so pure-Perl dependents can be tested.
+match:
+  distribution: "/NetAddr-IP-"
+pl:
+  args:
+    - "-noxs"
+test:
+  commandline: "PERLONJAVA_SKIP"

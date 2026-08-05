@@ -274,7 +274,11 @@ public class ScalarUtil extends PerlModuleBase {
         }
         var scalar = new RuntimeScalar();
         scalar.type = RuntimeScalarType.DUALVAR;
-        scalar.value = new DualVar(args.get(0), args.get(1));
+        // Keep independent scalar values.  Constant::Generate passes a value
+        // that can still be an alias to the result slot; retaining that alias
+        // makes the dualvar's numeric side point back to the dualvar itself
+        // and numeric conversion recurses forever.
+        scalar.value = new DualVar(new RuntimeScalar(args.get(0)), new RuntimeScalar(args.get(1)));
         return scalar.getList();
     }
 
