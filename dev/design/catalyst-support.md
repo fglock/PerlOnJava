@@ -142,6 +142,8 @@ path.
 | Class-C3-Adopt-NEXT 0.14 | runtime | functional tests mostly pass; warning differences remain | non-blocking until proven otherwise | defer |
 | Encode-Locale 1.05 | transitive runtime | tied `%ENV` mutation tests fail | risk | verify whether Catalyst runtime path exercises mutation |
 | POSIX-strftime-Compiler 0.46 | Plack logging | timezone and `POSIX::tzset` differences | non-blocking for initial dispatch | fix before logging acceptance gate |
+| Stream-Buffered 0.03 | Catalyst and Plack runtime | 18/18 assertions pass unchanged on both backends; anonymous temporary-file size handling fixed | cleared | retain regression coverage |
+| WWW-Form-UrlEncoded 0.26 | Plack runtime | Unicode value is emitted literally instead of UTF-8 percent-encoded | blocking | reduce byte/UTF-8 URI escaping |
 | AnyDBM_File | optional/transitive | missing bundled core module makes CPAN suggest installing Perl | tooling defect | add/import core module or correct capability metadata |
 | MooseX-Getopt 0.78 | runtime/development boundary | force-installed for discovery; help and trapped-exit tests fail | classify | determine which Catalyst runtime code requires it |
 | Test-Trap 0.3.5 | test/development | force-installed for discovery; many failures | deferred | do not block runtime installation if only test-time |
@@ -155,6 +157,11 @@ Start with Milestone 0, then Milestone 1. The shared CPAN state cannot support
 a trustworthy clean-install result, while the known framework blocker is the
 inherited attributed-method case described below. Use the dependency table as
 the baseline; use commit history and the PR for chronological progress.
+
+Stream::Buffered 0.03 is now cleared: its unchanged upstream tests pass on
+both backends after restoring `-s`/`-z` behavior for unlinked temporary files.
+The full `make` gate passes. The next active blocker is Unicode escaping in
+`WWW::Form::UrlEncoded`; Catalyst runtime completion remains follow-up work.
 
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.
@@ -211,6 +218,30 @@ PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl \
 ```
 
 Both commands exit zero, and the install log contains no forced distribution.
+
+#### Milestone 2 progress update (2026-08-04)
+
+- [x] Cleared `Stream::Buffered` 0.03 without changing its upstream source.
+  `FileTestOperator` now uses the open channel for `-s` and `-z` when
+  `IO::File->new_tmpfile` has an unlinked pathname; `IOHandle` and
+  `CustomFileChannel` provide the reusable size operation.
+- [x] Added `filetest_anonymous_tmpfile.t`, validated with system Perl, and
+  passed it with both JVM and interpreter backends.
+- [x] Passed unchanged `Stream::Buffered` `t/print.t` and `t/subclass.t` on
+  both backends (18/18 assertions).
+- [x] Full `make` passes after stale test workers were removed (14 tasks,
+  1m43s).
+
+Next active blocker: `WWW::Form::UrlEncoded` 0.26 Unicode percent encoding.
+
+#### Stream::Buffered resolution
+
+`Stream::Buffered::File::size` calls Perl's `-s` filehandle operation after
+writing to an `IO::File->new_tmpfile` handle. PerlOnJava recognized only
+pathname-backed channels, while `new_tmpfile` deliberately unlinks its path;
+the result was `undef` for both `-s` and `-z`. The fix keeps the general file
+test layer responsible for the behavior and obtains the size from the open
+`FileChannel`, preserving upstream Stream::Buffered unchanged.
 
 ### Milestone 3: Minimal application boot and dispatch
 
