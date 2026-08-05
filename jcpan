@@ -7,12 +7,13 @@
 #   jcpan --jobs 4 -t Module::Name
 #
 # Note: standard cpan uses -j for config file loading, so we use --jobs
-# to avoid conflicts. All other flags are passed through to cpan.
+# to avoid conflicts. --notest is a friendly long-form alias for cpan's -T.
 #
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Parse --jobs option for parallel test jobs (consumed here, not passed to cpan)
 ARGS=()
+NO_TEST=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --jobs)
@@ -34,12 +35,24 @@ while [[ $# -gt 0 ]]; do
             fi
             shift
             ;;
+        --notest)
+            NO_TEST=1
+            shift
+            ;;
         *)
             ARGS+=("$1")
             shift
             ;;
     esac
 done
+
+if [[ "$NO_TEST" -eq 1 ]]; then
+    if [[ "${ARGS[0]:-}" == "install" ]]; then
+        ARGS=(-T -i "${ARGS[@]:1}")
+    else
+        ARGS=(-T "${ARGS[@]}")
+    fi
+fi
 
 # Find cpan script - check development path first, then installed path
 if [ -f "$SCRIPT_DIR/src/main/perl/bin/cpan" ]; then

@@ -286,6 +286,28 @@ public class FileTestOperator {
                 }
             }
             if (innerHandle instanceof CustomFileChannel cfc) {
+                if (operator.equals("-s")) {
+                    try {
+                        long size = cfc.size();
+                        getGlobalVariable("main::!").set(0);
+                        return size > 0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
+                    } catch (IOException e) {
+                        getGlobalVariable("main::!").set(5);
+                        updateLastStat(fileHandle, false, 5);
+                        return scalarUndef;
+                    }
+                }
+                if (operator.equals("-z")) {
+                    try {
+                        long size = cfc.size();
+                        getGlobalVariable("main::!").set(0);
+                        return getScalarBoolean(size == 0);
+                    } catch (IOException e) {
+                        getGlobalVariable("main::!").set(5);
+                        updateLastStat(fileHandle, false, 5);
+                        return scalarUndef;
+                    }
+                }
                 // Special handling for -T/-B on filehandles: check from current position
                 if (operator.equals("-T") || operator.equals("-B")) {
                     Path path = cfc.getFilePath();
@@ -455,6 +477,17 @@ public class FileTestOperator {
         if (path == null) {
             getGlobalVariable("main::!").set(2);  // ENOENT
             updateLastStat(fileHandle, false, 2);
+            return scalarUndef;
+        }
+
+        // Java Path normalizes a trailing separator away.  The OS-facing Perl
+        // stat calls do not: "regular-file/" fails with ENOTDIR.  Preserve that
+        // distinction for file tests instead of accidentally testing the file.
+        boolean hasTrailingSeparator = filename.endsWith("/")
+                || (java.io.File.separatorChar == '\\' && filename.endsWith("\\"));
+        if (hasTrailingSeparator && Files.isRegularFile(path)) {
+            getGlobalVariable("main::!").set(20); // ENOTDIR
+            updateLastStat(fileHandle, false, 20);
             return scalarUndef;
         }
 

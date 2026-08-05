@@ -48,4 +48,45 @@ sub scan {
     return 1;
 }
 
+sub extract_cookies {
+    my ($self, $response) = @_;
+    return unless $response;
+
+    my @set = $response->header('Set-Cookie');
+    return $response unless @set;
+
+    my $request = $response->request;
+    my $uri = $request && $request->uri;
+    my $host = $uri ? $uri->host : undef;
+    $host = 'localhost' unless defined $host && length $host;
+    $host .= '.local' unless $host =~ /\./;
+
+    for my $line (@set) {
+        next unless defined $line;
+        my @parts = split /\s*;\s*/, $line;
+        my ($key, $value) = split /=/, shift(@parts), 2;
+        next unless defined $key && length $key && defined $value;
+
+        my %attr;
+        for my $part (@parts) {
+            my ($name, $attr_value) = split /=/, $part, 2;
+            next unless defined $name;
+            $attr{lc $name} = defined $attr_value ? $attr_value : 1;
+        }
+
+        my $domain = defined $attr{domain} && length $attr{domain}
+            ? lc $attr{domain} : $host;
+        my $path = defined $attr{path} && length $attr{path}
+            ? $attr{path} : '/';
+        $self->set_cookie(
+            0, $key, $value, $path, $domain, undef,
+            exists($attr{path}) ? 1 : 0,
+            exists($attr{secure}) ? 1 : 0,
+            $attr{'max-age'}, 1,
+        );
+    }
+
+    return $response;
+}
+
 1;

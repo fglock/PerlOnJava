@@ -121,6 +121,15 @@ public class Universal extends PerlModuleBase {
                         perlClassName = "Regexp";
                         break;
                     }
+                    if (object.type == GLOBREFERENCE
+                            && (object.value instanceof RuntimeIO || object.value instanceof RuntimeGlob)) {
+                        // Open filehandles are implicitly IO objects even when
+                        // their RuntimeIO has no explicit bless id.  This also
+                        // covers *{$fh}{IO}->can(...), used by Plack's portable
+                        // filehandle detection.
+                        perlClassName = "IO::Handle";
+                        break;
+                    }
                     return new RuntimeScalar(false).getList();
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);

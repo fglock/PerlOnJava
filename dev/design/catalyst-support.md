@@ -200,6 +200,14 @@ distribution:
    Leave the PR unmerged so the user can run the isolated install and approve
    it explicitly.
 
+Stream::Buffered 0.03 is now cleared: its unchanged upstream tests pass on
+both backends after restoring `-s`/`-z` behavior for unlinked temporary files.
+`WWW::Form::UrlEncoded` is provisionally cleared by an install-time patch that
+passes its complete upstream suite, but the patch must not become the final
+solution: the shared compiler/runtime still needs correct lexical `use bytes`
+semantics for regex substitution without losing lvalue identity. The next
+downstream blocker is one multipart assertion in `HTTP::Entity::Parser`.
+
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.
 
@@ -285,6 +293,49 @@ PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl \
 ```
 
 Both commands exit zero, and the install log contains no forced distribution.
+
+#### Milestone 2 progress update (2026-08-04)
+
+- [x] Cleared `Stream::Buffered` 0.03 without changing its upstream source.
+  `FileTestOperator` now uses the open channel for `-s` and `-z` when
+  `IO::File->new_tmpfile` has an unlinked pathname; `IOHandle` and
+  `CustomFileChannel` provide the reusable size operation.
+- [x] Added `filetest_anonymous_tmpfile.t`, validated with system Perl, and
+  passed it with both JVM and interpreter backends.
+- [x] Passed unchanged `Stream::Buffered` `t/print.t` and `t/subclass.t` on
+  both backends (18/18 assertions).
+- [x] Full `make` passes after stale test workers were removed (14 tasks,
+  1m43s).
+
+Next active engineering task: replace the provisional URL-encoding patch with
+shared compiler/runtime `use bytes` substitution semantics.
+
+#### URL-encoding progress update (2026-08-05)
+
+- [x] Added a narrow `WWW-Form-UrlEncoded-0.26` CPAN patch that makes the
+  pure-Perl encoder explicitly walk UTF-8 octets; system Perl, JVM, and
+  interpreter runs pass all 199 upstream assertions.
+- [ ] Replace the compatibility patch with a compiler/runtime fix. The
+  failing idiom is `use bytes; $value =~ s///`, where the JVM backend creates a
+  byte-view copy for regex matching and loses the original scalar's lvalue
+  update. The interpreter and JVM must agree on byte-view matching and restore
+  the original scalar semantics after substitution.
+- [x] Added `src/test/resources/unit/bytes_regex_substitution_todo.t`. System
+  Perl passes both octet-wise assertions; JVM and interpreter expose the
+  expected failures as TODOs (`☺` unchanged on JVM, only the first byte
+  replaced by the interpreter).
+- [ ] Re-run `HTTP::Entity::Parser` after the URL-encoding fix. The current
+  clean-install attempt reaches 275/276 assertions and fails only in
+  `t/01_content_type/multipart.t`.
+
+#### Stream::Buffered resolution
+
+`Stream::Buffered::File::size` calls Perl's `-s` filehandle operation after
+writing to an `IO::File->new_tmpfile` handle. PerlOnJava recognized only
+pathname-backed channels, while `new_tmpfile` deliberately unlinks its path;
+the result was `undef` for both `-s` and `-z`. The fix keeps the general file
+test layer responsible for the behavior and obtains the size from the open
+`FileChannel`, preserving upstream Stream::Buffered unchanged.
 
 ### Milestone 3: Minimal application boot and dispatch
 
