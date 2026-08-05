@@ -200,6 +200,11 @@ distribution:
    Leave the PR unmerged so the user can run the isolated install and approve
    it explicitly.
 
+Stream::Buffered 0.03 is now cleared: its unchanged upstream tests pass on
+both backends after restoring `-s`/`-z` behavior for unlinked temporary files.
+The full `make` gate passes. The next active blocker is Unicode escaping in
+`WWW::Form::UrlEncoded`; Catalyst runtime completion remains follow-up work.
+
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.
 
@@ -285,6 +290,30 @@ PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl \
 ```
 
 Both commands exit zero, and the install log contains no forced distribution.
+
+#### Milestone 2 progress update (2026-08-04)
+
+- [x] Cleared `Stream::Buffered` 0.03 without changing its upstream source.
+  `FileTestOperator` now uses the open channel for `-s` and `-z` when
+  `IO::File->new_tmpfile` has an unlinked pathname; `IOHandle` and
+  `CustomFileChannel` provide the reusable size operation.
+- [x] Added `filetest_anonymous_tmpfile.t`, validated with system Perl, and
+  passed it with both JVM and interpreter backends.
+- [x] Passed unchanged `Stream::Buffered` `t/print.t` and `t/subclass.t` on
+  both backends (18/18 assertions).
+- [x] Full `make` passes after stale test workers were removed (14 tasks,
+  1m43s).
+
+Next active blocker: `WWW::Form::UrlEncoded` 0.26 Unicode percent encoding.
+
+#### Stream::Buffered resolution
+
+`Stream::Buffered::File::size` calls Perl's `-s` filehandle operation after
+writing to an `IO::File->new_tmpfile` handle. PerlOnJava recognized only
+pathname-backed channels, while `new_tmpfile` deliberately unlinks its path;
+the result was `undef` for both `-s` and `-z`. The fix keeps the general file
+test layer responsible for the behavior and obtains the size from the open
+`FileChannel`, preserving upstream Stream::Buffered unchanged.
 
 ### Milestone 3: Minimal application boot and dispatch
 

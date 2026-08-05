@@ -213,6 +213,15 @@ public interface IOHandle {
         return RuntimeIO.handleIOError("tell operation is not supported.");
     }
 
+    /**
+     * Returns the size of the underlying file, when the handle represents one.
+     * Handles without a stat-able file (for example sockets and pipes) keep the
+     * default unsupported result.
+     */
+    default RuntimeScalar size() {
+        return RuntimeIO.handleIOError("size operation is not supported.");
+    }
+
     // Socket-specific methods
     default RuntimeScalar bind(String address, int port) {
         return RuntimeIO.handleIOError("Bind operation is not supported.");

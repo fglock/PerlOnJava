@@ -2,6 +2,7 @@ package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -249,13 +250,14 @@ public class CustomFileChannel implements IOHandle {
         return filePath;
     }
 
-    /**
-     * Return the size of the open file description.  Unlike querying
-     * {@link #getFilePath()}, this keeps working after an open temporary file
-     * has been unlinked, matching Perl's {@code -s $filehandle} semantics.
-     */
-    public long size() throws IOException {
-        return fileChannel.size();
+    @Override
+    public RuntimeScalar size() {
+        try {
+            long size = fileChannel.size();
+            return size == 0 ? RuntimeScalarCache.scalarZero : new RuntimeScalar(size);
+        } catch (IOException e) {
+            return RuntimeIO.handleIOError(e.getMessage() == null ? "size failed" : e.getMessage());
+        }
     }
 
     public void setAppendMode(boolean appendMode) {

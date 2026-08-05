@@ -318,7 +318,23 @@ public class FileTestOperator {
                 }
                 Path path = cfc.getFilePath();
                 if (path != null) {
+                    // IO::File->new_tmpfile unlinks its pathname after opening;
+                    // use fstat-like channel metadata for that still-open file.
+                    if ((operator.equals("-s") || operator.equals("-z")) && !Files.exists(path)) {
+                        RuntimeScalar size = cfc.size();
+                        return operator.equals("-s")
+                                ? size
+                                : getScalarBoolean(size.getLong() == 0);
+                    }
                     return fileTest(operator, new RuntimeScalar(path.toString()));
+                }
+                // Anonymous temporary files (such as IO::File->new_tmpfile)
+                // have no pathname, but fstat-based tests still work in Perl.
+                if (operator.equals("-s") || operator.equals("-z")) {
+                    RuntimeScalar size = cfc.size();
+                    return operator.equals("-s")
+                            ? size
+                            : getScalarBoolean(size.getLong() == 0);
                 }
             }
             // Check for directory handle
