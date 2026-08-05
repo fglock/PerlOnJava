@@ -327,6 +327,18 @@ public class BytecodeCompiler implements Visitor {
         return entry != null && "our".equals(entry.decl());
     }
 
+    boolean isDynamicOurVariable(String name) {
+        SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(name);
+        if (entry == null || !"our".equals(entry.decl())) {
+            return false;
+        }
+        // BEGIN blocks expose captured lexicals through a synthetic package alias.
+        // Those are closure storage, not genuine package variables, and must keep
+        // using the captured container rather than a runtime global lookup.
+        String perlPackage = entry.perlPackage();
+        return perlPackage == null || !perlPackage.startsWith("PerlOnJava::_BEGIN_");
+    }
+
     boolean isReservedVariable(String name) {
         SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(name);
         return entry != null && "reserved".equals(entry.decl());
@@ -1717,7 +1729,8 @@ public class BytecodeCompiler implements Visitor {
         // Get the array register - check closure, lexical, then global
         int arrayReg;
         if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                && currentSubroutineClosureVars.contains(arrayVarName)) {
+                && currentSubroutineClosureVars.contains(arrayVarName)
+                && !isDynamicOurVariable(arrayVarName)) {
             arrayReg = allocateRegister();
             int nameIdx = addToStringPool(arrayVarName);
             emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
@@ -1828,14 +1841,15 @@ public class BytecodeCompiler implements Visitor {
             String arrayVarName = "@" + varName;
 
             if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                    && currentSubroutineClosureVars.contains(arrayVarName)) {
+                    && currentSubroutineClosureVars.contains(arrayVarName)
+                    && !isDynamicOurVariable(arrayVarName)) {
                 arrayReg = allocateRegister();
                 int nameIdx = addToStringPool(arrayVarName);
                 emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                 emitReg(arrayReg);
                 emit(nameIdx);
                 emit(currentSubroutineBeginId);
-            } else if (hasVariable(arrayVarName)) {
+            } else if (hasVariable(arrayVarName) && !isDynamicOurVariable(arrayVarName)) {
                 arrayReg = getVariableRegister(arrayVarName);
             } else {
                 arrayReg = allocateRegister();
@@ -1949,7 +1963,8 @@ public class BytecodeCompiler implements Visitor {
         // Get the hash register - check closure, lexical, then global
         int hashReg;
         if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                && currentSubroutineClosureVars.contains(hashVarName)) {
+                && currentSubroutineClosureVars.contains(hashVarName)
+                && !isDynamicOurVariable(hashVarName)) {
             hashReg = allocateRegister();
             int nameIdx = addToStringPool(hashVarName);
             emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
@@ -2038,14 +2053,15 @@ public class BytecodeCompiler implements Visitor {
             String hashVarName = "%" + varName;
 
             if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                    && currentSubroutineClosureVars.contains(hashVarName)) {
+                    && currentSubroutineClosureVars.contains(hashVarName)
+                    && !isDynamicOurVariable(hashVarName)) {
                 hashReg = allocateRegister();
                 int nameIdx = addToStringPool(hashVarName);
                 emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                 emitReg(hashReg);
                 emit(nameIdx);
                 emit(currentSubroutineBeginId);
-            } else if (hasVariable(hashVarName)) {
+            } else if (hasVariable(hashVarName) && !isDynamicOurVariable(hashVarName)) {
                 hashReg = getVariableRegister(hashVarName);
             } else {
                 hashReg = allocateRegister();
@@ -2177,14 +2193,15 @@ public class BytecodeCompiler implements Visitor {
             String hashVarName = "%" + varName;
 
             if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                    && currentSubroutineClosureVars.contains(hashVarName)) {
+                    && currentSubroutineClosureVars.contains(hashVarName)
+                    && !isDynamicOurVariable(hashVarName)) {
                 hashReg = allocateRegister();
                 int nameIdx = addToStringPool(hashVarName);
                 emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                 emitReg(hashReg);
                 emit(nameIdx);
                 emit(currentSubroutineBeginId);
-            } else if (hasVariable(hashVarName)) {
+            } else if (hasVariable(hashVarName) && !isDynamicOurVariable(hashVarName)) {
                 hashReg = getVariableRegister(hashVarName);
             } else {
                 hashReg = allocateRegister();
@@ -4421,7 +4438,8 @@ public class BytecodeCompiler implements Visitor {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
 
                 // Check if this is a closure variable captured from outer scope via PersistentVariable
-                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)) {
+                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)
+                        && !isDynamicOurVariable(varName)) {
                     // This is a closure variable - use RETRIEVE_BEGIN_SCALAR
                     int rd = allocateOutputRegister();
                     int nameIdx = addToStringPool(varName);
@@ -4564,7 +4582,8 @@ public class BytecodeCompiler implements Visitor {
 
                 // Check if this is a closure variable captured from outer scope via PersistentVariable
                 int arrayReg;
-                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)) {
+                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)
+                        && !isDynamicOurVariable(varName)) {
                     // This is a closure variable - use RETRIEVE_BEGIN_ARRAY
                     arrayReg = allocateRegister();
                     int nameIdx = addToStringPool(varName);
@@ -4681,7 +4700,8 @@ public class BytecodeCompiler implements Visitor {
 
                 int hashReg;
                 if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                        && currentSubroutineClosureVars.contains(varName)) {
+                        && currentSubroutineClosureVars.contains(varName)
+                        && !isDynamicOurVariable(varName)) {
                     hashReg = allocateRegister();
                     int nameIdx = addToStringPool(varName);
                     emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
@@ -5052,6 +5072,31 @@ public class BytecodeCompiler implements Visitor {
             }
         }
         return narrowed;
+    }
+
+    private Map<String, String> collectVariableDeclarations(List<String> variableNames) {
+        Map<String, String> declarations = new HashMap<>();
+        for (String variableName : variableNames) {
+            SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(variableName);
+            // The closure compiler historically treats every captured lexical as
+            // `my`. Preserve that behavior for my/state variables; only `our`
+            // needs explicit metadata because it must be looked up dynamically.
+            if (entry != null && isDynamicOurVariable(variableName)) {
+                declarations.put(variableName, "our");
+            }
+        }
+        return declarations;
+    }
+
+    private Map<String, String> collectOurVariablePackages(List<String> variableNames) {
+        Map<String, String> packages = new HashMap<>();
+        for (String variableName : variableNames) {
+            SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(variableName);
+            if (entry != null && isDynamicOurVariable(variableName) && entry.perlPackage() != null) {
+                packages.put(variableName, entry.perlPackage());
+            }
+        }
+        return packages;
     }
 
     /**
@@ -5497,7 +5542,9 @@ public class BytecodeCompiler implements Visitor {
                 this.sourceName,
                 node.getIndex(),
                 this.errorUtil,
-                packedRegistry
+                packedRegistry,
+                collectVariableDeclarations(closureVarNames),
+                collectOurVariablePackages(closureVarNames)
         );
         // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
         // but named subs are NOT eval strings - clear the flag.
@@ -5612,7 +5659,9 @@ public class BytecodeCompiler implements Visitor {
                 this.sourceName,
                 node.getIndex(),
                 this.errorUtil,
-                parentRegistry  // Pass parent variable registry for nested closure support
+                parentRegistry,  // Pass parent variable registry for nested closure support
+                collectVariableDeclarations(closureVarNames),
+                collectOurVariablePackages(closureVarNames)
         );
         // The parentRegistry constructor sets isEvalString=true (for eval STRING closures),
         // but anonymous subs are NOT eval strings - clear the flag.

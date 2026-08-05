@@ -102,10 +102,10 @@ other prerequisites were installed incrementally. Do not use the current
 Do not delete, clean, restore, or replace `~/.perlonjava` in place. It may
 contain unrelated user state.
 
-### Required tooling improvement
+### Isolated-home tooling
 
-Before the final installation gate, add a supported isolated home override,
-provisionally named `PERLONJAVA_HOME`, with these semantics:
+`PERLONJAVA_HOME` is implemented on the Catalyst support branch with these
+semantics:
 
 - default remains `~/.perlonjava`;
 - library, CPAN metadata, sources, build directories, preferences, patches,
@@ -119,16 +119,23 @@ Acceptance test:
 
 ```bash
 isolated_root=$(mktemp -d /tmp/perlonjava-catalyst.XXXXXX)
-PERLONJAVA_HOME="$isolated_root" timeout 1200 ./jcpan install Try::Tiny \
+PERLONJAVA_HOME="$isolated_root" timeout 1200 ./jcpan install Text::Glob \
   > /tmp/catalyst-isolated-cpan.log 2>&1
-PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl -MTry::Tiny -e 'print "ok\n"' \
+PERLONJAVA_HOME="$isolated_root" timeout 60 ./jperl -MText::Glob \
+  -e 'print "$Text::Glob::VERSION\n$INC{q(Text/Glob.pm)}\n"' \
   >> /tmp/catalyst-isolated-cpan.log 2>&1
 ```
 
-The implementation must include a regression test that verifies no files were
-written beneath the default user home. Temporary-directory cleanup should be
-left to the test harness or performed only on the exact validated temporary
-path.
+`Try::Tiny` is not a valid isolation probe because version 0.32 is bundled in
+the JAR; CPAN reports it up to date without installing into the selected home.
+`Text::Glob` is deliberately used because it is a small, pure-Perl,
+non-bundled distribution whose `%INC` origin proves the install location.
+
+`PerlOnJavaHomeIntegrationTest` runs the native launcher selected for the host
+OS, loads `Config`, `CPAN::Config`, and `CPAN::HandleConfig`, and verifies that
+runtime, core-probe, preferences, patches, and install paths remain under a
+temporary override while the default user home stays untouched. The same test
+therefore exercises `jperl` on Unix and `jperl.bat` on Windows CI.
 
 ## Dependency Status
 
@@ -136,27 +143,62 @@ path.
 |---|---|---|---|---|
 | HTTP-Body 1.23 | runtime | 13/13 files, 250/250 assertions pass; installs normally | cleared | retain regression coverage |
 | Moose 2.4000 | runtime | bundled; broad upstream/DBIx::Class coverage already exists | monitor | investigate only Catalyst-relevant failures |
-| MooseX-MethodAttributes 0.32 | runtime | 20/22 files pass; Catalyst-specific inherited modifier failure | blocking | reduce and fix at Moose/MOP/runtime layer |
-| Catalyst-Runtime 5.90132 | runtime | downloaded, not successfully installed | blocking | resume after method attributes and isolation |
-| Plack 1.0054 | runtime | dependency installation incomplete | blocking later | classify runtime versus test-only prerequisites |
-| Class-C3-Adopt-NEXT 0.14 | runtime | functional tests mostly pass; warning differences remain | non-blocking until proven otherwise | defer |
-| Encode-Locale 1.05 | transitive runtime | tied `%ENV` mutation tests fail | risk | verify whether Catalyst runtime path exercises mutation |
-| POSIX-strftime-Compiler 0.46 | Plack logging | timezone and `POSIX::tzset` differences | non-blocking for initial dispatch | fix before logging acceptance gate |
-| Stream-Buffered 0.03 | Catalyst and Plack runtime | 18/18 assertions pass unchanged on both backends; anonymous temporary-file size handling fixed | cleared | retain regression coverage |
-| WWW-Form-UrlEncoded 0.26 | Plack runtime | Unicode value is emitted literally instead of UTF-8 percent-encoded | blocking | reduce byte/UTF-8 URI escaping |
+| MooseX-MethodAttributes 0.32 | runtime | 22/22 files, 144/144 tests pass unchanged | cleared | retain package-generation regression coverage |
+| Catalyst-Runtime 5.90132 | runtime | builds 56 files, but cannot install because required dependencies fail; aggregate suite reached the one-hour guard | blocking | clear direct runtime prerequisites before rerunning the suite |
+| Plack 1.0054 | runtime | builds 71 files; install is blocked by six required distributions and its suite consequently cannot load request modules | blocking | clear `Stream::Buffered` and URL encoding first, then rerun Plack |
+| Socket `NI_NAMEREQD` | core API | constant/export added; system Perl, JVM, interpreter, and full `make` pass; `Catalyst::Request` now advances to `Stream::Buffered` | cleared | retain regression coverage |
+| Stream-Buffered 0.03 | Catalyst and Plack runtime | `t/print.t` and `t/subclass.t` lose printed values (4/18 assertions fail) | blocking | reduce tied/filehandle print behavior |
+| WWW-Form-UrlEncoded 0.26 | Plack runtime | Unicode value is emitted literally instead of UTF-8 percent-encoded (2/199 assertions fail) | blocking | reduce byte/UTF-8 URI escaping |
+| HTTP-Entity-Parser 0.25 | Plack runtime | cannot load because `Stream::Buffered` and `WWW::Form::UrlEncoded` did not install | downstream blocking | rerun after its two prerequisites clear |
+| Filesys-Notify-Simple 0.14 | Plack runtime, reloader use | move/recreate tests emit duplicate plans and no assertions | classify | determine whether the non-forking runtime path works; reloader support is deferred |
+| Test-TCP 2.22 | Plack runtime metadata | process/fork-oriented suite fails broadly and distribution does not install | classify | separate runtime helpers usable without `fork` from unsupported tests |
+| Class-C3-Adopt-NEXT 0.14 | Catalyst runtime | 24/26 assertions pass; warning text/count differences prevent installation | blocking | reduce warning-category and formatting differences |
+| Encode-Locale 1.05 | HTTP-Message runtime | tied `%ENV` byte-key/value mutation fails 3/28 assertions and prevents installation | blocking | reduce byte-string hash key/value behavior |
+| POSIX-strftime-Compiler 0.46 | Plack logging runtime | timezone expectation and missing `POSIX::tzset` prevent installation | blocking | implement `tzset` and normalize timezone behavior |
 | AnyDBM_File | optional/transitive | missing bundled core module makes CPAN suggest installing Perl | tooling defect | add/import core module or correct capability metadata |
-| MooseX-Getopt 0.78 | runtime/development boundary | force-installed for discovery; help and trapped-exit tests fail | classify | determine which Catalyst runtime code requires it |
-| Test-Trap 0.3.5 | test/development | force-installed for discovery; many failures | deferred | do not block runtime installation if only test-time |
+| MooseX-Getopt 0.78 | Catalyst runtime | functional tests mostly pass, but missing failed `Test::Trap` prevents a clean install | blocking/tooling | preserve runtime installability without claiming fork/exit test support |
+| CGI-Struct 1.21 | Catalyst runtime | tests shell out through `env perl5` and fail with permission denied | blocking/tooling | route subprocess Perl selection through the PerlOnJava executable |
+| Text-SimpleTable 2.07 | Catalyst runtime | 11/12 assertions pass; one backend-selection assertion prevents installation | blocking | reduce optional visual-width selection |
+| Test-Trap 0.3.5 | test/development | label/exit/fork tests fail; blocks MooseX-Getopt's test prerequisite | deferred capability, install blocker | fix prerequisite-phase handling or narrowly classify unsupported tests |
 
 When a new dependency appears, add it here only if it is blocking, forced,
 incorrectly classified, or exposes a reusable PerlOnJava defect.
 
 ## Current Handoff State
 
-Start with Milestone 0, then Milestone 1. The shared CPAN state cannot support
-a trustworthy clean-install result, while the known framework blocker is the
-inherited attributed-method case described below. Use the dependency table as
-the baseline; use commit history and the PR for chronological progress.
+Milestones 0 and 1 completed on 2026-08-04. Milestone 2 is active. A clean
+isolated install under `/tmp/perlonjava-catalyst-runtime.T2Kb69` enumerated the
+full runtime graph, built Catalyst-Runtime 5.90132, and reached its aggregate
+suite without force before the one-hour guard expired. The run proved that
+Plack's six failed prerequisites and the additional Catalyst prerequisites in
+the dependency table are real clean-install blockers. The direct Catalyst
+compile blocker `Socket::NI_NAMEREQD` is fixed: its standard-Perl-validated
+test passes on both PerlOnJava backends, `make` passes, and loading
+`Catalyst::Request` now proceeds to the next missing runtime dependency,
+`Stream::Buffered`. Next reduce `Stream::Buffered`, then the Unicode escaping
+failure in `WWW::Form::UrlEncoded`, before rerunning Plack and Catalyst.
+
+## Immediate Next Steps
+
+Execute these in order; do not skip ahead by force-installing a failed
+distribution:
+
+1. Reduce `Stream-Buffered-0.03` failures in `t/print.t` and `t/subclass.t`.
+   Validate the reduction with system Perl, add shared-runtime regression
+   coverage, and verify both PerlOnJava backends.
+2. Reduce the Unicode percent-encoding failure in
+   `WWW-Form-UrlEncoded-0.26` (`foo=%E5&bar=☺` versus
+   `foo=%E5&bar=%E2%98%BA`) and rerun its complete upstream suite unchanged.
+3. In a new isolated `PERLONJAVA_HOME`, install those two distributions, then
+   rerun `HTTP-Entity-Parser-0.25` and the complete `Plack-1.0054` install.
+4. Classify the remaining Plack/Catalyst blockers in the dependency table.
+   For fork, process, watcher, or reloader tests, prove that the required
+   single-process runtime path works before adding any narrow test policy.
+5. Rerun a fresh, unforced `jcpan install Catalyst::Runtime`, followed by the
+   `-MCatalyst` load gate. Record exact versions and results in this document.
+6. Run `make`, push the unified PR, and wait for Ubuntu and Windows CI to pass.
+   Leave the PR unmerged so the user can run the isolated install and approve
+   it explicitly.
 
 Stream::Buffered 0.03 is now cleared: its unchanged upstream tests pass on
 both backends after restoring `-s`/`-z` behavior for unlinked temporary files.
@@ -168,7 +210,7 @@ milestone and record its acceptance result, without adding a work diary.
 
 ## Milestone Plan
 
-### Milestone 0: Isolated CPAN state
+### Milestone 0: Isolated CPAN state (completed 2026-08-04)
 
 Deliverables:
 
@@ -182,7 +224,22 @@ Exit criteria:
 - A known-small CPAN distribution installs and loads from an isolated root.
 - The default `~/.perlonjava` remains untouched by the test.
 
-### Milestone 1: Catalyst method attributes
+Completion:
+
+- Runtime `@INC`, `Config`, CPAN state and `MyConfig` discovery, MakeMaker
+  install paths, core probes, scripts, and manpages derive from
+  `PERLONJAVA_HOME`; the unset default remains `~/.perlonjava`.
+- `PerlOnJavaHomeIntegrationTest` selects `jperl` or `jperl.bat` for the host
+  OS and proves the temporary override does not write to the default home.
+- Files: `GlobalContext.java`, `Config.pm`, `CPAN/Config.pm`,
+  `CPAN/HandleConfig.pm`, both MakeMaker implementations, launcher integration
+  tests, and the CPAN usage guide.
+- Acceptance: `Text-Glob-0.11`, 2/2 files and 74/74 tests, installed and loaded
+  from a fresh `/tmp/perlonjava-catalyst.*` root without force.
+- Next step: Milestone 1's MooseX::MethodAttributes Catalyst reduction. No
+  isolated-home blocker remains.
+
+### Milestone 1: Catalyst method attributes (completed 2026-08-04)
 
 Deliverables:
 
@@ -197,6 +254,21 @@ Exit criteria:
   `t/catalyst_role.t` pass unchanged.
 - The complete upstream MooseX-MethodAttributes suite has no regressions.
 - Relevant local tests pass on both PerlOnJava backends.
+
+Completion:
+
+- Reduction showed the earliest failure was a local attributed method with a
+  `before` modifier; inherited `after` lookup failed later for the same reason.
+- PerlOnJava did not increment `mro::get_pkg_gen` for named sub definitions or
+  redefinitions. Class::MOP therefore reused an empty local method map, and
+  `namespace::autoclean` deleted real methods as if they were imports.
+- `SubroutineParser` now increments the defining package's generation whenever
+  it installs or replaces a named sub.
+- `mro_pkg_gen_sub_definition.t` was validated unchanged with system Perl and
+  passes with both PerlOnJava backends.
+- Acceptance: `t/catalyst.t` 13/13, `t/catalyst_role.t` 21/21, full upstream
+  suite 22/22 files and 144/144 tests, and the full `make` gate all pass.
+- Next step: Milestone 2's clean isolated Catalyst-Runtime installation.
 
 ### Milestone 2: Clean Catalyst runtime installation
 
@@ -301,7 +373,7 @@ Exit criteria:
 - All items in Definition of Done are satisfied.
 - The PR contains exact test commands and results.
 
-## Current Blocker: MooseX-MethodAttributes
+## Resolved Blocker: MooseX-MethodAttributes
 
 ### Reproduction source
 
@@ -330,20 +402,26 @@ timeout 60 /path/to/PerlOnJava4/jperl -Ilib -It/lib t/catalyst_role.t \
   > /tmp/moosex-methodattributes-role.log 2>&1
 ```
 
-### Observed behavior
+### Resolution
 
-- `t/catalyst.t` aborts while compiling/loading the Catalyst-like subclass:
+- Before the fix, `t/catalyst.t` aborted while loading the first Catalyst-like
+  Moose class with:
 
   ```text
   Moose::Exception::MethodNameNotFoundInInheritanceHierarchy=HASH(...)
   Compilation failed in require
   ```
 
-- The failure occurs around an `after get_attribute => sub { ... }` modifier
-  wrapping an inherited method carrying a custom `:Local` attribute.
-- `t/catalyst_role.t` completes but reports one method-list count mismatch.
-- Ordinary inherited Moose modifiers pass in a smaller probe. The reduction
-  must preserve MooseX::MethodAttributes metaroles and attributed methods.
+- The first failing operation was actually `before get_foo => sub { ... }` on
+  a local attributed method. At scope end, Class::MOP saw a stale package
+  generation and returned only its pre-sub-definition method map;
+  `namespace::autoclean` then removed `get_foo`, `get_attribute`, and `other`.
+- The same stale map caused the later inherited `after get_attribute` lookup
+  failure and the role test's local-method count mismatch.
+- Incrementing `mro::get_pkg_gen` in `SubroutineParser` at each named sub
+  definition or redefinition restores ordinary Perl cache semantics without
+  any Catalyst- or Moose-specific branch.
+- The unchanged upstream suite now passes all 22 files and 144 tests.
 
 ### Relevant upstream files
 
@@ -369,25 +447,9 @@ src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java
 src/main/java/org/perlonjava/backend/bytecode/OpcodeHandlerExtended.java
 ```
 
-### Investigation order
-
-1. Provision a standard-Perl Catalyst/Moose environment; the workstation's
-   current system Perl does not have Moose installed.
-2. Reduce the upstream package hierarchy while retaining:
-   - an inherited attributed method;
-   - `MooseX::MethodAttributes` inheritable metaroles;
-   - an `after` modifier in the subclass.
-3. Compare the class precedence list, `@ISA`, local method map, and
-   `find_next_method_by_name` immediately before the failing modifier.
-4. Determine whether the parent method is absent, stale in a method/MRO cache,
-   or represented by the wrong metaclass.
-5. Test both JVM and interpreter backends.
-6. Add the reduced test under `src/test/resources/unit/` only after standard
-   Perl validates it.
-7. Run the full MooseX-MethodAttributes suite and `make`.
-
-Do not add Catalyst names to generic cache invalidation or method lookup code.
-The fix must be driven by ordinary Perl/Moose semantics.
+The fix deliberately contains no Catalyst- or Moose-specific cache or lookup
+branch. The local regression uses only core `mro` behavior so system Perl can
+validate the expected semantics without a separate Moose installation.
 
 ## Standard Command Set
 

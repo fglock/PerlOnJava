@@ -59,7 +59,7 @@ sub LoadFile {
         $IN = $filename;
     }
     else {
-        open $IN, '<', $filename
+        open $IN, '<:encoding(UTF-8)', $filename
             or die "Can't open '$filename' for input:\n$!";
     }
     my $yaml = do { local $/; scalar <$IN> };

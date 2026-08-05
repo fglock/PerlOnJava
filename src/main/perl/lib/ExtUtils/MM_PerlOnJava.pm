@@ -35,8 +35,11 @@ sub init_main {
 
 # Installation base directory
 sub _perlonjava_lib {
+    my $perlonjava_home = defined($ENV{PERLONJAVA_HOME}) && length($ENV{PERLONJAVA_HOME})
+        ? $ENV{PERLONJAVA_HOME}
+        : File::Spec->catdir($ENV{HOME} || $ENV{USERPROFILE} || '.', '.perlonjava');
     return $ENV{PERLONJAVA_LIB} 
-        || File::Spec->catdir($ENV{HOME} || '.', '.perlonjava', 'lib');
+        || File::Spec->catdir($perlonjava_home, 'lib');
 }
 
 # Override: We don't support XS

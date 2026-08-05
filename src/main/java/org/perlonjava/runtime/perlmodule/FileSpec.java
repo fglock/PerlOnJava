@@ -34,6 +34,10 @@ public class FileSpec extends PerlModuleBase {
         super("File::Spec", false);
     }
 
+    private FileSpec(String packageName) {
+        super(packageName, false);
+    }
+
     /**
      * Static initializer to set up the File::Spec module.
      * This method initializes the exporter and defines the symbols that can be exported.
@@ -45,25 +49,29 @@ public class FileSpec extends PerlModuleBase {
         fileSpec.defineExport("EXPORT_OK", "canonpath", "catdir", "catfile", "curdir", "devnull", "rootdir", "tmpdir",
                 "updir", "no_upwards", "case_tolerant", "file_name_is_absolute", "path", "join", "splitpath", "splitdir",
                 "catpath", "abs2rel", "rel2abs");
+        // Upstream File::Spec inherits its implementation from the selected
+        // platform subclass. Install the Java-backed Unix defaults there so a
+        // localized @File::Spec::ISA can select Win32/Mac methods normally.
+        FileSpec implementation = new FileSpec("File::Spec::Unix");
         try {
-            fileSpec.registerMethod("canonpath", "$");
-            fileSpec.registerMethod("catdir", "@");
-            fileSpec.registerMethod("catfile", "@");
-            fileSpec.registerMethod("curdir", "");
-            fileSpec.registerMethod("devnull", "");
-            fileSpec.registerMethod("rootdir", "");
-            fileSpec.registerMethod("tmpdir", "");
-            fileSpec.registerMethod("updir", "");
-            fileSpec.registerMethod("no_upwards", "@");
-            fileSpec.registerMethod("case_tolerant", "");
-            fileSpec.registerMethod("file_name_is_absolute", "$");
-            fileSpec.registerMethod("path", "");
-            fileSpec.registerMethod("join", "@");
-            fileSpec.registerMethod("splitpath", "$;$");
-            fileSpec.registerMethod("splitdir", "$");
-            fileSpec.registerMethod("catpath", "$$$");
-            fileSpec.registerMethod("abs2rel", "$;$");
-            fileSpec.registerMethod("rel2abs", "$;$");
+            implementation.registerMethod("canonpath", "$");
+            implementation.registerMethod("catdir", "@");
+            implementation.registerMethod("catfile", "@");
+            implementation.registerMethod("curdir", "");
+            implementation.registerMethod("devnull", "");
+            implementation.registerMethod("rootdir", "");
+            implementation.registerMethod("tmpdir", "");
+            implementation.registerMethod("updir", "");
+            implementation.registerMethod("no_upwards", "@");
+            implementation.registerMethod("case_tolerant", "");
+            implementation.registerMethod("file_name_is_absolute", "$");
+            implementation.registerMethod("path", "");
+            implementation.registerMethod("join", "@");
+            implementation.registerMethod("splitpath", "$;$");
+            implementation.registerMethod("splitdir", "$");
+            implementation.registerMethod("catpath", "$$$");
+            implementation.registerMethod("abs2rel", "$;$");
+            implementation.registerMethod("rel2abs", "$;$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing File::Spec method: " + e.getMessage());
         }
