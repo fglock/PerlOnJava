@@ -228,14 +228,20 @@ public class FileSpec extends PerlModuleBase {
         // Build directory portion using catdir
         RuntimeArray dirArgs = new RuntimeArray();
         for (int i = 0; i < args.size() - 1; i++) {
-            dirArgs.push(args.get(i));
+            // catdir only consumes the string value.  Do not put the caller's
+            // scalar into this short-lived container: push() acquires a tracked
+            // reference, and Java temporaries are not guaranteed to receive
+            // Perl scope cleanup.  Retaining an overloaded File::Temp::Dir here
+            // postpones its deterministic DESTROY (and upload cleanup) until
+            // JVM shutdown.
+            dirArgs.push(new RuntimeScalar(args.get(i).toString()));
         }
         String dir = catdir(dirArgs, ctx).elements.get(0).toString();
         
         // Canonpath the file part
         RuntimeArray fileCanonArgs = new RuntimeArray();
         fileCanonArgs.push(new RuntimeScalar("dummy"));
-        fileCanonArgs.push(file);
+        fileCanonArgs.push(new RuntimeScalar(file.toString()));
         String filePart = canonpath(fileCanonArgs, ctx).elements.get(0).toString();
         
         // Combine: if dir is empty, just return the file

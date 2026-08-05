@@ -563,7 +563,7 @@ sub _root_pm_install_path {
     while (my $line = <$fh>) {
         if ($line =~ /^\s*package\s+([A-Za-z_]\w*(?:::\w+)*)\s*[,;]/) {
             my $package = $1;
-            return $fallback unless index($package, "$name::") == 0 || $package eq $name;
+            return $fallback unless index($package, "${name}::") == 0 || $package eq $name;
             (my $path = $package) =~ s{::}{/}g;
             return "$path.pm";
         }
@@ -1064,6 +1064,7 @@ MAKEFILE
     if (defined &MY::postamble) {
         my $postamble = MY::postamble($mm);
         if ($postamble) {
+            $postamble = _normalize_postamble_rule_styles($postamble);
             print $fh "\n# Postamble from MY::postamble\n";
             print $fh $postamble;
             print $fh "\n";
@@ -1073,6 +1074,25 @@ MAKEFILE
     }
 
     close $fh;
+}
+
+sub _normalize_postamble_rule_styles {
+    my ($postamble) = @_;
+
+    # The generated Makefile deliberately uses double-colon rules for targets
+    # that extension postambles commonly augment.  Older distributions often
+    # augment those same targets with a single-colon rule; GNU make rejects a
+    # target that mixes the two forms.  Match MakeMaker's generated style while
+    # leaving distribution-specific targets (README, generated sources, etc.)
+    # untouched.
+    for my $target (qw(
+        all pm_to_blib pure_all blib_scripts pl_files install_scripts config
+        test install clean realclean distclean ppd
+    )) {
+        $postamble =~ s/^(\s*\Q$target\E\s*):([^:\n]*)$/$1::$2/mg;
+    }
+
+    return $postamble;
 }
 
 sub _make_makefile_comments {

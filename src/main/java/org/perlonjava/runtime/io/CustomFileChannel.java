@@ -249,6 +249,15 @@ public class CustomFileChannel implements IOHandle {
         return filePath;
     }
 
+    /**
+     * Return the size of the open file description.  Unlike querying
+     * {@link #getFilePath()}, this keeps working after an open temporary file
+     * has been unlinked, matching Perl's {@code -s $filehandle} semantics.
+     */
+    public long size() throws IOException {
+        return fileChannel.size();
+    }
+
     public void setAppendMode(boolean appendMode) {
         this.appendMode = appendMode;
     }

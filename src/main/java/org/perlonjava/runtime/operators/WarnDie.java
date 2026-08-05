@@ -574,7 +574,11 @@ public class WarnDie {
             boolean pushedEvalFrame = RuntimeCode.evalDepth > 0
                     && InterpreterState.pushEvalFrameForCurrentInterpreter();
             try {
-                RuntimeList res = RuntimeCode.apply(sigHandler, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
+                // Perl passes the actual value stored in $@ to __DIE__.  For a
+                // string exception that includes the source-location suffix;
+                // passing the raw argument instead makes `die @_` rethrows add
+                // the handler's location and loses the original stack site.
+                RuntimeList res = RuntimeCode.apply(sigHandler, errVariable.getArrayOfAlias(), RuntimeContextType.SCALAR);
 
                 // Handle TAILCALL with trampoline loop (for goto &sub in __DIE__ handlers)
                 while (res.isNonLocalGoto()) {
