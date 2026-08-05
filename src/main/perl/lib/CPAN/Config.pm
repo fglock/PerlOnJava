@@ -124,6 +124,7 @@ sub _bootstrap_prefs {
         'XML-FromPerl.yml'           => 'PerlOnJava/CpanDistroprefs/XML-FromPerl.yml',
         'Term-ANSIColor-Markup.yml'   => 'PerlOnJava/CpanDistroprefs/Term-ANSIColor-Markup.yml',
         'LRU-Cache.yml'               => 'PerlOnJava/CpanDistroprefs/LRU-Cache.yml',
+        'WWW-Form-UrlEncoded.yml'     => 'PerlOnJava/CpanDistroprefs/WWW-Form-UrlEncoded.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -299,6 +300,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Term-ANSIColor-Markup-0.06/PortableAccessors.patch' ],
         [ 'LRU-Cache/PurePerl.patch',
           'PerlOnJava/CpanPatches/LRU-Cache-1.00/PurePerl.patch' ],
+        [ 'WWW-Form-UrlEncoded/PP.pm.patch',
+          'PerlOnJava/CpanPatches/WWW-Form-UrlEncoded-0.26/PP.pm.patch' ],
     );
 
     # Like prefs, extracted patch files persist after an upgrade. These paths

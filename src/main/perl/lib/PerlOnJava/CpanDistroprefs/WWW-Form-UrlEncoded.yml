@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for WWW::Form::UrlEncoded.
+
+  The upstream pure-Perl encoder relies on `use bytes` to expose the UTF-8
+  octets of a Unicode scalar to a substitution. PerlOnJava stores scalar text
+  in Java strings, so the equivalent byte conversion is applied explicitly
+  while preserving the upstream module's URL-encoding behavior.
+match:
+  distribution: "^KAZEBURO/WWW-Form-UrlEncoded-"
+patches:
+  - "WWW-Form-UrlEncoded/PP.pm.patch"

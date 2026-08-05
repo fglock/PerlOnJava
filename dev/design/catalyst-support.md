@@ -202,8 +202,11 @@ distribution:
 
 Stream::Buffered 0.03 is now cleared: its unchanged upstream tests pass on
 both backends after restoring `-s`/`-z` behavior for unlinked temporary files.
-The full `make` gate passes. The next active blocker is Unicode escaping in
-`WWW::Form::UrlEncoded`; Catalyst runtime completion remains follow-up work.
+`WWW::Form::UrlEncoded` is provisionally cleared by an install-time patch that
+passes its complete upstream suite, but the patch must not become the final
+solution: the shared compiler/runtime still needs correct lexical `use bytes`
+semantics for regex substitution without losing lvalue identity. The next
+downstream blocker is one multipart assertion in `HTTP::Entity::Parser`.
 
 When a milestone is completed, update this paragraph to name the next active
 milestone and record its acceptance result, without adding a work diary.
@@ -304,7 +307,26 @@ Both commands exit zero, and the install log contains no forced distribution.
 - [x] Full `make` passes after stale test workers were removed (14 tasks,
   1m43s).
 
-Next active blocker: `WWW::Form::UrlEncoded` 0.26 Unicode percent encoding.
+Next active engineering task: replace the provisional URL-encoding patch with
+shared compiler/runtime `use bytes` substitution semantics.
+
+#### URL-encoding progress update (2026-08-05)
+
+- [x] Added a narrow `WWW-Form-UrlEncoded-0.26` CPAN patch that makes the
+  pure-Perl encoder explicitly walk UTF-8 octets; system Perl, JVM, and
+  interpreter runs pass all 199 upstream assertions.
+- [ ] Replace the compatibility patch with a compiler/runtime fix. The
+  failing idiom is `use bytes; $value =~ s///`, where the JVM backend creates a
+  byte-view copy for regex matching and loses the original scalar's lvalue
+  update. The interpreter and JVM must agree on byte-view matching and restore
+  the original scalar semantics after substitution.
+- [x] Added `src/test/resources/unit/bytes_regex_substitution_todo.t`. System
+  Perl passes both octet-wise assertions; JVM and interpreter expose the
+  expected failures as TODOs (`☺` unchanged on JVM, only the first byte
+  replaced by the interpreter).
+- [ ] Re-run `HTTP::Entity::Parser` after the URL-encoding fix. The current
+  clean-install attempt reaches 275/276 assertions and fails only in
+  `t/01_content_type/multipart.t`.
 
 #### Stream::Buffered resolution
 
