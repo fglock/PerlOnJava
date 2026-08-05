@@ -68,11 +68,12 @@ my $user_home = getProperty('user.home') || '';
 my $user_dir = getProperty('user.dir') || '';
 my $java_home = getProperty('java.home') || '';
 my $user_name = getProperty('user.name') || 'unknown';
-my $perlonjava_home = $ENV{PERLONJAVA_HOME};
-$perlonjava_home = $user_home
+my $perlonjava_override = getenv('PERLONJAVA_HOME');
+my $perlonjava_home = defined($perlonjava_override) && length($perlonjava_override)
+    ? $perlonjava_override
+    : ($user_home
     ? _catdir($file_separator, $user_home, '.perlonjava')
-    : '.perlonjava'
-    unless defined($perlonjava_home) && length($perlonjava_home);
+    : '.perlonjava');
 my $core_privlib = _catdir($file_separator, $perlonjava_home, 'core', 'lib', 'perl5', '5.44.0');
 my $core_archlib = _catdir($file_separator, $core_privlib, "java-$java_version-$os_arch");
 _ensure_dir(_catdir($file_separator, $core_archlib, 'CORE'));
@@ -167,7 +168,6 @@ my $startperl = $is_windows
 
     # PerlOnJava specific
     perlonjava => '5.44.0',
-    perlonjava_home => $perlonjava_home,
     java_version => $java_version,
     java_vendor => $java_vendor,
     java_home => $java_home,

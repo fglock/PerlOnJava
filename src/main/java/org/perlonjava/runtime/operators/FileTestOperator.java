@@ -297,6 +297,17 @@ public class FileTestOperator {
                         return scalarUndef;
                     }
                 }
+                if (operator.equals("-z")) {
+                    try {
+                        long size = cfc.size();
+                        getGlobalVariable("main::!").set(0);
+                        return getScalarBoolean(size == 0);
+                    } catch (IOException e) {
+                        getGlobalVariable("main::!").set(5);
+                        updateLastStat(fileHandle, false, 5);
+                        return scalarUndef;
+                    }
+                }
                 // Special handling for -T/-B on filehandles: check from current position
                 if (operator.equals("-T") || operator.equals("-B")) {
                     Path path = cfc.getFilePath();
@@ -318,23 +329,7 @@ public class FileTestOperator {
                 }
                 Path path = cfc.getFilePath();
                 if (path != null) {
-                    // IO::File->new_tmpfile unlinks its pathname after opening;
-                    // use fstat-like channel metadata for that still-open file.
-                    if ((operator.equals("-s") || operator.equals("-z")) && !Files.exists(path)) {
-                        RuntimeScalar size = cfc.size();
-                        return operator.equals("-s")
-                                ? size
-                                : getScalarBoolean(size.getLong() == 0);
-                    }
                     return fileTest(operator, new RuntimeScalar(path.toString()));
-                }
-                // Anonymous temporary files (such as IO::File->new_tmpfile)
-                // have no pathname, but fstat-based tests still work in Perl.
-                if (operator.equals("-s") || operator.equals("-z")) {
-                    RuntimeScalar size = cfc.size();
-                    return operator.equals("-s")
-                            ? size
-                            : getScalarBoolean(size.getLong() == 0);
                 }
             }
             // Check for directory handle
