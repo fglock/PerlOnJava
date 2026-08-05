@@ -5,6 +5,7 @@ use Test::More;
 
 my $fh = IO::File->new_tmpfile;
 ok($fh, 'created an anonymous temporary file');
+binmode $fh;
 ok(-z $fh, 'new temporary file is empty');
 is(-s $fh, 0, 'empty temporary file has size zero');
 
