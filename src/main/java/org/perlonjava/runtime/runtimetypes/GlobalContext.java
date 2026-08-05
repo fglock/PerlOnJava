@@ -203,7 +203,7 @@ public class GlobalContext {
            @INC Search order mirrors Perl 5's site_perl > core pattern:
             - "-I" argument              (highest priority, user override)
             - PERL5LIB env               (user environment override)
-            - $PERLONJAVA_HOME/lib       (user-installed CPAN modules, like site_perl)
+            - ~/.perlonjava/lib          (user-installed CPAN modules, like site_perl)
             - JAR_PERLLIB                (bundled modules, like core lib — lowest priority)
            This allows CPAN-installed modules to override bundled ones.
            See also: https://stackoverflow.com/questions/2526804/how-is-perls-inc-constructed
@@ -218,10 +218,15 @@ public class GlobalContext {
             }
         }
         // Keep the user installation path in @INC even before it exists. A
-        // clean jcpan run creates $PERLONJAVA_HOME/lib in a child make process;
+        // clean jcpan run creates the selected PerlOnJava home/lib in a child
+        // make process;
         // the long-lived parent must be able to discover those newly-installed
         // prerequisites without restarting.
-        addUserLibraryPath(inc, resolvePerlOnJavaHome(System.getenv(), System.getProperty("user.home")));
+        String perlonjavaHome = env.getOrDefault("PERLONJAVA_HOME", new RuntimeScalar("")).toString();
+        if (perlonjavaHome.isEmpty()) {
+            perlonjavaHome = java.nio.file.Path.of(System.getProperty("user.home"), ".perlonjava").toString();
+        }
+        addPerlOnJavaLibraryPath(inc, perlonjavaHome);
         inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib (lowest priority)
 
         // Honor PERL_USE_UNSAFE_INC=1 (required by CPAN.pm / Module::Install-based
@@ -305,22 +310,19 @@ public class GlobalContext {
         InheritanceResolver.invalidateCache();
     }
 
-    static java.nio.file.Path resolvePerlOnJavaHome(Map<String, String> env, String userHome) {
-        String override = env.get("PERLONJAVA_HOME");
-        if (override != null && !override.isBlank()) {
-            return java.nio.file.Path.of(override);
-        }
+    static void addUserLibraryPath(List<RuntimeScalar> inc, String userHome) {
         if (userHome == null || userHome.isEmpty()) {
-            return java.nio.file.Path.of(".perlonjava");
-        }
-        return java.nio.file.Path.of(userHome, ".perlonjava");
-    }
-
-    static void addUserLibraryPath(List<RuntimeScalar> inc, java.nio.file.Path perlonjavaHome) {
-        if (perlonjavaHome == null) {
             return;
         }
-        String userLib = perlonjavaHome.resolve("lib").toString();
+        addPerlOnJavaLibraryPath(inc,
+                java.nio.file.Path.of(userHome, ".perlonjava").toString());
+    }
+
+    static void addPerlOnJavaLibraryPath(List<RuntimeScalar> inc, String perlonjavaHome) {
+        if (perlonjavaHome == null || perlonjavaHome.isEmpty()) {
+            return;
+        }
+        String userLib = java.nio.file.Path.of(perlonjavaHome, "lib").toString();
         inc.add(new RuntimeScalar(userLib));
     }
 

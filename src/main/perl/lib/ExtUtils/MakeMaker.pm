@@ -59,12 +59,10 @@ sub _default_install_base {
         my $jar_dir = dirname($ENV{PERLONJAVA_JAR});
         return File::Spec->catdir($jar_dir, 'lib');
     }
-    # Use $PERLONJAVA_HOME/lib (or ~/.perlonjava/lib) as the user library path.
-    my $home = $ENV{HOME} || $ENV{USERPROFILE} || '.';
-    my $perlonjava_home = defined($ENV{PERLONJAVA_HOME}) && length($ENV{PERLONJAVA_HOME})
-        ? $ENV{PERLONJAVA_HOME}
-        : File::Spec->catdir($home, '.perlonjava');
-    return File::Spec->catdir($perlonjava_home, 'lib');
+    # Use ~/.perlonjava/lib as default user library path
+    my $home = $ENV{PERLONJAVA_HOME}
+        || File::Spec->catdir($ENV{HOME} || $ENV{USERPROFILE} || '.', '.perlonjava');
+    return File::Spec->catdir($home, 'lib');
 }
 
 sub WriteMakefile {
@@ -297,7 +295,7 @@ sub _handle_xs_module {
     # in the JAR (jar:PERL5LIB).  The JAR shim provides proper fallback logic
     # (e.g. inheriting from a pure-Perl parent), while the CPAN version would
     # call XSLoader::load at the top level and die fatally.  Since
-    # The selected PerlOnJava home lib/ comes before jar:PERL5LIB in @INC, installing the
+    # ~/.perlonjava/lib/ comes before jar:PERL5LIB in @INC, installing the
     # CPAN version would shadow the working shim.
     $args->{_xs_module} = 1;
     
@@ -452,7 +450,7 @@ sub _install_pure_perl {
     }
     
     # Skip .pm files that already exist in PerlOnJava's bundled JAR.
-    # The selected PerlOnJava home lib/ has higher @INC priority than jar:PERL5LIB, so
+    # ~/.perlonjava/lib/ has higher @INC priority than jar:PERL5LIB, so
     # installing a CPAN version would shadow the bundled module.  This
     # protects Java-backed shims (IO::Socket::SSL, Net::SSLeay, etc.)
     # from being overwritten by incompatible CPAN versions, while still
@@ -563,7 +561,7 @@ sub _root_pm_install_path {
     while (my $line = <$fh>) {
         if ($line =~ /^\s*package\s+([A-Za-z_]\w*(?:::\w+)*)\s*[,;]/) {
             my $package = $1;
-            return $fallback unless index($package, "${name}::") == 0 || $package eq $name;
+            return $fallback unless index($package, "$name::") == 0 || $package eq $name;
             (my $path = $package) =~ s{::}{/}g;
             return "$path.pm";
         }
@@ -1064,7 +1062,6 @@ MAKEFILE
     if (defined &MY::postamble) {
         my $postamble = MY::postamble($mm);
         if ($postamble) {
-            $postamble = _normalize_postamble_rule_styles($postamble);
             print $fh "\n# Postamble from MY::postamble\n";
             print $fh $postamble;
             print $fh "\n";
@@ -1074,25 +1071,6 @@ MAKEFILE
     }
 
     close $fh;
-}
-
-sub _normalize_postamble_rule_styles {
-    my ($postamble) = @_;
-
-    # The generated Makefile deliberately uses double-colon rules for targets
-    # that extension postambles commonly augment.  Older distributions often
-    # augment those same targets with a single-colon rule; GNU make rejects a
-    # target that mixes the two forms.  Match MakeMaker's generated style while
-    # leaving distribution-specific targets (README, generated sources, etc.)
-    # untouched.
-    for my $target (qw(
-        all pm_to_blib pure_all blib_scripts pl_files install_scripts config
-        test install clean realclean distclean ppd
-    )) {
-        $postamble =~ s/^(\s*\Q$target\E\s*):([^:\n]*)$/$1::$2/mg;
-    }
-
-    return $postamble;
 }
 
 sub _make_makefile_comments {

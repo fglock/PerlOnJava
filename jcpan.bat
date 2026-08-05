@@ -3,15 +3,28 @@ rem jcpan - CPAN Client for PerlOnJava (Windows wrapper)
 rem Runs the standard cpan script with jperl
 rem Supports --jobs N for parallel test execution:
 rem   jcpan --jobs 4 -t Module::Name
+rem Supports --notest as an alias for cpan's -T option.
 set SCRIPT_DIR=%~dp0
 
 rem Parse --jobs option for parallel test jobs
 set "JCPAN_ARGS="
+set "JCPAN_NOTEST="
+set "JCPAN_INSTALL="
 :parse_args
 if "%~1"=="" goto run
 if "%~1"=="--jobs" (
     set "HARNESS_OPTIONS=j%~2"
     shift
+    shift
+    goto parse_args
+)
+if "%~1"=="--notest" (
+    set "JCPAN_NOTEST=-T"
+    shift
+    goto parse_args
+)
+if /I "%~1"=="install" (
+    set "JCPAN_INSTALL=-i"
     shift
     goto parse_args
 )
@@ -37,4 +50,4 @@ set "JPERL_BIN=%SCRIPT_DIR%jperl.bat"
 set "JCPAN_BIN=%SCRIPT_DIR%jcpan.bat"
 set "PERLONJAVA_JCPAN_ARGS=%JCPAN_ARGS%"
 set "PATH=%SCRIPT_DIR%;%PATH%"
-"%SCRIPT_DIR%jperl.bat" "%SCRIPT_DIR%src\main\perl\bin\cpan" %JCPAN_ARGS%
+"%SCRIPT_DIR%jperl.bat" "%SCRIPT_DIR%src\main\perl\bin\cpan" %JCPAN_INSTALL% %JCPAN_NOTEST% %JCPAN_ARGS%
