@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava distroprefs for Sort::External.
+
+  Sort::External 0.18 keeps all object state and its temporary-file codec in
+  XS. Replace that backend with a pure-Perl implementation preserving the
+  public API, bounded external-merge behavior, binary values, and UTF-8 flags.
+match:
+  distribution: "^CREAMYG/Sort-External-"
+patches:
+  - "Sort-External/PurePerl.patch"

@@ -103,7 +103,7 @@ public class Readline {
             if (isByteData) {
                 result.type = RuntimeScalarType.BYTE_STRING;
             }
-            return result;
+            return result.taintFromExternalInput();
         }
 
         if (rs != null && rs.isParagraphMode()) {
@@ -178,7 +178,7 @@ public class Readline {
         if (isByteMode) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
-        return result;
+        return result.taintFromExternalInput();
     }
 
     private static RuntimeScalar readFixedLength(RuntimeIO runtimeIO, int length) {
@@ -205,7 +205,7 @@ public class Readline {
         if (isByteMode) {
             rslt.type = RuntimeScalarType.BYTE_STRING;
         }
-        return rslt;
+        return rslt.taintFromExternalInput();
     }
 
     private static RuntimeScalar readUntilCharacter(RuntimeIO runtimeIO, char separator) {
@@ -236,7 +236,7 @@ public class Readline {
         if (isByteMode) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
-        return result;
+        return result.taintFromExternalInput();
     }
 
     private static RuntimeScalar readUntilString(RuntimeIO runtimeIO, String separator) {
@@ -276,7 +276,7 @@ public class Readline {
         if (isByteMode) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
-        return result;
+        return result.taintFromExternalInput();
     }
 
     /**
@@ -397,6 +397,7 @@ public class Readline {
         } else {
             scalar.set(scalarValue.toString());
         }
+        scalar.taintFromExternalInput();
 
         // Return the number of characters read
         return new RuntimeScalar(charsRead);

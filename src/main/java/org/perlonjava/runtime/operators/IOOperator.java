@@ -1158,6 +1158,7 @@ public class IOOperator {
     private static void setByteString(RuntimeScalar target, String value) {
         RuntimeScalar tmp = new RuntimeScalar(value);
         tmp.type = RuntimeScalarType.BYTE_STRING;
+        tmp.taintFromExternalInput();
         target.set(tmp);
     }
 

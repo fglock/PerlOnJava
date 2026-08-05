@@ -1696,6 +1696,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
 
+        rejectTaintedEval(code);
+
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
 
@@ -2212,6 +2214,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray args,
             int callContext) throws Throwable {
 
+        rejectTaintedEval(code);
+
         evalTrace("evalStringWithInterpreter enter tag=" + evalTag + " ctx=" + callContext +
                 " codeType=" + code.type + " codeLen=" + (code.toString() != null ? code.toString().length() : -1));
 
@@ -2683,6 +2687,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Clean up this eval's ThreadLocal stack entry.
             popEvalRuntimeContext(runtimeCtx);
+        }
+    }
+
+    /** Perl forbids compiling tainted eval STRING input while -T is active. */
+    public static void rejectTaintedEval(RuntimeScalar code) {
+        if (code != null && code.isTainted() && GlobalContext.isTaintModeActive()) {
+            throw new PerlCompilerException(
+                    "Insecure dependency in eval while running with -T switch");
         }
     }
 

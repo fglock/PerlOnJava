@@ -652,6 +652,7 @@ sub _default
 		$action->( $arg );
 
 		my $error = _cpanpm_output_indicates_failure();
+		$error ||= _cpanpm_status_indicates_failure();
 		push @errors, $error if $error;
 		}
 
@@ -763,6 +764,17 @@ sub _cpanpm_output_indicates_failure
 	return A_MODULE_FAILED_TO_INSTALL if $last_line =~ /\b(?:Cannot\s+install)\b/i;
 
 	$result || ();
+	}
+
+sub _cpanpm_status_indicates_failure
+	{
+	# CPAN already records structured phase status for every distribution in
+	# the current command, including recursively installed prerequisites.
+	# Prefer that state when App::Cpan's legacy last-output-line heuristic is
+	# fooled by trailing hints or report suggestions.
+	my @failed = CPAN::Shell->find_failed($CPAN::CurrentCommandId);
+	return A_MODULE_FAILED_TO_INSTALL if grep { $_->[5] } @failed;
+	return;
 	}
 }
 

@@ -18,10 +18,22 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeIO.initStdHandles;
  */
 public class GlobalContext {
 
+    private static final ThreadLocal<Boolean> threadTaintMode =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
+
     // Special variables internal names
     public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
     public static final String OPEN = encodeSpecialVar("OPEN"); // $^OPEN
     public static final String WARNING_SCOPE = encodeSpecialVar("WARNING_SCOPE"); // ${^WARNING_SCOPE}
+
+    /** Keep command-line taint mode isolated between concurrently executing scripts. */
+    public static void setThreadTaintMode(boolean enabled) {
+        threadTaintMode.set(enabled);
+    }
+
+    public static boolean isTaintModeActive() {
+        return threadTaintMode.get();
+    }
 
     // Virtual directory names for JAR-embedded Perl resources
     // E.g., @INC contains "jar:PERL5LIB", %INC contains "jar:PERL5LIB/DBI.pm"

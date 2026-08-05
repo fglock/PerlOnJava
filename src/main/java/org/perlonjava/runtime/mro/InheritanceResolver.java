@@ -129,7 +129,7 @@ public class InheritanceResolver {
      * Checks if the @ISA array for a class has changed since last cached.
      */
     private static boolean hasIsaChanged(String className) {
-        RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
+        RuntimeArray isaArray = getIsaArrayForClass(className);
         
         // Build current ISA list
         List<String> currentIsa = new ArrayList<>();
@@ -282,6 +282,21 @@ public class InheritanceResolver {
         populateIsaMapHelper(className, isaMap, new HashSet<>());
     }
 
+    /**
+     * Resolve @ISA through Perl's optional main:: package prefix.  Code may
+     * declare `package main::Foo::Bar` while objects and method calls report
+     * the same class as `Foo::Bar`; both spellings address one Perl stash.
+     */
+    static RuntimeArray getIsaArrayForClass(String className) {
+        for (String alias : packageLookupAliases(className)) {
+            String key = alias + "::ISA";
+            if (GlobalVariable.existsGlobalArray(key)) {
+                return GlobalVariable.getGlobalArray(key);
+            }
+        }
+        return GlobalVariable.getGlobalArray(className + "::ISA");
+    }
+
     private static void populateIsaMapHelper(String className,
                                              Map<String, List<String>> isaMap,
                                              Set<String> currentPath) {
@@ -297,7 +312,7 @@ public class InheritanceResolver {
         currentPath.add(className);
 
         // Retrieve @ISA array for the given class
-        RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
+        RuntimeArray isaArray = getIsaArrayForClass(className);
         List<String> parents = new ArrayList<>();
         for (RuntimeBase entity : isaArray.elements) {
             String parentName = entity.toString();
@@ -502,7 +517,11 @@ public class InheritanceResolver {
             aliases.add(normalized.substring(6));
         } else if (normalized.startsWith("::") && normalized.length() > 2) {
             aliases.add("main::" + normalized.substring(2));
-        } else if (!normalized.contains("::")) {
+        } else {
+            // Perl's root package prefix is optional at every nesting depth:
+            // Foo::Bar and main::Foo::Bar name the same stash.  Dynamic code
+            // generators commonly emit an explicit `package main::Foo::Bar`
+            // and later invoke it as Foo::Bar->method.
             aliases.add("main::" + normalized);
         }
 
