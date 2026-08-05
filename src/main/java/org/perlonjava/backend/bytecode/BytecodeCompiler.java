@@ -104,6 +104,10 @@ public class BytecodeCompiler implements Visitor {
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
     Map<String, Integer> capturedVarIndices;  // Name → register index
+    // Declaration metadata for captured package variables.  Keep this
+    // separately from the register table because closure analysis may first
+    // materialize a reference as a lexical before the body reaches `local`.
+    private final Set<String> capturedOurVariableNames = new HashSet<>();
     // BEGIN support for named subroutine closures
     int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
     Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
@@ -215,6 +219,7 @@ public class BytecodeCompiler implements Visitor {
                 if (regIndex >= 3) {
                     String decl = parentDecls != null ? parentDecls.get(varName) : null;
                     if (decl == null || decl.isEmpty()) decl = "my";
+                    if ("our".equals(decl)) capturedOurVariableNames.add(varName);
                     // Preserve the declaring package for `our` entries, so eval STRING
                     // with an inner `package Foo;` still resolves through the caller's
                     // original alias target. Fall back to current package for non-our.
@@ -324,7 +329,8 @@ public class BytecodeCompiler implements Visitor {
 
     boolean isOurVariable(String name) {
         SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(name);
-        return entry != null && "our".equals(entry.decl());
+        return (entry != null && "our".equals(entry.decl()))
+                || capturedOurVariableNames.contains(name);
     }
 
     boolean isDynamicOurVariable(String name) {

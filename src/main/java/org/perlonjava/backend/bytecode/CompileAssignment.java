@@ -288,7 +288,8 @@ public class CompileAssignment {
             if (element instanceof OperatorNode sigilOp && sigilOp.operator.equals("$")
                     && sigilOp.operand instanceof IdentifierNode idNode) {
                 String varName = "$" + idNode.name;
-                if (bc.hasVariable(varName)) {
+                if (bc.hasVariable(varName) && !bc.isOurVariable(varName)
+                        && !bc.isReservedVariable(varName)) {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
@@ -351,7 +352,8 @@ public class CompileAssignment {
             if (element instanceof OperatorNode sigilOp && sigilOp.operator.equals("$")
                     && sigilOp.operand instanceof IdentifierNode idNode) {
                 String varName = "$" + idNode.name;
-                if (bc.hasVariable(varName)) {
+                if (bc.hasVariable(varName) && !bc.isOurVariable(varName)
+                        && !bc.isReservedVariable(varName)) {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
