@@ -62,8 +62,8 @@ public class BitwiseOperators {
         // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
         int vt1 = val1.type;
         int vt2 = val2.type;
-        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE ||
-                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE) {
+        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE || vt1 == RuntimeScalarType.DUALVAR ||
+                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE || vt2 == RuntimeScalarType.DUALVAR) {
             return bitwiseAndBinary(val1, val2);
         }
         return bitwiseAndDot(val1, val2);
@@ -126,8 +126,8 @@ public class BitwiseOperators {
         // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
         int vt1 = val1.type;
         int vt2 = val2.type;
-        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE ||
-                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE) {
+        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE || vt1 == RuntimeScalarType.DUALVAR ||
+                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE || vt2 == RuntimeScalarType.DUALVAR) {
             return bitwiseOrBinary(val1, val2);
         }
         return bitwiseOrDot(val1, val2);
@@ -194,8 +194,8 @@ public class BitwiseOperators {
         // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
         int vt1 = val1.type;
         int vt2 = val2.type;
-        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE ||
-                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE) {
+        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE || vt1 == RuntimeScalarType.DUALVAR ||
+                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE || vt2 == RuntimeScalarType.DUALVAR) {
             return bitwiseXorBinary(val1, val2);
         }
         return bitwiseXorDot(val1, val2);

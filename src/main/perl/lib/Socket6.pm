@@ -16,6 +16,7 @@ our $VERSION = '0.29';
 our @EXPORT = qw(
     inet_pton inet_ntop pack_sockaddr_in6 pack_sockaddr_in6_all
     unpack_sockaddr_in6 unpack_sockaddr_in6_all sockaddr_in6
+    gethostbyname2 getipnodebyname
     getaddrinfo getnameinfo in6addr_any in6addr_loopback
     AF_INET6 PF_INET6 AI_PASSIVE AI_CANONNAME AI_NUMERICHOST AI_ADDRCONFIG
     NI_NUMERICHOST NI_NUMERICSERV NI_NUMERICSERVER NI_DGRAM EAI_NONAME EAI_FAIL
@@ -54,6 +55,19 @@ sub unpack_sockaddr_in6_all {
 }
 sub sockaddr_in6 {
     return @_ == 1 ? unpack_sockaddr_in6(@_) : pack_sockaddr_in6(@_);
+}
+
+# Compatibility entry points used by older pure-Perl IPv6 consumers.  The
+# bundled Socket6 implementation has no XS resolver, so use Perl's resolver
+# for the IPv4-compatible path and return the traditional host record shape.
+sub gethostbyname2 {
+    my ($host, $family) = @_;
+    return gethostbyname($host);
+}
+
+sub getipnodebyname {
+    my ($host, $family, $flags) = @_;
+    return gethostbyname($host);
 }
 sub in6addr_any      { Socket::IN6ADDR_ANY() }
 sub in6addr_loopback { Socket::IN6ADDR_LOOPBACK() }

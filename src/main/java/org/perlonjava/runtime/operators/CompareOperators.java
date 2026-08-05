@@ -219,9 +219,6 @@ public class CompareOperators {
             if (result != null) return result;
         }
 
-        // Check for uninitialized values (only when using numeric comparison fallback)
-        checkUninitialized(arg1, arg2, "gt (>)");
-
         // Convert strings to numbers if necessary
         arg1 = arg1.getNumber("numeric gt (>)");
         arg2 = arg2.getNumber("numeric gt (>)");

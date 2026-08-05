@@ -438,6 +438,37 @@ sub _install_pure_perl {
                     no_chdir => 1,
                 }, $baseext);
             }
+
+            # Some distributions keep package trees beside BASEEXT rather
+            # than below it (NetAddr::IP/Lite/Lite.pm is a notable example).
+            # Map files by their declared package so nested pure-Perl helper
+            # modules are staged into the same blib as the parent module.
+            opendir(my $root_dh, '.') or undef $root_dh;
+            if ($root_dh) {
+                while (my $entry = readdir($root_dh)) {
+                    next if $entry =~ /^\.{1,2}$/ || $entry eq 'lib' || $entry eq 'blib';
+                    next unless -d $entry;
+                    find({
+                        wanted => sub {
+                            return unless -f && /$installable_re/;
+                            my $src = $File::Find::name;
+                            open my $fh, '<', $src or return;
+                            while (my $line = <$fh>) {
+                                if ($line =~ /^\s*package\s+([A-Za-z_]\w*(?:::\w+)*)\s*[,;]/
+                                    && ($1 eq $name || index($1, "${name}::") == 0)) {
+                                    (my $rel = $1) =~ s{::}{/}g;
+                                    $pm{$src} = _install_dest($INSTALL_BASE, "$rel.pm")
+                                        unless exists $pm{$src};
+                                    last;
+                                }
+                            }
+                            close $fh;
+                        },
+                        no_chdir => 1,
+                    }, $entry);
+                }
+                closedir($root_dh);
+            }
         }
     }
     
@@ -1221,6 +1252,11 @@ sub _configure_subdirs {
         my $abs_dir = File::Spec->rel2abs($dir, $cwd);
         next unless chdir $abs_dir;
         my @cmd = ($perl, map({ "-I$_" } @inc), '-I../inc', 'Makefile.PL');
+        # Distros such as NetAddr::IP configure nested helper distributions.
+        # Preserve the parent pure-Perl/XS selection for those sub-builds;
+        # otherwise the child probes for a compiler and may execute XS setup
+        # even though the parent was explicitly configured with -noxs.
+        push @cmd, '-noxs' if grep { $_ eq '-noxs' } @ARGV;
         system(@cmd) == 0 or warn "PerlOnJava MakeMaker: subdir $dir configure failed\n";
         chdir $cwd;
     }

@@ -434,11 +434,8 @@ public class StringOperators {
         RuntimeScalar overloaded = tryStringConcatOverload(runtimeScalar, b);
         if (overloaded != null) return overloaded;
 
-        // b.toString() may trigger FETCH for tied vars, potentially modifying runtimeScalar.
-        // Read b first so runtimeScalar.toString() reflects any FETCH side-effects,
-        // matching Perl's behavior where the left SV is read after tied-var resolution.
-        RuntimeScalar bResolved = resolveTiedStringOperand(b);
         RuntimeScalar aResolved = resolveTiedStringOperand(runtimeScalar);
+        RuntimeScalar bResolved = resolveTiedStringOperand(b);
         String bStr = bResolved.toString();
         String aStr = aResolved.toString();
 
