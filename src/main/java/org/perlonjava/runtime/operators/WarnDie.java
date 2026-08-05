@@ -578,7 +578,13 @@ public class WarnDie {
                 // string exception that includes the source-location suffix;
                 // passing the raw argument instead makes `die @_` rethrows add
                 // the handler's location and loses the original stack site.
-                RuntimeList res = RuntimeCode.apply(sigHandler, errVariable.getArrayOfAlias(), RuntimeContextType.SCALAR);
+                // Pass a snapshot: the handler may run eval, which clears $@.
+                // Perl still gives __DIE__ the formatted exception value, but
+                // that value must not alias the mutable global while the
+                // handler is executing.
+                RuntimeList res = RuntimeCode.apply(sigHandler,
+                        new RuntimeArray(new RuntimeScalar(errVariable)),
+                        RuntimeContextType.SCALAR);
 
                 // Handle TAILCALL with trampoline loop (for goto &sub in __DIE__ handlers)
                 while (res.isNonLocalGoto()) {
