@@ -283,8 +283,8 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 
 ### Next steps
 
-1. Resolve the remaining Phase 4 suite blockers: Devel::Symdump's recursive
-   package lookup and symbol-table inventory differences, and
+1. Resolve the remaining Phase 4 suite blockers: Devel::Symdump's symbol-table
+   inventory differences in `t/symdump.t`, and
    Test2::Plugin::NoWarnings' `IPC::Run3` filehandle duplication.
 2. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
    interpreter code, and nested `eval`; keep the live LWP `t/local/http.t` and
@@ -370,9 +370,15 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   Exception::Class 86/86, Hook::LexWrap 57/57, and Sub::Quote 5,427/5,427
   pass. Hook::LexWrap was fixed by adding `sqrt` to the parser's
   `CORE::GLOBAL` override points; `core_global_sqrt_override.t` covers dynamic
-  wrapper reassignment on standard Perl, JVM, and interpreter. Devel::Symdump
-  has two interpreter-only failures (`recur.t`, `symdump.t`) while both pass
-  under standard Perl. `Devel::Peek::CvGV` now reconstructs canonical
+  wrapper reassignment on standard Perl, JVM, and interpreter. Recursive
+  package-stash entries now alias undefined nested stashes, normalize the
+  `main::Pkg::` spelling, resolve aliased package prefixes transitively, and
+  create post-alias scalars in the canonical stash while preserving scalars
+  pinned before the alias. `stash_recursive_alias.t` passes on standard Perl,
+  JVM, and interpreter, and Devel::Symdump's unchanged `t/recur.t` passes on
+  both PerlOnJava backends. Its full suite advances to 27/29 assertions; only
+  the two symbol-table inventory assertions in `t/symdump.t` remain.
+  `Devel::Peek::CvGV` now reconstructs canonical
   typeglobs from `Sub::Util::subname`; `devel_peek_cvgv.t` passes on standard
   Perl, JVM, and interpreter, and Test::MockObject advances to 231/232. Its
   sole remaining weak-reference lifetime failure is deferred to Phase 8.
