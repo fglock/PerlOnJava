@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "providers": [
+    {
+      "module": "DBI",
+      "version": "1.643",
+      "distribution": "DBI",
+      "provider": "bundled-perl",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Moose",
+      "version": "2.4000",
+      "distribution": "Moose",
+      "provider": "compatibility-shim",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Crypt::PRNG",
+      "version": "0.089",
+      "distribution": "CryptX",
+      "provider": "compatibility-shim",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "HTML::Parser",
+      "version": "3.83",
+      "distribution": "HTML-Parser",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "HTML::Entities",
+      "version": "3.83",
+      "distribution": "HTML-Parser",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "XML::LibXML",
+      "version": "2.0210",
+      "distribution": "XML-LibXML",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Set::Object",
+      "version": "1.43",
+      "distribution": "Set-Object",
+      "provider": "compatibility-shim",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Package::Stash::XS",
+      "version": "0.30",
+      "distribution": "Package-Stash-XS",
+      "provider": "compatibility-shim",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    }
+  ]
+}

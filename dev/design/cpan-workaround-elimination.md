@@ -268,12 +268,12 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: Phase 2, bundled-provider resolution.
+Current phase: Phase 3, prerequisite phase preservation.
 
 ### Phase checklist
 
 - [x] Phase 1: Shared `use bytes` substitution semantics (2026-08-06)
-- [ ] Phase 2: Bundled-provider resolution
+- [x] Phase 2: Bundled-provider resolution (2026-08-06)
 - [ ] Phase 3: Prerequisite phase preservation
 - [ ] Phase 4: Caller, eval, warning, and symbol-table parity
 - [ ] Phase 5: Control flow, lvalues, and introspection
@@ -283,13 +283,13 @@ Current phase: Phase 2, bundled-provider resolution.
 
 ### Next steps
 
-1. Define the provider-manifest schema and generate it from bundled Perl and
-   Java-backed module metadata.
-2. Teach CPAN resolution to satisfy compatible dependencies from the manifest.
-3. Prevent user-local installation from shadowing providers whose policy is
-   `forbidden`.
-4. Add isolated-home dependency and explicit-conformance test coverage.
-5. Migrate the initial provider set and retire its lifecycle skip prefs.
+1. Preserve runtime, build, test, and configure requirements as separate CPAN
+   queue phases.
+2. Add an explicit strict dependency-testing command mode.
+3. Verify clean DateTime, LWP, CGI, and Moose dependency graphs do not install
+   unsupported test-only modules as runtime prerequisites.
+4. Retire dependency-only skip and ignore-failure prefs made unnecessary by
+   phase-aware resolution.
 
 ### Completed phase deliverables
 
@@ -302,11 +302,32 @@ Current phase: Phase 2, bundled-provider resolution.
 - Regression: `src/test/resources/unit/bytes_regex_substitution.t`.
 - Retired artifacts: `WWW-Form-UrlEncoded.yml` and
   `WWW-Form-UrlEncoded-0.26/PP.pm.patch`.
+- Phase 2 adds the schema-validated `PerlOnJava/providers.json` manifest and
+  makes CPAN satisfy compatible requirements from provider versions while
+  rejecting incompatible or forced shadow installs.
+- Initial providers: DBI, Moose, Crypt::PRNG, HTML::Parser/HTML::Entities,
+  XML::LibXML, Set::Object, and Package::Stash::XS. Clean-runtime gaps were
+  closed with bundled HTML loader files, a Package::Stash::XS pure-Perl facade,
+  and the XML::SAX exception surface required by XML::LibXML.
+- Provider conformance uses the non-installing
+  `jcpan --provider -t Module::Name` path.
+- Retired lifecycle prefs: `DBI.yml`, `Moose.yml`, `CryptX.yml`,
+  `HTML-Parser.yml`, `XML-LibXML.yml`, `Set-Object.yml`, and
+  `Package-Stash-XS.yml`; retired patches: `DBI/DBI.pm.patch` and
+  `DBI/PurePerl.pm.patch`.
+- Verification: the provider regression passes under standard Perl and both
+  PerlOnJava resolver backends; all providers load from a clean JVM runtime;
+  a clean `jcpan DBI` refreshes metadata but fetches no DBI distribution and
+  installs no user-local files; full `make` passes.
 
 ### Open questions
 
-- Should explicit upstream conformance testing use `jcpan -t --provider` or a
-  separate command?
+- How should release tooling detect a newer CPAN version of a forbidden-shadow
+  provider (for example Set::Object newer than 1.43) and prompt a bundled
+  implementation/manifest review without allowing an automatic shadow install?
+- Should provider entries remain module-granular, or should a distribution
+  entry optionally enumerate bundled pure-Perl siblings such as
+  HTML::HeadParser?
 - Which dependency-test policy should be the default for `jcpan install` once
   phases are preserved?
 - Should executable regex callbacks use the future regex backend directly or

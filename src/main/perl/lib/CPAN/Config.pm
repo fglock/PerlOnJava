@@ -32,12 +32,9 @@ sub _bootstrap_prefs {
     my %pref_install = (
         'Moo.yml'                    => 'PerlOnJava/CpanDistroprefs/Moo.yml',
         'Params-Validate.yml'        => 'PerlOnJava/CpanDistroprefs/Params-Validate.yml',
-        'Moose.yml'                  => 'PerlOnJava/CpanDistroprefs/Moose.yml',
-        'DBI.yml'                    => 'PerlOnJava/CpanDistroprefs/DBI.yml',
         'DB-File.yml'                => 'PerlOnJava/CpanDistroprefs/DB-File.yml',
         'AnyEvent.yml'               => 'PerlOnJava/CpanDistroprefs/AnyEvent.yml',
         'SQL-Translator.yml'         => 'PerlOnJava/CpanDistroprefs/SQL-Translator.yml',
-        'XML-LibXML.yml'             => 'PerlOnJava/CpanDistroprefs/XML-LibXML.yml',
         'Net-Server.yml'             => 'PerlOnJava/CpanDistroprefs/Net-Server.yml',
         'CPAN-FindDependencies.yml'  => 'PerlOnJava/CpanDistroprefs/CPAN-FindDependencies.yml',
         'Error-Pure.yml'             => 'PerlOnJava/CpanDistroprefs/Error-Pure.yml',
@@ -56,7 +53,6 @@ sub _bootstrap_prefs {
         'ExtUtils-ParseXS.yml'       => 'PerlOnJava/CpanDistroprefs/ExtUtils-ParseXS.yml',
         'Module-Build.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Build.yml',
         'Module-Install.yml'         => 'PerlOnJava/CpanDistroprefs/Module-Install.yml',
-        'Package-Stash-XS.yml'       => 'PerlOnJava/CpanDistroprefs/Package-Stash-XS.yml',
         'Aliased.yml'                => 'PerlOnJava/CpanDistroprefs/Aliased.yml',
         'Carp-Assert.yml'            => 'PerlOnJava/CpanDistroprefs/Carp-Assert.yml',
         'Regexp-Common.yml'          => 'PerlOnJava/CpanDistroprefs/Regexp-Common.yml',
@@ -90,15 +86,12 @@ sub _bootstrap_prefs {
         'Template.yml'               => 'PerlOnJava/CpanDistroprefs/Template.yml',
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
         'Parse-RecDescent.yml'       => 'PerlOnJava/CpanDistroprefs/Parse-RecDescent.yml',
-        'CryptX.yml'                 => 'PerlOnJava/CpanDistroprefs/CryptX.yml',
         'Crypt-URandom.yml'          => 'PerlOnJava/CpanDistroprefs/Crypt-URandom.yml',
         'Hook-LexWrap.yml'           => 'PerlOnJava/CpanDistroprefs/Hook-LexWrap.yml',
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
         'CGI.yml'                    => 'PerlOnJava/CpanDistroprefs/CGI.yml',
         'CGI-Simple.yml'             => 'PerlOnJava/CpanDistroprefs/CGI-Simple.yml',
-        'HTML-Parser.yml'            => 'PerlOnJava/CpanDistroprefs/HTML-Parser.yml',
         'Graph.yml'                  => 'PerlOnJava/CpanDistroprefs/Graph.yml',
-        'Set-Object.yml'             => 'PerlOnJava/CpanDistroprefs/Set-Object.yml',
         'Class-DBI.yml'              => 'PerlOnJava/CpanDistroprefs/Class-DBI.yml',
         'XML-Filter-GenericChunk.yml' => 'PerlOnJava/CpanDistroprefs/XML-Filter-GenericChunk.yml',
         'XML-TreePP.yml'             => 'PerlOnJava/CpanDistroprefs/XML-TreePP.yml',
@@ -167,6 +160,13 @@ sub _bootstrap_prefs {
         File-Copy-Recursive.yml
         Test-File.yml
         WWW-Form-UrlEncoded.yml
+        DBI.yml
+        Moose.yml
+        CryptX.yml
+        HTML-Parser.yml
+        XML-LibXML.yml
+        Set-Object.yml
+        Package-Stash-XS.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;
@@ -222,10 +222,6 @@ sub _bootstrap_patches {
     # Map: target path relative to $patches_dir  =>  source path inside the JAR
     # (or on-disk dev tree during `make`). The source is located via @INC.
     my @bundled = (
-        [ 'DBI/DBI.pm.patch',
-          'PerlOnJava/CpanPatches/DBI-1.647/DBI.pm.patch' ],
-        [ 'DBI/PurePerl.pm.patch',
-          'PerlOnJava/CpanPatches/DBI-1.647/PurePerl.pm.patch' ],
         [ 'Exception-Class/GeneratedSubclassVersion.patch',
           'PerlOnJava/CpanPatches/Exception-Class-1.45/GeneratedSubclassVersion.patch' ],
         [ 'Net-Server/Proto.pm.patch',
@@ -312,6 +308,8 @@ sub _bootstrap_patches {
         'Test-FailWarnings-0.008/CallerOrigin.patch',
         'DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch',
         'WWW-Form-UrlEncoded/PP.pm.patch',
+        'DBI/DBI.pm.patch',
+        'DBI/PurePerl.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;

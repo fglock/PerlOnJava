@@ -180,11 +180,16 @@ over shell-specific syntax. Avoid `;`, `&&`, redirection, `/dev/null`, and other
 POSIX shell assumptions in bundled distroprefs. CPAN.pm runs command lines
 through Perl's `system()`, and Windows users may go through `cmd.exe`.
 
-Example:
+Do not use lifecycle phase skips for modules supplied by PerlOnJava. Declare
+those modules in `PerlOnJava/providers.json` instead. CPAN will satisfy a
+compatible prerequisite from the manifest and refuse a user-local install when
+the entry has `"shadow_policy": "forbidden"`.
 
-```yaml
-test:
-  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::test_phase()"'
+To fetch and test an upstream provider distribution without installing it over
+the bundled implementation, use the explicit conformance mode:
+
+```text
+jcpan --provider -t Moose
 ```
 
 ## Patch Files
