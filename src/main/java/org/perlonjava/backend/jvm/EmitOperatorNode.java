@@ -25,10 +25,18 @@ public class EmitOperatorNode {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(OperatorNode) " + node.operator + " in context " + emitterVisitor.ctx.contextType);
 
         switch (node.operator) {
-            case "await" -> throw new PerlCompilerException(
-                    node.tokenIndex,
-                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.TOPLEVEL_AWAIT_MESSAGE,
-                    emitterVisitor.ctx.errorUtil);
+            case "await" -> {
+                node.operand.accept(emitterVisitor.with(
+                        org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR));
+                emitterVisitor.pushCallContext();
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        org.objectweb.asm.Opcodes.INVOKESTATIC,
+                        "org/perlonjava/backend/bytecode/FutureAsyncAwaitRuntime",
+                        "wait",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)"
+                                + "Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+            }
             // Subroutine related
             case "__SUB__" -> EmitSubroutine.handleSelfCallOperator(emitterVisitor, node);
             case "package" -> EmitOperator.handlePackageOperator(emitterVisitor, node);

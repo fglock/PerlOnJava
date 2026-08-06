@@ -13,6 +13,55 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 @Tag("unit")
 class FutureAsyncAwaitRuntimeTest {
+    private static final String TOPLEVEL_PROGRAM = """
+            use strict;
+            use warnings;
+
+            BEGIN {
+                package Future;
+                our $VERSION = '0.52';
+                $INC{'Future.pm'} = __FILE__;
+
+                sub done { shift; bless { values => [ @_ ], waits => 0 }, __PACKAGE__ }
+                sub failed {
+                    shift;
+                    bless { error => $_[0], waits => 0 }, __PACKAGE__;
+                }
+                sub AWAIT_WAIT {
+                    my $self = shift;
+                    ++$self->{waits};
+                    $self->{wait_context} = !defined(wantarray) ? 'void'
+                            : wantarray ? 'list' : 'scalar';
+                    die $self->{error} if exists $self->{error};
+                    return wantarray ? @{ $self->{values} } : $self->{values}[0];
+                }
+            }
+
+            use Future::AsyncAwait;
+
+            my $scalar_future = Future->done(42);
+            my $scalar = await $scalar_future;
+            die "file-scope scalar await failed\n"
+                    unless $scalar == 42 && $scalar_future->{waits} == 1
+                        && $scalar_future->{wait_context} eq 'scalar';
+
+            my $list_future = Future->done(20, 22);
+            my @values = await $list_future;
+            die "file-scope list await failed\n"
+                    unless @values == 2 && $values[0] == 20 && $values[1] == 22
+                        && $list_future->{wait_context} eq 'list';
+
+            my $void_future = Future->done(1);
+            await $void_future;
+            die "file-scope void await failed\n"
+                    unless $void_future->{wait_context} eq 'void';
+
+            my $failed_future = Future->failed("file await failed\n");
+            my $failed_result = eval { await $failed_future };
+            die "file-scope await failure was not catchable\n"
+                    unless !defined($failed_result) && $@ eq "file await failed\n";
+            """;
+
     private static final String PROGRAM = """
             use strict;
             use warnings;
@@ -349,10 +398,27 @@ class FutureAsyncAwaitRuntimeTest {
         assertDoesNotThrow(() -> execute(true));
     }
 
+    @Test
+    void waitsForFileScopeAwaitablesFromJvmFrontend() {
+        assertDoesNotThrow(() -> execute(TOPLEVEL_PROGRAM, false,
+                "future_asyncawait_toplevel.t"));
+    }
+
+    @Test
+    void waitsForFileScopeAwaitablesFromInterpreterFrontend() {
+        assertDoesNotThrow(() -> execute(TOPLEVEL_PROGRAM, true,
+                "future_asyncawait_toplevel.t"));
+    }
+
     private static void execute(boolean useInterpreter) throws Exception {
+        execute(PROGRAM, useInterpreter, "future_asyncawait_phase2.t");
+    }
+
+    private static void execute(String program, boolean useInterpreter,
+                                String fileName) throws Exception {
         CompilerOptions options = new CompilerOptions();
-        options.code = PROGRAM;
-        options.fileName = "future_asyncawait_phase2.t";
+        options.code = program;
+        options.fileName = fileName;
         options.useInterpreter = useInterpreter;
         RuntimeArray.push(options.inc, new RuntimeScalar("src/main/perl/lib"));
         PerlLanguageProvider.executePerlCode(options, true);

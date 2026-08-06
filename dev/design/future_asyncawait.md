@@ -2,10 +2,11 @@
 
 ## Status
 
-Phases 1 and 2 completed on 2026-08-06. PerlOnJava can parse lexical
+Phases 1 through 3 completed on 2026-08-06. PerlOnJava can parse lexical
 `async sub`/`await` syntax and execute async subroutines through resumable
 interpreter frames. Immediate Awaitables continue inline; pending Awaitables
-suspend without blocking and resume from `AWAIT_ON_READY` callbacks.
+suspend without blocking and resume from `AWAIT_ON_READY` callbacks. File-scope
+await uses the Awaitable `AWAIT_WAIT` protocol.
 
 ## Motivation
 
@@ -108,7 +109,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   and interpreter frontends. The dependency guard retains a targeted error
   until an implementation of the Awaitable constructor methods is loaded.
 
-### Phase 3: Future lifecycle and control-flow parity
+### Phase 3: Future lifecycle and control-flow parity — completed 2026-08-06
 
 - Implement cancellation propagation in both directions.
 - Preserve scalar/list/void context and failure values.
@@ -167,11 +168,11 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 - **Backend divergence:** define suspension at interpreter-bytecode level
   first and route JVM callers through the same RuntimeCode boundary.
 - **Misleading partial support:** retain targeted diagnostics for missing
-  Awaitable constructors and for file-scope await until `AWAIT_WAIT` exists.
+  Awaitable constructors until an implementation is loaded.
 
 ## Progress tracking
 
-### Current status: Phase 3 in progress; current focus is file-scope await
+### Current status: Phase 4 in progress; current focus is syntax completeness
 
 ### Completed phases
 
@@ -263,13 +264,24 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Added both-backend regression coverage and verified the full `make` suite.
   - Files: `BytecodeInterpreter.java` and
     `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3i: File-scope await (2026-08-06)
+  - Lowered file-scope `await` to the Awaitable `AWAIT_WAIT` method while
+    preserving scalar, list, and void expression context.
+  - Kept async-sub `await` on the nonblocking resumable-frame path and made
+    `AWAIT_WAIT` failures behave like ordinary exceptions catchable by `eval`.
+  - Added default- and interpreter-frontend regression coverage and verified
+    the full `make` suite.
+  - Files: `FutureAsyncAwaitRuntime.java`, `BytecodeInterpreter.java`,
+    `EmitOperatorNode.java`, `Future::AsyncAwait.pm`, and
+    `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
-2. Import the applicable upstream Future::AsyncAwait lifecycle and
+1. Import the applicable upstream Future::AsyncAwait lifecycle and
    control-flow tests.
-3. Continue Phase 4 syntax and interoperability coverage.
+2. Add Phase 4 syntax forms: lexical async subs, methods, signatures,
+   attributes, forward declarations, and `CANCEL` blocks.
+3. Validate `try`, `defer`, and `class` interactions.
 
 ### Open questions
 

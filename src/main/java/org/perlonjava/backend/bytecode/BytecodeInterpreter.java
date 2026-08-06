@@ -2679,6 +2679,10 @@ public class BytecodeInterpreter {
                                 }
                                 RuntimeScalar awaited = registers[futureReg] instanceof RuntimeScalar scalar
                                         ? scalar : registers[futureReg].scalar();
+                                if (!code.futureAsyncAwaitSub) {
+                                    registers[rd] = FutureAsyncAwaitRuntime.wait(awaited, context);
+                                    break;
+                                }
                                 if (FutureAsyncAwaitRuntime.isReady(awaited)) {
                                     registers[rd] = FutureAsyncAwaitRuntime.get(awaited, context);
                                     break;

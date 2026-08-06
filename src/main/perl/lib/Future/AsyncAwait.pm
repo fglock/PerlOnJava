@@ -32,8 +32,8 @@ immediate and pending objects implementing the
 C<Future::AsyncAwait::Awaitable> method contract. Load C<Future>, or another
 compatible implementation, before declaring async subroutines.
 
-Cancellation propagation and file-scope C<await> via C<AWAIT_WAIT> remain
-under development.
+File-scope C<await> invokes the Awaitable C<AWAIT_WAIT> method in the
+surrounding scalar, list, or void context.
 
 The public syntax and behavior are based on Paul Evans' Future::AsyncAwait.
 PerlOnJava does not load or emulate its Perl-internal XS optree hooks.

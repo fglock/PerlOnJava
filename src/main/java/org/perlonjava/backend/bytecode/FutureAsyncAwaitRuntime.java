@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runtime bridge to the Future::AsyncAwait::Awaitable method contract. */
-final class FutureAsyncAwaitRuntime {
+public final class FutureAsyncAwaitRuntime {
     private static final RuntimeScalar EMPTY_CURRENT_SUB = new RuntimeScalar("");
     private static final ThreadLocal<ArrayDeque<Runnable>> RESUME_QUEUE =
             ThreadLocal.withInitial(ArrayDeque::new);
@@ -25,6 +25,20 @@ final class FutureAsyncAwaitRuntime {
 
     static RuntimeBase get(RuntimeScalar future, int context) {
         RuntimeList result = call(future, "AWAIT_GET", new RuntimeArray(), context);
+        if (context == RuntimeContextType.VOID) {
+            return new RuntimeList();
+        }
+        if (context == RuntimeContextType.LIST) {
+            return result;
+        }
+        return result.scalar();
+    }
+
+    /** Execute a file-scope await through the Awaitable blocking-wait contract. */
+    public static RuntimeBase wait(RuntimeBase future, int context) {
+        RuntimeScalar awaited = future instanceof RuntimeScalar scalar
+                ? scalar : future.scalar();
+        RuntimeList result = call(awaited, "AWAIT_WAIT", new RuntimeArray(), context);
         if (context == RuntimeContextType.VOID) {
             return new RuntimeList();
         }
