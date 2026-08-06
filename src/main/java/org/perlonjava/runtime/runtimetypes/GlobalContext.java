@@ -188,6 +188,9 @@ public class GlobalContext {
         matchStart.elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
         GlobalVariable.getGlobalArray(encodeSpecialVar("CAPTURE")).elements = new ArraySpecialVariable(ArraySpecialVariable.Id.CAPTURE);  // regex @{^CAPTURE}
         GlobalVariable.getGlobalArray("main::'");  // @'
+        // @_ is implemented as a call-frame lexical, but its main-package glob
+        // still has an ARRAY slot for symbol-table introspection.
+        GlobalVariable.getGlobalArray("main::_");
 
         // Initialize default formats
         // Create a default STDOUT format to prevent "Undefined format" errors
@@ -199,10 +202,11 @@ public class GlobalContext {
         // %SIG uses a special hash that auto-qualifies handler names for known signals
         GlobalVariable.globalHashes.put("main::SIG", new RuntimeSigHash());
         GlobalVariable.getGlobalHash(encodeSpecialVar("H"));
-        GlobalVariable.getGlobalHash("main::+").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);  // regex %+
-        GlobalVariable.getGlobalHash("main::-").elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);  // regex %-
-        GlobalVariable.getGlobalHash("main::!").elements = new ErrnoHash();  // %! errno hash
-
+        // These magic hashes are valid under strict vars but their stash slots
+        // are created lazily on first access.
+        GlobalVariable.declareGlobalHash("main::!");
+        GlobalVariable.declareGlobalHash("main::+");
+        GlobalVariable.declareGlobalHash("main::-");
         // Initialize %ENV
         Map<String, RuntimeScalar> env = GlobalVariable.getGlobalHash("main::ENV").elements;
         System.getenv().forEach((k, v) -> {

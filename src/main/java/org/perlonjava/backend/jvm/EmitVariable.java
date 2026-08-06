@@ -433,9 +433,11 @@ public class EmitVariable {
                     if (sigil.equals("$")) {
                         allowIfAlreadyExists = GlobalVariable.existsGlobalVariable(normalizedName);
                     } else if (sigil.equals("@")) {
-                        allowIfAlreadyExists = GlobalVariable.existsGlobalArray(normalizedName);
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalArray(normalizedName)
+                                || GlobalVariable.isDeclaredGlobalArray(normalizedName);
                     } else if (sigil.equals("%") && !normalizedName.endsWith("::")) {
-                        allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName);
+                        allowIfAlreadyExists = GlobalVariable.existsGlobalHash(normalizedName)
+                                || GlobalVariable.isDeclaredGlobalHash(normalizedName);
                     }
 
                     // Single-letter scalars ($A-$Z) bypass strict only if explicitly declared
