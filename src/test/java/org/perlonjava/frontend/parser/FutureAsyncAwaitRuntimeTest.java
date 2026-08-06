@@ -161,6 +161,20 @@ class FutureAsyncAwaitRuntimeTest {
                     unless $localized_array[0] == 1 && $localized_hash{outside} == 2
                         && !exists $localized_hash{inside};
 
+            use feature 'defer';
+            my $defer_log = '';
+            async sub deferred_cleanup {
+                defer { $defer_log .= 'done'; }
+                my $value = await $_[0];
+                return $value;
+            }
+            my $defer_pending = Future->new;
+            my $defer_result = deferred_cleanup($defer_pending);
+            die "defer ran while suspended\n" unless $defer_log eq '';
+            $defer_pending->AWAIT_DONE(9);
+            die "defer did not run at frame exit\n"
+                    unless $defer_result->AWAIT_GET == 9 && $defer_log eq 'done';
+
             my $cancelled = Future->new;
             my $cancelled_result = add_one($cancelled);
             $cancelled_result->AWAIT_CANCEL;
