@@ -213,11 +213,19 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
     `RuntimeScalar.java`, `GlobalRuntimeScalar.java`,
     `BytecodeInterpreter.java`, `SuspendedInterpreterFrame.java`, and
     `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3c: Array/hash dynamic-state preservation (2026-08-06)
+  - Preserved localized array and hash contents while the async frame is
+    suspended, including package-global localization markers.
+  - Added both-backend coverage for caller isolation, resumed values, and
+    post-completion restoration; full `make` passes.
+  - Files: `RuntimeArray.java`, `RuntimeHash.java`,
+    `GlobalRuntimeArray.java`, `GlobalRuntimeHash.java`, and
+    `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Add suspend/resume implementations for localized arrays, hashes, tied and
-   special variables, package state, defer blocks, and destruction cleanup.
+1. Add suspend/resume implementations for tied and special variables, package
+   state, defer blocks, and destruction cleanup.
 2. Cover eval, loops, regex captures, closures, and nested dynamic scopes.
 3. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
 4. Import the applicable upstream Future::AsyncAwait lifecycle and

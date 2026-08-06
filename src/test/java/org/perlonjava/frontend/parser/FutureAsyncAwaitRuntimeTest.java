@@ -141,6 +141,26 @@ class FutureAsyncAwaitRuntimeTest {
             die "localized value leaked after completion\n"
                     unless $localized_value == 7;
 
+            our @localized_array = (1);
+            our %localized_hash = (outside => 2);
+            async sub localized_containers {
+                local @localized_array = (40);
+                local %localized_hash = (inside => 2);
+                my $value = await $_[0];
+                return $localized_array[0] + $localized_hash{inside} + $value;
+            }
+            my $container_pending = Future->new;
+            my $container_result = localized_containers($container_pending);
+            die "localized containers leaked while suspended\n"
+                    unless $localized_array[0] == 1 && $localized_hash{outside} == 2
+                        && !exists $localized_hash{inside};
+            $container_pending->AWAIT_DONE(5);
+            die "localized containers were not restored on resume\n"
+                    unless $container_result->AWAIT_GET == 47;
+            die "localized containers leaked after completion\n"
+                    unless $localized_array[0] == 1 && $localized_hash{outside} == 2
+                        && !exists $localized_hash{inside};
+
             my $cancelled = Future->new;
             my $cancelled_result = add_one($cancelled);
             $cancelled_result->AWAIT_CANCEL;

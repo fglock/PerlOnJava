@@ -1457,6 +1457,28 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeHash activeState = new RuntimeHash();
+        activeState.type = this.type;
+        activeState.blessId = this.blessId;
+        activeState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
+        activeState.elements.putAll(this.elements);
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeHash activeState) {
+            this.type = activeState.type;
+            this.blessId = activeState.blessId;
+            this.byteKeys = activeState.byteKeys != null ? new HashSet<>(activeState.byteKeys) : null;
+            this.elements.putAll(activeState.elements);
+        }
+    }
+
     /**
      * Returns an iterator over the elements of type RuntimeScalar.
      *

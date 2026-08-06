@@ -1751,6 +1751,28 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeArray activeState = new RuntimeArray();
+        activeState.type = this.type;
+        activeState.blessId = this.blessId;
+        activeState.scalarContextSize = this.scalarContextSize;
+        activeState.elements.addAll(this.elements);
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeArray activeState) {
+            this.type = activeState.type;
+            this.blessId = activeState.blessId;
+            this.scalarContextSize = activeState.scalarContextSize;
+            this.elements.addAll(activeState.elements);
+        }
+    }
+
     /**
      * Inner class implementing the Iterator interface for RuntimeArray.
      */

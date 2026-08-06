@@ -92,6 +92,34 @@ public class GlobalRuntimeHash implements DynamicState {
         }
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeHash activeVariable = GlobalVariable.getGlobalHash(fullName);
+        RuntimeHash activeState = new RuntimeHash();
+        if (activeVariable != null) {
+            activeState.type = activeVariable.type;
+            activeState.blessId = activeVariable.blessId;
+            activeState.byteKeys = activeVariable.byteKeys != null
+                    ? new java.util.HashSet<>(activeVariable.byteKeys) : null;
+            activeState.elements.putAll(activeVariable.elements);
+        }
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeHash activeState) {
+            RuntimeHash activeVariable = GlobalVariable.getGlobalHash(fullName);
+            activeVariable.type = activeState.type;
+            activeVariable.blessId = activeState.blessId;
+            activeVariable.byteKeys = activeState.byteKeys != null
+                    ? new java.util.HashSet<>(activeState.byteKeys) : null;
+            activeVariable.elements.putAll(activeState.elements);
+        }
+    }
+
     private record SavedGlobalHashState(String fullName, RuntimeHash originalHash) {
     }
 }
