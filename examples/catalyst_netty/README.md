@@ -4,8 +4,9 @@ This fixture is an unmodified Catalyst application used by the Catalyst support
 acceptance tests. It covers Catalyst action discovery, request parsing, response
 handling, exception conversion, logging, PSGI adaptation, and the Netty server.
 
-Install the runtime into an isolated PerlOnJava home, run the direct dispatcher
-suite, then start the server with a hard timeout:
+Install the runtime into an
+[isolated PerlOnJava home](../../docs/guides/using-cpan-modules.md#isolated-installations),
+run the direct dispatcher suite, then start the server with a hard timeout:
 
 ```bash
 export PERLONJAVA_HOME=/path/to/isolated-home
