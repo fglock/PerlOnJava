@@ -34,6 +34,7 @@ sub _bootstrap_prefs {
         'Params-Validate.yml'        => 'PerlOnJava/CpanDistroprefs/Params-Validate.yml',
         'Moose.yml'                  => 'PerlOnJava/CpanDistroprefs/Moose.yml',
         'DBI.yml'                    => 'PerlOnJava/CpanDistroprefs/DBI.yml',
+        'DB-File.yml'                => 'PerlOnJava/CpanDistroprefs/DB-File.yml',
         'AnyEvent.yml'               => 'PerlOnJava/CpanDistroprefs/AnyEvent.yml',
         'SQL-Translator.yml'         => 'PerlOnJava/CpanDistroprefs/SQL-Translator.yml',
         'XML-LibXML.yml'             => 'PerlOnJava/CpanDistroprefs/XML-LibXML.yml',

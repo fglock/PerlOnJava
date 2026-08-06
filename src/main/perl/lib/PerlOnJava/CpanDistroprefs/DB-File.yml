@@ -1,0 +1,11 @@
+---
+comment: |
+  DB_File is an XS-only optional dependency pulled in by Cache::Memory.
+  Its own native database tests cannot run on PerlOnJava and are not needed
+  by pure-Perl consumers such as Net::OAuth2::Scheme.
+match:
+  distribution: "/DB_File-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])DB_File($|[[:space:]])"
+test:
+  commandline: "PERLONJAVA_SKIP"
