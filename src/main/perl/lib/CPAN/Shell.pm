@@ -1840,7 +1840,7 @@ to find objects with matching identifiers.
                         "q-reqtype[$reqtype]") if $CPAN::DEBUG;
         }
         if ($obj->{reqtype}) {
-            if ($obj->{reqtype} eq "b" && $reqtype =~ /^[rc]$/) {
+            if ($obj->{reqtype} =~ /^(?:b|t|q)$/ && $reqtype =~ /^[rc]$/) {
                 $obj->{reqtype} = $reqtype;
                 if (
                     exists $obj->{install}
@@ -1853,7 +1853,7 @@ to find objects with matching identifiers.
                    ) {
                     delete $obj->{install};
                     $CPAN::Frontend->mywarn
-                        ("Promoting $obj->{ID} from 'build_requires' to 'requires'");
+                        ("Promoting $obj->{ID} from a non-runtime prerequisite to 'requires'");
                 }
             }
         } else {

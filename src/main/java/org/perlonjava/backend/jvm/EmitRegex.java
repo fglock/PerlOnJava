@@ -222,9 +222,14 @@ public class EmitRegex {
         // @_ is at local variable slot 1 in subroutines
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, 1);
 
-        // Create the replacement regex (4-argument version with caller's @_)
+        // Create the replacement regex (4-argument version with caller's @_).
+        // Substitution carries lexical `use bytes` on the regex object so the
+        // runtime can match a byte view and still write through the original lvalue.
+        String replacementFactory = emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)
+                ? "getBytesReplacementRegex" : "getReplacementRegex";
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/regex/RuntimeRegex", "getReplacementRegex",
+                "org/perlonjava/runtime/regex/RuntimeRegex", replacementFactory,
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -244,7 +249,7 @@ public class EmitRegex {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        emitMatchRegex(emitterVisitor);
+        emitMatchRegexWithoutBytesView(emitterVisitor);
     }
 
     /**
@@ -348,6 +353,11 @@ public class EmitRegex {
                     false);
         }
 
+        emitMatchRegexWithoutBytesView(emitterVisitor);
+    }
+
+    /** Invoke RuntimeRegex after any call-site-specific target preparation. */
+    private static void emitMatchRegexWithoutBytesView(EmitterVisitor emitterVisitor) {
         emitterVisitor.pushCallContext();
         // Invoke the regex matching operation
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,

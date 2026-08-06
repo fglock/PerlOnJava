@@ -95,11 +95,9 @@ public class StringOperators {
         }
         // Convert to UTF-8 bytes, then create a string where each byte is a character
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-        StringBuilder sb = new StringBuilder(bytes.length);
-        for (byte b : bytes) {
-            sb.append((char) (b & 0xFF));
-        }
-        return new RuntimeScalar(sb.toString());
+        RuntimeScalar result = new RuntimeScalar(bytes);
+        result.tainted = runtimeScalar.tainted;
+        return result;
     }
 
     /**

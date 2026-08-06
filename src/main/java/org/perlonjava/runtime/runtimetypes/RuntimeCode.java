@@ -339,6 +339,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Return the pristine arguments belonging to a specific active code object.
+     * The formatted caller stack collapses compiler/interpreter wrapper pairs,
+     * while the argument stack retains both entries, so a logical caller frame
+     * cannot always be used as a raw argument-stack index.
+     */
+    private static RuntimeArray getOriginalArgsForCode(RuntimeCode target) {
+        if (target == null) return null;
+        Iterator<RuntimeCode> codeIt = activeCodeStack.get().iterator();
+        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack.get().iterator();
+        while (codeIt.hasNext() && argsIt.hasNext()) {
+            if (codeIt.next() == target) {
+                java.util.List<RuntimeScalar> list = argsIt.next();
+                RuntimeArray result = new RuntimeArray();
+                result.elements = new java.util.ArrayList<>(list);
+                return result;
+            }
+            argsIt.next();
+        }
+        return null;
+    }
+
+    /**
      * Get the hasargs flag for a given call depth.
      * depth=0 is the current (innermost) frame, depth=1 is its caller, etc.
      *
@@ -3359,7 +3381,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // the sub's own location (not the call site). For interpreter code, the first
         // frame from CallerStack already IS the call site, so no skip is needed.
         int argsFrame = frame; // Save pre-skip frame for argsStack indexing
-        if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()) {
+        boolean currentFrameIsInterpreter = frame < javaClassNames.size()
+                && javaClassNames.get(frame) != null
+                && javaClassNames.get(frame).startsWith("interpreter:");
+        boolean interpreterFrameBeforeVirtualEval = currentFrameIsInterpreter
+                && frame + 1 < stackTraceSize
+                && stackTrace.get(frame + 1).size() > 4
+                && "virtual-eval".equals(stackTrace.get(frame + 1).get(4));
+        if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()
+                && !interpreterFrameBeforeVirtualEval) {
             frame++;
         }
 
@@ -3516,6 +3546,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // args here — critical for DBIC TxnScopeGuard double-DESTROY
                         // detection.
                         RuntimeArray frameArgs = getOriginalArgsAt(trackedArgsFrame);
+                        RuntimeArray codeFrameArgs = getOriginalArgsForCode(activeCode);
+                        if (codeFrameArgs != null) {
+                            frameArgs = codeFrameArgs;
+                        }
                         if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
                             RuntimeArray activeFrameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
                             if (activeFrameArgs != null) {
@@ -3702,6 +3736,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static String callerSubNameForCode(RuntimeCode code) {
         if (code == null || code.subName == null || code.subName.isEmpty()
                 || code.subName.startsWith("(")) {
+            if (code != null) {
+                String registeredName = registeredCodeName(code);
+                if (registeredName != null) {
+                    return registeredName;
+                }
+            }
             return null;
         }
         if (code.subName.contains("::")) {
@@ -3709,6 +3749,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    /**
+     * Interpreter calls through imported or prototyped aliases may retain the
+     * code object without retaining its declared subName.  Recover the Perl
+     * name from the live symbol table before reporting an anonymous frame.
+     */
+    private static String registeredCodeName(RuntimeCode code) {
+        String packagePrefix = code.packageName == null || code.packageName.isEmpty()
+                ? null : code.packageName + "::";
+        String fallback = null;
+        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
+            RuntimeScalar value = entry.getValue();
+            if (value == null || value.type != RuntimeScalarType.CODE || value.value != code) {
+                continue;
+            }
+            String name = entry.getKey();
+            if (packagePrefix != null && name.startsWith(packagePrefix)) {
+                return name;
+            }
+            if (fallback == null) {
+                fallback = name;
+            }
+        }
+        return fallback;
     }
 
     private static int activeCodeFrameForCaller(int originalFrame) {
@@ -4285,6 +4350,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+
+            // The interpreter's shared-argument call opcode intentionally does
+            // not carry a source-level name. Recover it from the registered
+            // code reference so stack traces retain the called subroutine.
+            if ((subroutineName == null || subroutineName.isEmpty())
+                    && (code.subName == null || code.subName.isEmpty())) {
+                String registeredName = registeredCodeName(code);
+                if (registeredName != null) {
+                    subroutineName = registeredName;
+                }
+            }
 
             // Check for closure prototype — calling one should die
             if (code.isClosurePrototype) {

@@ -62,13 +62,15 @@ public class Vars extends PerlModuleBase {
                 // Create a code variable
                 GlobalVariable.getGlobalCodeRef(fullName);
             } else if (variableString.startsWith("*")) {
-                // A typeglob declaration predeclares all ordinary variable
-                // slots under strict vars, not just the IO slot.
+                // `use vars qw(*name)` creates the glob and its scalar slot,
+                // but does not materialize ARRAY, HASH, IO, or CODE slots.
+                // Keep array/hash declarations for strict-vars bookkeeping
+                // without creating their containers; symbol-table inspection
+                // (for example Devel::Symdump) must still see those slots as
+                // absent until they are actually used.
                 GlobalVariable.getGlobalVariable(fullName);
                 GlobalVariable.declareGlobalVariable(fullName);
-                GlobalVariable.getGlobalArray(fullName);
                 GlobalVariable.declareGlobalArray(fullName);
-                GlobalVariable.getGlobalHash(fullName);
                 GlobalVariable.declareGlobalHash(fullName);
                 GlobalVariable.getGlobalIO(fullName);
             } else {

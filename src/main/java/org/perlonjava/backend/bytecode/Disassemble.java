@@ -718,7 +718,8 @@ public class Disassemble {
                         int rs3 = interpretedCode.bytecode[pc++];  // flags
                         int callerArgsReg = interpretedCode.bytecode[pc++];  // caller @_
                         int implicitUQr = interpretedCode.bytecode[pc++];
-                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(", r").append(callerArgsReg).append(") implicitU=").append(implicitUQr).append("\n");
+                        int bytesSubstitution = interpretedCode.bytecode[pc++];
+                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(", r").append(callerArgsReg).append(") implicitU=").append(implicitUQr).append(" bytes=").append(bytesSubstitution).append("\n");
                         break;
                     case Opcodes.SUBSTR_VAR:
                         rd = interpretedCode.bytecode[pc++];

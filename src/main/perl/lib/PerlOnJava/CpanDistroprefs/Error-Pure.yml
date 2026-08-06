@@ -6,11 +6,10 @@ comment: |
   passes. The Error::Pure upstream suite is stricter than PerlOnJava's current
   warning and backtrace formatting: repeated module loads emit redeclaration
   warnings, and some generated error strings include extra warning text.
-  Allow installation so downstream pure-Perl modules such as Class::Utils can
-  test against the built module.
+  The source patch remains necessary for plain lexical constants. Dependency
+  tests are governed by CPAN's phase-aware queue; direct tests must report
+  their real result.
 match:
   distribution: "^SKIM/Error-Pure-[0-9]"
 patches:
   - "Error-Pure/PlainLexicalConstants.patch"
-test:
-  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

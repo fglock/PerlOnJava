@@ -60,6 +60,39 @@ public class PrototypeArgs {
     }
 
     /**
+     * Qualify a named handle embedded in the two-argument form of open at
+     * compile time.  In {@code package Foo; open FH, ">&SAVE"}, both FH and
+     * SAVE belong to Foo.  The destination is already represented by a
+     * package-qualified glob node, but the source is otherwise only a string
+     * by the time IOOperator sees it and cannot reliably recover the lexical
+     * package from caller().
+     */
+    private static Node qualifyTwoArgOpenDupMode(Parser parser, Node modeNode) {
+        if (!(modeNode instanceof StringNode stringNode)) {
+            return modeNode;
+        }
+
+        String mode = stringNode.value;
+        String[] prefixes = {
+                "+>>&=", "+<&=", "+>&=", ">>&=", "<&=", ">&=",
+                "+>>&", "+<&", "+>&", ">>&", "<&", ">&"
+        };
+        for (String prefix : prefixes) {
+            if (!mode.startsWith(prefix)) {
+                continue;
+            }
+            String handleName = mode.substring(prefix.length());
+            if (!handleName.contains("::") && isValidFilehandleName(handleName)) {
+                String qualified = FileHandle.normalizeBarewordHandle(parser, handleName);
+                return new StringNode(prefix + qualified, stringNode.isVString,
+                        stringNode.forceByteString, stringNode.getIndex());
+            }
+            break;
+        }
+        return modeNode;
+    }
+
+    /**
      * Throws a "Not enough arguments" error with the subroutine name if available.
      *
      * @param parser The parser instance
@@ -670,10 +703,13 @@ public class PrototypeArgs {
     private static void handleScalarArgument(Parser parser, ListNode args, boolean isOptional, boolean needComma) {
         Node arg = parseArgumentWithComma(parser, isOptional, needComma, "scalar argument");
         if (arg != null) {
+            String operatorName = parser.ctx.symbolTable.getCurrentSubroutine();
+            if ("open".equals(operatorName) && args.elements.size() == 1) {
+                arg = qualifyTwoArgOpenDupMode(parser, arg);
+            }
             // Check if this is the first argument and might be a bareword filehandle
             // For operators like truncate, seek, tell, eof, binmode, etc.
             if (args.elements.isEmpty() && arg instanceof IdentifierNode idNode) {
-                String operatorName = parser.ctx.symbolTable.getCurrentSubroutine();
                 if (isFilehandleOperator(operatorName)) {
                     // Try to parse as bareword filehandle first
                     Node filehandleNode = FileHandle.parseBarewordHandle(parser, idNode.name);

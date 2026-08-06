@@ -24,12 +24,23 @@ use Exporter 'import';
 our @EXPORT    = qw(Dump DumpArray DumpProg);
 our @EXPORT_OK = qw(Dump DumpArray DumpProg SvREFCNT DeadCode
                      fill_mstats mstats_fillhash mstats2hash
-                     DumpWithOP);
+                     DumpWithOP CvGV);
 
 # SvREFCNT - return the reference count of a scalar.
 # JVM uses tracing GC, not reference counting.  Return 1 as a safe
 # default (the value is "alive" if we can see it).
 sub SvREFCNT { return 1 }
+
+# CvGV - return the canonical typeglob associated with a named coderef.
+# PerlOnJava retains the CV's declared/install-site name through Sub::Util,
+# which is sufficient for consumers such as Test::MockObject::Extends.
+sub CvGV {
+    my ($code) = @_;
+    require Sub::Util;
+    my $name = Sub::Util::subname($code);
+    no strict 'refs';
+    return *{$name};
+}
 
 # Dump - print internal representation of a Perl value.
 # Not meaningful on JVM; emit a short placeholder.

@@ -79,6 +79,15 @@ public class RuntimeStashEntry extends RuntimeGlob {
      * @throws IllegalStateException if the typeglob assignment is not implemented for the given type.
      */
     public RuntimeScalar set(RuntimeScalar value) {
+        // A nested package entry can be an undefined glob while still naming a
+        // real stash. Perl aliases that stash when assigning entries such as
+        // `$Dst::{"Nested::"} = $Src::{"Nested::"}`; waiting for a GLOB type
+        // loses the alias when the source package has no visible slots yet.
+        if (value.value instanceof RuntimeStashEntry sourceEntry
+                && this.globName.endsWith("::")
+                && sourceEntry.globName.endsWith("::")) {
+            return super.set((RuntimeGlob) sourceEntry);
+        }
         type = RuntimeScalarType.GLOB;
         GlobalVariable.clearGlobalPseudoConstant(this.globName);
         if (value.type == READONLY_SCALAR) {
@@ -288,6 +297,9 @@ public class RuntimeStashEntry extends RuntimeGlob {
      * @return The scalar value associated with the provided RuntimeGlob.
      */
     public RuntimeScalar set(RuntimeStashEntry value) {
+        if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
+            return super.set((RuntimeGlob) value);
+        }
 
         type = RuntimeScalarType.GLOB;
 

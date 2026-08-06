@@ -34,9 +34,6 @@ specific to PerlOnJava and should be shared by every `jcpan` user.
 
 Good uses:
 
-- Skip a dependency's upstream test phase when the dependency is only being
-  staged for another module and its test suite is broader than the runtime
-  surface PerlOnJava currently needs.
 - Patch a CPAN tarball for a small compatibility issue that is clearly
   PerlOnJava-specific.
 - Replace a phase that assumes native build tools, `fork`, process signals, or
@@ -68,30 +65,22 @@ Prefer this order:
    PerlOnJava, or when it blocks downstream compatibility without giving useful
    signal.
 
-Skipping `make test` is acceptable for a transitive dependency when all of the
-following are true:
+CPAN preserves configure, build, test, and runtime requirements as separate
+queue phases. A normal dependency install stages its configure/build/runtime
+surface without running that dependency's own test surface. The explicitly
+requested distribution still resolves its test requirements and runs its
+tests. Use `jcpan --strict-dependency-tests ...` when every dependency's tests
+and recursively declared test requirements are part of the desired gate.
 
-- The dependency's files are needed at runtime or build time by another module.
-- The failing tests cover behavior outside the downstream module's required
-  surface, or cover an already-known PerlOnJava compatibility gap.
-- The downstream target's own tests still run and pass.
-- The distropref comment documents what is being skipped and why.
+Do not add target-name or `PERLONJAVA_JCPAN_ARGS` regexes merely to distinguish
+a direct request from a dependency. The phase-aware queue owns that policy.
 
 Skipping the target distribution's test phase is a last resort. If you do it,
 document the supported subset and keep a separate smoke test or downstream test
 that proves the behavior PerlOnJava claims to support.
 
-The `jcpan` launchers export `PERLONJAVA_JCPAN_ARGS` with the CPAN arguments
-after wrapper-only options such as `--jobs`. Dependency-only skips can use an
-`env` `not_PERLONJAVA_JCPAN_ARGS` match to stay out of direct target runs.
-For example:
-
-```yaml
-match:
-  distribution: "^AUTHOR/Example-Module-"
-  env:
-    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Example::Module($|[[:space:]])"
-```
+The `jcpan` launchers still export `PERLONJAVA_JCPAN_ARGS` for specialized
+target policies, but it is not the dependency-phase mechanism.
 
 ## Basic YAML Shape
 
@@ -180,11 +169,16 @@ over shell-specific syntax. Avoid `;`, `&&`, redirection, `/dev/null`, and other
 POSIX shell assumptions in bundled distroprefs. CPAN.pm runs command lines
 through Perl's `system()`, and Windows users may go through `cmd.exe`.
 
-Example:
+Do not use lifecycle phase skips for modules supplied by PerlOnJava. Declare
+those modules in `PerlOnJava/providers.json` instead. CPAN will satisfy a
+compatible prerequisite from the manifest and refuse a user-local install when
+the entry has `"shadow_policy": "forbidden"`.
 
-```yaml
-test:
-  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::test_phase()"'
+To fetch and test an upstream provider distribution without installing it over
+the bundled implementation, use the explicit conformance mode:
+
+```text
+jcpan --provider -t Moose
 ```
 
 ## Patch Files
@@ -275,10 +269,8 @@ distributions.
    ps aux | awk '$3 > 20 {print $2, $3, $11, $12}'
    ```
 
-When adding a dependency-only skip, keep the target verification focused on the
-original goal. For example, skipping `String::Print`'s upstream tests is only
-defensible if `Log::Report` then runs its own suite and passes against the
-staged `String::Print`.
+When changing dependency policy, verify both the normal phase-aware mode and
+`--strict-dependency-tests`; do not encode the policy in a distribution pref.
 
 ## Local User Overrides
 

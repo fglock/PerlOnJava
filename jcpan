@@ -5,6 +5,11 @@
 #
 # Supports --jobs N for parallel test execution:
 #   jcpan --jobs 4 -t Module::Name
+# Use --provider with -t for an explicit, non-installing upstream conformance
+# run against a bundled provider:
+#   jcpan --provider -t Module::Name
+# Use --strict-dependency-tests to run each dependency's own test surface and
+# resolve its test-only prerequisites recursively.
 #
 # Note: standard cpan uses -j for config file loading, so we use --jobs
 # to avoid conflicts. --notest is a friendly long-form alias for cpan's -T.
@@ -14,6 +19,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Parse --jobs option for parallel test jobs (consumed here, not passed to cpan)
 ARGS=()
 NO_TEST=0
+PROVIDER_CONFORMANCE=0
+STRICT_DEPENDENCY_TESTS=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --jobs)
@@ -39,12 +46,28 @@ while [[ $# -gt 0 ]]; do
             NO_TEST=1
             shift
             ;;
+        --provider)
+            PROVIDER_CONFORMANCE=1
+            shift
+            ;;
+        --strict-dependency-tests)
+            STRICT_DEPENDENCY_TESTS=1
+            shift
+            ;;
         *)
             ARGS+=("$1")
             shift
             ;;
     esac
 done
+
+if [[ "$PROVIDER_CONFORMANCE" -eq 1 ]]; then
+    export PERLONJAVA_PROVIDER_CONFORMANCE=1
+fi
+
+if [[ "$STRICT_DEPENDENCY_TESTS" -eq 1 ]]; then
+    export PERLONJAVA_STRICT_DEPENDENCY_TESTING=1
+fi
 
 if [[ "$NO_TEST" -eq 1 ]]; then
     if [[ "${ARGS[0]:-}" == "install" ]]; then

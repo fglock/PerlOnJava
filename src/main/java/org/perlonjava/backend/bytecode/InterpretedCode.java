@@ -358,7 +358,12 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             return RuntimeCode.coerceScalarCallResult(
-                    BytecodeInterpreter.execute(this, args, effectiveContext), effectiveContext, callContext);
+                    // The shared-args call path has no call-site name argument,
+                    // but the code object still carries the declared sub name.
+                    // Preserve it for interpreter stack traces (Carp relies on
+                    // caller()[3] to identify the assertion subroutine).
+                    BytecodeInterpreter.execute(this, args, effectiveContext, this.subName),
+                    effectiveContext, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
