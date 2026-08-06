@@ -211,7 +211,7 @@ public class EvalStringHandler {
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
                     " sourceType=" + sourceType);
             // Step 1: Clear $@ at start of eval
-            GlobalVariable.getGlobalVariable("main::@").set("");
+            GlobalVariable.setGlobalVariable("main::@", "");
 
             if (isEvalbytes && RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode)) {
                 perlCode = RuntimeCode.decodeEvalbytesUtf8Source(perlCode);
@@ -538,7 +538,7 @@ public class EvalStringHandler {
                                            int sourceLine) {
         try {
             // Clear $@ at start
-            GlobalVariable.getGlobalVariable("main::@").set("");
+            GlobalVariable.setGlobalVariable("main::@", "");
 
             // Parse the string
             Lexer lexer = new Lexer(perlCode);

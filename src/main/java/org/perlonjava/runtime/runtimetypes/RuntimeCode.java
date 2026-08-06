@@ -2615,8 +2615,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         " resultBool=" + (result != null && result.scalar() != null && result.scalar().getBoolean()));
 
                 // Clear $@ on successful execution
-                RuntimeScalar err = GlobalVariable.getGlobalVariable("main::@");
-                err.set("");
+                GlobalVariable.setGlobalVariable("main::@", "");
 
                 return result;
 

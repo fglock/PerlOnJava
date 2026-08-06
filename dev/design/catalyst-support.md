@@ -178,6 +178,15 @@ deterministically, the process audit is clean, and the final full `make` passes.
 The supported Catalyst runtime target is complete. Follow-up work is optional
 and should be separate in scope:
 
+- A post-completion core-suite comparison found that the stash literal-reference
+  fix made eval's internal `$@` clear use ordinary read-only assignment rules.
+  Internal eval updates now replace a read-only `$@` alias while direct Perl
+  assignment remains read-only. The standard-Perl/JVM/interpreter regression
+  covers eval BLOCK and eval STRING. After rebasing onto current master, the
+  exact core runner reports `lib/croak.t` 47/341, `op/utf8cache.t` 16/16,
+  `op/eval.t` 159/173, and `op/tie_fetch_count.t` 215/343; none is below its
+  current-master baseline.
+
 1. Review and merge the Catalyst runtime PR after CI passes.
 2. Track custom warning-mask provenance separately from Catalyst support.
 3. Consider Catalyst::Devel only in a follow-up proposal; its reloaders and
