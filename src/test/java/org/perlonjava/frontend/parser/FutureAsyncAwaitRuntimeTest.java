@@ -176,6 +176,26 @@ class FutureAsyncAwaitRuntimeTest {
             die "wrong await failure\n"
                     unless $failed_result->{values}[0] eq "await failed\n";
 
+            use Future::AsyncAwait qw(:experimental(cancel));
+            my $cancel_block_log = '';
+            async sub with_cancel_blocks {
+                my $captured = 'captured';
+                CANCEL { $cancel_block_log .= "first:$captured"; }
+                CANCEL { $cancel_block_log .= 'second:'; }
+                await $_[0];
+                return 1;
+            }
+            my $cancel_block_pending = Future->new;
+            my $cancel_block_result = with_cancel_blocks($cancel_block_pending);
+            $cancel_block_result->AWAIT_CANCEL;
+            die "CANCEL blocks did not run in reverse order\n"
+                    unless $cancel_block_log eq 'second:first:captured';
+            my $completed_cancel_result = with_cancel_blocks(
+                    Future->AWAIT_NEW_DONE(1));
+            die "CANCEL block ran after normal completion\n"
+                    unless $completed_cancel_result->AWAIT_GET == 1
+                        && $cancel_block_log eq 'second:first:captured';
+
             our $localized_value = 7;
             async sub localized_value {
                 local $localized_value = 42;
@@ -376,6 +396,40 @@ class FutureAsyncAwaitRuntimeTest {
             $void_pending->AWAIT_DONE(42);
             die "void context did not survive await\n"
                     unless $void_result->AWAIT_GET eq 'void';
+
+            use feature 'signatures';
+
+            async sub declared_async;
+            async sub declared_async :method ($future, $increment = 1) {
+                return await($future) + $increment;
+            }
+            my $declared_pending = Future->new;
+            my $declared_result = declared_async($declared_pending, 2);
+            $declared_pending->AWAIT_DONE(40);
+            die "async signature/attribute/forward declaration failed\n"
+                    unless $declared_result->AWAIT_GET == 42;
+
+            my async sub lexical_async($future) {
+                return await($future) + 2;
+            }
+            my $lexical_pending = Future->new;
+            my $lexical_result = lexical_async($lexical_pending);
+            $lexical_pending->AWAIT_DONE(40);
+            die "lexical async sub failed\n"
+                    unless $lexical_result->AWAIT_GET == 42;
+
+            use feature 'class';
+            no warnings 'experimental::class';
+            class AsyncAwaitExample {
+                async method add($future, $increment = 2) {
+                    return await($future) + $increment;
+                }
+            }
+            my $method_pending = Future->new;
+            my $method_result = AsyncAwaitExample->new->add($method_pending);
+            $method_pending->AWAIT_DONE(40);
+            die "async method failed\n"
+                    unless $method_result->AWAIT_GET == 42;
             """;
 
     @BeforeEach

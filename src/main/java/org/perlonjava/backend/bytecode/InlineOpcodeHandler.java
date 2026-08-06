@@ -1543,4 +1543,13 @@ public class InlineOpcodeHandler {
         DynamicVariableManager.pushLocalVariable(deferBlock);
         return pc;
     }
+
+    public static int executePushCancel(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int codeReg = bytecode[pc++];
+        int argsReg = bytecode[pc++];
+        RuntimeScalar codeRef = (RuntimeScalar) registers[codeReg];
+        RuntimeArray args = (RuntimeArray) registers[argsReg];
+        DynamicVariableManager.pushLocalVariable(new CancelBlock(codeRef, args));
+        return pc;
+    }
 }

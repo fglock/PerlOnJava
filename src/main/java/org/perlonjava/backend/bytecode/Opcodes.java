@@ -2434,6 +2434,9 @@ public class Opcodes {
      */
     public static final short AWAIT = 510;
 
+    /** Register a cancellation-only closure. Format: PUSH_CANCEL codeReg argsReg. */
+    public static final short PUSH_CANCEL = 500;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

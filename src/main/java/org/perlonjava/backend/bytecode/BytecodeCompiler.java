@@ -5220,7 +5220,8 @@ public class BytecodeCompiler implements Visitor {
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.SAVE_REGEX_STATE) {
+                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
+                || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;
         }
         bytecode.add((int) opcode);
@@ -5235,7 +5236,8 @@ public class BytecodeCompiler implements Visitor {
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.SAVE_REGEX_STATE) {
+                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
+                || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;
         }
         int pc = bytecode.size();
@@ -6544,7 +6546,8 @@ public class BytecodeCompiler implements Visitor {
         // Create DeferBlock and push onto dynamic variable stack
         // PUSH_DEFER takes code_reg and args_reg (@_ is always register 1)
         // This ensures the defer block sees the same @_ as the enclosing scope
-        emit(Opcodes.PUSH_DEFER);
+        emit(node.getBooleanAnnotation("futureAsyncAwaitCancel")
+                ? Opcodes.PUSH_CANCEL : Opcodes.PUSH_DEFER);
         emitReg(codeReg);
         emitReg(1);  // @_ is always in register 1
 

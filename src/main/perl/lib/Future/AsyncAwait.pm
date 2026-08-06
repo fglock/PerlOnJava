@@ -8,12 +8,16 @@ our $VERSION = '0.71';
 # PerlOnJava implements the syntax in its own frontend. Keep activation in
 # %^H so it follows Perl's normal lexical pragma scoping rules.
 sub import {
+    my $class = shift;
     $^H |= 0x020000;
     $^H{'Future::AsyncAwait/async'} = 1;
+    $^H{'Future::AsyncAwait/cancel'} = 1
+            if grep { $_ eq ':experimental(cancel)' } @_;
 }
 
 sub unimport {
     delete $^H{'Future::AsyncAwait/async'};
+    delete $^H{'Future::AsyncAwait/cancel'};
 }
 
 1;
@@ -34,6 +38,10 @@ compatible implementation, before declaring async subroutines.
 
 File-scope C<await> invokes the Awaitable C<AWAIT_WAIT> method in the
 surrounding scalar, list, or void context.
+
+Lexical async subs use C<my async sub>. Async class methods, signatures,
+attributes, forward declarations, and experimental C<CANCEL> blocks are
+supported. Enable cancellation blocks with C<:experimental(cancel)>.
 
 The public syntax and behavior are based on Paul Evans' Future::AsyncAwait.
 PerlOnJava does not load or emulate its Perl-internal XS optree hooks.

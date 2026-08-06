@@ -1731,6 +1731,14 @@ public class Disassemble {
                         sb.append("PUSH_DEFER pushLocalVariable(new DeferBlock(r").append(deferCodeReg).append(", r").append(deferArgsReg).append("))\n");
                         break;
                     }
+                    case Opcodes.PUSH_CANCEL: {
+                        int cancelCodeReg = interpretedCode.bytecode[pc++];
+                        int cancelArgsReg = interpretedCode.bytecode[pc++];
+                        sb.append("PUSH_CANCEL pushLocalVariable(new CancelBlock(r")
+                                .append(cancelCodeReg).append(", r")
+                                .append(cancelArgsReg).append("))\n");
+                        break;
+                    }
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];

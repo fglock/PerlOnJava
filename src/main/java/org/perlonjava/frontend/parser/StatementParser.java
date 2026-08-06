@@ -470,6 +470,18 @@ public class StatementParser {
         return new DeferNode(deferBlock, index);
     }
 
+    /** Parse Future::AsyncAwait's experimental cancellation-only block. */
+    public static Node parseCancelStatement(Parser parser) {
+        int index = parser.tokenIndex;
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "CANCEL"
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        Node cancelBlock = ParseBlock.parseBlock(parser);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        DeferNode result = new DeferNode(cancelBlock, index);
+        result.setAnnotation("futureAsyncAwaitCancel", true);
+        return result;
+    }
+
     /**
      * Parses a when statement (part of given/when feature from Perl 5.10).
      * <p>

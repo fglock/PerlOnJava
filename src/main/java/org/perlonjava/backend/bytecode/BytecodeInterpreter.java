@@ -2479,6 +2479,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executePushDefer(bytecode, pc, registers);
                             }
 
+                            case Opcodes.PUSH_CANCEL -> {
+                                pc = InlineOpcodeHandler.executePushCancel(bytecode, pc, registers);
+                            }
+
                             // =================================================================
                             // DEBUGGER SUPPORT
                             // =================================================================

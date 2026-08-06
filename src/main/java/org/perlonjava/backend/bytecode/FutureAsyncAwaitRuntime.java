@@ -169,6 +169,11 @@ public final class FutureAsyncAwaitRuntime {
         int localLevel = DynamicVariableManager.getLocalLevel();
         try {
             DynamicVariableManager.resumeSuspended(states);
+            for (int i = states.size() - 1; i >= 0; i--) {
+                if (states.get(i).state() instanceof CancelBlock cancelBlock) {
+                    cancelBlock.run();
+                }
+            }
             DynamicVariableManager.popToLocalLevel(localLevel);
         } finally {
             BytecodeInterpreter.abandon(frame);

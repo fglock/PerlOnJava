@@ -71,6 +71,45 @@ class FutureAsyncAwaitParserTest {
     }
 
     @Test
+    void parsesLexicalAsyncSubWithSignatureAndAttributes() {
+        assertDoesNotThrow(() -> execute("""
+                use v5.26;
+                use feature 'signatures';
+                use Future::AsyncAwait;
+                sub enclosing {
+                    my async sub lexical_task :method ($future) {
+                        await $future;
+                    }
+                }
+                """, true));
+    }
+
+    @Test
+    void parsesAsyncForwardDeclarationAndDefinition() {
+        assertDoesNotThrow(() -> execute("""
+                use Future::AsyncAwait;
+                async sub declared_task;
+                async sub declared_task { await $_[0] }
+                """, true));
+    }
+
+    @Test
+    void parsesAsyncClassMethod() {
+        assertDoesNotThrow(() -> execute("""
+                use feature 'class';
+                no warnings 'experimental::class';
+                use Future::AsyncAwait;
+                class AsyncExample {
+                    async method perform($future) { await $future }
+                }
+                """, true));
+
+        String ast = capturedOut.toString(StandardCharsets.UTF_8);
+        assertTrue(ast.contains("futureAsyncAwaitSub: 'true'"), ast);
+        assertTrue(ast.contains("OperatorNode: await"), ast);
+    }
+
+    @Test
     void rejectsAwaitInsideOrdinarySub() {
         Exception exception = assertThrows(Exception.class, () -> execute("""
                 use Future::AsyncAwait;

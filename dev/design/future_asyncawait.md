@@ -172,7 +172,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 ## Progress tracking
 
-### Current status: Phase 4 in progress; current focus is syntax completeness
+### Current status: Phase 4 in progress; current focus is native try/catch
 
 ### Completed phases
 
@@ -274,14 +274,27 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Files: `FutureAsyncAwaitRuntime.java`, `BytecodeInterpreter.java`,
     `EmitOperatorNode.java`, `Future::AsyncAwait.pm`, and
     `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 4a: Syntax forms and cancellation blocks (2026-08-06)
+  - Added `my async sub`, async class methods, signatures, attributes, and
+    forward declarations by routing the async modifier through the existing
+    subroutine and class parsers.
+  - Added `:experimental(cancel)` hint handling and cancellation-only dynamic
+    registrations. Executed `CANCEL` blocks run in reverse order with captured
+    lexicals when a suspended outer Future is cancelled, and are discarded on
+    normal completion or failure.
+  - Verified runtime interaction with `defer`, class methods, and both backend
+    frontends; full `make` passes.
+  - Files: `FutureAsyncAwaitParser.java`, `StatementResolver.java`,
+    `StatementParser.java`, `CancelBlock.java`, bytecode compiler/interpreter
+    integration, `Future::AsyncAwait.pm`, and async parser/runtime tests.
 
 ### Next steps
 
-1. Import the applicable upstream Future::AsyncAwait lifecycle and
+1. Implement `TryNode` in the bytecode backend so native `try/catch` can
+   contain resumable awaits; this backend limitation predates async support.
+2. Import the applicable upstream Future::AsyncAwait lifecycle and
    control-flow tests.
-2. Add Phase 4 syntax forms: lexical async subs, methods, signatures,
-   attributes, forward declarations, and `CANCEL` blocks.
-3. Validate `try`, `defer`, and `class` interactions.
+3. Begin Phase 5 ecosystem validation with Future and IO::Async.
 
 ### Open questions
 
@@ -289,6 +302,8 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   state machines after semantic parity is established?
 - Which Future::AsyncAwait extension hooks are required by modules in the
   intended PAGI ecosystem?
+- Should native `try/catch` be lowered onto the interpreter's existing eval
+  handler opcodes or receive dedicated exception-region opcodes?
 
 ## References
 

@@ -108,6 +108,11 @@ public class StatementResolver {
                         ? StatementParser.parseDeferStatement(parser)
                         : null;
 
+                case "CANCEL" -> parser.parsingFutureAsyncAwaitSub
+                        && FutureAsyncAwaitParser.isCancelEnabled()
+                        ? StatementParser.parseCancelStatement(parser)
+                        : null;
+
                 case "package" -> StatementParser.parsePackageDeclaration(parser, token);
 
                 case "class" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("class")
@@ -116,10 +121,28 @@ public class StatementResolver {
 
                 case "use", "no" -> StatementParser.parseUseDeclaration(parser, token);
 
-                case "async" -> FutureAsyncAwaitParser.isEnabled()
-                        && nextNonWhitespaceTokenIs(parser, currentIndex + 1, "sub")
-                        ? FutureAsyncAwaitParser.parseAsyncSubStatement(parser)
-                        : null;
+                case "async" -> {
+                    if (!FutureAsyncAwaitParser.isEnabled()) {
+                        yield null;
+                    }
+                    if (nextNonWhitespaceTokenIs(parser, currentIndex + 1, "sub")) {
+                        yield FutureAsyncAwaitParser.parseAsyncSubStatement(parser);
+                    }
+                    if (nextNonWhitespaceTokenIs(parser, currentIndex + 1, "method")
+                            && parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {
+                        consume(parser); // consume "async" and reuse the class method parser
+                        boolean previousAsync = parser.parsingFutureAsyncAwaitSub;
+                        parser.parsingFutureAsyncAwaitSub = true;
+                        try {
+                            Node method = parseStatement(parser, label);
+                            FutureAsyncAwaitParser.markAsync(method, currentIndex);
+                            yield method;
+                        } finally {
+                            parser.parsingFutureAsyncAwaitSub = previousAsync;
+                        }
+                    }
+                    yield null;
+                }
 
                 case "sub" -> {
                     parser.tokenIndex++;
@@ -275,6 +298,16 @@ public class StatementResolver {
                 case "our", "my", "state" -> {
                     String declaration = consume(parser).text;
                     LexerToken nextToken = peek(parser);
+                    boolean futureAsyncAwaitSub = false;
+
+                    // Future::AsyncAwait follows Perl's lexical-sub ordering:
+                    // `my async sub name { ... }` (the declaration comes first).
+                    if (nextToken.text.equals("async") && FutureAsyncAwaitParser.isEnabled()
+                            && nextNonWhitespaceTokenIs(parser, parser.tokenIndex + 1, "sub")) {
+                        consume(parser); // consume "async"
+                        nextToken = peek(parser);
+                        futureAsyncAwaitSub = true;
+                    }
 
                     if (nextToken.text.equals("sub")) {
                         consume(parser); // consume "sub"
@@ -410,7 +443,8 @@ public class StatementResolver {
                                 if (hasBody) {
                                     // Full definition: my sub name {...} or my sub name (...) {...}
                                     // Parse the rest as an anonymous sub
-                                    Node anonSub = SubroutineParser.parseSubroutineDefinition(parser, false, null);
+                                    Node anonSub = SubroutineParser.parseSubroutineDefinition(
+                                            parser, false, null, futureAsyncAwaitSub);
 
                                     // Apply pre-parsed prototype and attributes to the SubroutineNode.
                                     // parseSubroutineDefinition returns a SubroutineNode with prototype=null
@@ -420,6 +454,9 @@ public class StatementResolver {
                                         List<String> finalAttrs = !attributes.isEmpty() ? attributes : subNode.attributes;
                                         anonSub = new SubroutineNode(subNode.name, finalProto, finalAttrs,
                                                 subNode.block, subNode.useTryCatch, subNode.tokenIndex);
+                                        if (futureAsyncAwaitSub) {
+                                            FutureAsyncAwaitParser.markAsync(anonSub, currentIndex);
+                                        }
                                     }
 
                                     // NOW add &subName to symbol table AFTER parsing the body
