@@ -237,11 +237,17 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
     suite.
   - Files: `FutureAsyncAwaitRuntime.java` and
     `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3f: Special-variable suspension state (2026-08-06)
+  - Preserved hidden state for errno (`$!`), output autoflush (`$|`), and
+    input-line tracking (`$.`) across await detachment and resume.
+  - Added errno coverage and verified the full `make` suite on both backends.
+  - Files: `ErrnoVariable.java`, `OutputAutoFlushVariable.java`,
+    `ScalarSpecialVariable.java`, and `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Add suspend/resume implementations for tied and special variables, plus
-   destruction handling for abandoned frames.
+1. Add suspend/resume implementations for tied variables and destruction
+   handling for abandoned frames.
 2. Cover eval, loops, regex captures, closures, and nested dynamic scopes.
 3. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
 4. Import the applicable upstream Future::AsyncAwait lifecycle and

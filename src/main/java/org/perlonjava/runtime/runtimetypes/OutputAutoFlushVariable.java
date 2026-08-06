@@ -95,6 +95,22 @@ public class OutputAutoFlushVariable extends RuntimeScalar {
         }
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeIO handle = currentHandle();
+        State active = new State(handle, handle.isAutoFlush());
+        dynamicRestoreState();
+        return active;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof State active && active.handle != null) {
+            active.handle.setAutoFlush(active.autoFlush);
+        }
+    }
+
     private record State(RuntimeIO handle, boolean autoFlush) {
     }
 }

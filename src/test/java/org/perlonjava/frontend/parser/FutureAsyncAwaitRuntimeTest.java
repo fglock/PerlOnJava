@@ -196,6 +196,19 @@ class FutureAsyncAwaitRuntimeTest {
             $cancel_defer_result->AWAIT_CANCEL;
             die "defer did not run during cancellation cleanup\n"
                     unless $cancel_defer_log eq 'cancelled';
+
+            $! = 0;
+            async sub localized_errno {
+                local $! = 42;
+                my $value = await $_[0];
+                return $! + $value;
+            }
+            my $errno_pending = Future->new;
+            my $errno_result = localized_errno($errno_pending);
+            die "errno localization leaked while suspended\n" unless $! == 0;
+            $errno_pending->AWAIT_DONE(5);
+            die "errno state was not restored on resume\n"
+                    unless $errno_result->AWAIT_GET == 47 && $! == 0;
             """;
 
     @BeforeEach
