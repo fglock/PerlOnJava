@@ -247,10 +247,11 @@ public class BytecodeInterpreter {
         // Use ArrayDeque instead of Stack for better performance (no synchronization)
         java.util.ArrayDeque<Integer> evalCatchStack = frame.evalCatchStack;
 
-        // Parallel stack tracking DynamicVariableManager local level at eval entry.
-        // When EVAL_TRY is executed, save the current local level.
-        // On eval exit (both normal EVAL_END and exception catch), restore to this level
-        // so that `local` variables inside the eval block are properly unwound.
+        // Parallel stack tracking the frame-relative DynamicVariableManager level at
+        // eval entry. A suspended frame can resume from a Future callback whose
+        // dynamic stack has a different absolute depth, so absolute levels cannot be
+        // retained across AWAIT_WAIT. On eval exit (both normal EVAL_END and exception
+        // catch), add savedLocalLevel to restore the invocation-relative level.
         java.util.ArrayDeque<Integer> evalLocalLevelStack = frame.evalLocalLevelStack;
 
         // Parallel stack tracking the first register allocated inside the eval body.
@@ -819,7 +820,8 @@ public class BytecodeInterpreter {
                                 int nameIdx = bytecode[pc++];
                                 String name = code.stringPool[nameIdx];
 
-                                registers[levelReg] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());
+                                registers[levelReg] = new RuntimeScalar(
+                                        DynamicVariableManager.getLocalLevel() - savedLocalLevel);
                                 registers[rd] = GlobalRuntimeScalar.makeLocal(name);
                             }
 
@@ -827,8 +829,8 @@ public class BytecodeInterpreter {
                                 // Restore DynamicVariableManager to a previously saved local level.
                                 // Matches JVM compiler's DynamicVariableManager.popToLocalLevel(savedLevel) call.
                                 int rs = bytecode[pc++];
-                                int savedLevel = ((RuntimeScalar) registers[rs]).getInt();
-                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                int relativeLevel = ((RuntimeScalar) registers[rs]).getInt();
+                                DynamicVariableManager.popToLocalLevel(savedLocalLevel + relativeLevel);
                             }
 
                             case Opcodes.SAVE_REGEX_STATE -> {
@@ -1573,8 +1575,9 @@ public class BytecodeInterpreter {
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
                                             if (!evalLocalLevelStack.isEmpty()) {
-                                                int savedLevel = evalLocalLevelStack.pop();
-                                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                                int relativeLevel = evalLocalLevelStack.pop();
+                                                DynamicVariableManager.popToLocalLevel(
+                                                        savedLocalLevel + relativeLevel);
                                             }
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
@@ -1688,8 +1691,9 @@ public class BytecodeInterpreter {
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
                                             if (!evalLocalLevelStack.isEmpty()) {
-                                                int savedLevel = evalLocalLevelStack.pop();
-                                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                                int relativeLevel = evalLocalLevelStack.pop();
+                                                DynamicVariableManager.popToLocalLevel(
+                                                        savedLocalLevel + relativeLevel);
                                             }
                                             pc = evalCatchStack.pop();
                                             RuntimeCode.evalDepth--;
@@ -2080,7 +2084,8 @@ public class BytecodeInterpreter {
                                 evalBaseRegStack.push(firstBodyReg);
 
                                 // Save local level so we can restore local variables on eval exit
-                                evalLocalLevelStack.push(DynamicVariableManager.getLocalLevel());
+                                evalLocalLevelStack.push(
+                                        DynamicVariableManager.getLocalLevel() - savedLocalLevel);
 
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth++;
@@ -2113,8 +2118,9 @@ public class BytecodeInterpreter {
                                 // Restore local variables that were pushed inside the eval block
                                 // e.g., `eval { local @_ = @_ }` should restore @_ on eval exit
                                 if (!evalLocalLevelStack.isEmpty()) {
-                                    int savedLevel = evalLocalLevelStack.pop();
-                                    DynamicVariableManager.popToLocalLevel(savedLevel);
+                                    int relativeLevel = evalLocalLevelStack.pop();
+                                    DynamicVariableManager.popToLocalLevel(
+                                            savedLocalLevel + relativeLevel);
                                 }
 
                                 // Track eval depth for $^S
@@ -2452,7 +2458,9 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.GET_LOCAL_LEVEL -> {
-                                pc = InlineOpcodeHandler.executeGetLocalLevel(bytecode, pc, registers);
+                                int rd = bytecode[pc++];
+                                registers[rd] = new RuntimeScalar(
+                                        DynamicVariableManager.getLocalLevel() - savedLocalLevel);
                             }
 
                             case Opcodes.POP_PACKAGE -> {
@@ -2715,8 +2723,9 @@ public class BytecodeInterpreter {
                         int catchPc = evalCatchStack.pop();
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {
-                            int savedLevel = evalLocalLevelStack.pop();
-                            DynamicVariableManager.popToLocalLevel(savedLevel);
+                            int relativeLevel = evalLocalLevelStack.pop();
+                            DynamicVariableManager.popToLocalLevel(
+                                    savedLocalLevel + relativeLevel);
                         }
                         RuntimeCode.evalDepth--;
                         if (frame.virtualEvalFrameDepth > 0) {
@@ -2790,8 +2799,9 @@ public class BytecodeInterpreter {
 
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {
-                            int savedLevel = evalLocalLevelStack.pop();
-                            DynamicVariableManager.popToLocalLevel(savedLevel);
+                            int relativeLevel = evalLocalLevelStack.pop();
+                            DynamicVariableManager.popToLocalLevel(
+                                    savedLocalLevel + relativeLevel);
                         }
 
                         // Track eval depth for $^S

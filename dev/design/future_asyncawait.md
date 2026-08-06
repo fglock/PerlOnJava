@@ -171,7 +171,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 ## Progress tracking
 
-### Current status: Phase 3 in progress; current focus is array/hash localization
+### Current status: Phase 3 in progress; current focus is file-scope await
 
 ### Completed phases
 
@@ -253,13 +253,23 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
     full `make` passes.
   - Files: `GlobalRuntimeScalar.java`, `BytecodeInterpreter.java`,
     `FutureAsyncAwaitRuntime.java`, and `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3h: Control-flow and context parity (2026-08-06)
+  - Made interpreter cleanup levels frame-relative so eval and loop scope
+    bookkeeping can be safely rebased when a Future callback resumes under a
+    different dynamic-stack depth.
+  - Verified success and failure through `eval`, repeated awaits in loops,
+    closure captures, regex capture restoration, and scalar/list/void await
+    contexts on both frontends.
+  - Added both-backend regression coverage and verified the full `make` suite.
+  - Files: `BytecodeInterpreter.java` and
+    `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Cover eval, loops, regex captures, closures, and nested dynamic scopes.
-2. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
-3. Import the applicable upstream Future::AsyncAwait lifecycle and
+1. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
+2. Import the applicable upstream Future::AsyncAwait lifecycle and
    control-flow tests.
+3. Continue Phase 4 syntax and interoperability coverage.
 
 ### Open questions
 
@@ -267,8 +277,6 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   state machines after semantic parity is established?
 - Which Future::AsyncAwait extension hooks are required by modules in the
   intended PAGI ecosystem?
-- What is the smallest safe representation for detaching nested dynamic
-  localization entries without executing `defer` blocks at suspension time?
 
 ## References
 

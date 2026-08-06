@@ -36,6 +36,8 @@ class FutureAsyncAwaitRuntimeTest {
                 sub AWAIT_IS_CANCELLED { $_[0]{state} eq 'cancelled' }
                 sub AWAIT_GET {
                     my $self = shift;
+                    $self->{get_context} = !defined(wantarray) ? 'void'
+                            : wantarray ? 'list' : 'scalar';
                     die $self->{values}[0] if $self->{state} eq 'failed';
                     return wantarray ? @{ $self->{values} } : $self->{values}[0];
                 }
@@ -247,6 +249,84 @@ class FutureAsyncAwaitRuntimeTest {
             $destroy_result->AWAIT_CANCEL;
             die "cancelled lexical was not destroyed exactly once\n"
                     unless @destroy_log == 1 && $destroy_log[0] eq 'destroyed';
+
+            async sub eval_await {
+                my $value = eval { await $_[0] };
+                return defined($value) ? $value + 1 : "caught:$@";
+            }
+            my $eval_pending = Future->new;
+            my $eval_result = eval_await($eval_pending);
+            $eval_pending->AWAIT_DONE(10);
+            die "await inside eval lost success value\n"
+                    unless $eval_result->AWAIT_GET == 11;
+            my $eval_failed = Future->new;
+            my $eval_failed_result = eval_await($eval_failed);
+            $eval_failed->AWAIT_FAIL("eval await failed\n");
+            die "await failure was not caught by eval\n"
+                    unless $eval_failed_result->AWAIT_GET eq
+                           "caught:eval await failed\n";
+
+            async sub loop_await {
+                my $sum = 0;
+                for my $future (@_) {
+                    $sum += await $future;
+                }
+                return $sum;
+            }
+            my $loop_first = Future->new;
+            my $loop_second = Future->new;
+            my $loop_result = loop_await($loop_first, $loop_second);
+            $loop_first->AWAIT_DONE(20);
+            $loop_second->AWAIT_DONE(22);
+            die "loop state did not survive repeated awaits\n"
+                    unless $loop_result->AWAIT_GET == 42;
+
+            async sub regex_await {
+                "letters42" =~ /^([a-z]+)(\\d+)$/;
+                await $_[0];
+                return "$1:$2";
+            }
+            my $regex_pending = Future->new;
+            my $regex_result = regex_await($regex_pending);
+            "outside7" =~ /^([a-z]+)(\\d+)$/;
+            $regex_pending->AWAIT_DONE(1);
+            die "regex captures did not survive await\n"
+                    unless $regex_result->AWAIT_GET eq 'letters:42';
+            die "caller regex captures were not restored\n"
+                    unless "$1:$2" eq 'outside:7';
+
+            async sub closure_await {
+                my $base = 40;
+                my $add = sub { $base + $_[0] };
+                await $_[0];
+                return $add->(2);
+            }
+            my $closure_pending = Future->new;
+            my $closure_result = closure_await($closure_pending);
+            $closure_pending->AWAIT_DONE(1);
+            die "closure capture did not survive await\n"
+                    unless $closure_result->AWAIT_GET == 42;
+
+            async sub list_context_await {
+                my @values = await $_[0];
+                return join ':', @values;
+            }
+            my $list_pending = Future->new;
+            my $list_result = list_context_await($list_pending);
+            $list_pending->AWAIT_DONE(20, 22);
+            die "list context did not survive await\n"
+                    unless $list_result->AWAIT_GET eq '20:22'
+                        && $list_pending->{get_context} eq 'list';
+
+            async sub void_context_await {
+                await $_[0];
+                return $_[0]{get_context};
+            }
+            my $void_pending = Future->new;
+            my $void_result = void_context_await($void_pending);
+            $void_pending->AWAIT_DONE(42);
+            die "void context did not survive await\n"
+                    unless $void_result->AWAIT_GET eq 'void';
             """;
 
     @BeforeEach
