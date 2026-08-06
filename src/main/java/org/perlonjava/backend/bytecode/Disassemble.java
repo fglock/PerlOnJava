@@ -758,7 +758,8 @@ public class Disassemble {
                         int strReg = interpretedCode.bytecode[pc++];
                         int regReg = interpretedCode.bytecode[pc++];
                         int matchCtx = interpretedCode.bytecode[pc++];
-                        sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
+                        int bytesMode = interpretedCode.bytecode[pc++];
+                        sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(", bytes=").append(bytesMode).append(")\n");
                         break;
                     case Opcodes.MATCH_REGEX_NOT:
                         rd = interpretedCode.bytecode[pc++];

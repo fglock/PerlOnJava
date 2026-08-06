@@ -55,4 +55,14 @@ public class ArgumentParserTest {
                         + "${qq(\\x{6d}\\x{61}\\x{69}\\x{6e}\\x{3a}\\x{3a}\\x{e1})} = qq(\\x{20ac});\n1",
                 options.code);
     }
+
+    @Test
+    void versionedPerlShebangRunsInCurrentRuntime() {
+        CompilerOptions options = new CompilerOptions();
+
+        assertTrue(ArgumentParser.applyPerlShebangSwitches(
+                "#!/usr/bin/env perl5 -w\nprint qq(ok\\n);\n", options));
+        assertTrue(options.perlShebangProcessed);
+        assertTrue(options.warnFlag);
+    }
 }

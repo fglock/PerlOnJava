@@ -134,7 +134,7 @@ public class Time {
         return getTimeComponents(ctx, date);
     }
 
-    private static ZoneId localZoneId() {
+    public static ZoneId localZoneId() {
         RuntimeScalar tzScalar = getGlobalHash("main::ENV").elements.get("TZ");
         String tz = tzScalar != null && tzScalar.getDefinedBoolean()
                 ? tzScalar.toString()
@@ -151,6 +151,20 @@ public class Time {
         try {
             return ZoneId.of(tz);
         } catch (DateTimeException ignored) {
+            // POSIX forms such as CET-1CEST include an offset and daylight
+            // abbreviation. Java's short zone ID retains the corresponding
+            // regional DST rules even though it does not accept the full form.
+            int nameEnd = 0;
+            while (nameEnd < tz.length() && Character.isLetter(tz.charAt(nameEnd))) {
+                nameEnd++;
+            }
+            if (nameEnd >= 3) {
+                try {
+                    return ZoneId.of(tz.substring(0, nameEnd));
+                } catch (DateTimeException ignoredShortName) {
+                    // Fall through to the host default for an unknown POSIX name.
+                }
+            }
             return ZoneId.systemDefault();
         }
     }

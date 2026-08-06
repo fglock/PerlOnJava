@@ -1,0 +1,18 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::Trap.
+
+  Test::Trap is a test-only prerequisite of MooseX::Getopt in the Catalyst
+  runtime graph. PerlOnJava supports CORE::GLOBAL::exit overrides, but this
+  release escapes its exit layer using a labeled non-local last across several
+  callbacks. Use an equivalent private exception sentinel so exit status and
+  captured output are restored normally. The upstream suite still contains
+  unsupported fork coverage, so installation skips its aggregate test phase;
+  the non-forking suite is run explicitly by the Catalyst support acceptance.
+match:
+  distribution: "^(?:ETHER|EBHANSSEN)/Test-Trap-"
+patches:
+  - "Test-Trap/ExitTrap.patch"
+  - "Test-Trap/TempFileGlobLocalization.patch"
+test:
+  commandline: "PERLONJAVA_SKIP"

@@ -1,0 +1,49 @@
+diff --git a/lib/Test/Trap/Builder/TempFile.pm b/lib/Test/Trap/Builder/TempFile.pm
+--- a/lib/Test/Trap/Builder/TempFile.pm
++++ b/lib/Test/Trap/Builder/TempFile.pm
+@@ -53,20 +53,32 @@ sub import {
+       binmode $fh; # set the perlio layers for reading:
+       binmode $fh, $_ for @io_layers;
+     }
+-    local *$globref;
+-    {
+-      no warnings 'io';
+-      local ($!, $^E);
+-      open *$globref, '>>', $file;
+-    }
+-  IO_LAYERS: {
+-      GOTPERLIO or last IO_LAYERS;
+-      local($!, $^E);
+-      binmode *$globref; # set the perlio layers for writing:
+-      binmode *$globref, $_ for @io_layers;
+-    }
+-    *$globref->autoflush(1);
+-    $self->Next;
++    my $capture = sub {
++      my ($active_glob) = @_;
++      {
++        no warnings 'io';
++        local ($!, $^E);
++        open *$active_glob, '>>', $file;
++      }
++    IO_LAYERS: {
++        GOTPERLIO or last IO_LAYERS;
++        local($!, $^E);
++        binmode *$active_glob; # set the perlio layers for writing:
++        binmode *$active_glob, $_ for @io_layers;
++      }
++      *$active_glob->autoflush(1);
++      $self->Next;
++    };
++    if ($name eq 'stdout') {
++      local *STDOUT;
++      return $capture->(\*STDOUT);
++    }
++    if ($name eq 'stderr') {
++      local *STDERR;
++      return $capture->(\*STDERR);
++    }
++    local *$globref;
++    return $capture->($globref);
+   };
+ }

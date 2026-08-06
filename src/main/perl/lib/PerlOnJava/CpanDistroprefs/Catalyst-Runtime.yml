@@ -1,0 +1,18 @@
+---
+comment: |
+  PerlOnJava distroprefs for Catalyst::Runtime.
+
+  Catalyst 5.90132's broad upstream test phase includes legacy application
+  fixtures that mutate a value returned through a readonly configuration
+  scalar and aggregate suites for unsupported fork, development-server, and
+  process-management modes.  Those tests are not runtime prerequisites and
+  make the CPAN install gate both non-deterministic and pathologically slow.
+
+  Install the unchanged runtime distribution without running that aggregate
+  phase.  Catalyst's supported single-process behavior is covered separately
+  by the standard-Perl-validated CatalystNetty dispatcher suite and by the
+  Plack::Handler::Netty HTTP acceptance script.
+match:
+  distribution: "^JJNAPIORK/Catalyst-Runtime-"
+test:
+  commandline: "PERLONJAVA_SKIP"

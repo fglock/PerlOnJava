@@ -87,48 +87,23 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeScalar targetScalar = (RuntimeScalar) value.value;
-                boolean readonlyScalarRef =
+                // Internals::SvREADONLY marks a mutable container as Perl's
+                // pseudo-constant form (used by constant.pm). A compile-time
+                // literal is represented by RuntimeScalarReadOnly too, but a
+                // reference to that literal still aliases the scalar slot.
+                boolean explicitReadonlyScalarRef =
                         targetScalar.type == READONLY_SCALAR
-                                || targetScalar instanceof RuntimeScalarReadOnly;
-                RuntimeScalar deref = value.scalarDeref();
-                if (deref.type == CODE) {
-                    // `$stash->{foo} = \&bar` creates a constant subroutine returning the code reference
+                                && !(targetScalar instanceof RuntimeScalarReadOnly);
+                if (explicitReadonlyScalarRef) {
                     RuntimeCode code = new RuntimeCode("", null);
-                    code.constantValue = deref.getList();
-                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
-                            new RuntimeScalar(code));
-                    InheritanceResolver.invalidateCache();
-                } else if (deref.type == HASHREFERENCE) {
-                    // `$stash->{foo} = \$hash_ref` creates a constant subroutine returning the hash reference
-                    RuntimeCode code = new RuntimeCode("", null);
-                    code.constantValue = deref.getList();
-                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
-                            new RuntimeScalar(code));
-                } else if (deref.type == ARRAYREFERENCE) {
-                    // `$stash->{foo} = \$array_ref` creates a constant subroutine returning the array reference
-                    RuntimeCode code = new RuntimeCode("", null);
-                    code.constantValue = deref.getList();
-                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
-                            new RuntimeScalar(code));
-                } else if (deref.type == GLOB) {
-                    // `$stash->{foo} = \*bar` creates a constant subroutine returning the glob
-                    RuntimeCode code = new RuntimeCode("", null);
-                    code.constantValue = new RuntimeList(deref);
-                    GlobalVariable.defineGlobalCodeRef(this.globName).set(
-                            new RuntimeScalar(code));
-                } else if (readonlyScalarRef) {
-                    // Readonly scalar refs in a stash are Perl's pseudo-constant
-                    // scalar form. PerlOnJava models that with a constant CODE slot
-                    // so bareword constant users such as constant.pm keep working.
-                    RuntimeCode code = new RuntimeCode("", null);
-                    code.constantValue = deref.getList();
+                    code.constantValue = value.scalarDeref().getList();
                     GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
                 } else {
-                    // Ordinary mutable scalar refs alias the stash scalar slot and
-                    // register a bareword-only pseudo-constant. They must not create
-                    // a CODE slot: `${*Pkg::}{x} = \$v` updates $Pkg::x, while
-                    // `&Pkg::x` remains undefined.
+                    // Ordinary scalar references alias the stash scalar slot,
+                    // even when the scalar contains an object or another ref.
+                    // The proxy registry preserves Perl's compile-time bareword
+                    // lookup without installing an actual CODE slot.
                     super.set(value);
                     GlobalVariable.setGlobalPseudoConstant(this.globName, targetScalar);
                 }

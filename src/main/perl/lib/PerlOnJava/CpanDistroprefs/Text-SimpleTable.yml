@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Text::SimpleTable.
+
+  Text::VisualWidth::UTF8 requires unavailable native code and
+  Text::VisualWidth::PP uses regex lookbehind beyond PerlOnJava's supported
+  limit.  Both are optional accelerators: Text::SimpleTable's built-in
+  pure-Perl CJK width implementation passes upstream tests.  Disable recommended
+  prerequisites for this distribution so a clean Catalyst install neither
+  installs broken accelerators nor reports unsatisfied optional dependencies.
+match:
+  distribution: "^MRAMBERG/Text-SimpleTable-"
+cpanconfig:
+  recommends_policy: 0

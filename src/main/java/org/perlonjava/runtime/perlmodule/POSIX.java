@@ -29,6 +29,7 @@ public class POSIX extends PerlModuleBase {
         POSIX module = new POSIX();
         try {
             module.registerMethod("_strftime", "strftime", null);
+            module.registerMethod("tzset", null);
             module.registerMethod("_mktime", "mktime", null);
             module.registerMethod("_time", "posix_time", null);
             module.registerMethod("_sleep", "posix_sleep", null);
@@ -241,10 +242,22 @@ public class POSIX extends PerlModuleBase {
         }
 
         // Get timezone info for %z and %Z
-        ZonedDateTime zonedDateTime = dateTime.atZone(ZoneId.systemDefault());
+        ZonedDateTime zonedDateTime = dateTime.atZone(Time.localZoneId());
 
         String result = formatStrftime(format, zonedDateTime);
         return new RuntimeScalar(result).getList();
+    }
+
+    /**
+     * Refresh timezone state after a change to {@code $ENV{TZ}}.
+     *
+     * <p>PerlOnJava's time operators consult the Perl environment dynamically,
+     * so there is no native process cache to invalidate. Providing the POSIX
+     * entry point gives callers the standard synchronization boundary while
+     * preserving localized {@code %ENV} behavior.</p>
+     */
+    public static RuntimeList tzset(RuntimeArray args, int ctx) {
+        return RuntimeScalarCache.scalarUndef.getList();
     }
 
     /**
@@ -381,7 +394,10 @@ public class POSIX extends PerlModuleBase {
                 return String.format("%+03d%02d", hours, minutes);
             }
             case "Z": {
-                return dt.getZone().getDisplayName(TextStyle.SHORT, locale);
+                if (dt.getZone().equals(ZoneOffset.UTC)) {
+                    return "UTC";
+                }
+                return dt.format(DateTimeFormatter.ofPattern("z", Locale.ENGLISH));
             }
             default: return "%" + code;
         }
@@ -412,14 +428,14 @@ public class POSIX extends PerlModuleBase {
             // supplied hour instead of rejecting hour == -1.
             LocalDateTime ldt = LocalDateTime.of(actualYear, actualMon, mday, 0, 0, 0)
                     .plusHours(hour).plusMinutes(min).plusSeconds(sec);
-            ZonedDateTime zdt = ldt.atZone(ZoneId.systemDefault());
+            ZonedDateTime zdt = ldt.atZone(Time.localZoneId());
             // Perl's mktime honors an explicitly supplied isdst flag.  Time::Simple
             // passes isdst=0 after subtracting the current DST hour; Java's default
             // resolution otherwise leaves the value one hour early during DST.
             if (args.size() >= 9) {
                 int isdst = args.get(8).getInt();
                 if (isdst == 0) {
-                    ZoneId zone = ZoneId.systemDefault();
+                    ZoneId zone = Time.localZoneId();
                     int daylightSeconds = zdt.getOffset().getTotalSeconds()
                             - zone.getRules().getStandardOffset(zdt.toInstant()).getTotalSeconds();
                     if (daylightSeconds > 0) {

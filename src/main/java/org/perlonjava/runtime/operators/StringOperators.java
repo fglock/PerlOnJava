@@ -93,13 +93,10 @@ public class StringOperators {
         if (!needsConversion) {
             return runtimeScalar;
         }
-        // Convert to UTF-8 bytes, then create a string where each byte is a character
+        // Convert to UTF-8 bytes. RuntimeScalar(byte[]) preserves the byte-string
+        // type, so regex captures and replacements retain Perl's SvUTF8-off view.
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-        StringBuilder sb = new StringBuilder(bytes.length);
-        for (byte b : bytes) {
-            sb.append((char) (b & 0xFF));
-        }
-        return new RuntimeScalar(sb.toString());
+        return new RuntimeScalar(bytes);
     }
 
     /**

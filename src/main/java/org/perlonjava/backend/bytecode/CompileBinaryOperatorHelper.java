@@ -377,6 +377,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.emit(0);
             }
             case "!~" -> {
                 // $string !~ /pattern/ - negated regex match

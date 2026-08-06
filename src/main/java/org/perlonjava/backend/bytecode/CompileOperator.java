@@ -317,20 +317,13 @@ public class CompileOperator {
         } else {
             stringReg = loadDefaultUnderscore(bc);
         }
-        // When 'use bytes' is in effect, convert string to UTF-8 byte representation
-        if (bc.isBytesEnabled()) {
-            int bytesReg = bc.allocateRegister();
-            bc.emit(Opcodes.TO_BYTES_STRING);
-            bc.emitReg(bytesReg);
-            bc.emitReg(stringReg);
-            stringReg = bytesReg;
-        }
         int rd = bc.allocateOutputRegister();
         bc.emit(Opcodes.MATCH_REGEX);
         bc.emitReg(rd);
         bc.emitReg(stringReg);
         bc.emitReg(regexReg);
         bc.emit(bc.currentCallContext);
+        bc.emit(bc.isBytesEnabled() ? 1 : 0);
         bc.lastResultReg = rd;
     }
 
@@ -366,6 +359,7 @@ public class CompileOperator {
         bc.emitReg(stringReg);
         bc.emitReg(regexReg);
         bc.emit(bc.currentCallContext);
+        bc.emit(bc.isBytesEnabled() ? 1 : 0);
         bc.lastResultReg = rd;
     }
 

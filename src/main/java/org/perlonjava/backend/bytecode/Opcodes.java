@@ -1003,7 +1003,7 @@ public class Opcodes {
 
     /**
      * Match regex: rd = RuntimeRegex.matchRegex(string, regex, ctx)
-     * Format: MATCH_REGEX rd stringReg regexReg ctx
+     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode
      */
     public static final short MATCH_REGEX = 167;
 

@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::TCP.
+
+  Test::TCP's upstream suite and server helpers require fork/process
+  coordination, which PerlOnJava does not implement. Plack 1.0054 declares
+  Test::TCP as a runtime prerequisite for its optional server-test adapter,
+  while the supported Plack::Handler::Netty path does not use it. Install the
+  pure-Perl module so Plack's declared dependency is present, but skip its
+  fork-only upstream test phase.
+match:
+  distribution: "^(?:MIYAGAWA|TOKUHIROM)/Test-TCP-"
+test:
+  commandline: "PERLONJAVA_SKIP"

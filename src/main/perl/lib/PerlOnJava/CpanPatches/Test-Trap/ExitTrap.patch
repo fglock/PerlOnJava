@@ -1,0 +1,38 @@
+diff --git a/lib/Test/Trap.pm b/lib/Test/Trap.pm
+--- a/lib/Test/Trap.pm
++++ b/lib/Test/Trap.pm
+@@ -63,6 +63,7 @@ EXIT_LAYER: {
+     my $pid = $$;
+     my $outer = \&CORE::GLOBAL::exit;
+     undef $outer if $outer == \&_global_exit;
++    my $exit_signal = bless {}, 'Test::Trap::_PerlOnJavaExit';
+     local *___exit;
+   TEST_TRAP_EXITING: {
+       {
+@@ -76,12 +77,15 @@ EXIT_LAYER: {
+ 	  $self->{exit} = shift;
+ 	  $self->{leaveby} = 'exit';
+ 	  no warnings 'exiting';
+-	  last TEST_TRAP_EXITING;
++	  die $exit_signal;
+ 	};
+       }
+       local *CORE::GLOBAL::exit;
+       *CORE::GLOBAL::exit = \&_global_exit;
+-      $self->Next;
++      my $continued = eval { $self->Next; 1 };
++      my $error = $@;
++      die $error
++        if !$continued && ref($error) ne 'Test::Trap::_PerlOnJavaExit';
+     }
+     return;
+   };
+@@ -131,7 +135,7 @@ EXIT_LAYER: {
+ };
+ 
+ # Multi-layers:
+-$B->multi_layer(flow => qw/ raw die exit /);
++$B->multi_layer(flow => qw/ raw exit die /);
+ $B->multi_layer(default => qw/ flow stdout stderr warn /);
+ 
+ # Non-default non-trapping layers:

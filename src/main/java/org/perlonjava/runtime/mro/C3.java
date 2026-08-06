@@ -111,7 +111,8 @@ public class C3 {
             }
 
             if (!found || candidate == null) {
-                throw new PerlCompilerException("Inconsistent hierarchy detected in C3 linearization for " + className);
+                throw new PerlCompilerException(
+                        "Inconsistent hierarchy during C3 merge of class '" + className + "': merging failed");
             }
 
             // Add the candidate to result

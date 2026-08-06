@@ -51,22 +51,23 @@ my $_java_find_encoding = \&find_encoding;
         my ($name, $skip_external) = @_;
         return undef unless defined $name;
 
-        my $key = lc $name;
-        return $_encoding_cache{$key} if exists $_encoding_cache{$key};
-
         # Guard against circular alias chains for the same name
         return undef if $_resolving{$name};
         local $_resolving{$name} = 1;
 
-        # Consult Encode::Alias first so dynamic aliases can override names
-        # that the Java backend also knows, such as "locale".
+        # Consult Encode::Alias before the stable Java-encoding cache. Dynamic
+        # aliases such as Encode::Locale's "locale" can be reinitialized at
+        # runtime, so caching their resolved object here would make
+        # Encode::Locale::reinit() ineffective.
         if (defined &Encode::Alias::find_alias) {
             my $resolved = eval { Encode::Alias::find_alias("Encode", $name) };
             if (defined $resolved) {
-                $_encoding_cache{$key} = $resolved;
                 return $resolved;
             }
         }
+
+        my $key = lc $name;
+        return $_encoding_cache{$key} if exists $_encoding_cache{$key};
 
         if ($key eq 'locale') {
             my $enc = $_cached_java_find_encoding->('UTF-8');

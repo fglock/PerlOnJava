@@ -52,8 +52,16 @@ sub substr {
     return Unicode::GCString->new($piece);
 }
 
-# Approximate column width (1 per grapheme cluster).
-sub columns { return scalar @{ $_[0]->{clusters} }; }
+# Terminal column width. East Asian Wide and Fullwidth graphemes occupy two
+# columns; combining marks remain part of their base grapheme cluster.
+sub columns {
+    my $columns = 0;
+    for my $cluster (@{ $_[0]->{clusters} }) {
+        $columns += $cluster =~ /\p{East_Asian_Width=Wide}/
+                || $cluster =~ /\p{East_Asian_Width=Fullwidth}/ ? 2 : 1;
+    }
+    return $columns;
+}
 
 use overload
     '""'     => \&as_string,

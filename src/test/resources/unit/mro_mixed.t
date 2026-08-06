@@ -193,7 +193,7 @@ BEGIN {
 }
 
 # Start testing
-plan tests => 9;
+plan tests => 10;
 
 subtest 'MRO is per-class and not inherited' => sub {
     plan tests => 8;
@@ -425,6 +425,19 @@ subtest 'Circular inheritance detection with mixed MRO' => sub {
     };
     ok($@, 'Circular inheritance with C3 is detected');
     like($@, qr/(Recursive|Inconsistent|cyclic)/i, 'C3 detects inconsistent hierarchy');
+};
+
+subtest 'Inconsistent C3 diagnostics identify the merge failure' => sub {
+    package C3OrderX;
+    package C3OrderY;
+    package C3OrderXY; our @ISA = qw(C3OrderX C3OrderY);
+    package C3OrderYX; our @ISA = qw(C3OrderY C3OrderX);
+    package C3OrderConflict; our @ISA = qw(C3OrderXY C3OrderYX);
+    package main;
+
+    eval { mro::get_linear_isa('C3OrderConflict', 'c3') };
+    like($@, qr/inconsistent hierarchy .* merg(?:e|ing)/i,
+        'diagnostic follows Perl C3 merge terminology');
 };
 
 done_testing();

@@ -53,6 +53,27 @@ public class ScopedSymbolTable {
         }
     }
 
+    /**
+     * Make a newly registered category inherit an already-active {@code use warnings}.
+     * The category did not exist when those lexical bitsets were created, so it
+     * must be added retroactively to each active scope where {@code all} is on.
+     */
+    public void inheritAllWarningsForRegisteredCategory(String category) {
+        Integer categoryBit = warningBitPositions.get(category);
+        Integer allBit = warningBitPositions.get("all");
+        if (categoryBit == null || allBit == null) {
+            return;
+        }
+        for (int i = 0; i < warningFlagsStack.size(); i++) {
+            BitSet disabled = warningDisabledStack.get(i);
+            if (warningFlagsStack.get(i).get(allBit)
+                    && !disabled.get(allBit)
+                    && !disabled.get(categoryBit)) {
+                warningFlagsStack.get(i).set(categoryBit);
+            }
+        }
+    }
+
     // Stack to manage warning categories for each scope
     public final Stack<BitSet> warningFlagsStack = new Stack<>();
     // Stack to track explicitly disabled warning categories (for proper $^W interaction)

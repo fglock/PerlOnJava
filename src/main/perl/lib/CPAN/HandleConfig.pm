@@ -137,6 +137,7 @@ my %prefssupport = map { $_ => 1 }
      "make",
      "make_install_make_command",
      "prefer_installer",
+     "recommends_policy",
      "test_report",
     );
 
