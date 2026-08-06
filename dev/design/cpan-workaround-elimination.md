@@ -284,10 +284,9 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 ### Next steps
 
 1. Resolve the remaining Phase 4 suite blockers: Devel::Symdump's recursive
-   package lookup and symbol-table inventory differences, Hook::LexWrap's
-   interpreter TAP ordering failure, Test::MockObject's unsupported
-   `Devel::Peek::CvGV`, and Test2::Plugin::NoWarnings' `IPC::Run3` filehandle
-   duplication.
+   package lookup and symbol-table inventory differences, Test::MockObject's
+   unsupported `Devel::Peek::CvGV`, and Test2::Plugin::NoWarnings'
+   `IPC::Run3` filehandle duplication.
 2. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
    interpreter code, and nested `eval`; keep the live LWP `t/local/http.t` and
    CGI HTML::Entities failures as Phase 8/runtime-parity follow-ups.
@@ -369,13 +368,14 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   snapshot to `@DB::args`; the focused regression and Carp::Assert's 12-test
   embedded suite pass on the interpreter.
 - Phase 4 target-suite pass/blocker matrix: aliased 9/9, Carp::Assert 12/12,
-  Exception::Class 86/86, and Sub::Quote 5,427/5,427 pass under the
-  interpreter. Devel::Symdump has two interpreter-only failures (`recur.t`,
-  `symdump.t`) while both pass under standard Perl. Hook::LexWrap has a
-  54-test TAP ordering failure under the interpreter while standard Perl
-  passes. Test::MockObject is blocked by missing `Devel::Peek::CvGV`, and
-  Test2::Plugin::NoWarnings is blocked by `IPC::Run3`'s unsupported
-  `STDOUT_SAVE` duplication.
+  Exception::Class 86/86, Hook::LexWrap 57/57, and Sub::Quote 5,427/5,427
+  pass. Hook::LexWrap was fixed by adding `sqrt` to the parser's
+  `CORE::GLOBAL` override points; `core_global_sqrt_override.t` covers dynamic
+  wrapper reassignment on standard Perl, JVM, and interpreter. Devel::Symdump
+  has two interpreter-only failures (`recur.t`, `symdump.t`) while both pass
+  under standard Perl. Test::MockObject is blocked by missing
+  `Devel::Peek::CvGV`, and Test2::Plugin::NoWarnings is blocked by
+  `IPC::Run3`'s unsupported `STDOUT_SAVE` duplication.
 
 ### Open questions
 
