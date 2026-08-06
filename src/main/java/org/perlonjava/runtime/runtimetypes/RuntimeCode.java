@@ -3462,7 +3462,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // the sub's own location (not the call site). For interpreter code, the first
         // frame from CallerStack already IS the call site, so no skip is needed.
         int argsFrame = frame; // Save pre-skip frame for argsStack indexing
-        if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()) {
+        boolean interpreterFrameBeforeVirtualEval = frame + 1 < stackTraceSize
+                && stackTrace.get(frame + 1).size() > 4
+                && "virtual-eval".equals(stackTrace.get(frame + 1).get(4));
+        if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()
+                && !interpreterFrameBeforeVirtualEval) {
             frame++;
         }
 
