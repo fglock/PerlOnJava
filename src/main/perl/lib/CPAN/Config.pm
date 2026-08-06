@@ -179,6 +179,7 @@ sub _bootstrap_prefs {
         Test-Warnings.yml
         File-Copy-Recursive.yml
         Test-File.yml
+        WWW-Form-UrlEncoded.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;
@@ -336,6 +337,7 @@ sub _bootstrap_patches {
         'Test-FailWarnings-0.008/CallerOrigin.patch',
         'DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch',
         'Net-Server/Proto.pm.patch',
+        'WWW-Form-UrlEncoded/PP.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;

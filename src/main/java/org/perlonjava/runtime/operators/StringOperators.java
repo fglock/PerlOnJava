@@ -104,7 +104,9 @@ public class StringOperators {
         // Convert to UTF-8 bytes. RuntimeScalar(byte[]) preserves the byte-string
         // type, so regex captures and replacements retain Perl's SvUTF8-off view.
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-        return new RuntimeScalar(bytes);
+        RuntimeScalar result = new RuntimeScalar(bytes);
+        result.tainted = runtimeScalar.tainted;
+        return result;
     }
 
     /**

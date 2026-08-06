@@ -354,6 +354,7 @@ public class CompileOperator {
         bc.emitReg(1);  // @_ register - pass caller's args for replacement code
         bc.emit(unicodeStringsImplicitUFlag(bc));
         bc.emit(regexWarningState(node));
+        bc.emit(bc.isBytesEnabled() ? 1 : 0);
         int stringReg;
         if (args.elements.size() > 3) {
             bc.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);
