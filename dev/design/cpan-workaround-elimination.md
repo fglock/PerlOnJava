@@ -283,18 +283,11 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 
 ### Next steps
 
-1. Complete the interpreter `@DB::args` mapping exposed by the Carp regression:
-   caller-frame selection now preserves the named assertion frame across an
-   `eval`, but the trace reports the assertion's synthesized failure message
-   instead of its original argument `0`. The focused regression passes on
-   standard Perl and JVM; the unchanged Carp::Assert `embedded-Carp-Assert.t`
-   suite remains at 11/12 under the interpreter for this argument-payload
-   mismatch.
-2. After the interpreter frame and argument payload are correct, rerun the complete
+1. Rerun the complete
    aliased, Carp::Assert, Devel::Symdump, Exception::Class, Hook::LexWrap,
    Sub::Quote, Test::MockObject, and Test2::Plugin::NoWarnings suites before
    retiring their remaining preferences or patches.
-3. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
+2. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
    interpreter code, and nested `eval`; keep the live LWP `t/local/http.t` and
    CGI HTML::Entities failures as Phase 8/runtime-parity follow-ups.
 
@@ -370,9 +363,10 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   `carp_confess_named_frame.t` regression confirms the remaining issue is
   interpreter caller metadata rather than signal-handler preservation. A
   reduced `sub a { caller(0) }` reproduction showed the defect requires an
-  interpreter subroutine called from `eval`; the caller-frame fix now retains
-  the named frame, while Carp still exposes an argument-payload mismatch via
-  `@DB::args`.
+  interpreter subroutine called from `eval`. Caller selection now retains the
+  named frame, and active-code mapping supplies the correct pristine argument
+  snapshot to `@DB::args`; the focused regression and Carp::Assert's 12-test
+  embedded suite pass on the interpreter.
 
 ### Open questions
 
