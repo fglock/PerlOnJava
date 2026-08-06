@@ -268,14 +268,14 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
+Current phase: Phase 5, control flow, lvalues, and introspection.
 
 ### Phase checklist
 
 - [x] Phase 1: Shared `use bytes` substitution semantics (2026-08-06)
 - [x] Phase 2: Bundled-provider resolution (2026-08-06)
 - [x] Phase 3: Prerequisite phase preservation (2026-08-06)
-- [ ] Phase 4: Caller, eval, warning, and symbol-table parity
+- [x] Phase 4: Caller, eval, warning, and symbol-table parity (2026-08-06)
 - [ ] Phase 5: Control flow, lvalues, and introspection
 - [ ] Phase 6: Regex engine coverage
 - [ ] Phase 7: CPAN metadata and process services
@@ -283,11 +283,14 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 
 ### Next steps
 
-1. Resolve the remaining Phase 4 suite blocker:
-   Test2::Plugin::NoWarnings' `IPC::Run3` filehandle duplication.
-2. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
-   interpreter code, and nested `eval`; keep the live LWP `t/local/http.t` and
-   CGI HTML::Entities failures as Phase 8/runtime-parity follow-ups.
+1. Establish unchanged-suite baselines for the Phase 5 targets: Graph,
+   Class::Method::Modifiers, Module::Install, and Term::ANSIColor::Markup.
+2. Start with Graph's nested map/grep return propagation, then make the shared
+   lvalue analysis authoritative for both backends before integrating lazy
+   native `Want` support.
+3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+   `t/local/http.t` failure, and CGI HTML::Entities failures as documented
+   Phase 8/runtime-parity follow-ups.
 
 ### Completed phase deliverables
 
@@ -385,8 +388,21 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   typeglobs from `Sub::Util::subname`; `devel_peek_cvgv.t` passes on standard
   Perl, JVM, and interpreter, and Test::MockObject advances to 231/232. Its
   sole remaining weak-reference lifetime failure is deferred to Phase 8.
-  Test2::Plugin::NoWarnings remains blocked by `IPC::Run3`'s unsupported
-  `STDOUT_SAVE` duplication.
+  Test2::Plugin::NoWarnings' final blocker is resolved without patching
+  IPC::Run3. Constant named handles embedded in two-argument duplication modes
+  are now qualified in their compile-time package, so IPC::Run3 can save and
+  restore its localized `STDOUT_SAVE` and `STDERR_SAVE` globs. The remaining
+  `t/compile.t` mismatch was a diagnostic-order issue: strict-vars checking now
+  preserves the undeclared scalar-dereference error even when a later syntax
+  error aborts parsing. `zz_open_dup_package_handle.t` and
+  `zz_strict_deref_compile_error.t` pass under standard Perl, JVM, and
+  interpreter backends; the unchanged Test2::Plugin::NoWarnings suite passes
+  all 5 files and 8 assertions.
+- Phase 4 completion also narrows the virtual-eval frame exception to actual
+  interpreter frames. JVM `$SIG{__DIE__}` handlers again see `(eval)` while the
+  interpreter retains the named Carp caller frame. The existing
+  `io_compress_regressions.t` and `carp_confess_named_frame.t` regressions pass,
+  and the final full `make` gate passes 245 tests with 2 skipped.
 
 ### Open questions
 

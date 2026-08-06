@@ -261,6 +261,17 @@ public class Variable {
         // Not a variable name, not a block. This could be a dereference like @$a
         // Parse the expression with the appropriate precedence
         operand = parser.parseExpression(parser.getPrecedence("$") + 1);
+        if ((sigil.equals("@") || sigil.equals("%") || sigil.equals("&"))
+                && operand instanceof OperatorNode dereference
+                && dereference.operator.equals("$")
+                && dereference.operand instanceof IdentifierNode identifier) {
+            // Code generation normally diagnoses an undeclared scalar used as
+            // a dereference.  If a later syntax error aborts parsing first,
+            // however, Perl still reports the strict-vars error (for example
+            // `splice @$arr, 3 1`).  Check this compact dereference form now so
+            // the useful diagnostic is not replaced by a bare syntax error.
+            checkStrictVarsAtParseTime(parser, "$", identifier.name, false);
+        }
         return new OperatorNode(sigil, operand, parser.tokenIndex);
     }
 
@@ -309,6 +320,11 @@ public class Variable {
      * Mirrors the exemption logic from EmitVariable.java and BytecodeCompiler.java.
      */
     private static void checkStrictVarsAtParseTime(Parser parser, String sigil, String varName) {
+        checkStrictVarsAtParseTime(parser, sigil, varName, true);
+    }
+
+    private static void checkStrictVarsAtParseTime(
+            Parser parser, String sigil, String varName, boolean lazySubroutinesOnly) {
         // Only check $, @, % sigils (not *, &, $#)
         if (!sigil.equals("$") && !sigil.equals("@") && !sigil.equals("%")) return;
 
@@ -319,9 +335,11 @@ public class Variable {
         // lazily, so the existing code-generation strict check never fires at
         // compile time for them.  All other contexts (file-level, anonymous
         // subs, eval STRING) are handled correctly by the code-generation check.
-        if (!parser.ctx.symbolTable.isInSubroutineBody()) return;
-        String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
-        if (currentSub == null || currentSub.isEmpty()) return;
+        if (lazySubroutinesOnly) {
+            if (!parser.ctx.symbolTable.isInSubroutineBody()) return;
+            String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
+            if (currentSub == null || currentSub.isEmpty()) return;
+        }
 
         // Check if strict vars is enabled in the current scope
         if (!parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_VARS)) return;
