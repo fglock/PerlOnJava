@@ -284,9 +284,10 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 ### Next steps
 
 1. Fix the interpreter call-frame mapping exposed by
-   `src/test/resources/unit/carp_confess_named_frame.t`: standard Perl and the
-   JVM backend report `assert_like_carp_assert(0)`, while the interpreter
-   currently reports only the surrounding eval frame. The unchanged
+   `src/test/resources/unit/carp_confess_named_frame.t`: any interpreter
+   subroutine invoked from an `eval` currently reports the surrounding virtual
+   eval frame from `caller(0)` instead of its own frame. Standard Perl and the
+   JVM backend report `assert_like_carp_assert(0)` correctly. The unchanged
    Carp::Assert `embedded-Carp-Assert.t` suite reproduces the same single
    failure (12 assertions, 11 passing) under the interpreter.
 2. After the interpreter frame is named correctly, rerun the complete
@@ -368,6 +369,9 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   `$SIG{__DIE__}` preference is no longer needed. The new CPAN-independent
   `carp_confess_named_frame.t` regression confirms the remaining issue is
   interpreter caller-frame naming rather than signal-handler preservation.
+  A reduced `sub a { caller(0) }` reproduction shows the defect requires an
+  interpreter subroutine called from `eval`; direct calls and JVM execution
+  retain the named frame.
 
 ### Open questions
 
