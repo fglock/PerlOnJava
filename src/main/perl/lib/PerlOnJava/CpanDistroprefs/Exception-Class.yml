@@ -9,11 +9,9 @@ comment: |
   such as DBIx::Class report false module/file version mismatches. Keep the
   generated class version aligned with the file registered in %INC.
 
-  Keep the test output visible for signal, but allow CPAN to install it as
-  a DateTime prerequisite.
+  Keep only the generated-class version patch. Dependency tests are governed
+  by CPAN's phase-aware queue; direct tests must report their real result.
 match:
   distribution: "^DROLSKY/Exception-Class-"
 patches:
   - "Exception-Class/GeneratedSubclassVersion.patch"
-test:
-  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

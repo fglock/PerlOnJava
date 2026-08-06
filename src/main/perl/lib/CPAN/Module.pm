@@ -466,7 +466,7 @@ sub rematein {
     CPAN->debug("dist-reqtype[$pack->{reqtype}]".
                 "self-reqtype[$self->{reqtype}]") if $CPAN::DEBUG;
         if ($pack->{reqtype}) {
-            if ($pack->{reqtype} eq "b" && $self->{reqtype} =~ /^[rc]$/) {
+            if ($pack->{reqtype} =~ /^(?:b|t|q)$/ && $self->{reqtype} =~ /^[rc]$/) {
                 $pack->{reqtype} = $self->{reqtype};
                 if (
                     exists $pack->{install}
@@ -479,7 +479,7 @@ sub rematein {
                    ) {
                     delete $pack->{install};
                     $CPAN::Frontend->mywarn
-                        ("Promoting $pack->{ID} from 'build_requires' to 'requires'");
+                        ("Promoting $pack->{ID} from a non-runtime prerequisite to 'requires'");
                 }
             }
         } else {

@@ -268,13 +268,13 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: Phase 3, prerequisite phase preservation.
+Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 
 ### Phase checklist
 
 - [x] Phase 1: Shared `use bytes` substitution semantics (2026-08-06)
 - [x] Phase 2: Bundled-provider resolution (2026-08-06)
-- [ ] Phase 3: Prerequisite phase preservation
+- [x] Phase 3: Prerequisite phase preservation (2026-08-06)
 - [ ] Phase 4: Caller, eval, warning, and symbol-table parity
 - [ ] Phase 5: Control flow, lvalues, and introspection
 - [ ] Phase 6: Regex engine coverage
@@ -283,13 +283,12 @@ Current phase: Phase 3, prerequisite phase preservation.
 
 ### Next steps
 
-1. Preserve runtime, build, test, and configure requirements as separate CPAN
-   queue phases.
-2. Add an explicit strict dependency-testing command mode.
-3. Verify clean DateTime, LWP, CGI, and Moose dependency graphs do not install
-   unsupported test-only modules as runtime prerequisites.
-4. Retire dependency-only skip and ignore-failure prefs made unnecessary by
-   phase-aware resolution.
+1. Begin Phase 4 with the aliased `$SIG{__DIE__}` preservation failure and
+   reduce it to a focused standard-Perl differential test.
+2. Trace the handler and `$@` state across JVM code, interpreter code, and
+   nested `eval` before changing the shared call-frame model.
+3. Keep the live LWP `t/local/http.t` and CGI HTML::Entities failures as
+   Phase 8/runtime-parity follow-ups; neither is a prerequisite-phase failure.
 
 ### Completed phase deliverables
 
@@ -319,6 +318,44 @@ Current phase: Phase 3, prerequisite phase preservation.
   PerlOnJava resolver backends; all providers load from a clean JVM runtime;
   a clean `jcpan DBI` refreshes metadata but fetches no DBI distribution and
   installs no user-local files; full `make` passes.
+- Phase 3 preserves configure (`q`), build (`b`), test (`t`), runtime (`r`),
+  and command-line (`c`) queue types. Runtime requirements inherit the
+  non-runtime phase of the dependency surface that needs them.
+- Test requirements are resolved at the explicit target's test boundary.
+  Dependency distributions skip their own test surfaces by default while
+  remaining available through CPAN's tested-build path; the
+  `jcpan --strict-dependency-tests` mode opts into recursive dependency tests.
+- Regression: `src/test/resources/unit/cpan_prerequisite_phases.t` validates
+  metadata separation, queue inheritance, default policy, and strict mode
+  under standard Perl and both PerlOnJava backends (19 assertions). It also
+  loads an on-disk `META.json` fixture to cover MakeMaker's META 1.4 phase
+  collapse.
+- MakeMaker-generated `MYMETA.yml` can merge test requirements into its single
+  `build_requires` bucket. CPAN now reconciles that configured metadata with
+  the distribution's static `META.json`/`META.yml`, retaining configured
+  versions while restoring test-only modules to the test phase.
+- Retired 46 dependency-only skip and ignore-failure prefs. Bootstrap
+  retirement removes stale signed copies while retaining capability and source
+  patch policies. A clean bootstrap installs 44 active prefs and none of the
+  retired files.
+- Cached upstream metadata confirms representative phase distinctions:
+  DateTime test-only `Test::Without::Module`, libwww-perl test-only
+  `HTTP::Daemon`/`Test::RequiresInternet`, and CGI test-only
+  `Test::NoWarnings` are absent from their runtime requirement sets.
+- Authorized isolated live graphs completed the Phase 3 acceptance gate.
+  Moose was satisfied by the bundled provider without a shadow install. CGI
+  ran its requested 64-file/1491-test suite. DateTime and LWP initially exposed
+  the MakeMaker phase collapse through dependency-only `Test::Deep` installs;
+  after reconciliation, both passed that former blockage and entered their
+  requested distributions' own test suites. A production-path check against
+  the cached HTTP::CookieJar and File::Copy::Recursive metadata confirms their
+  collapsed entries are now `test_requires`, not build or runtime requirements.
+- A final clean DateTime run with `PERLONJAVA_HOME` rooted in its isolated
+  temporary tree passed all 51 files and 3,589 tests. The other live target
+  suites exposed unrelated runtime-parity work: CGI has HTML::Entities regex
+  failures, and LWP fails `t/local/http.t` around HTTP::Cookies/server
+  behavior. All processes were bounded by external timeouts; these failures do
+  not weaken the Phase 3 prerequisite-phase acceptance result.
 
 ### Open questions
 
@@ -328,8 +365,6 @@ Current phase: Phase 3, prerequisite phase preservation.
 - Should provider entries remain module-granular, or should a distribution
   entry optionally enumerate bundled pure-Perl siblings such as
   HTML::HeadParser?
-- Which dependency-test policy should be the default for `jcpan install` once
-  phases are preserved?
 - Should executable regex callbacks use the future regex backend directly or
   a compiler-owned callback opcode interface?
 
