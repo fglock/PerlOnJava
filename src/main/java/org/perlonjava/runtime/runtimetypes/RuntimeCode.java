@@ -339,6 +339,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Return the pristine arguments belonging to a specific active code object.
+     * The formatted caller stack collapses compiler/interpreter wrapper pairs,
+     * while the argument stack retains both entries, so a logical caller frame
+     * cannot always be used as a raw argument-stack index.
+     */
+    private static RuntimeArray getOriginalArgsForCode(RuntimeCode target) {
+        if (target == null) return null;
+        Iterator<RuntimeCode> codeIt = activeCodeStack.get().iterator();
+        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack.get().iterator();
+        while (codeIt.hasNext() && argsIt.hasNext()) {
+            if (codeIt.next() == target) {
+                java.util.List<RuntimeScalar> list = argsIt.next();
+                RuntimeArray result = new RuntimeArray();
+                result.elements = new java.util.ArrayList<>(list);
+                return result;
+            }
+            argsIt.next();
+        }
+        return null;
+    }
+
+    /**
      * Get the hasargs flag for a given call depth.
      * depth=0 is the current (innermost) frame, depth=1 is its caller, etc.
      *
@@ -3520,6 +3542,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // args here — critical for DBIC TxnScopeGuard double-DESTROY
                         // detection.
                         RuntimeArray frameArgs = getOriginalArgsAt(trackedArgsFrame);
+                        RuntimeArray codeFrameArgs = getOriginalArgsForCode(activeCode);
+                        if (codeFrameArgs != null) {
+                            frameArgs = codeFrameArgs;
+                        }
                         if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
                             RuntimeArray activeFrameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
                             if (activeFrameArgs != null) {
