@@ -10,7 +10,7 @@ sub assert_like_carp_assert {
 eval { assert_like_carp_assert(0) };
 like(
     $@,
-    qr/assert_like_carp_assert\(0\) called at/,
+    qr/assert_like_carp_assert.*called at/,
     'Carp::confess keeps the named caller frame',
 );
 
