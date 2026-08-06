@@ -4,6 +4,22 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Add `Catalyst::Runtime` 5.90132 support for single-process PSGI
+  applications through `Plack::Handler::Netty`, including action dispatch,
+  parameters, uploads, responses, UTF-8, logging, and exception handling.
+- Add localized `CORE::GLOBAL::exit` trapping and non-forking `Test::Trap`
+  compatibility; the exit-dependent `MooseX::Getopt` tests now pass.
+- Bugfix: byte-mode regex substitution preserves the original scalar's lvalue
+  identity and `/g` position on both the JVM and interpreter backends.
+- Bugfix: Catalyst class-data scalar-reference assignments retain normal stash
+  aliasing without turning literal or object references into pseudo-constants.
+- Bugfix: `Plack::Handler::Netty` preserves PSGI byte-string response bodies
+  without double UTF-8 encoding.
+- Bugfix: dynamic `Encode` aliases, `POSIX::tzset`, `utf-8-strict` PerlIO
+  layers, CJK display width, and `env perl5` shebang routing work correctly.
+- CPAN: add isolated-home Catalyst policies, distribution-scoped recommendation
+  handling, and structured failure reporting without false status 8 results
+  from informational messages.
 - Add compatibility modules for `Socket6`, `Email::Address::XS`, and the
   JSONP-used subset of `Want`; add a Java `Net::Gen` XS bridge for Net-ext.
 - Bugfix: subroutine return values are rvalue copies instead of aliases to
