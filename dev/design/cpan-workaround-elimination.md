@@ -284,9 +284,8 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 ### Next steps
 
 1. Resolve the remaining Phase 4 suite blockers: Devel::Symdump's recursive
-   package lookup and symbol-table inventory differences, Test::MockObject's
-   unsupported `Devel::Peek::CvGV`, and Test2::Plugin::NoWarnings'
-   `IPC::Run3` filehandle duplication.
+   package lookup and symbol-table inventory differences, and
+   Test2::Plugin::NoWarnings' `IPC::Run3` filehandle duplication.
 2. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
    interpreter code, and nested `eval`; keep the live LWP `t/local/http.t` and
    CGI HTML::Entities failures as Phase 8/runtime-parity follow-ups.
@@ -373,9 +372,12 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   `CORE::GLOBAL` override points; `core_global_sqrt_override.t` covers dynamic
   wrapper reassignment on standard Perl, JVM, and interpreter. Devel::Symdump
   has two interpreter-only failures (`recur.t`, `symdump.t`) while both pass
-  under standard Perl. Test::MockObject is blocked by missing
-  `Devel::Peek::CvGV`, and Test2::Plugin::NoWarnings is blocked by
-  `IPC::Run3`'s unsupported `STDOUT_SAVE` duplication.
+  under standard Perl. `Devel::Peek::CvGV` now reconstructs canonical
+  typeglobs from `Sub::Util::subname`; `devel_peek_cvgv.t` passes on standard
+  Perl, JVM, and interpreter, and Test::MockObject advances to 231/232. Its
+  sole remaining weak-reference lifetime failure is deferred to Phase 8.
+  Test2::Plugin::NoWarnings remains blocked by `IPC::Run3`'s unsupported
+  `STDOUT_SAVE` duplication.
 
 ### Open questions
 
