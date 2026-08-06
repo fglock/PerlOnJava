@@ -44,6 +44,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Optimization flags (set by compiler after construction)
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
     public boolean usesLocalization = true;
+    public boolean futureAsyncAwaitSub;
 
     // Goto label map (set by compiler after construction for dynamic goto support)
     // Maps label name → bytecode PC offset
@@ -357,12 +358,19 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-            return RuntimeCode.coerceScalarCallResult(
-                    BytecodeInterpreter.execute(this, args, effectiveContext), effectiveContext, callContext);
+            RuntimeList result = BytecodeInterpreter.execute(this, args, effectiveContext);
+            if (futureAsyncAwaitSub) {
+                return FutureAsyncAwaitRuntime.wrapInitialResult(
+                        effectiveContext, callContext, result);
+            }
+            return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
                 MortalList.flush();
+            }
+            if (futureAsyncAwaitSub && !(e instanceof PerlExitException)) {
+                return FutureAsyncAwaitRuntime.failedInitialResult(e, effectiveContext, callContext);
             }
             throw e;
         } finally {
@@ -394,13 +402,20 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-            return RuntimeCode.coerceScalarCallResult(
-                    BytecodeInterpreter.execute(this, args, effectiveContext, subroutineName),
-                    effectiveContext, callContext);
+            RuntimeList result = BytecodeInterpreter.execute(
+                    this, args, effectiveContext, subroutineName);
+            if (futureAsyncAwaitSub) {
+                return FutureAsyncAwaitRuntime.wrapInitialResult(
+                        effectiveContext, callContext, result);
+            }
+            return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
                 MortalList.flush();
+            }
+            if (futureAsyncAwaitSub && !(e instanceof PerlExitException)) {
+                return FutureAsyncAwaitRuntime.failedInitialResult(e, effectiveContext, callContext);
             }
             throw e;
         } finally {
@@ -479,6 +494,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.usesLocalization = this.usesLocalization;
+        copy.futureAsyncAwaitSub = this.futureAsyncAwaitSub;
         return copy;
     }
 

@@ -2576,6 +2576,14 @@ public class Disassemble {
                         sb.append("SMARTMATCH r").append(smRd).append(", r").append(smRs1).append(", r").append(smRs2).append("\n");
                         break;
                     }
+                    case Opcodes.AWAIT: {
+                        int awaitRd = interpretedCode.bytecode[pc++];
+                        int futureReg = interpretedCode.bytecode[pc++];
+                        int awaitContext = interpretedCode.bytecode[pc++];
+                        sb.append("AWAIT r").append(awaitRd).append(" = r")
+                                .append(futureReg).append(" context=").append(awaitContext).append("\n");
+                        break;
+                    }
 
                     default:
                         sb.append("UNKNOWN(").append(opcode).append(")\n");

@@ -27,7 +27,7 @@ public class EmitOperatorNode {
         switch (node.operator) {
             case "await" -> throw new PerlCompilerException(
                     node.tokenIndex,
-                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE,
+                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.TOPLEVEL_AWAIT_MESSAGE,
                     emitterVisitor.ctx.errorUtil);
             // Subroutine related
             case "__SUB__" -> EmitSubroutine.handleSelfCallOperator(emitterVisitor, node);

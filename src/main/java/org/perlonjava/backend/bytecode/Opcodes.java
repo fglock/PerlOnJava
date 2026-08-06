@@ -2427,6 +2427,13 @@ public class Opcodes {
     public static final short INTEGER_SUBTRACT_ASSIGN = 508;
     public static final short INTEGER_MULTIPLY_ASSIGN = 509;
 
+    /**
+     * Await an Awaitable value. Completed values continue inline; pending
+     * values suspend the current heap-owned interpreter frame.
+     * Format: AWAIT rd futureReg context
+     */
+    public static final short AWAIT = 510;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

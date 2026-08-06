@@ -12,7 +12,10 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 public final class FutureAsyncAwaitParser {
     static final String HINT_KEY = "Future::AsyncAwait/async";
     public static final String BACKEND_MESSAGE =
-            "Future::AsyncAwait execution requires resumable interpreter frames (planned for phase 2)";
+            "Future::AsyncAwait async execution requires a loaded Awaitable Future implementation"
+                    + " (load Future before declaring async subs)";
+    public static final String TOPLEVEL_AWAIT_MESSAGE =
+            "Future::AsyncAwait file-scope await requires AWAIT_WAIT support (planned for phase 3)";
 
     private FutureAsyncAwaitParser() {
     }

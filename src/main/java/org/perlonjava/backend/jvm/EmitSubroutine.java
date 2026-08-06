@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
@@ -92,13 +93,15 @@ public class EmitSubroutine {
      * @param node The subroutine node representing the subroutine.
      */
     public static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
-        if (node.getBooleanAnnotation("futureAsyncAwaitSub")) {
+        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB start");
+        if (node.getBooleanAnnotation("futureAsyncAwaitSub")
+                && !RuntimeCode.isCodeDefined(
+                        GlobalVariable.getGlobalCodeRef("Future::AWAIT_NEW_DONE"))) {
             throw new PerlCompilerException(
                     node.tokenIndex,
                     org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE,
                     ctx.errorUtil);
         }
-        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB start");
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
@@ -248,6 +251,12 @@ public class EmitSubroutine {
         int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)
         
         try {
+            if (node.getBooleanAnnotation("futureAsyncAwaitSub")) {
+                InterpretedCode interpreted = EmitterMethodCreator.compileToInterpreter(
+                        node.block, subCtx, node.useTryCatch);
+                interpreted.futureAsyncAwaitSub = true;
+                throw new InterpreterFallbackException(interpreted, newEnv);
+            }
             Class<?> generatedClass =
                     EmitterMethodCreator.createClassWithMethod(
                             subCtx, node.block, node.useTryCatch

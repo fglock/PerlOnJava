@@ -27,9 +27,13 @@ Future::AsyncAwait - PerlOnJava frontend compatibility facade
 =head1 DESCRIPTION
 
 This facade activates PerlOnJava's native parsing of C<async sub> and
-C<await>. Runtime suspension and resumption are under development; attempting
-to compile async execution currently produces an explicit unsupported-feature
-diagnostic.
+C<await>. Async subroutines use resumable interpreter frames and support both
+immediate and pending objects implementing the
+C<Future::AsyncAwait::Awaitable> method contract. Load C<Future>, or another
+compatible implementation, before declaring async subroutines.
+
+Cancellation propagation and file-scope C<await> via C<AWAIT_WAIT> remain
+under development.
 
 The public syntax and behavior are based on Paul Evans' Future::AsyncAwait.
 PerlOnJava does not load or emulate its Perl-internal XS optree hooks.

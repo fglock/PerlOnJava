@@ -5459,7 +5459,9 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        if (node.getBooleanAnnotation("futureAsyncAwaitSub")) {
+        if (node.getBooleanAnnotation("futureAsyncAwaitSub")
+                && !RuntimeCode.isCodeDefined(
+                GlobalVariable.getGlobalCodeRef("Future::AWAIT_NEW_DONE"))) {
             throwCompilerException(
                     org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE);
         }
@@ -5583,6 +5585,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         attachDeparseSourceSpan(subCode, node);
 
         if (RuntimeCode.DISASSEMBLE) {
@@ -5710,6 +5713,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         attachDeparseSourceSpan(subCode, node);
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         if (node.block != null) {

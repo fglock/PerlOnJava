@@ -2,10 +2,10 @@
 
 ## Status
 
-Phase 1 completed on 2026-08-06. PerlOnJava can load its compatibility
-facade, lexically recognize `async sub` and `await`, represent them in the
-AST, and reject execution with a targeted diagnostic until resumable frames
-are implemented.
+Phases 1 and 2 completed on 2026-08-06. PerlOnJava can parse lexical
+`async sub`/`await` syntax and execute async subroutines through resumable
+interpreter frames. Immediate Awaitables continue inline; pending Awaitables
+suspend without blocking and resume from `AWAIT_ON_READY` callbacks.
 
 ## Motivation
 
@@ -94,18 +94,19 @@ This phase deliberately provides no immediate-Future shortcut. Having one
 code path behave synchronously while pending Futures fail would conceal bugs
 and encourage code that deadlocks when real asynchronous I/O is introduced.
 
-### Phase 2: Resumable interpreter frames
+### Phase 2: Resumable interpreter frames — completed 2026-08-06
 
-- Promote the interpreter program counter, register array, eval catch stacks,
-  loop stacks, regex state, dynamic localization level, call context, and
-  closure ownership into an explicit frame object.
-- Add an `AWAIT` opcode. Completed Futures continue immediately; pending
-  Futures return a suspension result containing the frame and destination
-  register.
-- Resume the frame from a Future readiness callback and complete or fail the
-  outer Future.
-- Force async subroutine bodies through the interpreter from either frontend
-  backend.
+- Added `SuspendedInterpreterFrame`, which owns the program counter, register
+  array, eval catch stacks, labeled-block stack, regex snapshots, cleanup
+  batches, call context, and closure ownership across suspension.
+- Added the `AWAIT` opcode. Completed Awaitables continue immediately;
+  pending Awaitables return an internal suspension result containing the frame,
+  destination register, and expression context.
+- Resume callbacks are serialized through a trampoline and complete or fail a
+  single cloned outer Awaitable.
+- Async subroutine bodies are forced through the interpreter from both the JVM
+  and interpreter frontends. The dependency guard retains a targeted error
+  until an implementation of the Awaitable constructor methods is loaded.
 
 ### Phase 3: Future lifecycle and control-flow parity
 
@@ -161,16 +162,16 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 - **Frame ownership leaks:** make suspension state a single owner with an
   idempotent terminal transition and explicit cleanup tests.
-- **Reentrant callback completion:** schedule or trampoline resumption rather
-  than recursively growing the Java stack.
+- **Reentrant callback completion:** callbacks now pass through a thread-local
+  trampoline rather than recursively growing the Java stack.
 - **Backend divergence:** define suspension at interpreter-bytecode level
   first and route JVM callers through the same RuntimeCode boundary.
-- **Misleading partial support:** keep the Phase 1 backend diagnostic until
-  pending-Future suspension is implemented and tested.
+- **Misleading partial support:** retain targeted diagnostics for missing
+  Awaitable constructors and for file-scope await until `AWAIT_WAIT` exists.
 
 ## Progress tracking
 
-### Current status: Phase 1 complete
+### Current status: Phase 2 complete; Phase 3 next
 
 ### Completed phases
 
@@ -180,24 +181,36 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Added placement checks and explicit backend diagnostics.
   - Files: `Future/AsyncAwait.pm`, `FutureAsyncAwaitParser.java`, parser and
     backend integration points, and `FutureAsyncAwaitParserTest.java`.
+- [x] Phase 2: Resumable interpreter frames (2026-08-06)
+  - Added heap-owned interpreter execution state and internal suspension
+    results.
+  - Added `AWAIT` compilation, disassembly, immediate execution, pending
+    callback resumption, and callback trampolining.
+  - Added Awaitable cloning/completion/failure integration and selective
+    interpreter routing for async bodies from both frontends.
+  - Added `FutureAsyncAwaitRuntimeTest.java` for immediate, pending, repeated
+    await, lexical-state, and failure behavior on both backends.
+  - Files: `SuspendedInterpreterFrame.java`, `InterpreterSuspension.java`,
+    `FutureAsyncAwaitRuntime.java`, interpreter compiler/runtime integration,
+    and `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Define `SuspendedInterpreterFrame` and enumerate every piece of currently
-   method-local interpreter state that must move into it.
-2. Add suspension as an internal interpreter result without exposing it to
-   normal Perl calls.
-3. Implement the `AWAIT` opcode and immediate-Future path, then add pending
-   callback resumption.
+1. Add bidirectional cancellation propagation and terminal-state ownership.
+2. Detach and restore arbitrary dynamic `local` state across suspension, then
+   cover eval, loops, regex captures, closures, and destruction edge cases.
+3. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
+4. Import the applicable upstream Future::AsyncAwait lifecycle and
+   control-flow tests.
 
 ### Open questions
 
-- Should resumption callbacks run inline when a Future completes reentrantly,
-  or always pass through an explicit trampoline?
 - Should async subs permanently use the interpreter, or be promoted to JVM
   state machines after semantic parity is established?
 - Which Future::AsyncAwait extension hooks are required by modules in the
   intended PAGI ecosystem?
+- What is the smallest safe representation for detaching nested dynamic
+  localization entries without executing `defer` blocks at suspension time?
 
 ## References
 

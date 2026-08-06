@@ -1591,9 +1591,6 @@ public class SubroutineParser {
         // - For InterpretedCode, we replace codeRef.value (not just code fields)
 
         Supplier<Void> subroutineCreationTaskSupplier = () -> {
-            if (block.getBooleanAnnotation("futureAsyncAwaitSub")) {
-                throw new PerlCompilerException(FutureAsyncAwaitParser.BACKEND_MESSAGE);
-            }
             // Try unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
             if (placeholder.attributes != null && placeholder.attributes.contains("lvalue")) {
                 block.setAnnotation("subroutineIsLvalue", true);
