@@ -3317,6 +3317,19 @@ sub prereqs_for_slot {
 # return ([Foo,"r"],[Bar,"b"]) for normal modules
 # return ([perl=>5.008]) if we need a newer perl than we are running under
 # (sorry for the inconsistency, it was an accident)
+sub _perlonjava_provider_requirement {
+    my ($nmo, $merged, $need_module) = @_;
+    my $provider = $nmo->perlonjava_provider or return (0, undef);
+    my $provider_version = $provider->{version};
+    return (1, $provider) if $merged->accepts_module($need_module, $provider_version);
+    return (0, $provider) unless $provider->{shadow_policy} eq 'forbidden';
+
+    my $rq = $merged->requirements_for_module($need_module);
+    return (-1, "PerlOnJava's $provider->{provider} provider for " .
+        "$need_module is version $provider_version and does not satisfy $rq; " .
+        "shadowing this provider is forbidden\n");
+}
+
 sub unsat_prereq {
     my($self,$slot) = @_;
     my($merged_hash,$prereq_pm) = $self->prereqs_for_slot($slot);
@@ -3340,6 +3353,18 @@ sub unsat_prereq {
                 $CPAN::SQLite->search("CPAN::Module",$need_module);
             }
             $nmo = $CPAN::META->instance("CPAN::Module",$need_module);
+            my ($provider_status, $provider) =
+                _perlonjava_provider_requirement($nmo, $merged, $need_module);
+            if ($provider_status > 0) {
+                my $provider_version = $provider->{version};
+                $CPAN::Frontend->myprint(
+                    "Satisfied $need_module with PerlOnJava's " .
+                    "$provider->{provider} provider ($provider_version).\n"
+                ) if $CPAN::DEBUG;
+                next NEED;
+            } elsif ($provider_status < 0) {
+                die $provider;
+            }
             $inst_file = $nmo->inst_file || '';
             $available_file = $nmo->available_file || '';
             $available_version = $nmo->available_version;
