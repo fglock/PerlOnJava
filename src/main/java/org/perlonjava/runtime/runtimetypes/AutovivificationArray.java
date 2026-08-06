@@ -39,7 +39,10 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
         // setting the scalar's type to ARRAYREFERENCE and its value to this array.
         if (array.elements instanceof AutovivificationArray arrayProxy) {
             array.type = RuntimeArray.PLAIN_ARRAY;
-            array.elements = new ArrayList<>();
+            // Preserve RuntimeArray's owner-aware element list. A raw
+            // ArrayList loses the aggregate ownership metadata required by
+            // weak references to scalar slots such as \$hash->{key}[-1].
+            array.resetElementsAfterAutovivification();
 
             arrayProxy.scalarToAutovivify.value = array;
             arrayProxy.scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;

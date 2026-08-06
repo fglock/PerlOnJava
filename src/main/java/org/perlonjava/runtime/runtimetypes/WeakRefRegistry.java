@@ -136,10 +136,15 @@ public class WeakRefRegistry {
             base.releaseOwner(ref, "weaken");
             base.releaseActiveOwner(ref);
             if (--base.refCount == 0) {
-                if (base.localBindingExists) {
+                if (base.localBindingExists
+                        || (base instanceof RuntimeScalar scalar
+                        && scalar.isStoredInContainerOwner())) {
                     // Named container (my %hash / my @array): the local variable
-                    // slot holds a strong reference not counted in refCount.
-                    // Don't call callDestroy — the container is still alive.
+                    // slot holds a strong reference not counted in refCount. A
+                    // scalar slot inside an aggregate has the same ownership:
+                    // weakening a reference to that slot must not destroy the
+                    // slot while its container still contains it.
+                    // Don't call callDestroy — the binding is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (!(base instanceof RuntimeScalar scalar
                         && scalar.ephemeralScalarReferenceReferent)

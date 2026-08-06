@@ -64,6 +64,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return new RuntimeHashElementMap(this);
     }
 
+    void resetElementsAfterAutovivification() {
+        elements = newElementMap();
+    }
+
     private RuntimeHashElementMap newElementMap(Map<String, RuntimeScalar> values) {
         RuntimeHashElementMap map = new RuntimeHashElementMap(this);
         map.putAll(values);
