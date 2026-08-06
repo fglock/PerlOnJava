@@ -744,6 +744,8 @@ public class CompileOperator {
         String op = node.operator;
 
         switch (op) {
+            case "await" -> bytecodeCompiler.throwCompilerException(
+                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE);
             // Variable declarations and references
             case "my", "our", "local", "state" -> { bytecodeCompiler.compileVariableDeclaration(node, op); return; }
             case "$", "@", "%", "*", "&", "\\" -> { bytecodeCompiler.compileVariableReference(node, op); return; }

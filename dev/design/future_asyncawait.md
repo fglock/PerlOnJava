@@ -1,0 +1,206 @@
+# Future::AsyncAwait on PerlOnJava
+
+## Status
+
+Phase 1 completed on 2026-08-06. PerlOnJava can load its compatibility
+facade, lexically recognize `async sub` and `await`, represent them in the
+AST, and reject execution with a targeted diagnostic until resumable frames
+are implemented.
+
+## Motivation
+
+`Future::AsyncAwait` is the remaining language-level dependency preventing
+asynchronous frameworks such as PAGI::Server from running on PerlOnJava.
+This is not a conventional XS port. The upstream extension registers parser
+keywords, adds custom Perl optree operations, and captures the running Perl
+frame when an awaited Future is pending.
+
+PerlOnJava does not execute Perl 5 optrees, so emulating the upstream XS entry
+points would make the module load without providing its semantics. The
+implementation must instead add the syntax to PerlOnJava's frontend and lower
+it to resumable PerlOnJava execution frames.
+
+## Compatibility target
+
+The primary target is the public Perl syntax and behavior:
+
+- `async sub NAME { ... }` and anonymous `async sub { ... }`
+- `await EXPR` inside an async sub and at file scope
+- an async sub always returns a Future
+- a pending awaited Future suspends without blocking the event-loop thread
+- success, failure, cancellation, scalar/list context, lexical state, dynamic
+  localization, regex state, loops, and exception scopes survive suspension
+
+The C-level extension ABI in `Future/AsyncAwait/ExtensionBuilder.pm` is a
+separate compatibility layer. It is not required by PAGI::Server and will be
+considered after the language semantics work.
+
+## Non-goals
+
+- Translating `await $future` to `$future->get`. That blocks IO::Async and can
+  deadlock the event loop.
+- Reproducing Perl 5's internal `PL_keyword_plugin`, optree, pad, or context
+  stack data structures.
+- Claiming Future::AsyncAwait runtime support before pending Futures can
+  suspend and resume correctly.
+
+## Proposed architecture
+
+```text
+Future::AsyncAwait import
+          |
+          v
+lexically scoped %^H capability
+          |
+          v
+parser: async sub / await
+          |
+          v
+annotated PerlOnJava AST
+          |
+          v
+async bytecode lowering
+          |
+          v
+resumable interpreter frame <---- Future readiness callback
+          |
+          v
+outer Future completion / failure / cancellation
+```
+
+The bytecode interpreter is the first runtime target because it already uses
+an explicit program counter and register array. Async subroutines can be
+routed selectively through that backend even when the rest of a program uses
+the JVM backend. A later JVM lowering can generate an equivalent state
+machine for performance.
+
+## Phases
+
+### Phase 1: Frontend and capability boundary — completed 2026-08-06
+
+- Add a PerlOnJava `Future::AsyncAwait` compatibility facade which sets a
+  lexically scoped `%^H` capability instead of loading XS.
+- Recognize named and anonymous `async sub` only while that capability is
+  active.
+- Recognize `await` inside an async sub or at file scope and retain its operand
+  as an `OperatorNode("await", ...)` in the AST.
+- Annotate async subroutine nodes and bodies for backend routing.
+- Reject runtime compilation with an explicit message identifying resumable
+  frames as the next required phase.
+- Add parser/integration tests for loading, lexical syntax activation, AST
+  shape, placement validation, and the backend boundary.
+
+This phase deliberately provides no immediate-Future shortcut. Having one
+code path behave synchronously while pending Futures fail would conceal bugs
+and encourage code that deadlocks when real asynchronous I/O is introduced.
+
+### Phase 2: Resumable interpreter frames
+
+- Promote the interpreter program counter, register array, eval catch stacks,
+  loop stacks, regex state, dynamic localization level, call context, and
+  closure ownership into an explicit frame object.
+- Add an `AWAIT` opcode. Completed Futures continue immediately; pending
+  Futures return a suspension result containing the frame and destination
+  register.
+- Resume the frame from a Future readiness callback and complete or fail the
+  outer Future.
+- Force async subroutine bodies through the interpreter from either frontend
+  backend.
+
+### Phase 3: Future lifecycle and control-flow parity
+
+- Implement cancellation propagation in both directions.
+- Preserve scalar/list/void context and failure values.
+- Cover return, die/eval, nested awaits, loops, closures, localized variables,
+  regex captures, destruction, and abandoned pending Futures.
+- Implement file-scope await using the Awaitable `AWAIT_WAIT` protocol.
+
+### Phase 4: Syntax completeness and interoperability
+
+- Add `CANCEL` blocks, lexical async subs, async methods, signatures,
+  attributes, and forward declarations.
+- Validate interactions with supported keyword features such as `try`,
+  `defer`, and `class`.
+- Decide which portions of the extension-builder ABI can be represented by a
+  PerlOnJava-native hook API.
+
+### Phase 5: JVM lowering and ecosystem validation
+
+- Generate JVM state-machine classes for async subroutines or retain selective
+  interpreter routing where it is faster and simpler.
+- Pass the applicable upstream Future::AsyncAwait suite on both backends.
+- Run Future, IO::Async, Net::Async::HTTP, and PAGI::Server integration suites,
+  including cancellation, streaming, websocket, and backpressure tests.
+
+## Correctness invariants
+
+1. Awaiting a pending Future never blocks the event-loop thread.
+2. Code after an await executes at most once.
+3. The async sub's returned Future completes exactly once.
+4. Lexicals and localized values remain alive while suspended and are released
+   exactly once after completion, failure, cancellation, or abandonment.
+5. Resumption restores the original Perl scalar/list/void context.
+6. A failure from the awaited Future behaves like an exception at the await
+   expression.
+7. Syntax activation is lexical and does not turn ordinary `async()` calls or
+   barewords into keywords outside the importing scope.
+
+## Testing strategy
+
+- Java frontend tests inspect the AST and compiler diagnostics for Phase 1.
+  Perl `.t` tests begin when runtime behavior exists, and each new test must
+  first be validated with standard Perl and upstream Future::AsyncAwait.
+- Phase 2 adds focused immediate, pending, nested, and failure tests for both
+  default and `--interpreter` execution.
+- Phase 3 imports applicable upstream tests without weakening or deleting
+  them.
+- Each phase ends with a full `make` run. Ecosystem phases additionally run
+  timeout-wrapped `jcpan -t` commands with full output captured to files.
+
+## Risks and mitigations
+
+- **Frame ownership leaks:** make suspension state a single owner with an
+  idempotent terminal transition and explicit cleanup tests.
+- **Reentrant callback completion:** schedule or trampoline resumption rather
+  than recursively growing the Java stack.
+- **Backend divergence:** define suspension at interpreter-bytecode level
+  first and route JVM callers through the same RuntimeCode boundary.
+- **Misleading partial support:** keep the Phase 1 backend diagnostic until
+  pending-Future suspension is implemented and tested.
+
+## Progress tracking
+
+### Current status: Phase 1 complete
+
+### Completed phases
+
+- [x] Phase 1: Frontend and capability boundary (2026-08-06)
+  - Added lexical import/unimport capability handling.
+  - Added named and anonymous async-sub parsing and await AST construction.
+  - Added placement checks and explicit backend diagnostics.
+  - Files: `Future/AsyncAwait.pm`, `FutureAsyncAwaitParser.java`, parser and
+    backend integration points, and `FutureAsyncAwaitParserTest.java`.
+
+### Next steps
+
+1. Define `SuspendedInterpreterFrame` and enumerate every piece of currently
+   method-local interpreter state that must move into it.
+2. Add suspension as an internal interpreter result without exposing it to
+   normal Perl calls.
+3. Implement the `AWAIT` opcode and immediate-Future path, then add pending
+   callback resumption.
+
+### Open questions
+
+- Should resumption callbacks run inline when a Future completes reentrantly,
+  or always pass through an explicit trampoline?
+- Should async subs permanently use the interpreter, or be promoted to JVM
+  state machines after semantic parity is established?
+- Which Future::AsyncAwait extension hooks are required by modules in the
+  intended PAGI ecosystem?
+
+## References
+
+- `dev/design/shared_ast_transformer.md`
+- `docs/guides/module-porting.md`
+- Upstream `Future::AsyncAwait` 0.71 source and test suite

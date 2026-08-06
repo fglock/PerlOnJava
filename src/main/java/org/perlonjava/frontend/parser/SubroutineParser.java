@@ -699,6 +699,11 @@ public class SubroutineParser {
     }
 
     public static Node parseSubroutineDefinition(Parser parser, boolean wantName, String declaration) {
+        return parseSubroutineDefinition(parser, wantName, declaration, false);
+    }
+
+    public static Node parseSubroutineDefinition(
+            Parser parser, boolean wantName, String declaration, boolean futureAsyncAwaitSub) {
 
         // my, our, state subs are handled in StatementResolver, not here
         if (declaration != null && (declaration.equals("my") || declaration.equals("state"))) {
@@ -908,6 +913,9 @@ public class SubroutineParser {
 
             ListNode result = new ListNode(parser.tokenIndex);
             result.setAnnotation("compileTimeOnly", true);
+            if (futureAsyncAwaitSub) {
+                result.setAnnotation("futureAsyncAwaitSub", true);
+            }
             return result;
         }
 
@@ -921,6 +929,7 @@ public class SubroutineParser {
         // Save the current subroutine context and set the new one
         String previousSubroutine = parser.ctx.symbolTable.getCurrentSubroutine();
         boolean previousInSubroutineBody = parser.ctx.symbolTable.isInSubroutineBody();
+        boolean previousFutureAsyncAwaitSub = parser.parsingFutureAsyncAwaitSub;
 
         // Set the current subroutine name (use empty string for anonymous subs)
         // Use fully qualified name so ByteCodeSourceMapper records the declaration-time
@@ -931,6 +940,7 @@ public class SubroutineParser {
         parser.ctx.symbolTable.setCurrentSubroutine(qualifiedSubName);
         // We are now parsing inside a subroutine body (named or anonymous)
         parser.ctx.symbolTable.setInSubroutineBody(true);
+        parser.parsingFutureAsyncAwaitSub = futureAsyncAwaitSub;
         java.util.BitSet definitionWarningFlags =
                 (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone();
         java.util.BitSet definitionWarningFatalFlags =
@@ -943,6 +953,9 @@ public class SubroutineParser {
         try {
             // Parse the block of the subroutine, which contains the actual code.
             BlockNode block = ParseBlock.parseBlock(parser);
+            if (futureAsyncAwaitSub) {
+                block.setAnnotation("futureAsyncAwaitSub", true);
+            }
             block.setAnnotation("definitionWarningFlags", definitionWarningFlags);
             block.setAnnotation("definitionWarningFatalFlags", definitionWarningFatalFlags);
             block.setAnnotation("definitionWarningDisabledFlags", definitionWarningDisabledFlags);
@@ -963,8 +976,12 @@ public class SubroutineParser {
             }
 
             if (subName == null) {
-                return handleAnonSub(parser, subName, prototype, attributes, block, currentIndex,
+                Node result = handleAnonSub(parser, subName, prototype, attributes, block, currentIndex,
                         parser.tokenIndex);
+                if (futureAsyncAwaitSub && result instanceof AbstractNode abstractNode) {
+                    abstractNode.setAnnotation("futureAsyncAwaitSub", true);
+                }
+                return result;
             } else {
                 return handleNamedSub(parser, subName, prototype, attributes, block, declaration);
             }
@@ -976,6 +993,7 @@ public class SubroutineParser {
             // Restore the previous subroutine context
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
+            parser.parsingFutureAsyncAwaitSub = previousFutureAsyncAwaitSub;
         }
     }
 
@@ -1573,6 +1591,9 @@ public class SubroutineParser {
         // - For InterpretedCode, we replace codeRef.value (not just code fields)
 
         Supplier<Void> subroutineCreationTaskSupplier = () -> {
+            if (block.getBooleanAnnotation("futureAsyncAwaitSub")) {
+                throw new PerlCompilerException(FutureAsyncAwaitParser.BACKEND_MESSAGE);
+            }
             // Try unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
             if (placeholder.attributes != null && placeholder.attributes.contains("lvalue")) {
                 block.setAnnotation("subroutineIsLvalue", true);

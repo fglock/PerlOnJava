@@ -116,6 +116,11 @@ public class StatementResolver {
 
                 case "use", "no" -> StatementParser.parseUseDeclaration(parser, token);
 
+                case "async" -> FutureAsyncAwaitParser.isEnabled()
+                        && nextNonWhitespaceTokenIs(parser, currentIndex + 1, "sub")
+                        ? FutureAsyncAwaitParser.parseAsyncSubStatement(parser)
+                        : null;
+
                 case "sub" -> {
                     parser.tokenIndex++;
                     LexerToken nextToken = peek(parser);
@@ -890,6 +895,13 @@ public class StatementResolver {
 
         parseStatementTerminator(parser);
         return expression;
+    }
+
+    private static boolean nextNonWhitespaceTokenIs(Parser parser, int index, String text) {
+        int next = Whitespace.skipWhitespace(parser, index, parser.tokens);
+        return next < parser.tokens.size()
+                && parser.tokens.get(next).type == LexerTokenType.IDENTIFIER
+                && parser.tokens.get(next).text.equals(text);
     }
 
     // disambiguate between Block or Hash literal

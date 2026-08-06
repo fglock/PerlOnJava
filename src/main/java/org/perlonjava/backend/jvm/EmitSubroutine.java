@@ -12,6 +12,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -91,6 +92,12 @@ public class EmitSubroutine {
      * @param node The subroutine node representing the subroutine.
      */
     public static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
+        if (node.getBooleanAnnotation("futureAsyncAwaitSub")) {
+            throw new PerlCompilerException(
+                    node.tokenIndex,
+                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE,
+                    ctx.errorUtil);
+        }
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB start");
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;

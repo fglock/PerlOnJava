@@ -99,6 +99,18 @@ public class ParsePrimary {
         String nextTokenText = parser.tokens.get(parser.tokenIndex).text;
         String peekTokenText = peek(parser).text;
 
+        if (FutureAsyncAwaitParser.isEnabled()) {
+            if (operator.equals("async") && peekTokenText.equals("sub")) {
+                Node asyncSub = FutureAsyncAwaitParser.parseAsyncSubExpression(parser, startIndex);
+                if (asyncSub != null) {
+                    return asyncSub;
+                }
+            }
+            if (operator.equals("await")) {
+                return FutureAsyncAwaitParser.parseAwait(parser, startIndex);
+            }
+        }
+
         // Check for autoquoting: bareword => is treated as "bareword"
         if (peekTokenText.equals("=>")) {
             // Autoquote: convert identifier to string literal

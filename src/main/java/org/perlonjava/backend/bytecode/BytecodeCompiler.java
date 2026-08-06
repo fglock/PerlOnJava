@@ -5459,6 +5459,10 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
+        if (node.getBooleanAnnotation("futureAsyncAwaitSub")) {
+            throwCompilerException(
+                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE);
+        }
         if (node.useTryCatch) {
             // This is an eval block: eval { ... }
             visitEvalBlock(node);
