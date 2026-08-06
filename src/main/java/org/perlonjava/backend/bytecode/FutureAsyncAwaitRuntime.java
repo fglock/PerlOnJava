@@ -4,6 +4,7 @@ import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayDeque;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runtime bridge to the Future::AsyncAwait::Awaitable method contract. */
@@ -89,12 +90,14 @@ final class FutureAsyncAwaitRuntime {
         }
         if (isCancelled(outer)) {
             state.terminal.set(true);
+            cleanupAbandonedFrame(suspension.frame);
             state.callbackActive.set(false);
             return;
         }
         try {
             if (isCancelled(outer)) {
                 state.terminal.set(true);
+                cleanupAbandonedFrame(suspension.frame);
                 return;
             }
             try {
@@ -128,6 +131,39 @@ final class FutureAsyncAwaitRuntime {
     private static boolean isCancelled(RuntimeScalar future) {
         return call(future, "AWAIT_IS_CANCELLED", new RuntimeArray(),
                 RuntimeContextType.SCALAR).scalar().getBoolean();
+    }
+
+    /**
+     * Release a suspended frame when cancellation prevents it from resuming.
+     * Reattach the detached dynamic states on this callback thread and pop them
+     * normally so defer blocks run and localized values are restored exactly once.
+     */
+    private static void cleanupAbandonedFrame(SuspendedInterpreterFrame frame) {
+        List<DynamicVariableManager.SuspendedState> states = frame.suspendedDynamicStates;
+        if (states == null) return;
+        frame.suspendedDynamicStates = null;
+
+        InterpretedCode code = frame.code;
+        RuntimeArray args = (RuntimeArray) frame.registers[1];
+        RuntimeCode.pushArgs(args);
+        RuntimeCode.pushCallContext(frame.callContext);
+        RuntimeCode.pushActiveCode(code);
+        if (code.warningBitsString != null) {
+            WarningBitsRegistry.pushCurrent(code.warningBitsString);
+        }
+        int cleanupMark = MyVarCleanupStack.pushMark();
+        int localLevel = DynamicVariableManager.getLocalLevel();
+        try {
+            DynamicVariableManager.resumeSuspended(states);
+            DynamicVariableManager.popToLocalLevel(localLevel);
+        } finally {
+            MyVarCleanupStack.popMark(cleanupMark);
+            if (code.warningBitsString != null) {
+                WarningBitsRegistry.popCurrent();
+            }
+            RuntimeCode.popActiveCode(code);
+            RuntimeCode.popArgs();
+        }
     }
 
     private static final class AwaitState {

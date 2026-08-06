@@ -184,6 +184,18 @@ class FutureAsyncAwaitRuntimeTest {
             die "cancelled async sub resumed\n"
                     if $cancelled_result->AWAIT_IS_READY &&
                        !$cancelled_result->AWAIT_IS_CANCELLED;
+
+            my $cancel_defer_log = '';
+            async sub cancelled_cleanup {
+                defer { $cancel_defer_log .= 'cancelled'; }
+                await $_[0];
+                return 0;
+            }
+            my $cancel_defer_pending = Future->new;
+            my $cancel_defer_result = cancelled_cleanup($cancel_defer_pending);
+            $cancel_defer_result->AWAIT_CANCEL;
+            die "defer did not run during cancellation cleanup\n"
+                    unless $cancel_defer_log eq 'cancelled';
             """;
 
     @BeforeEach

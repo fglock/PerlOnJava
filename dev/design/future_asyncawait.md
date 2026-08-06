@@ -228,11 +228,20 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Reused the scalar dynamic-state snapshot path for the runtime package
     tracker and added async defer regression coverage on both backends.
   - Files: `DeferBlock.java` and `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3e: Abandoned-frame cancellation cleanup (2026-08-06)
+  - Added an explicit cleanup path for cancelled suspended frames that never
+    resume through their awaited Future.
+  - Reattached detached dynamic state under the saved call context so deferred
+    blocks execute and localization is restored exactly once.
+  - Added cancellation/defer cleanup coverage and verified the full `make`
+    suite.
+  - Files: `FutureAsyncAwaitRuntime.java` and
+    `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
 1. Add suspend/resume implementations for tied and special variables, plus
-   cancellation cleanup and destruction handling for abandoned frames.
+   destruction handling for abandoned frames.
 2. Cover eval, loops, regex captures, closures, and nested dynamic scopes.
 3. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
 4. Import the applicable upstream Future::AsyncAwait lifecycle and
