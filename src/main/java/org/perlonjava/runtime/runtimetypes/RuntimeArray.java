@@ -71,6 +71,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return new RuntimeArrayElementList(this);
     }
 
+    void resetElementsAfterAutovivification() {
+        elements = newElementList();
+    }
+
     private RuntimeArrayElementList newElementList(int initialCapacity) {
         return new RuntimeArrayElementList(this, initialCapacity);
     }
