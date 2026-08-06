@@ -125,7 +125,6 @@ sub _bootstrap_prefs {
         'XML-FromPerl.yml'           => 'PerlOnJava/CpanDistroprefs/XML-FromPerl.yml',
         'Term-ANSIColor-Markup.yml'   => 'PerlOnJava/CpanDistroprefs/Term-ANSIColor-Markup.yml',
         'LRU-Cache.yml'               => 'PerlOnJava/CpanDistroprefs/LRU-Cache.yml',
-        'WWW-Form-UrlEncoded.yml'     => 'PerlOnJava/CpanDistroprefs/WWW-Form-UrlEncoded.yml',
         'Sort-External.yml'            => 'PerlOnJava/CpanDistroprefs/Sort-External.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
@@ -167,6 +166,7 @@ sub _bootstrap_prefs {
         Test-Warnings.yml
         File-Copy-Recursive.yml
         Test-File.yml
+        WWW-Form-UrlEncoded.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;
@@ -302,8 +302,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Term-ANSIColor-Markup-0.06/PortableAccessors.patch' ],
         [ 'LRU-Cache/PurePerl.patch',
           'PerlOnJava/CpanPatches/LRU-Cache-1.00/PurePerl.patch' ],
-        [ 'WWW-Form-UrlEncoded/PP.pm.patch',
-          'PerlOnJava/CpanPatches/WWW-Form-UrlEncoded-0.26/PP.pm.patch' ],
         [ 'Sort-External/PurePerl.patch',
           'PerlOnJava/CpanPatches/Sort-External-0.18/PurePerl.patch' ],
     );
@@ -313,6 +311,7 @@ sub _bootstrap_patches {
     for my $rel (
         'Test-FailWarnings-0.008/CallerOrigin.patch',
         'DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch',
+        'WWW-Form-UrlEncoded/PP.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;

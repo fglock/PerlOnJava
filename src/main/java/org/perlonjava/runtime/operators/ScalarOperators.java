@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.ScalarSpecialVariable;
 
 import java.nio.charset.StandardCharsets;
 
@@ -126,6 +127,13 @@ public class ScalarOperators {
      * @return a RuntimeScalar containing the byte value (0-255)
      */
     public static RuntimeScalar ordBytes(RuntimeScalar runtimeScalar) {
+        // Capture variables such as $1 are live proxy scalars. Materialize the
+        // current match value so its BYTE_STRING flag participates in bytes::ord;
+        // otherwise the proxy's own type causes an already-byte-oriented octet
+        // to be encoded as UTF-8 a second time.
+        if (runtimeScalar instanceof ScalarSpecialVariable specialVariable) {
+            runtimeScalar = specialVariable.getValueAsScalar();
+        }
         String str = runtimeScalar.toString();
         int i;
         if (str.isEmpty()) {

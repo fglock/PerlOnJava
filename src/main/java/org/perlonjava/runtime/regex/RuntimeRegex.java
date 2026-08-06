@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -100,6 +101,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private RegexFlags regexFlags;
     // Replacement string for substitutions
     private RuntimeScalar replacement = null;
+    // Lexical `use bytes` was active at this substitution call site.
+    private boolean bytesSubstitution = false;
     // Caller's @_ for replacement code evaluation (so $_[0] etc. work in s/// replacement)
     private RuntimeArray callerArgs = null;
     // Tracks if a match has occurred: this is used as a counter for m?PAT?
@@ -1056,6 +1059,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return result;
     }
 
+    /** Create a replacement regex whose target and captures are viewed as UTF-8 octets. */
+    public static RuntimeScalar getBytesReplacementRegex(RuntimeScalar patternString,
+                                                         RuntimeScalar replacement,
+                                                         RuntimeScalar modifiers,
+                                                         RuntimeArray callerArgs) {
+        RuntimeScalar result = getReplacementRegex(patternString, replacement, modifiers, callerArgs);
+        ((RuntimeRegex) result.value).bytesSubstitution = true;
+        return result;
+    }
+
     /**
      * Applies a Perl "qr" object on a string; returns true/false or a list,
      * and produces side-effects.
@@ -1070,6 +1083,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegex regex = resolveRegex(quotedRegex);
         regex = ensureCompiledForRuntime(regex);
         if (regex.replacement != null) {
+            if (regex.bytesSubstitution) {
+                return replaceRegexBytes(quotedRegex, string, ctx);
+            }
             return replaceRegex(quotedRegex, string, ctx);
         }
 
@@ -1939,6 +1955,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Lookbehind/lookahead assertions should still inspect the full input
         // around the current search start, matching Perl's pos()-style scan.
         matcher.useTransparentBounds(transparentBounds);
+    }
+
+    /**
+     * Run a substitution against Perl's byte view without losing the bound
+     * scalar. Destructive substitutions copy the byte result back through the
+     * original lvalue; {@code /r} is handled by {@link #replaceRegex} and
+     * leaves the original untouched.
+     */
+    private static RuntimeBase replaceRegexBytes(RuntimeScalar quotedRegex,
+                                                 RuntimeScalar original,
+                                                 int ctx) {
+        RuntimeScalar byteView = StringOperators.toBytesString(original);
+        RuntimeBase result = replaceRegex(quotedRegex, byteView, ctx);
+
+        RuntimeRegex regex = resolveRegex(quotedRegex);
+        boolean nonDestructive = regex.regexFlags != null && regex.regexFlags.isNonDestructive();
+        if (!nonDestructive && byteView != original && result.getBoolean()) {
+            original.set(byteView);
+        }
+        return result;
     }
 
     private static void updateReplacementMatchState(RuntimeRegex regex, Matcher matcher,

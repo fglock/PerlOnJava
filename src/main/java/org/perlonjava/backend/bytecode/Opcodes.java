@@ -1385,7 +1385,7 @@ public class Opcodes {
 
     /**
      * Get replacement regex: rd = RuntimeRegex.getReplacementRegex(pattern, replacement, flags)
-     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u
+     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u bytes_substitution
      */
     public static final short GET_REPLACEMENT_REGEX = 236;
 
