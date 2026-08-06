@@ -14,7 +14,8 @@ sub as_string {
     $self->{qmod};
 }
 
-# r => requires, b => build_requires, c => commandline
+# r => runtime requires, b => build requires, t => test requires,
+# q => configure requires, c => commandline
 sub reqtype {
     my($self) = @_;
     $self->{reqtype};
@@ -126,14 +127,12 @@ sub jumpqueue {
         # treat it as commandline
         $what[0]{reqtype} = "c";
     }
-    my $inherit_reqtype = $what[0]{reqtype} =~ /^(c|r)$/ ? "r" : "b";
+    my $parent_reqtype = $what[0]{reqtype};
+    my $inherit_reqtype = $parent_reqtype =~ /^(c|r)$/ ? "r" : $parent_reqtype;
   WHAT: for my $what_tuple (@what) {
         my($qmod,$reqtype,$optional) = @$what_tuple{qw(qmod reqtype optional)};
-        if ($reqtype eq "r"
-            &&
-            $inherit_reqtype eq "b"
-           ) {
-            $reqtype = "b";
+        if ($reqtype eq "r" && $inherit_reqtype =~ /^(b|t|q)$/) {
+            $reqtype = $inherit_reqtype;
         }
         my $jumped = 0;
         for (my $i=0; $i<$#All;$i++) { #prevent deep recursion
@@ -196,7 +195,7 @@ sub reqtype_of {
             last;
         } elsif ($c eq "r") {
             $best = $c;
-        } elsif ($c eq "b") {
+        } elsif ($c =~ /^(b|q|t)$/) {
             if ($best eq "") {
                 $best = $c;
             }

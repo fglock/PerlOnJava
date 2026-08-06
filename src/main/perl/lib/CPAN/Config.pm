@@ -32,7 +32,6 @@ sub _bootstrap_prefs {
     my %pref_install = (
         'Moo.yml'                    => 'PerlOnJava/CpanDistroprefs/Moo.yml',
         'Params-Validate.yml'        => 'PerlOnJava/CpanDistroprefs/Params-Validate.yml',
-        'DB-File.yml'                => 'PerlOnJava/CpanDistroprefs/DB-File.yml',
         'AnyEvent.yml'               => 'PerlOnJava/CpanDistroprefs/AnyEvent.yml',
         'SQL-Translator.yml'         => 'PerlOnJava/CpanDistroprefs/SQL-Translator.yml',
         'Net-Server.yml'             => 'PerlOnJava/CpanDistroprefs/Net-Server.yml',
@@ -41,80 +40,35 @@ sub _bootstrap_prefs {
         'Error.yml'                  => 'PerlOnJava/CpanDistroprefs/Error.yml',
         'IO-All.yml'                 => 'PerlOnJava/CpanDistroprefs/IO-All.yml',
         'IO-Async.yml'               => 'PerlOnJava/CpanDistroprefs/IO-Async.yml',
-        'IO-Compress.yml'            => 'PerlOnJava/CpanDistroprefs/IO-Compress.yml',
-        'IO-HTML.yml'                => 'PerlOnJava/CpanDistroprefs/IO-HTML.yml',
         'IO-Socket-INET6.yml'        => 'PerlOnJava/CpanDistroprefs/IO-Socket-INET6.yml',
         'Image-BMP.yml'              => 'PerlOnJava/CpanDistroprefs/Image-BMP.yml',
         'Javascript-Menu-Full.yml'   => 'PerlOnJava/CpanDistroprefs/Javascript-Menu-Full.yml',
         'CGI-Widget-Tabs.yml'        => 'PerlOnJava/CpanDistroprefs/CGI-Widget-Tabs.yml',
-        'Devel-Symdump.yml'          => 'PerlOnJava/CpanDistroprefs/Devel-Symdump.yml',
         'Pod-Parser.yml'             => 'PerlOnJava/CpanDistroprefs/Pod-Parser.yml',
-        'ExtUtils-CBuilder.yml'      => 'PerlOnJava/CpanDistroprefs/ExtUtils-CBuilder.yml',
         'ExtUtils-ParseXS.yml'       => 'PerlOnJava/CpanDistroprefs/ExtUtils-ParseXS.yml',
-        'Module-Build.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Build.yml',
         'Module-Install.yml'         => 'PerlOnJava/CpanDistroprefs/Module-Install.yml',
-        'Aliased.yml'                => 'PerlOnJava/CpanDistroprefs/Aliased.yml',
-        'Carp-Assert.yml'            => 'PerlOnJava/CpanDistroprefs/Carp-Assert.yml',
-        'Regexp-Common.yml'          => 'PerlOnJava/CpanDistroprefs/Regexp-Common.yml',
-        'Class-Method-Modifiers.yml' => 'PerlOnJava/CpanDistroprefs/Class-Method-Modifiers.yml',
         'Class-Trait.yml'            => 'PerlOnJava/CpanDistroprefs/Class-Trait.yml',
-        'Sub-Quote.yml'              => 'PerlOnJava/CpanDistroprefs/Sub-Quote.yml',
-        'IPC-Run.yml'                => 'PerlOnJava/CpanDistroprefs/IPC-Run.yml',
-        'IPC-Run3.yml'               => 'PerlOnJava/CpanDistroprefs/IPC-Run3.yml',
         'Exception-Class.yml'        => 'PerlOnJava/CpanDistroprefs/Exception-Class.yml',
-        'Module-Pluggable.yml'       => 'PerlOnJava/CpanDistroprefs/Module-Pluggable.yml',
         'Module-Pluggable-Ordered.yml' => 'PerlOnJava/CpanDistroprefs/Module-Pluggable-Ordered.yml',
-        'Object-InsideOut.yml'     => 'PerlOnJava/CpanDistroprefs/Object-InsideOut.yml',
         'Logger-Simple.yml'        => 'PerlOnJava/CpanDistroprefs/Logger-Simple.yml',
-        'Object-Event.yml'           => 'PerlOnJava/CpanDistroprefs/Object-Event.yml',
-        'Path-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Path-Tiny.yml',
-        'Test2-Plugin-NoWarnings.yml' => 'PerlOnJava/CpanDistroprefs/Test2-Plugin-NoWarnings.yml',
-        'Params-ValidationCompiler.yml' => 'PerlOnJava/CpanDistroprefs/Params-ValidationCompiler.yml',
-        'Test-Deep.yml'              => 'PerlOnJava/CpanDistroprefs/Test-Deep.yml',
         'Test-Deep-JSON.yml'         => 'PerlOnJava/CpanDistroprefs/Test-Deep-JSON.yml',
-        'Test-File-ShareDir.yml'     => 'PerlOnJava/CpanDistroprefs/Test-File-ShareDir.yml',
-        'DateTime-Locale.yml'        => 'PerlOnJava/CpanDistroprefs/DateTime-Locale.yml',
         'Test-SharedFork.yml'        => 'PerlOnJava/CpanDistroprefs/Test-SharedFork.yml',
-        'UNIVERSAL-can.yml'          => 'PerlOnJava/CpanDistroprefs/UNIVERSAL-can.yml',
-        'UNIVERSAL-isa.yml'          => 'PerlOnJava/CpanDistroprefs/UNIVERSAL-isa.yml',
-        'Test-MockObject.yml'        => 'PerlOnJava/CpanDistroprefs/Test-MockObject.yml',
         'Data-Dmp.yml'               => 'PerlOnJava/CpanDistroprefs/Data-Dmp.yml',
         'Capture-Tiny.yml'           => 'PerlOnJava/CpanDistroprefs/Capture-Tiny.yml',
-        'Readonly.yml'               => 'PerlOnJava/CpanDistroprefs/Readonly.yml',
-        'String-Print.yml'           => 'PerlOnJava/CpanDistroprefs/String-Print.yml',
         'String-ShellQuote.yml'      => 'PerlOnJava/CpanDistroprefs/String-ShellQuote.yml',
         'Template.yml'               => 'PerlOnJava/CpanDistroprefs/Template.yml',
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
         'Parse-RecDescent.yml'       => 'PerlOnJava/CpanDistroprefs/Parse-RecDescent.yml',
         'Crypt-URandom.yml'          => 'PerlOnJava/CpanDistroprefs/Crypt-URandom.yml',
-        'Hook-LexWrap.yml'           => 'PerlOnJava/CpanDistroprefs/Hook-LexWrap.yml',
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
-        'CGI.yml'                    => 'PerlOnJava/CpanDistroprefs/CGI.yml',
-        'CGI-Simple.yml'             => 'PerlOnJava/CpanDistroprefs/CGI-Simple.yml',
         'Graph.yml'                  => 'PerlOnJava/CpanDistroprefs/Graph.yml',
         'Class-DBI.yml'              => 'PerlOnJava/CpanDistroprefs/Class-DBI.yml',
         'XML-Filter-GenericChunk.yml' => 'PerlOnJava/CpanDistroprefs/XML-Filter-GenericChunk.yml',
         'XML-TreePP.yml'             => 'PerlOnJava/CpanDistroprefs/XML-TreePP.yml',
-        'HTTP-Message.yml'           => 'PerlOnJava/CpanDistroprefs/HTTP-Message.yml',
         'HTTP-Response-Encoding.yml' => 'PerlOnJava/CpanDistroprefs/HTTP-Response-Encoding.yml',
-        'HTTP-Daemon.yml'            => 'PerlOnJava/CpanDistroprefs/HTTP-Daemon.yml',
-        'HTTP-Server-Simple.yml'     => 'PerlOnJava/CpanDistroprefs/HTTP-Server-Simple.yml',
-        'WWW-RobotRules.yml'         => 'PerlOnJava/CpanDistroprefs/WWW-RobotRules.yml',
-        'libwww-perl.yml'            => 'PerlOnJava/CpanDistroprefs/libwww-perl.yml',
         'LWP-Protocol-https.yml'     => 'PerlOnJava/CpanDistroprefs/LWP-Protocol-https.yml',
-        'REST-Client.yml'            => 'PerlOnJava/CpanDistroprefs/REST-Client.yml',
-        'String-Random.yml'          => 'PerlOnJava/CpanDistroprefs/String-Random.yml',
         'PerlIO-via-Timeout.yml'     => 'PerlOnJava/CpanDistroprefs/PerlIO-via-Timeout.yml',
-        'File-Slurp.yml'             => 'PerlOnJava/CpanDistroprefs/File-Slurp.yml',
-        'Sub-Delete.yml'             => 'PerlOnJava/CpanDistroprefs/Sub-Delete.yml',
-        'Monkey-Patch-Action.yml'    => 'PerlOnJava/CpanDistroprefs/Monkey-Patch-Action.yml',
-        'Module-Patch.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Patch.yml',
-        'Mojolicious.yml'            => 'PerlOnJava/CpanDistroprefs/Mojolicious.yml',
-        'Acrux.yml'                  => 'PerlOnJava/CpanDistroprefs/Acrux.yml',
-        'Crypt-OpenSSL-RSA.yml'      => 'PerlOnJava/CpanDistroprefs/Crypt-OpenSSL-RSA.yml',
         'Device-SerialPort.yml'      => 'PerlOnJava/CpanDistroprefs/Device-SerialPort.yml',
-        'WWW-Suffit.yml'             => 'PerlOnJava/CpanDistroprefs/WWW-Suffit.yml',
-        'WWW-Suffit-UserAgent.yml'   => 'PerlOnJava/CpanDistroprefs/WWW-Suffit-UserAgent.yml',
         'XML-FromPerl.yml'           => 'PerlOnJava/CpanDistroprefs/XML-FromPerl.yml',
         'Term-ANSIColor-Markup.yml'   => 'PerlOnJava/CpanDistroprefs/Term-ANSIColor-Markup.yml',
         'LRU-Cache.yml'               => 'PerlOnJava/CpanDistroprefs/LRU-Cache.yml',
@@ -167,6 +121,52 @@ sub _bootstrap_prefs {
         XML-LibXML.yml
         Set-Object.yml
         Package-Stash-XS.yml
+        Acrux.yml
+        CGI-Simple.yml
+        CGI.yml
+        Crypt-OpenSSL-RSA.yml
+        DB-File.yml
+        File-Slurp.yml
+        HTTP-Server-Simple.yml
+        Hook-LexWrap.yml
+        Module-Patch.yml
+        Mojolicious.yml
+        Monkey-Patch-Action.yml
+        REST-Client.yml
+        String-Random.yml
+        Sub-Delete.yml
+        Test-MockObject.yml
+        UNIVERSAL-can.yml
+        UNIVERSAL-isa.yml
+        WWW-Suffit-UserAgent.yml
+        WWW-Suffit.yml
+        libwww-perl.yml
+        HTTP-Daemon.yml
+        HTTP-Message.yml
+        IO-Compress.yml
+        IO-HTML.yml
+        Module-Build.yml
+        Object-Event.yml
+        Object-InsideOut.yml
+        String-Print.yml
+        WWW-RobotRules.yml
+        Aliased.yml
+        Carp-Assert.yml
+        Class-Method-Modifiers.yml
+        DateTime-Locale.yml
+        Devel-Symdump.yml
+        ExtUtils-CBuilder.yml
+        IPC-Run.yml
+        IPC-Run3.yml
+        Module-Pluggable.yml
+        Params-ValidationCompiler.yml
+        Path-Tiny.yml
+        Readonly.yml
+        Regexp-Common.yml
+        Sub-Quote.yml
+        Test-Deep.yml
+        Test-File-ShareDir.yml
+        Test2-Plugin-NoWarnings.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;

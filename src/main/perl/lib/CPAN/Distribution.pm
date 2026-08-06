@@ -60,6 +60,8 @@ sub undelay {
                      "configure_requires_later_for",
                      "later",
                      "later_for",
+                     "test_requires_later",
+                     "test_requires_later_for",
                     ) {
         delete $self->{$delayer};
     }
@@ -734,6 +736,40 @@ sub satisfy_requires {
         }
     }
     return 1;
+}
+
+# Test prerequisites are deliberately resolved at the test boundary.  This
+# keeps them out of dependency-only install graphs while preserving the full
+# test surface for an explicitly requested distribution.
+sub satisfy_test_requires {
+    my ($self) = @_;
+    $self->debug("Entering satisfy_test_requires") if $CPAN::DEBUG;
+    if (my @prereq = $self->unsat_prereq("test_requires_later")) {
+        if ($prereq[0][0] eq "perl") {
+            my $need = "requires perl '$prereq[0][1]' for testing";
+            my $id = $self->pretty_id;
+            $CPAN::Frontend->mywarn("$id $need; you have only $]; giving up\n");
+            $self->{make_test} = CPAN::Distrostatus->new("NO $need");
+            $self->store_persistent_state;
+            die "[test prereq] -- NOT OK\n";
+        }
+        my $follow = eval {
+            $self->follow_prereqs("test_requires_later", @prereq);
+        };
+        return if $follow;
+        if ($@ && ref $@ && $@->isa("CPAN::Exception::RecursiveDependency")) {
+            $CPAN::Frontend->mywarn($@);
+            die "[test depend] -- NOT OK\n";
+        }
+    }
+    return 1;
+}
+
+sub _perlonjava_skip_dependency_tests {
+    my ($self) = @_;
+    return 0 if $ENV{PERLONJAVA_STRICT_DEPENDENCY_TESTING};
+    my $reqtype = $self->{reqtype} || "c";
+    return $reqtype ne "c";
 }
 
 #-> sub CPAN::Distribution::satisfy_configure_requires ;
@@ -3060,7 +3096,7 @@ sub is_locally_optional {
     my($self, $prereq_pm, $prereq) = @_;
     $prereq_pm ||= $self->{prereq_pm};
     my($nmo,$opt);
-    for my $rt (qw(requires build_requires)) {
+    for my $rt (qw(requires build_requires test_requires)) {
         if (exists $prereq_pm->{$rt}{$prereq}) {
             # rt 121914
             $nmo ||= $CPAN::META->instance("CPAN::Module",$prereq);
@@ -3086,7 +3122,7 @@ sub follow_prereqs {
         # promote if possible
         if ($p->[1] =~ /^(r|c)$/) {
             push @good_prereq_tuples, $p;
-        } elsif ($p->[1] =~ /^(b)$/) {
+        } elsif ($p->[1] =~ /^(b|t|q)$/) {
             my $reqtype = CPAN::Queue->reqtype_of($p->[0]);
             if ($reqtype =~ /^(r|c)$/) {
                 push @good_prereq_tuples, [$p->[0], $reqtype, $p->[2]];
@@ -3100,6 +3136,8 @@ sub follow_prereqs {
     my $pretty_id = $self->pretty_id;
     my %map = (
                b => "build_requires",
+               t => "test_requires",
+               q => "configure_requires",
                r => "requires",
                c => "commandline",
               );
@@ -3201,7 +3239,7 @@ sub _feature_depends {
                                      "\n\n"
                                     );
             # configure_requires currently not in the spec, unlikely to be useful anyway
-            for my $reqtype (qw(configure_requires build_requires requires)) {
+            for my $reqtype (qw(configure_requires build_requires test_requires requires)) {
                 my $reqhash = $f->{$reqtype} or next;
                 while (my($k,$v) = each %$reqhash) {
                     $dep->{$reqtype}{$k} = $v;
@@ -3272,7 +3310,9 @@ sub prereqs_for_slot {
             $merged->add_minimum( "Module::Build" => 0 );
             delete $self->{writemakefile};
         }
-        $prereq_pm = {}; # configure_requires defined as "b"
+        $prereq_pm = {
+            configure_requires => { %{ $merged->as_string_hash || {} } },
+        };
     } elsif ($slot eq "later") {
         my $prereq_pm_0 = $self->prereq_pm || {};
         for my $reqtype (qw(requires build_requires opt_requires opt_build_requires)) {
@@ -3293,6 +3333,19 @@ sub prereqs_for_slot {
         ) {
             $merged->add_requirements(
                 CPAN::Meta::Requirements->from_string_hash($hash)
+            );
+        }
+    } elsif ($slot eq "test_requires_later") {
+        my $prereq_pm_0 = $self->prereq_pm || {};
+        for my $reqtype (qw(test_requires opt_test_requires)) {
+            $prereq_pm->{$reqtype} = {%{$prereq_pm_0->{$reqtype}||{}}};
+            for my $dep ($prefs_depends,$feature_depends) {
+                for my $k (keys %{$dep->{$reqtype}||{}}) {
+                    $prereq_pm->{$reqtype}{$k} = $dep->{$reqtype}{$k};
+                }
+            }
+            $merged->add_requirements(
+                CPAN::Meta::Requirements->from_string_hash($prereq_pm->{$reqtype})
             );
         }
     } else {
@@ -3316,6 +3369,15 @@ sub _perlonjava_provider_requirement {
     return (-1, "PerlOnJava's $provider->{provider} provider for " .
         "$need_module is version $provider_version and does not satisfy $rq; " .
         "shadowing this provider is forbidden\n");
+}
+
+sub _perlonjava_prereq_reqtype {
+    my ($slot, $prereq_pm, $need_module) = @_;
+    return "r" if exists $prereq_pm->{requires}{$need_module}
+        || exists $prereq_pm->{opt_requires}{$need_module};
+    return "q" if $slot eq "configure_requires_later";
+    return "t" if $slot eq "test_requires_later";
+    return "b";
 }
 
 sub unsat_prereq {
@@ -3547,23 +3609,9 @@ sub unsat_prereq {
                 }
             }
         }
-        my $needed_as;
-        if (0) {
-        } elsif (exists $prereq_pm->{requires}{$need_module}
-            || exists $prereq_pm->{opt_requires}{$need_module}
-        ) {
-            $needed_as = "r";
-        } elsif ($slot eq "configure_requires_later") {
-            # in ae872487d5 we said: C< we have not yet run the
-            # {Build,Makefile}.PL, we must presume "r" >; but the
-            # meta.yml standard says C< These dependencies are not
-            # required after the distribution is installed. >; so now
-            # we change it back to "b" and care for the proper
-            # promotion later.
-            $needed_as = "b";
-        } else {
-            $needed_as = "b";
-        }
+        my $needed_as = _perlonjava_prereq_reqtype(
+            $slot, $prereq_pm, $need_module,
+        );
         # here need to flag as optional for recommends/suggests
         # -- xdg, 2012-04-01
         $self->debug(sprintf "%s manadory?[%s]",
@@ -3655,6 +3703,23 @@ sub read_meta {
     return $meta;
 }
 
+# ExtUtils::MakeMaker writes META 1.4 MYMETA.yml files whose single
+# build_requires bucket contains both build and test requirements.  Keep the
+# configured MYMETA values, but use the distribution's modern static META file
+# to recover phase identity where it is available.
+sub _perlonjava_static_meta {
+    my ($self) = @_;
+    return unless $self->{build_dir};
+    return unless $CPAN::META->has_usable("CPAN::Meta");
+    for my $file (qw(META.json META.yml)) {
+        my $path = File::Spec->catfile($self->{build_dir}, $file);
+        next unless -f $path;
+        my $meta = eval { CPAN::Meta->load_file($path) };
+        return $meta if $meta;
+    }
+    return;
+}
+
 #-> sub CPAN::Distribution::read_yaml ;
 # XXX This should be DEPRECATED -- dagolden, 2011-02-05
 sub read_yaml {
@@ -3719,7 +3784,7 @@ sub prereq_pm {
                 $self->{writemakefile}||"",
                 $self->{modulebuild}||"",
                ) if $CPAN::DEBUG;
-    my($req,$breq, $opt_req, $opt_breq);
+    my($req,$breq,$treq, $opt_req,$opt_breq,$opt_treq);
     my $meta_obj = $self->read_meta;
     # META/MYMETA is only authoritative if dynamic_config is false
     if ($meta_obj && ! $meta_obj->dynamic_config) {
@@ -3727,33 +3792,48 @@ sub prereq_pm {
         my $requires = $prereqs->requirements_for(qw/runtime requires/);
         my $build_requires = $prereqs->requirements_for(qw/build requires/);
         my $test_requires = $prereqs->requirements_for(qw/test requires/);
-        # XXX we don't yet distinguish build vs test, so merge them for now
-        $build_requires->add_requirements($test_requires);
+        if (my $static_meta = $self->_perlonjava_static_meta) {
+            my $static_prereqs = $static_meta->effective_prereqs;
+            my $static_build =
+                $static_prereqs->requirements_for(qw/build requires/);
+            my $static_test =
+                $static_prereqs->requirements_for(qw/test requires/);
+            $test_requires->add_requirements($static_test);
+            my %static_build = map { $_ => 1 } $static_build->required_modules;
+            for my $module ($static_test->required_modules) {
+                $build_requires->clear_requirement($module)
+                    unless $static_build{$module};
+            }
+        }
         $req = $requires->as_string_hash;
         $breq = $build_requires->as_string_hash;
+        $treq = $test_requires->as_string_hash;
 
         # XXX assemble optional_req && optional_breq from recommends/suggests
         # depending on corresponding policies -- xdg, 2012-04-01
         CPAN->use_inst("CPAN::Meta::Requirements");
         my $opt_runtime = CPAN::Meta::Requirements->new;
         my $opt_build   = CPAN::Meta::Requirements->new;
+        my $opt_test    = CPAN::Meta::Requirements->new;
         if ( $CPAN::Config->{recommends_policy} ) {
             $opt_runtime->add_requirements( $prereqs->requirements_for(qw/runtime recommends/));
             $opt_build->add_requirements(   $prereqs->requirements_for(qw/build recommends/));
-            $opt_build->add_requirements(   $prereqs->requirements_for(qw/test  recommends/));
+            $opt_test->add_requirements(    $prereqs->requirements_for(qw/test  recommends/));
 
         }
         if ( $CPAN::Config->{suggests_policy} ) {
             $opt_runtime->add_requirements( $prereqs->requirements_for(qw/runtime suggests/));
             $opt_build->add_requirements(   $prereqs->requirements_for(qw/build suggests/));
-            $opt_build->add_requirements(   $prereqs->requirements_for(qw/test  suggests/));
+            $opt_test->add_requirements(    $prereqs->requirements_for(qw/test  suggests/));
         }
         $opt_req = $opt_runtime->as_string_hash;
         $opt_breq = $opt_build->as_string_hash;
+        $opt_treq = $opt_test->as_string_hash;
     }
     elsif (my $yaml = $self->read_yaml) { # often dynamic_config prevents a result here
         $req =  $yaml->{requires} || {};
         $breq =  $yaml->{build_requires} || {};
+        $treq =  $yaml->{test_requires} || {};
         if ( $CPAN::Config->{recommends_policy} ) {
             $opt_req = $yaml->{recommends} || {};
         }
@@ -3797,7 +3877,7 @@ sub prereq_pm {
                                     "methods to determine prerequisites\n");
     }
 
-    unless ($req || $breq) {
+    unless ($req || $breq || $treq) {
         my $build_dir;
         unless ( $build_dir = $self->{build_dir} ) {
             return;
@@ -3840,7 +3920,7 @@ sub prereq_pm {
             }
         }
     }
-    unless ($req || $breq) {
+    unless ($req || $breq || $treq) {
         my $build_dir = $self->{build_dir} or die "Panic: no build_dir?";
         my $buildfile = File::Spec->catfile($build_dir,"Build");
         if (-f $buildfile) {
@@ -3860,17 +3940,20 @@ sub prereq_pm {
                 } else {
                     $req  = $bphash->{requires} || +{};
                     $breq = $bphash->{build_requires} || +{};
+                    $treq = $bphash->{test_requires} || +{};
                 }
             }
         }
     }
     # XXX needs to be adapted for optional_req & optional_breq -- xdg, 2012-04-01
-    if ($req || $breq || $opt_req || $opt_breq ) {
+    if ($req || $breq || $treq || $opt_req || $opt_breq || $opt_treq ) {
         return $self->{prereq_pm} = {
            requires => $req,
            build_requires => $breq,
+           test_requires => $treq,
            opt_requires => $opt_req,
            opt_build_requires => $opt_breq,
+           opt_test_requires => $opt_treq,
        };
     }
 }
@@ -3889,7 +3972,7 @@ sub shortcut_test {
         return $self->goodbye("Won't repeat unsuccessful test during this command");
     }
 
-    for my $slot ( qw/later configure_requires_later/ ) {
+    for my $slot ( qw/later configure_requires_later test_requires_later/ ) {
         $self->debug("checking $slot slot[$self->{ID}]") if $CPAN::DEBUG;
         return $self->success($self->{$slot})
         if $self->{$slot};
@@ -4017,6 +4100,24 @@ sub test {
     if ( defined( my $sc = $self->shortcut_test ) ) {
         $self->post_test();
         return $sc;
+    }
+
+    if ($self->_perlonjava_skip_dependency_tests) {
+        $self->{make_test} = CPAN::Distrostatus->new("YES");
+        $CPAN::META->is_tested($self->{build_dir}, $self->{make_test}{TIME})
+            if $self->{build_dir};
+        $self->post_test();
+        return $self->success("Skipping dependency tests; use --strict-dependency-tests to enable them");
+    }
+
+    my $test_prereqs_satisfied = eval { $self->satisfy_test_requires };
+    if ($@) {
+        $self->post_test();
+        return $self->goodbye($@);
+    }
+    unless ($test_prereqs_satisfied) {
+        $self->post_test();
+        return;
     }
 
     if ($CPAN::Signal) {
@@ -4496,7 +4597,7 @@ sub shortcut_install {
         }
     }
 
-    for my $slot ( qw/later configure_requires_later/ ) {
+    for my $slot ( qw/later configure_requires_later test_requires_later/ ) {
         return $self->success($self->{$slot})
         if $self->{$slot};
     }
@@ -4620,7 +4721,7 @@ sub install {
     my $id = $self->id;
     my $reqtype = $self->{reqtype} ||= "c"; # in doubt it was a command
     my $want_install = "yes";
-    if ($reqtype eq "b") {
+    if ($reqtype =~ /^(b|t|q)$/) {
         if ($brip eq "no") {
             $want_install = "no";
         } elsif ($brip =~ m|^ask/(.+)|) {
@@ -4628,13 +4729,18 @@ sub install {
             $default = "yes" unless $default =~ /^(y|n)/i;
             $want_install =
                 CPAN::Shell::colorable_makemaker_prompt
-                      ("$id is just needed temporarily during building or testing. ".
+                      ("$id is just needed temporarily during configuration, building, or testing. ".
                        "Do you want to install it permanently?",
                        $default);
         }
     }
     unless ($want_install =~ /^y/i) {
-        my $is_only = "is only 'build_requires'";
+        my %phase_name = (
+            b => 'build_requires',
+            t => 'test_requires',
+            q => 'configure_requires',
+        );
+        my $is_only = "is only '$phase_name{$reqtype}'";
         $self->{install} = CPAN::Distrostatus->new("NO -- $is_only");
         delete $self->{force_update};
         $self->goodbye("Not installing because $is_only");

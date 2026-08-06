@@ -5,6 +5,7 @@ rem Supports --jobs N for parallel test execution:
 rem   jcpan --jobs 4 -t Module::Name
 rem Supports --notest as an alias for cpan's -T option.
 rem Supports --provider for explicit non-installing provider conformance tests.
+rem Supports --strict-dependency-tests for recursive dependency test surfaces.
 set SCRIPT_DIR=%~dp0
 
 rem Parse --jobs option for parallel test jobs
@@ -26,6 +27,11 @@ if "%~1"=="--notest" (
 )
 if "%~1"=="--provider" (
     set "PERLONJAVA_PROVIDER_CONFORMANCE=1"
+    shift
+    goto parse_args
+)
+if "%~1"=="--strict-dependency-tests" (
+    set "PERLONJAVA_STRICT_DEPENDENCY_TESTING=1"
     shift
     goto parse_args
 )
