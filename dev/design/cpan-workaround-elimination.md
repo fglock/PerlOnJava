@@ -283,8 +283,7 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 
 ### Next steps
 
-1. Resolve the remaining Phase 4 suite blockers: Devel::Symdump's symbol-table
-   inventory differences in `t/symdump.t`, and
+1. Resolve the remaining Phase 4 suite blocker:
    Test2::Plugin::NoWarnings' `IPC::Run3` filehandle duplication.
 2. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
    interpreter code, and nested `eval`; keep the live LWP `t/local/http.t` and
@@ -376,8 +375,12 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   create post-alias scalars in the canonical stash while preserving scalars
   pinned before the alias. `stash_recursive_alias.t` passes on standard Perl,
   JVM, and interpreter, and Devel::Symdump's unchanged `t/recur.t` passes on
-  both PerlOnJava backends. Its full suite advances to 27/29 assertions; only
-  the two symbol-table inventory assertions in `t/symdump.t` remain.
+  both PerlOnJava backends. Symbol-table inventory now keeps `use vars`
+  typeglob declarations from eagerly materializing aggregate slots, preserves
+  strict-vars authorization separately, exposes lowercase standard handles and
+  main's argument-array slot, distinguishes the special `$:` glob from a
+  package stash, and creates `%!`, `%+`, and `%-` lazily. Devel::Symdump's
+  unchanged full suite passes all 9 files and 29 assertions.
   `Devel::Peek::CvGV` now reconstructs canonical
   typeglobs from `Sub::Util::subname`; `devel_peek_cvgv.t` passes on standard
   Perl, JVM, and interpreter, and Test::MockObject advances to 231/232. Its

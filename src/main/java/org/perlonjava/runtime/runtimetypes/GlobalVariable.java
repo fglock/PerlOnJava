@@ -1029,6 +1029,15 @@ public class GlobalVariable {
                     var = new RuntimeStash(key);
                 } else {
                     var = new RuntimeHash();
+                    if (key.equals("main::!")) {
+                        // %! is magic but remains absent from the stash until
+                        // first accessed, matching Perl's lazy slot creation.
+                        var.elements = new ErrnoHash();
+                    } else if (key.equals("main::+")) {
+                        var.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);
+                    } else if (key.equals("main::-")) {
+                        var.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);
+                    }
                 }
                 // D-W6.18: mark as package-global so values stored here
                 // get the storedInPackageGlobal flag (replaces class-name

@@ -712,10 +712,13 @@ public class BytecodeCompiler implements Visitor {
         // This mirrors the allowIfAlreadyExists logic in EmitVariable.java
         String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
         boolean allowIfAlreadyExists = sigil.equals("$") && GlobalVariable.existsGlobalVariable(normalizedName);
-        if (sigil.equals("@") && GlobalVariable.existsGlobalArray(normalizedName)) {
+        if (sigil.equals("@") && (GlobalVariable.existsGlobalArray(normalizedName)
+                || GlobalVariable.isDeclaredGlobalArray(normalizedName))) {
             allowIfAlreadyExists = true;
         }
-        if (sigil.equals("%") && !normalizedName.endsWith("::") && GlobalVariable.existsGlobalHash(normalizedName)) {
+        if (sigil.equals("%") && !normalizedName.endsWith("::")
+                && (GlobalVariable.existsGlobalHash(normalizedName)
+                    || GlobalVariable.isDeclaredGlobalHash(normalizedName))) {
             allowIfAlreadyExists = true;
         }
 

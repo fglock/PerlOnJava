@@ -385,22 +385,27 @@ public class Variable {
                 int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
                 if (peekIdx < parser.tokens.size()) {
                     String nextText = parser.tokens.get(peekIdx).text;
-                    if (nextText.equals("{") && GlobalVariable.existsGlobalHash(normalizedName)) existsGlobally = true;
-                    if (nextText.equals("[") && GlobalVariable.existsGlobalArray(normalizedName)) existsGlobally = true;
+                    if (nextText.equals("{") && (GlobalVariable.existsGlobalHash(normalizedName)
+                            || GlobalVariable.isDeclaredGlobalHash(normalizedName))) existsGlobally = true;
+                    if (nextText.equals("[") && (GlobalVariable.existsGlobalArray(normalizedName)
+                            || GlobalVariable.isDeclaredGlobalArray(normalizedName))) existsGlobally = true;
                 }
             }
         } else if (sigil.equals("@")) {
-            existsGlobally = GlobalVariable.existsGlobalArray(normalizedName);
+            existsGlobally = GlobalVariable.existsGlobalArray(normalizedName)
+                    || GlobalVariable.isDeclaredGlobalArray(normalizedName);
             // For @hash{...} (hash slice), also check global hash
             if (!existsGlobally) {
                 int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
                 if (peekIdx < parser.tokens.size()) {
                     String nextText = parser.tokens.get(peekIdx).text;
-                    if (nextText.equals("{") && GlobalVariable.existsGlobalHash(normalizedName)) existsGlobally = true;
+                    if (nextText.equals("{") && (GlobalVariable.existsGlobalHash(normalizedName)
+                            || GlobalVariable.isDeclaredGlobalHash(normalizedName))) existsGlobally = true;
                 }
             }
         } else if (sigil.equals("%") && !normalizedName.endsWith("::"))
-            existsGlobally = GlobalVariable.existsGlobalHash(normalizedName);
+            existsGlobally = GlobalVariable.existsGlobalHash(normalizedName)
+                    || GlobalVariable.isDeclaredGlobalHash(normalizedName);
 
         // Single-letter scalars ($A-$Z) bypass strict only if explicitly declared
         // (via use vars or Exporter import), not if merely auto-vivified under 'no strict'.
@@ -413,8 +418,10 @@ public class Variable {
             int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
             if (peekIdx < parser.tokens.size()) {
                 String nextText = parser.tokens.get(peekIdx).text;
-                if (nextText.equals("[") && GlobalVariable.existsGlobalArray(normalizedName)) isContainerAccess = true;
-                if (nextText.equals("{") && GlobalVariable.existsGlobalHash(normalizedName)) isContainerAccess = true;
+                if (nextText.equals("[") && (GlobalVariable.existsGlobalArray(normalizedName)
+                        || GlobalVariable.isDeclaredGlobalArray(normalizedName))) isContainerAccess = true;
+                if (nextText.equals("{") && (GlobalVariable.existsGlobalHash(normalizedName)
+                        || GlobalVariable.isDeclaredGlobalHash(normalizedName))) isContainerAccess = true;
             }
             if (!isContainerAccess && !GlobalVariable.isDeclaredGlobalVariable(normalizedName)) {
                 existsGlobally = false;

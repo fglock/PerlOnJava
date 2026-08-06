@@ -65,6 +65,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.IO = new RuntimeScalar();
     }
 
+    private static boolean isStashGlobName(String name) {
+        // `main:::` is the fully-qualified spelling of the special variable
+        // named ":", not a package stash. Valid stash names end in exactly a
+        // double colon, not three consecutive colons.
+        return name != null && name.endsWith("::") && !name.endsWith(":::");
+    }
+
     /**
      * Creates a detached copy of this glob that has its own independent IO slot.
      * 
@@ -109,7 +116,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         if (this.hashSlot != null) {
             copy.hashSlot = this.hashSlot;
-        } else if (GlobalVariable.existsGlobalHash(this.globName) || this.globName.endsWith("::")) {
+            if (!GlobalVariable.existsGlobalHash(this.globName)
+                    && GlobalVariable.peekGlobalIO(this.globName) == this) {
+                copy.hashSlotAliasesNamedGlob = true;
+            }
+        } else if (GlobalVariable.existsGlobalHash(this.globName) || isStashGlobName(this.globName)) {
             copy.hashSlot = GlobalVariable.getGlobalHash(this.globName);
         } else if (GlobalVariable.peekGlobalIO(this.globName) == this) {
             copy.hashSlotAliasesNamedGlob = true;
@@ -532,7 +543,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return value.scalar();
         }
 
-        if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
+        if (isStashGlobName(this.globName) && isStashGlobName(value.globName)) {
             GlobalVariable.setStashAlias(this.globName, value.globName);
             // Unify the stash-view hash so `\%Dst:: == \%Src::` and `*Dst::{HASH} == *Src::{HASH}`.
             // Without this, the two RuntimeStash objects remain distinct even though name-level
@@ -654,7 +665,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // it unconditionally for stashes, so we must materialise the alias here
         // even if globalHashes hasn't been populated yet.
         boolean sourceHasHash = GlobalVariable.existsGlobalHash(globName)
-                || globName.endsWith("::");
+                || isStashGlobName(globName);
         if (sourceHasHash) {
             RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
             if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
@@ -821,6 +832,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     yield this.hashSlot.createReference();
                 }
                 if (this.slotSnapshot) {
+                    if (this.hashSlotAliasesNamedGlob
+                            && !GlobalVariable.existsGlobalHash(this.globName)) {
+                        yield new RuntimeScalar();
+                    }
                     if (this.hashSlot == null && this.hashSlotAliasesNamedGlob
                             && GlobalVariable.existsGlobalHash(this.globName)) {
                         this.hashSlot = GlobalVariable.getGlobalHash(this.globName);
@@ -833,7 +848,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // even if it hasn't been explicitly materialized. This mirrors Perl 5
                 // where the stash is an intrinsic property of the package.
                 // getGlobalHash() internally normalizes "main::Foo::" -> "Foo::".
-                if (this.globName.endsWith("::")) {
+                if (isStashGlobName(this.globName)) {
                     yield GlobalVariable.getGlobalHash(this.globName).createReference();
                 }
                 // Only return reference if hash exists (has elements or was explicitly created)
@@ -893,7 +908,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // For stash globs (name ends with ::), resolve to the correct package stash.
         // The glob for $::{"UNIVERSAL::"} has globName "main::UNIVERSAL::" but the
         // stash is stored with key "UNIVERSAL::". Strip "main::" for top-level packages.
-        if (this.globName.endsWith("::")) {
+        if (isStashGlobName(this.globName)) {
             // Strip a leading "main::" only when there is something after it
             // (e.g. "main::Foo::" -> "Foo::"). For the bare "main::" stash,
             // keep the key intact so we don't end up looking up "" and
@@ -1210,7 +1225,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
-        if (this.globName.endsWith("::")) {
+        if (isStashGlobName(this.globName)) {
             // `undef *Pkg::` removes the stash slot from the parent package but
             // does not anonymize previously-blessed objects (Perl semantics: old
             // refs keep their package name; only `undef %Pkg::` anonymizes).
