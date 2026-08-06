@@ -365,7 +365,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-            RuntimeList result = BytecodeInterpreter.execute(this, args, effectiveContext);
+            // Preserve the declared sub name for interpreter stack traces while
+            // retaining async initial-result wrapping from master.
+            RuntimeList result = BytecodeInterpreter.execute(
+                    this, args, effectiveContext, this.subName);
             if (futureAsyncAwaitSub) {
                 return FutureAsyncAwaitRuntime.wrapInitialResult(
                         effectiveContext, callContext, result, futureAsyncAwaitFutureClass);

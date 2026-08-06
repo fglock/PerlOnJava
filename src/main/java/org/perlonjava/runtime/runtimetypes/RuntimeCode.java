@@ -3805,6 +3805,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static String callerSubNameForCode(RuntimeCode code) {
         if (code == null || code.subName == null || code.subName.isEmpty()
                 || code.subName.startsWith("(")) {
+            if (code != null) {
+                String registeredName = registeredCodeName(code);
+                if (registeredName != null) {
+                    return registeredName;
+                }
+            }
             return null;
         }
         if (code.subName.contains("::")) {
@@ -3812,6 +3818,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    /**
+     * Interpreter calls through imported or prototyped aliases may retain the
+     * code object without retaining its declared subName.  Recover the Perl
+     * name from the live symbol table before reporting an anonymous frame.
+     */
+    private static String registeredCodeName(RuntimeCode code) {
+        String packagePrefix = code.packageName == null || code.packageName.isEmpty()
+                ? null : code.packageName + "::";
+        String fallback = null;
+        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
+            RuntimeScalar value = entry.getValue();
+            if (value == null || value.type != RuntimeScalarType.CODE || value.value != code) {
+                continue;
+            }
+            String name = entry.getKey();
+            if (packagePrefix != null && name.startsWith(packagePrefix)) {
+                return name;
+            }
+            if (fallback == null) {
+                fallback = name;
+            }
+        }
+        return fallback;
     }
 
     private static int activeCodeFrameForCaller(int originalFrame) {
@@ -4392,6 +4423,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+
+            // The interpreter's shared-argument call opcode intentionally does
+            // not carry a source-level name. Recover it from the registered
+            // code reference so stack traces retain the called subroutine.
+            if ((subroutineName == null || subroutineName.isEmpty())
+                    && (code.subName == null || code.subName.isEmpty())) {
+                String registeredName = registeredCodeName(code);
+                if (registeredName != null) {
+                    subroutineName = registeredName;
+                }
+            }
 
             // Check for closure prototype — calling one should die
             if (code.isClosurePrototype) {

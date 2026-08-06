@@ -283,12 +283,19 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
 
 ### Next steps
 
-1. Begin Phase 4 with the aliased `$SIG{__DIE__}` preservation failure and
-   reduce it to a focused standard-Perl differential test.
-2. Trace the handler and `$@` state across JVM code, interpreter code, and
-   nested `eval` before changing the shared call-frame model.
-3. Keep the live LWP `t/local/http.t` and CGI HTML::Entities failures as
-   Phase 8/runtime-parity follow-ups; neither is a prerequisite-phase failure.
+1. Fix the interpreter call-frame mapping exposed by
+   `src/test/resources/unit/carp_confess_named_frame.t`: standard Perl and the
+   JVM backend report `assert_like_carp_assert(0)`, while the interpreter
+   currently reports only the surrounding eval frame. The unchanged
+   Carp::Assert `embedded-Carp-Assert.t` suite reproduces the same single
+   failure (12 assertions, 11 passing) under the interpreter.
+2. After the interpreter frame is named correctly, rerun the complete
+   aliased, Carp::Assert, Devel::Symdump, Exception::Class, Hook::LexWrap,
+   Sub::Quote, Test::MockObject, and Test2::Plugin::NoWarnings suites before
+   retiring their remaining preferences or patches.
+3. Trace `$SIG{__DIE__}`, `$@`, and caller metadata across JVM code,
+   interpreter code, and nested `eval`; keep the live LWP `t/local/http.t` and
+   CGI HTML::Entities failures as Phase 8/runtime-parity follow-ups.
 
 ### Completed phase deliverables
 
@@ -356,6 +363,11 @@ Current phase: Phase 4, caller, eval, warning, and symbol-table parity.
   failures, and LWP fails `t/local/http.t` around HTTP::Cookies/server
   behavior. All processes were bounded by external timeouts; these failures do
   not weaken the Phase 3 prerequisite-phase acceptance result.
+- Phase 4 investigation: the unmodified aliased `t/sigdie.t` suite passes 9/9
+  under standard Perl, JVM, and interpreter backends, so its retired
+  `$SIG{__DIE__}` preference is no longer needed. The new CPAN-independent
+  `carp_confess_named_frame.t` regression confirms the remaining issue is
+  interpreter caller-frame naming rather than signal-handler preservation.
 
 ### Open questions
 
