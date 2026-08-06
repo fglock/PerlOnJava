@@ -209,6 +209,44 @@ class FutureAsyncAwaitRuntimeTest {
             $errno_pending->AWAIT_DONE(5);
             die "errno state was not restored on resume\n"
                     unless $errno_result->AWAIT_GET == 47 && $! == 0;
+
+            {
+                package AsyncAwaitTie;
+                sub TIESCALAR { bless { value => $_[1] }, $_[0] }
+                sub FETCH { $_[0]{value} }
+                sub STORE { $_[0]{value} = $_[1] }
+            }
+            our $tied_value;
+            tie $tied_value, 'AsyncAwaitTie', 3;
+            async sub localized_tied_scalar {
+                local $tied_value = 40;
+                my $value = await $_[0];
+                return $tied_value + $value;
+            }
+            my $tied_pending = Future->new;
+            my $tied_result = localized_tied_scalar($tied_pending);
+            die "tied localization leaked while suspended\n"
+                    unless $tied_value == 3;
+            $tied_pending->AWAIT_DONE(7);
+            die "tied state was not restored on resume\n"
+                    unless $tied_result->AWAIT_GET == 47 && $tied_value == 3;
+
+            our @destroy_log;
+            {
+                package AsyncAwaitDestroy;
+                sub DESTROY { push @main::destroy_log, 'destroyed' }
+            }
+            async sub cancelled_destroy {
+                my $guard = bless {}, 'AsyncAwaitDestroy';
+                await $_[0];
+                return 0;
+            }
+            my $destroy_pending = Future->new;
+            my $destroy_result = cancelled_destroy($destroy_pending);
+            die "lexical was destroyed while suspended\n" if @destroy_log;
+            $destroy_result->AWAIT_CANCEL;
+            die "cancelled lexical was not destroyed exactly once\n"
+                    unless @destroy_log == 1 && $destroy_log[0] eq 'destroyed';
             """;
 
     @BeforeEach

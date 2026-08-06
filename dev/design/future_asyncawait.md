@@ -243,14 +243,22 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Added errno coverage and verified the full `make` suite on both backends.
   - Files: `ErrnoVariable.java`, `OutputAutoFlushVariable.java`,
     `ScalarSpecialVariable.java`, and `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3g: Tied state and cancelled-frame destruction (2026-08-06)
+  - Preserved the active value behind tied package scalars through FETCH/STORE
+    while retaining the original tie magic.
+  - Added explicit abandonment cleanup for interpreter lexical registers and
+    closure captures so cancelled suspended frames release owned values and
+    fire `DESTROY` exactly once.
+  - Added tied-scalar and cancellation-destruction coverage on both backends;
+    full `make` passes.
+  - Files: `GlobalRuntimeScalar.java`, `BytecodeInterpreter.java`,
+    `FutureAsyncAwaitRuntime.java`, and `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Add suspend/resume implementations for tied variables and destruction
-   handling for abandoned frames.
-2. Cover eval, loops, regex captures, closures, and nested dynamic scopes.
-3. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
-4. Import the applicable upstream Future::AsyncAwait lifecycle and
+1. Cover eval, loops, regex captures, closures, and nested dynamic scopes.
+2. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
+3. Import the applicable upstream Future::AsyncAwait lifecycle and
    control-flow tests.
 
 ### Open questions

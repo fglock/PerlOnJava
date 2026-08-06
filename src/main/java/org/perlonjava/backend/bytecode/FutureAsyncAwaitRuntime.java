@@ -157,6 +157,7 @@ final class FutureAsyncAwaitRuntime {
             DynamicVariableManager.resumeSuspended(states);
             DynamicVariableManager.popToLocalLevel(localLevel);
         } finally {
+            BytecodeInterpreter.abandon(frame);
             MyVarCleanupStack.popMark(cleanupMark);
             if (code.warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();

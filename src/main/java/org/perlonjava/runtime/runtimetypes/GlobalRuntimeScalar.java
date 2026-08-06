@@ -211,16 +211,24 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         RuntimeScalar activeVariable = GlobalVariable.getGlobalVariable(fullName);
         RuntimeScalar activeState = activeVariable != null
                 ? new RuntimeScalar(activeVariable) : new RuntimeScalar();
+        boolean tied = activeVariable != null
+                && activeVariable.type == RuntimeScalarType.TIED_SCALAR;
+        RuntimeScalar tiedValue = tied ? activeVariable.tiedFetch() : null;
         dynamicRestoreState();
-        return activeState;
+        return new SuspendedGlobalScalar(activeState, tiedValue, tied);
     }
 
     @Override
     public void dynamicResumeState(Object token) {
         dynamicSaveState();
-        if (token instanceof RuntimeScalar activeState) {
+        if (token instanceof SuspendedGlobalScalar suspended) {
             RuntimeScalar activeVariable = GlobalVariable.getGlobalVariable(fullName);
             if (activeVariable != null) {
+                if (suspended.tied) {
+                    activeVariable.tiedStore(suspended.tiedValue);
+                    return;
+                }
+                RuntimeScalar activeState = suspended.value;
                 activeVariable.type = activeState.type;
                 activeVariable.value = activeState.value;
                 activeVariable.blessId = activeState.blessId;
@@ -231,6 +239,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 activeVariable.numericContextSeen = activeState.numericContextSeen;
             }
         }
+    }
+
+    private record SuspendedGlobalScalar(
+            RuntimeScalar value, RuntimeScalar tiedValue, boolean tied) {
     }
 
     private record SavedGlobalState(

@@ -181,6 +181,50 @@ public class BytecodeInterpreter {
         return execute(frame);
     }
 
+    /** Release lexical and closure ownership for a suspended frame that is cancelled. */
+    static void abandon(SuspendedInterpreterFrame frame) {
+        if (!frame.suspended) return;
+        frame.suspended = false;
+
+        for (RuntimeCode closure : frame.createdClosures) {
+            if (closure.capturedScalars != null
+                    && closure.refCount == 0
+                    && closure.stashRefCount <= 0
+                    && (frame.returnedClosures == null
+                        || !frame.returnedClosures.contains(closure))) {
+                closure.releaseCaptures();
+            }
+        }
+
+        InterpretedCode code = frame.code;
+        RuntimeBase[] registers = frame.registers;
+        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
+        BitSet myVars = code.myVarRegisters;
+        boolean needsFlush = false;
+        for (int i = myVars.nextSetBit(firstMyVarReg);
+             i >= 0 && i < registers.length;
+             i = myVars.nextSetBit(i + 1)) {
+            RuntimeBase reg = registers[i];
+            if (reg == null) continue;
+            if (reg instanceof RuntimeScalar rs) {
+                RuntimeScalar.scopeExitCleanup(rs);
+                needsFlush = true;
+            } else if (reg instanceof RuntimeHash rh) {
+                MortalList.scopeExitCleanupHash(rh);
+                needsFlush = true;
+            } else if (reg instanceof RuntimeArray ra) {
+                MortalList.scopeExitCleanupArray(ra);
+                needsFlush = true;
+            }
+            MyVarCleanupStack.unregister(reg);
+            registers[i] = null;
+        }
+        if (needsFlush) {
+            MortalList.flush();
+        }
+        code.releaseRegisters();
+    }
+
     private static RuntimeList execute(SuspendedInterpreterFrame frame) {
         InterpretedCode code = frame.code;
         int callContext = frame.callContext;
