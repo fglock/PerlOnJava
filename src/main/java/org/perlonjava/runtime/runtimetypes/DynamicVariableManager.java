@@ -1,7 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 
 /**
  * The DynamicVariableManager class is responsible for managing a stack of dynamic variables.
@@ -10,6 +12,7 @@ import java.util.Deque;
  * to their original states.
  */
 public class DynamicVariableManager {
+    public record SuspendedState(DynamicState state, Object token) {}
     // A stack to hold the dynamic states of variables.
     // Using ArrayDeque instead of Stack for better performance (no synchronization overhead).
     private static final Deque<DynamicState> variableStack = new ArrayDeque<>();
@@ -101,6 +104,32 @@ public class DynamicVariableManager {
             } else {
                 throw new RuntimeException(pendingException);
             }
+        }
+    }
+
+    /**
+     * Detach states belonging to a suspended interpreter frame.  Unlike
+     * {@link #popToLocalLevel(int)}, this returns the states in their original
+     * bottom-to-top order so they can be reinstated on a later callback.
+     */
+    public static List<SuspendedState> suspendAbove(int targetLocalLevel) {
+        if (targetLocalLevel < 0 || targetLocalLevel > variableStack.size()) {
+            throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
+        }
+        List<SuspendedState> result = new ArrayList<>();
+        while (variableStack.size() > targetLocalLevel) {
+            DynamicState state = variableStack.removeLast();
+            result.add(0, new SuspendedState(state, state.dynamicSuspendState()));
+        }
+        return result;
+    }
+
+    /** Reinstall detached states in their original stack order. */
+    public static void resumeSuspended(List<SuspendedState> states) {
+        if (states == null) return;
+        for (SuspendedState suspended : states) {
+            suspended.state().dynamicResumeState(suspended.token());
+            variableStack.addLast(suspended.state());
         }
     }
 }

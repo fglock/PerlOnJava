@@ -3,10 +3,12 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.runtimetypes.RegexState;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.DynamicVariableManager;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Set;
+import java.util.List;
 
 /**
  * Heap-owned execution state for an interpreter invocation that may cross an
@@ -35,6 +37,7 @@ public final class SuspendedInterpreterFrame {
     final ArrayDeque<RegexState> regexStateStack = new ArrayDeque<>();
     final ArrayList<RuntimeCode> createdClosures = new ArrayList<>();
     final ArrayDeque<ArrayList<Integer>> scopeCleanupBatches = new ArrayDeque<>();
+    List<DynamicVariableManager.SuspendedState> suspendedDynamicStates;
 
     boolean suspended;
     RegexState suspendedRegexState;

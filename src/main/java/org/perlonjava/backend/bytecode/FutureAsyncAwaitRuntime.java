@@ -4,6 +4,7 @@ import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runtime bridge to the Future::AsyncAwait::Awaitable method contract. */
 final class FutureAsyncAwaitRuntime {
@@ -38,7 +39,7 @@ final class FutureAsyncAwaitRuntime {
         if (result instanceof InterpreterSuspension suspension) {
             outer = call(suspension.awaited, "AWAIT_CLONE", new RuntimeArray(),
                     RuntimeContextType.SCALAR).scalar();
-            attach(outer, suspension);
+            attach(outer, suspension, new AwaitState());
         } else {
             outer = completedFuture(result);
         }
@@ -59,17 +60,43 @@ final class FutureAsyncAwaitRuntime {
                 new RuntimeArray(result), RuntimeContextType.SCALAR).scalar();
     }
 
-    private static void attach(RuntimeScalar outer, InterpreterSuspension suspension) {
+    private static void attach(RuntimeScalar outer, InterpreterSuspension suspension,
+                               AwaitState state) {
+        // Future::AsyncAwait requires cancellation to flow from the Future returned by
+        // the async sub to the Future currently being awaited.  Do this for every
+        // suspension segment, since a resumed frame may await a different Future.
+        call(outer, "AWAIT_CHAIN_CANCEL",
+                new RuntimeArray(suspension.awaited), RuntimeContextType.VOID);
+
         RuntimeCode callback = new RuntimeCode((callbackArgs, callbackContext) -> {
-            enqueue(() -> resume(outer, suspension));
+            enqueue(() -> resume(outer, suspension, state));
             return new RuntimeList();
         }, null);
         call(suspension.awaited, "AWAIT_ON_READY",
                 new RuntimeArray(new RuntimeScalar(callback)), RuntimeContextType.VOID);
     }
 
-    private static void resume(RuntimeScalar outer, InterpreterSuspension suspension) {
+    private static void resume(RuntimeScalar outer, InterpreterSuspension suspension,
+                               AwaitState state) {
+        // A Future implementation may invoke a readiness callback more than once,
+        // and cancellation may race with that callback.  The returned Future owns
+        // the terminal transition; the first terminal path wins.
+        if (state.terminal.get()) {
+            return;
+        }
+        if (!state.callbackActive.compareAndSet(false, true)) {
+            return;
+        }
+        if (isCancelled(outer)) {
+            state.terminal.set(true);
+            state.callbackActive.set(false);
+            return;
+        }
         try {
+            if (isCancelled(outer)) {
+                state.terminal.set(true);
+                return;
+            }
             try {
                 suspension.setResult(get(suspension.awaited, suspension.context));
             } catch (Throwable error) {
@@ -78,14 +105,34 @@ final class FutureAsyncAwaitRuntime {
 
             RuntimeList result = resumeWithCallState(suspension.frame);
             if (result instanceof InterpreterSuspension next) {
-                attach(outer, next);
+                attach(outer, next, state);
+                return;
+            }
+            if (!state.terminal.compareAndSet(false, true) || isCancelled(outer)) {
                 return;
             }
             call(outer, "AWAIT_DONE", new RuntimeArray(result), RuntimeContextType.VOID);
         } catch (Throwable error) {
+            if (!state.terminal.compareAndSet(false, true) || isCancelled(outer)) {
+                return;
+            }
             call(outer, "AWAIT_FAIL", new RuntimeArray(exceptionValue(error)),
                     RuntimeContextType.VOID);
+        } finally {
+            if (!state.terminal.get()) {
+                state.callbackActive.set(false);
+            }
         }
+    }
+
+    private static boolean isCancelled(RuntimeScalar future) {
+        return call(future, "AWAIT_IS_CANCELLED", new RuntimeArray(),
+                RuntimeContextType.SCALAR).scalar().getBoolean();
+    }
+
+    private static final class AwaitState {
+        final AtomicBoolean terminal = new AtomicBoolean();
+        final AtomicBoolean callbackActive = new AtomicBoolean();
     }
 
     private static RuntimeList resumeWithCallState(SuspendedInterpreterFrame frame) {

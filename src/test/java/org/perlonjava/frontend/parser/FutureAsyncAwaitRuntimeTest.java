@@ -33,7 +33,7 @@ class FutureAsyncAwaitRuntimeTest {
                 }
                 sub AWAIT_CLONE { ref($_[0])->new }
                 sub AWAIT_IS_READY { $_[0]{state} ne 'pending' }
-                sub AWAIT_IS_CANCELLED { 0 }
+                sub AWAIT_IS_CANCELLED { $_[0]{state} eq 'cancelled' }
                 sub AWAIT_GET {
                     my $self = shift;
                     die $self->{values}[0] if $self->{state} eq 'failed';
@@ -43,6 +43,22 @@ class FutureAsyncAwaitRuntimeTest {
                     my ($self, $callback) = @_;
                     if ($self->AWAIT_IS_READY) { $callback->($self) }
                     else { push @{ $self->{callbacks} }, $callback }
+                    return $self;
+                }
+                sub AWAIT_CHAIN_CANCEL {
+                    my ($self, $other) = @_;
+                    push @{ $self->{cancel_chain} }, $other;
+                    $other->AWAIT_CANCEL if $self->AWAIT_IS_CANCELLED;
+                    return $self;
+                }
+                sub AWAIT_CANCEL {
+                    my $self = shift;
+                    return $self if $self->AWAIT_IS_READY;
+                    $self->{state} = 'cancelled';
+                    my @callbacks = @{ $self->{callbacks} };
+                    $self->{callbacks} = [];
+                    $_->($self) for @callbacks;
+                    $_->AWAIT_CANCEL for @{ $self->{cancel_chain} || [] };
                     return $self;
                 }
                 sub AWAIT_DONE {
@@ -108,6 +124,32 @@ class FutureAsyncAwaitRuntimeTest {
                     unless $failed_result->{state} eq 'failed';
             die "wrong await failure\n"
                     unless $failed_result->{values}[0] eq "await failed\n";
+
+            our $localized_value = 7;
+            async sub localized_value {
+                local $localized_value = 42;
+                my $value = await $_[0];
+                return $localized_value + $value;
+            }
+            my $local_pending = Future->new;
+            my $local_result = localized_value($local_pending);
+            die "localized value leaked while suspended\n"
+                    unless $localized_value == 7;
+            $local_pending->AWAIT_DONE(5);
+            die "localized value was not restored on resume\n"
+                    unless $local_result->AWAIT_GET == 47;
+            die "localized value leaked after completion\n"
+                    unless $localized_value == 7;
+
+            my $cancelled = Future->new;
+            my $cancelled_result = add_one($cancelled);
+            $cancelled_result->AWAIT_CANCEL;
+            die "cancellation did not propagate\n"
+                    unless $cancelled->AWAIT_IS_CANCELLED;
+            $cancelled->AWAIT_DONE(99);
+            die "cancelled async sub resumed\n"
+                    if $cancelled_result->AWAIT_IS_READY &&
+                       !$cancelled_result->AWAIT_IS_CANCELLED;
             """;
 
     @BeforeEach

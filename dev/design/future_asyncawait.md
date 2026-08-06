@@ -171,7 +171,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 ## Progress tracking
 
-### Current status: Phase 2 complete; Phase 3 next
+### Current status: Phase 3 in progress; current focus is array/hash localization
 
 ### Completed phases
 
@@ -193,12 +193,32 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Files: `SuspendedInterpreterFrame.java`, `InterpreterSuspension.java`,
     `FutureAsyncAwaitRuntime.java`, interpreter compiler/runtime integration,
     and `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3a: Cancellation and terminal ownership (2026-08-06)
+  - Linked cancellation of the returned async Future to the currently awaited
+    Future through `AWAIT_CHAIN_CANCEL`.
+  - Prevented cancelled async frames from resuming and made completion/failure
+    idempotent across duplicate or racing readiness callbacks.
+  - Added runtime coverage for cancellation propagation and cancellation before
+    awaited readiness, on both frontends.
+  - Files: `FutureAsyncAwaitRuntime.java` and
+    `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 3b: Dynamic-state detachment foundation (2026-08-06)
+  - Added suspend/resume hooks to the dynamic-state protocol and stored
+    detached state snapshots on `SuspendedInterpreterFrame`.
+  - Preserved and restored `local` scalar values across pending awaits,
+    including global-scalar localization markers, while exposing the caller's
+    original value during suspension.
+  - Added both-backend regression coverage and verified the full `make` suite.
+  - Files: `DynamicState.java`, `DynamicVariableManager.java`,
+    `RuntimeScalar.java`, `GlobalRuntimeScalar.java`,
+    `BytecodeInterpreter.java`, `SuspendedInterpreterFrame.java`, and
+    `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Add bidirectional cancellation propagation and terminal-state ownership.
-2. Detach and restore arbitrary dynamic `local` state across suspension, then
-   cover eval, loops, regex captures, closures, and destruction edge cases.
+1. Add suspend/resume implementations for localized arrays, hashes, tied and
+   special variables, package state, defer blocks, and destruction cleanup.
+2. Cover eval, loops, regex captures, closures, and nested dynamic scopes.
 3. Implement file-scope await through the Awaitable `AWAIT_WAIT` protocol.
 4. Import the applicable upstream Future::AsyncAwait lifecycle and
    control-flow tests.

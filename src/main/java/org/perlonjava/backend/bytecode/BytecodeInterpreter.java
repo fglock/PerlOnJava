@@ -233,6 +233,10 @@ public class BytecodeInterpreter {
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
         int savedLocalLevel = DynamicVariableManager.getLocalLevel();
+        if (frame.suspendedDynamicStates != null) {
+            DynamicVariableManager.resumeSuspended(frame.suspendedDynamicStates);
+            frame.suspendedDynamicStates = null;
+        }
         // Cache the currentPackage RuntimeScalar to avoid ThreadLocal lookups in hot loop
         RuntimeScalar currentPackageScalar = InterpreterState.currentPackage.get();
         String savedPackage = currentPackageScalar.toString();
@@ -2850,7 +2854,12 @@ public class BytecodeInterpreter {
             // Outer finally: restore interpreter state saved at method entry.
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.
-            DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+            if (frame.suspended) {
+                frame.suspendedDynamicStates =
+                        DynamicVariableManager.suspendAbove(savedLocalLevel);
+            } else {
+                DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+            }
             currentPackageScalar.set(savedPackage);
             if (frame.suspended && !frame.evalCatchStack.isEmpty()) {
                 RuntimeCode.evalDepth -= frame.evalCatchStack.size();

@@ -43,4 +43,20 @@ public interface DynamicState {
      * especially in the presence of concurrent modifications.</p>
      */
     void dynamicRestoreState();
+
+    /**
+     * Detaches this state while an interpreter frame is suspended.  The default
+     * implementation preserves the existing save/restore protocol; state types
+     * that need to carry their active value across suspension may return a token
+     * and restore it from {@link #dynamicResumeState(Object)}.
+     */
+    default Object dynamicSuspendState() {
+        dynamicRestoreState();
+        return null;
+    }
+
+    /** Reinstalls a state previously detached by {@link #dynamicSuspendState()}. */
+    default void dynamicResumeState(Object token) {
+        dynamicSaveState();
+    }
 }

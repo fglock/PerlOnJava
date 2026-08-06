@@ -206,6 +206,33 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         }
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeScalar activeVariable = GlobalVariable.getGlobalVariable(fullName);
+        RuntimeScalar activeState = activeVariable != null
+                ? new RuntimeScalar(activeVariable) : new RuntimeScalar();
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeScalar activeState) {
+            RuntimeScalar activeVariable = GlobalVariable.getGlobalVariable(fullName);
+            if (activeVariable != null) {
+                activeVariable.type = activeState.type;
+                activeVariable.value = activeState.value;
+                activeVariable.blessId = activeState.blessId;
+                activeVariable.ownsScalarReferenceContents = activeState.ownsScalarReferenceContents;
+                activeVariable.referencedByScalarReference = activeState.referencedByScalarReference;
+                activeVariable.tainted = activeState.tainted;
+                activeVariable.numericLiteralText = activeState.numericLiteralText;
+                activeVariable.numericContextSeen = activeState.numericContextSeen;
+            }
+        }
+    }
+
     private record SavedGlobalState(
             String fullName,
             RuntimeScalar originalVariable,

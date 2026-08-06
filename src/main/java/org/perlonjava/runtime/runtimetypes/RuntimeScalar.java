@@ -3828,6 +3828,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeScalar activeState = new RuntimeScalar(this);
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeScalar activeState) {
+            this.type = activeState.type;
+            this.value = activeState.value;
+            this.blessId = activeState.blessId;
+            this.ownsScalarReferenceContents = activeState.ownsScalarReferenceContents;
+            this.referencedByScalarReference = activeState.referencedByScalarReference;
+            this.tainted = activeState.tainted;
+            this.numericLiteralText = activeState.numericLiteralText;
+            this.numericContextSeen = activeState.numericContextSeen;
+        }
+    }
+
     public static void scopeExitCleanupPreservingReturnedLvalue(RuntimeScalar scalar, RuntimeBase returnedLvalue) {
         if (scalar != null
                 && scalar == returnedLvalue
