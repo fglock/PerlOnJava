@@ -6,10 +6,9 @@ comment: |
   retired after cached JVM method dispatch learned to consume the non-local
   return at the method that owns those blocks.
 
-  The remaining hunks isolate independent compatibility gaps: Storable code
-  references and adjacency rendering without Set::Object map behavior.
+  The remaining patch isolates adjacency rendering without Set::Object map
+  behavior.
 match:
   distribution: "^.*/Graph-[0-9]"
 patches:
-  - "Graph/Graph.pm.patch"
   - "Graph/AdjacencyMap.pm.patch"

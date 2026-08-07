@@ -284,7 +284,7 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 ### Next steps
 
 1. Split and retire the remaining independently justified Graph patch hunks,
-   starting with Storable code references, then adjacency rendering.
+   starting with adjacency rendering's Set::Object lifetime issue.
 2. Remove Module::Install's explicit `authors` patch through glob-alias
    introspection parity, then integrate lazy native `Want` support so
    Term::ANSIColor::Markup can use its upstream lvalue accessors.
@@ -476,6 +476,22 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   same-tree full rerun. A transient `t/89_connected_subgraphs.t` count mismatch
   (111 versus 112) passed 17/17 immediately afterward and remained green in
   that full rerun. The final full `make` gate passes.
+- Storable's SX_CODE reader now honors a true `$Storable::Eval`, delegates to
+  either its CODE callback or lexical Perl eval, preserves seen-table tags, and
+  collapses the surrounding SX_REF around an already reference-level CODE
+  value. False Eval retains PerlOnJava's established refusal diagnostic.
+  Regression: `src/test/resources/unit/zz_storable_code_eval.t` passes 2/2
+  under standard Perl, JVM, and interpreter backends. Unpatched Graph
+  `t/67_copy.t` advances from a fatal `Can't retrieve code references` error
+  after 47 assertions to all 56 assertions passing. The Storable guard is
+  removed from `Graph.pm.patch`. Its final caller-attribution hunk is also
+  obsolete: unpatched `t/06_new.t`, `t/59_dfs.t`, `t/63_scc.t`, and
+  `t/83_bitmatrix.t` pass 169/169, 266/266, 56/56, and 29/29 respectively.
+  `Graph.pm.patch` is deleted and registered for installed-cache retirement;
+  Graph now has one remaining source patch. The source-first `jcpan -t Graph`
+  smoke applies exactly that one patch, uses upstream Storable selection, and
+  passes all 88 files and 9,243 assertions; bootstrap removes the installed
+  `Graph.pm.patch`. The full `make` gate passes.
 
 ### Open questions
 
