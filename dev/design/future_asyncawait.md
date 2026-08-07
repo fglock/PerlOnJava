@@ -433,10 +433,21 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      live owner when recycled fd numbers have stale bookkeeping entries.
    - The systemd save/`dup2`/fdopen/restore sequence passes a ten-assertion
      regression with system Perl, both PerlOnJava frontends, and the in-process
-     unit harness. PAGI's `t/49-systemd-activation.t` now loads with its local
-     dependencies but encounters the separately tracked IO::Async TCP bind
-     boundary before it can inspect the inherited listener.
-   - Next: the remaining PAGI file/runtime and IO::Async listener gaps.
+     unit harness.
+   - [Completed 2026-08-07] Preserved socket identity through parsimonious
+     fdopen, duplicated-descriptor, and layered filehandle wrappers. Socket
+     naming, accept, datagram routing, shutdown checks, and socket options now
+     consistently reach the underlying socket.
+   - Added a five-assertion borrowed-listener regression validated first with
+     system Perl and then with both PerlOnJava frontends; full `make` passes.
+     Files: `RuntimeIO.java`, `IOOperator.java`, and
+     `socket_borrowed_name.t`.
+   - PAGI's `t/49-systemd-activation.t` now identifies and marks the inherited
+     TCP listener, cleans `LISTEN_FDS`/`LISTEN_PID`, and accepts the client
+     connection. It then stalls in the asynchronous request/response path and
+     reaches the test's 180-second external timeout without further TAP.
+   - Next: isolate the PAGI post-accept event-loop stall, then continue the
+     remaining PAGI file/runtime gaps.
      Process-worker tests remain outside scope while PerlOnJava does not
      implement `fork`.
 3. Revisit native JVM state-machine lowering only if profiling identifies

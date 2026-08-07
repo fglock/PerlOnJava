@@ -2002,7 +2002,8 @@ public class IOOperator {
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
             String unixPath = parseSockaddrUn(addressStr);
-            if (unixPath != null && socketIO.ioHandle instanceof SocketIO unixSocket) {
+            SocketIO unixSocket = socketIO.getSocketHandle();
+            if (unixPath != null && unixSocket != null) {
                 return unixSocket.bindUnix(unixPath);
             }
             String[] parts = parseSockaddrIn(addressStr);
@@ -2057,7 +2058,8 @@ public class IOOperator {
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
             String unixPath = parseSockaddrUn(addressStr);
-            if (unixPath != null && socketIO.ioHandle instanceof SocketIO unixSocket) {
+            SocketIO unixSocket = socketIO.getSocketHandle();
+            if (unixPath != null && unixSocket != null) {
                 return unixSocket.connectUnix(unixPath);
             }
             String[] parts = parseSockaddrIn(addressStr);
@@ -2134,7 +2136,9 @@ public class IOOperator {
             RuntimeScalar listenSocketHandle = args[1].scalar();
 
             RuntimeIO listenRuntimeIO = listenSocketHandle.getRuntimeIO();
-            if (listenRuntimeIO == null || !(listenRuntimeIO.ioHandle instanceof SocketIO listenSocketIO)) {
+            SocketIO listenSocketIO = listenRuntimeIO == null
+                    ? null : listenRuntimeIO.getSocketHandle();
+            if (listenSocketIO == null) {
                 getGlobalVariable("main::!").set("Invalid listening socket handle for accept");
                 return scalarFalse;
             }
@@ -2573,7 +2577,8 @@ public class IOOperator {
             }
 
             // Check if this is a UDP socket with a TO address (4th arg)
-            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+            SocketIO sio = socketIO.getSocketHandle();
+            if (sio != null && sio.isDatagramSocket()) {
                 byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
                 if (args.length >= 4) {
                     String packedAddr = args[3].toString();
@@ -2640,7 +2645,8 @@ public class IOOperator {
             }
 
             // Check if this is a UDP socket
-            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+            SocketIO sio = socketIO.getSocketHandle();
+            if (sio != null && sio.isDatagramSocket()) {
                 byte[] data = sio.recvFrom(length, (flags & Socket.MSG_PEEK) != 0);
                 if (data != null) {
                     buffer.set(new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
@@ -2693,7 +2699,7 @@ public class IOOperator {
             // For now, implement basic shutdown by closing the socket
             // In a full implementation, we would handle the different HOW values:
             // 0 = SHUT_RD (shutdown reading), 1 = SHUT_WR (shutdown writing), 2 = SHUT_RDWR (shutdown both)
-            if (socketIO.ioHandle instanceof SocketIO) {
+            if (socketIO.getSocketHandle() != null) {
                 // For simplicity, just return success - actual socket shutdown would be more complex
                 return scalarTrue;
             } else {
@@ -2731,7 +2737,8 @@ public class IOOperator {
             }
 
             // Handle socket option setting
-            if (socketIO.ioHandle instanceof SocketIO socketIOHandle) {
+            SocketIO socketIOHandle = socketIO.getSocketHandle();
+            if (socketIOHandle != null) {
 
                 // Extract the integer value from the optval - handle both integer and string representations
                 int optionValue = 0;
@@ -2814,7 +2821,8 @@ public class IOOperator {
             }
 
             // Handle socket option retrieval
-            if (socketIO.ioHandle instanceof SocketIO socketIOHandle) {
+            SocketIO socketIOHandle = socketIO.getSocketHandle();
+            if (socketIOHandle != null) {
 
                 // Use Java's native socket option support via SocketIO
                 int optionValue = socketIOHandle.getSocketOption(level, optname);

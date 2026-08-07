@@ -1705,8 +1705,9 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar containing packed sockaddr_in structure, or undef if not a socket
      */
     public RuntimeScalar getsockname() {
-        if (ioHandle instanceof SocketIO) {
-            return ((SocketIO) ioHandle).getsockname();
+        SocketIO socket = getSocketHandle();
+        if (socket != null) {
+            return socket.getsockname();
         }
         return scalarUndef;
     }
@@ -1718,9 +1719,38 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar containing packed sockaddr_in structure, or undef if not a socket
      */
     public RuntimeScalar getpeername() {
-        if (ioHandle instanceof SocketIO) {
-            return ((SocketIO) ioHandle).getpeername();
+        SocketIO socket = getSocketHandle();
+        if (socket != null) {
+            return socket.getpeername();
         }
         return scalarUndef;
+    }
+
+    /**
+     * Finds the socket beneath filehandle aliases and I/O layers.
+     * Parsimonious fdopen handles ({@code +<&=}) and duplicated descriptors
+     * must retain socket identity for operations such as getsockname().
+     */
+    public SocketIO getSocketHandle() {
+        IOHandle handle = ioHandle;
+        while (handle != null) {
+            if (handle instanceof SocketIO socket) {
+                return socket;
+            }
+            if (handle instanceof BorrowedIOHandle borrowed) {
+                handle = borrowed.getDelegate();
+                continue;
+            }
+            if (handle instanceof DupIOHandle duplicate) {
+                handle = duplicate.getDelegate();
+                continue;
+            }
+            if (handle instanceof LayeredIOHandle layered) {
+                handle = layered.getDelegate();
+                continue;
+            }
+            return null;
+        }
+        return null;
     }
 }
