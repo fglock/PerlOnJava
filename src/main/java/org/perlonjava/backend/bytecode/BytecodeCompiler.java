@@ -3020,6 +3020,7 @@ public class BytecodeCompiler implements Visitor {
                         }
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
                     }
+                    emitLexicalAlias(reg, varName);
                     emit(Opcodes.REGISTER_MY_VAR);
                     emitReg(reg);
 
@@ -4964,6 +4965,12 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
+    void emitLexicalAlias(int register, String variableName) {
+        emit(Opcodes.APPLY_LEXICAL_ALIAS);
+        emitReg(register);
+        emit(addToStringPool(variableName));
+    }
+
     @Override
     public void visit(OperatorNode node) {
         CompileOperator.visitOperator(this, node);
@@ -5700,6 +5707,12 @@ public class BytecodeCompiler implements Visitor {
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
         attachDeparseSourceSpan(subCode, node);
+        Set<String> declaredLexicalNames = new LinkedHashSet<>();
+        if (node.block != null) {
+            node.block.accept(new VariableCollectorVisitor(
+                    new HashSet<>(), declaredLexicalNames));
+        }
+        subCode.lexicalVariableNames = declaredLexicalNames;
         subCode.prototype = node.prototype;
         subCode.attributes = node.attributes;
         subCode.packageName = getCurrentPackage();

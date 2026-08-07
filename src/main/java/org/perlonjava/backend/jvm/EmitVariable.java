@@ -1526,6 +1526,20 @@ public class EmitVariable {
                                     methodDescriptor,
                                     false);
                         }
+
+                        // Devel::LexAlias can replace this CV's lexical cell
+                        // before invocation. Bare `my` must retain the aliased
+                        // value rather than resetting it to undef/empty.
+                        Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
+                        codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                        ctx.mv.visitLdcInsn(var);
+                        ctx.mv.visitMethodInsn(
+                                Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "resolveLexicalAlias",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                                false);
+                        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, className);
                     } else if (operator.equals("state")) {
                         // "state":
                         // Determine the method to call and its descriptor based on the sigil

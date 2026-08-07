@@ -1364,8 +1364,11 @@ public class SubroutineParser {
         Set<String> usedVars = null;
         {
             Set<String> usedVarSet = new HashSet<>();
-            VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVarSet);
+            Set<String> declaredVarSet = new LinkedHashSet<>();
+            VariableCollectorVisitor collector =
+                    new VariableCollectorVisitor(usedVarSet, declaredVarSet);
             block.accept(collector);
+            placeholder.lexicalVariableNames = declaredVarSet;
             if (!collector.hasEvalString()) {
                 usedVars = usedVarSet;
             }
@@ -1617,6 +1620,8 @@ public class SubroutineParser {
                     interpretedCode.attributes = placeholder.attributes;
                     interpretedCode.subName = placeholder.subName;
                     interpretedCode.packageName = placeholder.packageName;
+                    interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
+                    interpretedCode.lexicalAliases = placeholder.lexicalAliases;
 
                     // Set the __SUB__ field for self-reference
                     interpretedCode.__SUB__ = codeRef;
@@ -1657,6 +1662,8 @@ public class SubroutineParser {
                 interpretedCode.attributes = placeholder.attributes;
                 interpretedCode.subName = placeholder.subName;
                 interpretedCode.packageName = placeholder.packageName;
+                interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
+                interpretedCode.lexicalAliases = placeholder.lexicalAliases;
                 interpretedCode.__SUB__ = codeRef;
                 placeholder.subroutine = interpretedCode;
                 placeholder.codeObject = interpretedCode;

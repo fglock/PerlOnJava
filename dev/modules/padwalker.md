@@ -1,4 +1,4 @@
-# PadWalker Support Plan
+# PadWalker Support
 
 ## Problem
 
@@ -9,7 +9,7 @@
 use PadWalker 'peek_sub', 'closed_over';
 ```
 
-PerlOnJava currently cannot load the CPAN XS implementation:
+PerlOnJava cannot load the CPAN XS implementation directly:
 
 ```text
 Can't load loadable object for module PadWalker: no Java XS implementation available
@@ -208,21 +208,38 @@ PadWalker failure. Any later Reply failure should be investigated separately.
 
 ## Progress Tracking
 
-### Current Status
+### Current Status: Phase 1 completed (2026-08-07)
 
-Plan only. No PadWalker implementation has landed.
+### Completed Phases
+
+- [x] Phase 1: code-reference lexical metadata and mutation (2026-08-07)
+  - Added live captured-variable maps for JVM and interpreter closures.
+  - Added declared local-pad names for named and anonymous subroutines.
+  - Implemented bundled `PadWalker::peek_sub`, `closed_over`, and
+    `set_closed_over` through `Internals`.
+  - Added bundled `Devel::Caller` and `Devel::LexAlias` compatibility for
+    `caller_cv` and lexical rebinding.
+  - Made active lexical-frame tracking opt-in when Devel::LexAlias loads.
+  - Validated the focused unit suite with system Perl and both PerlOnJava
+    backends; `Devel::LexAlias` passes 11 upstream tests and
+    `Lexical::Persistence` passes 54 tests.
+  - Files include `RuntimeCode.java`, `Internals.java`,
+    `VariableCollectorVisitor.java`, `EmitVariable.java`,
+    `BytecodeCompiler.java`, `PadWalker.pm`, `Devel/Caller.pm`, and
+    `Devel/LexAlias.pm`.
 
 ### Next Steps
 
-1. Add Phase 1 runtime metadata to `RuntimeCode`.
-2. Populate metadata from both JVM and interpreter closure construction paths.
-3. Add the bundled `PadWalker.pm` facade and Java-backed `PadWalker` module.
-4. Add Phase 1 unit tests.
-5. Re-run `./jcpan -t Reply` under `timeout`.
+1. Validate `./jcpan -t Reply` and diagnose any failure beyond its former
+   PadWalker load blocker.
+2. Design Phase 2 `peek_my` and `peek_our` scope filtering on top of the
+   opt-in active-frame registry.
+3. Add duplicate-name and closure-lifetime coverage beyond the
+   Lexical::Persistence integration suite.
 
 ### Open Questions
 
-- Should PadWalker frame tracking share infrastructure with the debugger plan?
 - Should `peek_sub` eventually preserve local pad variables, or should
-  PerlOnJava document captured-variable support as the long-term boundary?
-- What runtime flag should enable caller-frame lexical tracking for Phase 2?
+  compiler-maintained declaration metadata remain the supported boundary?
+- Should Phase 2 share its frame-level filtering and logical-frame numbering
+  with the debugger's existing call-stack infrastructure?

@@ -2408,6 +2408,9 @@ public class Opcodes {
      */
     public static final short HASH_SLICE_FOR_LOCAL = 498;
 
+    /** Replace a freshly-created lexical cell with a Devel::LexAlias binding. */
+    public static final short APPLY_LEXICAL_ALIAS = 499;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

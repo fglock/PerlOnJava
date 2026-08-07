@@ -755,6 +755,14 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ❌  **Safe** module.
 
 ### Non-core modules
+
+- 🟡 **PadWalker**: `peek_sub`, `closed_over`, and `set_closed_over` use
+  runtime-maintained lexical metadata on both backends; caller-pad APIs are
+  not implemented.
+- 🟡 **Devel::Caller**: `caller_cv` and caller argument compatibility are
+  implemented for lexical tooling.
+- 🟡 **Devel::LexAlias**: local and captured lexical cells can be aliased on
+  both the JVM and interpreter backends.
 - ✅  **HTTP::CookieJar** module.
 - ✅  **JSON** module.
 - ✅  **Cpanel::JSON::XS** module (JSON::PP-backed shim; same bundled encoder/decoder stack as `JSON`).

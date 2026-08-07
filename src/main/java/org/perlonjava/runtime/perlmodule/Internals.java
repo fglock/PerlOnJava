@@ -70,6 +70,8 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
             internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
+            internals.registerMethod("jperl_peek_sub", "jperlPeekSub", null);
+            internals.registerMethod("jperl_caller_cv", "jperlCallerCv", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -166,7 +168,42 @@ public class Internals extends PerlModuleBase {
         return result.createReference().getList();
     }
 
-    private static void rebindCapturedVariable(
+    /** Return the lexicals known to a CV, using live refs for captures. */
+    public static RuntimeList jperlPeekSub(RuntimeArray args, int ctx) {
+        RuntimeHash result = new RuntimeHash();
+        if (args.size() != 1 || args.get(0).type != RuntimeScalarType.CODE) {
+            return result.createReference().getList();
+        }
+
+        RuntimeCode code = (RuntimeCode) args.get(0).value;
+        if (code.lexicalVariableNames != null) {
+            for (String name : code.lexicalVariableNames) {
+                RuntimeBase placeholder = switch (name.charAt(0)) {
+                    case '@' -> new RuntimeArray();
+                    case '%' -> new RuntimeHash();
+                    default -> new RuntimeScalar();
+                };
+                result.put(name, placeholder.createReference());
+            }
+        }
+        RuntimeList captures = jperlClosedOver(args, ctx);
+        RuntimeHash capturedHash = captures.scalar().hashDerefRaw();
+        for (Map.Entry<String, RuntimeScalar> entry : capturedHash.elements.entrySet()) {
+            result.put(entry.getKey(), entry.getValue());
+        }
+        return result.createReference().getList();
+    }
+
+    /** Return the exact CV for a caller frame, for Devel::Caller::caller_cv. */
+    public static RuntimeList jperlCallerCv(RuntimeArray args, int ctx) {
+        int level = args.isEmpty() ? 0 : args.get(0).getInt();
+        RuntimeCode code = RuntimeCode.getActiveCodeAtCallerFrame(level + 2);
+        if (code == null) return new RuntimeList();
+        if (code.__SUB__ != null) return code.__SUB__.getList();
+        return new RuntimeScalar(code).getList();
+    }
+
+    public static void rebindCapturedVariable(
             RuntimeCode code, String variableName, RuntimeBase replacement) {
         if (code instanceof InterpretedCode interpreted) {
             Integer register = interpreted.variableRegistry.get(variableName);

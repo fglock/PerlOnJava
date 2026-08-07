@@ -20,6 +20,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -95,6 +96,12 @@ public class EmitSubroutine {
             return;
         }
         MethodVisitor mv = ctx.mv;
+
+        Set<String> declaredLexicalNames = new LinkedHashSet<>();
+        if (node.block != null) {
+            node.block.accept(new VariableCollectorVisitor(
+                    new HashSet<>(), declaredLexicalNames));
+        }
 
         // Retrieve closure variable list (copy to avoid corrupting the cache)
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = new TreeMap<>(ctx.symbolTable.getAllVisibleVariables());
@@ -580,6 +587,25 @@ public class EmitSubroutine {
                 // Stack: [codeRef] (codeRef.value now points to clone if isClosure)
             }
         }
+
+        // PadWalker::peek_sub must also see lexicals declared by anonymous
+        // subs. Named subs get this metadata from SubroutineParser, while
+        // anonymous subs are materialized here at runtime.
+        mv.visitLdcInsn(declaredLexicalNames.size());
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+        int declaredNameIndex = 0;
+        for (String variableName : declaredLexicalNames) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(declaredNameIndex++);
+            mv.visitLdcInsn(variableName);
+            mv.visitInsn(Opcodes.AASTORE);
+        }
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "attachLexicalVariableNames",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Ljava/lang/String;)"
+                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
 
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {

@@ -12,6 +12,7 @@ our %EXPORT_TAGS = (all => \@EXPORT_OK);
 # interpreted closures, so the runtime can expose the live references that
 # PadWalker callers expect.
 sub closed_over { Internals::jperl_closed_over(@_) }
+sub peek_sub    { Internals::jperl_peek_sub(@_) }
 
 sub _unsupported {
     die "PadWalker::$_[0] is not implemented on PerlOnJava\n";
@@ -19,7 +20,6 @@ sub _unsupported {
 
 sub peek_my         { _unsupported('peek_my') }
 sub peek_our        { _unsupported('peek_our') }
-sub peek_sub        { _unsupported('peek_sub') }
 sub var_name        { _unsupported('var_name') }
 sub set_closed_over { Internals::jperl_set_closed_over(@_) }
 

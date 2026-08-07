@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::Block.
+
+  Test::Block's runtime behavior is usable, but its upstream tests assert
+  exact diagnostic source line numbers that no longer match the diagnostics
+  emitted by the current system Perl either. Allow installation so downstream
+  distributions are not blocked by a host-Perl test-suite failure.
+match:
+  distribution: "^ADIE/Test-Block-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

@@ -462,6 +462,20 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.deparseFlags = this.deparseFlags;
         copy.deparseSourceOffset = this.deparseSourceOffset;
         copy.deparseSourceEnd = this.deparseSourceEnd;
+        copy.lexicalVariableNames = this.lexicalVariableNames == null
+                ? null : new java.util.LinkedHashSet<>(this.lexicalVariableNames);
+        copy.lexicalAliases = this.lexicalAliases == null
+                ? null : new java.util.HashMap<>(this.lexicalAliases);
+        if (capturedVars != null) {
+            copy.closedOverVariables = new java.util.LinkedHashMap<>();
+            for (Map.Entry<String, Integer> entry : this.variableRegistry.entrySet()) {
+                int capturedIndex = entry.getValue() - 3;
+                if (capturedIndex >= 0 && capturedIndex < capturedVars.length
+                        && capturedVars[capturedIndex] != null) {
+                    copy.closedOverVariables.put(entry.getKey(), capturedVars[capturedIndex]);
+                }
+            }
+        }
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.usesLocalization = this.usesLocalization;
