@@ -63,7 +63,6 @@ sub _bootstrap_prefs {
         'Class-DBI.yml'              => 'PerlOnJava/CpanDistroprefs/Class-DBI.yml',
         'XML-Filter-GenericChunk.yml' => 'PerlOnJava/CpanDistroprefs/XML-Filter-GenericChunk.yml',
         'XML-TreePP.yml'             => 'PerlOnJava/CpanDistroprefs/XML-TreePP.yml',
-        'HTTP-Response-Encoding.yml' => 'PerlOnJava/CpanDistroprefs/HTTP-Response-Encoding.yml',
         'LWP-Protocol-https.yml'     => 'PerlOnJava/CpanDistroprefs/LWP-Protocol-https.yml',
         'PerlIO-via-Timeout.yml'     => 'PerlOnJava/CpanDistroprefs/PerlIO-via-Timeout.yml',
         'Device-SerialPort.yml'      => 'PerlOnJava/CpanDistroprefs/Device-SerialPort.yml',
@@ -148,6 +147,7 @@ sub _bootstrap_prefs {
         String-Print.yml
         WWW-RobotRules.yml
         XML-Filter-GenericChunk.yml
+        HTTP-Response-Encoding.yml
         Aliased.yml
         Carp-Assert.yml
         Class-Method-Modifiers.yml
@@ -262,8 +262,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/OpenAI-API-0.37/NoNetworkTests.patch' ],
         [ 'Image-BMP/BMP.pm.patch',
           'PerlOnJava/CpanPatches/Image-BMP-1.26/BMP.pm.patch' ],
-        [ 'HTTP-Response-Encoding/Makefile.PL.patch',
-          'PerlOnJava/CpanPatches/HTTP-Response-Encoding-0.06/Makefile.PL.patch' ],
         [ 'Javascript-Menu-Full/NoCGIDependency.patch',
           'PerlOnJava/CpanPatches/Javascript-Menu-Full-2.02/NoCGIDependency.patch' ],
         [ 'CGI-Widget-Tabs/OptionalAuthorAndCGITests.patch',
@@ -321,6 +319,7 @@ sub _bootstrap_patches {
         'Graph/AdjacencyMap.pm.patch',
         'Module-Install/ExplicitAuthorsMethod.patch',
         'Term-ANSIColor-Markup/PortableAccessors.patch',
+        'HTTP-Response-Encoding/Makefile.PL.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;
