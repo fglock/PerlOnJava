@@ -110,7 +110,19 @@ sub UNSHIFT {
 
 sub SPLICE {
     my $self = shift;
-    my @removed = splice @{ $self->{records} }, @_;
+    my @removed;
+    if (@_ == 0) {
+        @removed = splice @{ $self->{records} };
+    }
+    elsif (@_ == 1) {
+        my $offset = shift;
+        @removed = splice @{ $self->{records} }, $offset;
+    }
+    else {
+        my $offset = shift;
+        my $length = shift;
+        @removed = splice @{ $self->{records} }, $offset, $length, @_;
+    }
     $self->_flush;
     return wantarray ? @removed : $removed[-1];
 }

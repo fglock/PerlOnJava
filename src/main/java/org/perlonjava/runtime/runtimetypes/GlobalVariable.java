@@ -851,12 +851,16 @@ public class GlobalVariable {
             String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
                 RuntimeArray resolved = globalArrays.get(resolvedKey);
-                if (resolved != null) {
-                    if (isaArray || resolvedKey.endsWith("::ISA")) {
-                        resolved.markIsaArray();
-                    }
-                    return resolved;
+                if (resolved == null) {
+                    resolved = new RuntimeArray();
+                    markPackageGlobalRoot(resolved);
+                    globalArrays.put(resolvedKey, resolved);
+                    invalidatePackageRootSnapshot();
                 }
+                if (isaArray || resolvedKey.endsWith("::ISA")) {
+                    resolved.markIsaArray();
+                }
+                return resolved;
             }
         }
         RuntimeArray var = globalArrays.get(key);

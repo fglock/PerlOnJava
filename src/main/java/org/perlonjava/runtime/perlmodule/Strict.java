@@ -15,6 +15,7 @@ public class Strict extends PerlModuleBase {
 
     // Bitmask for use integer, bytes
     public static final int HINT_INTEGER = 0x00000001;
+    public static final int HINT_LOCALE = 0x00000004;
     public static final int HINT_BYTES = 0x00000008;
 
     // Bitmask for strict options
