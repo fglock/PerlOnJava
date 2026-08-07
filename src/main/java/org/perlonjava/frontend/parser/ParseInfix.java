@@ -119,7 +119,22 @@ public class ParseInfix {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
 
-            right = parser.parseExpression(precedence);
+            // `defined` parses a direct `&name` as a CODE-slot probe by
+            // setting parsingTakeReference. That mode must not leak through
+            // an assignment: in `defined(my $x = &name)`, Perl calls name
+            // (sharing @_) and tests the assigned result.
+            boolean callAmpersandOnAssignmentRhs = parser.parsingTakeReference
+                    && operator.equals("=");
+            if (callAmpersandOnAssignmentRhs) {
+                parser.parsingTakeReference = false;
+            }
+            try {
+                right = parser.parseExpression(precedence);
+            } finally {
+                if (callAmpersandOnAssignmentRhs) {
+                    parser.parsingTakeReference = true;
+                }
+            }
             if (right == null) {
                 // Report an incomplete infix expression at its operator.  By
                 // the time parseExpression returns null, tokenIndex points at

@@ -292,8 +292,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Graph-0.9735/Graph.pm.patch' ],
         [ 'Graph/AdjacencyMap.pm.patch',
           'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap.pm.patch' ],
-        [ 'Graph/AdjacencyMap-Light.pm.patch',
-          'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap-Light.pm.patch' ],
         [ 'Term-ANSIColor-Markup/PortableAccessors.patch',
           'PerlOnJava/CpanPatches/Term-ANSIColor-Markup-0.06/PortableAccessors.patch' ],
         [ 'LRU-Cache/PurePerl.patch',
@@ -310,6 +308,7 @@ sub _bootstrap_patches {
         'WWW-Form-UrlEncoded/PP.pm.patch',
         'DBI/DBI.pm.patch',
         'DBI/PurePerl.pm.patch',
+        'Graph/AdjacencyMap-Light.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;
