@@ -15,6 +15,122 @@ public class MathOperators {
     /** Largest magnitude such that every integer in [-N, N] is exactly representable as double (2^53). */
     private static final double MAX_EXACT_DOUBLE_INT = 9007199254740992.0;
 
+    /** Operations whose native-IV result is truncated to PerlOnJava's 32-bit ivsize. */
+    private enum IntegerOperation { ADD, SUBTRACT, MULTIPLY }
+
+    private static RuntimeScalar integerBinary(RuntimeScalar arg1, RuntimeScalar arg2,
+                                               IntegerOperation operation, boolean warn,
+                                               boolean overload) {
+        if (overload) {
+            int blessId = blessedId(arg1);
+            int blessId2 = blessedId(arg2);
+            if (blessId < 0 || blessId2 < 0) {
+                String symbol = switch (operation) {
+                    case ADD -> "+";
+                    case SUBTRACT -> "-";
+                    case MULTIPLY -> "*";
+                };
+                RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(
+                        arg1, arg2, blessId, blessId2, "(" + symbol, symbol);
+                if (result != null) return result;
+            }
+        }
+
+        String context = switch (operation) {
+            case ADD -> "addition (+)";
+            case SUBTRACT -> "subtraction (-)";
+            case MULTIPLY -> "multiplication (*)";
+        };
+        arg1 = warn ? arg1.getNumberWarn(context) : arg1.getNumber(context);
+        arg2 = warn ? arg2.getNumberWarn(context) : arg2.getNumber(context);
+        int a = (int) arg1.getLong();
+        int b = (int) arg2.getLong();
+        int result = switch (operation) {
+            case ADD -> a + b;
+            case SUBTRACT -> a - b;
+            case MULTIPLY -> a * b;
+        };
+        return new RuntimeScalar(result);
+    }
+
+    public static RuntimeScalar integerAdd(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.ADD, false, true);
+    }
+
+    public static RuntimeScalar integerAddWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.ADD, true, true);
+    }
+
+    public static RuntimeScalar integerAddNoOverload(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.ADD, false, false);
+    }
+
+    public static RuntimeScalar integerSubtract(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.SUBTRACT, false, true);
+    }
+
+    public static RuntimeScalar integerSubtractWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.SUBTRACT, true, true);
+    }
+
+    public static RuntimeScalar integerSubtractNoOverload(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.SUBTRACT, false, false);
+    }
+
+    public static RuntimeScalar integerMultiply(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.MULTIPLY, false, true);
+    }
+
+    public static RuntimeScalar integerMultiplyWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.MULTIPLY, true, true);
+    }
+
+    public static RuntimeScalar integerMultiplyNoOverload(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBinary(arg1, arg2, IntegerOperation.MULTIPLY, false, false);
+    }
+
+    public static RuntimeScalar integerUnaryMinus(RuntimeScalar arg) {
+        int blessId = blessedId(arg);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
+                    arg, blessId, "(neg", "neg", MathOperators::integerUnaryMinus);
+            if (result != null) return result;
+        }
+        return new RuntimeScalar(-(int) arg.getNumber("negation (-)").getLong());
+    }
+
+    public static RuntimeScalar integerUnaryMinusNoOverload(RuntimeScalar arg) {
+        return new RuntimeScalar(-(int) arg.getNumber("negation (-)").getLong());
+    }
+
+    public static RuntimeScalar integerAddAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        RuntimeScalar overloaded = compoundIntegerOverload(arg1, arg2, "(+=", "+=", "(+");
+        arg1.set(overloaded != null ? overloaded : integerAdd(arg1, arg2));
+        return arg1;
+    }
+
+    public static RuntimeScalar integerSubtractAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
+        RuntimeScalar overloaded = compoundIntegerOverload(arg1, arg2, "(-=", "-=", "(-");
+        arg1.set(overloaded != null ? overloaded : integerSubtract(arg1, arg2));
+        return arg1;
+    }
+
+    public static RuntimeScalar integerMultiplyAssignWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        RuntimeScalar overloaded = compoundIntegerOverload(arg1, arg2, "(*=", "*=", "(*");
+        arg1.set(overloaded != null ? overloaded : integerMultiplyWarn(arg1, arg2));
+        return arg1;
+    }
+
+    private static RuntimeScalar compoundIntegerOverload(RuntimeScalar arg1, RuntimeScalar arg2,
+                                                         String copyKey, String assignKey, String baseKey) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        return blessId < 0 || blessId2 < 0
+                ? OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2,
+                        copyKey, assignKey, baseKey)
+                : null;
+    }
+
     /**
      * Adds an integer to a RuntimeScalar and returns the result.
      *

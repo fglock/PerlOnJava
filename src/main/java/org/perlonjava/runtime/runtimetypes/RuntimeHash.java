@@ -1282,6 +1282,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The current RuntimeHash instance after undefining its elements.
      */
     public RuntimeHash undefine() {
+        if (this.type == TIED_HASH) {
+            TieHash.tiedClear(this);
+            hashIterator = null;
+            return this;
+        }
         notePackageRootClear(this.elements.values());
         // Fast path: if no value could possibly fire a DESTROY, use the
         // old one-shot path (one flush total instead of N flushes). The

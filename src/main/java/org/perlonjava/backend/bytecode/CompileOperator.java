@@ -742,8 +742,13 @@ public class CompileOperator {
 
             // Simple unary ops (dispatchOperator)
             case "not", "!" -> emitSimpleUnaryScalar(bytecodeCompiler, node, Opcodes.NOT);
-            case "~" -> emitSimpleUnary(bytecodeCompiler, node,
-                    bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_BITWISE_NOT : Opcodes.BITWISE_NOT);
+            case "~" -> {
+                Object integerAnnotation = node.getAnnotation("useInteger");
+                boolean useInteger = integerAnnotation instanceof Boolean value
+                        ? value : bytecodeCompiler.isIntegerEnabled();
+                emitSimpleUnary(bytecodeCompiler, node,
+                        useInteger ? Opcodes.INTEGER_BITWISE_NOT : Opcodes.BITWISE_NOT);
+            }
             case "binary~" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_BINARY);
             case "~." -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_STRING);
             case "defined" -> visitDefined(bytecodeCompiler, node);
@@ -1309,7 +1314,11 @@ public class CompileOperator {
                 bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int operandReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.NEG_NO_OVERLOAD : Opcodes.NEG_SCALAR);
+                Object integerAnnotation = node.getAnnotation("useInteger");
+                boolean useInteger = integerAnnotation instanceof Boolean value
+                        ? value : bytecodeCompiler.isIntegerEnabled();
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_NEGATE
+                        : bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.NEG_NO_OVERLOAD : Opcodes.NEG_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(operandReg);
                 bytecodeCompiler.lastResultReg = rd;

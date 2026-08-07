@@ -158,6 +158,7 @@ public class ScalarUtil extends PerlModuleBase {
                 if (scalar.value instanceof RuntimeScalar inner) {
                     if (inner.type == READONLY_SCALAR) inner = (RuntimeScalar) inner.value;
                     if (inner instanceof RuntimeSubstrLvalue) yield "LVALUE";
+                    if (inner.firstClassRegexScalar) yield "REGEXP";
                     yield switch (inner.type) {
                         case VSTRING -> "VSTRING";
                         case REGEX, ARRAYREFERENCE, HASHREFERENCE, CODE, GLOBREFERENCE, REFERENCE -> "REF";

@@ -1002,6 +1002,28 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeNegScalar(bytecode, pc, registers);
                             }
 
+                            case Opcodes.INTEGER_ADD, Opcodes.INTEGER_SUBTRACT, Opcodes.INTEGER_MULTIPLY,
+                                 Opcodes.INTEGER_BITWISE_AND, Opcodes.INTEGER_BITWISE_OR,
+                                 Opcodes.INTEGER_BITWISE_XOR -> {
+                                pc = InlineOpcodeHandler.executeIntegerBinary(opcode, bytecode, pc, registers);
+                            }
+
+                            case Opcodes.INTEGER_NEGATE -> {
+                                pc = InlineOpcodeHandler.executeIntegerNegate(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.INTEGER_ADD_ASSIGN -> {
+                                pc = InlineOpcodeHandler.executeIntegerArithmeticAssign(bytecode, pc, registers, 0);
+                            }
+
+                            case Opcodes.INTEGER_SUBTRACT_ASSIGN -> {
+                                pc = InlineOpcodeHandler.executeIntegerArithmeticAssign(bytecode, pc, registers, 1);
+                            }
+
+                            case Opcodes.INTEGER_MULTIPLY_ASSIGN -> {
+                                pc = InlineOpcodeHandler.executeIntegerArithmeticAssign(bytecode, pc, registers, 2);
+                            }
+
                             // Arithmetic without overload dispatch (no overloading pragma)
                             case Opcodes.ADD_NO_OVERLOAD -> {
                                 pc = InlineOpcodeHandler.executeAddNoOverload(bytecode, pc, registers);

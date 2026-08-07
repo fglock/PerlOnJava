@@ -26,6 +26,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("/", "divide", "org/perlonjava/runtime/operators/MathOperators");
         put("%", "modulus", "org/perlonjava/runtime/operators/MathOperators");
         put("unaryMinus", "unaryMinus", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("integerUnaryMinus", "integerUnaryMinus", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("!", "not", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("not", "not", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
@@ -74,6 +75,9 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("*=_warn", "multiplyAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
         put("/=_warn", "divideAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
         put("/=_int_warn", "integerDivideAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
+        put("+=_int", "integerAddAssign", "org/perlonjava/runtime/operators/MathOperators");
+        put("-=_int", "integerSubtractAssign", "org/perlonjava/runtime/operators/MathOperators");
+        put("*=_int_warn", "integerMultiplyAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
         put("%=_warn", "modulusAssignWarn", "org/perlonjava/runtime/operators/MathOperators");
 
         // Bitwise
@@ -82,6 +86,8 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("^", "bitwiseXor", "org/perlonjava/runtime/operators/BitwiseOperators");
         put("<<", "shiftLeft", "org/perlonjava/runtime/operators/BitwiseOperators");
         put(">>", "shiftRight", "org/perlonjava/runtime/operators/BitwiseOperators");
+        put("<<_int", "integerShiftLeft", "org/perlonjava/runtime/operators/BitwiseOperators");
+        put(">>_int", "integerShiftRight", "org/perlonjava/runtime/operators/BitwiseOperators");
         put("~", "bitwiseNot", "org/perlonjava/runtime/operators/BitwiseOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("&.", "bitwiseAndDot", "org/perlonjava/runtime/operators/BitwiseOperators");
         put("|.", "bitwiseOrDot", "org/perlonjava/runtime/operators/BitwiseOperators");

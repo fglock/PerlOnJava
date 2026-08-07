@@ -50,7 +50,8 @@ public class CompileBinaryOperatorHelper {
         boolean useInteger = isIntegerEnabled(bytecodeCompiler, useIntegerOverride);
         switch (operator) {
             case "+" -> {
-                bytecodeCompiler.emit(noOverload ? Opcodes.ADD_NO_OVERLOAD
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_ADD
+                        : noOverload ? Opcodes.ADD_NO_OVERLOAD
                         : (bytecodeCompiler.isUninitializedWarningsEnabled()
                             ? Opcodes.ADD_SCALAR_WARN : Opcodes.ADD_SCALAR));
                 bytecodeCompiler.emitReg(rd);
@@ -58,13 +59,15 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "-" -> {
-                bytecodeCompiler.emit(noOverload ? Opcodes.SUB_NO_OVERLOAD : Opcodes.SUB_SCALAR);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_SUBTRACT
+                        : noOverload ? Opcodes.SUB_NO_OVERLOAD : Opcodes.SUB_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "*" -> {
-                bytecodeCompiler.emit(noOverload ? Opcodes.MUL_NO_OVERLOAD : Opcodes.MUL_SCALAR);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_MULTIPLY
+                        : noOverload ? Opcodes.MUL_NO_OVERLOAD : Opcodes.MUL_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -391,7 +394,7 @@ public class CompileBinaryOperatorHelper {
             }
             case "&" -> {
                 // Numeric bitwise AND (default): rs1 & rs2
-                bytecodeCompiler.emit(Opcodes.BITWISE_AND_BINARY);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_BITWISE_AND : Opcodes.BITWISE_AND_BINARY);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -405,7 +408,7 @@ public class CompileBinaryOperatorHelper {
             }
             case "|" -> {
                 // Numeric bitwise OR (default): rs1 | rs2
-                bytecodeCompiler.emit(Opcodes.BITWISE_OR_BINARY);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_BITWISE_OR : Opcodes.BITWISE_OR_BINARY);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -419,7 +422,7 @@ public class CompileBinaryOperatorHelper {
             }
             case "^" -> {
                 // Numeric bitwise XOR (default): rs1 ^ rs2
-                bytecodeCompiler.emit(Opcodes.BITWISE_XOR_BINARY);
+                bytecodeCompiler.emit(useInteger ? Opcodes.INTEGER_BITWISE_XOR : Opcodes.BITWISE_XOR_BINARY);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

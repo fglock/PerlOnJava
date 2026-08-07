@@ -643,6 +643,13 @@ public class SubroutineParser {
                 && !parser.ctx.symbolTable.isFeatureCategoryEnabled("try")) {
             return true;
         }
+        // Before feature 'isa' is enabled, a leading `isa Class(...)` is the
+        // classic indirect-object spelling of `Class->isa(...)`, not the infix
+        // class-membership operator.
+        if (parser != null && subName.equals("isa")
+                && !parser.ctx.symbolTable.isFeatureCategoryEnabled("isa")) {
+            return true;
+        }
         return false;
     }
 

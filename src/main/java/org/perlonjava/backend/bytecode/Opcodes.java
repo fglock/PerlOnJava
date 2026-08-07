@@ -2411,6 +2411,22 @@ public class Opcodes {
     /** Replace a freshly-created lexical cell with a Devel::LexAlias binding. */
     public static final short APPLY_LEXICAL_ALIAS = 499;
 
+    /** 32-bit native-IV arithmetic under lexical {@code use integer}. */
+    public static final short INTEGER_ADD = 500;
+    public static final short INTEGER_SUBTRACT = 501;
+    public static final short INTEGER_MULTIPLY = 502;
+    public static final short INTEGER_NEGATE = 503;
+
+    /** Signed 32-bit numeric bitwise operations under lexical {@code use integer}. */
+    public static final short INTEGER_BITWISE_AND = 504;
+    public static final short INTEGER_BITWISE_OR = 505;
+    public static final short INTEGER_BITWISE_XOR = 506;
+
+    /** In-place 32-bit native-IV arithmetic under lexical {@code use integer}. */
+    public static final short INTEGER_ADD_ASSIGN = 507;
+    public static final short INTEGER_SUBTRACT_ASSIGN = 508;
+    public static final short INTEGER_MULTIPLY_ASSIGN = 509;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

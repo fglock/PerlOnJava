@@ -32,6 +32,15 @@ public class EmitBinaryOperator {
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleBinaryOperator: " + node.toString());
 
+        if (isIntegerEnabled(emitterVisitor, node)
+                && switch (node.operator) {
+                    case "+", "-", "*", "&", "|", "^" -> true;
+                    default -> false;
+                }) {
+            emitIntegerBinaryOperator(emitterVisitor, scalarVisitor, node, operatorHandler);
+            return;
+        }
+
         // Optimization
         if ((node.operator.equals("+")
                 || node.operator.equals("-")
@@ -210,6 +219,72 @@ public class EmitBinaryOperator {
         emitOperator(node, emitterVisitor);
     }
 
+    private static void emitIntegerBinaryOperator(EmitterVisitor emitterVisitor,
+                                                  EmitterVisitor scalarVisitor,
+                                                  BinaryOperatorNode node,
+                                                  OperatorHandler normalHandler) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        node.left.accept(scalarVisitor);
+        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooled = leftSlot >= 0;
+        if (!pooled) {
+            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        }
+        mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+        node.right.accept(scalarVisitor);
+        mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+        mv.visitInsn(Opcodes.SWAP);
+        if (pooled) {
+            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+        }
+
+        String className;
+        String methodName;
+        switch (node.operator) {
+            case "+" -> {
+                className = "org/perlonjava/runtime/operators/MathOperators";
+                methodName = switch (normalHandler.methodName()) {
+                    case "addWarn" -> "integerAddWarn";
+                    case "addNoOverload" -> "integerAddNoOverload";
+                    default -> "integerAdd";
+                };
+            }
+            case "-" -> {
+                className = "org/perlonjava/runtime/operators/MathOperators";
+                methodName = switch (normalHandler.methodName()) {
+                    case "subtractWarn" -> "integerSubtractWarn";
+                    case "subtractNoOverload" -> "integerSubtractNoOverload";
+                    default -> "integerSubtract";
+                };
+            }
+            case "*" -> {
+                className = "org/perlonjava/runtime/operators/MathOperators";
+                methodName = switch (normalHandler.methodName()) {
+                    case "multiplyWarn" -> "integerMultiplyWarn";
+                    case "multiplyNoOverload" -> "integerMultiplyNoOverload";
+                    default -> "integerMultiply";
+                };
+            }
+            case "&" -> {
+                className = "org/perlonjava/runtime/operators/BitwiseOperators";
+                methodName = "integerBitwiseAnd";
+            }
+            case "|" -> {
+                className = "org/perlonjava/runtime/operators/BitwiseOperators";
+                methodName = "integerBitwiseOr";
+            }
+            case "^" -> {
+                className = "org/perlonjava/runtime/operators/BitwiseOperators";
+                methodName = "integerBitwiseXor";
+            }
+            default -> throw new IllegalArgumentException("not an integer binary operator: " + node.operator);
+        }
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, className, methodName,
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        EmitOperator.handleVoidContext(emitterVisitor);
+    }
+
     static void handleCompoundAssignment(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Compound assignment operators like `+=`, `-=`, etc.
         // These now have proper overload support via MathOperators.*Assign() methods
@@ -225,7 +300,13 @@ public class EmitBinaryOperator {
         // Under "use integer", use the integer warn variant for /=
         boolean isInteger = isIntegerEnabled(emitterVisitor, node);
         OperatorHandler operatorHandler;
-        if (shouldUseWarnVariant && isInteger && node.operator.equals("/=")) {
+        if (isInteger && switch (node.operator) {
+            case "+=", "-=", "*=" -> true;
+            default -> false;
+        }) {
+            operatorHandler = OperatorHandler.get(node.operator + "_int"
+                    + (shouldUseWarnVariant ? "_warn" : ""));
+        } else if (shouldUseWarnVariant && isInteger && node.operator.equals("/=")) {
             operatorHandler = OperatorHandler.get("/=_int_warn");
         } else {
             operatorHandler = shouldUseWarnVariant 
@@ -306,9 +387,14 @@ public class EmitBinaryOperator {
             // Note: operands are already on the stack (left DUPped, then right)
             String baseOperator = node.operator.substring(0, node.operator.length() - 1);
             // Get the operator handler for the base operator, use warn variant only for certain ops
-            OperatorHandler baseOpHandler = shouldUseWarnVariant
-                    ? OperatorHandler.getWarn(baseOperator)
-                    : OperatorHandler.get(baseOperator);
+            OperatorHandler baseOpHandler;
+            if (isInteger && (baseOperator.equals("<<") || baseOperator.equals(">>"))) {
+                baseOpHandler = OperatorHandler.get(baseOperator + "_int");
+            } else {
+                baseOpHandler = shouldUseWarnVariant
+                        ? OperatorHandler.getWarn(baseOperator)
+                        : OperatorHandler.get(baseOperator);
+            }
             if (baseOpHandler == null) {
                 baseOpHandler = OperatorHandler.get(baseOperator);
             }

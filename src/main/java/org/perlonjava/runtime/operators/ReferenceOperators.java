@@ -256,6 +256,8 @@ public class ReferenceOperators {
                 if (runtimeScalar.value instanceof RuntimeScalar scalar) {
                     if (scalar instanceof RuntimeSubstrLvalue) {
                         ref = "LVALUE";
+                    } else if (scalar.firstClassRegexScalar) {
+                        ref = "REGEXP";
                     } else {
                         ref = switch (scalar.type) {
                             case VSTRING -> "VSTRING";

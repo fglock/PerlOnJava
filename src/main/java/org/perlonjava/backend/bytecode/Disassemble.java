@@ -334,6 +334,47 @@ public class Disassemble {
                         int rsNeg = interpretedCode.bytecode[pc++];
                         sb.append("NEG_SCALAR r").append(rd).append(" = -r").append(rsNeg).append("\n");
                         break;
+                    case Opcodes.INTEGER_ADD:
+                    case Opcodes.INTEGER_SUBTRACT:
+                    case Opcodes.INTEGER_MULTIPLY:
+                    case Opcodes.INTEGER_BITWISE_AND:
+                    case Opcodes.INTEGER_BITWISE_OR:
+                    case Opcodes.INTEGER_BITWISE_XOR: {
+                        rd = interpretedCode.bytecode[pc++];
+                        rs1 = interpretedCode.bytecode[pc++];
+                        rs2 = interpretedCode.bytecode[pc++];
+                        String name = switch (opcode) {
+                            case Opcodes.INTEGER_ADD -> "INTEGER_ADD";
+                            case Opcodes.INTEGER_SUBTRACT -> "INTEGER_SUBTRACT";
+                            case Opcodes.INTEGER_MULTIPLY -> "INTEGER_MULTIPLY";
+                            case Opcodes.INTEGER_BITWISE_AND -> "INTEGER_BITWISE_AND";
+                            case Opcodes.INTEGER_BITWISE_OR -> "INTEGER_BITWISE_OR";
+                            default -> "INTEGER_BITWISE_XOR";
+                        };
+                        sb.append(name).append(" r").append(rd).append(" = r")
+                                .append(rs1).append(", r").append(rs2).append("\n");
+                        break;
+                    }
+                    case Opcodes.INTEGER_NEGATE:
+                        rd = interpretedCode.bytecode[pc++];
+                        int rsIntegerNeg = interpretedCode.bytecode[pc++];
+                        sb.append("INTEGER_NEGATE r").append(rd).append(" = -r")
+                                .append(rsIntegerNeg).append("\n");
+                        break;
+                    case Opcodes.INTEGER_ADD_ASSIGN:
+                    case Opcodes.INTEGER_SUBTRACT_ASSIGN:
+                    case Opcodes.INTEGER_MULTIPLY_ASSIGN: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int rsIntegerAssign = interpretedCode.bytecode[pc++];
+                        String name = switch (opcode) {
+                            case Opcodes.INTEGER_ADD_ASSIGN -> "INTEGER_ADD_ASSIGN";
+                            case Opcodes.INTEGER_SUBTRACT_ASSIGN -> "INTEGER_SUBTRACT_ASSIGN";
+                            default -> "INTEGER_MULTIPLY_ASSIGN";
+                        };
+                        sb.append(name).append(" r").append(rd).append(", r")
+                                .append(rsIntegerAssign).append("\n");
+                        break;
+                    }
                     case Opcodes.ADD_NO_OVERLOAD:
                     case Opcodes.SUB_NO_OVERLOAD:
                     case Opcodes.MUL_NO_OVERLOAD:
