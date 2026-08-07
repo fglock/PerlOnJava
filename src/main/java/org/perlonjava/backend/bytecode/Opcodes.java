@@ -2437,6 +2437,12 @@ public class Opcodes {
     /** Register a cancellation-only closure. Format: PUSH_CANCEL codeReg argsReg. */
     public static final short PUSH_CANCEL = 500;
 
+    /**
+     * Apply lexical pragma state at a runtime statement boundary.
+     * Format: APPLY_COMPILER_FLAGS warningBitsIdx hints hintHashId warningScopeId
+     */
+    public static final short APPLY_COMPILER_FLAGS = 501;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

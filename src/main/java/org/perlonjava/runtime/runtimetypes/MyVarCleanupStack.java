@@ -159,6 +159,29 @@ public class MyVarCleanupStack {
         }
     }
 
+    /**
+     * Replace the Java object backing a live lexical slot without ending the
+     * lexical's Perl scope. The interpreter uses replace-on-assignment for
+     * ordinary scalars, so leaving the old object on this stack would make
+     * reachability analysis overlook references stored in the new slot.
+     */
+    public static void replace(Object oldVar, Object newVar) {
+        if (oldVar == null || newVar == null || oldVar == newVar) return;
+        for (int i = stack.size() - 1; i >= 0; i--) {
+            if (stack.get(i) == oldVar) {
+                stack.set(i, newVar);
+                Integer count = liveCounts.get(oldVar);
+                if (count != null) {
+                    if (count <= 1) liveCounts.remove(oldVar);
+                    else liveCounts.put(oldVar, count - 1);
+                    liveCounts.merge(newVar, 1, Integer::sum);
+                    MortalList.invalidateLiveRootSnapshot();
+                }
+                return;
+            }
+        }
+    }
+
     private static void decLiveCount(Object var) {
         Integer c = liveCounts.get(var);
         if (c == null) return;

@@ -1739,6 +1739,17 @@ public class Disassemble {
                                 .append(cancelArgsReg).append("))\n");
                         break;
                     }
+                    case Opcodes.APPLY_COMPILER_FLAGS: {
+                        int warningBitsIdx = interpretedCode.bytecode[pc++];
+                        int hints = interpretedCode.bytecode[pc++];
+                        int hintHashId = interpretedCode.bytecode[pc++];
+                        int warningScopeId = interpretedCode.bytecode[pc++];
+                        sb.append("APPLY_COMPILER_FLAGS warningBits=")
+                                .append(warningBitsIdx).append(" hints=").append(hints)
+                                .append(" hintHash=").append(hintHashId)
+                                .append(" warningScope=").append(warningScopeId).append("\n");
+                        break;
+                    }
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];

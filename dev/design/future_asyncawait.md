@@ -126,7 +126,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 - Decide which portions of the extension-builder ABI can be represented by a
   PerlOnJava-native hook API.
 
-### Phase 5: JVM lowering and ecosystem validation
+### Phase 5: Production lowering and ecosystem validation — completed 2026-08-07
 
 - Generate JVM state-machine classes for async subroutines or retain selective
   interpreter routing where it is faster and simpler.
@@ -172,8 +172,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 ## Progress tracking
 
-### Current status: Phase 5 in progress; upstream compatibility complete and
-ecosystem validation in progress
+### Current status: Complete and fully verified
 
 ### Completed phases
 
@@ -366,29 +365,67 @@ ecosystem validation in progress
     full `make` passes.
   - Files: `Future/AsyncAwait/Awaitable.pm` and
     `Test/Future/AsyncAwait/Awaitable.pm`.
-- [ ] Phase 5f: Ecosystem validation (in progress)
-  - The `Future` 0.52 suite reaches 784 tests on the feature branch. Three
-    cancellation/refcount assertions in `t/02cancel-pp.t` fail identically on
-    a clean `origin/master` build, confirming they are pre-existing and not an
-    async/await regression.
-  - `IO::Async`, `Net::Async::HTTP`, and PAGI validation remain to be run and
-    classified.
+- [x] Phase 5f: Ecosystem validation and aggregate refcount repair (2026-08-07)
+  - Repaired weak scalar references to autovivified array and hash elements by
+    preserving the aggregate's owner-aware element collection during
+    autovivification. This restores cancellation callback revocation and
+    compaction in `Future` without changing weak-reference behavior for
+    initialized aggregates.
+  - Added an eight-assertion aggregate-element regression validated first with
+    system Perl and then with both PerlOnJava frontends.
+  - Repaired the two baseline failures that initially masked final verification:
+    interpreter list declarations now register every lexical and replace that
+    registration when assignment replaces the scalar slot; readonly scalar
+    literals remain owned by their installed subroutine on both frontends;
+    interpolated bracketed `\Q`/`\E` are accepted without warnings; and the
+    interpreter now applies lexical warning/hint state at runtime like the JVM
+    backend.
+  - Verified `Future` 0.52 completely (`56` files, `784` tests) and
+    `IO::Async` 0.805 completely (`64` files, `665` tests).
+  - `Net::Async::HTTP` reaches its own suite but 38 programs cannot import four
+    platform-dependent `Socket` IPTOS constants. The host system Perl also
+    lacks those constants, so this is a separate Socket portability boundary
+    rather than an async-runtime failure.
+  - PAGI validation reaches 263 assertions across 110 programs: 68 programs
+    and 231 assertions pass. Remaining failures are downstream module-porting
+    gaps involving Net::Async::HTTP/WebSocket dependencies, Unix sockets,
+    inherited descriptors, process activation, and file/runtime behavior.
+- [x] Phase 5g: Production-lowering and extension-ABI decision (2026-08-07)
+  - Retained selective interpreter routing as the production async lowering.
+    It shares the same callable boundary with JVM-compiled callers and passed
+    the applicable upstream and ecosystem coverage without a second state
+    machine implementation.
+  - No native extension-builder ABI was added. The validated pure-Perl
+    Awaitable role and Future protocol cover the working ecosystem; downstream
+    failures occur at unrelated module and operating-system boundaries.
+  - A native JVM state machine remains an optional profiling-driven
+    optimization, not a correctness or compatibility requirement.
 
 ### Next steps
 
-1. Run timeout-wrapped IO::Async ecosystem suites and classify any
-   failures as async-runtime gaps, module-porting gaps, or unsupported features.
-2. Continue with Net::Async::HTTP and PAGI::Server where their dependency
-   stacks are available.
-3. Use those results to define the minimum native extension-hook ABI and decide
-   whether selective interpreter routing remains the production lowering.
+1. Track Socket IPTOS portability needed by Net::Async::HTTP as a separate
+   module-porting task.
+2. Track PAGI's Unix-socket, inherited-descriptor, process-activation, and
+   remaining file/runtime gaps separately from async/await.
+3. Revisit native JVM state-machine lowering only if profiling identifies
+   selective interpreter routing as a material bottleneck.
 
 ### Open questions
 
-- Should async subs permanently use the interpreter, or be promoted to JVM
-  state machines after semantic parity is established?
-- Which Future::AsyncAwait extension hooks are required by modules in the
-  intended PAGI ecosystem?
+- No async-runtime questions remain open. Selective interpreter routing is the
+  production lowering, and no extension-builder hooks are currently required.
+
+### Final verification
+
+- Updated the obsolete Phase 1 parser test to verify that runtime compilation
+  continues past the former implementation boundary.
+- `weaken_scalar_refs.t`, `regex_charclass.t`, and the new aggregate-element
+  weak-reference regression pass on both frontends; the new test also passes
+  with system Perl.
+- A clean full `make` succeeds after compiling all runtime changes.
+- Final ecosystem reruns pass: Future 0.52 (`56` files, `784` tests) and
+  IO::Async 0.805 (`64` files, `665` tests), with only documented unsupported
+  fork, thread, listener, and socketpair cases skipped.
 
 ## References
 

@@ -70,6 +70,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return map;
     }
 
+    void resetElementMapAfterAutovivification() {
+        elements = newElementMap();
+    }
+
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
         private final RuntimeHash owner;
 

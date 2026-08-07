@@ -81,6 +81,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return list;
     }
 
+    void resetElementListAfterAutovivification() {
+        elements = newElementList();
+    }
+
     private static final class RuntimeArrayElementList extends ArrayList<RuntimeScalar> {
         private final RuntimeArray owner;
 

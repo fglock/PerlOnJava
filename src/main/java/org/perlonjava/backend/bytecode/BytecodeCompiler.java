@@ -14,7 +14,6 @@ import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.util.*;
 
@@ -3361,6 +3360,9 @@ public class BytecodeCompiler implements Visitor {
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
 
+                                emit(Opcodes.REGISTER_MY_VAR);
+                                emitReg(reg);
+
                                 // Runtime attribute dispatch for list variable declarations.
                                 // Attributes are stored on the parent my/state node, propagate to each element.
                                 emitVarAttrsIfNeeded(node, reg, sigil);
@@ -4947,8 +4949,37 @@ public class BytecodeCompiler implements Visitor {
                 int refContext = node.operand instanceof BinaryOperatorNode binOp && binOp.operator.equals("=")
                         ? RuntimeContextType.SCALAR
                         : RuntimeContextType.LIST;
-                compileNode(node.operand, -1, refContext);
-                int valueReg = lastResultReg;
+                int valueReg;
+                if (node.operand instanceof StringNode stringNode && !stringNode.isVString) {
+                    boolean byteString = stringNode.forceByteString || isAsciiOnly(stringNode.value);
+                    if (!byteString
+                            && emitterContext != null
+                            && emitterContext.symbolTable != null
+                            && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
+                        byteString = stringNode.value.codePoints().allMatch(c -> c <= 0xFF);
+                    }
+                    int cacheIndex = byteString
+                            ? RuntimeScalarCache.getOrCreateByteStringIndex(stringNode.value)
+                            : RuntimeScalarCache.getOrCreateStringIndex(stringNode.value);
+                    if (cacheIndex >= 0) {
+                        RuntimeScalarReadOnly constant = byteString
+                                ? RuntimeScalarCache.materializeByteStringLiteral(cacheIndex)
+                                : RuntimeScalarCache.materializeStringLiteral(cacheIndex);
+                        valueReg = allocateRegister();
+                        emit(Opcodes.LOAD_CONST);
+                        emitReg(valueReg);
+                        emit(addToConstantPool(constant));
+                        if (emitterContext != null && emitterContext.javaClassInfo != null) {
+                            emitterContext.javaClassInfo.addPadConstant(constant);
+                        }
+                    } else {
+                        compileNode(node.operand, -1, refContext);
+                        valueReg = lastResultReg;
+                    }
+                } else {
+                    compileNode(node.operand, -1, refContext);
+                    valueReg = lastResultReg;
+                }
 
                 // Allocate register for reference
                 int rd = allocateOutputRegister();
@@ -6659,9 +6690,15 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.warningDisabledStack.pop();
         symbolTable.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
 
-        // Update per-call-site $^H and %^H for caller()[8] and caller()[10]
-        WarningBitsRegistry.setCallSiteHints(node.getStrictOptions());
-        WarningBitsRegistry.snapshotCurrentHintHash();
+        int warningBitsIdx = addToStringPool(symbolTable.getWarningBitsString());
+        emit(Opcodes.APPLY_COMPILER_FLAGS);
+        emit(warningBitsIdx);
+        emit(node.getStrictOptions());
+        emit(node.getHintHashSnapshotId());
+        emit(node.getWarningScopeId());
+        if (node.getWarningScopeId() > 0) {
+            usesLocalization = true;
+        }
     }
 
     @Override

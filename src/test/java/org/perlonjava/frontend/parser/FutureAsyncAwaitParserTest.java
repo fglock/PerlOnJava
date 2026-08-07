@@ -150,14 +150,11 @@ class FutureAsyncAwaitParserTest {
     }
 
     @Test
-    void runtimeCompilationStopsAtExplicitPhaseBoundary() {
-        Exception exception = assertThrows(Exception.class, () -> execute("""
+    void runtimeCompilationContinuesPastFormerPhaseBoundary() {
+        assertDoesNotThrow(() -> execute("""
                 use Future::AsyncAwait;
                 my $code = async sub { 1 };
                 """, false));
-
-        assertTrue(rootMessage(exception).contains(FutureAsyncAwaitParser.BACKEND_MESSAGE),
-                rootMessage(exception));
     }
 
     private static void execute(String code, boolean parseOnly) throws Exception {

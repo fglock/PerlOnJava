@@ -2,6 +2,8 @@ package org.perlonjava.backend.bytecode;
 
 import java.util.BitSet;
 
+import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
@@ -1028,6 +1030,7 @@ public class BytecodeInterpreter {
                                     // `my $x = $object; $x = "$x"`, where a
                                     // stale owner otherwise delays DESTROY.
                                     if (target instanceof RuntimeScalar oldTarget) {
+                                        MyVarCleanupStack.replace(oldTarget, targetScalar);
                                         MortalList.deferDecrementIfNotCaptured(oldTarget);
                                     }
                                     registers[rd] = targetScalar;
@@ -2481,6 +2484,21 @@ public class BytecodeInterpreter {
 
                             case Opcodes.PUSH_CANCEL -> {
                                 pc = InlineOpcodeHandler.executePushCancel(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.APPLY_COMPILER_FLAGS -> {
+                                int warningBitsIdx = bytecode[pc++];
+                                int hints = bytecode[pc++];
+                                int hintHashId = bytecode[pc++];
+                                int warningScopeId = bytecode[pc++];
+                                WarningBitsRegistry.setCallSiteBits(code.stringPool[warningBitsIdx]);
+                                WarningBitsRegistry.setCallSiteHints(hints);
+                                HintHashRegistry.setCallSiteHintHashId(hintHashId);
+                                if (warningScopeId > 0) {
+                                    RuntimeScalar warningScope = GlobalRuntimeScalar.makeLocal(
+                                            GlobalContext.WARNING_SCOPE);
+                                    warningScope.set(new RuntimeScalar(warningScopeId));
+                                }
                             }
 
                             // =================================================================
