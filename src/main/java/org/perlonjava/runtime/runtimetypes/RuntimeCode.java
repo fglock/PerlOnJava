@@ -3018,7 +3018,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 
                                 MortalList.pushMark();
                                 try {
-                                    return cachedCode.apply(a, callContext);
+                                    return applyCachedMethod(cachedCode, a, callContext);
                                 } finally {
                                     MortalList.popMark();
                                 }
@@ -3068,7 +3068,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             MortalList.pushMark();
                             try {
-                                return code.apply(a, callContext);
+                                return applyCachedMethod(code, a, callContext);
                             } finally {
                                 MortalList.popMark();
                             }
@@ -3088,6 +3088,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
+        }
+    }
+
+    /**
+     * Preserve the normal Perl-subroutine boundary when the method inline cache
+     * invokes a resolved RuntimeCode directly. In particular, an explicit
+     * return inside map/grep must cross generated block callbacks but stop at
+     * the method that owns those blocks; letting the marker escape makes the
+     * method's caller return as well.
+     */
+    private static RuntimeList applyCachedMethod(
+            RuntimeCode code, RuntimeArray args, int callContext) {
+        int effectiveContext = effectiveCallContext(code, callContext);
+        try {
+            // Preserve LVALUE here: generated code performs the callable check
+            // from the raw context. Normalizing it first would silently turn a
+            // forbidden lvalue method assignment into an ordinary scalar call.
+            return code.apply(args, callContext);
+        } catch (PerlNonLocalReturnException e) {
+            if (code.isMapGrepBlock) {
+                throw e;
+            }
+            RuntimeList result = e.returnValue != null
+                    ? e.returnValue.getList() : new RuntimeList();
+            return coerceScalarCallResult(
+                    result, effectiveContext, callContext, !isLvalueCode(code));
         }
     }
 
