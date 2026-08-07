@@ -363,7 +363,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                     // Preserve it for interpreter stack traces (Carp relies on
                     // caller()[3] to identify the assertion subroutine).
                     BytecodeInterpreter.execute(this, args, effectiveContext, this.subName),
-                    effectiveContext, callContext);
+                    effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -401,7 +401,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         try {
             return RuntimeCode.coerceScalarCallResult(
                     BytecodeInterpreter.execute(this, args, effectiveContext, subroutineName),
-                    effectiveContext, callContext);
+                    effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);

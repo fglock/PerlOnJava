@@ -268,7 +268,7 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: Phase 5, control flow, lvalues, and introspection.
+Current phase: Phase 6, regex engine coverage.
 
 ### Phase checklist
 
@@ -276,16 +276,19 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 - [x] Phase 2: Bundled-provider resolution (2026-08-06)
 - [x] Phase 3: Prerequisite phase preservation (2026-08-06)
 - [x] Phase 4: Caller, eval, warning, and symbol-table parity (2026-08-06)
-- [ ] Phase 5: Control flow, lvalues, and introspection
+- [x] Phase 5: Control flow, lvalues, and introspection (2026-08-07)
 - [ ] Phase 6: Regex engine coverage
 - [ ] Phase 7: CPAN metadata and process services
 - [ ] Phase 8: Deterministic lifetime and remaining parity
 
 ### Next steps
 
-1. Make the shared lvalue analysis authoritative for both backends and rerun
-   the unpatched Phase 5 target matrix.
-2. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+1. Inventory the active Phase 6 regex prefs and patches, then establish
+   unpatched JVM/interpreter baselines for Regexp::Common and String::Random.
+2. Separate stack-safety and declarative syntax gaps from executable
+   `(?{...})`/`(??{...})` callback support before selecting the first regex
+   workaround to retire.
+3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -531,6 +534,40 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   lvalue assignments, and passes 4 files/11 assertions. The distropref and
   `PortableAccessors.patch` are deleted and registered for installed-cache
   retirement; a source bootstrap removes both stale artifacts.
+- Phase 5's final Class::Method::Modifiers pass makes the shared lvalue/runtime
+  policy authoritative at the remaining interpreter boundaries. Interpreted
+  `:lvalue` code now preserves returned scalar aliases during RETURN assembly
+  and call-result coercion, matching the JVM path. Eval-block caller frames
+  keep the interpreted callee name while sourcing package, file, and line from
+  the adjacent eval call site.
+- Interpreter assignment through localized `our` arrays and hashes reloads
+  the dynamic global container instead of mutating a stale symbol-table
+  register. Hash-element assignment updates the existing scalar slot in place,
+  so references such as `\$cache->{wrapped}` observe later CODE replacement.
+  Sub::Util initialization now installs its documented
+  `Sub::Name::_is_renamed` introspection alias.
+- Regressions `zz_caller_exported_alias.t`, `zz_lvalue_wrapper_return.t`,
+  `zz_local_our_aggregate_restore.t`,
+  `zz_hash_element_assignment_identity.t`, and
+  `zz_b_anonymous_cv_introspection.t` pass under standard Perl, JVM, and
+  interpreter backends. The existing four-level eval caller regression remains
+  green, and the full `make` gate passes.
+- Unmodified Class::Method::Modifiers 2.15 passes 29 files/131 assertions on
+  the JVM backend and in a source-first, zero-pref `jcpan -t` run. Isolated
+  interpreter execution passes all non-TODO assertions in all 29 files; 27
+  files exit cleanly, while `t/041-modify-parent.t` and `t/140-lvalue.t` reach
+  only their upstream TODO failures before bundled Test::More's empty
+  diagnostic stack panics. The ordinary interpreter Test::Harness path also
+  reuses one runtime across files and exposes cross-file package/test-state
+  contamination, so the isolated per-file matrix is the authoritative
+  semantic result. Bootstrap retirement removes the stale
+  `Class-Method-Modifiers.yml` ignore-failure preference.
+- Phase 5 is complete: Graph 0.9735, Class::Method::Modifiers 2.15,
+  Module::Install 1.21, and Term::ANSIColor::Markup 0.06 all pass their
+  source-first JVM acceptance paths without Phase 5 preferences or source
+  patches. The known interpreter Test::More TODO-diagnostic and in-process
+  harness-isolation limitations remain visible; no failure is converted to a
+  pass.
 
 ### Open questions
 

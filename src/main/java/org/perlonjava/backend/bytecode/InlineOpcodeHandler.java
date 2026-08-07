@@ -664,8 +664,9 @@ public class InlineOpcodeHandler {
 
     /**
      * Hash element store: hash{key} = value, returns the lvalue (element)
-     * Creates a fresh copy to prevent aliasing bugs.
-     * Uses addToScalar to resolve special variables ($1, $2, etc.)
+     * Updates the existing scalar slot in place so references to the hash
+     * element remain live. RuntimeHashProxyEntry handles a missing or tied
+     * element, and addToScalar resolves special variables ($1, $2, etc.).
      * Format: HASH_SET rd hashReg keyReg valueReg
      */
     public static int executeHashSet(int[] bytecode, int pc, RuntimeBase[] registers) {
@@ -677,10 +678,9 @@ public class InlineOpcodeHandler {
         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
         RuntimeBase valBase = registers[valueReg];
         RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
-        RuntimeScalar copy = new RuntimeScalar();
-        val.addToScalar(copy);
-        hash.put(key.toString(), copy);
-        registers[rd] = copy;
+        RuntimeScalar target = hash.get(key);
+        val.addToScalar(target);
+        registers[rd] = target;
         return pc;
     }
 
