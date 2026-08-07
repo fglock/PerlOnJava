@@ -14,6 +14,7 @@ public final class FutureAsyncAwaitParser {
     static final String CANCEL_HINT_KEY = "Future::AsyncAwait/cancel";
     private static final String AWAITABLE_HINT_KEY = "Future::AsyncAwait/awaitable";
     private static final String FUTURE_CLASS_HINT_KEY = "Future::AsyncAwait/future";
+    private static final String AWAITABLE_ANNOTATION = "futureAsyncAwaitAwaitable";
     public static final String BACKEND_MESSAGE =
             "Future::AsyncAwait async execution requires a loaded Awaitable Future implementation"
                     + " (load Future before declaring async subs)";
@@ -34,6 +35,12 @@ public final class FutureAsyncAwaitParser {
                 GlobalVariable.getGlobalCodeRef("Future::new"));
     }
 
+    public static boolean hasAwaitableFuture(Node node) {
+        return node instanceof org.perlonjava.frontend.astnode.AbstractNode abstractNode
+                && abstractNode.getBooleanAnnotation(AWAITABLE_ANNOTATION)
+                || hasAwaitableFuture();
+    }
+
     private static String futureClass() {
         RuntimeHash hints = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         RuntimeScalar value = hints.elements.get(FUTURE_CLASS_HINT_KEY);
@@ -41,6 +48,7 @@ public final class FutureAsyncAwaitParser {
     }
 
     static void markFutureClass(org.perlonjava.frontend.astnode.AbstractNode node) {
+        node.setAnnotation(AWAITABLE_ANNOTATION, hasAwaitableFuture());
         String futureClass = futureClass();
         if (futureClass != null) {
             node.setAnnotation("futureAsyncAwaitFutureClass", futureClass);

@@ -502,6 +502,14 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      system Perl and both PerlOnJava frontends; full `make` passes.
      PAGI-Tools' multipart stream and error suites now pass all 12 subtests,
      including partial-file cleanup and exclusive creation.
+   - [Completed 2026-08-07] Preserved definition-time Awaitable Future
+     availability as an annotation on async subroutines and their blocks.
+     Deferred compilation of an async closure nested inside a normal sub no
+     longer depends on whichever lexical hints are active when that outer sub
+     is later called. Both compiler paths retain the targeted error for syntax
+     parsed without an Awaitable implementation; full `make` passes.
+     PAGI-Tools' named-router and test-client component-coercion files now pass
+     all 14 subtests.
    - Next: continue the narrowed PAGI-Tools runtime and portability gaps.
      Process-worker tests remain outside scope while PerlOnJava does not
      implement `fork`.

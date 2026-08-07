@@ -523,6 +523,15 @@ class FutureAsyncAwaitRuntimeTest {
             die "read in async interpreter frame used sysread semantics\n"
                     unless read_scalar_handle()->AWAIT_GET eq "11:alpha\nbeta\n";
 
+            sub make_deferred_async {
+                return async sub { 42 };
+            }
+            {
+                no Future::AsyncAwait;
+                die "deferred async compilation lost definition-time Future availability\n"
+                        unless make_deferred_async()->()->AWAIT_GET == 42;
+            }
+
             use feature 'class';
             no warnings 'experimental::class';
             class AsyncAwaitExample {
