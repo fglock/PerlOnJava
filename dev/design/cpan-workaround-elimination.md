@@ -283,11 +283,11 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 
 ### Next steps
 
-1. Establish unchanged-suite baselines for the Phase 5 targets: Graph,
+1. Establish unchanged-suite baselines for the remaining Phase 5 targets:
    Class::Method::Modifiers, Module::Install, and Term::ANSIColor::Markup.
-2. Start with Graph's nested map/grep return propagation, then make the shared
-   lvalue analysis authoritative for both backends before integrating lazy
-   native `Want` support.
+2. Use those failures to select the next control-flow or introspection blocker,
+   then make the shared lvalue analysis authoritative for both backends before
+   integrating lazy native `Want` support.
 3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
@@ -403,6 +403,19 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   interpreter retains the named Carp caller frame. The existing
   `io_compress_regressions.t` and `carp_confess_named_frame.t` regressions pass,
   and the final full `make` gate passes 245 tests with 2 skipped.
+- Phase 5 Graph baseline initially passed 86/88 files, with all eight failures
+  in `t/59_dfs.t` and `t/62_bcc.t`: diagnostics named the caller `(eval)` where
+  Graph expected `Graph::topological_sort`, `Graph::is_connected`, or
+  `Graph::biconnectivity`. The defect was eval/interpreter frame alignment, not
+  the anticipated nested map/grep return propagation.
+- Formatted interpreter frames now carry explicit backend metadata, virtual
+  eval frames are placed outside their contiguous interpreted calls, and a
+  named active Perl subroutine takes precedence when it occupies a synthetic
+  eval slot. Genuine outer eval callers remain `(eval)`.
+- Regression: `src/test/resources/unit/zz_eval_defined_named_caller.t` passes
+  its four assertions under standard Perl, JVM, and interpreter backends. The
+  unchanged Graph 0.9735 suite now passes all 88 files and 9,256 assertions.
+  The full `make` gate passes 245 tests with 2 skipped.
 
 ### Open questions
 

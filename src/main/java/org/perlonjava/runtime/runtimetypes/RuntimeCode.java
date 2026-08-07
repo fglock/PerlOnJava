@@ -3369,6 +3369,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ArrayList<String> syntheticFrame = new ArrayList<>(it.next());
                 if (isSyntheticOwnSubFrame(syntheticFrame)) {
                     stackTrace.add(syntheticOwnSubInsertAt(stackTrace, syntheticFrame), syntheticFrame);
+                } else if (isVirtualEvalFrame(syntheticFrame)) {
+                    stackTrace.add(virtualEvalInsertAt(stackTrace), syntheticFrame);
                 } else {
                     framesToInsert.add(syntheticFrame);
                 }
@@ -3381,15 +3383,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // the sub's own location (not the call site). For interpreter code, the first
         // frame from CallerStack already IS the call site, so no skip is needed.
         int argsFrame = frame; // Save pre-skip frame for argsStack indexing
-        boolean currentFrameIsInterpreter = frame < javaClassNames.size()
-                && javaClassNames.get(frame) != null
-                && javaClassNames.get(frame).startsWith("interpreter:");
+        boolean currentFrameIsInterpreter = frame < stackTraceSize
+                && stackTrace.get(frame).size() > 4
+                && "interpreter".equals(stackTrace.get(frame).get(4));
+        if (!currentFrameIsInterpreter) {
+            currentFrameIsInterpreter = frame < javaClassNames.size()
+                    && javaClassNames.get(frame) != null
+                    && javaClassNames.get(frame).startsWith("interpreter:");
+        }
+        boolean currentFrameIsVirtualEval = frame < stackTraceSize
+                && isVirtualEvalFrame(stackTrace.get(frame));
         boolean interpreterFrameBeforeVirtualEval = currentFrameIsInterpreter
                 && frame + 1 < stackTraceSize
-                && stackTrace.get(frame + 1).size() > 4
-                && "virtual-eval".equals(stackTrace.get(frame + 1).get(4));
+                && isVirtualEvalFrame(stackTrace.get(frame + 1));
         if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()
-                && !interpreterFrameBeforeVirtualEval) {
+                && !currentFrameIsVirtualEval && !interpreterFrameBeforeVirtualEval) {
             frame++;
         }
 
@@ -3462,7 +3470,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 boolean previousFrameIsEval = previousFrameSubName != null
                         && previousFrameSubName.startsWith("(eval");
 
+                // Ordinary interpreter entries describe the subroutine whose
+                // own bytecode produced that frame. After the normal own-frame
+                // skip, the previous formatted entry is therefore the Perl
+                // caller name. The frame immediately before a virtual eval is
+                // deliberately not skipped, so its own name is authoritative.
+                // Prefer this source-level metadata over activeCodeStack, whose
+                // eval compiler wrappers can be one logical frame out of phase.
+                if (subName == null && currentFrameIsInterpreter) {
+                    String interpreterSubName = interpreterFrameBeforeVirtualEval
+                            ? frameSubName : previousFrameSubName;
+                    if (interpreterSubName != null && !interpreterSubName.startsWith("(eval")) {
+                        subName = interpreterSubName;
+                    }
+                }
+
                 RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                if (virtualEvalFrame && activeCode != null) {
+                    // A synthetic eval frame can occupy the formatted slot for
+                    // a still-active named subroutine. At that same logical
+                    // depth the active-code stack is authoritative; only keep
+                    // `(eval)` when no named Perl code exists (the next outer
+                    // caller really is the eval itself).
+                    String activeSubName = callerSubNameForCode(activeCode);
+                    if (activeSubName != null && !activeSubName.startsWith("(eval")) {
+                        subName = activeSubName;
+                    }
+                }
                 if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
                     if (subName == null && !activeCode.explicitlyRenamed
@@ -3818,6 +3852,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static boolean isSyntheticOwnSubFrame(ArrayList<String> frame) {
         return frame.size() > 4 && "synthetic-own-sub".equals(frame.get(4));
+    }
+
+    private static boolean isVirtualEvalFrame(ArrayList<String> frame) {
+        return frame.size() > 4 && "virtual-eval".equals(frame.get(4));
+    }
+
+    /** Place an eval outside the contiguous interpreted calls executing inside it. */
+    private static int virtualEvalInsertAt(ArrayList<ArrayList<String>> stackTrace) {
+        int index = 0;
+        while (index < stackTrace.size()) {
+            ArrayList<String> frame = stackTrace.get(index);
+            if (frame.size() <= 4 || !"interpreter".equals(frame.get(4))) {
+                break;
+            }
+            index++;
+        }
+        return index;
     }
 
     private static int syntheticOwnSubInsertAt(ArrayList<ArrayList<String>> stackTrace, ArrayList<String> syntheticFrame) {
