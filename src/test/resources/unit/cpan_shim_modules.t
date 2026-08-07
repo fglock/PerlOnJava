@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Test::More;
 use File::Temp qw(tempdir);
+use Fcntl qw(O_CREAT O_RDWR);
 use lib 'src/main/perl/lib';
 
 use_ok('UNIVERSAL::require');
@@ -113,6 +114,16 @@ use_ok('SDBM_File');
     tie my %db2, 'SDBM_File', $file, 0, 0666 or die "tie again: $!";
     is($db2{foo}, 'bar', 'SDBM_File reloads stored values');
     untie %db2;
+}
+
+use_ok('AnyDBM_File');
+{
+    my $dir = tempdir(CLEANUP => 1);
+    my $file = "$dir/anydbm";
+    tie my %db, 'AnyDBM_File', $file, O_CREAT | O_RDWR, 0666 or die "tie: $!";
+    $db{answer} = 42;
+    is($db{answer}, 42, 'AnyDBM_File delegates to an available DBM backend');
+    untie %db;
 }
 
 use_ok('HTTP::Cookies');

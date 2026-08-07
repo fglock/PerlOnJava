@@ -284,17 +284,14 @@ Current phase: Phase 7, CPAN metadata and process services.
 
 ### Next steps
 
-1. Evaluate `HTTP-Response-Encoding.yml` against its current static and
-   generated metadata in a clean source-first install, then retire the patch
-   if the dependency graph is authoritative without it.
-2. Replace CPAN-FindDependencies' Unix `system` patch with the argv-safe Java
+1. Replace CPAN-FindDependencies' Unix `system` patch with the argv-safe Java
    process service, including output capture, deadlines, and process-tree
    termination.
-3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
+2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -727,6 +724,13 @@ Current phase: Phase 7, CPAN metadata and process services.
   namespace dependency, revisited the unchanged target exactly once, and
   passed all 3 files/20 assertions. Bootstrap migration removes stale signed
   copies of the former four-module preference.
+- `HTTP-Response-Encoding.yml` and its Makefile metadata patch are retired.
+  Upstream omits the test-only `LWP::UserAgent`; the bounded retry discovers
+  that module, stages libwww-perl's source graph, and then passes the unchanged
+  target suite (5 files/17 assertions). That clean graph also exposed missing
+  core `AnyDBM_File`; PerlOnJava now bundles the standard selector at version
+  1.01 and delegates to its existing SDBM implementation, preventing CPAN from
+  attempting to install a complete Perl distribution for WWW::RobotRules.
 
 ### Open questions
 

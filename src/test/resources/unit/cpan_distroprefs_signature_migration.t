@@ -29,6 +29,8 @@ my $logger_pref = File::Spec->catfile($prefs_dir, 'Logger-Simple.yml');
 my $retired_pref = File::Spec->catfile($prefs_dir, 'Test-Deep-JSON.yml');
 my $retired_xml_pref =
     File::Spec->catfile($prefs_dir, 'XML-Filter-GenericChunk.yml');
+my $retired_http_pref =
+    File::Spec->catfile($prefs_dir, 'HTTP-Response-Encoding.yml');
 open my $legacy, '>', $logger_pref or die "$logger_pref: $!";
 print {$legacy} <<'YAML';
 ---
@@ -57,6 +59,15 @@ match:
   distribution: "^PHISH/XML-Filter-GenericChunk-"
 YAML
 close $retired_xml;
+open my $retired_http, '>', $retired_http_pref
+    or die "$retired_http_pref: $!";
+print {$retired_http} <<'YAML';
+---
+comment: PerlOnJava legacy dependency patch
+match:
+  distribution: "^DANKOGAI/HTTP-Response-Encoding-"
+YAML
+close $retired_http;
 
 {
     local $ENV{PERLONJAVA_HOME} = $home;
@@ -75,6 +86,8 @@ ok(!-e $retired_pref,
     'retired PerlOnJava Test::Deep::JSON preference is removed');
 ok(!-e $retired_xml_pref,
     'retired PerlOnJava XML::Filter::GenericChunk preference is removed');
+ok(!-e $retired_http_pref,
+    'retired PerlOnJava HTTP::Response::Encoding preference is removed');
 
 open my $custom, '>', $retired_pref or die "$retired_pref: $!";
 print {$custom} <<'YAML';
