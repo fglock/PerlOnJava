@@ -581,10 +581,8 @@ sub _dump {
     }
     # \d here would treat "1\x{660}" as a safe decimal number
     elsif (defined &Data::Dumper::_perlonjava_numified_safe_decimal
-       and Data::Dumper::_perlonjava_numified_safe_decimal($val)) {
-      $out .= $val;
-    }
-    elsif ($val =~ /^(?:0|-?[1-9][0-9]{0,8})\z/) { # safe decimal number
+       ? Data::Dumper::_perlonjava_numified_safe_decimal($val)
+       : $val =~ /^(?:0|-?[1-9][0-9]{0,8})\z/) {
       $out .= $val;
     }
     else {                 # string
