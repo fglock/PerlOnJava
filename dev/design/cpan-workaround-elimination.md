@@ -284,9 +284,10 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Implement Phase 8's weak-reference lifetime, readonly-clone, scope-exit,
-   and deterministic destruction parity, continuing with the remaining
-   SQL::Translator failures.
+1. Continue Phase 8 with SQL::Translator's unchanged `t/24yaml.t` round-trip
+   mismatch (1/2 assertions pass). The source-first dependency inventory must
+   also include `Carp::Clan` and `Parse::RecDescent` before the complete suite
+   is used as the retirement gate; focused `t/13schema.t` already passes.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -763,6 +764,14 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   statement boundary. The unchanged focused test passes 2/2 on JVM and
   interpreter, and a source-first CPAN run passes all 42 files/1,268
   assertions.
+- A `CORE::GLOBAL::caller` override with prototype `;$` now leaves binary
+  concatenation outside an omitted optional argument. This fixes the standard
+  Perl parse of `caller.'::'`, used by YAML::Mo after Sub::Uplevel installs its
+  caller proxy. Regression `core_global_caller_concat.t` passes 2/2 under
+  standard Perl, JVM, and interpreter execution; `Sub::Uplevel` followed by
+  YAML now loads on the JVM backend. The full `make` gate passes. Interpreter
+  YAML still has a separate pre-existing compile-time import issue at its
+  first `has ... =>` declaration and is not folded into this parser fix.
 
 ### Open questions
 

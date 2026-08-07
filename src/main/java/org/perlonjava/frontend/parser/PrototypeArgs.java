@@ -208,6 +208,10 @@ public class PrototypeArgs {
                 next.text.equals("|.") ||
                 next.text.equals("^.") ||
                 next.text.equals("&.") ||
+                // Concatenation is binary-only. An optional named-unary call
+                // such as caller.'::' therefore has no argument and leaves
+                // the dot for the enclosing expression.
+                next.text.equals(".") ||
                 next.text.equals("==") ||
                 next.text.equals("!=") ||
                 next.text.equals(">") ||
