@@ -283,12 +283,14 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 
 ### Next steps
 
-1. Establish unchanged-suite baselines for the remaining Phase 5 targets:
-   Class::Method::Modifiers, Module::Install, and Term::ANSIColor::Markup.
-2. Use those failures to select the next control-flow or introspection blocker,
-   then make the shared lvalue analysis authoritative for both backends before
-   integrating lazy native `Want` support.
-3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+1. Split and retire the remaining independently justified Graph patch hunks,
+   starting with `defined(&sub)` and SCC return-shape parity.
+2. Remove Module::Install's explicit `authors` patch through glob-alias
+   introspection parity, then integrate lazy native `Want` support so
+   Term::ANSIColor::Markup can use its upstream lvalue accessors.
+3. Make the shared lvalue analysis authoritative for both backends and rerun
+   the unpatched Phase 5 target matrix.
+4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -403,8 +405,8 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   interpreter retains the named Carp caller frame. The existing
   `io_compress_regressions.t` and `carp_confess_named_frame.t` regressions pass,
   and the final full `make` gate passes 245 tests with 2 skipped.
-- Phase 5 Graph baseline initially passed 86/88 files, with all eight failures
-  in `t/59_dfs.t` and `t/62_bcc.t`: diagnostics named the caller `(eval)` where
+- Phase 5's patched Graph baseline initially passed 86/88 files, with all
+  eight failures in `t/59_dfs.t` and `t/62_bcc.t`: diagnostics named the caller `(eval)` where
   Graph expected `Graph::topological_sort`, `Graph::is_connected`, or
   `Graph::biconnectivity`. The defect was eval/interpreter frame alignment, not
   the anticipated nested map/grep return propagation.
@@ -414,8 +416,30 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   eval slot. Genuine outer eval callers remain `(eval)`.
 - Regression: `src/test/resources/unit/zz_eval_defined_named_caller.t` passes
   its four assertions under standard Perl, JVM, and interpreter backends. The
-  unchanged Graph 0.9735 suite now passes all 88 files and 9,256 assertions.
+  Graph 0.9735 suite with its existing source bundle passes all 88 files and
+  9,256 assertions.
   The full `make` gate passes 245 tests with 2 skipped.
+- The remaining Phase 5 target baselines also pass with their current patches:
+  Class::Method::Modifiers 2.15 passes 29 files/131 assertions without a
+  source patch; Module::Install 1.21 passes 35 files/546 assertions with its
+  explicit-`authors` patch; Term::ANSIColor::Markup 0.06 passes 4 files/11
+  assertions with its portable-accessor patch.
+- A pristine Graph extraction exposed the still-active patch surface. Cached
+  JVM method dispatch invoked resolved code directly and let a non-local
+  RETURN from nested map callbacks escape past the owning method. Both cache
+  hit and miss paths now consume that return at the normal method boundary
+  while preserving raw LVALUE context checks. Regression:
+  `src/test/resources/unit/zz_nested_map_return.t` passes 11 assertions under
+  standard Perl, JVM, and interpreter backends; unpatched `t/16_edges.t`
+  passes 48/48.
+- The explicit-loop `get_ids_by_paths` rewrites were removed from the
+  `AdjacencyMap.pm` and `AdjacencyMap-Light.pm` patches. Applying the reduced
+  patch bundle to pristine Graph 0.9735 sources passes all 88 files and 9,260
+  assertions. A fully unpatched run now reaches 82/88 files and identifies the
+  remaining independent gaps: deterministic attribute dumping,
+  `defined(&sub)`, SCC return shape, and Storable code references. The normal
+  `jcpan -t Graph` path refreshes the installed reduced patch copies and passes
+  all 88 files and 9,234 assertions.
 
 ### Open questions
 
