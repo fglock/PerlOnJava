@@ -283,9 +283,10 @@ Current phase: Phase 6, regex engine coverage.
 
 ### Next steps
 
-1. Reduce Regexp::Common's five remaining JVM failures: executable conditional
-   comments, declarative nested comments, IPv6, palindrome, and Spain postal
-   codes. Keep each defect separate from the completed recursion increment.
+1. Reduce Regexp::Common's two remaining declarative JVM failures: nested
+   comments and Spain postal codes. Its executable conditional-comment and
+   palindrome patterns remain callback-interface work rather than backend
+   mismatches.
 2. Re-run the complete isolated Regexp::Common matrix on the interpreter and
    JVM backends after each regex increment; direct execution of three upstream
    recursion files remains subject to the documented interpreter no-TAP
@@ -676,12 +677,21 @@ Current phase: Phase 6, regex engine coverage.
 - Regexp::Common's unchanged `test_balanced.t`, `test_sub.t`, and
   `test_sub_named.t` now pass 127/127, 20/20, and 5/5 respectively on the JVM
   backend. Its complete unchanged JVM matrix still reaches 73 files and
-  149,226 assertions, but failures fall from eight files to five: the three
-  recursion-dependent failures are eliminated, leaving only executable
-  conditional comments, nested comments, IPv6, palindrome, and Spain postal
-  codes. Direct interpreter execution of those three upstream files still
+  149,226 assertions, but failures initially fell from eight files to five:
+  the three recursion-dependent failures were eliminated. Direct interpreter
+  execution of those three upstream files still
   exits without TAP; the equivalent recursive semantics pass through the new
   cross-backend unit regression and are not misreported as upstream passes.
+- Perl branch-reset groups now retain native logical capture numbering through
+  a Java-to-Perl group map instead of exposing one group range per expanded
+  alternative. Regression `zz_branch_reset_capture.t` passes 14/14 under
+  standard Perl, JVM, and interpreter, including unequal alternatives,
+  optional captures, list context, and distinct trailing-capture sizing for
+  `@-` and `@+`. Regexp::Common's unchanged IPv6 suite consequently passes
+  159/159 on both PerlOnJava backends. The complete JVM matrix remains 73 files
+  and 149,226 assertions, with failures reduced again from five files to four:
+  executable conditional comments, executable palindrome recursion,
+  declarative nested comments, and Spain postal codes.
 
 ### Open questions
 

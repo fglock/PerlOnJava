@@ -60,7 +60,9 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
      */
     @Override
     public int size() {
-        if (mode == Id.LAST_MATCH_END || mode == Id.LAST_MATCH_START || mode == Id.CAPTURE) {
+        if (mode == Id.LAST_MATCH_START) {
+            return RuntimeRegex.matcherStartSize();
+        } else if (mode == Id.LAST_MATCH_END || mode == Id.CAPTURE) {
             // Retrieve the number of capturing groups in the Matcher
             return RuntimeRegex.matcherSize();
         } else {
