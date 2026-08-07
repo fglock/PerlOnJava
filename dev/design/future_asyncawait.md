@@ -438,16 +438,17 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      fdopen, duplicated-descriptor, and layered filehandle wrappers. Socket
      naming, accept, datagram routing, shutdown checks, and socket options now
      consistently reach the underlying socket.
-   - Added a five-assertion borrowed-listener regression validated first with
+   - Added a seven-assertion borrowed-listener regression validated first with
      system Perl and then with both PerlOnJava frontends; full `make` passes.
-     Files: `RuntimeIO.java`, `IOOperator.java`, and
-     `socket_borrowed_name.t`.
-   - PAGI's `t/49-systemd-activation.t` now identifies and marks the inherited
-     TCP listener, cleans `LISTEN_FDS`/`LISTEN_PID`, and accepts the client
-     connection. It then stalls in the asynchronous request/response path and
-     reaches the test's 180-second external timeout without further TAP.
-   - Next: isolate the PAGI post-accept event-loop stall, then continue the
-     remaining PAGI file/runtime gaps.
+     `IO::Poll` now uses the same wrapper-aware socket lookup, preventing a
+     borrowed listener from being treated as permanently readable and causing
+     a second blocking `accept`. Files: `RuntimeIO.java`, `IOOperator.java`,
+     `IOPoll.java`, and `socket_borrowed_name.t`.
+   - PAGI's `t/49-systemd-activation.t` now passes both subtests: it identifies
+     and marks the inherited TCP listener, cleans `LISTEN_FDS`/`LISTEN_PID`,
+     serves a request through IO::Async, and returns the expected 200 response
+     and body.
+   - Next: continue the remaining PAGI file/runtime gaps.
      Process-worker tests remain outside scope while PerlOnJava does not
      implement `fork`.
 3. Revisit native JVM state-machine lowering only if profiling identifies
