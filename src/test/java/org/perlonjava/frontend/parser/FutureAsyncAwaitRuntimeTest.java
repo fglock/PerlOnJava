@@ -208,6 +208,22 @@ class FutureAsyncAwaitRuntimeTest {
             $second->AWAIT_DONE(32);
             die "wrong repeated-await result\n" unless $twice->AWAIT_GET == 42;
 
+            async sub abandonment_identity { return await $_[0] }
+            async sub abandonment_outer {
+                return await abandonment_identity($_[0]);
+            }
+            my $abandoned_source = Future->new;
+            my $abandoned_result = abandonment_outer($abandoned_source);
+            undef $abandoned_result;
+            my $abandonment_warning = '';
+            {
+                local $SIG{__WARN__} = sub { $abandonment_warning .= join '', @_ };
+                $abandoned_source->AWAIT_DONE(1);
+            }
+            die "abandoned nested async chain reported wrong owner\n"
+                    unless $abandonment_warning =~
+                        /^Suspended async sub main::abandonment_outer lost its returning future /;
+
             my $failed = Future->new;
             my $failed_result = add_one($failed);
             $failed->AWAIT_FAIL("await failed\n");

@@ -8,6 +8,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 final class InterpreterSuspension extends RuntimeList {
     final SuspendedInterpreterFrame frame;
     final RuntimeScalar awaited;
+    private final RuntimeScalar awaitedOwner;
     final int destinationRegister;
     final int context;
 
@@ -15,11 +16,19 @@ final class InterpreterSuspension extends RuntimeList {
                           int destinationRegister, int context) {
         this.frame = frame;
         this.awaited = awaited;
+        this.awaitedOwner = new RuntimeScalar();
+        this.awaitedOwner.set(awaited);
         this.destinationRegister = destinationRegister;
         this.context = context;
     }
 
     void setResult(RuntimeBase value) {
         frame.registers[destinationRegister] = value;
+    }
+
+    void releaseAwaitedOwner() {
+        if (awaitedOwner.getDefinedBoolean()) {
+            awaitedOwner.set(new RuntimeScalar());
+        }
     }
 }

@@ -172,7 +172,8 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 ## Progress tracking
 
-### Current status: Phase 5 in progress; current focus is upstream-suite validation
+### Current status: Phase 5 in progress; upstream compatibility complete and
+ecosystem validation in progress
 
 ### Completed phases
 
@@ -342,17 +343,44 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
     or separately packaged Awaitable role/helper files.
   - Files: parser context and eval-string integration, `SignatureParser.java`,
     async runtime metadata, and `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 5d: Abandoned returning-Future ownership (2026-08-07)
+  - Replaced the readiness callback's strong ownership of the returned Future
+    with a weakened scalar probe, allowing suspended async frames to detect
+    when their caller has discarded the result.
+  - Added upstream-compatible suspended and failed-abandonment warnings and
+    terminal cleanup of abandoned frames.
+  - Added explicit ownership of the currently awaited Future while a frame is
+    suspended, preventing nested async chains from being mistaken for
+    abandonment before their outer owner is collected.
+  - Verified upstream `42unresolved.t` (14/14) on both frontends and added a
+    nested-chain regression; full `make` passes.
+  - Files: `FutureAsyncAwaitRuntime.java`, `InterpreterSuspension.java`, and
+    `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 5e: Awaitable role packaging (2026-08-07)
+  - Packaged the upstream-compatible `Future::AsyncAwait::Awaitable` Role::Tiny
+    contract and `Test::Future::AsyncAwait::Awaitable` conformance helper.
+  - Used Role::Tiny's direct role initialization/generator interface to avoid
+    relying on unsupported caller-sensitive typeglob exports.
+  - Verified the modules with system Perl syntax checks and upstream
+    `51awaitable-role.t`/`52awaitable-test.t` (9 assertions) on both frontends;
+    full `make` passes.
+  - Files: `Future/AsyncAwait/Awaitable.pm` and
+    `Test/Future/AsyncAwait/Awaitable.pm`.
+- [ ] Phase 5f: Ecosystem validation (in progress)
+  - The `Future` 0.52 suite reaches 784 tests on the feature branch. Three
+    cancellation/refcount assertions in `t/02cancel-pp.t` fail identically on
+    a clean `origin/master` build, confirming they are pre-existing and not an
+    async/await regression.
+  - `IO::Async`, `Net::Async::HTTP`, and PAGI validation remain to be run and
+    classified.
 
 ### Next steps
 
-1. Implement abandoned-returning-Future detection and diagnostics without
-   keeping the outer Future alive through readiness callbacks.
-2. Package and validate the pure-Perl Awaitable role/test helper where their
-   dependencies are supported, then rerun the applicable suite on both
-   frontends.
-3. Run timeout-wrapped Future and IO::Async ecosystem suites and classify any
+1. Run timeout-wrapped IO::Async ecosystem suites and classify any
    failures as async-runtime gaps, module-porting gaps, or unsupported features.
-4. Use those results to define the minimum native extension-hook ABI and decide
+2. Continue with Net::Async::HTTP and PAGI::Server where their dependency
+   stacks are available.
+3. Use those results to define the minimum native extension-hook ABI and decide
    whether selective interpreter routing remains the production lowering.
 
 ### Open questions
