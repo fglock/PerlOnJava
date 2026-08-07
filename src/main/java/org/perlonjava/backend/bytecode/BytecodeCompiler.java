@@ -4946,6 +4946,7 @@ public class BytecodeCompiler implements Visitor {
                         if (codeRef.type == RuntimeScalarType.CODE
                                 && codeRef.value instanceof RuntimeCode rc) {
                             rc.isSymbolicReference = true;
+                            rc.referenceOriginFqn = subName;
                         }
                     }
                     // For both \&name and \&$var (lexical subs), the & operator

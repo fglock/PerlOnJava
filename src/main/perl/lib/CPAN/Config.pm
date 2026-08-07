@@ -47,7 +47,6 @@ sub _bootstrap_prefs {
         'Pod-Parser.yml'             => 'PerlOnJava/CpanDistroprefs/Pod-Parser.yml',
         'POD-Tested.yml'             => 'PerlOnJava/CpanDistroprefs/POD-Tested.yml',
         'ExtUtils-ParseXS.yml'       => 'PerlOnJava/CpanDistroprefs/ExtUtils-ParseXS.yml',
-        'Module-Install.yml'         => 'PerlOnJava/CpanDistroprefs/Module-Install.yml',
         'Class-Trait.yml'            => 'PerlOnJava/CpanDistroprefs/Class-Trait.yml',
         'Exception-Class.yml'        => 'PerlOnJava/CpanDistroprefs/Exception-Class.yml',
         'Module-Pluggable-Ordered.yml' => 'PerlOnJava/CpanDistroprefs/Module-Pluggable-Ordered.yml',
@@ -170,6 +169,7 @@ sub _bootstrap_prefs {
         ExtUtils-CBuilder.yml
         IPC-Run.yml
         IPC-Run3.yml
+        Module-Install.yml
         Module-Pluggable.yml
         Params-ValidationCompiler.yml
         Path-Tiny.yml
@@ -281,8 +281,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/String-ShellQuote-1.04/SkipForkScriptTests.patch' ],
         [ 'IO-All/SkipForkTests.patch',
           'PerlOnJava/CpanPatches/IO-All-0.87/SkipForkTests.patch' ],
-        [ 'Module-Install/ExplicitAuthorsMethod.patch',
-          'PerlOnJava/CpanPatches/Module-Install-1.21/ExplicitAuthorsMethod.patch' ],
         [ 'Module-Pluggable-Ordered/LimitFixturePlugins.patch',
           'PerlOnJava/CpanPatches/Module-Pluggable-Ordered-1.5/LimitFixturePlugins.patch' ],
         [ 'LWP-Protocol-https/SkipForkProxyTest.patch',
@@ -333,6 +331,7 @@ sub _bootstrap_patches {
         'Graph/Graph.pm.patch',
         'Graph/AdjacencyMap-Light.pm.patch',
         'Graph/AdjacencyMap.pm.patch',
+        'Module-Install/ExplicitAuthorsMethod.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;

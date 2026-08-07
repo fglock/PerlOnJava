@@ -4,6 +4,7 @@ import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
@@ -206,8 +207,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 || codeContainer.type != CODE
                 || !(codeContainer.value instanceof RuntimeCode existingCode)
                 || existingCode.defined()
-                || !existingCode.isDeclared
-                || !existingCode.isSymbolicReference
+                || (!(existingCode.isDeclared && existingCode.isSymbolicReference)
+                    && !existingCode.hasForwardGlobAlias)
                 || value == null
                 || value.type != CODE
                 || !(value.value instanceof RuntimeCode newCode)
@@ -229,7 +230,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return false;
         }
 
+        List<RuntimeCode> forwardAliases = existingCode.forwardGlobAliases;
         existingCode.adoptDefinitionFrom(newCode);
+        for (RuntimeCode alias : forwardAliases) {
+            if (alias != existingCode) {
+                alias.adoptDefinitionFrom(newCode);
+            }
+        }
         attachCoderefToNamedGlob(existingCode, globName);
         existingCode.hadStashRef = true;
         existingCode.stashRefCount++;
@@ -336,8 +343,72 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case READONLY_SCALAR:
                 return set((RuntimeScalar) value.value);
             case CODE:
+                if (value.value instanceof RuntimeCode aliasedCode
+                        && !aliasedCode.defined()) {
+                    String sourceName = aliasedCode.referenceOriginFqn;
+                    if (sourceName == null
+                            && aliasedCode.packageName != null
+                            && aliasedCode.subName != null
+                            && !aliasedCode.subName.isEmpty()) {
+                        sourceName = aliasedCode.packageName + "::" + aliasedCode.subName;
+                    }
+                    if (sourceName == null || sourceName.equals(this.globName)) {
+                        for (var entry : GlobalVariable.globalCodeRefs.entrySet()) {
+                            if (!entry.getKey().equals(this.globName)
+                                    && entry.getValue() != null
+                                    && entry.getValue().value == aliasedCode) {
+                                sourceName = entry.getKey();
+                                break;
+                            }
+                        }
+                    }
+                    if (sourceName != null && !sourceName.equals(this.globName)) {
+                        // Bytecode constants retain the parse-time CV across the
+                        // interpreter's runtime-global reset. Rebind an undefined
+                        // named reference to the live source slot so both glob
+                        // names observe the CV body installed later.
+                        RuntimeScalar sourceContainer =
+                                GlobalVariable.getGlobalCodeRefForFreshLookup(sourceName);
+                        if (sourceContainer.value instanceof RuntimeCode sourceCode) {
+                            sourceCode.hasForwardGlobAlias = true;
+                            value = sourceContainer;
+                        } else {
+                            aliasedCode.hasForwardGlobAlias = true;
+                        }
+                    }
+                }
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+
+                if (value.value instanceof RuntimeCode sourceCode
+                        && !sourceCode.defined()
+                        && sourceCode.hasForwardGlobAlias
+                        && sourceCode.requiresForwardGlobAliasGroup
+                        && codeContainer.value instanceof RuntimeCode targetCode
+                        && targetCode != sourceCode
+                        && !targetCode.defined()) {
+                    List<RuntimeCode> aliasGroup = sourceCode.forwardGlobAliases;
+                    if (aliasGroup.isEmpty()) {
+                        aliasGroup.add(sourceCode);
+                    }
+                    if (targetCode.forwardGlobAliases != aliasGroup) {
+                        for (RuntimeCode alias : targetCode.forwardGlobAliases) {
+                            if (!aliasGroup.contains(alias)) {
+                                aliasGroup.add(alias);
+                            }
+                        }
+                    }
+                    if (!aliasGroup.contains(targetCode)) {
+                        aliasGroup.add(targetCode);
+                    }
+                    for (RuntimeCode alias : aliasGroup) {
+                        alias.hasForwardGlobAlias = true;
+                        alias.forwardGlobAliases = aliasGroup;
+                    }
+                    // Preserve the target's cached placeholder; the shared
+                    // alias group will populate it when either name is defined.
+                    value = codeContainer;
+                }
 
                 if (fillForwardCodeRefInPlace(this.globName, codeContainer, value)) {
                     InheritanceResolver.invalidateCache();
