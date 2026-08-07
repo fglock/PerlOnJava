@@ -54,6 +54,12 @@ public class Socket extends PerlModuleBase {
     public static final int IPPROTO_IPV6 = IS_MAC ? 41 : IS_WINDOWS ? 41 : 41;
     public static final int IP_TOS = IS_MAC ? 3 : 1;
     public static final int IP_TTL = IS_MAC ? 4 : 2;
+    // RFC 1349 type-of-service bits. Some Socket builds omit these macros even
+    // when the platform headers define them; their wire values are portable.
+    public static final int IPTOS_LOWDELAY = 0x10;
+    public static final int IPTOS_THROUGHPUT = 0x08;
+    public static final int IPTOS_RELIABILITY = 0x04;
+    public static final int IPTOS_MINCOST = 0x02;
     public static final int SHUT_RD = 0;
     public static final int SHUT_WR = 1;
     public static final int SHUT_RDWR = 2;
@@ -139,6 +145,10 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("IPPROTO_IPV6", "");
             socket.registerMethod("IP_TOS", "");
             socket.registerMethod("IP_TTL", "");
+            socket.registerMethod("IPTOS_LOWDELAY", "");
+            socket.registerMethod("IPTOS_THROUGHPUT", "");
+            socket.registerMethod("IPTOS_RELIABILITY", "");
+            socket.registerMethod("IPTOS_MINCOST", "");
             socket.registerMethod("SHUT_RD", "");
             socket.registerMethod("SHUT_WR", "");
             socket.registerMethod("SHUT_RDWR", "");
@@ -779,6 +789,22 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList IP_TTL(RuntimeArray args, int ctx) {
         return new RuntimeScalar(IP_TTL).getList();
+    }
+
+    public static RuntimeList IPTOS_LOWDELAY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IPTOS_LOWDELAY).getList();
+    }
+
+    public static RuntimeList IPTOS_THROUGHPUT(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IPTOS_THROUGHPUT).getList();
+    }
+
+    public static RuntimeList IPTOS_RELIABILITY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IPTOS_RELIABILITY).getList();
+    }
+
+    public static RuntimeList IPTOS_MINCOST(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IPTOS_MINCOST).getList();
     }
 
     public static RuntimeList SHUT_RD(RuntimeArray args, int ctx) {

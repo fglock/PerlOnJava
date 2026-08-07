@@ -403,8 +403,17 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 ### Next steps
 
-1. Track Socket IPTOS portability needed by Net::Async::HTTP as a separate
-   module-porting task.
+1. [Completed 2026-08-07] Track Socket IPTOS portability needed by
+   Net::Async::HTTP as a separate module-porting task.
+   - Added the four portable RFC 1349 type-of-service constants required by
+     Net::Async::HTTP to PerlOnJava's bundled `Socket` implementation.
+   - Re-ran Net::Async::HTTP 0.50: the suite now reaches all 41 test programs
+     without IPTOS import errors. The run executes 27 assertions (23 pass) and
+     leaves 30 programs failing at the separately tracked socketpair, bind,
+     and socket-I/O boundaries.
+   - Kept this as a post-completion ecosystem follow-up rather than part of the
+     async runtime; files: `Socket.java`, `Socket.pm`, and
+     `socket_iptos_constants.t`.
 2. Track PAGI's Unix-socket, inherited-descriptor, process-activation, and
    remaining file/runtime gaps separately from async/await.
 3. Revisit native JVM state-machine lowering only if profiling identifies
