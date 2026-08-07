@@ -784,6 +784,49 @@ sub _perlonjava_skip_dependency_tests {
     return $reqtype ne "c";
 }
 
+sub _perlonjava_missing_modules_from_test_output {
+    my ($output) = @_;
+    return unless defined $output && length $output;
+
+    my %seen;
+    my @modules;
+    while ($output =~ /(?:\A|\n)Can't locate ([A-Za-z_][A-Za-z0-9_]*(?:\/[A-Za-z_][A-Za-z0-9_]*)*\.pm) in \@INC\b/g) {
+        my $module = $1;
+        $module =~ s{/}{::}g;
+        $module =~ s{\.pm\z}{};
+        push @modules, $module unless $seen{$module}++;
+    }
+    return @modules;
+}
+
+sub _perlonjava_capture_test_command {
+    my ($system) = @_;
+    require File::Temp;
+
+    my ($capture, $capture_path) = File::Temp::tempfile(
+        'perlonjava-cpan-test-XXXXXX',
+        TMPDIR => 1,
+        UNLINK => 1,
+    );
+    my $tests_ok;
+    {
+        local *STDOUT = $capture;
+        local *STDERR = $capture;
+        $tests_ok = system($system) == 0;
+    }
+    seek $capture, 0, 0;
+    my $output = do { local $/; <$capture> };
+    close $capture;
+    return ($tests_ok, defined($output) ? $output : '');
+}
+
+sub _perlonjava_missing_module_retry_available {
+    my ($self) = @_;
+    return !defined($self->{perlonjava_missing_module_retry_command})
+        || $self->{perlonjava_missing_module_retry_command}
+            != $CPAN::CurrentCommandId;
+}
+
 #-> sub CPAN::Distribution::satisfy_configure_requires ;
 # return values: 1 means configure_require is satisfied;
 # and 0 means not satisfied (and maybe queued)
@@ -4345,8 +4388,42 @@ sub test {
         }
     } # FORK
     } else {
-        # No fork available - run tests directly via system()
-        $tests_ok = system($system) == 0;
+        # No fork is available on PerlOnJava. Capture and replay the complete
+        # output so a single canonical missing-module failure can be promoted
+        # to a test prerequisite below.
+        my $test_output;
+        ($tests_ok, $test_output) =
+            CPAN::Distribution::_perlonjava_capture_test_command($system);
+        $CPAN::Frontend->myprint($test_output) if length $test_output;
+
+        if (!$tests_ok && $self->_perlonjava_missing_module_retry_available) {
+            my @missing =
+                CPAN::Distribution::_perlonjava_missing_modules_from_test_output(
+                    $test_output,
+                );
+            if (@missing) {
+                $self->{perlonjava_missing_module_retry_command} =
+                    $CPAN::CurrentCommandId;
+                $self->{prereq_pm}{test_requires} ||= {};
+                $self->{prereq_pm}{test_requires}{$_} ||= 0 for @missing;
+                my $follow = eval {
+                    $self->follow_prereqs(
+                        'test_requires_later',
+                        map { [$_, 't', 0] } @missing,
+                    );
+                };
+                if ($follow) {
+                    $CPAN::Frontend->myprint(
+                        "Retrying tests once after canonical missing modules: "
+                        . join(', ', @missing) . "\n"
+                    );
+                    $self->store_persistent_state;
+                    $self->post_test();
+                    return;
+                }
+                die $@ if $@;
+            }
+        }
     }
 
     $self->introduce_myself;

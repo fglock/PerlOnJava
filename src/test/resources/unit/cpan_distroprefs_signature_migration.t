@@ -27,6 +27,8 @@ my $prefs_dir = File::Spec->catdir($home, 'cpan', 'prefs');
 make_path($prefs_dir);
 my $logger_pref = File::Spec->catfile($prefs_dir, 'Logger-Simple.yml');
 my $retired_pref = File::Spec->catfile($prefs_dir, 'Test-Deep-JSON.yml');
+my $retired_xml_pref =
+    File::Spec->catfile($prefs_dir, 'XML-Filter-GenericChunk.yml');
 open my $legacy, '>', $logger_pref or die "$logger_pref: $!";
 print {$legacy} <<'YAML';
 ---
@@ -46,6 +48,15 @@ match:
   distribution: "^MOTEMEN/Test-Deep-JSON-"
 YAML
 close $retired;
+open my $retired_xml, '>', $retired_xml_pref
+    or die "$retired_xml_pref: $!";
+print {$retired_xml} <<'YAML';
+---
+comment: PerlOnJava legacy dependency workaround
+match:
+  distribution: "^PHISH/XML-Filter-GenericChunk-"
+YAML
+close $retired_xml;
 
 {
     local $ENV{PERLONJAVA_HOME} = $home;
@@ -62,6 +73,8 @@ unlike($updated_text, qr/commandline:/,
     'legacy shell-assignment commandline is removed');
 ok(!-e $retired_pref,
     'retired PerlOnJava Test::Deep::JSON preference is removed');
+ok(!-e $retired_xml_pref,
+    'retired PerlOnJava XML::Filter::GenericChunk preference is removed');
 
 open my $custom, '>', $retired_pref or die "$retired_pref: $!";
 print {$custom} <<'YAML';
