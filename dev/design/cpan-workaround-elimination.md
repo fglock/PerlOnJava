@@ -284,20 +284,17 @@ Current phase: Phase 7, CPAN metadata and process services.
 
 ### Next steps
 
-1. Continue the Phase 7 metadata inventory with
-   `XML-Filter-GenericChunk.yml` and `HTTP-Response-Encoding.yml`, verifying
-   each distribution's current static and generated metadata in a clean
-   source-first install before retiring its dependency workaround.
-2. Define and test the one-retry boundary for canonical missing-module test
-   failures not covered by authoritative META/MYMETA reconciliation.
-3. Replace CPAN-FindDependencies' Unix `system` patch with the argv-safe Java
+1. Evaluate `HTTP-Response-Encoding.yml` against its current static and
+   generated metadata in a clean source-first install, then retire the patch
+   if the dependency graph is authoritative without it.
+2. Replace CPAN-FindDependencies' Unix `system` patch with the argv-safe Java
    process service, including output capture, deadlines, and process-tree
    termination.
-4. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
+3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-5. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -715,6 +712,21 @@ Current phase: Phase 7, CPAN metadata and process services.
   regression passes 5/5. A fresh isolated `PERLONJAVA_HOME` source install
   applies no preference, installs all three dependencies, and passes the
   unchanged target suite (2 files/7 assertions). The full `make` gate passes.
+- Phase 7 now has one bounded missing-module test retry. PerlOnJava captures
+  and replays the first no-fork test command's complete output, accepts only
+  canonical `Can't locate path/to/Module.pm in @INC` diagnostics, deduplicates
+  their normalized module names, queues them as test prerequisites, and
+  revisits that distribution once. A second failure and every noncanonical
+  assertion failure remain ordinary failures. Regression
+  `cpan_prerequisite_phases.t` passes 23/23 under standard Perl, JVM, and
+  interpreter execution.
+- `XML-Filter-GenericChunk.yml` is retired. Upstream META supplies
+  `XML::LibXML` and `XML::SAX::Base`; an isolated no-policy first run exposed
+  the two genuinely undeclared test-time modules, `XML::SAX::DocumentLocator`
+  and `XML::NamespaceSupport`. The bounded retry installed XML::SAX and its
+  namespace dependency, revisited the unchanged target exactly once, and
+  passed all 3 files/20 assertions. Bootstrap migration removes stale signed
+  copies of the former four-module preference.
 
 ### Open questions
 

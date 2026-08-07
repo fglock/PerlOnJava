@@ -147,6 +147,7 @@ sub _bootstrap_prefs {
         Object-InsideOut.yml
         String-Print.yml
         WWW-RobotRules.yml
+        XML-Filter-GenericChunk.yml
         Aliased.yml
         Carp-Assert.yml
         Class-Method-Modifiers.yml

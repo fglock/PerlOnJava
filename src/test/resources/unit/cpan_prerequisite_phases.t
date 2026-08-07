@@ -182,6 +182,37 @@ is(
     'configure requirement receives configure queue type',
 );
 
+is_deeply(
+    [ CPAN::Distribution::_perlonjava_missing_modules_from_test_output(<<'OUTPUT') ],
+Can't locate XML/SAX/DocumentLocator.pm in @INC (you may need to install the XML::SAX::DocumentLocator module)
+Compilation failed in require
+Can't locate XML/NamespaceSupport.pm in @INC (you may need to install the XML::NamespaceSupport module)
+Can't locate XML/SAX/DocumentLocator.pm in @INC (duplicate)
+OUTPUT
+    [ qw(XML::SAX::DocumentLocator XML::NamespaceSupport) ],
+    'canonical missing-module diagnostics are deduplicated and normalized',
+);
+
+is_deeply(
+    [ CPAN::Distribution::_perlonjava_missing_modules_from_test_output(<<'OUTPUT') ],
+Could not load Optional::Feature
+Can't locate malformed-name.pm in @INC
+not ok 1 - ordinary test failure
+OUTPUT
+    [],
+    'noncanonical test failures do not trigger dependency discovery',
+);
+
+{
+    local $CPAN::CurrentCommandId = 42;
+    my $retry_dist = bless {}, 'CPAN::Distribution';
+    ok($retry_dist->_perlonjava_missing_module_retry_available,
+        'missing-module retry starts available for a CPAN command');
+    $retry_dist->{perlonjava_missing_module_retry_command} = 42;
+    ok(!$retry_dist->_perlonjava_missing_module_retry_available,
+        'missing-module retry is bounded to one attempt per CPAN command');
+}
+
 CPAN::Queue->nullify_queue;
 CPAN::Queue->jumpqueue(
     { qmod => 'Local::TestParent', reqtype => 't', optional => 0 },
