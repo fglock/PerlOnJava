@@ -216,27 +216,19 @@ public class EmitStatement {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
         }
-        // Phase 3: Full flush of ALL pending mortal decrements.
-        // Unlike the previous pushMark/popAndFlush approach, this processes ALL
-        // pending entries — including deferred decrements from subroutine scope
-        // exits that occurred within this block. Those entries were previously
-        // "orphaned" below the mark and never processed, causing:
-        //   - Memory leaks (DESTROY never fires)
-        //   - Premature DESTROY (deferred entries flushed at wrong time by
-        //     setLargeRefCounted, which processes ALL pending entries)
+        // Drain mortal decrements owned by the current function, including entries
+        // left by nested subroutine scope exits. Keep entries below the function's
+        // mark intact: those belong to the caller and may be return values still
+        // awaiting capture in a surrounding expression. A full flush here can, for
+        // example, destroy the first constructor result while evaluating the second
+        // element of a caller's list assignment.
         //
-        // Full flush is safe here because by the time a scope exits:
-        //   1. All return values from inner method calls have been captured
-        //      (via setLargeRefCounted, which already flushes) or discarded.
-        //   2. The pending entries are only deferred decrements that should
-        //      have been processed earlier (Perl 5 FREETMPS at statement
-        //      boundaries), not entries that need to be preserved.
         // Flush when requested (non-sub, non-do blocks) even without my-variables,
         // because pending entries may exist from inner sub scope exits.
         if (flush) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "flush",
+                    "flushAboveMark",
                     "()V",
                     false);
         }
@@ -322,7 +314,7 @@ public class EmitStatement {
         }
         ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/MortalList",
-                "flush",
+                "flushAboveMark",
                 "()V",
                 false);
     }

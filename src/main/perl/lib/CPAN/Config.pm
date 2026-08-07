@@ -61,7 +61,6 @@ sub _bootstrap_prefs {
         'Parse-RecDescent.yml'       => 'PerlOnJava/CpanDistroprefs/Parse-RecDescent.yml',
         'Crypt-URandom.yml'          => 'PerlOnJava/CpanDistroprefs/Crypt-URandom.yml',
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
-        'Graph.yml'                  => 'PerlOnJava/CpanDistroprefs/Graph.yml',
         'Class-DBI.yml'              => 'PerlOnJava/CpanDistroprefs/Class-DBI.yml',
         'XML-Filter-GenericChunk.yml' => 'PerlOnJava/CpanDistroprefs/XML-Filter-GenericChunk.yml',
         'XML-TreePP.yml'             => 'PerlOnJava/CpanDistroprefs/XML-TreePP.yml',
@@ -167,6 +166,7 @@ sub _bootstrap_prefs {
         Test-Deep.yml
         Test-File-ShareDir.yml
         Test2-Plugin-NoWarnings.yml
+        Graph.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;
@@ -288,8 +288,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Class-Trait-0.33/SkipObsoleteModPerlWarningTest.patch' ],
         [ 'XML-TreePP/TreePP.pm.patch',
           'PerlOnJava/CpanPatches/XML-TreePP-0.43/TreePP.pm.patch' ],
-        [ 'Graph/AdjacencyMap.pm.patch',
-          'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap.pm.patch' ],
         [ 'Term-ANSIColor-Markup/PortableAccessors.patch',
           'PerlOnJava/CpanPatches/Term-ANSIColor-Markup-0.06/PortableAccessors.patch' ],
         [ 'LRU-Cache/PurePerl.patch',
@@ -308,6 +306,7 @@ sub _bootstrap_patches {
         'DBI/PurePerl.pm.patch',
         'Graph/Graph.pm.patch',
         'Graph/AdjacencyMap-Light.pm.patch',
+        'Graph/AdjacencyMap.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;
