@@ -131,26 +131,15 @@ Blocker classes:
    - Added `get_addr_info` alias to `getaddrinfo` to satisfy older
      `Net::Server::Proto` import behavior during early triage.
 
-2. **Net::Server distropref + patch bootstrap**
-   - File: `src/main/perl/lib/CPAN/Config.pm`
-   - Added bundled distropref `Net-Server.yml` and patch bootstrap entry for:
-     - `Net-Server-2.018/Proto.pm.patch`
+2. **Net::Server compiler compatibility**
+   - File: `src/main/java/org/perlonjava/backend/jvm/EmitLogicalOperator.java`
+   - Preserved parenthesized scalar lvalues for nested logical assignments.
+   - Retired `Proto.pm.patch`; the source patch created invalid import stubs
+     and is no longer required.
+   - Replaced it with a test-only distropref that skips fork-dependent programs
+     before Net::Server emits a failing `ok(can_fork())` assertion.
 
-3. **Net::Server::Proto export-list patch**
-   - File: `src/main/perl/lib/CPAN/Config.pm` (inline patch payload in `_bootstrap_patches`)
-   - Added missing helper symbols to `@EXPORT_OK`:
-     - `get_addr_info`
-     - `safe_name_info`
-     - `parse_info`
-     - `object`
-     - `ipv6_package`
-
-4. **Force-installed patched Net::Server**
-   - Command: `./jcpan -fi Net::Server`
-   - Reason: ensure patched `Net::Server::Proto.pm` is actually installed to
-     `~/.perlonjava/lib/` even when upstream Net::Server test suite remains red.
-
-5. **CRLF scalar export parity**
+3. **CRLF scalar export parity**
    - File: `src/main/perl/lib/Socket.pm`
    - Added scalar exports and values:
      - `$CR`, `$LF`, `$CRLF`
@@ -179,6 +168,17 @@ timeout 5400 make > /tmp/make_starman_final.log 2>&1
 
 - Exit: `0`
 
+Net::Server verification after retiring the source patch:
+
+```bash
+timeout 600 ./jcpan -t Net::Server::HTTP
+```
+
+- `Result: PASS`
+- `Files=34, Tests=130`
+- `Options.t`, `Port_Configuration.t`, `Server_Single.t`, and
+  `Server_Thread.t` run normally; fork-dependent programs skip.
+
 ## Progress Tracking
 
 ### Current Status: Completed and passing
@@ -189,17 +189,18 @@ timeout 5400 make > /tmp/make_starman_final.log 2>&1
 - [x] Phase 2: Dependency and root-cause classification (2026-05-08)
 - [x] Phase 3: Targeted fix streams (2026-05-08)
 - [x] Phase 4: Full verification and documentation (2026-05-08)
+- [x] Phase 5: Remove obsolete Net::Server source patch (2026-08-07)
+  - Fixed parenthesized logical-assignment lvalues in the JVM compiler.
+  - Verified pristine `t/Options.t` passes on both JVM and interpreter backends.
+  - Added bootstrap retirement for the old source patch and a fork-test skip.
 
 ### Next Steps
 
-1. If desired, reduce noisy `Net::Server::Proto` redefinition/prototype warnings.
-2. Optionally add a dedicated regression test for `IO::Socket qw(:crlf)` scalar exports.
-3. Keep `Net-Server.yml` distropref and patch synced if upstream Net::Server version changes.
+1. Optionally add a dedicated regression test for `IO::Socket qw(:crlf)` scalar exports.
+2. Keep the unmodified Net::Server module sources in CPAN regression coverage.
 
 ### Open Questions
 
-- Should we suppress known benign `Net::Server::Proto` redefinition warnings to
-  reduce log noise in CPAN runs?
 - Do we want a distropref for Starman itself to explicitly annotate expected
   `fork`-related skips in test output?
 

@@ -234,8 +234,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/DBI-1.647/PurePerl.pm.patch' ],
         [ 'Exception-Class/GeneratedSubclassVersion.patch',
           'PerlOnJava/CpanPatches/Exception-Class-1.45/GeneratedSubclassVersion.patch' ],
-        [ 'Net-Server/Proto.pm.patch',
-          'PerlOnJava/CpanPatches/Net-Server-2.018/Proto.pm.patch' ],
+        [ 'Net-Server/SkipForkTests.patch',
+          'PerlOnJava/CpanPatches/Net-Server-2.018/SkipForkTests.patch' ],
         [ 'Device-SerialPort/NoXsBitsFallback.patch',
           'PerlOnJava/CpanPatches/Device-SerialPort-1.04/NoXsBitsFallback.patch' ],
         [ 'CPAN-FindDependencies/MakeMaker.pm.patch',
@@ -321,6 +321,7 @@ sub _bootstrap_patches {
     for my $rel (
         'Test-FailWarnings-0.008/CallerOrigin.patch',
         'DateTime-Format-CLDR-1.19/ByteSafePatternLiterals.patch',
+        'Net-Server/Proto.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;

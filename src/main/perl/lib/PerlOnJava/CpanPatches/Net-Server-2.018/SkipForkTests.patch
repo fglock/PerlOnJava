@@ -1,0 +1,12 @@
+--- t/NetServerTest.pm.orig
++++ t/NetServerTest.pm
+@@ -43,6 +43,10 @@ sub prepare_test {
+     my $args = shift || {};
+     my $N = $args->{'n_tests'} || die "Missing n_tests";
++    if (!$args->{'plan_only'} && !$args->{'threads'} && !can_fork()) {
++        print "1..0 # SKIP Fork doesn't work on this platform\n";
++        exit;
++    }
+     print "1..$N\n";
+     %env = map {/NET_SERVER_TEST_(\w+)/; lc($1) => $ENV{$_}} grep {/^NET_SERVER_TEST_\w+$/} keys %ENV;
+     $env{'_ok_N'} = $N;
