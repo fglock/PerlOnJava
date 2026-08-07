@@ -238,6 +238,13 @@ public class ExceptionFormatter {
                             if (stackTrace.isEmpty()) {
                                 firstFrameFromInterpreter = true;
                             }
+                        } else {
+                            // Keep the execution backend attached to the
+                            // formatted frame. RuntimeCode.caller() needs this
+                            // after synthetic/eval frame insertion, where a
+                            // separately reconstructed Java-class list can no
+                            // longer be assumed to have identical indexes.
+                            entry.add("interpreter");
                         }
                         // Ordinary interpreter frames from tokenIndex/PC represent
                         // the sub's OWN location (like JVM frames), so caller()
