@@ -11,6 +11,7 @@ import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.astnode.ArrayLiteralNode;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.astnode.HashLiteralNode;
+import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.TernaryOperatorNode;
@@ -163,6 +164,13 @@ public class EmitLogicalOperator {
     }
 
     private static Node scalarizeSingleElementSliceLvalue(Node left) {
+        // Parentheses are represented as a one-element ListNode in some nested
+        // expression shapes.  Perl still treats ($scalar) as the scalar lvalue;
+        // emitting the list node directly leaves a RuntimeList on the stack and
+        // makes the scalar-only logical-assignment bytecode unverifiable.
+        while (left instanceof ListNode list && list.elements.size() == 1) {
+            left = list.elements.get(0);
+        }
         if (!(left instanceof BinaryOperatorNode access)) {
             return left;
         }

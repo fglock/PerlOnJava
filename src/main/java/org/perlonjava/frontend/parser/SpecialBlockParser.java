@@ -11,7 +11,9 @@ import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.BitSet;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
@@ -26,6 +28,15 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
 public class SpecialBlockParser {
 
     private static ScopedSymbolTable symbolTable = new ScopedSymbolTable();
+
+    /**
+     * The enclosing parser scope that a running BEGIN/use callback is allowed
+     * to mutate. executePerlAST compiles the BEGIN wrapper with a snapshot, so
+     * compiler-facing XS replacements must not add declarations to that
+     * disposable snapshot.
+     */
+    private static final ThreadLocal<Deque<ScopedSymbolTable>> compileTimeMutationScopes =
+            ThreadLocal.withInitial(ArrayDeque::new);
 
     private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
         Stack<BitSet> copy = new Stack<>();
@@ -48,6 +59,11 @@ public class SpecialBlockParser {
 
     public static ScopedSymbolTable getCurrentScope() {
         return symbolTable;
+    }
+
+    public static ScopedSymbolTable getCompileTimeMutationScope() {
+        Deque<ScopedSymbolTable> scopes = compileTimeMutationScopes.get();
+        return scopes.isEmpty() ? symbolTable : scopes.peek();
     }
 
     public static void setCurrentScope(ScopedSymbolTable st) {
@@ -361,6 +377,7 @@ public class SpecialBlockParser {
         }
         try {
             setCurrentScope(parser.ctx.symbolTable);
+            compileTimeMutationScopes.get().push(parser.ctx.symbolTable);
             // Mark wrapper infrastructure nodes to skip DEBUG opcodes and source location mapping.
             // Skip all nodes EXCEPT the last one (the actual ->() call or anon sub).
             // The last node needs source location mapping so that caller() inside BEGIN blocks
@@ -387,6 +404,13 @@ public class SpecialBlockParser {
                         contextType);
             } finally {
                 CallerStack.pop();
+                Deque<ScopedSymbolTable> scopes = compileTimeMutationScopes.get();
+                if (!scopes.isEmpty()) {
+                    scopes.pop();
+                }
+                if (scopes.isEmpty()) {
+                    compileTimeMutationScopes.remove();
+                }
             }
         } catch (PerlExitException e) {
             // exit() inside BEGIN block should terminate the program, not cause compilation error

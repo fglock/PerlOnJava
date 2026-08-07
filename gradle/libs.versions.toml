@@ -5,6 +5,7 @@ commons-compress = "1.28.0"
 commons-csv = "1.14.1"
 icu4j = "78.3"
 junit-jupiter = "6.1.2"
+jsoup = "1.22.2"
 snakeyaml-engine = "3.0.1"
 sqlite-jdbc = "3.53.2.0"
 tomlj = "1.1.1"
@@ -20,6 +21,7 @@ icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit-jupiter" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 snakeyaml-engine = { module = "org.snakeyaml:snakeyaml-engine", version.ref = "snakeyaml-engine" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }

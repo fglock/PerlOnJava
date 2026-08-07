@@ -23,6 +23,8 @@ These modules have optimized Java implementations built into PerlOnJava:
 | Digest::SHA | DigestSHA.java | - | Uses Java MessageDigest |
 | Time::HiRes | TimeHiRes.java | - | Uses System.nanoTime() |
 | DBI | Dbi.java | - | JDBC backend |
+| Exporter::Lexical | ExporterLexical.java | 0.02 | Installs lexical subs into the enclosing compile-time scope |
+| HTML::Content::Extractor | HTMLContentExtractor.java | 0.17 | Uses jsoup's HTML5 parser with a small legacy tree-compatibility layer |
 
 ## Modules with PP Fallbacks or Shims
 

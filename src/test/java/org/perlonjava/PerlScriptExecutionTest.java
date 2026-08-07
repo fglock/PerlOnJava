@@ -163,7 +163,13 @@ public class PerlScriptExecutionTest {
                     // Tests known to be much slower than the rest. Use forward
                     // slashes; we match against both '/' and '\' separators.
                     final List<String> HEAVY_TESTS = List.of(
-                        "unit/code_too_large.t"
+                        "unit/code_too_large.t",
+                        // Compiler-integration fixtures are kept in the dedicated
+                        // shard so adding them does not reshuffle every later test
+                        // across the state-sensitive round-robin shards.
+                        "unit/exporter_lexical_compile_scope.t",
+                        "unit/html_content_extractor_jsoup.t",
+                        "unit/jvm_eval_nested_compound_assignment.t"
                     );
                     java.util.function.Predicate<String> isHeavy = s -> {
                         String norm = s.replace('\\', '/');
