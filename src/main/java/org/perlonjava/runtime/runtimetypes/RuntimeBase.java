@@ -68,6 +68,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean isPackageGlobalRoot = false;
 
     /**
+     * An owned, non-empty aggregate stored in this object's hash was explicitly
+     * replaced with an empty aggregate. Callback APIs use this operation to break
+     * closure cycles before returning. Once observed, nested Perl call depth
+     * must not by itself keep a weakened probe alive; real roots still do.
+     */
+    public boolean clearedOwnedAggregateElement = false;
+
+    /**
      * Number of closures that capture this aggregate lexical directly
      * (currently RuntimeArray / RuntimeHash pads). While positive, scope-exit
      * cleanup of the aggregate's contents is deferred until the last closure

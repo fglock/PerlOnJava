@@ -725,6 +725,21 @@ public class InlineOpcodeHandler {
         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
         RuntimeBase valBase = registers[valueReg];
         RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
+
+        // Preserve an existing hash element's scalar slot. Replacing the map entry
+        // bypasses RuntimeScalar.set() and therefore fails to release the previous
+        // referent (including arrays that own closure callbacks). It also breaks
+        // references and aliases to the element. Tied and readonly hashes retain
+        // their specialized put() behavior below.
+        RuntimeScalar existing = hash.elements.get(key.toString());
+        if (existing != null
+                && (hash.type == RuntimeHash.PLAIN_HASH
+                || hash.type == RuntimeHash.AUTOVIVIFY_HASH)) {
+            val.addToScalar(existing);
+            registers[rd] = existing;
+            return pc;
+        }
+
         RuntimeScalar copy = new RuntimeScalar();
         val.addToScalar(copy);
         hash.put(key.toString(), copy);

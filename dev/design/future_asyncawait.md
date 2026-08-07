@@ -520,10 +520,26 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      nine subtests on both the JVM and interpreter backends; full `make`
      passes. Files: `StatementResolver.java` and
      `FutureAsyncAwaitAnonymousInvocationTest.java`.
-   - Next: investigate the four callback-cycle cleanup assertions separately.
-     The only other remaining PAGI-Tools failure is an unsupported `fork`-open
+   - [Completed 2026-08-08] Repaired callback-cycle cleanup after async
+     lifecycle methods replace callback arrays or hashes with empty
+     aggregates. Existing hash-element scalar slots are now updated in place,
+     so displaced callback containers release their closure captures on both
+     backends while immutable constant-derived slots retain replace-on-write
+     behavior.
+   - Zero-count objects that explicitly cleared a callback aggregate no longer
+     acquire an ownerless synthetic refcount merely because cleanup occurs in
+     a nested Perl call. Scope exit performs a fresh root check for this narrow
+     case, allowing weak probes to clear after the last real lexical leaves
+     scope without weakening pending-Future or Test::Refcount safeguards.
+   - Added a nested-call async callback-cleanup regression for both frontends.
+     PAGI-Tools' dispatcher (35 subtests), response writer (16), SSE lifecycle
+     (11), and WebSocket cleanup (11) now pass on both the JVM and interpreter
+     frontends; full `make` passes.
+   - The only remaining PAGI-Tools failure is its unsupported `fork`-open
      case, which remains outside scope while PerlOnJava does not implement
-     `fork`.
+     `fork`. Files: `InlineOpcodeHandler.java`, `RuntimeHash.java`,
+     `RuntimeScalar.java`, `RuntimeBase.java`, `MortalList.java`,
+     `MyVarCleanupStack.java`, and `FutureAsyncAwaitCallbackCleanupTest.java`.
 3. Revisit native JVM state-machine lowering only if profiling identifies
    selective interpreter routing as a material bottleneck.
 
@@ -542,6 +558,8 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   weak-reference regression pass on both frontends; the new test also passes
   with system Perl.
 - A clean full `make` succeeds after compiling all runtime changes.
+- The final callback-lifecycle matrix passes on both frontends: dispatcher
+  (35), response writer (16), SSE lifecycle (11), and WebSocket cleanup (11).
 - Final ecosystem reruns pass: Future 0.52 (`56` files, `784` tests) and
   IO::Async 0.805 (`64` files, `665` tests), with only documented unsupported
   fork, thread, listener, and socketpair cases skipped.

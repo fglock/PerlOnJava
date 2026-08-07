@@ -1419,6 +1419,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
         }
+        noteClearedAggregateElement(value);
         // Fast path for untracked references (refCount == -1).
         // Most reference assignments involve untracked objects (named variables,
         // anonymous arrays/hashes that were never blessed). Skip all refCount
@@ -1775,6 +1776,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return this;
+    }
+
+    private void noteClearedAggregateElement(RuntimeScalar replacement) {
+        if (!(containerOwner instanceof RuntimeHash owner)
+                || !owner.elements.containsValue(this)
+                || replacement == null) {
+            return;
+        }
+        boolean clearedArray = this.value instanceof RuntimeArray displacedArray
+                && !displacedArray.elements.isEmpty()
+                && replacement.value instanceof RuntimeArray replacementArray
+                && replacementArray.elements.isEmpty();
+        boolean clearedHash = this.value instanceof RuntimeHash displacedHash
+                && !displacedHash.elements.isEmpty()
+                && replacement.value instanceof RuntimeHash replacementHash
+                && replacementHash.elements.isEmpty();
+        if (clearedArray || clearedHash) {
+            owner.clearedOwnedAggregateElement = true;
+        }
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {

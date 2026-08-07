@@ -461,11 +461,27 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // assigning one hash entry must not overwrite another entry's
                 // slot container. This matters for pure-Perl deep-cloners
                 // which preserve referent identity while populating hashes.
-                elements.put(key, independentSlot(key, value));
+                RuntimeScalar existing = elements.get(key);
+                if (existing != null
+                        && existing.type != READONLY_SCALAR
+                        && !(existing instanceof RuntimeScalarReadOnly)) {
+                    if (value == null) existing.undefine();
+                    else value.addToScalar(existing);
+                } else {
+                    elements.put(key, independentSlot(key, value));
+                }
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                elements.put(key, independentSlot(key, value));
+                RuntimeScalar existing = elements.get(key);
+                if (existing != null
+                        && existing.type != READONLY_SCALAR
+                        && !(existing instanceof RuntimeScalarReadOnly)) {
+                    if (value == null) existing.undefine();
+                    else value.addToScalar(existing);
+                } else {
+                    elements.put(key, independentSlot(key, value));
+                }
             }
             case TIED_HASH -> {
                 notePackageRootMutation(null, value);
