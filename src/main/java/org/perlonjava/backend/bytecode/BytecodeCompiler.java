@@ -4624,17 +4624,7 @@ public class BytecodeCompiler implements Visitor {
                 // Special case: @_ is register 1
                 if (varName.equals("@_")) {
                     int arrayReg = 1; // @_ is always in register 1
-
-                    // Check if we're in scalar context - if so, return array size
-                    if (currentCallContext == RuntimeContextType.SCALAR) {
-                        int rd = allocateOutputRegister();
-                        emit(Opcodes.ARRAY_SIZE);
-                        emitReg(rd);
-                        emitReg(arrayReg);
-                        lastResultReg = rd;
-                    } else {
-                        lastResultReg = arrayReg;
-                    }
+                    setArrayResultForContext(arrayReg);
                     return;
                 }
 
@@ -4672,25 +4662,7 @@ public class BytecodeCompiler implements Visitor {
                     emit(nameIdx);
                 }
 
-                // Check if we're in scalar context - if so, return array size
-                if (currentCallContext == RuntimeContextType.SCALAR) {
-                    int rd = allocateOutputRegister();
-                    emit(Opcodes.ARRAY_SIZE);
-                    emitReg(rd);
-                    emitReg(arrayReg);
-                    lastResultReg = rd;
-                } else if (currentCallContext == RuntimeContextType.RUNTIME) {
-                    // In RUNTIME context (e.g., return @a), check wantarray at runtime
-                    // and convert to scalar (count) if scalar context
-                    int rd = allocateOutputRegister();
-                    emit(Opcodes.SCALAR_IF_WANTARRAY);
-                    emitReg(rd);
-                    emitReg(arrayReg);
-                    emitReg(2); // wantarray is in register 2
-                    lastResultReg = rd;
-                } else {
-                    lastResultReg = arrayReg;
-                }
+                setArrayResultForContext(arrayReg);
             } else if (node.operand instanceof OperatorNode operandOp) {
                 // Dereference: @$arrayref or @{$hashref}
 
@@ -4714,10 +4686,7 @@ public class BytecodeCompiler implements Visitor {
                     emit(pkgIdx);
                 }
 
-                lastResultReg = rd;
-                // Note: We don't check scalar context here because dereferencing
-                // should return the array itself. The slice or other operation
-                // will handle scalar context conversion if needed.
+                setArrayResultForContext(rd);
             } else if (node.operand instanceof BlockNode blockNode) {
                 // @{ block } - evaluate block and dereference the result
                 // The block should return an arrayref
@@ -4738,7 +4707,7 @@ public class BytecodeCompiler implements Visitor {
                     emit(pkgIdx);
                 }
 
-                lastResultReg = rd;
+                setArrayResultForContext(rd);
             } else if (node.operand instanceof StringNode strNode) {
                 // Symbolic ref: @{'name'} or 'name'->@* — load global array by string name
                 String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
@@ -4747,7 +4716,7 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
                 emitReg(rd);
                 emit(nameIdx);
-                lastResultReg = rd;
+                setArrayResultForContext(rd);
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -5014,6 +4983,31 @@ public class BytecodeCompiler implements Visitor {
             } else {
                 throwCompilerException("Reference operator requires operand");
             }
+        }
+    }
+
+    /**
+     * Apply Perl's context conversion to an array value. This is shared by
+     * named arrays and dereferenced arrays: scalar {@code @$ref} is the array
+     * length just like scalar {@code @array}, while runtime context defers the
+     * choice to {@code wantarray}.
+     */
+    private void setArrayResultForContext(int arrayReg) {
+        if (currentCallContext == RuntimeContextType.SCALAR) {
+            int rd = allocateOutputRegister();
+            emit(Opcodes.ARRAY_SIZE);
+            emitReg(rd);
+            emitReg(arrayReg);
+            lastResultReg = rd;
+        } else if (currentCallContext == RuntimeContextType.RUNTIME) {
+            int rd = allocateOutputRegister();
+            emit(Opcodes.SCALAR_IF_WANTARRAY);
+            emitReg(rd);
+            emitReg(arrayReg);
+            emitReg(2); // wantarray is in register 2
+            lastResultReg = rd;
+        } else {
+            lastResultReg = arrayReg;
         }
     }
 

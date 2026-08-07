@@ -283,13 +283,14 @@ Current phase: Phase 6, regex engine coverage.
 
 ### Next steps
 
-1. Reduce Regexp::Common's `RE_balanced` nested-match failure and determine
-   whether the next engine increment should be a declarative recursive
-   subpattern or the broader stack-safe backend migration.
-2. Re-run representative Regexp::Common interpreter surfaces now that legacy
-   multidimensional hash keys no longer block module loading, then separate
-   shared regex failures from backend-specific ones.
-3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, and Type::Tiny's
+1. Introduce a matcher abstraction with explicit capture and character-offset
+   semantics, then route declarative recursive subpatterns to the stack-safe
+   backend. The first syntax increment is Perl's relative `(?-1)` recursion.
+2. Re-run Regexp::Common's balanced, nested-comment, IPv6, palindrome,
+   subpattern, and postal-code surfaces against that backend, then run the
+   complete source-first acceptance suite on both PerlOnJava backends.
+3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
+   executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
 4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
@@ -632,8 +633,34 @@ Current phase: Phase 6, regex engine coverage.
   current `$;` value. Regression `zz_multidimensional_hash_key.t` passes 4/4
   under standard Perl, JVM, and interpreter. Regexp::Common now loads on the
   interpreter; its previously blocked Netherlands and Spain postal-code files
-  pass 5,641 and 2,834 assertions respectively, leaving their former suite
-  failures outside the regex engine.
+  completed targeted runs of 5,641 and 2,834 assertions respectively. This
+  proves the multidimensional-key blocker is gone; later randomized complete
+  matrices still expose a shared Spain postal-pattern mismatch.
+- Regexp::Common's `RE_balanced` reduction is declarative recursion, not an
+  executable callback. The generated pattern contains `(?-1)`; the current
+  preprocessor incorrectly routes the leading minus through modifier parsing
+  and emits `(?)`. Java's regex engine has no recursive-subpattern operation.
+  A finite-depth expansion was rejected because it would silently make valid
+  matching depend on nesting depth, contrary to Phase 6's stack-safe backend
+  contract. This is the first required matcher-abstraction/backend increment.
+- Scalar context is now applied consistently to named and dereferenced arrays
+  in interpreter bytecode. Previously `@$ref` and `@{...}` emitted a
+  `RuntimeArray` even in scalar arithmetic; postfix compound assignments such
+  as `$tests += @$_ for values %groups` then failed with a `ClassCastException`
+  or corrupted TAP plans. Regression
+  `zz_postfix_foreach_compound_assignment.t` passes 3/3 under standard Perl,
+  JVM, and interpreter backends.
+- The scalar-array correction unblocks 14 previously crashing or incomplete
+  Regexp::Common interpreter files (67,899/67,899 assertions), including the
+  URI matrix, USA SSNs, HTML comments, decimal numbers, US ZIP codes, and the
+  ZIP driver. The complete isolated per-file interpreter matrix now reaches
+  all 73 files and 147,004 assertions: 67 files pass, five have assertion
+  failures, and the executable conditional test errors explicitly. The shared
+  assertion categories are nested comments, IPv6, case-insensitive matching,
+  palindromes, and Spain postal codes. The equivalent JVM matrix reaches
+  149,226 assertions and additionally exposes balanced and named/numbered
+  subpattern failures; empty interpreter output for those three files is not
+  counted as a pass gate.
 
 ### Open questions
 
