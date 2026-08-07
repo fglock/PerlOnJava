@@ -79,7 +79,6 @@ sub _bootstrap_prefs {
         'PerlIO-via-Timeout.yml'     => 'PerlOnJava/CpanDistroprefs/PerlIO-via-Timeout.yml',
         'Device-SerialPort.yml'      => 'PerlOnJava/CpanDistroprefs/Device-SerialPort.yml',
         'XML-FromPerl.yml'           => 'PerlOnJava/CpanDistroprefs/XML-FromPerl.yml',
-        'Term-ANSIColor-Markup.yml'   => 'PerlOnJava/CpanDistroprefs/Term-ANSIColor-Markup.yml',
         'LRU-Cache.yml'               => 'PerlOnJava/CpanDistroprefs/LRU-Cache.yml',
         'Sort-External.yml'            => 'PerlOnJava/CpanDistroprefs/Sort-External.yml',
         'Char-Latin7.yml'               => 'PerlOnJava/CpanDistroprefs/Char-Latin7.yml',
@@ -179,6 +178,7 @@ sub _bootstrap_prefs {
         Test-Deep.yml
         Test-File-ShareDir.yml
         Test2-Plugin-NoWarnings.yml
+        Term-ANSIColor-Markup.yml
         Graph.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
@@ -307,8 +307,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Class-Trait-0.33/SkipObsoleteModPerlWarningTest.patch' ],
         [ 'XML-TreePP/TreePP.pm.patch',
           'PerlOnJava/CpanPatches/XML-TreePP-0.43/TreePP.pm.patch' ],
-        [ 'Term-ANSIColor-Markup/PortableAccessors.patch',
-          'PerlOnJava/CpanPatches/Term-ANSIColor-Markup-0.06/PortableAccessors.patch' ],
         [ 'LRU-Cache/PurePerl.patch',
           'PerlOnJava/CpanPatches/LRU-Cache-1.00/PurePerl.patch' ],
         [ 'Sort-External/PurePerl.patch',
@@ -332,6 +330,7 @@ sub _bootstrap_patches {
         'Graph/AdjacencyMap-Light.pm.patch',
         'Graph/AdjacencyMap.pm.patch',
         'Module-Install/ExplicitAuthorsMethod.patch',
+        'Term-ANSIColor-Markup/PortableAccessors.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;

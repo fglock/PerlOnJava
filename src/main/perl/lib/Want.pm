@@ -1,13 +1,14 @@
 # Copyright (c) 2001-2014 Robin Houston.
 #
-# PerlOnJava compatibility subset.  The original Want distribution uses XS
-# op-tree inspection.  These predicates cover the non-lvalue call patterns
-# used by JSONP without pretending to provide full Want parity.
+# PerlOnJava compatibility subset. The original Want distribution uses XS
+# op-tree inspection. The pure-Perl predicates cover common scalar/list use;
+# PerlOnJava adds a lazy native call-context bridge for LVALUE and ASSIGN.
 
 package Want;
 
 use strict;
 use warnings;
+use Config ();
 use Exporter 'import';
 
 our $VERSION = '0.29';
@@ -33,5 +34,13 @@ sub rreturn { return wantarray ? @_ : $_[-1] }
 sub lnoreturn { return }
 sub wantref { return '' }
 sub want_ref { return wantref() }
+
+# PerlOnJava keeps the caller's scalar/list/lvalue context on its runtime call
+# stack. Load the native bridge only when Want itself is requested; standard
+# Perl continues to use the conservative pure-Perl implementation above.
+if ($Config::Config{archname} =~ /^java-/) {
+    require XSLoader;
+    XSLoader::load('Want', $VERSION);
+}
 
 1;
