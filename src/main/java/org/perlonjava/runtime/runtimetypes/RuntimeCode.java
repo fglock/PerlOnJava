@@ -718,6 +718,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // only declared; RuntimeCode.defined() still reports whether the subroutine
     // itself has an implementation.
     public boolean isSymbolicReference = false;
+    // Stash slot from which an explicit CODE reference such as `\&Pkg::name`
+    // was taken. Stored on the CV so detached scalar snapshots retain it.
+    public String referenceOriginFqn = null;
+    // An undefined named CV assigned into a different typeglob must remain a
+    // live alias when the source CV is defined later. Module::Install uses
+    // `*authors = \&author` before dynamically installing `author`.
+    public boolean hasForwardGlobAlias = false;
+    // Undefined CV placeholders can already be cached independently by call
+    // sites for both glob names. Keep those placeholders in one alias group so
+    // a later definition can populate every cached CV in place.
+    public List<RuntimeCode> forwardGlobAliases = new ArrayList<>();
+    // Set only when interpreter bytecode lowers `*target = \&source` to a live
+    // source-slot load. JVM compilation resolves later named subs at compile
+    // time and must retain its existing replacement behavior.
+    public boolean requiresForwardGlobAliasGroup = false;
     // Flag to indicate this is a built-in operator
     public boolean isBuiltin = false;
     // Flag to indicate this was explicitly declared (sub foo; or sub foo { ... })
@@ -1587,11 +1602,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public void adoptDefinitionFrom(RuntimeCode codeFrom) {
         Supplier<Void> sourceCompilerSupplier = codeFrom.compilerSupplier;
-        boolean sourceIsLazyOnly = sourceCompilerSupplier != null
+        boolean sourceNeedsDelegation = (codeFrom instanceof InterpretedCode && this.hasForwardGlobAlias)
+                || (sourceCompilerSupplier != null
                 && codeFrom.constantValue == null
                 && codeFrom.subroutine == null
                 && codeFrom.methodHandle == null
-                && codeFrom.codeObject == null;
+                && codeFrom.codeObject == null);
 
         this.methodHandle = codeFrom.methodHandle;
         this.subroutine = codeFrom.subroutine;
@@ -1629,7 +1645,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.stateArray = codeFrom.stateArray;
         this.stateHash = codeFrom.stateHash;
         this.constantValue = codeFrom.constantValue;
-        if (sourceIsLazyOnly) {
+        if (sourceNeedsDelegation) {
             this.subroutine = (runtimeArgs, callContext) ->
                     RuntimeCode.apply(new RuntimeScalar(codeFrom), runtimeArgs, callContext);
             this.codeObject = codeFrom;
@@ -4881,6 +4897,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Special case: if the scalar already contains a CODE reference (lexical sub hidden variable),
         // just return it directly
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
+            if (runtimeScalar.globalCodeRefFqn != null) {
+                ((RuntimeCode) runtimeScalar.value).referenceOriginFqn = runtimeScalar.globalCodeRefFqn;
+            }
             // Ensure the subroutine is fully compiled before returning the reference
             // This is important for compile-time usage (e.g., use overload qr => \&lexical_sub)
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
@@ -4986,6 +5005,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeScalar snapshot = new RuntimeScalar();
         snapshot.type = codeRef.type;
         snapshot.value = codeRef.value;
+        if (codeRef.value instanceof RuntimeCode referencedCode) {
+            referencedCode.referenceOriginFqn = name;
+        }
         return snapshot;
     }
 

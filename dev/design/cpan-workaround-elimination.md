@@ -283,9 +283,8 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 
 ### Next steps
 
-1. Remove Module::Install's explicit `authors` patch through glob-alias
-   introspection parity, then integrate lazy native `Want` support so
-   Term::ANSIColor::Markup can use its upstream lvalue accessors.
+1. Integrate lazy native `Want` support so Term::ANSIColor::Markup can use its
+   upstream lvalue accessors and retire its portable-accessor patch.
 2. Make the shared lvalue analysis authoritative for both backends and rerun
    the unpatched Phase 5 target matrix.
 3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
@@ -504,6 +503,21 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   `AdjacencyMap.pm`, and removes all stale installed Graph preference and patch
   files. Graph 0.9735 is now fully unpatched, and the final full `make` gate
   passes.
+- Undefined named CODE references assigned to another typeglob now retain a
+  live forward-CV alias. Independently cached source and target placeholders
+  form an interpreter-only alias group and receive the later definition in
+  place; adopting an interpreted definition delegates to its executable
+  bytecode without changing ordinary JVM glob-replacement behavior. Regression:
+  `src/test/resources/unit/zz_forward_code_glob_alias.t` passes 4/4 under
+  standard Perl, JVM, and interpreter backends, while the existing saved-CV,
+  overload, and Math::BigInt regressions remain green.
+- Module::Install's explicit `authors` wrapper is retired. Unmodified upstream
+  Module::Install 1.21 passes all 35 files and 546 assertions, and a
+  source-first `jcpan -t Module::Install` run applies no patch, retains upstream
+  `*authors = \&author`, removes the stale installed preference and patch, and
+  passes the same 35-file/546-assertion suite. `Module-Install.yml` and
+  `Module-Install-1.21/ExplicitAuthorsMethod.patch` are deleted and registered
+  for installed-cache retirement. The final full `make` gate passes.
 
 ### Open questions
 
