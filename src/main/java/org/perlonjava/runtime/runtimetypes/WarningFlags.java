@@ -417,7 +417,7 @@ public class WarningFlags {
         // because they were registered (via warnings::register) after the scope's
         // "use warnings" was compiled. In Perl 5, "use warnings" (which enables "all")
         // implicitly enables all custom categories registered later.
-        if (customCategories.contains(category) && byteIndex >= bits.length()) {
+        if (customCategories.contains(category)) {
             int allOffset = PERL5_OFFSETS.get("all");
             int allBitPos = allOffset * 2;
             int allByteIndex = allBitPos / 8;

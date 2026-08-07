@@ -19,6 +19,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_LOCALE;
 import static org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
 
@@ -573,6 +574,14 @@ public class StringParser {
                 }
             } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)) {
                 if (!modStr.contains("u") && !modStr.contains("a")) {
+                    modStr = "u" + modStr;
+                }
+            } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_LOCALE)) {
+                // Java has no POSIX-regex locale mode. Its Unicode character
+                // classes provide the expected LC_CTYPE behavior for letters
+                // such as German umlauts, which is the important distinction
+                // from Perl's default byte-string ASCII semantics here.
+                if (!modStr.contains("u") && !modStr.contains("a") && !modStr.contains("l")) {
                     modStr = "u" + modStr;
                 }
             }
