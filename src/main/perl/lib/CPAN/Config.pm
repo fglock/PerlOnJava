@@ -187,6 +187,20 @@ sub _bootstrap_prefs {
         unlink $dest if defined($existing) && $existing =~ /PerlOnJava/;
     }
 
+    # Logger-Simple.yml was historically shipped without the PerlOnJava
+    # ownership signature used above. Upgrade only that exact legacy policy;
+    # otherwise the cross-platform test.env replacement can never reach homes
+    # which bootstrapped the old shell-assignment commandline.
+    my $legacy_logger = File::Spec->catfile($prefs_dir, 'Logger-Simple.yml');
+    if (-f $legacy_logger) {
+        my $existing = $slurp->($legacy_logger);
+        if (defined($existing)
+            && $existing =~ /distribution:\s*["']?\^TSTANLEY\/Logger-Simple-/
+            && $existing =~ /commandline:\s*["']JPERL_UNIMPLEMENTED=warn make test["']/) {
+            unlink $legacy_logger;
+        }
+    }
+
     for my $file (sort keys %pref_install) {
         my $src_rel = $pref_install{$file};
         my $src_path = $find_source->($src_rel);

@@ -283,14 +283,15 @@ Current phase: Phase 6, regex engine coverage.
 
 ### Next steps
 
-1. Establish pristine Object::InsideOut and Logger::Simple baselines and
-   isolate the recursive-pattern syntax still requiring
-   `JPERL_UNIMPLEMENTED=warn`.
-2. Keep Type::Tiny's two executable `(?{...})` callback tests under explicit
-   capability policy until the compiler/runtime callback interface is designed.
-3. Classify Regexp::Common's failing nested-comment, IPv6, balanced-pattern,
-   palindrome, named-subpattern, and postal-code surfaces before selecting the
-   next declarative regex feature to implement.
+1. Reduce Regexp::Common's `RE_balanced` nested-match failure and determine
+   whether the next engine increment should be a declarative recursive
+   subpattern or the broader stack-safe backend migration.
+2. Re-run representative Regexp::Common interpreter surfaces now that legacy
+   multidimensional hash keys no longer block module loading, then separate
+   shared regex failures from backend-specific ones.
+3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, and Type::Tiny's
+   executable `(?{...})`/`(??{...})` paths under explicit capability policy
+   until the compiler/runtime callback interface is designed.
 4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
@@ -603,6 +604,36 @@ Current phase: Phase 6, regex engine coverage.
   `PERLONJAVA_HOME` bootstraps only the encoding patch, leaves the upstream
   global parser regex intact, and passes all 55 files/1,073 assertions. The
   final full `make` gate passes.
+- Logger::Simple 2.0 isolates the Object::InsideOut dependency to a
+  self-referential `(??{$BALANCED_PARENS})` pattern. Standard Perl passes its
+  unchanged 4-file/8-assertion suite. JVM and interpreter backends pass the
+  same suite only under the visible `JPERL_UNIMPLEMENTED=warn` fallback; an
+  unmodified no-policy run fails 3 of 4 programs while compiling that pattern.
+  This is executable dynamic-pattern evaluation, so it remains with the other
+  deferred callback capabilities rather than being treated as declarative
+  recursion.
+- Logger-Simple.yml now sets warning mode through the cross-platform
+  distropref `test.env` mapping instead of a Unix shell assignment. It was the
+  only bundled preference missing the `PerlOnJava` ownership signature, which
+  prevented bootstrap upgrades from replacing the old commandline. A narrowly
+  matched migration upgrades that exact legacy file; regression
+  `cpan_distroprefs_signature_migration.t` checks every active preference's
+  signature and the migration under standard Perl, JVM, and interpreter. An
+  isolated existing-home `jcpan -t Logger::Simple` run migrates the legacy
+  file, applies warning mode through the normal CPAN test command, and passes
+  all 4 files/8 assertions.
+- ExtUtils::ParseXS 3.64 also uses executable `(??{$bal})` patterns throughout
+  OutputMap and Node parsing, and three upstream run tests compile native XS
+  fixtures. Its test-phase skip therefore remains an explicit combination of
+  callback and native-compilation capability policy, not a declarative regex
+  workaround ready for retirement.
+- Legacy multidimensional hash access now has interpreter parity with the JVM
+  backend: `$hash{a, b}` and `$hashref->{a, b}` join key expressions with the
+  current `$;` value. Regression `zz_multidimensional_hash_key.t` passes 4/4
+  under standard Perl, JVM, and interpreter. Regexp::Common now loads on the
+  interpreter; its previously blocked Netherlands and Spain postal-code files
+  pass 5,641 and 2,834 assertions respectively, leaving their former suite
+  failures outside the regex engine.
 
 ### Open questions
 

@@ -1,9 +1,12 @@
 ---
 comment: |
+  PerlOnJava distroprefs for Logger::Simple.
+
   Logger::Simple depends on Object::InsideOut, whose balanced-attribute
   parser uses a recursive regex. Run the target suite with the warning-mode
   fallback enabled so the pure-Perl logger can load on the JVM.
 match:
   distribution: "^TSTANLEY/Logger-Simple-"
 test:
-  commandline: "JPERL_UNIMPLEMENTED=warn make test"
+  env:
+    JPERL_UNIMPLEMENTED: warn

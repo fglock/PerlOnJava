@@ -2057,8 +2057,36 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             }
         } else {
-            throwCompilerException("Multi-element hash access not yet implemented");
+            int keyReg = compileMultidimensionalHashKey(keyNode);
+            int rd = allocateOutputRegister();
+            emit(opcodeForHashElementGet());
+            emitReg(rd);
+            emitReg(hashReg);
+            emitReg(keyReg);
+            lastResultReg = rd;
         }
+    }
+
+    /**
+     * Compile Perl's legacy multidimensional hash-key syntax. Expressions in
+     * {@code $hash{a, b}} form one scalar key by joining their values with the
+     * current value of {@code $;} (SUBSEP); they are not a hash slice.
+     */
+    int compileMultidimensionalHashKey(HashLiteralNode keyNode) {
+        int separatorReg = allocateRegister();
+        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+        emitReg(separatorReg);
+        emit(addToStringPool("main::;"));
+
+        compileNode(keyNode.asListNode(), -1, RuntimeContextType.LIST);
+        int elementsReg = lastResultReg;
+
+        int keyReg = allocateOutputRegister();
+        emit(Opcodes.JOIN);
+        emitReg(keyReg);
+        emitReg(separatorReg);
+        emitReg(elementsReg);
+        return keyReg;
     }
 
     void handleHashSlice(BinaryOperatorNode node, OperatorNode leftOp) {
@@ -2578,6 +2606,10 @@ public class BytecodeCompiler implements Visitor {
             keyReg = lastResultReg;
         }
 
+        return emitHashDerefGetWithKeyReg(baseReg, keyReg, tokenIndex);
+    }
+
+    int emitHashDerefGetWithKeyReg(int baseReg, int keyReg, int tokenIndex) {
         int hashReg = allocateRegister();
         if (isStrictRefsEnabled()) {
             emitWithToken(Opcodes.DEREF_HASH, tokenIndex);
@@ -2792,7 +2824,24 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = emitHashDerefGet(baseReg, keyExpr, node.getIndex());
             }
         } else {
-            throwCompilerException("Multi-element hash access not yet implemented");
+            int keyReg = compileMultidimensionalHashKey(keyNode);
+            int hashReg = allocateRegister();
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(baseReg);
+            } else {
+                emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                emitReg(hashReg);
+                emitReg(baseReg);
+                emit(addToStringPool(getCurrentPackage()));
+            }
+            int rd = allocateOutputRegister();
+            emit(opcodeForHashElementGet());
+            emitReg(rd);
+            emitReg(hashReg);
+            emitReg(keyReg);
+            lastResultReg = rd;
         }
     }
 
