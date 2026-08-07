@@ -284,7 +284,7 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 ### Next steps
 
 1. Split and retire the remaining independently justified Graph patch hunks,
-   starting with `defined(&sub)` and SCC return-shape parity.
+   starting with SCC return-shape parity.
 2. Remove Module::Install's explicit `authors` patch through glob-alias
    introspection parity, then integrate lazy native `Want` support so
    Term::ANSIColor::Markup can use its upstream lvalue accessors.
@@ -440,6 +440,19 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   `defined(&sub)`, SCC return shape, and Storable code references. The normal
   `jcpan -t Graph` path refreshes the installed reduced patch copies and passes
   all 88 files and 9,234 assertions.
+- Assignment RHS parsing under `defined` now restores ampersand-call semantics:
+  `defined(my $x = &sub)` calls the subroutine and tests its assigned result,
+  while a direct `defined(&sub)` remains a CODE-slot probe. Regression:
+  `src/test/resources/unit/zz_defined_ampersand_assignment.t` passes 4/4 under
+  standard Perl, JVM, and interpreter backends.
+- The final `AdjacencyMap-Light.pm.patch` hunk is retired. Pristine Graph tests
+  `t/24_mixvertexed.t`, `t/48_get_vertex_count.t`, and `t/65_ref.t` pass
+  56/56, 12/12, and 1,795/1,795 respectively. Bootstrap retirement removes
+  the stale installed patch on upgrade. Pristine Graph with only the two
+  remaining patch files passes all 88 files and 9,263 assertions.
+- The final `jcpan -t Graph` smoke applies exactly two patches and passes all
+  88 files and 9,268 assertions. A fresh `CPAN::Config` bootstrap load removes
+  `Graph/AdjacencyMap-Light.pm.patch` from the installed patch cache.
 
 ### Open questions
 

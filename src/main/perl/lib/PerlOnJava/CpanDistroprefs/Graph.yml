@@ -8,11 +8,9 @@ comment: |
 
   The remaining hunks isolate independent compatibility gaps: Storable code
   references, Graph's SCC return shape, deterministic attribute dumping,
-  adjacency rendering without Set::Object map behavior, and Perl's
-  `defined(&sub)` parsing semantics.
+  and adjacency rendering without Set::Object map behavior.
 match:
   distribution: "^.*/Graph-[0-9]"
 patches:
   - "Graph/Graph.pm.patch"
   - "Graph/AdjacencyMap.pm.patch"
-  - "Graph/AdjacencyMap-Light.pm.patch"
