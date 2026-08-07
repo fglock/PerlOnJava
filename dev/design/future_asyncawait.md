@@ -448,6 +448,16 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      and marks the inherited TCP listener, cleans `LISTEN_FDS`/`LISTEN_PID`,
      serves a request through IO::Async, and returns the expected 200 response
      and body.
+   - [Completed 2026-08-07] Routed the interpreter's buffered `read` operator
+     through the same `Readline.read` runtime as the JVM backend instead of
+     incorrectly applying `sysread` semantics. Scalar-backed filehandles now
+     fill their destination buffer inside selectively interpreted async frames.
+   - Added scalar-handle `read` coverage validated with system Perl and both
+     PerlOnJava frontends, plus an async-frame regression; full `make` passes.
+     PAGI's `t/42-file-response.t` now passes all 14 in-process subtests. Its
+     three remaining large-file worker-pool cases require unsupported `fork`
+     and remain outside scope. Files: `IOOperator.java`,
+     `FutureAsyncAwaitRuntimeTest.java`, and `scalar_handle_read.t`.
    - Next: continue the remaining PAGI file/runtime gaps.
      Process-worker tests remain outside scope while PerlOnJava does not
      implement `fork`.

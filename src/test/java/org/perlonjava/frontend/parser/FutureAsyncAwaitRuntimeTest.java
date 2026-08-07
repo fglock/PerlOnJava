@@ -514,6 +514,15 @@ class FutureAsyncAwaitRuntimeTest {
             die "lexical async sub failed\n"
                     unless $lexical_result->AWAIT_GET == 42;
 
+            async sub read_scalar_handle {
+                my $content = "alpha\nbeta\n";
+                open my $fh, '<', \\$content or die "scalar handle open failed: $!";
+                my $count = read($fh, my $buffer, 16_384);
+                return "$count:$buffer";
+            }
+            die "read in async interpreter frame used sysread semantics\n"
+                    unless read_scalar_handle()->AWAIT_GET eq "11:alpha\nbeta\n";
+
             use feature 'class';
             no warnings 'experimental::class';
             class AsyncAwaitExample {

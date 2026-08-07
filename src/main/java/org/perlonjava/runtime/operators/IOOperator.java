@@ -3323,7 +3323,7 @@ public class IOOperator {
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {
-        return sysread(ctx, args);
+        return Readline.read(new RuntimeList(args));
     }
 
 }
