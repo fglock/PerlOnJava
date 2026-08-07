@@ -242,6 +242,9 @@ public class BytecodeInterpreter {
         RuntimeBase[] registers = frame.registers;
         int pc = frame.pc;
         final int[] bytecode = code.bytecode;
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        WarningBitsRegistry.setRuntimeWarningBits(
+                frame.pc > 0 ? frame.suspendedRuntimeWarningBits : code.warningBitsString);
 
         // Eval block exception handling: stack of catch PCs
         // When EVAL_TRY is executed, push the catch PC onto this stack
@@ -2493,6 +2496,13 @@ public class BytecodeInterpreter {
                                 int hintHashId = bytecode[pc++];
                                 int warningScopeId = bytecode[pc++];
                                 WarningBitsRegistry.setCallSiteBits(code.stringPool[warningBitsIdx]);
+                                // A lexical `no warnings` node carries a runtime
+                                // warningScopeId whose localized suppression is
+                                // unwound at block exit. Do not overwrite the
+                                // enclosing enabled bits with its temporary mask.
+                                if (warningScopeId == 0) {
+                                    WarningBitsRegistry.setRuntimeWarningBits(code.stringPool[warningBitsIdx]);
+                                }
                                 WarningBitsRegistry.setCallSiteHints(hints);
                                 HintHashRegistry.setCallSiteHintHashId(hintHashId);
                                 if (warningScopeId > 0) {
@@ -2936,6 +2946,8 @@ public class BytecodeInterpreter {
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.
             if (frame.suspended) {
+                frame.suspendedRuntimeWarningBits =
+                        WarningBitsRegistry.getRuntimeWarningBits();
                 frame.suspendedDynamicStates =
                         DynamicVariableManager.suspendAbove(savedLocalLevel);
             } else {
@@ -2950,6 +2962,7 @@ public class BytecodeInterpreter {
                 frame.virtualEvalFrameDepth--;
             }
             InterpreterState.pop();
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
             if (!frame.suspended) {
                 code.releaseRegisters();
             }

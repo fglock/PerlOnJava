@@ -377,9 +377,9 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
     interpreter list declarations now register every lexical and replace that
     registration when assignment replaces the scalar slot; readonly scalar
     literals remain owned by their installed subroutine on both frontends;
-    interpolated bracketed `\Q`/`\E` are accepted without warnings; and the
-    interpreter now applies lexical warning/hint state at runtime like the JVM
-    backend.
+    interpolated bracketed `\Q`/`\E` preserve Perl's deferred regexp warnings;
+    and the interpreter now applies lexical warning/hint state at runtime like
+    the JVM backend.
   - Verified `Future` 0.52 completely (`56` files, `784` tests) and
     `IO::Async` 0.805 completely (`64` files, `665` tests).
   - `Net::Async::HTTP` reaches its own suite but 38 programs cannot import four
@@ -427,9 +427,18 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
    - PAGI's `t/43-unix-socket.t` now passes its first 13 subtests and reaches
      live Unix-listener setup. Its next section depends on unsupported `fork`
      and hits the test's 180-second external timeout.
-   - Next: inherited-descriptor and systemd activation support, followed by the
-     remaining file/runtime gaps. Process-worker tests remain outside scope
-     while PerlOnJava does not implement `fork`.
+   - [Completed 2026-08-07] Routed `POSIX::dup` and `POSIX::close` through the
+     virtual descriptor table for Java-backed handles while retaining native
+     fallbacks for raw descriptors. Descriptor lookup now prefers the current
+     live owner when recycled fd numbers have stale bookkeeping entries.
+   - The systemd save/`dup2`/fdopen/restore sequence passes a ten-assertion
+     regression with system Perl, both PerlOnJava frontends, and the in-process
+     unit harness. PAGI's `t/49-systemd-activation.t` now loads with its local
+     dependencies but encounters the separately tracked IO::Async TCP bind
+     boundary before it can inspect the inherited listener.
+   - Next: the remaining PAGI file/runtime and IO::Async listener gaps.
+     Process-worker tests remain outside scope while PerlOnJava does not
+     implement `fork`.
 3. Revisit native JVM state-machine lowering only if profiling identifies
    selective interpreter routing as a material bottleneck.
 

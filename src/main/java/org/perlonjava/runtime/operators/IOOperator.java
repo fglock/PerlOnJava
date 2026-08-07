@@ -2859,18 +2859,19 @@ public class IOOperator {
      * fileno registry (which includes dup'd handles and sockets), and standard fds.
      */
     private static RuntimeIO findFileHandleByDescriptor(int fd) {
-        // Check if we have it in our mapping
-        RuntimeIO handle = fileDescriptorMap.get(fd);
-        if (handle != null) {
-            return handle;
+        // Prefer live registry entries. Descriptor numbers are recycled, so a
+        // later open may own a number that still has an older bookkeeping entry
+        // in fileDescriptorMap.
+        RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
+        if (fromRegistry != null && fromRegistry.ioHandle != null
+                && !(fromRegistry.ioHandle instanceof ClosedIOHandle)) {
+            return fromRegistry;
         }
 
-        // Prefer live registry entries. When fd 1 or 2 has been closed and a
-        // later file open reuses that number, Perl's numeric dup targets the
-        // new file, not the original static STDOUT/STDERR object.
-        RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
-        if (fromRegistry != null) {
-            return fromRegistry;
+        RuntimeIO handle = fileDescriptorMap.get(fd);
+        if (handle != null && handle.ioHandle != null
+                && !(handle.ioHandle instanceof ClosedIOHandle)) {
+            return handle;
         }
 
         // Handle standard file descriptors if no current registry owner exists.
@@ -3109,6 +3110,33 @@ public class IOOperator {
      */
     public static void unregisterFileDescriptor(int fd) {
         fileDescriptorMap.remove(fd);
+    }
+
+    /**
+     * Duplicate a descriptor managed by PerlOnJava's virtual descriptor table.
+     *
+     * <p>This is the descriptor-level counterpart of Perl's
+     * {@code open($fh, "<&$fd")}.  POSIX::dup() uses it for Java-backed files,
+     * pipes, and sockets whose descriptor numbers are intentionally synthetic
+     * rather than raw operating-system descriptors.</p>
+     *
+     * @param fd source descriptor
+     * @return the new descriptor, or {@code -1} when the source is not managed
+     */
+    public static int duplicateFileDescriptor(int fd) {
+        RuntimeIO source = findFileHandleByDescriptor(fd);
+        if (source == null || source.ioHandle == null || source.ioHandle instanceof ClosedIOHandle) {
+            return -1;
+        }
+
+        RuntimeIO duplicate = duplicateFileHandle(source);
+        if (duplicate == null) {
+            return -1;
+        }
+
+        int duplicateFd = duplicate.fileno().getInt();
+        registerFileDescriptor(duplicateFd, duplicate);
+        return duplicateFd;
     }
 
     /**

@@ -27,9 +27,7 @@ public class RegexQuoteMeta {
             char c = s.charAt(offset);
             if (escaped) {
                 if (inCharClass && (c == 'Q' || c == 'E')) {
-                    // Interpolated character-class contents are processed at
-                    // runtime. Perl treats their \Q and \E as literal Q/E
-                    // characters without an "unrecognized escape" warning.
+                    warnUnrecognizedCharClassEscape(c);
                     sb.append(c);
                     if (charClassFirst && c != '^') {
                         charClassFirst = false;
@@ -47,6 +45,7 @@ public class RegexQuoteMeta {
 
             if (c == '\\' && offset + 1 < len && s.charAt(offset + 1) == 'Q') {
                 if (inCharClass) {
+                    warnUnrecognizedCharClassEscape('Q');
                     sb.append('Q');
                     if (charClassFirst) {
                         charClassFirst = false;
