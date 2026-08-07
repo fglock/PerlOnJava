@@ -283,12 +283,13 @@ Current phase: Phase 6, regex engine coverage.
 
 ### Next steps
 
-1. Introduce a matcher abstraction with explicit capture and character-offset
-   semantics, then route declarative recursive subpatterns to the stack-safe
-   backend. The first syntax increment is Perl's relative `(?-1)` recursion.
-2. Re-run Regexp::Common's balanced, nested-comment, IPv6, palindrome,
-   subpattern, and postal-code surfaces against that backend, then run the
-   complete source-first acceptance suite on both PerlOnJava backends.
+1. Reduce Regexp::Common's five remaining JVM failures: executable conditional
+   comments, declarative nested comments, IPv6, palindrome, and Spain postal
+   codes. Keep each defect separate from the completed recursion increment.
+2. Re-run the complete isolated Regexp::Common matrix on the interpreter and
+   JVM backends after each regex increment; direct execution of three upstream
+   recursion files remains subject to the documented interpreter no-TAP
+   condition, while equivalent unit coverage must pass on both backends.
 3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -661,6 +662,26 @@ Current phase: Phase 6, regex engine coverage.
   149,226 assertions and additionally exposes balanced and named/numbered
   subpattern failures; empty interpreter output for those three files is not
   counted as a pass gate.
+- Phase 6 now has a backend-neutral `RegexMatcher` boundary for Perl-visible
+  match state and a Joni 2.2.7 backend for declarative recursive subpatterns.
+  Perl relative and absolute numbered calls and named calls are translated to
+  Joni's stack-machine recursion syntax; captures are converted from UTF-8
+  byte offsets to Perl/Java character offsets. Java `Pattern` remains the
+  default backend for all non-recursive patterns, and executable regex
+  callbacks remain outside this increment.
+- Regression `zz_recursive_regex.t` passes 12/12 under standard Perl, JVM, and
+  interpreter execution, covering nested and 500-level matches, rejection,
+  captures after a wide character, global matching, global substitution, and
+  stringified `qr//` flags. The full local `make` gate passes.
+- Regexp::Common's unchanged `test_balanced.t`, `test_sub.t`, and
+  `test_sub_named.t` now pass 127/127, 20/20, and 5/5 respectively on the JVM
+  backend. Its complete unchanged JVM matrix still reaches 73 files and
+  149,226 assertions, but failures fall from eight files to five: the three
+  recursion-dependent failures are eliminated, leaving only executable
+  conditional comments, nested comments, IPv6, palindrome, and Spain postal
+  codes. Direct interpreter execution of those three upstream files still
+  exits without TAP; the equivalent recursive semantics pass through the new
+  cross-backend unit regression and are not misreported as upstream passes.
 
 ### Open questions
 
