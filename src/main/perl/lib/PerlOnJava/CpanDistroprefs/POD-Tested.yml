@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for POD::Tested.
+
+  POD::Tested inherits from Pod::Parser at load time, but the distribution's
+  Build.PL and metadata omit Pod::Parser from their prerequisites. Declare it
+  explicitly so a clean jcpan dependency run stages Pod-Parser before testing
+  POD::Tested and downstream Test::Cookbook.
+match:
+  distribution: "^NKH/POD-Tested-"
+depends:
+  requires:
+    Pod::Parser: 0

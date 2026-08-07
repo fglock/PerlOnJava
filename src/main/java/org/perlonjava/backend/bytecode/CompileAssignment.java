@@ -506,6 +506,7 @@ public class CompileAssignment {
                                 // may tie the variable), then assign the value so STORE fires.
                                 bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
                                 bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emitLexicalAlias(reg, varName);
                                 bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
@@ -514,7 +515,12 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(valueReg);
                                 emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
                             } else {
-                                bytecodeCompiler.emit(Opcodes.MY_SCALAR);
+                                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                                bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emitLexicalAlias(reg, varName);
+                                bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                                bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitReg(valueReg);
                                 emitReleaseConsumedRhsTemp(bytecodeCompiler, node.right, valueReg, reg);
@@ -582,6 +588,7 @@ public class CompileAssignment {
                             bytecodeCompiler.registerVariable(varName, arrayReg);
                             bytecodeCompiler.emit(Opcodes.NEW_ARRAY);
                             bytecodeCompiler.emitReg(arrayReg);
+                            bytecodeCompiler.emitLexicalAlias(arrayReg, varName);
 
                             bytecodeCompiler.emit(Opcodes.ARRAY_SET_FROM_LIST);
                             bytecodeCompiler.emitReg(arrayReg);
@@ -649,6 +656,7 @@ public class CompileAssignment {
                             bytecodeCompiler.registerVariable(varName, hashReg);
                             bytecodeCompiler.emit(Opcodes.NEW_HASH);
                             bytecodeCompiler.emitReg(hashReg);
+                            bytecodeCompiler.emitLexicalAlias(hashReg, varName);
 
                             int countReg = -1;
                             if (outerContext == RuntimeContextType.SCALAR) {
@@ -778,6 +786,7 @@ public class CompileAssignment {
                                                 bytecodeCompiler.emitReg(varReg);
                                             }
                                         }
+                                        bytecodeCompiler.emitLexicalAlias(varReg, varName);
                                         bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                         bytecodeCompiler.emitReg(varReg);
                                     }

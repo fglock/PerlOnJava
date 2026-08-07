@@ -417,7 +417,19 @@ public class Universal extends PerlModuleBase {
      * @return A RuntimeList indicating if the object does the given role.
      */
     public static RuntimeList DOES(RuntimeArray args, int ctx) {
-        return isa(args, ctx);
+        if (args.size() != 2) {
+            throw new IllegalStateException("Bad number of arguments for DOES() method");
+        }
+
+        // Perl's default UNIVERSAL::DOES delegates through method dispatch,
+        // equivalent to $invocant->isa($role).  Calling this class's isa()
+        // implementation directly bypasses package-specific isa overrides.
+        return RuntimeCode.call(
+                args.get(0),
+                new RuntimeScalar("isa"),
+                scalarUndef,
+                new RuntimeBase[]{args.get(1)},
+                ctx);
     }
 
     /**

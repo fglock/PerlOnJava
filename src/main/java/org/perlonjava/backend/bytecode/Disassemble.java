@@ -191,6 +191,12 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("REGISTER_MY_VAR r").append(rd).append("\n");
                         break;
+                    case Opcodes.APPLY_LEXICAL_ALIAS:
+                        rd = interpretedCode.bytecode[pc++];
+                        int aliasNameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("APPLY_LEXICAL_ALIAS r").append(rd)
+                                .append(" ").append(interpretedCode.stringPool[aliasNameIdx]).append("\n");
+                        break;
                     case Opcodes.ASSIGN_LEXICAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];

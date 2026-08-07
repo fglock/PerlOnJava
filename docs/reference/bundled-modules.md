@@ -15,6 +15,9 @@ Recent CPAN compatibility additions include:
 | `Email::Address::XS` | Pure Perl compatibility subset | Address parsing/object API used by `Email::Sender` |
 | `Want` | Pure Perl compatibility subset | Non-lvalue predicates used by `JSONP`; full op-tree introspection is not yet available |
 | `Net::Gen` | Java XS bridge | Net-ext constants and sockaddr helpers used by `Net::UDP` |
+| `PadWalker` | Perl facade over Java runtime metadata | `peek_sub`, `closed_over`, and `set_closed_over`; caller-pad APIs remain unsupported |
+| `Devel::Caller` | Perl facade over Java call frames | `caller_cv` and caller argument compatibility used by lexical tooling |
+| `Devel::LexAlias` | Perl facade over Java lexical cells | Rebinds local and captured scalar, array, and hash lexicals |
 
 ---
 
@@ -363,6 +366,9 @@ These are loaded automatically or via `use`:
 | `Attribute::Handlers` | Perl | |
 | `Devel::Cycle` | Perl | |
 | `Devel::Peek` | Perl | |
+| `Devel::Caller` | Perl + Java | Caller CV and argument introspection used by lexical compatibility modules |
+| `Devel::LexAlias` | Perl + Java | Lexical-cell aliasing for local pads and closures |
+| `PadWalker` | Perl + Java | `peek_sub`, `closed_over`, `set_closed_over`; no `peek_my`, `peek_our`, or `var_name` yet |
 | `Class::XSAccessor` / `Class::XSAccessor::Array` | Perl | Pure-Perl replacement for the CPAN XS accessors; no entersub optimizer |
 | `Class::MOP` | Perl | Upstream 2.4000 source |
 | `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass (no threads). See note below. |

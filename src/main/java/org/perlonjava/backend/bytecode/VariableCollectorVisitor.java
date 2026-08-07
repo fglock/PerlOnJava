@@ -20,8 +20,10 @@ import java.util.Set;
  */
 public class VariableCollectorVisitor implements Visitor {
     private final Set<String> variables;
+    private final Set<String> declaredVariables;
     private boolean hasEvalString = false;
     private final Deque<Set<String>> localScopes = new ArrayDeque<>();
+    private int subroutineDepth = 0;
 
     /**
      * Create a new VariableCollectorVisitor.
@@ -29,7 +31,12 @@ public class VariableCollectorVisitor implements Visitor {
      * @param variables Set to populate with variable names (will be modified)
      */
     public VariableCollectorVisitor(Set<String> variables) {
+        this(variables, null);
+    }
+
+    public VariableCollectorVisitor(Set<String> variables, Set<String> declaredVariables) {
         this.variables = variables;
+        this.declaredVariables = declaredVariables;
         this.localScopes.push(new HashSet<>());
     }
 
@@ -58,23 +65,35 @@ public class VariableCollectorVisitor implements Visitor {
     }
 
     private void declare(String varName) {
+        declare(varName, null);
+    }
+
+    private void declare(String varName, String declaration) {
         localScopes.peek().add(varName);
+        if (declaredVariables != null && subroutineDepth == 0
+                && ("my".equals(declaration) || "state".equals(declaration))) {
+            declaredVariables.add(varName);
+        }
     }
 
     private void declareFrom(Node node) {
+        declareFrom(node, null);
+    }
+
+    private void declareFrom(Node node, String declaration) {
         if (node == null) return;
         if (node instanceof OperatorNode opNode) {
             if (isDeclarationOperator(opNode.operator)) {
-                declareFrom(opNode.operand);
+                declareFrom(opNode.operand, opNode.operator);
             } else if (isVariableOperator(opNode.operator)
                     && opNode.operand instanceof IdentifierNode idNode) {
-                declare(opNode.operator + idNode.name);
+                declare(opNode.operator + idNode.name, declaration);
             } else {
-                declareFrom(opNode.operand);
+                declareFrom(opNode.operand, declaration);
             }
         } else if (node instanceof ListNode listNode && listNode.elements != null) {
             for (Node element : listNode.elements) {
-                declareFrom(element);
+                declareFrom(element, declaration);
             }
         }
     }
@@ -95,7 +114,7 @@ public class VariableCollectorVisitor implements Visitor {
     private void visitAssignmentTarget(Node node) {
         if (node == null) return;
         if (node instanceof OperatorNode opNode && isDeclarationOperator(opNode.operator)) {
-            declareFrom(opNode.operand);
+            declareFrom(opNode.operand, opNode.operator);
             return;
         }
         if (node instanceof ListNode listNode && listNode.elements != null) {
@@ -125,7 +144,7 @@ public class VariableCollectorVisitor implements Visitor {
 
         // Check if this is a variable reference (sigil + identifier)
         if (isDeclarationOperator(op)) {
-            declareFrom(node.operand);
+            declareFrom(node.operand, op);
             return;
         }
 
@@ -318,8 +337,13 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
-        if (node.block != null) {
-            node.block.accept(this);
+        subroutineDepth++;
+        try {
+            if (node.block != null) {
+                node.block.accept(this);
+            }
+        } finally {
+            subroutineDepth--;
         }
     }
 

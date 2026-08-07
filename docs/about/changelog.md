@@ -4,6 +4,13 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Add Java-backed `PadWalker`, `Devel::Caller`, and `Devel::LexAlias`
+  compatibility, including anonymous-sub pad metadata and lexical rebinding
+  across JVM and interpreter closures; `Lexical::Persistence` and
+  `Test::Cookbook` now pass their installation suites.
+- CPAN: supply POD::Tested's omitted `Pod::Parser` prerequisite and tolerate
+  Test::Block diagnostics that also fail under current system Perl.
+- Bugfix: `UNIVERSAL::DOES` honors classes that override `isa`.
 - Add `Catalyst::Runtime` 5.90132 support for single-process PSGI
   applications through `Plack::Handler::Netty`, including action dispatch,
   parameters, uploads, responses, UTF-8, logging, and exception handling.

@@ -700,6 +700,13 @@ public class BytecodeInterpreter {
                                 MyVarCleanupStack.register(registers[reg]);
                             }
 
+                            case Opcodes.APPLY_LEXICAL_ALIAS -> {
+                                int reg = bytecode[pc++];
+                                int nameIdx = bytecode[pc++];
+                                registers[reg] = code.resolveLexicalAlias(
+                                        code.stringPool[nameIdx], registers[reg]);
+                            }
+
                             // =================================================================
                             // VARIABLE ACCESS - GLOBAL
                             // =================================================================

@@ -164,6 +164,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static final ThreadLocal<Deque<RuntimeCode>> activeCodeStack =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    private record ActiveLexicalFrame(RuntimeCode code, Map<String, RuntimeBase> cells) {}
+    private static volatile boolean lexicalAliasSupportEnabled;
+    private static final ThreadLocal<Deque<ActiveLexicalFrame>> activeLexicalFrames =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
     /**
      * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
      * time. Used to populate {@code @DB::args} for {@code caller(N)} from package DB.
@@ -222,9 +227,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static void pushActiveCode(RuntimeCode code) {
         activeCodeStack.get().push(code);
+        if (lexicalAliasSupportEnabled) {
+            activeLexicalFrames.get().push(new ActiveLexicalFrame(code, new HashMap<>()));
+        }
     }
 
     public static void popActiveCode(RuntimeCode code) {
+        if (lexicalAliasSupportEnabled) {
+            Deque<ActiveLexicalFrame> frames = activeLexicalFrames.get();
+            if (!frames.isEmpty() && frames.peek().code() == code) {
+                frames.pop();
+            } else {
+                frames.removeIf(frame -> frame.code() == code);
+            }
+        }
         Deque<RuntimeCode> stack = activeCodeStack.get();
         if (!stack.isEmpty() && stack.peek() == code) {
             stack.pop();
@@ -254,6 +270,38 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static boolean hasActiveCode() {
         return !activeCodeStack.get().isEmpty();
+    }
+
+    public static void enableLexicalAliasSupport() {
+        lexicalAliasSupportEnabled = true;
+    }
+
+    private static boolean sameLogicalCode(RuntimeCode left, RuntimeCode right) {
+        if (left == right) return true;
+        return left != null && left.__SUB__ != null && left.__SUB__.value == right
+                || right != null && right.__SUB__ != null && right.__SUB__.value == left;
+    }
+
+    private static void registerActiveLexical(
+            RuntimeCode code, String variableName, RuntimeBase cell) {
+        if (!lexicalAliasSupportEnabled) return;
+        for (ActiveLexicalFrame frame : activeLexicalFrames.get()) {
+            if (sameLogicalCode(frame.code(), code)) {
+                frame.cells().put(variableName, cell);
+                return;
+            }
+        }
+    }
+
+    public static RuntimeBase findActiveLexical(RuntimeCode code, String variableName) {
+        if (!lexicalAliasSupportEnabled) return null;
+        for (ActiveLexicalFrame frame : activeLexicalFrames.get()) {
+            if (sameLogicalCode(frame.code(), code)) {
+                RuntimeBase cell = frame.cells().get(variableName);
+                if (cell != null) return cell;
+            }
+        }
+        return null;
     }
 
     /**
@@ -858,6 +906,53 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Live lexical containers keyed by their Perl pad names for PadWalker. */
     public Map<String, RuntimeBase> closedOverVariables;
+
+    /** Lexicals declared by this CV, exposed by PadWalker::peek_sub. */
+    public Set<String> lexicalVariableNames;
+
+    /**
+     * Attach the lexical names declared directly by an anonymous subroutine.
+     * Returning the original scalar keeps this convenient for JVM bytecode
+     * emission, where the CODE reference is already on the operand stack.
+     */
+    public static RuntimeScalar attachLexicalVariableNames(
+            RuntimeScalar codeRef, String[] variableNames) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            code.lexicalVariableNames = variableNames == null
+                    ? null
+                    : new java.util.LinkedHashSet<>(java.util.Arrays.asList(variableNames));
+        }
+        return codeRef;
+    }
+
+    /** Devel::LexAlias replacements applied when a lexical is instantiated. */
+    public Map<String, RuntimeBase> lexicalAliases;
+
+    public RuntimeBase resolveLexicalAlias(String variableName, RuntimeBase defaultValue) {
+        RuntimeBase cell = defaultValue;
+        if (lexicalAliases != null) {
+            RuntimeBase replacement = lexicalAliases.get(variableName);
+            if (replacement != null) cell = replacement;
+        }
+        registerActiveLexical(this, variableName, cell);
+        return cell;
+    }
+
+    public static RuntimeBase resolveLexicalAlias(
+            RuntimeBase defaultValue, RuntimeScalar codeRef, String variableName) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            return code.resolveLexicalAlias(variableName, defaultValue);
+        }
+        return defaultValue;
+    }
+
+    public void setLexicalAlias(String variableName, RuntimeBase replacement) {
+        if (lexicalVariableNames == null || !lexicalVariableNames.contains(variableName)) {
+            return;
+        }
+        if (lexicalAliases == null) lexicalAliases = new HashMap<>();
+        lexicalAliases.put(variableName, replacement);
+    }
 
     /**
      * Tracks the number of stash (glob) entries that reference this CODE object.
@@ -2828,12 +2923,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
                 RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
                 if (capturedVar != null) {
+                    if (code.closedOverVariables == null) {
+                        code.closedOverVariables = new LinkedHashMap<>();
+                    }
+                    code.closedOverVariables.put(f.getName(), capturedVar);
                     captured.add(capturedVar);
                     capturedVar.retainClosureCapture();
                 }
             } else if (f.getType() == RuntimeArray.class || f.getType() == RuntimeHash.class) {
                 RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
                 if (capturedAggregate != null) {
+                    if (code.closedOverVariables == null) {
+                        code.closedOverVariables = new LinkedHashMap<>();
+                    }
+                    code.closedOverVariables.put(f.getName(), capturedAggregate);
                     capturedAggregates.add(capturedAggregate);
                     capturedAggregate.retainClosureCapture();
                 }
@@ -3740,6 +3843,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             previous = active;
         }
         return null;
+    }
+
+    public static RuntimeCode getActiveCodeAtCallerFrame(int logicalFrame) {
+        return activeCodeAtCallerFrame(logicalFrame);
     }
 
     private static boolean isCompilerWrapperPair(RuntimeCode left, RuntimeCode right) {
