@@ -283,14 +283,12 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 
 ### Next steps
 
-1. Split and retire the remaining independently justified Graph patch hunks,
-   starting with adjacency rendering's Set::Object lifetime issue.
-2. Remove Module::Install's explicit `authors` patch through glob-alias
+1. Remove Module::Install's explicit `authors` patch through glob-alias
    introspection parity, then integrate lazy native `Want` support so
    Term::ANSIColor::Markup can use its upstream lvalue accessors.
-3. Make the shared lvalue analysis authoritative for both backends and rerun
+2. Make the shared lvalue analysis authoritative for both backends and rerun
    the unpatched Phase 5 target matrix.
-4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -492,6 +490,20 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   smoke applies exactly that one patch, uses upstream Storable selection, and
   passes all 88 files and 9,243 assertions; bootstrap removes the installed
   `Graph.pm.patch`. The full `make` gate passes.
+- JVM nested-block cleanup now drains deferred mortal decrements only above the
+  current function mark. Previously, a full drain inside the second constructor
+  call could destroy the first constructor result while it was still waiting in
+  the caller's list-assignment RHS. Regression:
+  `src/test/resources/unit/zz_list_assignment_destroy_lifetime.t` passes 3/3
+  under standard Perl, JVM, and interpreter backends.
+- Graph's final adjacency rewrite is retired. The upstream Set::Object-based
+  rendering in `t/08_stringify.t` now keeps both returned sets alive, so
+  `AdjacencyMap.pm.patch` and `Graph.yml` are deleted and registered for
+  installed-cache retirement. A source-first, zero-patch `jcpan -t Graph`
+  build passes all 88 files and 9,241 assertions, retains upstream
+  `AdjacencyMap.pm`, and removes all stale installed Graph preference and patch
+  files. Graph 0.9735 is now fully unpatched, and the final full `make` gate
+  passes.
 
 ### Open questions
 
