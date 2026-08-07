@@ -458,6 +458,26 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      three remaining large-file worker-pool cases require unsupported `fork`
      and remain outside scope. Files: `IOOperator.java`,
      `FutureAsyncAwaitRuntimeTest.java`, and `scalar_handle_read.t`.
+   - [Completed 2026-08-07] Removed PAGI's WebSocket module-loading boundary.
+     `Net::Async::WebSocket` 0.14 used the XS-only experimental `meta` module
+     only to install generated frame-sending methods; a bundled CPAN
+     distropref now replaces that use with portable typeglob assignments.
+   - Tightened `base`'s in-memory-package fallback so a missing nested
+     dependency cannot leave a partially compiled parent class accepted as a
+     successful load. The focused failure test matches system Perl on both
+     PerlOnJava frontends.
+   - Preserved byte-string flags for string bitwise AND, OR, XOR, and
+     complement. This keeps WebSocket masking byte-safe instead of UTF-8
+     re-encoding binary payload octets such as `FF FE`; the new operator
+     regression matches system Perl on both frontends.
+   - PAGI's `t/04-websocket.t` now passes all seven scenarios over a live
+     loopback listener: text and binary echo, message sequencing, close,
+     WebSocket scope, subprotocol parsing, and 403 rejection. Full `make`
+     passes. A cold `jcpan -t Net::Async::WebSocket` also applies the bundled
+     distropref without attempting the removed `meta` dependency and passes
+     the upstream suite (5 files, 22 tests). Files: `Base.java`,
+     `BitwiseOperators.java`, the two focused unit tests, and the
+     `Net-Async-WebSocket` CPAN distropref and patch.
    - Next: continue the remaining PAGI file/runtime gaps.
      Process-worker tests remain outside scope while PerlOnJava does not
      implement `fork`.

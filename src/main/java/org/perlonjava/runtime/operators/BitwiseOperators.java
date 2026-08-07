@@ -367,7 +367,9 @@ public class BitwiseOperators {
             result.append((char) (c1 & c2));
         }
 
-        return new RuntimeScalar(result.toString());
+        return stringBitwiseResult(result.toString(),
+                runtimeScalar.type == RuntimeScalarType.STRING
+                        || arg2.type == RuntimeScalarType.STRING);
     }
 
     /**
@@ -393,7 +395,9 @@ public class BitwiseOperators {
             result.append((char) (c1 | c2));
         }
 
-        return new RuntimeScalar(result.toString());
+        return stringBitwiseResult(result.toString(),
+                runtimeScalar.type == RuntimeScalarType.STRING
+                        || arg2.type == RuntimeScalarType.STRING);
     }
 
     /**
@@ -419,7 +423,9 @@ public class BitwiseOperators {
             result.append((char) (c1 ^ c2));
         }
 
-        return new RuntimeScalar(result.toString());
+        return stringBitwiseResult(result.toString(),
+                runtimeScalar.type == RuntimeScalarType.STRING
+                        || arg2.type == RuntimeScalarType.STRING);
     }
 
     /**
@@ -441,7 +447,18 @@ public class BitwiseOperators {
             result.append((char) ((~c) & 0xFF));
         }
 
-        return new RuntimeScalar(result.toString());
+        // Perl's string complement returns an octet string even when the
+        // operand carries the UTF-8 flag (for code points representable as
+        // bytes, which is the range accepted above).
+        return stringBitwiseResult(result.toString(), false);
+    }
+
+    private static RuntimeScalar stringBitwiseResult(String value, boolean utf8) {
+        RuntimeScalar result = new RuntimeScalar(value);
+        if (!utf8) {
+            result.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return result;
     }
 
     /**

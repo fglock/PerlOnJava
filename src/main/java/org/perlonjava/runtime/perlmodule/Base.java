@@ -117,10 +117,15 @@ public class Base extends PerlModuleBase {
                     RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename));
                 } catch (Exception e) {
                     String msg = e.getMessage();
-                    boolean notFound = msg != null
-                            && (msg.contains("not found")
-                                || msg.contains("Can't locate"));
-                    if (notFound) {
+                    // Only accept the in-memory fallback when the requested
+                    // base file itself is missing. A partially compiled base
+                    // can leave methods in its stash before a nested require
+                    // fails; treating that nested "Can't locate" as success
+                    // silently creates an incomplete parent class.
+                    boolean requestedBaseNotFound = msg != null
+                            && (msg.contains("Can't locate " + filename + " in @INC")
+                                || msg.contains(filename + " not found"));
+                    if (requestedBaseNotFound) {
                         // No .pm file. Fall back to in-memory check — the
                         // package may have been built up by other code (e.g.
                         // Java bridge stubs for IO::Handle::_sync, or DBIC's
