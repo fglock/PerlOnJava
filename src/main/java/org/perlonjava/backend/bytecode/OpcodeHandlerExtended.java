@@ -881,20 +881,27 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute match regex operation.
-     * Format: MATCH_REGEX rd stringReg regexReg ctx
+     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode
      */
     public static int executeMatchRegex(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+        boolean bytesMode = bytecode[pc++] != 0;
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
-        registers[rd] = RuntimeRegex.matchRegex(
-                (RuntimeScalar) registers[regexReg],
-                (RuntimeScalar) registers[stringReg],
-                ctx
-        );
+        if (bytesMode) {
+            registers[rd] = RuntimeRegex.matchRegexBytes(
+                    (RuntimeScalar) registers[regexReg],
+                    (RuntimeScalar) registers[stringReg],
+                    ctx);
+        } else {
+            registers[rd] = RuntimeRegex.matchRegex(
+                    (RuntimeScalar) registers[regexReg],
+                    (RuntimeScalar) registers[stringReg],
+                    ctx);
+        }
         return pc;
     }
 

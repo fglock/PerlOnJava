@@ -3712,7 +3712,7 @@ sub prereq_pm {
         CPAN->use_inst("CPAN::Meta::Requirements");
         my $opt_runtime = CPAN::Meta::Requirements->new;
         my $opt_build   = CPAN::Meta::Requirements->new;
-        if ( $CPAN::Config->{recommends_policy} ) {
+        if ( CPAN::HandleConfig->prefs_lookup($self, q{recommends_policy}) ) {
             $opt_runtime->add_requirements( $prereqs->requirements_for(qw/runtime recommends/));
             $opt_build->add_requirements(   $prereqs->requirements_for(qw/build recommends/));
             $opt_build->add_requirements(   $prereqs->requirements_for(qw/test  recommends/));
@@ -3729,7 +3729,7 @@ sub prereq_pm {
     elsif (my $yaml = $self->read_yaml) { # often dynamic_config prevents a result here
         $req =  $yaml->{requires} || {};
         $breq =  $yaml->{build_requires} || {};
-        if ( $CPAN::Config->{recommends_policy} ) {
+        if ( CPAN::HandleConfig->prefs_lookup($self, q{recommends_policy}) ) {
             $opt_req = $yaml->{recommends} || {};
         }
         undef $req unless ref $req eq "HASH" && %$req;

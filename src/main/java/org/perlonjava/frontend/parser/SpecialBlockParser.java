@@ -417,7 +417,7 @@ public class SpecialBlockParser {
                 restoreStack(parser.ctx.symbolTable.strictOptionsStack, savedStrictOptionsStack);
             }
         }
-        GlobalVariable.getGlobalVariable("main::@").set(""); // Reset error variable
+        GlobalVariable.setGlobalVariable("main::@", ""); // Reset error variable
 
         if (!blockPhase.equals("BEGIN")) {
             RuntimeScalar codeRef = result.getFirst();

@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -1083,6 +1084,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Fast path: no alarm active, use direct matching
         RuntimeBase result = matchRegexDirect(quotedRegex, string, ctx);
+        return result;
+    }
+
+    /** Apply a regex under lexical {@code use bytes} while preserving an s/// lvalue. */
+    public static RuntimeBase matchRegexBytes(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+        RuntimeScalar byteView = StringOperators.toBytesString(string);
+        if (byteView == string) {
+            return matchRegex(quotedRegex, string, ctx);
+        }
+
+        RuntimeRegex regex = resolveRegex(quotedRegex);
+        boolean destructiveReplacement = regex.replacement != null
+                && (regex.regexFlags == null || !regex.regexFlags.isNonDestructive());
+        if (!destructiveReplacement) {
+            RuntimePosLvalue.copyPositionState(string, byteView);
+        }
+        RuntimeBase result = matchRegex(quotedRegex, byteView, ctx);
+        if (destructiveReplacement && result.scalar().getBoolean()) {
+            string.set(byteView);
+        } else if (!destructiveReplacement) {
+            RuntimePosLvalue.copyPositionState(byteView, string);
+        }
         return result;
     }
 
@@ -2316,6 +2339,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         lastMatchUsedPFlag = false;
         lastCaptureGroups = null;
         lastNamedCaptureGroups = null;
+        lastMatchWasByteString = false;
         manualCaptureStarts = null;
         manualCaptureEnds = null;
 

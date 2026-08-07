@@ -314,7 +314,7 @@ public class SlowOpcodeHandler {
                 " src=" + (code != null ? code.sourceName : "null"));
 
         if (siteIsEvalbytes) {
-            GlobalVariable.getGlobalVariable("main::@").set("");
+            GlobalVariable.setGlobalVariable("main::@", "");
             ScalarUtils.assertBytes(codeScalar);
         }
 

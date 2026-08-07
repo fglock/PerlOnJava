@@ -742,7 +742,18 @@ public class GlobalVariable {
      * @param value The value to set.
      */
     public static void setGlobalVariable(String key, String value) {
-        getGlobalVariable(key).set(value);
+        RuntimeScalar scalar = getGlobalVariable(key);
+        if ("main::@".equals(key)
+                && (scalar instanceof RuntimeScalarReadOnly
+                    || scalar.type == RuntimeScalarType.READONLY_SCALAR)) {
+            // Perl's eval machinery can replace $@ even when stash assignment
+            // has aliased it to a read-only literal (`$::{'@'} = \3`).  An
+            // ordinary Perl `$@ = ...` still uses RuntimeScalar.set() and must
+            // continue to throw for that alias.
+            globalVariables.put(key, new RuntimeScalar(value));
+            return;
+        }
+        scalar.set(value);
     }
 
     /**

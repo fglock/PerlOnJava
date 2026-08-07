@@ -1860,7 +1860,7 @@ public class BytecodeInterpreter {
 
                             case Opcodes.MATCH_REGEX -> {
                                 // Match regex
-                                // Format: MATCH_REGEX rd stringReg regexReg ctx
+                                // Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode
                                 pc = OpcodeHandlerExtended.executeMatchRegex(bytecode, pc, registers);
                             }
 

@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Filesys::Notify::Simple.
+
+  Plack 1.0054 declares this module for its optional restarter/reloader path,
+  which is outside PerlOnJava's supported single-process deployment mode. Its
+  move/recreate tests depend on process-oriented filesystem watcher behavior.
+  Install the module for dependency completeness while skipping that unsupported
+  upstream test phase; the Netty runtime path is covered independently.
+match:
+  distribution: "^MIYAGAWA/Filesys-Notify-Simple-"
+test:
+  commandline: "PERLONJAVA_SKIP"

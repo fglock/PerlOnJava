@@ -21,6 +21,29 @@ public class Warnings extends PerlModuleBase {
     public static final WarningFlags warningManager = new WarningFlags();
 
     /**
+     * Resolve the package that invoked a native warnings::* routine. Native
+     * registrations and interpreter wrappers can add more than one active-code
+     * entry, so prefer the first warnings::register package on the active stack
+     * and otherwise use the first frame outside warnings itself.
+     */
+    private static String invokingWarningPackage(String fallback) {
+        String firstExternal = null;
+        for (int depth = 1; depth < 32; depth++) {
+            RuntimeCode code = RuntimeCode.getActiveCodeAt(depth);
+            if (code == null) break;
+            String pkg = code.packageName;
+            if (pkg == null || pkg.isEmpty() || "warnings".equals(pkg)) continue;
+            if (firstExternal == null) firstExternal = pkg;
+            if (WarningFlags.isCustomCategory(pkg)) return pkg;
+            if (code.sourcePackage != null
+                    && WarningFlags.isCustomCategory(code.sourcePackage)) {
+                return code.sourcePackage;
+            }
+        }
+        return firstExternal != null ? firstExternal : fallback;
+    }
+
+    /**
      * Constructor for Warnings.
      * Initializes the module with the name "warnings".
      */
@@ -214,7 +237,7 @@ public class Warnings extends PerlModuleBase {
     private static String findExternalCallerBits() {
         for (int level = 0; level < 50; level++) {
             RuntimeList callerInfo = RuntimeCode.caller(
-                new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)),
+                new RuntimeList(RuntimeScalarCache.getScalarInt(level)),
                 RuntimeContextType.LIST
             );
             if (callerInfo.size() <= 0) break;
@@ -453,16 +476,7 @@ public class Warnings extends PerlModuleBase {
         if (args.size() > 0) {
             category = args.get(0).toString();
         } else {
-            // No args: use calling package as category (Perl 5 behavior).
-            // Use caller(0) directly (without the +1 offset from getCallerPackageAtLevel)
-            // because this registered Java method adds a frame to the caller stack,
-            // and we need the direct caller's package (caller(0)).
-            RuntimeList callerInfo = RuntimeCode.caller(
-                new RuntimeList(RuntimeScalarCache.getScalarInt(0)), 
-                RuntimeContextType.LIST
-            );
-            String pkg = (callerInfo.size() > 0) ? callerInfo.elements.get(0).toString() : null;
-            category = (pkg != null) ? pkg : "all";
+            category = invokingWarningPackage("all");
         }
         
         // For custom (registered) categories, walk past the registered package
@@ -521,14 +535,7 @@ public class Warnings extends PerlModuleBase {
         if (args.size() > 0) {
             category = args.get(0).toString();
         } else {
-            // No args: use calling package as category (Perl 5 behavior).
-            // Use caller(0) directly to get the direct caller's package.
-            RuntimeList callerInfo = RuntimeCode.caller(
-                new RuntimeList(RuntimeScalarCache.getScalarInt(0)), 
-                RuntimeContextType.LIST
-            );
-            String pkg = (callerInfo.size() > 0) ? callerInfo.elements.get(0).toString() : null;
-            category = (pkg != null) ? pkg : "all";
+            category = invokingWarningPackage("all");
         }
         
         // For custom categories, walk past the registered package
@@ -612,14 +619,8 @@ public class Warnings extends PerlModuleBase {
             message = args.get(1);
         } else {
             // warnif(message) - use calling package as category.
-            // Use caller(0) directly to get the direct caller's package.
             message = args.get(0);
-            RuntimeList callerInfo = RuntimeCode.caller(
-                new RuntimeList(RuntimeScalarCache.getScalarInt(0)), 
-                RuntimeContextType.LIST
-            );
-            String pkg = (callerInfo.size() > 0) ? callerInfo.elements.get(0).toString() : null;
-            category = (pkg != null) ? pkg : "main";
+            category = invokingWarningPackage("main");
         }
         
         // Check scope-based runtime suppression first (from "no warnings 'category'" blocks)

@@ -488,6 +488,10 @@ public class LayeredIOHandle implements IOHandle {
         if ("locale".equalsIgnoreCase(charsetName)) {
             return Charset.defaultCharset();
         }
+        if ("utf-8-strict".equalsIgnoreCase(charsetName)
+                || "utf8-strict".equalsIgnoreCase(charsetName)) {
+            return StandardCharsets.UTF_8;
+        }
         return Charset.forName(charsetName);
     }
 

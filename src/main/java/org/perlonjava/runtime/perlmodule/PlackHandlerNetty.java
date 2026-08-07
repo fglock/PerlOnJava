@@ -48,6 +48,19 @@ import java.nio.charset.StandardCharsets;
 public class PlackHandlerNetty extends PerlModuleBase {
 
     /**
+     * PSGI response bodies are byte strings. PerlOnJava represents their octets
+     * as ISO-8859-1 code points, so writing the Java String as UTF-8 would encode
+     * already-encoded content a second time and disagree with Content-Length.
+     */
+    private static ByteBuf psgiBodyBuffer(RuntimeArray bodyArray) {
+        ByteBuf content = Unpooled.buffer();
+        for (int i = 0; i < bodyArray.size(); i++) {
+            content.writeCharSequence(bodyArray.get(i).toString(), StandardCharsets.ISO_8859_1);
+        }
+        return content;
+    }
+
+    /**
      * Creates a new PSGI server module instance for XSLoader.
      */
     public PlackHandlerNetty() {
@@ -717,19 +730,12 @@ public class PlackHandlerNetty extends PerlModuleBase {
          */
         private FullHttpResponse buildHttpResponse(int status, RuntimeArray headersArray,
                                                    RuntimeArray bodyArray) {
-            // Build response body by concatenating all body parts
-            StringBuilder bodyBuilder = new StringBuilder();
-            for (int i = 0; i < bodyArray.size(); i++) {
-                bodyBuilder.append(bodyArray.get(i).toString());
-            }
-            String bodyString = bodyBuilder.toString();
-
             // Create Netty response
             HttpResponseStatus httpStatus = HttpResponseStatus.valueOf(status);
             FullHttpResponse response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1,
                 httpStatus,
-                Unpooled.copiedBuffer(bodyString, CharsetUtil.UTF_8)
+                psgiBodyBuffer(bodyArray)
             );
 
             // Add PSGI headers (flat array: name1, value1, name2, value2, ...)
@@ -908,17 +914,10 @@ public class PlackHandlerNetty extends PerlModuleBase {
          */
         private FullHttpResponse buildHttpResponse(int status, RuntimeArray headersArray,
                                                    RuntimeArray bodyArray) {
-            // Build response body by concatenating all body parts
-            StringBuilder bodyBuilder = new StringBuilder();
-            for (int i = 0; i < bodyArray.size(); i++) {
-                bodyBuilder.append(bodyArray.get(i).toString());
-            }
-
-            String bodyStr = bodyBuilder.toString();
             FullHttpResponse response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1,
                 HttpResponseStatus.valueOf(status),
-                Unpooled.copiedBuffer(bodyStr, CharsetUtil.UTF_8)
+                psgiBodyBuffer(bodyArray)
             );
 
             // Process PSGI headers (flat array of pairs: key1, val1, key2, val2, ...)

@@ -367,7 +367,9 @@ public class ArgumentParser {
     private static boolean processPerlShebangSwitches(String shebangLine, CompilerOptions parsedArgs) {
         // perlrun: parsing of #! switches starts at a *word* "perl" or "indir".
         // Substrings like "jperl" must NOT match (matches stock perl behavior).
-        Matcher perlWord = Pattern.compile("\\b(?:perl|indir)\\b", Pattern.CASE_INSENSITIVE).matcher(shebangLine);
+        Matcher perlWord = Pattern.compile(
+                "\\b(?:perl(?:\\d+(?:\\.\\d+)*)?|indir)\\b",
+                Pattern.CASE_INSENSITIVE).matcher(shebangLine);
         if (perlWord.find()) {
             String relevantPart = shebangLine.substring(perlWord.end()).trim();
             // Strip emacs mode line marker (e.g. "-*- mode: cperl -*-") which real

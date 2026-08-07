@@ -417,7 +417,7 @@ public class WarningFlags {
         // because they were registered (via warnings::register) after the scope's
         // "use warnings" was compiled. In Perl 5, "use warnings" (which enables "all")
         // implicitly enables all custom categories registered later.
-        if (customCategories.contains(category)) {
+        if (customCategories.contains(category) && byteIndex >= bits.length()) {
             int allOffset = PERL5_OFFSETS.get("all");
             int allBitPos = allOffset * 2;
             int allByteIndex = allBitPos / 8;
@@ -588,8 +588,8 @@ public class WarningFlags {
         
         // If "all" warnings are already enabled, enable this new category too
         ScopedSymbolTable symbolTable = getCurrentScope();
-        if (symbolTable != null && symbolTable.isWarningCategoryEnabled("all")) {
-            symbolTable.enableWarningCategory(category);
+        if (symbolTable != null) {
+            symbolTable.inheritAllWarningsForRegisteredCategory(category);
         }
     }
 

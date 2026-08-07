@@ -337,21 +337,13 @@ public class EmitRegex {
      * UTF-8 byte representation before matching.
      */
     private static void emitMatchRegex(EmitterVisitor emitterVisitor) {
-        // When 'use bytes' is in effect, convert the input string to byte representation
-        // so that regex character classes like [\x7f-\xa0] match against UTF-8 bytes
-        if (emitterVisitor.ctx.symbolTable != null &&
-                emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)) {
-            // Stack: regex, string (top) -> regex, bytesString (top)
-            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/operators/StringOperators", "toBytesString",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                    false);
-        }
-
+        boolean bytesMode = emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES);
         emitterVisitor.pushCallContext();
         // Invoke the regex matching operation
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/regex/RuntimeRegex", "matchRegex",
+                "org/perlonjava/runtime/regex/RuntimeRegex",
+                bytesMode ? "matchRegexBytes" : "matchRegex",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

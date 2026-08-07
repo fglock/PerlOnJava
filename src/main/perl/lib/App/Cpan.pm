@@ -753,7 +753,7 @@ sub _get_cpanpm_last_line
 
 BEGIN {
 my $epic_fail_words = join '|',
-	qw( Error stop(?:ping)? problems force not unsupported
+	qw( Error stop(?:ping)? problems force unsupported
 		fail(?:ed)? Cannot\s+install );
 
 sub _cpanpm_output_indicates_failure

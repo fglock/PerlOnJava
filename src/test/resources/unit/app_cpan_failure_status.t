@@ -26,4 +26,15 @@ use App::Cpan ();
     );
 }
 
+{
+    no warnings 'redefine';
+    local *App::Cpan::_get_cpanpm_last_line = sub {
+        return "This option does not take effect\n";
+    };
+    ok(
+        !App::Cpan::_cpanpm_output_indicates_failure(),
+        q{an informational 'not' does not make a successful install fail},
+    );
+}
+
 done_testing;

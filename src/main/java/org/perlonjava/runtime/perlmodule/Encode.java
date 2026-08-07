@@ -888,18 +888,20 @@ public class Encode extends PerlModuleBase {
 
         try {
             Charset charset = getCharset(encodingName);
-            // Create a blessed hash with both the Perl-canonical Name
-            // (used by ->name) and the IANA MimeName (used by ->mime_name).
-            RuntimeHash encObj = new RuntimeHash();
-            encObj.put("Name", new RuntimeScalar(perlCanonicalName(charset.name())));
-            encObj.put("MimeName", new RuntimeScalar(charset.name()));
-            RuntimeScalar ref = encObj.createReference();
-            ReferenceOperators.bless(ref, new RuntimeScalar("Encode::Encoding"));
-            return ref.getList();
+            return createEncodingObject(charset).getList();
         } catch (Exception e) {
             // Return undef if encoding not found
             return scalarUndef.getList();
         }
+    }
+
+    private static RuntimeScalar createEncodingObject(Charset charset) {
+        RuntimeHash encObj = new RuntimeHash();
+        encObj.put("Name", new RuntimeScalar(perlCanonicalName(charset.name())));
+        encObj.put("MimeName", new RuntimeScalar(charset.name()));
+        RuntimeScalar ref = encObj.createReference();
+        ReferenceOperators.bless(ref, new RuntimeScalar("Encode::Encoding"));
+        return ref;
     }
 
     /**
@@ -1256,11 +1258,6 @@ public class Encode extends PerlModuleBase {
         }
 
         String key = encodingName.toLowerCase(Locale.ROOT);
-        Charset cached = CHARSET_ALIASES.get(key);
-        if (cached != null) {
-            return cached.name();
-        }
-
         String globalName = switch (key) {
             case "locale" -> "Encode::Locale::ENCODING_LOCALE";
             case "locale_fs" -> "Encode::Locale::ENCODING_LOCALE_FS";
@@ -1269,14 +1266,30 @@ public class Encode extends PerlModuleBase {
             default -> null;
         };
         if (globalName == null) {
+            Charset cached = CHARSET_ALIASES.get(key);
+            if (cached != null) {
+                return cached.name();
+            }
             return encodingName;
+        }
+
+
+        // Encode::Locale::_flush_aliases deletes this entry when reinit()
+        // changes a dynamic target. Keep the Java fast-path cache only while
+        // the corresponding Perl Encode::Alias cache entry still exists.
+        RuntimeHash perlAliasCache = GlobalVariable.getGlobalHash("Encode::Alias::Alias");
+        Charset cached = CHARSET_ALIASES.get(key);
+        if (cached != null && perlAliasCache.elements.containsKey(key)) {
+            return cached.name();
         }
 
         RuntimeScalar aliasTarget = GlobalVariable.globalVariables.get(globalName);
         if (aliasTarget != null && aliasTarget.getDefinedBoolean()) {
             String target = aliasTarget.toString();
             try {
-                CHARSET_ALIASES.put(key, getCharset(target));
+                Charset resolved = getCharset(target);
+                CHARSET_ALIASES.put(key, resolved);
+                perlAliasCache.put(key, createEncodingObject(resolved));
             } catch (RuntimeException ignored) {
                 return target;
             }

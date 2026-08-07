@@ -59,6 +59,26 @@ public class RuntimePosLvalue {
         return position;
     }
 
+    /** Copy pos() and zero-length /g bookkeeping between equivalent scalar views. */
+    public static void copyPositionState(RuntimeScalar source, RuntimeScalar target) {
+        RuntimeScalar targetPosition = pos(target);
+        CacheEntry sourceEntry = positionCache.get(source);
+        CacheEntry targetEntry = positionCache.get(target);
+        if (sourceEntry == null || sourceEntry.regexPosition.type == RuntimeScalarType.UNDEF) {
+            targetPosition.type = RuntimeScalarType.UNDEF;
+            targetPosition.value = null;
+            targetEntry.lastMatchWasZeroLength = false;
+            targetEntry.lastMatchPosition = -1;
+            targetEntry.lastMatchPattern = null;
+            return;
+        }
+        targetPosition.type = sourceEntry.regexPosition.type;
+        targetPosition.value = sourceEntry.regexPosition.value;
+        targetEntry.lastMatchWasZeroLength = sourceEntry.lastMatchWasZeroLength;
+        targetEntry.lastMatchPosition = sourceEntry.lastMatchPosition;
+        targetEntry.lastMatchPattern = sourceEntry.lastMatchPattern;
+    }
+
     /**
      * Invalidate the pos() for a scalar when its string value is modified.
      * This should be called on any string modification operation (.=, substr assignment, etc.)
