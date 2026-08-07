@@ -268,7 +268,7 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: Phase 6, regex engine coverage.
+Current phase: Phase 7, CPAN metadata and process services.
 
 ### Phase checklist
 
@@ -277,20 +277,18 @@ Current phase: Phase 6, regex engine coverage.
 - [x] Phase 3: Prerequisite phase preservation (2026-08-06)
 - [x] Phase 4: Caller, eval, warning, and symbol-table parity (2026-08-06)
 - [x] Phase 5: Control flow, lvalues, and introspection (2026-08-07)
-- [ ] Phase 6: Regex engine coverage
+- [x] Phase 6: Regex engine coverage (2026-08-07; executable callbacks deferred
+  by design)
 - [ ] Phase 7: CPAN metadata and process services
 - [ ] Phase 8: Deterministic lifetime and remaining parity
 
 ### Next steps
 
-1. Reduce Regexp::Common's two remaining declarative JVM failures: nested
-   comments and Spain postal codes. Its executable conditional-comment and
-   palindrome patterns remain callback-interface work rather than backend
-   mismatches.
-2. Re-run the complete isolated Regexp::Common matrix on the interpreter and
-   JVM backends after each regex increment; direct execution of three upstream
-   recursion files remains subject to the documented interpreter no-TAP
-   condition, while equivalent unit coverage must pass on both backends.
+1. Inventory active Phase 7 preferences and patches for missing CPAN metadata,
+   undeclared prerequisites, shell command construction, output capture,
+   process deadlines, and process-tree termination.
+2. Define the authoritative MYMETA reconciliation and one-retry boundary before
+   removing any dependency workaround, with source-first CPAN acceptance tests.
 3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -692,6 +690,18 @@ Current phase: Phase 6, regex engine coverage.
   and 149,226 assertions, with failures reduced again from five files to four:
   executable conditional comments, executable palindrome recursion,
   declarative nested comments, and Spain postal codes.
+- Regexp::Common nested comments are also executable dynamic recursion: the
+  module constructs `(??{$Regexp::Common::comment[...]})`. Spain's apparent
+  postal-pattern failures were instead invalid randomized "pass" inputs caused
+  by bytecode `redo` rechecking a `while` condition. Perl `redo` restarts the
+  body without checking that condition. Regression `zz_redo_unless.t` passes
+  5/5 under standard Perl, JVM, and interpreter; the unchanged Spain suite now
+  passes 2,833/2,833 on both PerlOnJava backends.
+- Phase 6 declarative coverage is complete. The final unchanged JVM matrix runs
+  all 73 Regexp::Common files and 149,226 assertions; only three executable-code
+  regex suites remain: conditional comments, palindrome recursion, and nested
+  comment recursion. These use `(?{...})`, `(??{...})`, or both and remain
+  visible under the callback-interface deferral required by the Phase 6 design.
 
 ### Open questions
 
