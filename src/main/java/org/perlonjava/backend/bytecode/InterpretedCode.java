@@ -345,11 +345,13 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, null);
-        int effectiveContext = RuntimeCode.effectiveCallContext(this, callContext);
+        int effectiveContext = futureAsyncAwaitSub
+                ? RuntimeContextType.LIST
+                : RuntimeCode.effectiveCallContext(this, callContext);
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         // This matches what RuntimeCode.apply() does for JVM-compiled subs
         RuntimeCode.pushArgs(args);
-        RuntimeCode.pushCallContext(callContext);
+        RuntimeCode.pushCallContext(effectiveContext);
         RuntimeCode.pushActiveCode(this);
         // Push warning bits for FATAL warnings support
         // This allows runtime code to check current warning context
@@ -391,10 +393,12 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);
-        int effectiveContext = RuntimeCode.effectiveCallContext(this, callContext);
+        int effectiveContext = futureAsyncAwaitSub
+                ? RuntimeContextType.LIST
+                : RuntimeCode.effectiveCallContext(this, callContext);
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         RuntimeCode.pushArgs(args);
-        RuntimeCode.pushCallContext(callContext);
+        RuntimeCode.pushCallContext(effectiveContext);
         RuntimeCode.pushActiveCode(this);
         // Push warning bits for FATAL warnings support
         if (warningBitsString != null) {

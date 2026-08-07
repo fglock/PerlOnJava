@@ -134,6 +134,12 @@ class FutureAsyncAwaitRuntimeTest {
 
             use Future::AsyncAwait;
 
+            async sub async_body_context {
+                return wantarray ? 'list' : defined(wantarray) ? 'scalar' : 'void';
+            }
+            die "async body did not run in list context\n"
+                    unless async_body_context()->AWAIT_GET eq 'list';
+
             async sub add_one {
                 my $value = await $_[0];
                 return $value + 1;

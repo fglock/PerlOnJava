@@ -298,14 +298,34 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
     ecosystem requirements rather than speculative compatibility surface.
   - Files: `BytecodeCompiler.java`, `StatementParser.java`, and
     `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 5a: Upstream harness baseline and core compatibility (2026-08-07)
+  - Made the facade load `Future >= 0.49` when available and record Awaitable
+    capability from `%INC`, avoiding a compile-order dependency on runtime
+    typeglob aliases while retaining the targeted missing-Future diagnostic.
+  - Ran async bodies in list context, independent of the caller context, while
+    preserving scalar/list/void context at each `await` expression.
+  - Added the upstream stack-balance diagnostic helper and verified the core
+    upstream files `00use.t` through `21context-while.t`, plus destruction,
+    failure, native try, and regression tests on the default frontend.
+  - The full cached 0.71 baseline now reaches 208 subtests across 52 files;
+    remaining failures are concentrated in restricted syntax diagnostics,
+    synchronous signature errors, Future subclass selection, abandoned-Future
+    warnings, and optional Awaitable-role packaging.
+  - Added both-backend regression coverage and verified the full `make` suite.
+  - Files: `Future::AsyncAwait.pm`, `FutureAsyncAwaitParser.java`, backend async
+    call-context integration, and `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Inventory and import the applicable upstream Future::AsyncAwait lifecycle,
-   syntax, cancellation, and control-flow tests.
-2. Run timeout-wrapped Future and IO::Async ecosystem suites and classify
+1. Close the remaining applicable upstream semantic gaps: restricted
+   map/grep/non-lexical-foreach/string-eval placement, synchronous signature
+   validation, Future subclass selection, and abandoned-Future diagnostics.
+2. Package and validate the pure-Perl Awaitable role/test helper where their
+   dependencies are supported, then rerun the applicable suite on both
+   frontends.
+3. Run timeout-wrapped Future and IO::Async ecosystem suites and classify any
    failures as async-runtime gaps, module-porting gaps, or unsupported features.
-3. Use those results to define the minimum native extension-hook ABI and decide
+4. Use those results to define the minimum native extension-hook ABI and decide
    whether selective interpreter routing remains the production lowering.
 
 ### Open questions

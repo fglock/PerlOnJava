@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 public final class FutureAsyncAwaitParser {
     static final String HINT_KEY = "Future::AsyncAwait/async";
     static final String CANCEL_HINT_KEY = "Future::AsyncAwait/cancel";
+    private static final String AWAITABLE_HINT_KEY = "Future::AsyncAwait/awaitable";
     public static final String BACKEND_MESSAGE =
             "Future::AsyncAwait async execution requires a loaded Awaitable Future implementation"
                     + " (load Future before declaring async subs)";
@@ -24,6 +25,12 @@ public final class FutureAsyncAwaitParser {
 
     static boolean isCancelEnabled() {
         return hintEnabled(CANCEL_HINT_KEY);
+    }
+
+    public static boolean hasAwaitableFuture() {
+        return hintEnabled(AWAITABLE_HINT_KEY)
+                || org.perlonjava.runtime.runtimetypes.RuntimeCode.isCodeDefined(
+                GlobalVariable.getGlobalCodeRef("Future::new"));
     }
 
     private static boolean hintEnabled(String key) {

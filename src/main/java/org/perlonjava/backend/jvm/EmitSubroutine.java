@@ -95,8 +95,7 @@ public class EmitSubroutine {
     public static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB start");
         if (node.getBooleanAnnotation("futureAsyncAwaitSub")
-                && !RuntimeCode.isCodeDefined(
-                        GlobalVariable.getGlobalCodeRef("Future::AWAIT_NEW_DONE"))) {
+                && !org.perlonjava.frontend.parser.FutureAsyncAwaitParser.hasAwaitableFuture()) {
             throw new PerlCompilerException(
                     node.tokenIndex,
                     org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE,

@@ -5,18 +5,35 @@ use warnings;
 
 our $VERSION = '0.71';
 
+# Match upstream's default Future implementation when it is installed. Keep
+# loading non-fatal so the compiler can emit its targeted capability message
+# in minimal environments that only contain this syntax facade.
+eval {
+    require Future;
+    Future->VERSION('0.49');
+    1;
+};
+
+# Upstream exposes this test helper as the current Perl context-stack index.
+# PerlOnJava's resumable frames are heap-owned rather than Perl CX stack
+# entries, so the externally useful invariant is represented by a stable zero.
+sub __cxstack_ix () { 0 }
+
 # PerlOnJava implements the syntax in its own frontend. Keep activation in
 # %^H so it follows Perl's normal lexical pragma scoping rules.
 sub import {
     my $class = shift;
     $^H |= 0x020000;
     $^H{'Future::AsyncAwait/async'} = 1;
+    $^H{'Future::AsyncAwait/awaitable'} = 1
+            if $INC{'Future.pm'} || Future->can('new');
     $^H{'Future::AsyncAwait/cancel'} = 1
             if grep { $_ eq ':experimental(cancel)' } @_;
 }
 
 sub unimport {
     delete $^H{'Future::AsyncAwait/async'};
+    delete $^H{'Future::AsyncAwait/awaitable'};
     delete $^H{'Future::AsyncAwait/cancel'};
 }
 
