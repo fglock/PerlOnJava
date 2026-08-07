@@ -35,7 +35,6 @@ sub _bootstrap_prefs {
         'AnyEvent.yml'               => 'PerlOnJava/CpanDistroprefs/AnyEvent.yml',
         'SQL-Translator.yml'         => 'PerlOnJava/CpanDistroprefs/SQL-Translator.yml',
         'Net-Server.yml'             => 'PerlOnJava/CpanDistroprefs/Net-Server.yml',
-        'CPAN-FindDependencies.yml'  => 'PerlOnJava/CpanDistroprefs/CPAN-FindDependencies.yml',
         'Error-Pure.yml'             => 'PerlOnJava/CpanDistroprefs/Error-Pure.yml',
         'Error.yml'                  => 'PerlOnJava/CpanDistroprefs/Error.yml',
         'IO-All.yml'                 => 'PerlOnJava/CpanDistroprefs/IO-All.yml',
@@ -161,6 +160,7 @@ sub _bootstrap_prefs {
         WWW-RobotRules.yml
         XML-Filter-GenericChunk.yml
         HTTP-Response-Encoding.yml
+        CPAN-FindDependencies.yml
         Aliased.yml
         Carp-Assert.yml
         Class-Method-Modifiers.yml
@@ -257,8 +257,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Net-Server-2.018/SkipForkTests.patch' ],
         [ 'Device-SerialPort/NoXsBitsFallback.patch',
           'PerlOnJava/CpanPatches/Device-SerialPort-1.04/NoXsBitsFallback.patch' ],
-        [ 'CPAN-FindDependencies/MakeMaker.pm.patch',
-          'PerlOnJava/CpanPatches/CPAN-FindDependencies-3.13/MakeMaker.pm.patch' ],
         [ 'Pod-Parser/Pod-Find-core-probe.patch',
           'PerlOnJava/CpanPatches/Pod-Parser-1.67/Pod-Find-core-probe.patch' ],
         [ 'IO-Async/NoFork.patch',
@@ -346,6 +344,7 @@ sub _bootstrap_patches {
         'Module-Install/ExplicitAuthorsMethod.patch',
         'Term-ANSIColor-Markup/PortableAccessors.patch',
         'HTTP-Response-Encoding/Makefile.PL.patch',
+        'CPAN-FindDependencies/MakeMaker.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;

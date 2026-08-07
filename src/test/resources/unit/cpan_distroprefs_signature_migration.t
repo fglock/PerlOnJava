@@ -31,6 +31,8 @@ my $retired_xml_pref =
     File::Spec->catfile($prefs_dir, 'XML-Filter-GenericChunk.yml');
 my $retired_http_pref =
     File::Spec->catfile($prefs_dir, 'HTTP-Response-Encoding.yml');
+my $retired_finddeps_pref =
+    File::Spec->catfile($prefs_dir, 'CPAN-FindDependencies.yml');
 open my $legacy, '>', $logger_pref or die "$logger_pref: $!";
 print {$legacy} <<'YAML';
 ---
@@ -68,6 +70,15 @@ match:
   distribution: "^DANKOGAI/HTTP-Response-Encoding-"
 YAML
 close $retired_http;
+open my $retired_finddeps, '>', $retired_finddeps_pref
+    or die "$retired_finddeps_pref: $!";
+print {$retired_finddeps} <<'YAML';
+---
+comment: PerlOnJava legacy fork workaround
+match:
+  distribution: "^DCANTRELL/CPAN-FindDependencies-"
+YAML
+close $retired_finddeps;
 
 {
     local $ENV{PERLONJAVA_HOME} = $home;
@@ -88,6 +99,8 @@ ok(!-e $retired_xml_pref,
     'retired PerlOnJava XML::Filter::GenericChunk preference is removed');
 ok(!-e $retired_http_pref,
     'retired PerlOnJava HTTP::Response::Encoding preference is removed');
+ok(!-e $retired_finddeps_pref,
+    'retired PerlOnJava CPAN::FindDependencies preference is removed');
 
 open my $custom, '>', $retired_pref or die "$retired_pref: $!";
 print {$custom} <<'YAML';

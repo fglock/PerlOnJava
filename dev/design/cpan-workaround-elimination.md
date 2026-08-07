@@ -268,7 +268,7 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: Phase 7, CPAN metadata and process services.
+Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Phase checklist
 
@@ -279,14 +279,15 @@ Current phase: Phase 7, CPAN metadata and process services.
 - [x] Phase 5: Control flow, lvalues, and introspection (2026-08-07)
 - [x] Phase 6: Regex engine coverage (2026-08-07; executable callbacks deferred
   by design)
-- [ ] Phase 7: CPAN metadata and process services
+- [x] Phase 7: CPAN metadata and process services (2026-08-07)
 - [ ] Phase 8: Deterministic lifetime and remaining parity
 
 ### Next steps
 
-1. Replace CPAN-FindDependencies' Unix `system` patch with the argv-safe Java
-   process service, including output capture, deadlines, and process-tree
-   termination.
+1. Implement Phase 8's weak-reference lifetime, readonly-clone, scope-exit,
+   and deterministic destruction parity, beginning with Test::MockObject's
+   weak-reference lifetime assertion and the remaining Test::Deep and
+   SQL::Translator failures.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -731,6 +732,20 @@ Current phase: Phase 7, CPAN metadata and process services.
   core `AnyDBM_File`; PerlOnJava now bundles the standard selector at version
   1.01 and delegates to its existing SDBM implementation, preventing CPAN from
   attempting to install a complete Perl distribution for WWW::RobotRules.
+- Phase 7 adds `PerlOnJava::Process`, an argv-safe process API backed by Java
+  `ProcessBuilder`. It mirrors Perl `%ENV`, supports an explicit working
+  directory, merges and captures stdout/stderr, enforces bounded deadlines,
+  and terminates descendant processes before forcibly terminating a surviving
+  root. A fork/exec implementation preserves the API when the regression runs
+  under standard Perl. `zz_perlonjava_process.t` passes 8/8 under standard
+  Perl, the JVM backend, and the interpreter backend.
+- The bundled `CPAN::FindDependencies::MakeMaker` adapter now invokes
+  `Makefile.PL` through that process API, replacing the distribution-specific
+  Unix `system` patch. `CPAN-FindDependencies.yml` and
+  `CPAN-FindDependencies-3.13/MakeMaker.pm.patch` are retired with stale-file
+  migration coverage. The unchanged upstream focused `t/makefilepl.t` passes
+  6/6, including output suppression and the spinning-Makefile.PL deadline;
+  the full `make` gate passes.
 
 ### Open questions
 
