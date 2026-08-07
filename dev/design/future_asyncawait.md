@@ -496,6 +496,12 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      missing `Fcntl::O_NOFOLLOW` in multipart file output, two cases that
      execute async subs without first loading Future, and one parser syntax
      case in the memory session-store test.
+   - [Completed 2026-08-07] Added `Fcntl::O_NOFOLLOW` to the bundled
+     Linux-layout open flags and made `sysopen` reject a symbolic link in the
+     final path component. The focused no-clobber regression passes with
+     system Perl and both PerlOnJava frontends; full `make` passes.
+     PAGI-Tools' multipart stream and error suites now pass all 12 subtests,
+     including partial-file cleanup and exclusive creation.
    - Next: continue the narrowed PAGI-Tools runtime and portability gaps.
      Process-worker tests remain outside scope while PerlOnJava does not
      implement `fork`.

@@ -1500,6 +1500,13 @@ public class IOOperator {
         int O_EXCL = 0200;  // 128 in decimal
         int O_APPEND = 02000; // 1024 in decimal
         int O_TRUNC = 01000;  // 512 in decimal
+        int O_NOFOLLOW = 0400000; // Reject a symlink in the final path component
+
+        File file = RuntimeIO.resolveFile(fileName);
+        if ((mode & O_NOFOLLOW) != 0 && Files.isSymbolicLink(file.toPath())) {
+            getGlobalVariable("main::!").set("Too many levels of symbolic links");
+            return scalarFalse;
+        }
 
         // Determine the base mode
         int baseMode = mode & 3; // Get the lowest 2 bits
@@ -1524,7 +1531,6 @@ public class IOOperator {
 
         // If creating a new file, apply the permissions
         if ((mode & O_CREAT) != 0) {
-            File file = RuntimeIO.resolveFile(fileName);
             boolean existed = file.exists();
             // O_EXCL: "error if O_CREAT and the file already exists"
             if ((mode & O_EXCL) != 0 && existed) {
