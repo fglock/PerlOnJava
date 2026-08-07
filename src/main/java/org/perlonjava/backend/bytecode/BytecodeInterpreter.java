@@ -577,7 +577,8 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
-                                RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
+                                RuntimeList retList = RuntimeCode.returnList(
+                                        retVal, callContext, !RuntimeCode.isLvalueCode(code));
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
                                 frame.returnedClosures = collectReturnedClosures(retList);
                                 if (!returnListContainsTrackedReference(retList)) {
@@ -596,7 +597,8 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
-                                RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
+                                RuntimeList retList = RuntimeCode.returnList(
+                                        retVal, callContext, !RuntimeCode.isLvalueCode(code));
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
                                 frame.returnedClosures = collectReturnedClosures(retList);
 

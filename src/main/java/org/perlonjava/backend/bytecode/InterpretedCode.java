@@ -373,7 +373,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 return FutureAsyncAwaitRuntime.wrapInitialResult(
                         effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
             }
-            return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
+            return RuntimeCode.coerceScalarCallResult(
+                    result, effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -422,7 +423,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 return FutureAsyncAwaitRuntime.wrapInitialResult(
                         effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
             }
-            return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
+            return RuntimeCode.coerceScalarCallResult(
+                    result, effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);

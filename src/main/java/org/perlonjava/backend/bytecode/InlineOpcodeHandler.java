@@ -707,8 +707,9 @@ public class InlineOpcodeHandler {
 
     /**
      * Hash element store: hash{key} = value, returns the lvalue (element)
-     * Creates a fresh copy to prevent aliasing bugs.
-     * Uses addToScalar to resolve special variables ($1, $2, etc.)
+     * Updates the existing scalar slot in place so references to the hash
+     * element remain live. RuntimeHashProxyEntry handles a missing or tied
+     * element, and addToScalar resolves special variables ($1, $2, etc.).
      * Format: HASH_SET rd hashReg keyReg valueReg
      */
     public static int executeHashSet(int[] bytecode, int pc, RuntimeBase[] registers) {
@@ -720,32 +721,9 @@ public class InlineOpcodeHandler {
         RuntimeScalar key = (RuntimeScalar) registers[keyReg];
         RuntimeBase valBase = registers[valueReg];
         RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
-
-        // Preserve an existing hash element's scalar slot. Replacing the map entry
-        // bypasses RuntimeScalar.set() and therefore fails to release the previous
-        // referent (including arrays that own closure callbacks). It also breaks
-        // references and aliases to the element. Tied and readonly hashes retain
-        // their specialized put() behavior below.
-        RuntimeScalar existing = hash.elements.get(key.toString());
-        if (existing != null
-                && (hash.type == RuntimeHash.PLAIN_HASH
-                || hash.type == RuntimeHash.AUTOVIVIFY_HASH)
-                && RuntimeHash.isAggregateClearAssignment(existing, val)) {
-            val.addToScalar(existing);
-            registers[rd] = existing;
-            return pc;
-        }
-
-        if (hash.type == RuntimeHash.TIED_HASH) {
-            RuntimeScalar element = hash.get(key);
-            element.set(val);
-            registers[rd] = element;
-        } else {
-            RuntimeScalar copy = new RuntimeScalar();
-            val.addToScalar(copy);
-            hash.put(key.toString(), copy);
-            registers[rd] = copy;
-        }
+        RuntimeScalar target = hash.get(key);
+        val.addToScalar(target);
+        registers[rd] = target;
         return pc;
     }
 

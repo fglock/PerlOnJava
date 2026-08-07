@@ -3561,12 +3561,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         if (frame >= 0 && frame < stackTraceSize) {
+            // An interpreted subroutine immediately inside an eval BLOCK has
+            // its own frame directly before the synthetic eval frame.  Keep
+            // the interpreted frame for caller()[3] (the callee name), but
+            // take caller()[0..2] from the eval frame, which is the actual
+            // Perl call site.  Advancing the whole frame would instead report
+            // `(eval)` as the called subroutine.
+            ArrayList<String> frameInfo = stackTrace.get(frame);
+            ArrayList<String> locationFrameInfo = interpreterFrameBeforeVirtualEval
+                    ? stackTrace.get(frame + 1)
+                    : frameInfo;
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
-                String pkg = stackTrace.get(frame).getFirst();
+                String pkg = locationFrameInfo.getFirst();
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));
             } else {
-                ArrayList<String> frameInfo = stackTrace.get(frame);
                 int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
                 int trackedOriginalFrame = Math.max(0, originalFrame - syntheticOwnSubFramesBefore);
                 // Interpreter stack traces may contain a synthetic entry for the
@@ -3576,10 +3585,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int trackedActiveCodeFrame = activeCodeFrameForCaller(
                         result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
                 int trackedArgsFrame = Math.max(0, argsFrame - syntheticOwnSubFramesBefore);
-                String pkg = frameInfo.get(0);
+                String pkg = locationFrameInfo.get(0);
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
-                res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
-                res.add(new RuntimeScalar(frameInfo.get(2)));  // line
+                res.add(new RuntimeScalar(locationFrameInfo.get(1)));  // filename
+                res.add(new RuntimeScalar(locationFrameInfo.get(2)));  // line
 
                 // Perl's caller() without EXPR returns only 3 elements: (package, filename, line).
                 // caller(EXPR) returns 11 elements including subroutine name, hasargs, etc.
