@@ -284,7 +284,7 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 ### Next steps
 
 1. Split and retire the remaining independently justified Graph patch hunks,
-   starting with deterministic attribute dumping and Storable code references.
+   starting with Storable code references, then adjacency rendering.
 2. Remove Module::Install's explicit `authors` patch through glob-alias
    introspection parity, then integrate lazy native `Want` support so
    Term::ANSIColor::Markup can use its upstream lvalue accessors.
@@ -462,6 +462,20 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   `jcpan -t Graph` smoke applies those two reduced patches to a fresh build,
   retains the upstream SCC expression, and passes all 88 files and 9,246
   assertions. The final full `make` gate passes 245 tests with 2 skipped.
+- Data::Dumper's PerlOnJava scalar-state bridge now controls the complete safe
+  decimal decision, so untouched short numeric strings remain quoted while
+  integer and numified-string scalars remain numeric. Regression:
+  `src/test/resources/unit/zz_data_dumper_short_numeric_flags.t` passes 5/5
+  under standard Perl, JVM, and interpreter backends; the existing
+  `data_dumper_numified.t` regression remains 7/7. Unpatched Graph
+  `t/08_stringify.t` improves from eight failures to the four independent
+  Set::Object lifetime failures, with every attribute-dumping mismatch gone.
+  The recursive deterministic-dumper rewrite is removed from
+  `AdjacencyMap.pm.patch`. The reduced two-patch CPAN build retains Graph's
+  upstream `_dumper` and passes all 88 files and 9,249 assertions on a
+  same-tree full rerun. A transient `t/89_connected_subgraphs.t` count mismatch
+  (111 versus 112) passed 17/17 immediately afterward and remained green in
+  that full rerun. The final full `make` gate passes.
 
 ### Open questions
 

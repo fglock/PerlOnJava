@@ -534,10 +534,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return false;
         }
         String s = scalar.toString();
-        if (s.length() != 10) return false;
+        if (s.isEmpty() || s.length() > 10) return false;
+        if (s.equals("0")) return true;
+        int start = s.charAt(0) == '-' ? 1 : 0;
+        if (start == 1 && s.length() == 1) return false;
         char first = s.charAt(0);
+        if (start == 1) first = s.charAt(1);
         if (first < '1' || first > '9') return false;
-        for (int i = 1; i < s.length(); i++) {
+        for (int i = start + 1; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c < '0' || c > '9') return false;
         }
