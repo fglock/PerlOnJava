@@ -226,7 +226,17 @@ public class StatementParser {
 
         // Parse the body of the loop
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node body = ParseBlock.parseBlock(parser);
+        String previousForbiddenContext = parser.futureAsyncAwaitForbiddenContext;
+        if (parser.parsingFutureAsyncAwaitSub && !isLexicalForeachVariable(varNode)) {
+            parser.futureAsyncAwaitForbiddenContext =
+                    "foreach on non-lexical iterator variable";
+        }
+        Node body;
+        try {
+            body = ParseBlock.parseBlock(parser);
+        } finally {
+            parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
+        }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Parse optional continue block
@@ -266,6 +276,11 @@ public class StatementParser {
         }
 
         return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
+    }
+
+    private static boolean isLexicalForeachVariable(Node varNode) {
+        return varNode instanceof OperatorNode operator
+                && (operator.operator.equals("my") || operator.operator.equals("state"));
     }
 
     /**

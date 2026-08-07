@@ -152,6 +152,28 @@ class FutureAsyncAwaitRuntimeTest {
                     unless subclass_result()->isa('FutureSubclass')
                         && subclass_result()->AWAIT_GET == 123;
 
+            eval q{ async sub invalid_map { map { await $_[0] } 1 } };
+            die "await in map was not rejected\n"
+                    unless $@ =~ /^await is not allowed inside map /;
+            eval q{ async sub invalid_grep { grep { await $_[0] } 1 } };
+            die "await in grep was not rejected\n"
+                    unless $@ =~ /^await is not allowed inside grep /;
+            our $foreach_global;
+            eval q{
+                async sub invalid_foreach {
+                    foreach $foreach_global (1) { await $_[0] }
+                }
+            };
+            die "await in non-lexical foreach was not rejected\n"
+                    unless $@ =~ /^await is not allowed inside foreach on non-lexical iterator variable /;
+            my $string_eval_error;
+            (async sub {
+                eval q{ await $_[0] };
+                $string_eval_error = $@;
+            })->();
+            die "await at string-eval level was not rejected\n"
+                    unless $string_eval_error =~ /^await is not allowed inside string eval /;
+
             async sub add_one {
                 my $value = await $_[0];
                 return $value + 1;
@@ -454,6 +476,18 @@ class FutureAsyncAwaitRuntimeTest {
             $declared_pending->AWAIT_DONE(40);
             die "async signature/attribute/forward declaration failed\n"
                     unless $declared_result->AWAIT_GET == 42;
+
+            async sub exactly_one($value) { return $value }
+            my $too_few_ok = eval { exactly_one(); 1 };
+            my $too_few_error = $@;
+            die "async signature too-few error was not synchronous\n"
+                    unless !$too_few_ok
+                        && $too_few_error =~ /^Too few arguments for subroutine 'main::exactly_one'/;
+            my $too_many_ok = eval { exactly_one(1, 2); 1 };
+            my $too_many_error = $@;
+            die "async signature too-many error was not synchronous\n"
+                    unless !$too_many_ok
+                        && $too_many_error =~ /^Too many arguments for subroutine 'main::exactly_one'/;
 
             my async sub lexical_async($future) {
                 return await($future) + 2;

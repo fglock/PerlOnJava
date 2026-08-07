@@ -5589,6 +5589,7 @@ public class BytecodeCompiler implements Visitor {
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+        copySignatureMetadata(subCode, node.block);
         attachDeparseSourceSpan(subCode, node);
 
         if (RuntimeCode.DISASSEMBLE) {
@@ -5719,6 +5720,7 @@ public class BytecodeCompiler implements Visitor {
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+        copySignatureMetadata(subCode, node.block);
         attachDeparseSourceSpan(subCode, node);
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         if (node.block != null) {
@@ -5784,6 +5786,14 @@ public class BytecodeCompiler implements Visitor {
         }
 
         lastResultReg = codeReg;
+    }
+
+    private static void copySignatureMetadata(InterpretedCode code, Node block) {
+        if (block.getAnnotation("signatureMinArgs") instanceof Integer min) {
+            code.signatureMinArgs = min;
+            code.signatureMaxArgs = (Integer) block.getAnnotation("signatureMaxArgs");
+            code.signatureSubName = (String) block.getAnnotation("signatureSubName");
+        }
     }
 
     /**

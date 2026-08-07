@@ -46,6 +46,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public boolean usesLocalization = true;
     public boolean futureAsyncAwaitSub;
     public String futureAsyncAwaitFutureClass;
+    public int signatureMinArgs = -1;
+    public int signatureMaxArgs = -1;
+    public String signatureSubName;
 
     // Goto label map (set by compiler after construction for dynamic goto support)
     // Maps label name → bytecode PC offset
@@ -346,6 +349,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, null);
+        validateAsyncSignature(args);
         int effectiveContext = futureAsyncAwaitSub
                 ? RuntimeContextType.LIST
                 : RuntimeCode.effectiveCallContext(this, callContext);
@@ -395,6 +399,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);
+        validateAsyncSignature(args);
         int effectiveContext = futureAsyncAwaitSub
                 ? RuntimeContextType.LIST
                 : RuntimeCode.effectiveCallContext(this, callContext);
@@ -503,7 +508,29 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.usesLocalization = this.usesLocalization;
         copy.futureAsyncAwaitSub = this.futureAsyncAwaitSub;
         copy.futureAsyncAwaitFutureClass = this.futureAsyncAwaitFutureClass;
+        copy.signatureMinArgs = this.signatureMinArgs;
+        copy.signatureMaxArgs = this.signatureMaxArgs;
+        copy.signatureSubName = this.signatureSubName;
         return copy;
+    }
+
+    private void validateAsyncSignature(RuntimeArray args) {
+        if (!futureAsyncAwaitSub || signatureMinArgs < 0) {
+            return;
+        }
+        int count = args.size();
+        if (count < signatureMinArgs) {
+            throw signatureError("Too few", count, signatureMinArgs);
+        }
+        if (signatureMaxArgs != Integer.MAX_VALUE && count > signatureMaxArgs) {
+            throw signatureError("Too many", count, signatureMaxArgs);
+        }
+    }
+
+    private PerlDieException signatureError(String kind, int got, int expected) {
+        String name = signatureSubName == null ? "" : " for subroutine '" + signatureSubName + "'";
+        return new PerlDieException(new RuntimeScalar(
+                kind + " arguments" + name + " (got " + got + "; expected " + expected + ")\n"));
     }
 
     /**

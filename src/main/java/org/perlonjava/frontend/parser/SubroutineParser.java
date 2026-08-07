@@ -779,6 +779,15 @@ public class SubroutineParser {
         if (!attributes.isEmpty()) {
             org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
         }
+        if (futureAsyncAwaitSub && attributes.contains("lvalue")) {
+            String location = parser.ctx.errorUtil == null
+                    ? ""
+                    : parser.ctx.errorUtil.warningLocation(currentIndex);
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar("The :lvalue attribute has no effect on an async sub"
+                            + location + ".\n"),
+                    new RuntimeScalar("misc"));
+        }
 
         ListNode signature = null;
         // Scope index for signature parameter variables (for strict vars checking).
@@ -973,6 +982,12 @@ public class SubroutineParser {
 
             // Insert signature code in the block
             if (signature != null) {
+                block.setAnnotation("signatureMinArgs",
+                        signature.getAnnotation("signatureMinArgs"));
+                block.setAnnotation("signatureMaxArgs",
+                        signature.getAnnotation("signatureMaxArgs"));
+                block.setAnnotation("signatureSubName",
+                        signature.getAnnotation("signatureSubName"));
                 block.elements.addAll(0, signature.elements);
             }
 

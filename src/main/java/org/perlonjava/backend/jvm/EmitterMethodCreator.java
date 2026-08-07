@@ -1743,6 +1743,11 @@ public class EmitterMethodCreator implements Opcodes {
             code.futureAsyncAwaitSub = true;
             code.futureAsyncAwaitFutureClass =
                     (String) ast.getAnnotation("futureAsyncAwaitFutureClass");
+            if (ast.getAnnotation("signatureMinArgs") instanceof Integer min) {
+                code.signatureMinArgs = min;
+                code.signatureMaxArgs = (Integer) ast.getAnnotation("signatureMaxArgs");
+                code.signatureSubName = (String) ast.getAnnotation("signatureSubName");
+            }
             return code;
         }
         if (ctx.compilerOptions.useInterpreter || RuntimeCode.FORCE_INTERPRETER) {

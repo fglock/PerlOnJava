@@ -140,6 +140,8 @@ public class ParseMapGrepSort {
     static BinaryOperatorNode parseMapGrep(Parser parser, LexerToken token) {
         ListNode operand;
         int currentIndex = parser.tokenIndex;
+        String previousForbiddenContext = parser.futureAsyncAwaitForbiddenContext;
+        parser.futureAsyncAwaitForbiddenContext = token.text;
         try {
             // Handle 'map' keyword as a Binary operator with a Code and List operands
             operand = ListParser.parseZeroOrMoreList(parser, 1, true, false, false, false);
@@ -164,6 +166,8 @@ public class ParseMapGrepSort {
                 TokenUtils.consume(parser, OPERATOR, ")");
             }
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseMap: " + operand.handle + " : " + operand);
+        } finally {
+            parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
         }
 
         // transform:   { 123 }

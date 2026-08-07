@@ -85,6 +85,13 @@ public final class FutureAsyncAwaitParser {
     }
 
     static OperatorNode parseAwait(Parser parser, int awaitIndex) {
+        if (parser.parsingEvalString && !parser.parsingFutureAsyncAwaitSub) {
+            parser.throwError(awaitIndex, "await is not allowed inside string eval");
+        }
+        if (parser.futureAsyncAwaitForbiddenContext != null) {
+            parser.throwError(awaitIndex, "await is not allowed inside "
+                    + parser.futureAsyncAwaitForbiddenContext);
+        }
         if (!parser.parsingFutureAsyncAwaitSub
                 && parser.ctx.symbolTable.isInSubroutineBody()) {
             parser.throwError(awaitIndex, "Cannot 'await' outside of an 'async sub'");

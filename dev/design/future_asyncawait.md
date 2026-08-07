@@ -325,12 +325,28 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Files: `Future::AsyncAwait.pm`, async parser/subroutine metadata paths,
     `InterpretedCode.java`, `FutureAsyncAwaitRuntime.java`, and
     `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 5c: Upstream placement, signature, and attribute parity (2026-08-07)
+  - Rejected `await` in map/grep callback blocks, non-lexical foreach iterator
+    bodies, and eval-string top level with upstream-compatible diagnostics,
+    while retaining lexical foreach and nested async-sub support.
+  - Moved async signature arity checks to the synchronous call boundary while
+    keeping default expressions and parameter binding inside the Future-wrapped
+    body.
+  - Preserved `:lvalue` for attribute introspection and emitted the required
+    compile-time warning that it has no effect on an async Future result.
+  - Verified upstream placement tests (19 assertions), signature tests (9),
+    and attribute tests (5) on both frontends; full `make` passes.
+  - The complete default-frontend baseline now has one applicable failing file,
+    `42unresolved.t`, for four missing abandoned-Future diagnostics. Remaining
+    harness failures require unsupported `for_list`, optional extension modules,
+    or separately packaged Awaitable role/helper files.
+  - Files: parser context and eval-string integration, `SignatureParser.java`,
+    async runtime metadata, and `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Close the remaining applicable upstream semantic gaps: restricted
-   map/grep/non-lexical-foreach/string-eval placement, synchronous signature
-   validation, and abandoned-Future diagnostics.
+1. Implement abandoned-returning-Future detection and diagnostics without
+   keeping the outer Future alive through readiness callbacks.
 2. Package and validate the pure-Perl Awaitable role/test helper where their
    dependencies are supported, then rerun the applicable suite on both
    frontends.
