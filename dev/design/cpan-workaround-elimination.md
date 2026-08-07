@@ -286,9 +286,9 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 1. Continue Phase 8 with SQL::Translator's complete unchanged source suite,
    using the now-confirmed `Carp::Clan` and `Parse::RecDescent` dependencies.
-   `t/24yaml.t` passes 2/2 and `t/13schema.t` passes; the much larger
-   `t/02mysql-parser.t` advances through 317 passing assertions before the
-   600-second investigative deadline and needs a longer bounded run.
+   `t/24yaml.t` passes 2/2, `t/13schema.t` passes, and the much larger
+   `t/02mysql-parser.t` completes all 347 assertions under a 1,200-second
+   bound. Use the complete matrix as the next policy-retirement gate.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -781,8 +781,8 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   2/2 under standard Perl, JVM, and interpreter execution, and the full
   `make` gate passes. SQL::Translator's unchanged SQLite-to-YAML round trip
   consequently advances from 1/2 to 2/2; its MySQL parser advances beyond the
-  former failure after assertion 204 to 317 passing assertions before the
-  bounded investigative run expires.
+  former failure after assertion 204 and completes all 347 assertions under a
+  1,200-second bound.
 
 ### Open questions
 
