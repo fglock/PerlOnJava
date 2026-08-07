@@ -186,6 +186,10 @@ imports:
   - source: perl5/cpan/Digest/lib/Digest.pm
     target: src/main/perl/lib/Digest.pm
 
+  # Encode::Alias - pure-Perl alias dispatcher used by Encode::Locale
+  - source: perl5/cpan/Encode/lib/Encode/Alias.pm
+    target: src/main/perl/lib/Encode/Alias.pm
+
   # Tests for distribution
   - source: perl5/cpan/Digest/t
     target: perl5_t/Digest

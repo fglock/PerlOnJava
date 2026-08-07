@@ -280,6 +280,11 @@ public class CompileOperator {
         return reg;
     }
 
+    private static int regexWarningState(OperatorNode node) {
+        if (Boolean.TRUE.equals(node.getAnnotation("regexWarningsFatal"))) return 2;
+        return Boolean.TRUE.equals(node.getAnnotation("regexWarningsEnabled")) ? 1 : 0;
+    }
+
     private static void visitMatchRegex(BytecodeCompiler bc, OperatorNode node) {
         if (node.operand == null || !(node.operand instanceof ListNode args) || args.elements.size() < 2) {
             bc.throwCompilerException("matchRegex requires pattern and flags");
@@ -303,12 +308,14 @@ public class CompileOperator {
             bc.emitReg(flagsReg);
             bc.emitReg(callsiteId);
             bc.emit(unicodeStringsImplicitUFlag(bc));
+            bc.emit(regexWarningState(node));
         } else {
             bc.emit(Opcodes.QUOTE_REGEX);
             bc.emitReg(regexReg);
             bc.emitReg(patternReg);
             bc.emitReg(flagsReg);
             bc.emit(unicodeStringsImplicitUFlag(bc));
+            bc.emit(regexWarningState(node));
         }
         int stringReg;
         if (args.elements.size() > 2) {
@@ -346,6 +353,7 @@ public class CompileOperator {
         bc.emitReg(flagsReg);
         bc.emitReg(1);  // @_ register - pass caller's args for replacement code
         bc.emit(unicodeStringsImplicitUFlag(bc));
+        bc.emit(regexWarningState(node));
         int stringReg;
         if (args.elements.size() > 3) {
             bc.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);
@@ -1024,12 +1032,14 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(flagsReg);
                     bytecodeCompiler.emitReg(callsiteId);
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
+                    bytecodeCompiler.emit(regexWarningState(node));
                 } else {
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
                     bytecodeCompiler.emitReg(rd);
                     bytecodeCompiler.emitReg(patternReg);
                     bytecodeCompiler.emitReg(flagsReg);
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
+                    bytecodeCompiler.emit(regexWarningState(node));
                 }
                 bytecodeCompiler.lastResultReg = rd;
             }

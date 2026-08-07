@@ -36,6 +36,17 @@ public class EmitRegex {
         }
     }
 
+    /** Emit the lexical warning state captured when the regex was parsed. */
+    private static void emitRegexWarningState(EmitterVisitor emitterVisitor, OperatorNode node) {
+        boolean enabled = Boolean.TRUE.equals(node.getAnnotation("regexWarningsEnabled"));
+        boolean fatal = Boolean.TRUE.equals(node.getAnnotation("regexWarningsFatal"));
+        emitterVisitor.ctx.mv.visitInsn(fatal ? Opcodes.ICONST_2
+                : enabled ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RegexQuoteMeta",
+                "setCallSiteWarningState", "(I)V", false);
+    }
+
     /**
      * Handles the binding regex operation where a variable is bound to a regex operation.
      * This method processes the binary operator node representing the binding operation.
@@ -217,6 +228,7 @@ public class EmitRegex {
         operand.elements.get(1).accept(scalarVisitor);  // Replacement
         operand.elements.get(2).accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
+        emitRegexWarningState(emitterVisitor, node);
 
         // Push the caller's @_ so $_[0] etc. work in s/// replacement
         // @_ is at local variable slot 1 in subroutines
@@ -262,6 +274,7 @@ public class EmitRegex {
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         operand.elements.get(1).accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
+        emitRegexWarningState(emitterVisitor, node);
 
         // Create the quoted regex
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -296,6 +309,7 @@ public class EmitRegex {
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         flagsNode.accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
+        emitRegexWarningState(emitterVisitor, node);
 
         // Create the regex matcher (use 3-argument version for /o or m?PAT?)
         if (needsCallsiteCache) {

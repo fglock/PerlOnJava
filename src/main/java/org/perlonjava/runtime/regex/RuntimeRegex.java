@@ -281,7 +281,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             System.err.println("  caller stack: " + Thread.currentThread().getStackTrace()[2]);
         }
 
-        String cacheKey = patternString + "/" + modifiers;
+        String originalPatternString = patternString;
+        String compilePatternString = patternString;
+        List<String> quoteMetaWarningsOnUse = new ArrayList<>();
+        if (compilePatternString != null && compilePatternString.contains("\\Q")) {
+            // Interpolated-pattern warnings are lexical diagnostics for each
+            // construction, even when the compiled regex itself is cached.
+            compilePatternString = escapeQ(compilePatternString);
+            quoteMetaWarningsOnUse = RegexQuoteMeta.getWarningsOnUse();
+        }
+
+        String cacheKey = originalPatternString + "/" + modifiers;
 
         // Check if the regex is already cached
         RuntimeRegex regex = regexCache.get(cacheKey);
@@ -290,14 +300,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 System.err.println("  cache miss, compiling new regex");
             }
             regex = new RuntimeRegex();
-
-            String originalPatternString = patternString;
-            String compilePatternString = patternString;
-            List<String> quoteMetaWarningsOnUse = new ArrayList<>();
-            if (compilePatternString != null && compilePatternString.contains("\\Q")) {
-                compilePatternString = escapeQ(compilePatternString);
-                quoteMetaWarningsOnUse = RegexQuoteMeta.getWarningsOnUse();
-            }
 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
 

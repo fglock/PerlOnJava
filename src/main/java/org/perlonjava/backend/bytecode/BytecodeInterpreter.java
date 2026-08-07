@@ -6,6 +6,7 @@ import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -3089,10 +3090,12 @@ public class BytecodeInterpreter {
                 int patternReg = bytecode[pc++];
                 int flagsReg = bytecode[pc++];
                 int implicitU = bytecode[pc++];
+                int warningState = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
+                RegexQuoteMeta.setCallSiteWarningState(warningState);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
                 return pc;
             }
@@ -3102,10 +3105,12 @@ public class BytecodeInterpreter {
                 int flagsReg = bytecode[pc++];
                 int callsiteId = bytecode[pc++];
                 int implicitU = bytecode[pc++];
+                int warningState = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
+                RegexQuoteMeta.setCallSiteWarningState(warningState);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
                 return pc;
             }

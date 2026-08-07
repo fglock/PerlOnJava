@@ -53,9 +53,16 @@ from its completed dependency test phases.
 - Run each requested `jcpan -t` target with a hard timeout and captured logs.
 - Run `make` and check for orphaned PerlOnJava JVMs.
 
+### Phase 5: Bundled-suite follow-up
+
+- Bundle the pure-Perl `Encode::Alias` and `Encode::Locale` dependency closure
+  needed by LWP-backed XML external-entity tests.
+- Fix the readonly pad-constant lifetime and interpolated-regex lexical warning
+  failures exposed by the full `make` run.
+
 ## Progress tracking
 
-### Current status: Complete (2026-08-07)
+### Current status: Complete (2026-08-08)
 
 ### Completed phases
 
@@ -63,6 +70,7 @@ from its completed dependency test phases.
 - [x] Phase 2: Pure-Perl dependency closure (2026-08-07)
 - [x] Phase 3: Password crypto dependency closure (2026-08-07)
 - [x] Phase 4: End-to-end verification (2026-08-07)
+- [x] Phase 5: Bundled-suite follow-up (2026-08-08)
 
 ### Work completed (2026-08-07)
 
@@ -87,20 +95,37 @@ from its completed dependency test phases.
   - `Data::FetchPath`: 4 files / 19 tests pass.
   - `Hash::AutoHash`: 32 files / 2785 tests pass.
   - `Password::OWASP`: 4 files / 40 tests pass.
-- `make test-bundled-modules` passes 370/372 module files, including all three
-  new crypto vector files. The two failures are pre-existing XML::Parser tests
-  caused by missing `Encode::Locale`; both reproduce on clean master.
-- A full `make` was run. The branch exposes failures in
-  `weaken_scalar_refs.t` and `regex_charclass.t`; both exact failures reproduce
-  with the clean master runtime when invoked directly (master's parallel test
-  harness currently does not promote their failing TAP to task failures).
+- The initial `make test-bundled-modules` run passed 370/372 module files. The
+  two failures were XML::Parser external-entity tests caused by the missing
+  `Encode::Locale` dependency and reproduced on clean master.
+- The initial full `make` exposed failures in `weaken_scalar_refs.t` and
+  `regex_charclass.t`; both exact failures reproduced with the clean master
+  runtime when invoked directly.
+
+### Follow-up completed (2026-08-08)
+
+- Imported core `Encode::Alias` and added an `Encode::Locale` compatibility
+  facade over the newer pure-Perl locale implementation already bundled with
+  ExtUtils::MakeMaker. No new Java dependency was added.
+- Added upstream-derived Encode::Locale alias, environment, and warning tests;
+  the original upstream suite also passes under system Perl (5 files / 28 tests).
+- Preserved installed subroutine pad constants when scalar references are
+  classified for deterministic weak-reference cleanup. Weak refs now remain
+  live until the defining glob is replaced.
+- Captured `regexp` warning enabled/fatal state on regex AST nodes and carried
+  it through JVM emission and interpreter bytecode, preventing imported-module
+  warning-state leakage while retaining enabled and fatal warning behavior on
+  regex-cache hits. The regression test passes under system Perl and both
+  PerlOnJava backends.
+- The focused Encode::Locale and XML::Parser bundled-module suites pass. The
+  complete bundled-module suite passes 375/375 files with zero failures, and a
+  final full `make` passes.
 
 ### Next steps
 
-1. No work remains for the three requested CPAN targets.
-2. Separately repair the existing test-harness exit-status discrepancy and the
-   pre-existing XML::Parser `Encode::Locale` dependency if broader suite
-   cleanup is desired.
+1. No work remains for the requested CPAN targets or XML::Parser follow-up.
+2. The parallel test-harness exit-status discrepancy remains a separate issue;
+   the underlying tests now pass directly and under `make`.
 
 ### Open questions
 

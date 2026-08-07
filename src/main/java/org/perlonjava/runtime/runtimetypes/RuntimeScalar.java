@@ -2851,12 +2851,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !isRegisteredLexical
                 && captureCount == 0
                 && !isPackageGlobalRoot
-                && containerOwner == null) {
+                && containerOwner == null
+                && !RuntimeCode.isInstalledPadConstant(this)) {
             // An unbound scalar value returned from a subroutine is an
             // ephemeral Perl SV. Birth-track it so weaken(\(sub_return()))
             // consumes its sole owner immediately. Bound lexicals, closure
-            // captures, globals, aggregate elements, and active @_ arguments
-            // retain the established untracked/WEAKLY_TRACKED behavior.
+            // captures, globals, aggregate elements, active @_ arguments, and
+            // constants owned by an installed subroutine's optree retain the
+            // established untracked/WEAKLY_TRACKED behavior.
             this.refCount = 0;
             this.ephemeralScalarReferenceReferent = true;
         }
