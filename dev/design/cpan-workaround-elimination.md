@@ -284,7 +284,7 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 ### Next steps
 
 1. Split and retire the remaining independently justified Graph patch hunks,
-   starting with SCC return-shape parity.
+   starting with deterministic attribute dumping and Storable code references.
 2. Remove Module::Install's explicit `authors` patch through glob-alias
    introspection parity, then integrate lazy native `Want` support so
    Term::ANSIColor::Markup can use its upstream lvalue accessors.
@@ -453,6 +453,15 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 - The final `jcpan -t Graph` smoke applies exactly two patches and passes all
   88 files and 9,268 assertions. A fresh `CPAN::Config` bootstrap load removes
   `Graph/AdjacencyMap-Light.pm.patch` from the installed patch cache.
+- The same assignment-RHS parser correction makes Graph's upstream
+  `strongly_connected_component_by_index` expression work without rewriting
+  its return shape. Regression: `src/test/resources/unit/zz_ampersand_postfix_deref.t`
+  passes 4/4 under standard Perl, JVM, and interpreter backends. The SCC hunk
+  is removed from `Graph.pm.patch`; pristine Graph with the current two patch
+  files passes all 88 files and 9,245 assertions. A source-first
+  `jcpan -t Graph` smoke applies those two reduced patches to a fresh build,
+  retains the upstream SCC expression, and passes all 88 files and 9,246
+  assertions. The final full `make` gate passes 245 tests with 2 skipped.
 
 ### Open questions
 

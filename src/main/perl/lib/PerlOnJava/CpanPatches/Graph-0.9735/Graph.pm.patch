@@ -22,16 +22,3 @@
 +        "$caller: Unknown option%s: @{[map qq['$_'], sort @opt]}",
          @opt > 1 ? 's' : '';
  }
- 
-@@ -2162,8 +2169,9 @@ sub strongly_connected_component_by_vertex {
- sub strongly_connected_component_by_index {
-     &expect_directed;
-     my $i = $_[1];
--    return if !defined(my $c = &_strongly_connected_components->[0][ $i ]);
--    @$c;
-+    my $c = &_strongly_connected_components->[0][ $i ];
-+    return unless defined $c;
-+    return @$c;
- }
- 
- sub same_strongly_connected_components {
