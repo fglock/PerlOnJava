@@ -285,16 +285,14 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 ### Next steps
 
 1. Implement Phase 8's weak-reference lifetime, readonly-clone, scope-exit,
-   and deterministic destruction parity, beginning with Test::MockObject's
-   weak-reference lifetime assertion and the remaining Test::Deep and
-   SQL::Translator failures.
+   and deterministic destruction parity, continuing with the remaining
+   Test::Deep and SQL::Translator failures.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
-   `t/local/http.t` failure, and CGI HTML::Entities failures as documented
-   Phase 8/runtime-parity follow-ups.
+3. Keep the live LWP `t/local/http.t` failure and CGI HTML::Entities failures
+   as documented Phase 8/runtime-parity follow-ups.
 
 ### Completed phase deliverables
 
@@ -746,6 +744,15 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   migration coverage. The unchanged upstream focused `t/makefilepl.t` passes
   6/6, including output suppression and the spinning-Makefile.PL deadline;
   the full `make` gate passes.
+- Phase 8 begins by preserving strong aggregate owners before the
+  weak-reference cleanup heuristic corrects suspected selective-refcount
+  drift. A block-lexical call log can therefore retain a logged object until
+  its owning entry is deleted, without pinning the object afterward.
+  `zz_block_lexical_call_log_lifetime.t` passes 2/2 under standard Perl, JVM,
+  and interpreter execution. Test::MockObject's unchanged `t/bugs.t` advances
+  from 17/18 to 18/18 on the JVM backend, and a source-first CPAN run passes
+  the complete 12-file/232-assertion suite. Its interpreter method-table issue
+  remains separate and is not claimed as an upstream interpreter pass.
 
 ### Open questions
 
