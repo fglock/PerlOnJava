@@ -478,7 +478,25 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      the upstream suite (5 files, 22 tests). Files: `Base.java`,
      `BitwiseOperators.java`, the two focused unit tests, and the
      `Net-Async-WebSocket` CPAN distropref and patch.
-   - Next: continue the remaining PAGI file/runtime gaps.
+   - [Completed 2026-08-07] Revalidated the remaining directly runnable
+     PAGI::Server boundaries after installing the HTTP and WebSocket clients.
+     Descriptor reuse (11 subtests), WebSocket receive-queue limits (3),
+     release-only request timeouts (4), WebSocket/SSE idle timeouts (4), access
+     logging, incomplete-response handling, lifespan modes, and the applicable
+     error-propagation scenarios all pass. The only failure in the latter is
+     its explicit `fork`-based lifespan-crash scenario.
+   - [Completed 2026-08-07] Added the core-compatible `Time::HiRes` 1.9764
+     version metadata to the bundled Java-backed module. CPAN dependency
+     checks can now satisfy PAGI-Tools' prerequisite without downloading the
+     XS distribution. The version requirement passes with system Perl and
+     both PerlOnJava frontends; full `make` passes.
+   - PAGI-Tools 0.002002 now reaches all 151 upstream programs and 1,309
+     assertions. It leaves 10 programs and 11 assertions failing: one
+     unsupported `fork`-open case, four callback-cycle cleanup assertions,
+     missing `Fcntl::O_NOFOLLOW` in multipart file output, two cases that
+     execute async subs without first loading Future, and one parser syntax
+     case in the memory session-store test.
+   - Next: continue the narrowed PAGI-Tools runtime and portability gaps.
      Process-worker tests remain outside scope while PerlOnJava does not
      implement `fork`.
 3. Revisit native JVM state-machine lowering only if profiling identifies

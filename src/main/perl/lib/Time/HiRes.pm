@@ -19,6 +19,7 @@ use strict;
 use warnings;
 use Exporter 'import';
 
+our $VERSION = '1.9764';
 our @EXPORT_OK = qw(usleep nanosleep ualarm gettimeofday tv_interval time sleep alarm);
 
 require XSLoader;
