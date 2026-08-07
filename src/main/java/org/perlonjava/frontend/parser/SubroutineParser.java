@@ -955,6 +955,7 @@ public class SubroutineParser {
             BlockNode block = ParseBlock.parseBlock(parser);
             if (futureAsyncAwaitSub) {
                 block.setAnnotation("futureAsyncAwaitSub", true);
+                FutureAsyncAwaitParser.markFutureClass(block);
             }
             block.setAnnotation("definitionWarningFlags", definitionWarningFlags);
             block.setAnnotation("definitionWarningFatalFlags", definitionWarningFatalFlags);

@@ -49,30 +49,37 @@ public final class FutureAsyncAwaitRuntime {
     }
 
     static RuntimeList wrapInitialResult(int effectiveContext, int requestedContext,
-                                         RuntimeList result) {
+                                         RuntimeList result, String futureClass) {
         RuntimeScalar outer;
         if (result instanceof InterpreterSuspension suspension) {
-            outer = call(suspension.awaited, "AWAIT_CLONE", new RuntimeArray(),
-                    RuntimeContextType.SCALAR).scalar();
+            outer = futureClass == null
+                    ? call(suspension.awaited, "AWAIT_CLONE", new RuntimeArray(),
+                            RuntimeContextType.SCALAR).scalar()
+                    : call(new RuntimeScalar(futureClass), "new", new RuntimeArray(),
+                            RuntimeContextType.SCALAR).scalar();
             attach(outer, suspension, new AwaitState());
         } else {
-            outer = completedFuture(result);
+            outer = completedFuture(result, futureClass);
         }
         return RuntimeCode.coerceScalarCallResult(new RuntimeList(outer),
                 effectiveContext, requestedContext);
     }
 
     static RuntimeList failedInitialResult(Throwable error, int effectiveContext,
-                                           int requestedContext) {
-        RuntimeScalar outer = call(new RuntimeScalar("Future"), "AWAIT_NEW_FAIL",
+                                           int requestedContext, String futureClass) {
+        RuntimeScalar outer = call(new RuntimeScalar(futureClass(futureClass)), "AWAIT_NEW_FAIL",
                 new RuntimeArray(exceptionValue(error)), RuntimeContextType.SCALAR).scalar();
         return RuntimeCode.coerceScalarCallResult(new RuntimeList(outer),
                 effectiveContext, requestedContext);
     }
 
-    private static RuntimeScalar completedFuture(RuntimeList result) {
-        return call(new RuntimeScalar("Future"), "AWAIT_NEW_DONE",
+    private static RuntimeScalar completedFuture(RuntimeList result, String futureClass) {
+        return call(new RuntimeScalar(futureClass(futureClass)), "AWAIT_NEW_DONE",
                 new RuntimeArray(result), RuntimeContextType.SCALAR).scalar();
+    }
+
+    private static String futureClass(String configured) {
+        return configured == null ? "Future" : configured;
     }
 
     private static void attach(RuntimeScalar outer, InterpreterSuspension suspension,

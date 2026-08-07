@@ -140,6 +140,18 @@ class FutureAsyncAwaitRuntimeTest {
             die "async body did not run in list context\n"
                     unless async_body_context()->AWAIT_GET eq 'list';
 
+            {
+                package FutureSubclass;
+                our @ISA = ('Future');
+            }
+            {
+                use Future::AsyncAwait future_class => 'FutureSubclass';
+                async sub subclass_result { return 123 }
+            }
+            die "future_class did not select result class\n"
+                    unless subclass_result()->isa('FutureSubclass')
+                        && subclass_result()->AWAIT_GET == 123;
+
             async sub add_one {
                 my $value = await $_[0];
                 return $value + 1;

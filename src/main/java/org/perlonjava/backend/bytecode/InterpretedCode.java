@@ -45,6 +45,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
     public boolean usesLocalization = true;
     public boolean futureAsyncAwaitSub;
+    public String futureAsyncAwaitFutureClass;
 
     // Goto label map (set by compiler after construction for dynamic goto support)
     // Maps label name → bytecode PC offset
@@ -363,7 +364,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             RuntimeList result = BytecodeInterpreter.execute(this, args, effectiveContext);
             if (futureAsyncAwaitSub) {
                 return FutureAsyncAwaitRuntime.wrapInitialResult(
-                        effectiveContext, callContext, result);
+                        effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
             }
             return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
         } catch (RuntimeException e) {
@@ -372,7 +373,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 MortalList.flush();
             }
             if (futureAsyncAwaitSub && !(e instanceof PerlExitException)) {
-                return FutureAsyncAwaitRuntime.failedInitialResult(e, effectiveContext, callContext);
+                return FutureAsyncAwaitRuntime.failedInitialResult(
+                        e, effectiveContext, callContext, futureAsyncAwaitFutureClass);
             }
             throw e;
         } finally {
@@ -410,7 +412,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                     this, args, effectiveContext, subroutineName);
             if (futureAsyncAwaitSub) {
                 return FutureAsyncAwaitRuntime.wrapInitialResult(
-                        effectiveContext, callContext, result);
+                        effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
             }
             return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
         } catch (RuntimeException e) {
@@ -419,7 +421,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 MortalList.flush();
             }
             if (futureAsyncAwaitSub && !(e instanceof PerlExitException)) {
-                return FutureAsyncAwaitRuntime.failedInitialResult(e, effectiveContext, callContext);
+                return FutureAsyncAwaitRuntime.failedInitialResult(
+                        e, effectiveContext, callContext, futureAsyncAwaitFutureClass);
             }
             throw e;
         } finally {
@@ -499,6 +502,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.usesLocalization = this.usesLocalization;
         copy.futureAsyncAwaitSub = this.futureAsyncAwaitSub;
+        copy.futureAsyncAwaitFutureClass = this.futureAsyncAwaitFutureClass;
         return copy;
     }
 

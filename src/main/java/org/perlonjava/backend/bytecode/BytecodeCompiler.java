@@ -5587,6 +5587,8 @@ public class BytecodeCompiler implements Visitor {
         // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
+        subCode.futureAsyncAwaitFutureClass =
+                (String) node.getAnnotation("futureAsyncAwaitFutureClass");
         attachDeparseSourceSpan(subCode, node);
 
         if (RuntimeCode.DISASSEMBLE) {
@@ -5715,6 +5717,8 @@ public class BytecodeCompiler implements Visitor {
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
+        subCode.futureAsyncAwaitFutureClass =
+                (String) node.getAnnotation("futureAsyncAwaitFutureClass");
         attachDeparseSourceSpan(subCode, node);
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         if (node.block != null) {

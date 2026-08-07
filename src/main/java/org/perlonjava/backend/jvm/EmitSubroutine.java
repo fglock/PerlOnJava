@@ -254,6 +254,8 @@ public class EmitSubroutine {
                 InterpretedCode interpreted = EmitterMethodCreator.compileToInterpreter(
                         node.block, subCtx, node.useTryCatch);
                 interpreted.futureAsyncAwaitSub = true;
+                interpreted.futureAsyncAwaitFutureClass =
+                        (String) node.getAnnotation("futureAsyncAwaitFutureClass");
                 throw new InterpreterFallbackException(interpreted, newEnv);
             }
             Class<?> generatedClass =

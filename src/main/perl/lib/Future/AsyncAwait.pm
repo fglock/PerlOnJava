@@ -27,14 +27,22 @@ sub import {
     $^H{'Future::AsyncAwait/async'} = 1;
     $^H{'Future::AsyncAwait/awaitable'} = 1
             if $INC{'Future.pm'} || Future->can('new');
-    $^H{'Future::AsyncAwait/cancel'} = 1
-            if grep { $_ eq ':experimental(cancel)' } @_;
+    while (@_) {
+        my $option = shift;
+        if ($option eq ':experimental(cancel)') {
+            $^H{'Future::AsyncAwait/cancel'} = 1;
+        }
+        elsif ($option eq 'future_class') {
+            $^H{'Future::AsyncAwait/future'} = shift;
+        }
+    }
 }
 
 sub unimport {
     delete $^H{'Future::AsyncAwait/async'};
     delete $^H{'Future::AsyncAwait/awaitable'};
     delete $^H{'Future::AsyncAwait/cancel'};
+    delete $^H{'Future::AsyncAwait/future'};
 }
 
 1;

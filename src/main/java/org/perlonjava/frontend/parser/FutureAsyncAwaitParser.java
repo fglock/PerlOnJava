@@ -13,6 +13,7 @@ public final class FutureAsyncAwaitParser {
     static final String HINT_KEY = "Future::AsyncAwait/async";
     static final String CANCEL_HINT_KEY = "Future::AsyncAwait/cancel";
     private static final String AWAITABLE_HINT_KEY = "Future::AsyncAwait/awaitable";
+    private static final String FUTURE_CLASS_HINT_KEY = "Future::AsyncAwait/future";
     public static final String BACKEND_MESSAGE =
             "Future::AsyncAwait async execution requires a loaded Awaitable Future implementation"
                     + " (load Future before declaring async subs)";
@@ -31,6 +32,19 @@ public final class FutureAsyncAwaitParser {
         return hintEnabled(AWAITABLE_HINT_KEY)
                 || org.perlonjava.runtime.runtimetypes.RuntimeCode.isCodeDefined(
                 GlobalVariable.getGlobalCodeRef("Future::new"));
+    }
+
+    private static String futureClass() {
+        RuntimeHash hints = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        RuntimeScalar value = hints.elements.get(FUTURE_CLASS_HINT_KEY);
+        return value == null || !value.getBoolean() ? null : value.toString();
+    }
+
+    static void markFutureClass(org.perlonjava.frontend.astnode.AbstractNode node) {
+        String futureClass = futureClass();
+        if (futureClass != null) {
+            node.setAnnotation("futureAsyncAwaitFutureClass", futureClass);
+        }
     }
 
     private static boolean hintEnabled(String key) {
@@ -63,6 +77,7 @@ public final class FutureAsyncAwaitParser {
         if (result instanceof org.perlonjava.frontend.astnode.AbstractNode abstractNode) {
             abstractNode.setAnnotation("futureAsyncAwaitSub", true);
             abstractNode.setAnnotation("futureAsyncAwaitTokenIndex", asyncIndex);
+            markFutureClass(abstractNode);
         }
         if (result instanceof org.perlonjava.frontend.astnode.SubroutineNode subroutine) {
             subroutine.block.setAnnotation("futureAsyncAwaitSub", true);

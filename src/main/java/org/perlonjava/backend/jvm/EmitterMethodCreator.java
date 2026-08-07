@@ -1741,6 +1741,8 @@ public class EmitterMethodCreator implements Opcodes {
         if (Boolean.TRUE.equals(ast.getAnnotation("futureAsyncAwaitSub"))) {
             InterpretedCode code = compileToInterpreter(ast, ctx, useTryCatch);
             code.futureAsyncAwaitSub = true;
+            code.futureAsyncAwaitFutureClass =
+                    (String) ast.getAnnotation("futureAsyncAwaitFutureClass");
             return code;
         }
         if (ctx.compilerOptions.useInterpreter || RuntimeCode.FORCE_INTERPRETER) {

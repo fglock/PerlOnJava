@@ -314,12 +314,23 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Added both-backend regression coverage and verified the full `make` suite.
   - Files: `Future::AsyncAwait.pm`, `FutureAsyncAwaitParser.java`, backend async
     call-context integration, and `FutureAsyncAwaitRuntimeTest.java`.
+- [x] Phase 5b: Configured Future subclasses (2026-08-07)
+  - Implemented the upstream `future_class => $class` import option with
+    lexical hint scoping and per-async-sub metadata.
+  - Constructed immediate success/failure and pending outer results with the
+    configured subclass while preserving Awaitable cloning for the default
+    unconfigured path.
+  - Verified upstream `50future-subclass.t` (4/4), both frontend regression
+    coverage, and a green full `make` rerun.
+  - Files: `Future::AsyncAwait.pm`, async parser/subroutine metadata paths,
+    `InterpretedCode.java`, `FutureAsyncAwaitRuntime.java`, and
+    `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
 1. Close the remaining applicable upstream semantic gaps: restricted
    map/grep/non-lexical-foreach/string-eval placement, synchronous signature
-   validation, Future subclass selection, and abandoned-Future diagnostics.
+   validation, and abandoned-Future diagnostics.
 2. Package and validate the pure-Perl Awaitable role/test helper where their
    dependencies are supported, then rerun the applicable suite on both
    frontends.
