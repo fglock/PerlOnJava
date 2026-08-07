@@ -152,6 +152,11 @@ class FutureAsyncAwaitParserTest {
     @Test
     void runtimeCompilationContinuesPastFormerPhaseBoundary() {
         assertDoesNotThrow(() -> execute("""
+                BEGIN {
+                    package Future;
+                    our $VERSION = '0.52';
+                    $INC{'Future.pm'} = __FILE__;
+                }
                 use Future::AsyncAwait;
                 my $code = async sub { 1 };
                 """, false));

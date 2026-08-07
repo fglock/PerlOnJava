@@ -418,7 +418,9 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 ### Final verification
 
 - Updated the obsolete Phase 1 parser test to verify that runtime compilation
-  continues past the former implementation boundary.
+  continues past the former implementation boundary. Its minimal compatible
+  `Future` fixture is defined in-memory so clean builds do not depend on a
+  developer module cache.
 - `weaken_scalar_refs.t`, `regex_charclass.t`, and the new aggregate-element
   weak-reference regression pass on both frontends; the new test also passes
   with system Perl.
