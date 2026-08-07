@@ -288,8 +288,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Class-Trait-0.33/SkipObsoleteModPerlWarningTest.patch' ],
         [ 'XML-TreePP/TreePP.pm.patch',
           'PerlOnJava/CpanPatches/XML-TreePP-0.43/TreePP.pm.patch' ],
-        [ 'Graph/Graph.pm.patch',
-          'PerlOnJava/CpanPatches/Graph-0.9735/Graph.pm.patch' ],
         [ 'Graph/AdjacencyMap.pm.patch',
           'PerlOnJava/CpanPatches/Graph-0.9735/AdjacencyMap.pm.patch' ],
         [ 'Term-ANSIColor-Markup/PortableAccessors.patch',
@@ -308,6 +306,7 @@ sub _bootstrap_patches {
         'WWW-Form-UrlEncoded/PP.pm.patch',
         'DBI/DBI.pm.patch',
         'DBI/PurePerl.pm.patch',
+        'Graph/Graph.pm.patch',
         'Graph/AdjacencyMap-Light.pm.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
