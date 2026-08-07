@@ -1,10 +1,10 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RegexMatcher;
 
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
 
 /**
  * Snapshot of regex-related global state (Perl's $1, $&amp;, $`, $', etc.).
@@ -15,7 +15,7 @@ import java.util.regex.Matcher;
  */
 public class RegexState implements DynamicState {
 
-    private final Matcher globalMatcher;
+    private final RegexMatcher globalMatcher;
     private final String globalMatchString;
     private final String lastMatchedString;
     private final int lastMatchStart;
