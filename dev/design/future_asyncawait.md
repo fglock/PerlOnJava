@@ -117,7 +117,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   regex captures, destruction, and abandoned pending Futures.
 - Implement file-scope await using the Awaitable `AWAIT_WAIT` protocol.
 
-### Phase 4: Syntax completeness and interoperability
+### Phase 4: Syntax completeness and interoperability — completed 2026-08-07
 
 - Add `CANCEL` blocks, lexical async subs, async methods, signatures,
   attributes, and forward declarations.
@@ -172,7 +172,7 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 
 ## Progress tracking
 
-### Current status: Phase 4 in progress; current focus is native try/catch
+### Current status: Phase 5 in progress; current focus is upstream-suite validation
 
 ### Completed phases
 
@@ -287,14 +287,26 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   - Files: `FutureAsyncAwaitParser.java`, `StatementResolver.java`,
     `StatementParser.java`, `CancelBlock.java`, bytecode compiler/interpreter
     integration, `Future::AsyncAwait.pm`, and async parser/runtime tests.
+- [x] Phase 4b: Resumable native try/catch/finally (2026-08-07)
+  - Lowered `TryNode` onto the interpreter's existing eval-handler opcodes,
+    including lexical catch-parameter binding and expression-result merging.
+  - Kept native `try` inline inside async bodies so an `await` suspends the
+    owning async frame instead of an internal ordinary-sub wrapper.
+  - Verified awaited success and failure through `try`, `catch`, and `finally`
+    on both frontend backends; full `make` passes.
+  - Deferred extension-hook ABI selection to Phase 5 so it is based on concrete
+    ecosystem requirements rather than speculative compatibility surface.
+  - Files: `BytecodeCompiler.java`, `StatementParser.java`, and
+    `FutureAsyncAwaitRuntimeTest.java`.
 
 ### Next steps
 
-1. Implement `TryNode` in the bytecode backend so native `try/catch` can
-   contain resumable awaits; this backend limitation predates async support.
-2. Import the applicable upstream Future::AsyncAwait lifecycle and
-   control-flow tests.
-3. Begin Phase 5 ecosystem validation with Future and IO::Async.
+1. Inventory and import the applicable upstream Future::AsyncAwait lifecycle,
+   syntax, cancellation, and control-flow tests.
+2. Run timeout-wrapped Future and IO::Async ecosystem suites and classify
+   failures as async-runtime gaps, module-porting gaps, or unsupported features.
+3. Use those results to define the minimum native extension-hook ABI and decide
+   whether selective interpreter routing remains the production lowering.
 
 ### Open questions
 
@@ -302,8 +314,6 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   state machines after semantic parity is established?
 - Which Future::AsyncAwait extension hooks are required by modules in the
   intended PAGI ecosystem?
-- Should native `try/catch` be lowered onto the interpreter's existing eval
-  handler opcodes or receive dedicated exception-region opcodes?
 
 ## References
 

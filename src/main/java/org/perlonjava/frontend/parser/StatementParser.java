@@ -417,13 +417,20 @@ public class StatementParser {
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
 
+            TryNode tryNode = new TryNode(
+                    tryBlock, catchParameter, catchBlock, finallyBlock, index);
+            // Async bodies must keep try inline so an await suspends the owning
+            // async frame rather than an ordinary internal wrapper subroutine.
+            if (parser.parsingFutureAsyncAwaitSub) {
+                return tryNode;
+            }
+
             // The generated wrapper is internal syntax for the try expression.
             // Let it accept lvalue contexts so :lvalue subs can return aliases
             // through try { ... } without failing the subroutine lvalue check.
             return new BinaryOperatorNode("->",
                     new SubroutineNode(null, null, List.of("lvalue"),
-                            new BlockNode(List.of(
-                                new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, index)), index),
+                            new BlockNode(List.of(tryNode), index),
                         false, index),
                 atUnderscoreArgs(parser),
                 index);

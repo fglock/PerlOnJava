@@ -6529,7 +6529,60 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(TryNode node) {
-        throw new UnsupportedOperationException("Try/catch not yet implemented");
+        int resultReg = allocateOutputRegister();
+        int firstBodyReg = nextRegister;
+
+        emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
+        int catchTargetPos = bytecode.size();
+        emitInt(0);
+        emitReg(firstBodyReg);
+
+        compileNode(node.tryBlock, resultReg, currentCallContext);
+        if (lastResultReg >= 0) {
+            emitAliasWithTarget(resultReg, lastResultReg);
+        }
+        emit(Opcodes.EVAL_END);
+
+        emit(Opcodes.GOTO);
+        int gotoEndPos = bytecode.size();
+        emitInt(0);
+
+        int catchPc = bytecode.size();
+        patchIntOffset(catchTargetPos, catchPc);
+
+        int ignoredEvalResult = allocateRegister();
+        emit(Opcodes.EVAL_CATCH);
+        emitReg(ignoredEvalResult);
+
+        OperatorNode catchDeclaration = new OperatorNode(
+                "my", node.catchParameter, node.getIndex());
+        compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
+        int catchReg = lastResultReg;
+
+        int errorReg = allocateRegister();
+        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+        emitReg(errorReg);
+        emit(addToStringPool("main::@"));
+        emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
+        emitReg(catchReg);
+        emitReg(errorReg);
+
+        compileNode(node.catchBlock, resultReg, currentCallContext);
+        if (lastResultReg >= 0) {
+            emitAliasWithTarget(resultReg, lastResultReg);
+        }
+
+        int finallyPc = bytecode.size();
+        patchIntOffset(gotoEndPos, finallyPc);
+        if (node.finallyBlock != null) {
+            finallyBlockDepth++;
+            try {
+                compileNode(node.finallyBlock, -1, RuntimeContextType.VOID);
+            } finally {
+                finallyBlockDepth--;
+            }
+        }
+        lastResultReg = resultReg;
     }
 
     @Override

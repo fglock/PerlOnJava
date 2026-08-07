@@ -335,6 +335,34 @@ class FutureAsyncAwaitRuntimeTest {
                     unless $eval_failed_result->AWAIT_GET eq
                            "caught:eval await failed\n";
 
+            use feature 'try';
+            my $try_finally_log = '';
+            async sub try_await {
+                my $value;
+                try {
+                    $value = await($_[0]) + 1;
+                }
+                catch ($error) {
+                    $value = "caught:$error";
+                }
+                finally {
+                    $try_finally_log .= 'finally;';
+                }
+                return $value;
+            }
+            my $try_pending = Future->new;
+            my $try_result = try_await($try_pending);
+            $try_pending->AWAIT_DONE(41);
+            die "await inside try lost success value\n"
+                    unless $try_result->AWAIT_GET == 42;
+            my $try_failed = Future->new;
+            my $try_failed_result = try_await($try_failed);
+            $try_failed->AWAIT_FAIL("try await failed\n");
+            die "await failure was not caught by catch\n"
+                    unless $try_failed_result->AWAIT_GET eq
+                           "caught:try await failed\n"
+                        && $try_finally_log eq 'finally;finally;';
+
             async sub loop_await {
                 my $sum = 0;
                 for my $future (@_) {
