@@ -1963,6 +1963,22 @@ public class IOOperator {
         }
     }
 
+    private static String parseSockaddrUn(String packedAddress) {
+        byte[] bytes = packedAddress.getBytes(StandardCharsets.ISO_8859_1);
+        if (bytes.length < 3) {
+            return null;
+        }
+        int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+        if (family != Socket.AF_UNIX) {
+            return null;
+        }
+        int end = 2;
+        while (end < bytes.length && bytes[end] != 0) {
+            end++;
+        }
+        return new String(bytes, 2, end - 2, StandardCharsets.ISO_8859_1);
+    }
+
     /**
      * bind(SOCKET, NAME)
      * Binds a socket to an address.
@@ -1985,6 +2001,10 @@ public class IOOperator {
 
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
+            String unixPath = parseSockaddrUn(addressStr);
+            if (unixPath != null && socketIO.ioHandle instanceof SocketIO unixSocket) {
+                return unixSocket.bindUnix(unixPath);
+            }
             String[] parts = parseSockaddrIn(addressStr);
 
             // Fallback to "host:port" string format if binary parsing fails
@@ -2036,6 +2056,10 @@ public class IOOperator {
 
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
+            String unixPath = parseSockaddrUn(addressStr);
+            if (unixPath != null && socketIO.ioHandle instanceof SocketIO unixSocket) {
+                return unixSocket.connectUnix(unixPath);
+            }
             String[] parts = parseSockaddrIn(addressStr);
 
             // Fallback to "host:port" string format if binary parsing fails

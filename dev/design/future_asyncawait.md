@@ -416,6 +416,20 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      `socket_iptos_constants.t`.
 2. Track PAGI's Unix-socket, inherited-descriptor, process-activation, and
    remaining file/runtime gaps separately from async/await.
+   - [Completed 2026-08-07] Added channel-native Unix stream socket creation,
+     bind, listen, connect, accept, close, `getsockname`, and `getpeername`,
+     including interpreter opcode parity and packed `sockaddr_un` handling.
+   - [Completed 2026-08-07] Allowed restrictive masks such as `umask(0077)`;
+     the existing FFM binding already supported them, but the operator rejected
+     owner permission bits incorrectly.
+   - The focused socket and umask regressions pass with system Perl and both
+     PerlOnJava frontends; a full `make` also passes.
+   - PAGI's `t/43-unix-socket.t` now passes its first 13 subtests and reaches
+     live Unix-listener setup. Its next section depends on unsupported `fork`
+     and hits the test's 180-second external timeout.
+   - Next: inherited-descriptor and systemd activation support, followed by the
+     remaining file/runtime gaps. Process-worker tests remain outside scope
+     while PerlOnJava does not implement `fork`.
 3. Revisit native JVM state-machine lowering only if profiling identifies
    selective interpreter routing as a material bottleneck.
 

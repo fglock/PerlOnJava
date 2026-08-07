@@ -8,7 +8,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 /**
- * Native implementation of Perl's umask operator using JNA
+ * Native implementation of Perl's umask operator using FFM
  * <p>
  * This implementation provides direct access to the system umask:
  * - On POSIX systems: Uses native umask() system call
@@ -77,13 +77,6 @@ public class UmaskOperator {
             // Set new umask and get previous value
             int previousMask = FFMPosix.get().umask(newMask);
 
-            // Check Perl's special behavior: die if trying to restrict self
-            if ((newMask & 0700) > 0) {
-                // Restore previous umask before throwing
-                FFMPosix.get().umask(previousMask);
-                throw new PerlCompilerException("umask not implemented");
-            }
-
             return new RuntimeScalar(previousMask);
 
         } catch (UnsatisfiedLinkError | NoClassDefFoundError e) {
@@ -120,11 +113,6 @@ public class UmaskOperator {
 
         // Ensure mask is within valid range (0-0777)
         newMask &= 0777;
-
-        // Check Perl's special behavior: die if trying to restrict self
-        if ((newMask & 0700) > 0) {
-            throw new PerlCompilerException("umask not implemented");
-        }
 
         // Atomically update and return previous value
         int previousMask = windowsSimulatedUmask;

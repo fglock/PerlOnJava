@@ -2397,6 +2397,8 @@ public class Disassemble {
                     case Opcodes.LISTEN:
                     case Opcodes.PIPE:
                     case Opcodes.SOCKETPAIR:
+                    case Opcodes.GETSOCKNAME:
+                    case Opcodes.GETPEERNAME:
                     case Opcodes.WRITE:
                     case Opcodes.FORMLINE:
                     case Opcodes.PRINTF:
@@ -2426,6 +2428,8 @@ public class Disassemble {
                             case Opcodes.LISTEN -> "listen";
                             case Opcodes.PIPE -> "pipe";
                             case Opcodes.SOCKETPAIR -> "socketpair";
+                            case Opcodes.GETSOCKNAME -> "getsockname";
+                            case Opcodes.GETPEERNAME -> "getpeername";
                             case Opcodes.WRITE -> "write";
                             case Opcodes.FORMLINE -> "formline";
                             case Opcodes.PRINTF -> "printf";

@@ -2430,6 +2430,7 @@ public class BytecodeInterpreter {
                                  Opcodes.CLOSE, Opcodes.BINMODE, Opcodes.SEEK, Opcodes.EOF_OP, Opcodes.SYSREAD,
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
                                  Opcodes.LISTEN, Opcodes.PIPE, Opcodes.SOCKETPAIR,
+                                 Opcodes.GETSOCKNAME, Opcodes.GETPEERNAME,
                                  Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,
                                  Opcodes.SYSSEEK, Opcodes.TRUNCATE, Opcodes.FLOCK, Opcodes.READ, Opcodes.OPENDIR, Opcodes.READDIR,
                                  Opcodes.SEEKDIR -> {

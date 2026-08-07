@@ -2443,6 +2443,12 @@ public class Opcodes {
      */
     public static final short APPLY_COMPILER_FLAGS = 501;
 
+    /** getsockname SOCKET: Format: GETSOCKNAME rd argsReg ctx. */
+    public static final short GETSOCKNAME = 502;
+
+    /** getpeername SOCKET: Format: GETPEERNAME rd argsReg ctx. */
+    public static final short GETPEERNAME = 503;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
