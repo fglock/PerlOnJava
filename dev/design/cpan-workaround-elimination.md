@@ -283,11 +283,9 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
 
 ### Next steps
 
-1. Integrate lazy native `Want` support so Term::ANSIColor::Markup can use its
-   upstream lvalue accessors and retire its portable-accessor patch.
-2. Make the shared lvalue analysis authoritative for both backends and rerun
+1. Make the shared lvalue analysis authoritative for both backends and rerun
    the unpatched Phase 5 target matrix.
-3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+2. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -518,6 +516,21 @@ Current phase: Phase 5, control flow, lvalues, and introspection.
   passes the same 35-file/546-assertion suite. `Module-Install.yml` and
   `Module-Install-1.21/ExplicitAuthorsMethod.patch` are deleted and registered
   for installed-cache retirement. The final full `make` gate passes.
+- The bundled Want compatibility layer now loads a Java call-context bridge
+  lazily through XSLoader and answers `LVALUE`/`ASSIGN` from the existing
+  runtime context stack. Class::Accessor::Lvalue 0.11's unchanged suite passes
+  2 files/24 assertions on the JVM backend; the interpreter exercises the
+  lvalue behavior successfully, with its two remaining failures limited to
+  pre-existing anonymous-accessor `caller` attribution in diagnostics.
+- Term::ANSIColor::Markup 0.06 no longer substitutes ordinary accessors for its
+  upstream lvalue accessors. Its pristine suite passes 4 files/11 assertions
+  on the JVM backend and all 11 assertions in direct interpreter runs using
+  the current Test::Builder. A source-first `jcpan -t
+  Term::ANSIColor::Markup` run installs the real pure-Perl
+  Class::Accessor::Lvalue dependency, applies no patch, retains upstream
+  lvalue assignments, and passes 4 files/11 assertions. The distropref and
+  `PortableAccessors.patch` are deleted and registered for installed-cache
+  retirement; a source bootstrap removes both stale artifacts.
 
 ### Open questions
 
