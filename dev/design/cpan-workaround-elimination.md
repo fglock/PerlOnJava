@@ -286,7 +286,7 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 1. Implement Phase 8's weak-reference lifetime, readonly-clone, scope-exit,
    and deterministic destruction parity, continuing with the remaining
-   Test::Deep and SQL::Translator failures.
+   SQL::Translator failures.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -744,15 +744,25 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   migration coverage. The unchanged upstream focused `t/makefilepl.t` passes
   6/6, including output suppression and the spinning-Makefile.PL deadline;
   the full `make` gate passes.
-- Phase 8 begins by preserving strong aggregate owners before the
+- Phase 8 begins by preserving reachable strong aggregate owners before the
   weak-reference cleanup heuristic corrects suspected selective-refcount
-  drift. A block-lexical call log can therefore retain a logged object until
-  its owning entry is deleted, without pinning the object afterward.
+  drift. Owner reachability follows scalar, aggregate, and backend-neutral
+  closed-over-variable captures, while stale slots in restored localized
+  caches no longer suppress cleanup. A block-lexical call log can therefore
+  retain a logged object until its owning entry is deleted, without pinning
+  the object afterward.
   `zz_block_lexical_call_log_lifetime.t` passes 2/2 under standard Perl, JVM,
   and interpreter execution. Test::MockObject's unchanged `t/bugs.t` advances
   from 17/18 to 18/18 on the JVM backend, and a source-first CPAN run passes
   the complete 12-file/232-assertion suite. Its interpreter method-table issue
   remains separate and is not claimed as an upstream interpreter pass.
+- Test::Deep's right-hand expected structure previously retained two stale
+  selective owners after its localized comparison caches were restored, so
+  `t/memory.t` cleared the weak observer only after an explicit reachability
+  sweep. The stricter reachable-owner check clears that observer at the Perl
+  statement boundary. The unchanged focused test passes 2/2 on JVM and
+  interpreter, and a source-first CPAN run passes all 42 files/1,268
+  assertions.
 
 ### Open questions
 

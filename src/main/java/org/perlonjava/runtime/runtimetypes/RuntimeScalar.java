@@ -1688,7 +1688,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
                 && !thisWasWeak
                 && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                && oldBase.activeOwnerCount() == 0
+                && oldBase.reachableOwnerCount() == 0
                 && !ReachabilityWalker.isReachableFromExternalRoot(oldBase)
                 && !ReachabilityWalker.isReachableFromLiveCodeCaptures(oldBase)) {
             WeakRefRegistry.clearWeakRefsTo(oldBase);
