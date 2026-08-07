@@ -126,7 +126,23 @@ public class StatementResolver {
                         yield null;
                     }
                     if (nextNonWhitespaceTokenIs(parser, currentIndex + 1, "sub")) {
-                        yield FutureAsyncAwaitParser.parseAsyncSubStatement(parser);
+                        int subIndex = Whitespace.skipWhitespace(parser, currentIndex + 1, parser.tokens);
+                        int afterSubIndex = Whitespace.skipWhitespace(parser, subIndex + 1, parser.tokens);
+                        LexerToken afterSub = afterSubIndex < parser.tokens.size()
+                                ? parser.tokens.get(afterSubIndex)
+                                : null;
+
+                        // A named async sub is a declaration, but an anonymous async sub at
+                        // statement position is still an expression. Leave the latter for
+                        // parseExpression so postfix calls such as `async sub { ... }->()`
+                        // bind to the returned code reference.
+                        if (afterSub != null
+                                && (afterSub.type == LexerTokenType.IDENTIFIER
+                                || afterSub.text.equals("'")
+                                || afterSub.text.equals("::"))) {
+                            yield FutureAsyncAwaitParser.parseAsyncSubStatement(parser);
+                        }
+                        yield null;
                     }
                     if (nextNonWhitespaceTokenIs(parser, currentIndex + 1, "method")
                             && parser.ctx.symbolTable.isFeatureCategoryEnabled("class")) {

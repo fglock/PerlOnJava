@@ -510,9 +510,20 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      parsed without an Awaitable implementation; full `make` passes.
      PAGI-Tools' named-router and test-client component-coercion files now pass
      all 14 subtests.
-   - Next: continue the narrowed PAGI-Tools runtime and portability gaps.
-     Process-worker tests remain outside scope while PerlOnJava does not
-     implement `fork`.
+   - [Completed 2026-08-07] Distinguished named async declarations from
+     anonymous async expressions at statement position. Anonymous forms now
+     continue through precedence parsing, so postfix invocation in a `(&)`
+     prototype block (`async sub { ... }->()`) binds to the code reference
+     instead of leaving `->()` as a new invalid statement.
+   - Added an isolated parser regression and verified the minimal invocation
+     on both frontends. PAGI-Tools' memory session-store suite now passes all
+     nine subtests on both the JVM and interpreter backends; full `make`
+     passes. Files: `StatementResolver.java` and
+     `FutureAsyncAwaitAnonymousInvocationTest.java`.
+   - Next: investigate the four callback-cycle cleanup assertions separately.
+     The only other remaining PAGI-Tools failure is an unsupported `fork`-open
+     case, which remains outside scope while PerlOnJava does not implement
+     `fork`.
 3. Revisit native JVM state-machine lowering only if profiling identifies
    selective interpreter routing as a material bottleneck.
 
