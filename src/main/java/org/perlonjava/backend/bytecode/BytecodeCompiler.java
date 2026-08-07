@@ -6289,6 +6289,7 @@ public class BytecodeCompiler implements Visitor {
         loopStack.push(loopInfo);
 
         int loopEndJumpPc = -1;
+        int redoTargetPc = loopStartPc;
         MyVarCleanupRegisters conditionMyCleanup = MyVarCleanupRegisters.empty();
 
         if (node.isDoWhile) {
@@ -6368,6 +6369,8 @@ public class BytecodeCompiler implements Visitor {
             emitInt(0);  // Placeholder for jump target (will be patched)
 
             // Step 5: Execute body
+            // Perl redo restarts the body without re-evaluating the condition.
+            redoTargetPc = bytecode.size();
             if (node.body != null) {
                 loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
                 node.body.accept(this);
@@ -6413,7 +6416,7 @@ public class BytecodeCompiler implements Visitor {
             patchJump(pc, loopInfo.continuePc);
         }
         for (int pc : loopInfo.redoPcs) {
-            patchJump(pc, loopStartPc);
+            patchJump(pc, redoTargetPc);
         }
 
         // Step 12: Pop loop info
