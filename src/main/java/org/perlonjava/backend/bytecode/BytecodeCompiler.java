@@ -92,6 +92,28 @@ public class BytecodeCompiler implements Visitor {
     int targetOutputReg = -1;
 
     /**
+     * Emit Perl's normal scalar value for a completed loop.
+     *
+     * <p>A loop expression evaluates to a defined empty string in scalar
+     * context. Runtime string evals use this bytecode backend even when the
+     * surrounding program uses JVM compilation, so leaving no result register
+     * here made an eval-generated sub ending in {@code for} return undef.</p>
+     */
+    private void emitNormalLoopResult() {
+        if (currentCallContext == RuntimeContextType.SCALAR
+                || currentCallContext == RuntimeContextType.RUNTIME) {
+            int resultReg = allocateOutputRegister();
+            int constIdx = addToConstantPool(RuntimeScalarCache.scalarEmptyString);
+            emit(Opcodes.LOAD_CONST);
+            emitReg(resultReg);
+            emit(constIdx);
+            lastResultReg = resultReg;
+        } else {
+            lastResultReg = -1;
+        }
+    }
+
+    /**
      * When {@code localHashLvalueCompileDepth > 0}, hash element / arrow-hash fetches emit
      * {@code *_FOR_LOCAL} opcodes so {@code local $hash{key}} / {@code local $href->{k}} get
      * {@link RuntimeHashProxyEntry} proxies. {@code suppressLocalHashFetchForLocal} is bumped while
@@ -6302,7 +6324,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(foreachRegexSaveReg);
         }
 
-        lastResultReg = -1;  // For loop returns empty
+        emitNormalLoopResult();
     }
 
     @Override
@@ -6577,7 +6599,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(loopRegexSaveReg);
         }
 
-        lastResultReg = -1;  // For loop returns empty
+        emitNormalLoopResult();
     }
 
     @Override

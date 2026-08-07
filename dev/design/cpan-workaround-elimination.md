@@ -284,10 +284,11 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Continue Phase 8 with SQL::Translator's unchanged `t/24yaml.t` round-trip
-   mismatch (1/2 assertions pass). The source-first dependency inventory must
-   also include `Carp::Clan` and `Parse::RecDescent` before the complete suite
-   is used as the retirement gate; focused `t/13schema.t` already passes.
+1. Continue Phase 8 with SQL::Translator's complete unchanged source suite,
+   using the now-confirmed `Carp::Clan` and `Parse::RecDescent` dependencies.
+   `t/24yaml.t` passes 2/2 and `t/13schema.t` passes; the much larger
+   `t/02mysql-parser.t` advances through 317 passing assertions before the
+   600-second investigative deadline and needs a longer bounded run.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -772,6 +773,16 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   YAML now loads on the JVM backend. The full `make` gate passes. Interpreter
   YAML still has a separate pre-existing compile-time import issue at its
   first `has ... =>` declaration and is not folded into this parser fix.
+- Eval-generated foreach and C-style loops now emit Perl's defined empty-string
+  result in scalar context instead of leaving the bytecode result register
+  absent (which enclosing blocks converted to undef). Parse::RecDescent uses
+  that distinction to accept a successfully matched production whose final
+  action statement is a loop. Regression `eval_foreach_return_value.t` passes
+  2/2 under standard Perl, JVM, and interpreter execution, and the full
+  `make` gate passes. SQL::Translator's unchanged SQLite-to-YAML round trip
+  consequently advances from 1/2 to 2/2; its MySQL parser advances beyond the
+  former failure after assertion 204 to 317 passing assertions before the
+  bounded investigative run expires.
 
 ### Open questions
 
