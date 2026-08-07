@@ -163,6 +163,7 @@ sub _bootstrap_prefs {
         Regexp-Common.yml
         Sub-Quote.yml
         Test-Deep.yml
+        Test-Deep-JSON.yml
         Test-File-ShareDir.yml
         Test2-Plugin-NoWarnings.yml
         Term-ANSIColor-Markup.yml

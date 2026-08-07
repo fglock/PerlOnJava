@@ -284,16 +284,20 @@ Current phase: Phase 7, CPAN metadata and process services.
 
 ### Next steps
 
-1. Inventory active Phase 7 preferences and patches for missing CPAN metadata,
-   undeclared prerequisites, shell command construction, output capture,
-   process deadlines, and process-tree termination.
-2. Define the authoritative MYMETA reconciliation and one-retry boundary before
-   removing any dependency workaround, with source-first CPAN acceptance tests.
-3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
+1. Continue the Phase 7 metadata inventory with
+   `XML-Filter-GenericChunk.yml` and `HTTP-Response-Encoding.yml`, verifying
+   each distribution's current static and generated metadata in a clean
+   source-first install before retiring its dependency workaround.
+2. Define and test the one-retry boundary for canonical missing-module test
+   failures not covered by authoritative META/MYMETA reconciliation.
+3. Replace CPAN-FindDependencies' Unix `system` patch with the argv-safe Java
+   process service, including output capture, deadlines, and process-tree
+   termination.
+4. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+5. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -702,6 +706,15 @@ Current phase: Phase 7, CPAN metadata and process services.
   regex suites remain: conditional comments, palindrome recursion, and nested
   comment recursion. These use `(?{...})`, `(??{...})`, or both and remain
   visible under the callback-interface deferral required by the Phase 6 design.
+- Phase 7's first metadata-only retirement removes
+  `Test-Deep-JSON.yml`. Test::Deep::JSON 0.05's generated metadata declares
+  `Exporter::Lite`, `JSON::MaybeXS`, and `Test::Deep`, so the Phase 3
+  META/MYMETA reconciliation resolves the graph without an explicit
+  distropref. Bootstrap migration removes stale PerlOnJava-signed copies while
+  preserving a user-owned file with the same name; the standard-Perl migration
+  regression passes 5/5. A fresh isolated `PERLONJAVA_HOME` source install
+  applies no preference, installs all three dependencies, and passes the
+  unchanged target suite (2 files/7 assertions). The full `make` gate passes.
 
 ### Open questions
 
