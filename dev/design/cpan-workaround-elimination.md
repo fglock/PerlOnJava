@@ -283,12 +283,15 @@ Current phase: Phase 6, regex engine coverage.
 
 ### Next steps
 
-1. Inventory the active Phase 6 regex prefs and patches, then establish
-   unpatched JVM/interpreter baselines for Regexp::Common and String::Random.
-2. Separate stack-safety and declarative syntax gaps from executable
-   `(?{...})`/`(??{...})` callback support before selecting the first regex
-   workaround to retire.
-3. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
+1. Establish pristine Object::InsideOut and Logger::Simple baselines and
+   isolate the recursive-pattern syntax still requiring
+   `JPERL_UNIMPLEMENTED=warn`.
+2. Keep Type::Tiny's two executable `(?{...})` callback tests under explicit
+   capability policy until the compiler/runtime callback interface is designed.
+3. Classify Regexp::Common's failing nested-comment, IPv6, balanced-pattern,
+   palindrome, named-subpattern, and postal-code surfaces before selecting the
+   next declarative regex feature to implement.
+4. Keep Test::MockObject's weak-reference lifetime assertion, the live LWP
    `t/local/http.t` failure, and CGI HTML::Entities failures as documented
    Phase 8/runtime-parity follow-ups.
 
@@ -568,6 +571,38 @@ Current phase: Phase 6, regex engine coverage.
   patches. The known interpreter Test::More TODO-diagnostic and in-process
   harness-isolation limitations remain visible; no failure is converted to a
   pass.
+- Phase 6 inventory found four active regex-related preferences:
+  ExtUtils::ParseXS and Logger::Simple retain recursive-pattern capability
+  policy, Type::Tiny retains two executable-callback test skips, and
+  XML::TreePP retained parser stack-safety plus byte/UTF-8 source adaptations.
+  String::Random and Regexp::Common have no source preference or patch; their
+  names remain only in bootstrap retirement so upgrades remove stale signed
+  copies.
+- String::Random 0.32 is a completed zero-workaround baseline. Its unchanged
+  Module::Build suite passes 9 files/202 assertions on JVM and interpreter
+  backends. Two consecutive source-first `jcpan -t String::Random` runs pass
+  the same suite, apply no preference, and leave `String-Random.yml` absent.
+- Regexp::Common 2024080801 remains a later regex-engine target. Its pristine
+  JVM suite runs 73 files/140,752 assertions but fails 11 programs and 2,633
+  assertions across nested comments, IPv6, USA SSNs, balanced patterns,
+  case-insensitive matching, palindromes, named subpatterns, and Netherlands
+  and Spain postal codes. No failure is hidden by a preference.
+- Type::Tiny 2.010001's pristine callback tests pass 2 files/6 assertions under
+  standard Perl. Both PerlOnJava backends reject the non-constant `(?{...})`
+  group before assertions, confirming that `SkipRegexCallbackTests.patch`
+  represents the explicitly deferred executable-callback capability rather
+  than a declarative regex or stack-safety defect.
+- XML::TreePP 0.43 no longer needs its incremental parser rewrite. Pristine
+  upstream `t/03_parsefile.t` and the 150 KB `t/51_RT_42441.t` fixture pass on
+  JVM and interpreter backends; the complete pristine JVM suite reaches all 55
+  files/1,073 assertions with failures confined to the independent
+  byte/UTF-8 output tests. The patch now retains only the encoding adaptation.
+  The reduced patch passes its five affected upstream files/136 assertions
+  under standard Perl and passes every assertion in isolated JVM and
+  interpreter runs. A source-first `jcpan -t XML::TreePP` in a fresh isolated
+  `PERLONJAVA_HOME` bootstraps only the encoding patch, leaves the upstream
+  global parser regex intact, and passes all 55 files/1,073 assertions. The
+  final full `make` gate passes.
 
 ### Open questions
 
