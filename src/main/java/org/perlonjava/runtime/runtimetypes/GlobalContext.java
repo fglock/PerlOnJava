@@ -232,7 +232,9 @@ public class GlobalContext {
         GlobalVariable.declareGlobalHash("main::+");
         GlobalVariable.declareGlobalHash("main::-");
         // Initialize %ENV
-        Map<String, RuntimeScalar> env = GlobalVariable.getGlobalHash("main::ENV").elements;
+        RuntimeHash environmentHash = GlobalVariable.getGlobalHash("main::ENV");
+        environmentHash.isEnvironmentHash = true;
+        Map<String, RuntimeScalar> env = environmentHash.elements;
         System.getenv().forEach((k, v) -> {
             RuntimeScalar envValue = new RuntimeScalar(v);
             envValue.tainted = compilerOptions.taintMode;

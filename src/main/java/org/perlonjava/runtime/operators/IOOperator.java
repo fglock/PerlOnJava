@@ -2966,7 +2966,8 @@ public class IOOperator {
             int fd = Integer.parseInt(fileName);
             sourceHandle = findFileHandleByDescriptor(fd);
             if (sourceHandle == null || sourceHandle.ioHandle == null) {
-                throw new PerlCompilerException("Bad file descriptor: " + fd);
+                RuntimeIO.handleIOError(9); // EBADF
+                return null;
             }
         } else {
             // Handle named filehandles — always use glob table to get the CURRENT handle,
@@ -3013,10 +3014,12 @@ public class IOOperator {
                         case "STDOUT": sourceHandle = RuntimeIO.stdout; break;
                         case "STDERR": sourceHandle = RuntimeIO.stderr; break;
                         default:
-                            throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
+                            RuntimeIO.handleIOError(9); // EBADF
+                            return null;
                     }
                     if (sourceHandle == null || sourceHandle.ioHandle == null) {
-                        throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
+                        RuntimeIO.handleIOError(9); // EBADF
+                        return null;
                     }
                 }
             }

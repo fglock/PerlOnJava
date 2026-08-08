@@ -284,13 +284,15 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Continue to the documented CGI and LWP Phase 8 parity follow-ups.
+1. Continue with the documented LWP `t/local/http.t` Phase 8 parity follow-up;
+   CGI's complete unchanged source matrix now passes.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-3. Keep the live LWP `t/local/http.t` failure and CGI HTML::Entities failures
-   as documented Phase 8/runtime-parity follow-ups.
+3. After LWP, select the next remaining Phase 8 source-first consumer from the
+   baseline inventory and record its unchanged matrix before changing runtime
+   behavior.
 
 ### Completed phase deliverables
 
@@ -852,6 +854,19 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   SQL::Translator, DBIx::Class's unchanged `t/99dbic_sqlt_parser.t` passes
   179/179 (including `Schema not leaked`) and `t/86sqlt.t` passes 144/144; both
   automatic leak registries finish empty.
+- CGI's Phase 8 follow-up is complete (2026-08-08). Runtime parity fixes make
+  sparse list holes iterate as `undef`, distinguish leading-dot numeric
+  literals from concatenation during prototype parsing, preserve magic-while
+  assignment through single parentheses, return `EBADF` rather than throwing
+  for a missing filehandle-duplication source, expose the bundled File::Temp
+  wrapper through legacy FileHandle identity, and store `%ENV` values as
+  byte-oriented scalars. The bundled HTML::Entities implementation now treats
+  an explicit undefined unsafe set as the default and uses decimal numeric
+  fallback entities. Eight standard-Perl-validated regressions pass under JVM
+  and interpreter execution. CGI 4.72's complete unchanged source matrix passes
+  all 64 files and 1,578/1,578 assertions with zero failures, errors, timeouts,
+  or incomplete files (10 skips and four upstream TODOs). The full `make` gate
+  passes; no CGI distribution preference or patch is required.
 
 ### Open questions
 
