@@ -14,7 +14,6 @@ import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.util.*;
 
@@ -3361,6 +3360,9 @@ public class BytecodeCompiler implements Visitor {
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
 
+                                emit(Opcodes.REGISTER_MY_VAR);
+                                emitReg(reg);
+
                                 // Runtime attribute dispatch for list variable declarations.
                                 // Attributes are stored on the parent my/state node, propagate to each element.
                                 emitVarAttrsIfNeeded(node, reg, sigil);
@@ -4947,8 +4949,37 @@ public class BytecodeCompiler implements Visitor {
                 int refContext = node.operand instanceof BinaryOperatorNode binOp && binOp.operator.equals("=")
                         ? RuntimeContextType.SCALAR
                         : RuntimeContextType.LIST;
-                compileNode(node.operand, -1, refContext);
-                int valueReg = lastResultReg;
+                int valueReg;
+                if (node.operand instanceof StringNode stringNode && !stringNode.isVString) {
+                    boolean byteString = stringNode.forceByteString || isAsciiOnly(stringNode.value);
+                    if (!byteString
+                            && emitterContext != null
+                            && emitterContext.symbolTable != null
+                            && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
+                        byteString = stringNode.value.codePoints().allMatch(c -> c <= 0xFF);
+                    }
+                    int cacheIndex = byteString
+                            ? RuntimeScalarCache.getOrCreateByteStringIndex(stringNode.value)
+                            : RuntimeScalarCache.getOrCreateStringIndex(stringNode.value);
+                    if (cacheIndex >= 0) {
+                        RuntimeScalarReadOnly constant = byteString
+                                ? RuntimeScalarCache.materializeByteStringLiteral(cacheIndex)
+                                : RuntimeScalarCache.materializeStringLiteral(cacheIndex);
+                        valueReg = allocateRegister();
+                        emit(Opcodes.LOAD_CONST);
+                        emitReg(valueReg);
+                        emit(addToConstantPool(constant));
+                        if (emitterContext != null && emitterContext.javaClassInfo != null) {
+                            emitterContext.javaClassInfo.addPadConstant(constant);
+                        }
+                    } else {
+                        compileNode(node.operand, -1, refContext);
+                        valueReg = lastResultReg;
+                    }
+                } else {
+                    compileNode(node.operand, -1, refContext);
+                    valueReg = lastResultReg;
+                }
 
                 // Allocate register for reference
                 int rd = allocateOutputRegister();
@@ -5220,7 +5251,8 @@ public class BytecodeCompiler implements Visitor {
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.SAVE_REGEX_STATE) {
+                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
+                || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;
         }
         bytecode.add((int) opcode);
@@ -5235,7 +5267,8 @@ public class BytecodeCompiler implements Visitor {
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
                 opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
-                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.SAVE_REGEX_STATE) {
+                opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
+                || opcode == Opcodes.SAVE_REGEX_STATE) {
             usesLocalization = true;
         }
         int pc = bytecode.size();
@@ -5459,6 +5492,11 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(SubroutineNode node) {
+        if (node.getBooleanAnnotation("futureAsyncAwaitSub")
+                && !org.perlonjava.frontend.parser.FutureAsyncAwaitParser.hasAwaitableFuture(node)) {
+            throwCompilerException(
+                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE);
+        }
         if (node.useTryCatch) {
             // This is an eval block: eval { ... }
             visitEvalBlock(node);
@@ -5579,6 +5617,10 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
+        subCode.futureAsyncAwaitFutureClass =
+                (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+        copySignatureMetadata(subCode, node.block);
         attachDeparseSourceSpan(subCode, node);
 
         if (RuntimeCode.DISASSEMBLE) {
@@ -5706,6 +5748,10 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
+        subCode.futureAsyncAwaitFutureClass =
+                (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+        copySignatureMetadata(subCode, node.block);
         attachDeparseSourceSpan(subCode, node);
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         if (node.block != null) {
@@ -5771,6 +5817,14 @@ public class BytecodeCompiler implements Visitor {
         }
 
         lastResultReg = codeReg;
+    }
+
+    private static void copySignatureMetadata(InterpretedCode code, Node block) {
+        if (block.getAnnotation("signatureMinArgs") instanceof Integer min) {
+            code.signatureMinArgs = min;
+            code.signatureMaxArgs = (Integer) block.getAnnotation("signatureMaxArgs");
+            code.signatureSubName = (String) block.getAnnotation("signatureSubName");
+        }
     }
 
     /**
@@ -6519,7 +6573,60 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(TryNode node) {
-        throw new UnsupportedOperationException("Try/catch not yet implemented");
+        int resultReg = allocateOutputRegister();
+        int firstBodyReg = nextRegister;
+
+        emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
+        int catchTargetPos = bytecode.size();
+        emitInt(0);
+        emitReg(firstBodyReg);
+
+        compileNode(node.tryBlock, resultReg, currentCallContext);
+        if (lastResultReg >= 0) {
+            emitAliasWithTarget(resultReg, lastResultReg);
+        }
+        emit(Opcodes.EVAL_END);
+
+        emit(Opcodes.GOTO);
+        int gotoEndPos = bytecode.size();
+        emitInt(0);
+
+        int catchPc = bytecode.size();
+        patchIntOffset(catchTargetPos, catchPc);
+
+        int ignoredEvalResult = allocateRegister();
+        emit(Opcodes.EVAL_CATCH);
+        emitReg(ignoredEvalResult);
+
+        OperatorNode catchDeclaration = new OperatorNode(
+                "my", node.catchParameter, node.getIndex());
+        compileNode(catchDeclaration, -1, RuntimeContextType.SCALAR);
+        int catchReg = lastResultReg;
+
+        int errorReg = allocateRegister();
+        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+        emitReg(errorReg);
+        emit(addToStringPool("main::@"));
+        emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
+        emitReg(catchReg);
+        emitReg(errorReg);
+
+        compileNode(node.catchBlock, resultReg, currentCallContext);
+        if (lastResultReg >= 0) {
+            emitAliasWithTarget(resultReg, lastResultReg);
+        }
+
+        int finallyPc = bytecode.size();
+        patchIntOffset(gotoEndPos, finallyPc);
+        if (node.finallyBlock != null) {
+            finallyBlockDepth++;
+            try {
+                compileNode(node.finallyBlock, -1, RuntimeContextType.VOID);
+            } finally {
+                finallyBlockDepth--;
+            }
+        }
+        lastResultReg = resultReg;
     }
 
     @Override
@@ -6536,7 +6643,8 @@ public class BytecodeCompiler implements Visitor {
         // Create DeferBlock and push onto dynamic variable stack
         // PUSH_DEFER takes code_reg and args_reg (@_ is always register 1)
         // This ensures the defer block sees the same @_ as the enclosing scope
-        emit(Opcodes.PUSH_DEFER);
+        emit(node.getBooleanAnnotation("futureAsyncAwaitCancel")
+                ? Opcodes.PUSH_CANCEL : Opcodes.PUSH_DEFER);
         emitReg(codeReg);
         emitReg(1);  // @_ is always in register 1
 
@@ -6582,9 +6690,15 @@ public class BytecodeCompiler implements Visitor {
         symbolTable.warningDisabledStack.pop();
         symbolTable.warningDisabledStack.push((java.util.BitSet) node.getWarningDisabledFlags().clone());
 
-        // Update per-call-site $^H and %^H for caller()[8] and caller()[10]
-        WarningBitsRegistry.setCallSiteHints(node.getStrictOptions());
-        WarningBitsRegistry.snapshotCurrentHintHash();
+        int warningBitsIdx = addToStringPool(symbolTable.getWarningBitsString());
+        emit(Opcodes.APPLY_COMPILER_FLAGS);
+        emit(warningBitsIdx);
+        emit(node.getStrictOptions());
+        emit(node.getHintHashSnapshotId());
+        emit(node.getWarningScopeId());
+        if (node.getWarningScopeId() > 0) {
+            usesLocalization = true;
+        }
     }
 
     @Override

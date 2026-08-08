@@ -463,6 +463,34 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         super.dynamicRestoreState();
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        if (variableId == Id.INPUT_LINE_NUMBER) {
+            RuntimeIO handle = RuntimeIO.lastAccesseddHandle;
+            InputLineState active = new InputLineState(
+                    handle,
+                    handle != null ? handle.currentLineNumber : (lvalue != null ? lvalue.getInt() : 0),
+                    lvalue != null ? new RuntimeScalar(lvalue) : null);
+            dynamicRestoreState();
+            return active;
+        }
+        return super.dynamicSuspendState();
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        if (variableId == Id.INPUT_LINE_NUMBER && token instanceof InputLineState active) {
+            dynamicSaveState();
+            RuntimeIO.lastAccesseddHandle = active.lastHandle;
+            if (active.lastHandle != null) {
+                active.lastHandle.currentLineNumber = active.lastLineNumber;
+            }
+            lvalue = active.localValue;
+            return;
+        }
+        super.dynamicResumeState(token);
+    }
+
     /**
      * Creates a RuntimeScalar from a regex match result string, preserving
      * BYTE_STRING type if the matched input was a byte string.

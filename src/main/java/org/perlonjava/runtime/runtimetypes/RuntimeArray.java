@@ -81,6 +81,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return list;
     }
 
+    void resetElementListAfterAutovivification() {
+        elements = newElementList();
+    }
+
     private static final class RuntimeArrayElementList extends ArrayList<RuntimeScalar> {
         private final RuntimeArray owner;
 
@@ -1748,6 +1752,28 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             this.type = previousState.type;
             // Restore the blessId from the saved state
             this.blessId = previousState.blessId;
+        }
+    }
+
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeArray activeState = new RuntimeArray();
+        activeState.type = this.type;
+        activeState.blessId = this.blessId;
+        activeState.scalarContextSize = this.scalarContextSize;
+        activeState.elements.addAll(this.elements);
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeArray activeState) {
+            this.type = activeState.type;
+            this.blessId = activeState.blessId;
+            this.scalarContextSize = activeState.scalarContextSize;
+            this.elements.addAll(activeState.elements);
         }
     }
 

@@ -2,6 +2,8 @@ package org.perlonjava.backend.bytecode;
 
 import java.util.BitSet;
 
+import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
@@ -162,79 +164,147 @@ public class BytecodeInterpreter {
      * @return RuntimeList containing the result (may be RuntimeControlFlowList)
      */
     public static RuntimeList execute(InterpretedCode code, RuntimeArray args, int callContext, String subroutineName) {
+        RuntimeBase[] registers = code.getRegisters();
+        SuspendedInterpreterFrame frame = new SuspendedInterpreterFrame(
+                code, registers, callContext, subroutineName);
+
+        // Initialize special registers (same as compiler).
+        registers[0] = code;
+        registers[1] = args;
+        registers[2] = RuntimeScalarCache.getScalarInt(callContext);
+        if (code.capturedVars != null && code.capturedVars.length > 0) {
+            System.arraycopy(code.capturedVars, 0, registers, 3, code.capturedVars.length);
+        }
+        return execute(frame);
+    }
+
+    /** Resume a heap-owned interpreter frame after an await callback. */
+    static RuntimeList resume(SuspendedInterpreterFrame frame) {
+        return execute(frame);
+    }
+
+    /** Release lexical and closure ownership for a suspended frame that is cancelled. */
+    static void abandon(SuspendedInterpreterFrame frame) {
+        if (!frame.suspended) return;
+        frame.suspended = false;
+
+        for (RuntimeCode closure : frame.createdClosures) {
+            if (closure.capturedScalars != null
+                    && closure.refCount == 0
+                    && closure.stashRefCount <= 0
+                    && (frame.returnedClosures == null
+                        || !frame.returnedClosures.contains(closure))) {
+                closure.releaseCaptures();
+            }
+        }
+
+        InterpretedCode code = frame.code;
+        RuntimeBase[] registers = frame.registers;
+        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
+        BitSet myVars = code.myVarRegisters;
+        boolean needsFlush = false;
+        for (int i = myVars.nextSetBit(firstMyVarReg);
+             i >= 0 && i < registers.length;
+             i = myVars.nextSetBit(i + 1)) {
+            RuntimeBase reg = registers[i];
+            if (reg == null) continue;
+            if (reg instanceof RuntimeScalar rs) {
+                RuntimeScalar.scopeExitCleanup(rs);
+                needsFlush = true;
+            } else if (reg instanceof RuntimeHash rh) {
+                MortalList.scopeExitCleanupHash(rh);
+                needsFlush = true;
+            } else if (reg instanceof RuntimeArray ra) {
+                MortalList.scopeExitCleanupArray(ra);
+                needsFlush = true;
+            }
+            MyVarCleanupStack.unregister(reg);
+            registers[i] = null;
+        }
+        if (needsFlush) {
+            MortalList.flush();
+        }
+        code.releaseRegisters();
+    }
+
+    private static RuntimeList execute(SuspendedInterpreterFrame frame) {
+        InterpretedCode code = frame.code;
+        int callContext = frame.callContext;
         // Track interpreter state for stack traces
         String framePackageName = code.packageName != null ? code.packageName : "main";
         // Prefer code.subName (set by set_subname) over passed subroutineName
         // This ensures caller() returns the name set by set_subname()
-        String frameSubName = code.subName != null ? code.subName : (subroutineName != null ? subroutineName : "(eval)");
+        String frameSubName = code.subName != null ? code.subName
+                : (frame.subroutineName != null ? frame.subroutineName : "(eval)");
         // Get PC holder for direct updates (avoids ThreadLocal lookups in hot loop)
         int[] pcHolder = InterpreterState.push(code, framePackageName, frameSubName);
 
-        // Get register array from cache (avoids allocation for non-recursive calls)
-        RuntimeBase[] registers = code.getRegisters();
-
-        // Initialize special registers (same as compiler)
-        registers[0] = code;           // $this (for closures - register 0)
-        registers[1] = args;           // @_ (arguments - register 1)
-        registers[2] = RuntimeScalarCache.getScalarInt(callContext); // wantarray (register 2)
-
-        // Copy captured variables (closure support)
-        if (code.capturedVars != null && code.capturedVars.length > 0) {
-            System.arraycopy(code.capturedVars, 0, registers, 3, code.capturedVars.length);
-        }
-
-        int pc = 0;  // Program counter
+        RuntimeBase[] registers = frame.registers;
+        int pc = frame.pc;
         final int[] bytecode = code.bytecode;
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        WarningBitsRegistry.setRuntimeWarningBits(
+                frame.pc > 0 ? frame.suspendedRuntimeWarningBits : code.warningBitsString);
 
         // Eval block exception handling: stack of catch PCs
         // When EVAL_TRY is executed, push the catch PC onto this stack
         // When exception occurs, pop from stack and jump to catch PC
         // Use ArrayDeque instead of Stack for better performance (no synchronization)
-        java.util.ArrayDeque<Integer> evalCatchStack = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<Integer> evalCatchStack = frame.evalCatchStack;
 
-        // Parallel stack tracking DynamicVariableManager local level at eval entry.
-        // When EVAL_TRY is executed, save the current local level.
-        // On eval exit (both normal EVAL_END and exception catch), restore to this level
-        // so that `local` variables inside the eval block are properly unwound.
-        java.util.ArrayDeque<Integer> evalLocalLevelStack = new java.util.ArrayDeque<>();
+        // Parallel stack tracking the frame-relative DynamicVariableManager level at
+        // eval entry. A suspended frame can resume from a Future callback whose
+        // dynamic stack has a different absolute depth, so absolute levels cannot be
+        // retained across AWAIT_WAIT. On eval exit (both normal EVAL_END and exception
+        // catch), add savedLocalLevel to restore the invocation-relative level.
+        java.util.ArrayDeque<Integer> evalLocalLevelStack = frame.evalLocalLevelStack;
 
         // Parallel stack tracking the first register allocated inside the eval body.
         // When an exception is caught, registers from this index to the end of the
         // register array are cleaned up (scope exit cleanup + mortal flush) so that
         // DESTROY fires for blessed objects that went out of scope during die.
-        java.util.ArrayDeque<Integer> evalBaseRegStack = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<Integer> evalBaseRegStack = frame.evalBaseRegStack;
 
         // Interpreted eval BLOCKs execute inline, so caller() needs a virtual
         // frame for each active EVAL_TRY. Track the depth explicitly so normal,
         // exceptional, and non-local exits all unwind the synthetic frames.
-        int virtualEvalFrameDepth = 0;
-
         // Labeled block stack for non-local last/next/redo handling.
         // When a function call returns a RuntimeControlFlowList, we check this stack
         // to see if the label matches an enclosing labeled block.
         // Uses ArrayList for O(1) indexed access when searching for labels
-        java.util.ArrayList<int[]> labeledBlockStack = new java.util.ArrayList<>();
+        java.util.ArrayList<int[]> labeledBlockStack = frame.labeledBlockStack;
         // Each entry is [labelStringPoolIdx, exitPc]
 
-        java.util.ArrayDeque<RegexState> regexStateStack = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<RegexState> regexStateStack = frame.regexStateStack;
 
         // Only ordinary localized variables are conditional. Regex capture variables
         // ($1, $&, @-, etc.) are dynamically scoped for every subroutine call, even
         // when the callee does not use `local`.
-        boolean usesLocalization = code.usesLocalization;
         // Record DVM level so the finally block can clean up everything pushed
         // by this subroutine (local variables AND regex state snapshot).
         int savedLocalLevel = DynamicVariableManager.getLocalLevel();
+        if (frame.suspendedDynamicStates != null) {
+            DynamicVariableManager.resumeSuspended(frame.suspendedDynamicStates);
+            frame.suspendedDynamicStates = null;
+        }
         // Cache the currentPackage RuntimeScalar to avoid ThreadLocal lookups in hot loop
         RuntimeScalar currentPackageScalar = InterpreterState.currentPackage.get();
         String savedPackage = currentPackageScalar.toString();
-        currentPackageScalar.set(framePackageName);
         RegexState.save();
-        // Track whether an exception is propagating out of this frame, so the
-        // finally block can do scope-exit cleanup for blessed objects in my-variables.
-        // Without this, DESTROY doesn't fire for objects in subroutines that are
-        // unwound by die when there's no enclosing eval in the same frame.
-        Throwable propagatingException = null;
+        if (frame.suspendedRegexState != null) {
+            frame.suspendedRegexState.restore();
+        }
+        currentPackageScalar.set(frame.suspendedPackage != null
+                ? frame.suspendedPackage : framePackageName);
+        frame.suspended = false;
+        if (frame.pc > 0 && !frame.evalCatchStack.isEmpty()) {
+            RuntimeCode.evalDepth += frame.evalCatchStack.size();
+            for (int i = 0; i < frame.evalCatchStack.size(); i++) {
+                if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
+                    frame.virtualEvalFrameDepth++;
+                }
+            }
+        }
 
         // First my-variable register index (skip reserved + captured vars).
         int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
@@ -245,15 +315,14 @@ public class BytecodeInterpreter {
         // block closures that over-capture all visible variables but are temporary.
         // This matches the JVM-compiled path where scopeExitCleanup releases
         // captures for CODE refs with refCount=0 (RuntimeScalar.java line ~2185).
-        java.util.List<RuntimeCode> createdClosures = null;
-        java.util.Set<RuntimeCode> returnedClosures = null;
+        java.util.List<RuntimeCode> createdClosures = frame.createdClosures;
 
         // Scope-exit cleanup emitted by BytecodeCompiler is bracketed by
         // MORTAL_PUSH_MARK / MORTAL_POP_FLUSH. Defer unregister/null-store
         // until the POP so interpreted code matches the JVM backend:
         // cleanup all lexicals first, unregister/null them second, then flush.
         java.util.ArrayDeque<java.util.ArrayList<Integer>> scopeCleanupBatches =
-                new java.util.ArrayDeque<>();
+                frame.scopeCleanupBatches;
 
         // Structure: try { while(true) { try { ...dispatch... } catch { handle eval/die } } } finally { cleanup }
         //
@@ -269,6 +338,17 @@ public class BytecodeInterpreter {
             outer:
             while (true) {
                 try {
+                    if (frame.resumeException != null) {
+                        Throwable resumeException = frame.resumeException;
+                        frame.resumeException = null;
+                        if (resumeException instanceof RuntimeException runtimeException) {
+                            throw runtimeException;
+                        }
+                        if (resumeException instanceof Error error) {
+                            throw error;
+                        }
+                        throw new RuntimeException(resumeException);
+                    }
                     // Main dispatch loop - JVM JIT optimizes switch to tableswitch (O(1) jump)
                     while (pc < bytecode.length) {
                         // Update current PC for caller()/stack trace reporting.
@@ -503,7 +583,7 @@ public class BytecodeInterpreter {
                                 }
                                 RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
-                                returnedClosures = collectReturnedClosures(retList);
+                                frame.returnedClosures = collectReturnedClosures(retList);
                                 if (!returnListContainsTrackedReference(retList)) {
                                     MortalList.flushAboveMark();
                                 }
@@ -522,7 +602,7 @@ public class BytecodeInterpreter {
                                 }
                                 RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
-                                returnedClosures = collectReturnedClosures(retList);
+                                frame.returnedClosures = collectReturnedClosures(retList);
 
                                 return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
                             }
@@ -745,7 +825,8 @@ public class BytecodeInterpreter {
                                 int nameIdx = bytecode[pc++];
                                 String name = code.stringPool[nameIdx];
 
-                                registers[levelReg] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());
+                                registers[levelReg] = new RuntimeScalar(
+                                        DynamicVariableManager.getLocalLevel() - savedLocalLevel);
                                 registers[rd] = GlobalRuntimeScalar.makeLocal(name);
                             }
 
@@ -753,8 +834,8 @@ public class BytecodeInterpreter {
                                 // Restore DynamicVariableManager to a previously saved local level.
                                 // Matches JVM compiler's DynamicVariableManager.popToLocalLevel(savedLevel) call.
                                 int rs = bytecode[pc++];
-                                int savedLevel = ((RuntimeScalar) registers[rs]).getInt();
-                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                int relativeLevel = ((RuntimeScalar) registers[rs]).getInt();
+                                DynamicVariableManager.popToLocalLevel(savedLocalLevel + relativeLevel);
                             }
 
                             case Opcodes.SAVE_REGEX_STATE -> {
@@ -902,9 +983,6 @@ public class BytecodeInterpreter {
                                 if (closureVal instanceof RuntimeScalar crs
                                         && crs.value instanceof RuntimeCode ic
                                         && ic.capturedScalars != null) {
-                                    if (createdClosures == null) {
-                                        createdClosures = new java.util.ArrayList<>();
-                                    }
                                     createdClosures.add(ic);
                                 }
                             }
@@ -955,6 +1033,7 @@ public class BytecodeInterpreter {
                                     // `my $x = $object; $x = "$x"`, where a
                                     // stale owner otherwise delays DESTROY.
                                     if (target instanceof RuntimeScalar oldTarget) {
+                                        MyVarCleanupStack.replace(oldTarget, targetScalar);
                                         MortalList.deferDecrementIfNotCaptured(oldTarget);
                                     }
                                     registers[rd] = targetScalar;
@@ -1502,8 +1581,9 @@ public class BytecodeInterpreter {
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
                                             if (!evalLocalLevelStack.isEmpty()) {
-                                                int savedLevel = evalLocalLevelStack.pop();
-                                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                                int relativeLevel = evalLocalLevelStack.pop();
+                                                DynamicVariableManager.popToLocalLevel(
+                                                        savedLocalLevel + relativeLevel);
                                             }
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
@@ -1617,8 +1697,9 @@ public class BytecodeInterpreter {
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
                                             if (!evalLocalLevelStack.isEmpty()) {
-                                                int savedLevel = evalLocalLevelStack.pop();
-                                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                                int relativeLevel = evalLocalLevelStack.pop();
+                                                DynamicVariableManager.popToLocalLevel(
+                                                        savedLocalLevel + relativeLevel);
                                             }
                                             pc = evalCatchStack.pop();
                                             RuntimeCode.evalDepth--;
@@ -2009,13 +2090,14 @@ public class BytecodeInterpreter {
                                 evalBaseRegStack.push(firstBodyReg);
 
                                 // Save local level so we can restore local variables on eval exit
-                                evalLocalLevelStack.push(DynamicVariableManager.getLocalLevel());
+                                evalLocalLevelStack.push(
+                                        DynamicVariableManager.getLocalLevel() - savedLocalLevel);
 
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth++;
 
                                 if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
-                                    virtualEvalFrameDepth++;
+                                    frame.virtualEvalFrameDepth++;
                                 }
 
                                 // Clear $@ at start of eval block
@@ -2042,16 +2124,17 @@ public class BytecodeInterpreter {
                                 // Restore local variables that were pushed inside the eval block
                                 // e.g., `eval { local @_ = @_ }` should restore @_ on eval exit
                                 if (!evalLocalLevelStack.isEmpty()) {
-                                    int savedLevel = evalLocalLevelStack.pop();
-                                    DynamicVariableManager.popToLocalLevel(savedLevel);
+                                    int relativeLevel = evalLocalLevelStack.pop();
+                                    DynamicVariableManager.popToLocalLevel(
+                                            savedLocalLevel + relativeLevel);
                                 }
 
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth--;
 
-                                if (virtualEvalFrameDepth > 0) {
+                                if (frame.virtualEvalFrameDepth > 0) {
                                     InterpreterState.pop();
-                                    virtualEvalFrameDepth--;
+                                    frame.virtualEvalFrameDepth--;
                                 }
                             }
 
@@ -2350,6 +2433,7 @@ public class BytecodeInterpreter {
                                  Opcodes.CLOSE, Opcodes.BINMODE, Opcodes.SEEK, Opcodes.EOF_OP, Opcodes.SYSREAD,
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
                                  Opcodes.LISTEN, Opcodes.PIPE, Opcodes.SOCKETPAIR,
+                                 Opcodes.GETSOCKNAME, Opcodes.GETPEERNAME,
                                  Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,
                                  Opcodes.SYSSEEK, Opcodes.TRUNCATE, Opcodes.FLOCK, Opcodes.READ, Opcodes.OPENDIR, Opcodes.READDIR,
                                  Opcodes.SEEKDIR -> {
@@ -2381,7 +2465,9 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.GET_LOCAL_LEVEL -> {
-                                pc = InlineOpcodeHandler.executeGetLocalLevel(bytecode, pc, registers);
+                                int rd = bytecode[pc++];
+                                registers[rd] = new RuntimeScalar(
+                                        DynamicVariableManager.getLocalLevel() - savedLocalLevel);
                             }
 
                             case Opcodes.POP_PACKAGE -> {
@@ -2398,6 +2484,32 @@ public class BytecodeInterpreter {
 
                             case Opcodes.PUSH_DEFER -> {
                                 pc = InlineOpcodeHandler.executePushDefer(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.PUSH_CANCEL -> {
+                                pc = InlineOpcodeHandler.executePushCancel(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.APPLY_COMPILER_FLAGS -> {
+                                int warningBitsIdx = bytecode[pc++];
+                                int hints = bytecode[pc++];
+                                int hintHashId = bytecode[pc++];
+                                int warningScopeId = bytecode[pc++];
+                                WarningBitsRegistry.setCallSiteBits(code.stringPool[warningBitsIdx]);
+                                // A lexical `no warnings` node carries a runtime
+                                // warningScopeId whose localized suppression is
+                                // unwound at block exit. Do not overwrite the
+                                // enclosing enabled bits with its temporary mask.
+                                if (warningScopeId == 0) {
+                                    WarningBitsRegistry.setRuntimeWarningBits(code.stringPool[warningBitsIdx]);
+                                }
+                                WarningBitsRegistry.setCallSiteHints(hints);
+                                HintHashRegistry.setCallSiteHintHashId(hintHashId);
+                                if (warningScopeId > 0) {
+                                    RuntimeScalar warningScope = GlobalRuntimeScalar.makeLocal(
+                                            GlobalContext.WARNING_SCOPE);
+                                    warningScope.set(new RuntimeScalar(warningScopeId));
+                                }
                             }
 
                             // =================================================================
@@ -2591,6 +2703,31 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.AWAIT -> {
+                                int rd = bytecode[pc++];
+                                int futureReg = bytecode[pc++];
+                                int context = bytecode[pc++];
+                                if (context == RuntimeContextType.RUNTIME) {
+                                    context = ((RuntimeScalar) registers[2]).getInt();
+                                }
+                                RuntimeScalar awaited = registers[futureReg] instanceof RuntimeScalar scalar
+                                        ? scalar : registers[futureReg].scalar();
+                                if (!code.futureAsyncAwaitSub) {
+                                    registers[rd] = FutureAsyncAwaitRuntime.wait(awaited, context);
+                                    break;
+                                }
+                                if (FutureAsyncAwaitRuntime.isReady(awaited)) {
+                                    registers[rd] = FutureAsyncAwaitRuntime.get(awaited, context);
+                                    break;
+                                }
+
+                                frame.pc = pc;
+                                frame.suspendedRegexState = new RegexState();
+                                frame.suspendedPackage = currentPackageScalar.toString();
+                                frame.suspended = true;
+                                return new InterpreterSuspension(frame, awaited, rd, context);
+                            }
+
                             case Opcodes.LIST_SLICE -> {
                                 // List slice: rd = list.getSlice(indices)
                                 // Used for (list)[indices] syntax
@@ -2623,13 +2760,14 @@ public class BytecodeInterpreter {
                         int catchPc = evalCatchStack.pop();
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {
-                            int savedLevel = evalLocalLevelStack.pop();
-                            DynamicVariableManager.popToLocalLevel(savedLevel);
+                            int relativeLevel = evalLocalLevelStack.pop();
+                            DynamicVariableManager.popToLocalLevel(
+                                    savedLocalLevel + relativeLevel);
                         }
                         RuntimeCode.evalDepth--;
-                        if (virtualEvalFrameDepth > 0) {
+                        if (frame.virtualEvalFrameDepth > 0) {
                             InterpreterState.pop();
-                            virtualEvalFrameDepth--;
+                            frame.virtualEvalFrameDepth--;
                         }
                         WarnDie.catchEval(e);
                         pc = catchPc;
@@ -2656,11 +2794,11 @@ public class BytecodeInterpreter {
                     StackTraceElement[] st = e.getStackTrace();
                     String javaLine = (st.length > 0) ? " [java:" + st[0].getFileName() + ":" + st[0].getLineNumber() + "]" : "";
                     String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage() + javaLine;
-                    propagatingException = e;
+                    frame.propagatingException = e;
                     throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
                 } catch (PerlExitException e) {
                     // exit() should NEVER be caught by eval{} - always propagate
-                    propagatingException = e;
+                    frame.propagatingException = e;
                     throw e;
                 } catch (Throwable e) {
                     // Check if we're inside an eval block
@@ -2698,16 +2836,17 @@ public class BytecodeInterpreter {
 
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {
-                            int savedLevel = evalLocalLevelStack.pop();
-                            DynamicVariableManager.popToLocalLevel(savedLevel);
+                            int relativeLevel = evalLocalLevelStack.pop();
+                            DynamicVariableManager.popToLocalLevel(
+                                    savedLocalLevel + relativeLevel);
                         }
 
                         // Track eval depth for $^S
                         RuntimeCode.evalDepth--;
 
-                        if (virtualEvalFrameDepth > 0) {
+                        if (frame.virtualEvalFrameDepth > 0) {
                             InterpreterState.pop();
-                            virtualEvalFrameDepth--;
+                            frame.virtualEvalFrameDepth--;
                         }
 
                         // Call WarnDie.catchEval() to set $@
@@ -2721,10 +2860,10 @@ public class BytecodeInterpreter {
                     // Re-throw RuntimeExceptions as-is (includes PerlDieException)
                     if (e instanceof RuntimeException re) {
                         re = WarnDie.maybeInvokeUnhandledDieHandler(re);
-                        propagatingException = re;
+                        frame.propagatingException = re;
                         throw re;
                     }
-                    propagatingException = e;
+                    frame.propagatingException = e;
 
                     // Check if we're running inside an eval STRING context
                     // (sourceName starts with "(eval " when code is from eval STRING)
@@ -2758,12 +2897,12 @@ public class BytecodeInterpreter {
             // This matches the JVM-compiled path where scopeExitCleanup releases
             // captures for CODE refs with refCount=0 (see RuntimeScalar.java
             // scopeExitCleanup special case for CODE refs).
-            if (createdClosures != null) {
+            if (!frame.suspended && !createdClosures.isEmpty()) {
                 for (RuntimeCode closure : createdClosures) {
                     if (closure.capturedScalars != null
                             && closure.refCount == 0
                             && closure.stashRefCount <= 0
-                            && (returnedClosures == null || !returnedClosures.contains(closure))) {
+                            && (frame.returnedClosures == null || !frame.returnedClosures.contains(closure))) {
                         closure.releaseCaptures();
                     }
                 }
@@ -2773,7 +2912,7 @@ public class BytecodeInterpreter {
             // of this subroutine frame without being caught by an eval.
             // This ensures DESTROY fires for blessed objects going out of scope
             // during die unwinding (e.g. TxnScopeGuard in a sub called from eval).
-            if (propagatingException != null) {
+            if (!frame.suspended && frame.propagatingException != null) {
                 // Only clean up registers that are actual "my" variables.
                 // Temporary registers may alias hash/array elements (via HASH_GET,
                 // HASH_DEREF_FETCH, etc.) and calling scopeExitCleanup on them
@@ -2806,15 +2945,27 @@ public class BytecodeInterpreter {
             // Outer finally: restore interpreter state saved at method entry.
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.
-            DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+            if (frame.suspended) {
+                frame.suspendedRuntimeWarningBits =
+                        WarningBitsRegistry.getRuntimeWarningBits();
+                frame.suspendedDynamicStates =
+                        DynamicVariableManager.suspendAbove(savedLocalLevel);
+            } else {
+                DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+            }
             currentPackageScalar.set(savedPackage);
-            while (virtualEvalFrameDepth > 0) {
+            if (frame.suspended && !frame.evalCatchStack.isEmpty()) {
+                RuntimeCode.evalDepth -= frame.evalCatchStack.size();
+            }
+            while (frame.virtualEvalFrameDepth > 0) {
                 InterpreterState.pop();
-                virtualEvalFrameDepth--;
+                frame.virtualEvalFrameDepth--;
             }
             InterpreterState.pop();
-            // Release cached registers for reuse
-            code.releaseRegisters();
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            if (!frame.suspended) {
+                code.releaseRegisters();
+            }
         }
     }
 

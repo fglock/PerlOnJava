@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Net::Async::WebSocket.
+
+  Net::Async::WebSocket 0.14 uses the XS-only experimental meta module solely
+  to install four generated send_*_frame methods. Replace that small use with
+  the equivalent portable typeglob assignment so Protocol.pm remains pure Perl
+  and WebSocket clients load on PerlOnJava. Remove the now-unused prerequisite
+  from Build.PL and static metadata so jcpan does not attempt to install meta.
+match:
+  distribution: "^PEVANS/Net-Async-WebSocket-"
+patches:
+  - "Net-Async-WebSocket/PlainPerlAccessors.patch"

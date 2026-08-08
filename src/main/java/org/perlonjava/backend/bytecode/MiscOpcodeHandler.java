@@ -71,6 +71,8 @@ public class MiscOpcodeHandler {
             case Opcodes.LISTEN -> IOOperator.listen(ctx, argsArray);
             case Opcodes.PIPE -> IOOperator.pipe(ctx, argsArray);
             case Opcodes.SOCKETPAIR -> IOOperator.socketpair(ctx, argsArray);
+            case Opcodes.GETSOCKNAME -> IOOperator.getsockname(ctx, argsArray);
+            case Opcodes.GETPEERNAME -> IOOperator.getpeername(ctx, argsArray);
             case Opcodes.WRITE -> IOOperator.write(ctx, argsArray);
             case Opcodes.FORMLINE -> IOOperator.formline(ctx, argsArray);
             case Opcodes.PRINTF -> IOOperator.printf(ctx, argsArray);

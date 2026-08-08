@@ -43,7 +43,7 @@ public class SocketIO implements IOHandle {
     // Track the protocol family for server socket conversion in listen()
     private ProtocolFamily protocolFamily;
     // Track bound address for lazy server socket creation in listen()
-    private InetSocketAddress boundAddress;
+    private SocketAddress boundAddress;
     // DatagramChannel for UDP sockets
     private DatagramChannel datagramChannel;
     // Last received sender address for recv() return value
@@ -118,10 +118,25 @@ public class SocketIO implements IOHandle {
 
     public SocketIO(SocketChannel channel, ProtocolFamily family, int socketType) {
         this.socketChannel = channel;
-        this.socket = channel.socket();
         this.protocolFamily = family;
         this.socketOptions = new HashMap<>();
         this.socketType = socketType;
+        initializeInternetSocketStreams();
+    }
+
+    private void initializeInternetSocketStreams() {
+        if (socketChannel == null || protocolFamily == StandardProtocolFamily.UNIX) {
+            return;
+        }
+        try {
+            this.socket = socketChannel.socket();
+            if (socketChannel.isConnected()) {
+                this.inputStream = socket.getInputStream();
+                this.outputStream = socket.getOutputStream();
+            }
+        } catch (IOException e) {
+            handleIOException(e, "Failed to initialize socket streams");
+        }
     }
 
     /**
@@ -188,6 +203,25 @@ public class SocketIO implements IOHandle {
             return scalarTrue;
         } catch (IOException e) {
             return handleIOException(e, "bind operation failed");
+        }
+    }
+
+    public RuntimeScalar bindUnix(String path) {
+        try {
+            UnixDomainSocketAddress bindAddr = UnixDomainSocketAddress.of(path);
+            if (socketChannel == null || protocolFamily != StandardProtocolFamily.UNIX) {
+                throw new IllegalStateException("No Unix socket available to bind");
+            }
+
+            socketChannel.close();
+            socketChannel = null;
+            serverSocketChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
+            serverSocketChannel.configureBlocking(blocking);
+            serverSocketChannel.bind(bindAddr);
+            boundAddress = bindAddr;
+            return scalarTrue;
+        } catch (IOException e) {
+            return handleIOException(e, "Unix bind operation failed");
         }
     }
 
@@ -297,6 +331,26 @@ public class SocketIO implements IOHandle {
             // Perl 5's connect() returns undef on failure (not false).
             // IO::Socket::IP relies on `defined connect(...)` to detect failure.
             handleIOException(e, "connect operation failed");
+            return scalarUndef;
+        }
+    }
+
+    public RuntimeScalar connectUnix(String path) {
+        if (socketChannel == null || protocolFamily != StandardProtocolFamily.UNIX) {
+            throw new IllegalStateException("No Unix socket available to connect");
+        }
+        try {
+            boolean connected = socketChannel.connect(UnixDomainSocketAddress.of(path));
+            if (!connected) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EINPROGRESS());
+                return scalarUndef;
+            }
+            return scalarTrue;
+        } catch (java.net.ConnectException e) {
+            getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
+            return scalarUndef;
+        } catch (IOException e) {
+            handleIOException(e, "Unix connect operation failed");
             return scalarUndef;
         }
     }
@@ -427,9 +481,7 @@ public class SocketIO implements IOHandle {
                         }
                     }
                     if (socketChannel.isConnected()) {
-                        this.socket = socketChannel.socket();
-                        this.inputStream = socket.getInputStream();
-                        this.outputStream = socket.getOutputStream();
+                        initializeInternetSocketStreams();
                     }
                 }
             }
@@ -458,9 +510,7 @@ public class SocketIO implements IOHandle {
                     boolean finished = socketChannel.finishConnect();
                     if (finished) {
                         // Connection completed successfully
-                        this.socket = socketChannel.socket();
-                        this.inputStream = socket.getInputStream();
-                        this.outputStream = socket.getOutputStream();
+                        initializeInternetSocketStreams();
                         return 0;
                     }
                     // Still in progress
@@ -489,6 +539,9 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar listen(int backlog) {
         try {
+            if (serverSocketChannel != null && protocolFamily == StandardProtocolFamily.UNIX) {
+                return scalarTrue;
+            }
             if (serverSocket == null) {
                 // Convert from client socket to server socket.
                 // Close the client socket/channel and create a ServerSocketChannel.
@@ -504,8 +557,8 @@ public class SocketIO implements IOHandle {
                     java.net.SocketAddress sa = socket.getLocalSocketAddress();
                     if (sa instanceof InetSocketAddress isa) addr = isa;
                 }
-                if (addr == null) {
-                    addr = this.boundAddress;
+                if (addr == null && this.boundAddress instanceof InetSocketAddress inetAddress) {
+                    addr = inetAddress;
                 }
                 if (socketChannel != null) {
                     socketChannel.close();
@@ -560,7 +613,7 @@ public class SocketIO implements IOHandle {
      * @return the SocketIO for the accepted connection, or null on failure
      */
     public SocketIO acceptConnection() {
-        if (serverSocket == null) {
+        if (serverSocket == null && serverSocketChannel == null) {
             throw new IllegalStateException("No server socket available to accept connections");
         }
         try {
@@ -570,12 +623,8 @@ public class SocketIO implements IOHandle {
                 if (clientChannel == null) {
                     return null; // non-blocking and no connection pending
                 }
-                Socket clientSocket = clientChannel.socket();
-                SocketIO clientIO = new SocketIO(clientSocket);
-                // Ensure the channel is set on the new SocketIO
-                clientIO.socketChannel = clientChannel;
-                clientIO.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
-                return clientIO;
+                return new SocketIO(clientChannel, protocolFamily,
+                        org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM);
             }
             // Fallback to blocking accept
             Socket clientSocket = serverSocket.accept();
@@ -792,13 +841,7 @@ public class SocketIO implements IOHandle {
         if (socketChannel != null && socketChannel.isConnectionPending()) {
             boolean finished = socketChannel.finishConnect();
             if (finished) {
-                this.socket = socketChannel.socket();
-                if (this.inputStream == null) {
-                    this.inputStream = socket.getInputStream();
-                }
-                if (this.outputStream == null) {
-                    this.outputStream = socket.getOutputStream();
-                }
+                initializeInternetSocketStreams();
                 return true;
             }
             return false; // still pending
@@ -976,10 +1019,18 @@ public class SocketIO implements IOHandle {
                 socket.close();
                 socket = null;
             }
+            if (socketChannel != null) {
+                socketChannel.close();
+                socketChannel = null;
+            }
             sslSelectChannel = null;
             if (serverSocket != null) {
                 serverSocket.close();
                 serverSocket = null;
+            }
+            if (serverSocketChannel != null) {
+                serverSocketChannel.close();
+                serverSocketChannel = null;
             }
             if (datagramChannel != null) {
                 datagramChannel.close();
@@ -997,6 +1048,14 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar getsockname() {
         try {
+            if (socketChannel != null
+                    && socketChannel.getLocalAddress() instanceof UnixDomainSocketAddress unixAddress) {
+                return packSockaddrUn(unixAddress);
+            }
+            if (serverSocketChannel != null
+                    && serverSocketChannel.getLocalAddress() instanceof UnixDomainSocketAddress unixAddress) {
+                return packSockaddrUn(unixAddress);
+            }
             InetSocketAddress localAddress = null;
 
             if (datagramChannel != null && datagramChannel.getLocalAddress() instanceof InetSocketAddress) {
@@ -1025,6 +1084,10 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar getpeername() {
         try {
+            if (socketChannel != null
+                    && socketChannel.getRemoteAddress() instanceof UnixDomainSocketAddress unixAddress) {
+                return packSockaddrUn(unixAddress);
+            }
             if (datagramChannel != null && datagramChannel.getRemoteAddress() instanceof InetSocketAddress remoteAddress) {
                 return packSockaddrIn(remoteAddress);
             }
@@ -1080,6 +1143,15 @@ public class SocketIO implements IOHandle {
         } catch (Exception e) {
             return scalarUndef;
         }
+    }
+
+    private RuntimeScalar packSockaddrUn(UnixDomainSocketAddress address) {
+        byte[] path = address.getPath().toString().getBytes(StandardCharsets.ISO_8859_1);
+        byte[] sockaddr = new byte[Math.max(3, path.length + 3)];
+        sockaddr[0] = 0;
+        sockaddr[1] = (byte) org.perlonjava.runtime.perlmodule.Socket.AF_UNIX;
+        System.arraycopy(path, 0, sockaddr, 2, path.length);
+        return new RuntimeScalar(new String(sockaddr, StandardCharsets.ISO_8859_1));
     }
 
     /**
@@ -1253,7 +1325,10 @@ public class SocketIO implements IOHandle {
                 return socketType;
             }
             if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_ACCEPTCONN) {
-                return serverSocket != null && serverSocket.isBound() && !serverSocket.isClosed() ? 1 : 0;
+                if (serverSocket != null) {
+                    return serverSocket.isBound() && !serverSocket.isClosed() ? 1 : 0;
+                }
+                return serverSocketChannel != null && serverSocketChannel.isOpen() ? 1 : 0;
             }
         }
 

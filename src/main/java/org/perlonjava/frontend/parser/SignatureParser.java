@@ -456,7 +456,17 @@ public class SignatureParser {
         // (Named parameters are declared within their extraction code)
         allNodes.addAll(astNodes);
 
-        return new ListNode(allNodes, parser.tokenIndex);
+        ListNode signature = new ListNode(allNodes, parser.tokenIndex);
+        int adjustment = isMethod ? 1 : 0;
+        signature.setAnnotation("signatureMinArgs", minParams + adjustment);
+        signature.setAnnotation("signatureMaxArgs",
+                maxParams == Integer.MAX_VALUE ? Integer.MAX_VALUE : maxParams + adjustment);
+        if (subroutineName != null) {
+            signature.setAnnotation("signatureSubName",
+                    NameNormalizer.normalizeVariableName(
+                            subroutineName, parser.ctx.symbolTable.getCurrentPackage()));
+        }
+        return signature;
     }
 
     private Node generateArgCountValidation() {

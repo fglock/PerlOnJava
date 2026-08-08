@@ -386,6 +386,12 @@ public class WarnDie {
         if (WarningFlags.areWarningsForcedOff()) {
             return new RuntimeScalar();
         }
+        // Perl-core helpers use `local $^W = 0` to suppress warnings while
+        // deliberately probing numeric/string behavior. That dynamic override
+        // takes precedence over an interpreter caller's lexical warning bits.
+        if (Warnings.isWarnFlagLocalized() && !Warnings.isWarnFlagSet()) {
+            return new RuntimeScalar();
+        }
 
         // Get the warning bits for the current Perl execution context.
         // We scan the Java call stack for the nearest Perl frame (org.perlonjava.anon* or perlmodule)

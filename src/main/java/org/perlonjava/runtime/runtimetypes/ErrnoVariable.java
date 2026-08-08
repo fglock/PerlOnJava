@@ -368,4 +368,27 @@ public class ErrnoVariable extends RuntimeScalar {
             message = messageStack.pop();
         }
     }
+
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeScalar activeValue = new RuntimeScalar(this);
+        ErrnoState active = new ErrnoState(errno, message, activeValue);
+        dynamicRestoreState();
+        return active;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof ErrnoState active) {
+            errno = active.errno;
+            message = active.message;
+            this.type = active.value.type;
+            this.value = active.value.value;
+            this.blessId = active.value.blessId;
+        }
+    }
+
+    private record ErrnoState(int errno, String message, RuntimeScalar value) {
+    }
 }

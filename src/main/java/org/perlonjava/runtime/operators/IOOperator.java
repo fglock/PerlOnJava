@@ -1500,6 +1500,13 @@ public class IOOperator {
         int O_EXCL = 0200;  // 128 in decimal
         int O_APPEND = 02000; // 1024 in decimal
         int O_TRUNC = 01000;  // 512 in decimal
+        int O_NOFOLLOW = 0400000; // Reject a symlink in the final path component
+
+        File file = RuntimeIO.resolveFile(fileName);
+        if ((mode & O_NOFOLLOW) != 0 && Files.isSymbolicLink(file.toPath())) {
+            getGlobalVariable("main::!").set("Too many levels of symbolic links");
+            return scalarFalse;
+        }
 
         // Determine the base mode
         int baseMode = mode & 3; // Get the lowest 2 bits
@@ -1524,7 +1531,6 @@ public class IOOperator {
 
         // If creating a new file, apply the permissions
         if ((mode & O_CREAT) != 0) {
-            File file = RuntimeIO.resolveFile(fileName);
             boolean existed = file.exists();
             // O_EXCL: "error if O_CREAT and the file already exists"
             if ((mode & O_EXCL) != 0 && existed) {
@@ -1963,6 +1969,22 @@ public class IOOperator {
         }
     }
 
+    private static String parseSockaddrUn(String packedAddress) {
+        byte[] bytes = packedAddress.getBytes(StandardCharsets.ISO_8859_1);
+        if (bytes.length < 3) {
+            return null;
+        }
+        int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+        if (family != Socket.AF_UNIX) {
+            return null;
+        }
+        int end = 2;
+        while (end < bytes.length && bytes[end] != 0) {
+            end++;
+        }
+        return new String(bytes, 2, end - 2, StandardCharsets.ISO_8859_1);
+    }
+
     /**
      * bind(SOCKET, NAME)
      * Binds a socket to an address.
@@ -1985,6 +2007,11 @@ public class IOOperator {
 
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
+            String unixPath = parseSockaddrUn(addressStr);
+            SocketIO unixSocket = socketIO.getSocketHandle();
+            if (unixPath != null && unixSocket != null) {
+                return unixSocket.bindUnix(unixPath);
+            }
             String[] parts = parseSockaddrIn(addressStr);
 
             // Fallback to "host:port" string format if binary parsing fails
@@ -2036,6 +2063,11 @@ public class IOOperator {
 
             // Parse Perl-style packed socket address (sockaddr_in format)
             String addressStr = address.toString();
+            String unixPath = parseSockaddrUn(addressStr);
+            SocketIO unixSocket = socketIO.getSocketHandle();
+            if (unixPath != null && unixSocket != null) {
+                return unixSocket.connectUnix(unixPath);
+            }
             String[] parts = parseSockaddrIn(addressStr);
 
             // Fallback to "host:port" string format if binary parsing fails
@@ -2110,7 +2142,9 @@ public class IOOperator {
             RuntimeScalar listenSocketHandle = args[1].scalar();
 
             RuntimeIO listenRuntimeIO = listenSocketHandle.getRuntimeIO();
-            if (listenRuntimeIO == null || !(listenRuntimeIO.ioHandle instanceof SocketIO listenSocketIO)) {
+            SocketIO listenSocketIO = listenRuntimeIO == null
+                    ? null : listenRuntimeIO.getSocketHandle();
+            if (listenSocketIO == null) {
                 getGlobalVariable("main::!").set("Invalid listening socket handle for accept");
                 return scalarFalse;
             }
@@ -2549,7 +2583,8 @@ public class IOOperator {
             }
 
             // Check if this is a UDP socket with a TO address (4th arg)
-            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+            SocketIO sio = socketIO.getSocketHandle();
+            if (sio != null && sio.isDatagramSocket()) {
                 byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
                 if (args.length >= 4) {
                     String packedAddr = args[3].toString();
@@ -2616,7 +2651,8 @@ public class IOOperator {
             }
 
             // Check if this is a UDP socket
-            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+            SocketIO sio = socketIO.getSocketHandle();
+            if (sio != null && sio.isDatagramSocket()) {
                 byte[] data = sio.recvFrom(length, (flags & Socket.MSG_PEEK) != 0);
                 if (data != null) {
                     buffer.set(new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
@@ -2669,7 +2705,7 @@ public class IOOperator {
             // For now, implement basic shutdown by closing the socket
             // In a full implementation, we would handle the different HOW values:
             // 0 = SHUT_RD (shutdown reading), 1 = SHUT_WR (shutdown writing), 2 = SHUT_RDWR (shutdown both)
-            if (socketIO.ioHandle instanceof SocketIO) {
+            if (socketIO.getSocketHandle() != null) {
                 // For simplicity, just return success - actual socket shutdown would be more complex
                 return scalarTrue;
             } else {
@@ -2707,7 +2743,8 @@ public class IOOperator {
             }
 
             // Handle socket option setting
-            if (socketIO.ioHandle instanceof SocketIO socketIOHandle) {
+            SocketIO socketIOHandle = socketIO.getSocketHandle();
+            if (socketIOHandle != null) {
 
                 // Extract the integer value from the optval - handle both integer and string representations
                 int optionValue = 0;
@@ -2790,7 +2827,8 @@ public class IOOperator {
             }
 
             // Handle socket option retrieval
-            if (socketIO.ioHandle instanceof SocketIO socketIOHandle) {
+            SocketIO socketIOHandle = socketIO.getSocketHandle();
+            if (socketIOHandle != null) {
 
                 // Use Java's native socket option support via SocketIO
                 int optionValue = socketIOHandle.getSocketOption(level, optname);
@@ -2835,18 +2873,19 @@ public class IOOperator {
      * fileno registry (which includes dup'd handles and sockets), and standard fds.
      */
     private static RuntimeIO findFileHandleByDescriptor(int fd) {
-        // Check if we have it in our mapping
-        RuntimeIO handle = fileDescriptorMap.get(fd);
-        if (handle != null) {
-            return handle;
+        // Prefer live registry entries. Descriptor numbers are recycled, so a
+        // later open may own a number that still has an older bookkeeping entry
+        // in fileDescriptorMap.
+        RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
+        if (fromRegistry != null && fromRegistry.ioHandle != null
+                && !(fromRegistry.ioHandle instanceof ClosedIOHandle)) {
+            return fromRegistry;
         }
 
-        // Prefer live registry entries. When fd 1 or 2 has been closed and a
-        // later file open reuses that number, Perl's numeric dup targets the
-        // new file, not the original static STDOUT/STDERR object.
-        RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
-        if (fromRegistry != null) {
-            return fromRegistry;
+        RuntimeIO handle = fileDescriptorMap.get(fd);
+        if (handle != null && handle.ioHandle != null
+                && !(handle.ioHandle instanceof ClosedIOHandle)) {
+            return handle;
         }
 
         // Handle standard file descriptors if no current registry owner exists.
@@ -3088,6 +3127,33 @@ public class IOOperator {
     }
 
     /**
+     * Duplicate a descriptor managed by PerlOnJava's virtual descriptor table.
+     *
+     * <p>This is the descriptor-level counterpart of Perl's
+     * {@code open($fh, "<&$fd")}.  POSIX::dup() uses it for Java-backed files,
+     * pipes, and sockets whose descriptor numbers are intentionally synthetic
+     * rather than raw operating-system descriptors.</p>
+     *
+     * @param fd source descriptor
+     * @return the new descriptor, or {@code -1} when the source is not managed
+     */
+    public static int duplicateFileDescriptor(int fd) {
+        RuntimeIO source = findFileHandleByDescriptor(fd);
+        if (source == null || source.ioHandle == null || source.ioHandle instanceof ClosedIOHandle) {
+            return -1;
+        }
+
+        RuntimeIO duplicate = duplicateFileHandle(source);
+        if (duplicate == null) {
+            return -1;
+        }
+
+        int duplicateFd = duplicate.fileno().getInt();
+        registerFileDescriptor(duplicateFd, duplicate);
+        return duplicateFd;
+    }
+
+    /**
      * Create a pair of connected sockets (socketpair operator)
      * This creates two connected sockets that can communicate with each other
      */
@@ -3263,7 +3329,7 @@ public class IOOperator {
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {
-        return sysread(ctx, args);
+        return Readline.read(new RuntimeList(args));
     }
 
 }

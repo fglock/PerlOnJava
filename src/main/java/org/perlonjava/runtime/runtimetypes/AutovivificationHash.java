@@ -42,7 +42,9 @@ public class AutovivificationHash extends HashMap<String, RuntimeScalar> {
         // setting the scalar's type to HASHREFERENCE and its value to this hash.
         if (hash.elements instanceof AutovivificationHash hashProxy) {
             hash.type = RuntimeHash.PLAIN_HASH;
-            hash.elements = new HashMap<>();
+            // Restore RuntimeHash's owner-aware element map. A plain HashMap
+            // drops aggregate-slot ownership metadata after autovivification.
+            hash.resetElementMapAfterAutovivification();
 
             hashProxy.scalarToAutovivify.value = hash;
             hashProxy.scalarToAutovivify.type = HASHREFERENCE;

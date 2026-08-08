@@ -108,6 +108,32 @@ public class GlobalRuntimeArray implements DynamicState {
         }
     }
 
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeArray activeVariable = GlobalVariable.getGlobalArray(fullName);
+        RuntimeArray activeState = new RuntimeArray();
+        if (activeVariable != null) {
+            activeState.type = activeVariable.type;
+            activeState.blessId = activeVariable.blessId;
+            activeState.scalarContextSize = activeVariable.scalarContextSize;
+            activeState.elements.addAll(activeVariable.elements);
+        }
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeArray activeState) {
+            RuntimeArray activeVariable = GlobalVariable.getGlobalArray(fullName);
+            activeVariable.type = activeState.type;
+            activeVariable.blessId = activeState.blessId;
+            activeVariable.scalarContextSize = activeState.scalarContextSize;
+            activeVariable.elements.addAll(activeState.elements);
+        }
+    }
+
     private record SavedGlobalArrayState(String fullName, RuntimeArray originalArray) {
     }
 }

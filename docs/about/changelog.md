@@ -27,6 +27,25 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - CPAN: add isolated-home Catalyst policies, distribution-scoped recommendation
   handling, and structured failure reporting without false status 8 results
   from informational messages.
+- Add native `Future::AsyncAwait` syntax and runtime support, including
+  suspended Future resumption, cancellation, async signatures and attributes,
+  `defer`/`CANCEL` integration, and the Awaitable role contract.
+- Add the compatibility needed to run the single-process `PAGI::Server`
+  reference stack with HTTP, WebSocket, and Server-Sent Events; add a verified
+  runnable HTTP example under `examples/pagi/`. Process-forking server modes
+  remain unsupported.
+- CPAN: load large metadata caches lazily and avoid full-catalog scans during
+  dependency installation and command summaries, so `jcpan -T PAGI::Server`
+  installs the reference server and its dependency chain successfully.
+- Bugfix: scope interpreter warning state across JVM-compiled Perl calls and
+  honor explicit `local $^W = 0` suppression; this restores the full
+  14,726-assertion `op/pack.t` run and related regex/substitution baselines.
+- Bugfix: constrain async callback-aggregate lifecycle bookkeeping to active
+  async frames, preserve DESTROY-rescued graphs during targeted weak sweeps,
+  and assign collision-free async bytecode opcodes after integer operations.
+- Bugfix: the unit-test harness accepts successful `plan skip_all` exits as
+  clean TAP completion, allowing Unix-only socket tests to skip correctly on
+  Windows CI.
 - Add compatibility modules for `Socket6`, `Email::Address::XS`, and the
   JSONP-used subset of `Want`; add a Java `Net::Gen` XS bridge for Net-ext.
 - Bugfix: subroutine return values are rvalue copies instead of aliases to

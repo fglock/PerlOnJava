@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.backend.bytecode.FutureAsyncAwaitRuntime;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.*;
@@ -68,6 +69,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         RuntimeHashElementMap map = new RuntimeHashElementMap(this);
         map.putAll(values);
         return map;
+    }
+
+    void resetElementMapAfterAutovivification() {
+        elements = newElementMap();
     }
 
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
@@ -457,11 +462,29 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // assigning one hash entry must not overwrite another entry's
                 // slot container. This matters for pure-Perl deep-cloners
                 // which preserve referent identity while populating hashes.
-                elements.put(key, independentSlot(key, value));
+                RuntimeScalar existing = elements.get(key);
+                if (existing != null
+                        && existing.type != READONLY_SCALAR
+                        && !(existing instanceof RuntimeScalarReadOnly)
+                        && isAggregateClearAssignment(existing, value)) {
+                    if (value == null) existing.undefine();
+                    else value.addToScalar(existing);
+                } else {
+                    elements.put(key, independentSlot(key, value));
+                }
             }
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
-                elements.put(key, independentSlot(key, value));
+                RuntimeScalar existing = elements.get(key);
+                if (existing != null
+                        && existing.type != READONLY_SCALAR
+                        && !(existing instanceof RuntimeScalarReadOnly)
+                        && isAggregateClearAssignment(existing, value)) {
+                    if (value == null) existing.undefine();
+                    else value.addToScalar(existing);
+                } else {
+                    elements.put(key, independentSlot(key, value));
+                }
             }
             case TIED_HASH -> {
                 notePackageRootMutation(null, value);
@@ -471,6 +494,26 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
+    }
+
+    /**
+     * Callback owners commonly release their captures with
+     * {@code $self->{callbacks} = []}. Preserve that element's scalar slot so
+     * the displaced aggregate is released through RuntimeScalar.set(), without
+     * changing the established copy-on-store behavior of ordinary hash writes.
+     */
+    public static boolean isAggregateClearAssignment(
+            RuntimeScalar existing, RuntimeScalar replacement) {
+        if (existing == null || replacement == null
+                || !FutureAsyncAwaitRuntime.isExecutingAsyncSub()) return false;
+        return (existing.value instanceof RuntimeArray oldArray
+                    && !oldArray.elements.isEmpty()
+                    && replacement.value instanceof RuntimeArray newArray
+                    && newArray.elements.isEmpty())
+                || (existing.value instanceof RuntimeHash oldHash
+                    && !oldHash.elements.isEmpty()
+                    && replacement.value instanceof RuntimeHash newHash
+                    && newHash.elements.isEmpty());
     }
 
     private RuntimeScalar independentSlot(String key, RuntimeScalar value) {
@@ -1454,6 +1497,28 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;
             this.type = previousState.type;
+        }
+    }
+
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeHash activeState = new RuntimeHash();
+        activeState.type = this.type;
+        activeState.blessId = this.blessId;
+        activeState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
+        activeState.elements.putAll(this.elements);
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeHash activeState) {
+            this.type = activeState.type;
+            this.blessId = activeState.blessId;
+            this.byteKeys = activeState.byteKeys != null ? new HashSet<>(activeState.byteKeys) : null;
+            this.elements.putAll(activeState.elements);
         }
     }
 

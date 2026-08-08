@@ -235,6 +235,21 @@ public class MortalList {
                 }
                 base.releaseActiveOwner(scalar);
                 pending.add(base);
+            } else if (base.refCount == 0
+                    && base.clearedOwnedAggregateElement
+                    && WeakRefRegistry.hasWeakRefsTo(base)) {
+                // A nested-call reachability guard may have preserved this object
+                // at a selective count of zero. The scalar still represents a live
+                // Perl owner even though there is no count left to decrement. Drop
+                // that stale ownership marker and ask the reachability walker to
+                // decide at the next safe (non-nested) boundary whether the weak
+                // observers should be cleared.
+                scalar.refCountOwned = false;
+                if (base.refCountTrace) {
+                    base.releaseOwner(scalar, "deferDecrementIfTracked zero-count owner");
+                }
+                base.releaseActiveOwner(scalar);
+                requestImmediateWeakSweep();
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
             // on scope exit. We can't count strong refs for non-DESTROY objects
@@ -919,6 +934,19 @@ public class MortalList {
         }
     }
 
+    static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
+        if (!active
+                || base == null
+                || base.refCount != 0
+                || !base.clearedOwnedAggregateElement
+                || !WeakRefRegistry.hasWeakRefsTo(base)
+                || ReachabilityWalker.isReachableFromRoots(base)) {
+            return;
+        }
+        base.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(base);
+    }
+
     // D-W6.18 perf: cached reachable-set, valid for the duration of a
     // single flush() invocation. The walker BFS is O(globals); without
     // this cache, calling it once per pending target turns flush into
@@ -1040,15 +1068,26 @@ public class MortalList {
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
-                    && (RuntimeCode.argsStackDepth() > 1
+                    && ((RuntimeCode.argsStackDepth() > 1
+                            && !base.clearedOwnedAggregateElement)
                     || isReachableFromExternalRootCached(base)
                     || ReachabilityWalker.isReachableFromRoots(base))) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing
                 // weak refs here drops callback invocants that should remain
-                // valid. Classes with DESTROY keep the stricter path below.
-                base.refCount = 1;
+                // valid. Once an owned callback aggregate has been explicitly
+                // replaced with an empty aggregate, however, nested call depth is
+                // no longer treated as ownership: assertions commonly run in
+                // subtest callbacks after the observed object has left scope.
+                // Real roots and explicit method-invocant holds still protect
+                // live objects. Classes with DESTROY keep the stricter path.
+                // Keep lifecycle objects at zero rather than inventing an
+                // unmatched owner. Ordinary objects retain the established
+                // protective count while nested calls still hold them.
+                if (!base.clearedOwnedAggregateElement) {
+                    base.refCount = 1;
+                }
             } else if (base.blessId != 0
                     && base.storedInPackageGlobal
                     && hasWeakRefs

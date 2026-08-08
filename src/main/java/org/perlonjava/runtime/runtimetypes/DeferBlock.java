@@ -75,4 +75,20 @@ public class DeferBlock implements DynamicState {
         // Execute the defer block by calling the code reference with the captured @_
         RuntimeCode.apply(codeRef, capturedArgs, RuntimeContextType.VOID);
     }
+
+    /**
+     * A suspended async frame must detach its defer registrations without
+     * running them.  They remain owned by the frame and are reattached before
+     * the next resume; normal completion, failure, or cancellation cleanup can
+     * then execute them at the actual scope exit.
+     */
+    @Override
+    public Object dynamicSuspendState() {
+        return null;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        // Registration itself is the state; there is nothing to reinitialize.
+    }
 }

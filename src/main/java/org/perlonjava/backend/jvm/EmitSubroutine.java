@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
@@ -12,6 +13,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -92,6 +94,13 @@ public class EmitSubroutine {
      */
     public static void emitSubroutine(EmitterContext ctx, SubroutineNode node) {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SUB start");
+        if (node.getBooleanAnnotation("futureAsyncAwaitSub")
+                && !org.perlonjava.frontend.parser.FutureAsyncAwaitParser.hasAwaitableFuture(node)) {
+            throw new PerlCompilerException(
+                    node.tokenIndex,
+                    org.perlonjava.frontend.parser.FutureAsyncAwaitParser.BACKEND_MESSAGE,
+                    ctx.errorUtil);
+        }
         if (ctx.contextType == RuntimeContextType.VOID) {
             return;
         }
@@ -241,6 +250,14 @@ public class EmitSubroutine {
         int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)
         
         try {
+            if (node.getBooleanAnnotation("futureAsyncAwaitSub")) {
+                InterpretedCode interpreted = EmitterMethodCreator.compileToInterpreter(
+                        node.block, subCtx, node.useTryCatch);
+                interpreted.futureAsyncAwaitSub = true;
+                interpreted.futureAsyncAwaitFutureClass =
+                        (String) node.getAnnotation("futureAsyncAwaitFutureClass");
+                throw new InterpreterFallbackException(interpreted, newEnv);
+            }
             Class<?> generatedClass =
                     EmitterMethodCreator.createClassWithMethod(
                             subCtx, node.block, node.useTryCatch

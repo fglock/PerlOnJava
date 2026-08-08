@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.NumberParser;
+import org.perlonjava.backend.bytecode.FutureAsyncAwaitRuntime;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
@@ -1419,6 +1420,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (isPackageGlobalRoot) {
             MortalList.invalidateExternalRootSnapshot();
         }
+        noteClearedAggregateElement(value);
         // Fast path for untracked references (refCount == -1).
         // Most reference assignments involve untracked objects (named variables,
         // anonymous arrays/hashes that were never blessed). Skip all refCount
@@ -1427,6 +1429,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.ownsScalarReferenceContents || scalarReferenceContentsNeedRetain(value);
         if (!scalarRefContentTrackingNeeded
                 && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned == 0
+                && !WeakRefRegistry.isweak(this)
                 && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
             // Both old and new are non-GLOB references. Check if referents are untracked.
             boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
@@ -1775,6 +1778,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         return this;
+    }
+
+    private void noteClearedAggregateElement(RuntimeScalar replacement) {
+        if (!FutureAsyncAwaitRuntime.isExecutingAsyncSub()
+                || !(containerOwner instanceof RuntimeHash owner)
+                || !owner.elements.containsValue(this)
+                || replacement == null) {
+            return;
+        }
+        boolean clearedArray = this.value instanceof RuntimeArray displacedArray
+                && !displacedArray.elements.isEmpty()
+                && replacement.value instanceof RuntimeArray replacementArray
+                && replacementArray.elements.isEmpty();
+        boolean clearedHash = this.value instanceof RuntimeHash displacedHash
+                && !displacedHash.elements.isEmpty()
+                && replacement.value instanceof RuntimeHash replacementHash
+                && replacementHash.elements.isEmpty();
+        if (clearedArray || clearedHash) {
+            owner.clearedOwnedAggregateElement = true;
+        }
     }
 
     private static boolean blessedClassHasDestroy(RuntimeBase base) {
@@ -3825,6 +3848,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 displacedBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(displacedBase);
             }
+        }
+    }
+
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeScalar activeState = new RuntimeScalar(this);
+        dynamicRestoreState();
+        return activeState;
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeScalar activeState) {
+            this.type = activeState.type;
+            this.value = activeState.value;
+            this.blessId = activeState.blessId;
+            this.ownsScalarReferenceContents = activeState.ownsScalarReferenceContents;
+            this.referencedByScalarReference = activeState.referencedByScalarReference;
+            this.tainted = activeState.tainted;
+            this.numericLiteralText = activeState.numericLiteralText;
+            this.numericContextSeen = activeState.numericContextSeen;
         }
     }
 

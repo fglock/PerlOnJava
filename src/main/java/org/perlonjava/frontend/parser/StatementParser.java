@@ -226,7 +226,17 @@ public class StatementParser {
 
         // Parse the body of the loop
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-        Node body = ParseBlock.parseBlock(parser);
+        String previousForbiddenContext = parser.futureAsyncAwaitForbiddenContext;
+        if (parser.parsingFutureAsyncAwaitSub && !isLexicalForeachVariable(varNode)) {
+            parser.futureAsyncAwaitForbiddenContext =
+                    "foreach on non-lexical iterator variable";
+        }
+        Node body;
+        try {
+            body = ParseBlock.parseBlock(parser);
+        } finally {
+            parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
+        }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         // Parse optional continue block
@@ -266,6 +276,11 @@ public class StatementParser {
         }
 
         return new For1Node(label, true, varNode, initialization, body, continueNode, parser.tokenIndex);
+    }
+
+    private static boolean isLexicalForeachVariable(Node varNode) {
+        return varNode instanceof OperatorNode operator
+                && (operator.operator.equals("my") || operator.operator.equals("state"));
     }
 
     /**
@@ -417,13 +432,20 @@ public class StatementParser {
                 TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             }
 
+            TryNode tryNode = new TryNode(
+                    tryBlock, catchParameter, catchBlock, finallyBlock, index);
+            // Async bodies must keep try inline so an await suspends the owning
+            // async frame rather than an ordinary internal wrapper subroutine.
+            if (parser.parsingFutureAsyncAwaitSub) {
+                return tryNode;
+            }
+
             // The generated wrapper is internal syntax for the try expression.
             // Let it accept lvalue contexts so :lvalue subs can return aliases
             // through try { ... } without failing the subroutine lvalue check.
             return new BinaryOperatorNode("->",
                     new SubroutineNode(null, null, List.of("lvalue"),
-                            new BlockNode(List.of(
-                                new TryNode(tryBlock, catchParameter, catchBlock, finallyBlock, index)), index),
+                            new BlockNode(List.of(tryNode), index),
                         false, index),
                 atUnderscoreArgs(parser),
                 index);
@@ -468,6 +490,18 @@ public class StatementParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
         return new DeferNode(deferBlock, index);
+    }
+
+    /** Parse Future::AsyncAwait's experimental cancellation-only block. */
+    public static Node parseCancelStatement(Parser parser) {
+        int index = parser.tokenIndex;
+        TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "CANCEL"
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        Node cancelBlock = ParseBlock.parseBlock(parser);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        DeferNode result = new DeferNode(cancelBlock, index);
+        result.setAnnotation("futureAsyncAwaitCancel", true);
+        return result;
     }
 
     /**

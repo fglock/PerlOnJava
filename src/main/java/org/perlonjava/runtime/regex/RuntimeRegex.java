@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -261,6 +263,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private void emitWarningsOnUse() {
+        // These warnings belong to the regex use site, not the earlier qr//
+        // construction site. The active Perl code supplies the baseline lexical
+        // warning bits; WarnDie additionally applies a narrower runtime
+        // `no warnings 'regexp'` scope at the individual match site.
+        String activeCodeBits = WarningBitsRegistry.getCurrent();
+        boolean activeCodeEnablesRegexp = activeCodeBits == null
+                || WarningFlags.isEnabledInBits(activeCodeBits, "regexp");
+        if (!WarningFlags.areWarningsForcedOn()
+                && InterpreterState.current() == null
+                && !activeCodeEnablesRegexp) {
+            return;
+        }
         for (String warning : warningsOnUse) {
             WarnDie.warnWithCategory(new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "regexp");
         }

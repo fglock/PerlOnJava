@@ -406,6 +406,7 @@ public class EvalStringHandler {
             );
 
             Parser parser = new Parser(ctx, tokens);
+            parser.parsingEvalString = true;
             Node ast;
             BHooksEndOfScope.beginFileLoad(evalFileName);
             try {
@@ -573,6 +574,7 @@ public class EvalStringHandler {
             );
 
             Parser parser = new Parser(ctx, tokens);
+            parser.parsingEvalString = true;
             Node ast;
             BHooksEndOfScope.beginFileLoad(evalFileName);
             try {

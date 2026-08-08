@@ -1731,6 +1731,25 @@ public class Disassemble {
                         sb.append("PUSH_DEFER pushLocalVariable(new DeferBlock(r").append(deferCodeReg).append(", r").append(deferArgsReg).append("))\n");
                         break;
                     }
+                    case Opcodes.PUSH_CANCEL: {
+                        int cancelCodeReg = interpretedCode.bytecode[pc++];
+                        int cancelArgsReg = interpretedCode.bytecode[pc++];
+                        sb.append("PUSH_CANCEL pushLocalVariable(new CancelBlock(r")
+                                .append(cancelCodeReg).append(", r")
+                                .append(cancelArgsReg).append("))\n");
+                        break;
+                    }
+                    case Opcodes.APPLY_COMPILER_FLAGS: {
+                        int warningBitsIdx = interpretedCode.bytecode[pc++];
+                        int hints = interpretedCode.bytecode[pc++];
+                        int hintHashId = interpretedCode.bytecode[pc++];
+                        int warningScopeId = interpretedCode.bytecode[pc++];
+                        sb.append("APPLY_COMPILER_FLAGS warningBits=")
+                                .append(warningBitsIdx).append(" hints=").append(hints)
+                                .append(" hintHash=").append(hintHashId)
+                                .append(" warningScope=").append(warningScopeId).append("\n");
+                        break;
+                    }
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];
@@ -2378,6 +2397,8 @@ public class Disassemble {
                     case Opcodes.LISTEN:
                     case Opcodes.PIPE:
                     case Opcodes.SOCKETPAIR:
+                    case Opcodes.GETSOCKNAME:
+                    case Opcodes.GETPEERNAME:
                     case Opcodes.WRITE:
                     case Opcodes.FORMLINE:
                     case Opcodes.PRINTF:
@@ -2407,6 +2428,8 @@ public class Disassemble {
                             case Opcodes.LISTEN -> "listen";
                             case Opcodes.PIPE -> "pipe";
                             case Opcodes.SOCKETPAIR -> "socketpair";
+                            case Opcodes.GETSOCKNAME -> "getsockname";
+                            case Opcodes.GETPEERNAME -> "getpeername";
                             case Opcodes.WRITE -> "write";
                             case Opcodes.FORMLINE -> "formline";
                             case Opcodes.PRINTF -> "printf";
@@ -2574,6 +2597,14 @@ public class Disassemble {
                         int smRs1 = interpretedCode.bytecode[pc++];
                         int smRs2 = interpretedCode.bytecode[pc++];
                         sb.append("SMARTMATCH r").append(smRd).append(", r").append(smRs1).append(", r").append(smRs2).append("\n");
+                        break;
+                    }
+                    case Opcodes.AWAIT: {
+                        int awaitRd = interpretedCode.bytecode[pc++];
+                        int futureReg = interpretedCode.bytecode[pc++];
+                        int awaitContext = interpretedCode.bytecode[pc++];
+                        sb.append("AWAIT r").append(awaitRd).append(" = r")
+                                .append(futureReg).append(" context=").append(awaitContext).append("\n");
                         break;
                     }
 

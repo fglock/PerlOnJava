@@ -628,6 +628,21 @@ public class POSIX extends PerlModuleBase {
             return RuntimeScalarCache.scalarUndef.getList();
         }
         int fd = args.get(0).getInt();
+
+        // Java-backed filehandles use virtual descriptors.  Closing the same
+        // integer through libc could close an unrelated JVM descriptor, while
+        // leaving the Perl socket or file open.
+        RuntimeIO managed = lookupByFd(fd);
+        if (managed != null && managed.ioHandle != null) {
+            RuntimeScalar result = managed.close();
+            IOOperator.unregisterFileDescriptor(fd);
+            if (!result.getBoolean()) {
+                GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar("0 but true").getList();
+        }
+
         try {
             FFMPosixInterface posix = FFMPosix.get();
             int result = posix.nativeClose(fd);
@@ -1046,6 +1061,19 @@ public class POSIX extends PerlModuleBase {
             return RuntimeScalarCache.scalarUndef.getList();
         }
         int fd = args.get(0).getInt();
+
+        // Prefer PerlOnJava's virtual descriptor table.  Java socket channels
+        // and ordinary RuntimeIO handles do not expose their raw OS fd, and a
+        // libc dup() of the same integer may duplicate an unrelated JVM fd.
+        if (lookupByFd(fd) != null) {
+            int duplicateFd = IOOperator.duplicateFileDescriptor(fd);
+            if (duplicateFd < 0) {
+                GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(duplicateFd).getList();
+        }
+
         try {
             var posix = FFMPosix.get();
             int result = posix.dup(fd);

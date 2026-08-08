@@ -103,8 +103,9 @@ public class IOPoll extends PerlModuleBase {
                     continue;
                 }
 
-                // Check if it's a socket handle (unwrap LayeredIOHandle if needed)
-                SocketIO socketIO = getSocketIO(rio);
+                // Preserve socket readiness semantics through fdopen aliases,
+                // duplicated descriptors, and I/O layers.
+                SocketIO socketIO = rio.getSocketHandle();
 
                 if (socketIO != null) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
@@ -270,18 +271,4 @@ public class IOPoll extends PerlModuleBase {
         }
     }
 
-    /**
-     * Extract SocketIO from a RuntimeIO, unwrapping LayeredIOHandle if needed.
-     */
-    private static SocketIO getSocketIO(RuntimeIO rio) {
-        if (rio.ioHandle instanceof SocketIO socketIO) {
-            return socketIO;
-        }
-        if (rio.ioHandle instanceof org.perlonjava.runtime.io.LayeredIOHandle layered) {
-            if (layered.getDelegate() instanceof SocketIO socketIO) {
-                return socketIO;
-            }
-        }
-        return null;
-    }
 }

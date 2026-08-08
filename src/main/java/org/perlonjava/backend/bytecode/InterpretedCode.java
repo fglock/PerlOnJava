@@ -44,6 +44,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Optimization flags (set by compiler after construction)
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
     public boolean usesLocalization = true;
+    public boolean futureAsyncAwaitSub;
+    public String futureAsyncAwaitFutureClass;
+    public int signatureMinArgs = -1;
+    public int signatureMaxArgs = -1;
+    public String signatureSubName;
 
     // Goto label map (set by compiler after construction for dynamic goto support)
     // Maps label name → bytecode PC offset
@@ -344,11 +349,14 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, null);
-        int effectiveContext = RuntimeCode.effectiveCallContext(this, callContext);
+        validateAsyncSignature(args);
+        int effectiveContext = futureAsyncAwaitSub
+                ? RuntimeContextType.LIST
+                : RuntimeCode.effectiveCallContext(this, callContext);
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         // This matches what RuntimeCode.apply() does for JVM-compiled subs
         RuntimeCode.pushArgs(args);
-        RuntimeCode.pushCallContext(callContext);
+        RuntimeCode.pushCallContext(effectiveContext);
         RuntimeCode.pushActiveCode(this);
         // Push warning bits for FATAL warnings support
         // This allows runtime code to check current warning context
@@ -357,12 +365,20 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-            return RuntimeCode.coerceScalarCallResult(
-                    BytecodeInterpreter.execute(this, args, effectiveContext), effectiveContext, callContext);
+            RuntimeList result = BytecodeInterpreter.execute(this, args, effectiveContext);
+            if (futureAsyncAwaitSub) {
+                return FutureAsyncAwaitRuntime.wrapInitialResult(
+                        effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
+            }
+            return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
                 MortalList.flush();
+            }
+            if (futureAsyncAwaitSub && !(e instanceof PerlExitException)) {
+                return FutureAsyncAwaitRuntime.failedInitialResult(
+                        e, effectiveContext, callContext, futureAsyncAwaitFutureClass);
             }
             throw e;
         } finally {
@@ -383,10 +399,13 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             return new RuntimeList(constantValue);
         }
         RuntimeCode.requireLvalueCallable(this, callContext, subroutineName);
-        int effectiveContext = RuntimeCode.effectiveCallContext(this, callContext);
+        validateAsyncSignature(args);
+        int effectiveContext = futureAsyncAwaitSub
+                ? RuntimeContextType.LIST
+                : RuntimeCode.effectiveCallContext(this, callContext);
         // Push args for getCallerArgs() support (used by List::Util::any/all/etc.)
         RuntimeCode.pushArgs(args);
-        RuntimeCode.pushCallContext(callContext);
+        RuntimeCode.pushCallContext(effectiveContext);
         RuntimeCode.pushActiveCode(this);
         // Push warning bits for FATAL warnings support
         if (warningBitsString != null) {
@@ -394,13 +413,21 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-            return RuntimeCode.coerceScalarCallResult(
-                    BytecodeInterpreter.execute(this, args, effectiveContext, subroutineName),
-                    effectiveContext, callContext);
+            RuntimeList result = BytecodeInterpreter.execute(
+                    this, args, effectiveContext, subroutineName);
+            if (futureAsyncAwaitSub) {
+                return FutureAsyncAwaitRuntime.wrapInitialResult(
+                        effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
+            }
+            return RuntimeCode.coerceScalarCallResult(result, effectiveContext, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
                 MortalList.flush();
+            }
+            if (futureAsyncAwaitSub && !(e instanceof PerlExitException)) {
+                return FutureAsyncAwaitRuntime.failedInitialResult(
+                        e, effectiveContext, callContext, futureAsyncAwaitFutureClass);
             }
             throw e;
         } finally {
@@ -479,7 +506,31 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.usesLocalization = this.usesLocalization;
+        copy.futureAsyncAwaitSub = this.futureAsyncAwaitSub;
+        copy.futureAsyncAwaitFutureClass = this.futureAsyncAwaitFutureClass;
+        copy.signatureMinArgs = this.signatureMinArgs;
+        copy.signatureMaxArgs = this.signatureMaxArgs;
+        copy.signatureSubName = this.signatureSubName;
         return copy;
+    }
+
+    private void validateAsyncSignature(RuntimeArray args) {
+        if (!futureAsyncAwaitSub || signatureMinArgs < 0) {
+            return;
+        }
+        int count = args.size();
+        if (count < signatureMinArgs) {
+            throw signatureError("Too few", count, signatureMinArgs);
+        }
+        if (signatureMaxArgs != Integer.MAX_VALUE && count > signatureMaxArgs) {
+            throw signatureError("Too many", count, signatureMaxArgs);
+        }
+    }
+
+    private PerlDieException signatureError(String kind, int got, int expected) {
+        String name = signatureSubName == null ? "" : " for subroutine '" + signatureSubName + "'";
+        return new PerlDieException(new RuntimeScalar(
+                kind + " arguments" + name + " (got " + got + "; expected " + expected + ")\n"));
     }
 
     /**

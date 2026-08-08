@@ -21,6 +21,7 @@ use constant O_TRUNC    => 01000;  # Truncate file to zero length
 use constant O_APPEND   => 02000;  # Append mode - writes always go to end of file
 use constant O_NONBLOCK => 04000;  # Non-blocking mode
 use constant O_NDELAY   => O_NONBLOCK;  # Synonym for O_NONBLOCK
+use constant O_NOFOLLOW => 0400000; # Fail if the final path component is a symlink
 
 # Seek constants
 use constant SEEK_SET   => 0;      # Seek from beginning of file

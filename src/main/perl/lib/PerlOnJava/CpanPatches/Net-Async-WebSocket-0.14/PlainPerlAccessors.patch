@@ -1,0 +1,25 @@
+--- Build.PL.orig
++++ Build.PL
+@@ -14 +13,0 @@
+-      'meta' => '0.008',
+--- META.json.orig
++++ META.json
+@@ -33 +32,0 @@
+-            "meta" : "0.008",
+--- META.yml.orig
++++ META.yml
+@@ -40 +39,0 @@
+-  meta: '0.008'
+--- lib/Net/Async/WebSocket/Protocol.pm.orig
++++ lib/Net/Async/WebSocket/Protocol.pm
+@@ -16,2 +15,0 @@
+-use meta 0.008;
+-no warnings 'meta::experimental';
+@@ -226 +223,0 @@
+-my $metapkg = meta::get_this_package;
+@@ -245 +241,4 @@
+-   $metapkg->add_named_sub( $method => $code );
++   {
++      no strict 'refs';
++      *{ __PACKAGE__ . "::$method" } = $code;
++   }

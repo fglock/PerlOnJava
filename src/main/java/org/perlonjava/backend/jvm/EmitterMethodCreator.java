@@ -1738,6 +1738,18 @@ public class EmitterMethodCreator implements Opcodes {
         // For anonymous subs this is set by SubroutineNode constructor, but for named subs the block
         // is passed directly here without going through SubroutineNode.
         ast.setAnnotation("blockIsSubroutine", true);
+        if (Boolean.TRUE.equals(ast.getAnnotation("futureAsyncAwaitSub"))) {
+            InterpretedCode code = compileToInterpreter(ast, ctx, useTryCatch);
+            code.futureAsyncAwaitSub = true;
+            code.futureAsyncAwaitFutureClass =
+                    (String) ast.getAnnotation("futureAsyncAwaitFutureClass");
+            if (ast.getAnnotation("signatureMinArgs") instanceof Integer min) {
+                code.signatureMinArgs = min;
+                code.signatureMaxArgs = (Integer) ast.getAnnotation("signatureMaxArgs");
+                code.signatureSubName = (String) ast.getAnnotation("signatureSubName");
+            }
+            return code;
+        }
         if (ctx.compilerOptions.useInterpreter || RuntimeCode.FORCE_INTERPRETER) {
             return compileToInterpreter(ast, ctx, useTryCatch);
         }

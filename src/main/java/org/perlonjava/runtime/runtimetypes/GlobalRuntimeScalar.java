@@ -17,6 +17,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         this.fullName = fullName;
     }
 
+    boolean localizes(String variableName) {
+        return fullName.equals(variableName);
+    }
+
     public static RuntimeScalar makeLocal(String fullName) {
         RuntimeScalar original = GlobalVariable.getGlobalVariable(fullName);
         if (original instanceof ScalarSpecialVariable sv && sv.variableId == ScalarSpecialVariable.Id.INPUT_LINE_NUMBER) {
@@ -204,6 +208,45 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 }
             }
         }
+    }
+
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeScalar activeVariable = GlobalVariable.getGlobalVariable(fullName);
+        RuntimeScalar activeState = activeVariable != null
+                ? new RuntimeScalar(activeVariable) : new RuntimeScalar();
+        boolean tied = activeVariable != null
+                && activeVariable.type == RuntimeScalarType.TIED_SCALAR;
+        RuntimeScalar tiedValue = tied ? activeVariable.tiedFetch() : null;
+        dynamicRestoreState();
+        return new SuspendedGlobalScalar(activeState, tiedValue, tied);
+    }
+
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof SuspendedGlobalScalar suspended) {
+            RuntimeScalar activeVariable = GlobalVariable.getGlobalVariable(fullName);
+            if (activeVariable != null) {
+                if (suspended.tied) {
+                    activeVariable.tiedStore(suspended.tiedValue);
+                    return;
+                }
+                RuntimeScalar activeState = suspended.value;
+                activeVariable.type = activeState.type;
+                activeVariable.value = activeState.value;
+                activeVariable.blessId = activeState.blessId;
+                activeVariable.ownsScalarReferenceContents = activeState.ownsScalarReferenceContents;
+                activeVariable.referencedByScalarReference = activeState.referencedByScalarReference;
+                activeVariable.tainted = activeState.tainted;
+                activeVariable.numericLiteralText = activeState.numericLiteralText;
+                activeVariable.numericContextSeen = activeState.numericContextSeen;
+            }
+        }
+    }
+
+    private record SuspendedGlobalScalar(
+            RuntimeScalar value, RuntimeScalar tiedValue, boolean tied) {
     }
 
     private record SavedGlobalState(
