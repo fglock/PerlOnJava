@@ -284,14 +284,10 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Rebuild SQL::Translator's complete unchanged 75-file matrix from the
-   distribution root. The first runner changed into `t/`, which breaks the two
-   upstream diff-script files' relative-path probe, and its XML::Writer source
-   path omitted `blib/lib`. Keep a bounded per-process heap for tests that spawn
-   child jperls so concurrent workspaces cannot trigger host memory pressure.
-2. Complete the corrected `t/60roundtrip.t` run and isolate the two
-   `t/70sqlt-diff_script*.t` open3 subprocess paths if they remain non-passing.
-   Do not classify harness-path or local resource failures as runtime defects.
+1. With SQL::Translator installed normally, rerun DBIx::Class's focused
+   `t/99dbic_sqlt_parser.t` and `t/86sqlt.t` files that originally motivated
+   the skip policy.
+2. Continue to the documented CGI and LWP Phase 8 parity follow-ups.
 3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -825,6 +821,32 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   SQL::Translator's unchanged `sqlite-rename-field.t` advances from 15/16 to
   16/16 because its generated schema-conversion comment is now a successful
   no-op.
+- The corrected authoritative SQL::Translator matrix uses absolute test paths
+  (preserving the distribution-root cwd), XML::Writer's generated `blib/lib`,
+  one worker, a 768 MB inherited heap bound, and a 1,800-second per-file hard
+  timeout. All 75 unchanged files and 1,947/1,947 assertions pass, with zero
+  failures, errors, timeouts, or incomplete files and eight upstream TODOs.
+  The expensive gates complete within the bound: `t/02mysql-parser.t` passes
+  347/347 in 1,755 seconds, `t/60roundtrip.t` passes 100/100 in 1,670 seconds,
+  and the open3-based diff scripts pass 16/16 and 21/21.
+- `SQL-Translator.yml` is retired now that its documented removal condition is
+  met. It is removed from bundled preference installation, and bootstrap
+  migration removes an old PerlOnJava-owned installed copy while preserving
+  user-owned policy files. `cpan_distroprefs_signature_migration.t` passes 9/9
+  under standard Perl, JVM, and interpreter execution.
+- CPAN metadata and distribution tests now have independent JVM heap controls.
+  `jcpan` preserves the caller-selected heap for its long-lived metadata graph,
+  while defaulting MakeMaker test children to 768 MB and preserving non-heap
+  options such as `-Xss`; `PERLONJAVA_TEST_JPERL_OPTS` remains an explicit
+  override. Both the full and simplified MakeMaker generators propagate the
+  child setting. `zzzz_makemaker_test_heap_override.t` passes 4/4 under
+  standard Perl, JVM, and interpreter execution.
+- A fresh isolated source-first `jcpan -t SQL::Translator` with a 2 GB CPAN
+  parent and 768 MB test children installs all generated dependencies without
+  manual source paths and without installing or applying
+  `SQL-Translator.yml`. All 75 upstream files and 1,947/1,947 assertions pass
+  in 3,706 seconds (`Result: PASS`, exit 0). This independently confirms the
+  complete matrix through the normal CPAN dependency and MakeMaker paths.
 
 ### Open questions
 

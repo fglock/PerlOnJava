@@ -791,10 +791,10 @@ sub _create_install_makefile {
     } elsif ($test_glob) {
         # Use ExtUtils::Command::MM::test_harness with undef *Test::Harness::Switches
         # to disable the default -w switch, matching standard MakeMaker behavior
-        $test_cmd = qq{PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $test_glob};
+        $test_cmd = qq{JPERL_OPTS="\$\${PERLONJAVA_TEST_JPERL_OPTS:-\$\$JPERL_OPTS}" PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $test_glob};
     } elsif (-f 'test.pl') {
         # Legacy convention: some older CPAN dists use test.pl instead of t/*.t
-        $test_cmd = qq{PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl test.pl};
+        $test_cmd = qq{JPERL_OPTS="\$\${PERLONJAVA_TEST_JPERL_OPTS:-\$\$JPERL_OPTS}" PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl test.pl};
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }

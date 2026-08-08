@@ -4,6 +4,18 @@ BEGIN { pop @INC if $INC[-1] eq '.' }
 use strict;
 use vars qw($VERSION);
 
+# CPAN itself retains a large metadata graph and may need a larger heap than
+# individual distribution tests. Keep test JVMs bounded independently so a
+# parent started with a large -Xmx does not multiply that reservation across
+# every Test::Harness child. Preserve non-heap options such as -Xss.
+if (!exists $ENV{PERLONJAVA_TEST_JPERL_OPTS}) {
+    my $test_opts = $ENV{JPERL_OPTS} || '';
+    $test_opts =~ s/(?:^|\s)-Xmx\S+//g;
+    $test_opts =~ s/^\s+|\s+$//g;
+    $ENV{PERLONJAVA_TEST_JPERL_OPTS} =
+        join ' ', grep { length } $test_opts, '-Xmx768m';
+}
+
 use App::Cpan;
 use CPAN::Version;
 my $minver = '1.64';
