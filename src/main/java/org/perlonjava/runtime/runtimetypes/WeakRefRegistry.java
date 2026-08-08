@@ -117,7 +117,11 @@ public class WeakRefRegistry {
             MyVarCleanupStack.snapshotStackToLiveCounts();
         }
 
-        boolean weakenedLiveCodeRef = base instanceof RuntimeCode && MyVarCleanupStack.isLive(ref);
+        boolean weakenedLiveLexical = MyVarCleanupStack.isLive(ref);
+        boolean weakenedLiveCodeRef = base instanceof RuntimeCode && weakenedLiveLexical;
+        boolean weakenedLiveBlessedRef = base.blessId != 0
+                && !(base instanceof RuntimeCode)
+                && weakenedLiveLexical;
 
         if (base.refCount > 0 && ref.refCountOwned) {
             // Tracked object with a properly-counted reference:
@@ -198,6 +202,19 @@ public class WeakRefRegistry {
             // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
             base.refCount = WEAKLY_TRACKED;
+            MortalList.requestImmediateWeakSweep();
+        }
+        // A live lexical can be the final Perl-visible strong owner even when
+        // selective refCount remains inflated by earlier argument/temporary
+        // copies. Request one root-based sweep at the next safe statement
+        // boundary so weaken($lexical) has Perl's immediate observable
+        // semantics. Keep this limited to blessed non-CODE referents: DBIC
+        // schema/parser flows need it, while CODE refs and container-internal
+        // weak backrefs use their targeted cleanup paths below.
+        if (weakenedLiveBlessedRef
+                && base.refCount > 0
+                && base.reachableOwnerCount() == 0
+                && !ModuleInitGuard.inModuleInit()) {
             MortalList.requestImmediateWeakSweep();
         }
         boolean shouldCheckLiveCodeRef = weakenedLiveCodeRef

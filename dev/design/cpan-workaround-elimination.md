@@ -284,15 +284,12 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. With SQL::Translator installed normally, rerun DBIx::Class's focused
-   `t/99dbic_sqlt_parser.t` and `t/86sqlt.t` files that originally motivated
-   the skip policy.
-2. Continue to the documented CGI and LWP Phase 8 parity follow-ups.
-3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
+1. Continue to the documented CGI and LWP Phase 8 parity follow-ups.
+2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-4. Keep the live LWP `t/local/http.t` failure and CGI HTML::Entities failures
+3. Keep the live LWP `t/local/http.t` failure and CGI HTML::Entities failures
    as documented Phase 8/runtime-parity follow-ups.
 
 ### Completed phase deliverables
@@ -847,6 +844,14 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   `SQL-Translator.yml`. All 75 upstream files and 1,947/1,947 assertions pass
   in 3,706 seconds (`Result: PASS`, exit 0). This independently confirms the
   complete matrix through the normal CPAN dependency and MakeMaker paths.
+- A live lexical weakened after its referent's registered owners have become
+  unreachable now requests one root-based sweep when selective refcount still
+  reports a positive residual count. This preserves the throttled fast path for
+  ordinary weak refs while restoring immediate Perl semantics for DBIC's
+  schema/parser lifetime pattern. Against the isolated normally installed
+  SQL::Translator, DBIx::Class's unchanged `t/99dbic_sqlt_parser.t` passes
+  179/179 (including `Schema not leaked`) and `t/86sqlt.t` passes 144/144; both
+  automatic leak registries finish empty.
 
 ### Open questions
 
