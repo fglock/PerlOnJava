@@ -3,6 +3,11 @@
 This directory contains sample Perl scripts that demonstrate various features and capabilities of Perl.
 These scripts are intended to serve as examples and reference material for developers.
 
+Featured example:
+
+- [`pagi/`](pagi/) — an asynchronous HTTP application running on
+  `PAGI::Server` with PerlOnJava's native `async`/`await` support.
+
 Note:
 
 - The Perl scripts in this directory are not part of the automated test suite.
@@ -20,5 +25,4 @@ Note:
 - Ensure that any new Perl scripts added to the src/test/resources directory follow the project's testing conventions.
 
 - If you add new example scripts to this directory, consider documenting their purpose and usage to help other developers.
-
 
