@@ -117,6 +117,10 @@ from its completed dependency test phases.
   warning-state leakage while retaining enabled and fatal warning behavior on
   regex-cache hits. The regression test passes under system Perl and both
   PerlOnJava backends.
+- Restored Perl string sign toggling for unary minus under `use integer`, and
+  distinguished finite 32-bit wrapping from `Inf`/`NaN` native-IV conversion.
+  The reported `op/negate.t`, `op/infnan.t`, and `op/lex_assign.t` regressions
+  pass 1489/1489 assertions under both PerlOnJava backends.
 - The focused Encode::Locale and XML::Parser bundled-module suites pass. The
   complete bundled-module suite passes 375/375 files with zero failures, and a
   final full `make` passes.

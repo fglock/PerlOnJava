@@ -232,8 +232,8 @@ public class BitwiseOperators {
                     arg1, arg2, blessId, blessId2, "(" + symbol, symbol);
             if (overloaded != null) return overloaded;
         }
-        int a = (int) arg1.getLong();
-        int b = (int) arg2.getLong();
+        int a = nativeIntValue(arg1);
+        int b = nativeIntValue(arg2);
         int result = switch (operator) {
             case '&' -> a & b;
             case '|' -> a | b;
@@ -241,6 +241,15 @@ public class BitwiseOperators {
             default -> throw new IllegalArgumentException("unknown bitwise operator: " + operator);
         };
         return new RuntimeScalar(result);
+    }
+
+    private static int nativeIntValue(RuntimeScalar value) {
+        RuntimeScalar number = value.getNumber("bitwise operation");
+        if (number.type != RuntimeScalarType.DOUBLE) return (int) number.getLong();
+        double numericValue = number.getDouble();
+        return Double.isFinite(numericValue)
+                ? (int) (long) numericValue
+                : (int) numericValue;
     }
 
     /**

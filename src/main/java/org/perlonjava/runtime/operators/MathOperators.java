@@ -96,11 +96,39 @@ public class MathOperators {
                     arg, blessId, "(neg", "neg", MathOperators::integerUnaryMinus);
             if (result != null) return result;
         }
-        return new RuntimeScalar(-(int) arg.getNumber("negation (-)").getLong());
+        RuntimeScalar stringResult = unaryMinusStringResult(arg);
+        if (stringResult != null) return stringResult;
+        return new RuntimeScalar(-nativeIntValue(arg, "negation (-)"));
     }
 
     public static RuntimeScalar integerUnaryMinusNoOverload(RuntimeScalar arg) {
-        return new RuntimeScalar(-(int) arg.getNumber("negation (-)").getLong());
+        RuntimeScalar stringResult = unaryMinusStringResult(arg);
+        if (stringResult != null) return stringResult;
+        return new RuntimeScalar(-nativeIntValue(arg, "negation (-)"));
+    }
+
+    private static int nativeIntValue(RuntimeScalar arg, String operation) {
+        RuntimeScalar number = arg.getNumber(operation);
+        if (number.type != DOUBLE) return (int) number.getLong();
+        double value = number.getDouble();
+        return Double.isFinite(value) ? (int) (long) value : (int) value;
+    }
+
+    /** Perl's unary-minus string sign toggling, or {@code null} for numeric coercion. */
+    private static RuntimeScalar unaryMinusStringResult(RuntimeScalar runtimeScalar) {
+        if (!runtimeScalar.isString()) return null;
+        String input = runtimeScalar.toString();
+        if (input.length() < 2) {
+            if (input.isEmpty()) return getScalarInt(0);
+            if (input.equals("-")) return new RuntimeScalar("+");
+            if (input.equals("+")) return new RuntimeScalar("-");
+        }
+        if (!input.matches("^\\s*[-+]?\\d+(\\.\\d+)?([eE][-+]?\\d+)?\\s*$")) {
+            if (input.startsWith("-")) return new RuntimeScalar("+" + input.substring(1));
+            if (input.startsWith("+")) return new RuntimeScalar("-" + input.substring(1));
+            if (input.matches("^[_A-Za-z].*")) return new RuntimeScalar("-" + input);
+        }
+        return null;
     }
 
     public static RuntimeScalar integerAddAssign(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -1271,37 +1299,8 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        if (runtimeScalar.isString()) {
-            String input = runtimeScalar.toString();
-            if (input.length() < 2) {
-                if (input.isEmpty()) {
-                    return getScalarInt(0);
-                }
-                if (input.equals("-")) {
-                    return new RuntimeScalar("+");
-                }
-                if (input.equals("+")) {
-                    return new RuntimeScalar("-");
-                }
-            }
-            // Check if string has non-numeric trailing characters (not purely numeric)
-            // Purely numeric: "10", "-10", "10.0", "-10.0", "1e5"
-            // Non-numeric: "-10foo", "+xyz", "abc"
-            // Don't match: whitespace-prefixed numbers like " -10"
-            if (!input.matches("^\\s*[-+]?\\d+(\\.\\d+)?([eE][-+]?\\d+)?\\s*$")) {
-                // String is not purely numeric
-                if (input.startsWith("-")) {
-                    // Handle case where string starts with "-"
-                    return new RuntimeScalar("+" + input.substring(1));
-                } else if (input.startsWith("+")) {
-                    // Handle case where string starts with "+"
-                    return new RuntimeScalar("-" + input.substring(1));
-                } else if (input.matches("^[_A-Za-z].*")) {
-                    // Only add "-" prefix for strings starting with letter/underscore
-                    return new RuntimeScalar("-" + input);
-                }
-            }
-        }
+        RuntimeScalar stringResult = unaryMinusStringResult(runtimeScalar);
+        if (stringResult != null) return stringResult;
         return subtract(getScalarInt(0), runtimeScalar);
     }
 
