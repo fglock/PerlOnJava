@@ -1477,9 +1477,13 @@ public class BytecodeCompiler implements Visitor {
                     emitInt(intValue);
                 }
             } else if (isLargeInteger) {
-                // Large integer - store as double to match Perl 5 IV-to-NV promotion
-                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
-                int constIdx = addToConstantPool(doubleScalar);
+                RuntimeScalar integerScalar;
+                try {
+                    integerScalar = new RuntimeScalar(Long.parseLong(value));
+                } catch (NumberFormatException overflow) {
+                    integerScalar = new RuntimeScalar(Double.parseDouble(value), value);
+                }
+                int constIdx = addToConstantPool(integerScalar);
                 emit(Opcodes.LOAD_CONST);
                 emitReg(rd);
                 emit(constIdx);

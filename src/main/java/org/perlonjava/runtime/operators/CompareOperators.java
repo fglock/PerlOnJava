@@ -111,7 +111,7 @@ public class CompareOperators {
     public static RuntimeScalar lessThan(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
-            return getScalarBoolean((int) arg1.value < (int) arg2.value);
+            return getScalarBoolean(arg1.getLong() < arg2.getLong());
         }
 
         // Prepare overload context and check if object is eligible for overloading
@@ -154,7 +154,7 @@ public class CompareOperators {
     public static RuntimeScalar lessThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
-            return getScalarBoolean((int) arg1.value <= (int) arg2.value);
+            return getScalarBoolean(arg1.getLong() <= arg2.getLong());
         }
 
         // Prepare overload context and check if object is eligible for overloading
@@ -197,7 +197,7 @@ public class CompareOperators {
     public static RuntimeScalar greaterThan(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
-            return getScalarBoolean((int) arg1.value > (int) arg2.value);
+            return getScalarBoolean(arg1.getLong() > arg2.getLong());
         }
 
         // Prepare overload context and check if object is eligible for overloading
@@ -240,7 +240,7 @@ public class CompareOperators {
     public static RuntimeScalar greaterThanOrEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
-            return getScalarBoolean((int) arg1.value >= (int) arg2.value);
+            return getScalarBoolean(arg1.getLong() >= arg2.getLong());
         }
 
         // Prepare overload context and check if object is eligible for overloading
@@ -319,7 +319,7 @@ public class CompareOperators {
     public static RuntimeScalar equalTo(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
-            return getScalarBoolean((int) arg1.value == (int) arg2.value);
+            return getScalarBoolean(arg1.getLong() == arg2.getLong());
         }
 
         // Prepare overload context and check if object is eligible for overloading
@@ -362,7 +362,7 @@ public class CompareOperators {
     public static RuntimeScalar notEqualTo(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber()
         if (arg1.type == RuntimeScalarType.INTEGER && arg2.type == RuntimeScalarType.INTEGER) {
-            return getScalarBoolean((int) arg1.value != (int) arg2.value);
+            return getScalarBoolean(arg1.getLong() != arg2.getLong());
         }
 
         // Prepare overload context and check if object is eligible for overloading

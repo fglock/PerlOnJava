@@ -239,8 +239,8 @@ public class MathOperators {
     private static RuntimeScalar addUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.addExact(a, b));
             } catch (ArithmeticException ignored) {
@@ -289,8 +289,8 @@ public class MathOperators {
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.addExact(a, b));
             } catch (ArithmeticException ignored) {
@@ -403,8 +403,8 @@ public class MathOperators {
     private static RuntimeScalar subtractUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.subtractExact(a, b));
             } catch (ArithmeticException ignored) {
@@ -453,8 +453,8 @@ public class MathOperators {
     private static RuntimeScalar subtractWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.subtractExact(a, b));
             } catch (ArithmeticException ignored) {
@@ -504,13 +504,12 @@ public class MathOperators {
     private static RuntimeScalar multiplyUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
-                // Widen to long — int*int product always fits in long; avoid double mantissa loss.
-                return new RuntimeScalar((long) a * (long) b);
+                return new RuntimeScalar((double) a * (double) b);
             }
         }
 
@@ -555,12 +554,12 @@ public class MathOperators {
     private static RuntimeScalar multiplyWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((long) a * (long) b);
+                return new RuntimeScalar((double) a * (double) b);
             }
         }
 
@@ -1468,7 +1467,7 @@ public class MathOperators {
             return Overload.bool_not(runtimeScalar);
         }
         return switch (runtimeScalar.type) {
-            case INTEGER -> getScalarBoolean((int) runtimeScalar.value == 0);
+            case INTEGER -> getScalarBoolean(runtimeScalar.getLong() == 0);
             case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
             case STRING, BYTE_STRING -> {
                 String s = (String) runtimeScalar.value;

@@ -591,22 +591,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
-        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
-            // Java double can only exactly represent integers up to 2^53.
-            // Beyond that, storing as DOUBLE loses precision and breaks exact pack/unpack
-            // semantics for 64-bit formats (q/Q/j/J) and BER compression (w).
-            long lv = value;
-            // Note: avoid Math.abs(lv) which overflows for Long.MIN_VALUE
-            if (lv <= 9007199254740992L && lv >= -9007199254740992L) { // within 2^53
-                this.type = DOUBLE;
-                this.value = (double) lv;
-            } else {
-                this.type = RuntimeScalarType.STRING;
-                this.value = Long.toString(lv);
-            }
+        setIntegerValue(value);
+    }
+
+    private void setIntegerValue(long integerValue) {
+        this.type = RuntimeScalarType.INTEGER;
+        if (integerValue >= Integer.MIN_VALUE && integerValue <= Integer.MAX_VALUE) {
+            this.value = Integer.valueOf((int) integerValue);
         } else {
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = value.intValue();
+            this.value = Long.valueOf(integerValue);
         }
     }
 
@@ -758,7 +751,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for getInt()
     public int getInt() {
         if (type == INTEGER) {
-            return (int) this.value;
+            return ((Number) this.value).intValue();
         }
         return getIntLarge();
     }
@@ -767,7 +760,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private int getIntLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> (int) value;
+            case INTEGER -> ((Number) value).intValue();
             case DOUBLE -> (int) ((double) value);
             case STRING, BYTE_STRING -> {
                 markNumericContextSeen();
@@ -817,7 +810,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         } else if (type == RuntimeScalarType.INTEGER) {
             // For regular integers
-            return BigInteger.valueOf((int) value);
+            return BigInteger.valueOf(((Number) value).longValue());
         } else if (type == RuntimeScalarType.UNDEF) {
             return BigInteger.ZERO;
         } else {
@@ -884,7 +877,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         } else if (type == RuntimeScalarType.INTEGER) {
             // For regular integers - need to handle as unsigned
-            long val = (int) value;  // Cast to long keeping sign extension
+            long val = ((Number) value).longValue();
             if (val < 0) {
                 // Convert negative to unsigned BigInteger
                 return new BigInteger(Long.toUnsignedString(val));
@@ -941,7 +934,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public long getLong() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> (int) value;
+            case INTEGER -> ((Number) value).longValue();
             case DOUBLE -> (long) ((double) value);
             case STRING, BYTE_STRING -> {
                 markNumericContextSeen();
@@ -976,7 +969,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for getDouble()
     public double getDouble() {
         if (type == INTEGER) {
-            return (int) this.value;
+            return ((Number) this.value).doubleValue();
         }
         return getDoubleLarge();
     }
@@ -985,7 +978,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private double getDoubleLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> (int) value;
+            case INTEGER -> ((Number) value).doubleValue();
             case DOUBLE -> (double) value;
             case STRING, BYTE_STRING -> {
                 markNumericContextSeen();
@@ -1020,7 +1013,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for getBoolean()
     public boolean getBoolean() {
         if (type == INTEGER) {
-            return (int) value != 0;
+            return ((Number) value).longValue() != 0;
         }
         return getBooleanLarge();
     }
@@ -1029,7 +1022,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private boolean getBooleanLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> (int) value != 0;
+            case INTEGER -> ((Number) value).longValue() != 0;
             case DOUBLE -> (double) value != 0.0;
             case STRING, BYTE_STRING -> {
                 String s = (String) value;
@@ -2041,7 +2034,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private String toStringLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
-            case INTEGER -> Integer.toString((int) value);
+            case INTEGER -> Long.toString(((Number) value).longValue());
             case DOUBLE -> ScalarUtils.formatLikePerl((double) value);
             case STRING, BYTE_STRING -> (String) value;
             case UNDEF -> "";
@@ -2099,7 +2092,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return (String) this.value;
         }
         return switch (type) {
-            case INTEGER -> Integer.toString((int) value);
+            case INTEGER -> Long.toString(((Number) value).longValue());
             case DOUBLE -> ScalarUtils.formatLikePerl((double) value);
             case STRING, BYTE_STRING -> (String) value;
             case UNDEF -> "";
@@ -3422,13 +3415,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
-                int intValue = (int) this.value;
-                // Check for overflow - upgrade to double if needed
-                if (intValue == Integer.MAX_VALUE) {
+                long integerValue = ((Number) this.value).longValue();
+                if (integerValue == Long.MAX_VALUE) {
                     this.type = RuntimeScalarType.DOUBLE;
-                    this.value = (double) intValue + 1;
+                    this.value = (double) integerValue + 1;
                 } else {
-                    this.value = intValue + 1;
+                    setIntegerValue(integerValue + 1);
                 }
             }
             case DOUBLE -> // 1
@@ -3523,10 +3515,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for $v++
     public RuntimeScalar postAutoIncrement() {
         if (this.type == INTEGER) {
-            int intValue = (int) this.value;
-            if (intValue < Integer.MAX_VALUE) {
-                this.value = intValue + 1;
-                return new RuntimeScalar(intValue).propagateTaint(this); // return old value directly
+            long integerValue = ((Number) this.value).longValue();
+            if (integerValue < Long.MAX_VALUE) {
+                setIntegerValue(integerValue + 1);
+                return new RuntimeScalar(integerValue).propagateTaint(this);
             }
         }
         return postAutoIncrementLarge();
@@ -3545,13 +3537,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
-                int intValue = (int) this.value;
-                // Check for overflow - upgrade to double if needed
-                if (intValue == Integer.MAX_VALUE) {
+                long integerValue = ((Number) this.value).longValue();
+                if (integerValue == Long.MAX_VALUE) {
                     this.type = RuntimeScalarType.DOUBLE;
-                    this.value = (double) intValue + 1;
+                    this.value = (double) integerValue + 1;
                 } else {
-                    this.value = intValue + 1;
+                    setIntegerValue(integerValue + 1);
                 }
             }
             case DOUBLE -> // 1
@@ -3646,8 +3637,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.formatPictureTainted = false;
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
-            case INTEGER -> // 0
-                    this.value = (int) this.value - 1;
+            case INTEGER -> { // 0
+                long integerValue = ((Number) this.value).longValue();
+                if (integerValue == Long.MIN_VALUE) {
+                    this.type = RuntimeScalarType.DOUBLE;
+                    this.value = (double) integerValue - 1;
+                } else {
+                    setIntegerValue(integerValue - 1);
+                }
+            }
             case DOUBLE -> // 1
                     this.value = (double) this.value - 1;
             case STRING, BYTE_STRING -> { // 2
@@ -3753,8 +3751,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
-            case INTEGER -> // 0
-                    this.value = (int) this.value - 1;
+            case INTEGER -> { // 0
+                long integerValue = ((Number) this.value).longValue();
+                if (integerValue == Long.MIN_VALUE) {
+                    this.type = RuntimeScalarType.DOUBLE;
+                    this.value = (double) integerValue - 1;
+                } else {
+                    setIntegerValue(integerValue - 1);
+                }
+            }
             case DOUBLE -> // 1
                     this.value = (double) this.value - 1;
             case STRING, BYTE_STRING -> { // 2

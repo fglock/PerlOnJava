@@ -595,7 +595,7 @@ public class ConstantFoldingVisitor implements Visitor {
                         if (firstElement instanceof RuntimeScalar scalar) {
                             // Only inline simple types, not references
                             if (scalar.type == RuntimeScalarType.INTEGER) {
-                                return new NumberNode(String.valueOf(scalar.getInt()), tokenIndex);
+                                return new NumberNode(String.valueOf(scalar.getLong()), tokenIndex);
                             } else if (scalar.type == RuntimeScalarType.DOUBLE) {
                                 return new NumberNode(String.valueOf(scalar.getDouble()), tokenIndex);
                             } else if (scalar.type == RuntimeScalarType.STRING) {
@@ -696,7 +696,7 @@ public class ConstantFoldingVisitor implements Visitor {
                 case "int":
                     if (foldedArgs.size() == 1) {
                         RuntimeScalar arg = getConstantValue(foldedArgs.get(0));
-                        return new NumberNode(String.valueOf(arg.getInt()), tokenIndex);
+                        return new NumberNode(String.valueOf(arg.getLong()), tokenIndex);
                     }
                     break;
 
@@ -751,7 +751,7 @@ public class ConstantFoldingVisitor implements Visitor {
     private static Node createResultNode(RuntimeScalar result, int tokenIndex) {
         switch (result.type) {
             case RuntimeScalarType.INTEGER:
-                return new NumberNode(String.valueOf(result.getInt()), tokenIndex);
+                return new NumberNode(String.valueOf(result.getLong()), tokenIndex);
             case RuntimeScalarType.DOUBLE:
                 double d = result.getDouble();
                 String str;

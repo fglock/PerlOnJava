@@ -27,8 +27,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            int result = ((int) runtimeScalar.value) & ((int) arg2.value);
-            return new RuntimeScalar(Integer.toUnsignedLong(result)).propagateTaint(runtimeScalar, arg2);
+            long result = (runtimeScalar.getLong() & 0xFFFFFFFFL)
+                    & (arg2.getLong() & 0xFFFFFFFFL);
+            return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '&' operator on blessed objects
@@ -98,8 +99,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            int result = ((int) runtimeScalar.value) | ((int) arg2.value);
-            return new RuntimeScalar(Integer.toUnsignedLong(result)).propagateTaint(runtimeScalar, arg2);
+            long result = ((runtimeScalar.getLong() & 0xFFFFFFFFL)
+                    | (arg2.getLong() & 0xFFFFFFFFL)) & 0xFFFFFFFFL;
+            return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '|' operator on blessed objects
@@ -163,8 +165,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            int result = ((int) runtimeScalar.value) ^ ((int) arg2.value);
-            return new RuntimeScalar(Integer.toUnsignedLong(result)).propagateTaint(runtimeScalar, arg2);
+            long result = ((runtimeScalar.getLong() & 0xFFFFFFFFL)
+                    ^ (arg2.getLong() & 0xFFFFFFFFL)) & 0xFFFFFFFFL;
+            return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '^' operator on blessed objects
@@ -478,9 +481,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            int shift = (int) arg2.value;
+            int shift = arg2.getInt();
             if (shift >= 0 && shift < 32) {
-                long unsignedValue = ((int) runtimeScalar.value) & 0xFFFFFFFFL;
+                long unsignedValue = runtimeScalar.getLong() & 0xFFFFFFFFL;
                 long result = (unsignedValue << shift) & 0xFFFFFFFFL;
                 return new RuntimeScalar(result);
             }
@@ -568,9 +571,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            int shift = (int) arg2.value;
+            int shift = arg2.getInt();
             if (shift >= 0 && shift < 32) {
-                long unsignedValue = ((int) runtimeScalar.value) & 0xFFFFFFFFL;
+                long unsignedValue = runtimeScalar.getLong() & 0xFFFFFFFFL;
                 long result = unsignedValue >>> shift;
                 return new RuntimeScalar(result);
             }

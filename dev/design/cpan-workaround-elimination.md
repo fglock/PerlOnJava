@@ -284,15 +284,16 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Establish the separate Phase 8 64-bit-IV baseline with focused standard
-   Perl, JVM, and interpreter gates for integer boundaries, `pack`/`unpack`,
-   bitwise operators, and `sprintf` before changing scalar representation.
+1. Migrate numeric NOT and shift operators from the advertised 32-bit UV model
+   to 64-bit behavior, with warning-category masks and `use integer` covered
+   explicitly before changing `Config.pm`.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-3. Use that baseline to select the next source-first consumer whose failures
-   are caused by IV width rather than an explicit capability policy.
+3. Then enable signed/unsigned `q`/`Q` pack and unpack, long `sprintf`
+   modifiers, and finally the 64-bit `Config.pm` declarations before rerunning
+   the Data::CompactReadonly/Number::Phone source-first consumer gate.
 
 ### Completed phase deliverables
 
@@ -879,6 +880,21 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   23 files and 330 assertions (`Result: PASS`; one unstable upstream NNTP file
   skips). The full `make` gate passes; no libwww-perl preference or patch is
   required.
+- The Phase 8 64-bit-IV differential baseline is established (2026-08-08).
+  Standard Perl reports 8-byte IV/UV values and supports 64-bit numeric NOT,
+  shifts, `q`/`Q`, and long `sprintf`; PerlOnJava still deliberately advertises
+  4-byte IV/UV values and keeps those downstream gates disabled. The first
+  dependency-ordered migration step now stores signed Java `long` values as
+  exact integer scalars, carries them through JVM and interpreter literals,
+  constant folding, arithmetic, comparison, increment, and decrement, and
+  retains Java `Integer` storage for ordinary values so established fast paths
+  and unit-shard state remain stable. Regression
+  `zzzz_iv64_scalar_exactness.t` passes 10/10 under standard Perl, JVM, and
+  interpreter execution, covering 2^53, IV_MAX/IV_MIN, arithmetic,
+  comparison, and increment. The differential baseline now matches standard
+  Perl for all signed integer and arithmetic rows; bitwise width, `q`/`Q`,
+  long `sprintf`, unsigned IV_MAX+1 values, and `Config.pm` remain explicit
+  next steps. The full `make` gate passes.
 
 ### Open questions
 
