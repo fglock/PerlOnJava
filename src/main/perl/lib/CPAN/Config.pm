@@ -33,7 +33,6 @@ sub _bootstrap_prefs {
         'Moo.yml'                    => 'PerlOnJava/CpanDistroprefs/Moo.yml',
         'Params-Validate.yml'        => 'PerlOnJava/CpanDistroprefs/Params-Validate.yml',
         'AnyEvent.yml'               => 'PerlOnJava/CpanDistroprefs/AnyEvent.yml',
-        'SQL-Translator.yml'         => 'PerlOnJava/CpanDistroprefs/SQL-Translator.yml',
         'Net-Server.yml'             => 'PerlOnJava/CpanDistroprefs/Net-Server.yml',
         'Error-Pure.yml'             => 'PerlOnJava/CpanDistroprefs/Error-Pure.yml',
         'Error.yml'                  => 'PerlOnJava/CpanDistroprefs/Error.yml',
@@ -161,6 +160,7 @@ sub _bootstrap_prefs {
         XML-Filter-GenericChunk.yml
         HTTP-Response-Encoding.yml
         CPAN-FindDependencies.yml
+        SQL-Translator.yml
         Aliased.yml
         Carp-Assert.yml
         Class-Method-Modifiers.yml

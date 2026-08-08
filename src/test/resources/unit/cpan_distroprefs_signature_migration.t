@@ -33,6 +33,8 @@ my $retired_http_pref =
     File::Spec->catfile($prefs_dir, 'HTTP-Response-Encoding.yml');
 my $retired_finddeps_pref =
     File::Spec->catfile($prefs_dir, 'CPAN-FindDependencies.yml');
+my $retired_sqlt_pref =
+    File::Spec->catfile($prefs_dir, 'SQL-Translator.yml');
 open my $legacy, '>', $logger_pref or die "$logger_pref: $!";
 print {$legacy} <<'YAML';
 ---
@@ -79,6 +81,15 @@ match:
   distribution: "^DCANTRELL/CPAN-FindDependencies-"
 YAML
 close $retired_finddeps;
+open my $retired_sqlt, '>', $retired_sqlt_pref
+    or die "$retired_sqlt_pref: $!";
+print {$retired_sqlt} <<'YAML';
+---
+comment: PerlOnJava legacy SQL Translator skip
+match:
+  distribution: "/SQL-Translator-"
+YAML
+close $retired_sqlt;
 
 {
     local $ENV{PERLONJAVA_HOME} = $home;
@@ -101,6 +112,8 @@ ok(!-e $retired_http_pref,
     'retired PerlOnJava HTTP::Response::Encoding preference is removed');
 ok(!-e $retired_finddeps_pref,
     'retired PerlOnJava CPAN::FindDependencies preference is removed');
+ok(!-e $retired_sqlt_pref,
+    'retired PerlOnJava SQL::Translator preference is removed');
 
 open my $custom, '>', $retired_pref or die "$retired_pref: $!";
 print {$custom} <<'YAML';

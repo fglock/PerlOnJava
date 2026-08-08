@@ -116,10 +116,10 @@ PERLONJAVA_CPAN_PERL5LIB = \$(shell if test -f blib/.perlonjava-cpan-perl5lib; t
 PERLONJAVA_TEST_PERL5LIB = inc:\$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
 
 test :: pure_all
-	PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
+	JPERL_OPTS="\$\${PERLONJAVA_TEST_JPERL_OPTS:-\$\$JPERL_OPTS}" PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
 
 test_dynamic :: pure_all
-	PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
+	JPERL_OPTS="\$\${PERLONJAVA_TEST_JPERL_OPTS:-\$\$JPERL_OPTS}" PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
 
 test_static ::
 	\@echo "No static tests for PerlOnJava"
