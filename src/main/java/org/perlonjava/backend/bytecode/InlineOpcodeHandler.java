@@ -734,7 +734,8 @@ public class InlineOpcodeHandler {
         RuntimeScalar existing = hash.elements.get(key.toString());
         if (existing != null
                 && (hash.type == RuntimeHash.PLAIN_HASH
-                || hash.type == RuntimeHash.AUTOVIVIFY_HASH)) {
+                || hash.type == RuntimeHash.AUTOVIVIFY_HASH)
+                && RuntimeHash.isAggregateClearAssignment(existing, val)) {
             val.addToScalar(existing);
             registers[rd] = existing;
             return pc;

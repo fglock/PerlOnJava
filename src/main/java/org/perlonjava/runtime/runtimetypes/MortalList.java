@@ -235,7 +235,9 @@ public class MortalList {
                 }
                 base.releaseActiveOwner(scalar);
                 pending.add(base);
-            } else if (base.refCount == 0 && WeakRefRegistry.hasWeakRefsTo(base)) {
+            } else if (base.refCount == 0
+                    && base.clearedOwnedAggregateElement
+                    && WeakRefRegistry.hasWeakRefsTo(base)) {
                 // A nested-call reachability guard may have preserved this object
                 // at a selective count of zero. The scalar still represents a live
                 // Perl owner even though there is no count left to decrement. Drop
@@ -1080,9 +1082,12 @@ public class MortalList {
                 // subtest callbacks after the observed object has left scope.
                 // Real roots and explicit method-invocant holds still protect
                 // live objects. Classes with DESTROY keep the stricter path.
-                // Keep the count at zero rather than inventing an unmatched owner.
-                // Later real stores can increment from zero, and the final owning
-                // scalar's cleanup requests a reachability sweep above.
+                // Keep lifecycle objects at zero rather than inventing an
+                // unmatched owner. Ordinary objects retain the established
+                // protective count while nested calls still hold them.
+                if (!base.clearedOwnedAggregateElement) {
+                    base.refCount = 1;
+                }
             } else if (base.blessId != 0
                     && base.storedInPackageGlobal
                     && hasWeakRefs

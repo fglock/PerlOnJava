@@ -37,6 +37,12 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - CPAN: load large metadata caches lazily and avoid full-catalog scans during
   dependency installation and command summaries, so `jcpan -T PAGI::Server`
   installs the reference server and its dependency chain successfully.
+- Bugfix: scope interpreter warning state across JVM-compiled Perl calls and
+  honor explicit `local $^W = 0` suppression; this restores the full
+  14,726-assertion `op/pack.t` run and related regex/substitution baselines.
+- Bugfix: constrain async callback-aggregate lifecycle bookkeeping to active
+  async frames, preserve DESTROY-rescued graphs during targeted weak sweeps,
+  and assign collision-free async bytecode opcodes after integer operations.
 - Add compatibility modules for `Socket6`, `Email::Address::XS`, and the
   JSONP-used subset of `Want`; add a Java `Net::Gen` XS bridge for Net-ext.
 - Bugfix: subroutine return values are rvalue copies instead of aliases to

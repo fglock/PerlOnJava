@@ -1523,7 +1523,10 @@ public class ReachabilityWalker {
         // so iterate to a fixed point after this explicit release.
         if (releasedObjectNeedsCascade) {
             for (int pass = 0; pass < 8; pass++) {
-                int passCleared = sweepWeakRefs(false, false);
+                // This is still an automatic, statement-boundary sweep. Keep
+                // DESTROY-rescued objects pinned; the targeted release above
+                // must not drain unrelated (or newly rescued) object graphs.
+                int passCleared = sweepWeakRefs(true, false);
                 cleared += passCleared;
                 if (passCleared == 0) break;
             }

@@ -1,5 +1,8 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
 import java.util.ArrayList;
 import java.util.List;
 

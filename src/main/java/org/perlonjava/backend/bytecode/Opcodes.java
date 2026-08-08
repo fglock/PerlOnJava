@@ -2435,19 +2435,19 @@ public class Opcodes {
     public static final short AWAIT = 510;
 
     /** Register a cancellation-only closure. Format: PUSH_CANCEL codeReg argsReg. */
-    public static final short PUSH_CANCEL = 500;
+    public static final short PUSH_CANCEL = 511;
 
     /**
      * Apply lexical pragma state at a runtime statement boundary.
      * Format: APPLY_COMPILER_FLAGS warningBitsIdx hints hintHashId warningScopeId
      */
-    public static final short APPLY_COMPILER_FLAGS = 501;
+    public static final short APPLY_COMPILER_FLAGS = 512;
 
     /** getsockname SOCKET: Format: GETSOCKNAME rd argsReg ctx. */
-    public static final short GETSOCKNAME = 502;
+    public static final short GETSOCKNAME = 513;
 
     /** getpeername SOCKET: Format: GETPEERNAME rd argsReg ctx. */
-    public static final short GETPEERNAME = 503;
+    public static final short GETPEERNAME = 514;
 
     private Opcodes() {
     } // Utility class - no instantiation

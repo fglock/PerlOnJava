@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.backend.bytecode.FutureAsyncAwaitRuntime;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.*;
@@ -464,7 +465,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 RuntimeScalar existing = elements.get(key);
                 if (existing != null
                         && existing.type != READONLY_SCALAR
-                        && !(existing instanceof RuntimeScalarReadOnly)) {
+                        && !(existing instanceof RuntimeScalarReadOnly)
+                        && isAggregateClearAssignment(existing, value)) {
                     if (value == null) existing.undefine();
                     else value.addToScalar(existing);
                 } else {
@@ -476,7 +478,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 RuntimeScalar existing = elements.get(key);
                 if (existing != null
                         && existing.type != READONLY_SCALAR
-                        && !(existing instanceof RuntimeScalarReadOnly)) {
+                        && !(existing instanceof RuntimeScalarReadOnly)
+                        && isAggregateClearAssignment(existing, value)) {
                     if (value == null) existing.undefine();
                     else value.addToScalar(existing);
                 } else {
@@ -491,6 +494,26 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
+    }
+
+    /**
+     * Callback owners commonly release their captures with
+     * {@code $self->{callbacks} = []}. Preserve that element's scalar slot so
+     * the displaced aggregate is released through RuntimeScalar.set(), without
+     * changing the established copy-on-store behavior of ordinary hash writes.
+     */
+    public static boolean isAggregateClearAssignment(
+            RuntimeScalar existing, RuntimeScalar replacement) {
+        if (existing == null || replacement == null
+                || !FutureAsyncAwaitRuntime.isExecutingAsyncSub()) return false;
+        return (existing.value instanceof RuntimeArray oldArray
+                    && !oldArray.elements.isEmpty()
+                    && replacement.value instanceof RuntimeArray newArray
+                    && newArray.elements.isEmpty())
+                || (existing.value instanceof RuntimeHash oldHash
+                    && !oldHash.elements.isEmpty()
+                    && replacement.value instanceof RuntimeHash newHash
+                    && newHash.elements.isEmpty());
     }
 
     private RuntimeScalar independentSlot(String key, RuntimeScalar value) {

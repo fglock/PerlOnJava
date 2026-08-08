@@ -27,6 +27,17 @@ public class DynamicVariableManager {
         return variableStack.size();
     }
 
+    /** Return whether a package scalar currently has an active local() frame. */
+    public static boolean isGlobalScalarLocalized(String fullName) {
+        for (DynamicState state : variableStack) {
+            if (state instanceof GlobalRuntimeScalar scalar
+                    && scalar.localizes(fullName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Pushes a new dynamic variable onto the stack. This method saves the current state
      * of the variable before pushing it onto the stack, allowing it to be restored later.

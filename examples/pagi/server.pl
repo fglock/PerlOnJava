@@ -3,7 +3,6 @@ use strict;
 use warnings;
 
 use FindBin;
-use Future::IO::Impl::IOAsync;
 use IO::Async::Loop;
 use PAGI::Server;
 

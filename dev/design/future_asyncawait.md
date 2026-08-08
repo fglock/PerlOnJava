@@ -522,10 +522,10 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
      `FutureAsyncAwaitAnonymousInvocationTest.java`.
    - [Completed 2026-08-08] Repaired callback-cycle cleanup after async
      lifecycle methods replace callback arrays or hashes with empty
-     aggregates. Existing hash-element scalar slots are now updated in place,
-     so displaced callback containers release their closure captures on both
-     backends while immutable constant-derived slots retain replace-on-write
-     behavior.
+     aggregates. While an async frame is active, those lifecycle assignments
+     preserve the existing hash-element scalar slot so displaced callback
+     containers release their closure captures on both backends. Ordinary hash
+     writes retain their established copy-on-store behavior.
    - Zero-count objects that explicitly cleared a callback aggregate no longer
      acquire an ownerless synthetic refcount merely because cleanup occurs in
      a nested Perl call. Scope exit performs a fresh root check for this narrow
@@ -569,6 +569,23 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   and its dependency chain installed successfully with tests skipped as
   requested. The `examples/pagi/` smoke test passes on both frontends using
   the installed module.
+- [Completed 2026-08-08] Rebased onto current master and repaired the reported
+  Perl-core regression set. Async opcodes now occupy unique IDs after the new
+  integer opcodes, targeted weak sweeps keep DESTROY-rescued graphs pinned,
+  callback lifecycle bookkeeping is limited to active async frames, and an
+  explicit `local $^W = 0` again suppresses inherited interpreter warning
+  state inside JVM-compiled Perl helpers.
+- Full `make` passes. The nine reported Perl-core files now match their prior
+  behavioral baseline: `op/pack.t` runs all 14,726 assertions; C3, advanced
+  regex, and substitution counts are restored. The remaining aggregate-log
+  count changes come from a changed `perl5_t` corpus (`runlevel.t` 27→24,
+  `pat_psycho.t` 17→15, and `croak.t` 341→334), with unchanged or fewer
+  failures.
+- Removed the example server's unnecessary `Future::IO::Impl::IOAsync` import.
+  The minimal app does not use Future::IO, and the optional integration is not
+  a declared PAGI::Server prerequisite. The documented install command, both
+  smoke-test backends, and a live HTTP request now require only PAGI::Server's
+  declared dependency chain.
 
 ## References
 

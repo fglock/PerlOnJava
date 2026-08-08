@@ -18,6 +18,18 @@ public final class FutureAsyncAwaitRuntime {
     private FutureAsyncAwaitRuntime() {
     }
 
+    /** True while an async sub's interpreter-owned frame is executing. */
+    public static boolean isExecutingAsyncSub() {
+        for (int depth = 0; ; depth++) {
+            RuntimeCode active = RuntimeCode.getActiveCodeAt(depth);
+            if (active == null) return false;
+            if (active instanceof InterpretedCode interpreted
+                    && interpreted.futureAsyncAwaitSub) {
+                return true;
+            }
+        }
+    }
+
     static boolean isReady(RuntimeScalar future) {
         return call(future, "AWAIT_IS_READY", new RuntimeArray(), RuntimeContextType.SCALAR)
                 .scalar().getBoolean();

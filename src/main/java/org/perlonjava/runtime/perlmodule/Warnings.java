@@ -273,6 +273,12 @@ public class Warnings extends PerlModuleBase {
         return GlobalVariable.getGlobalVariable(varName).getBoolean();
     }
 
+    /** Whether $^W is currently under an explicit local() override. */
+    public static boolean isWarnFlagLocalized() {
+        String varName = "main::" + Character.toString('W' - 'A' + 1);
+        return DynamicVariableManager.isGlobalScalarLocalized(varName);
+    }
+
     /**
      * Checks if warnings should be emitted for a specific category at runtime.
      * This is used by warn methods (like getNumberWarn) to determine if warnings

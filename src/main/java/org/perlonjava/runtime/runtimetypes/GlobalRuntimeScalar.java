@@ -17,6 +17,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         this.fullName = fullName;
     }
 
+    boolean localizes(String variableName) {
+        return fullName.equals(variableName);
+    }
+
     public static RuntimeScalar makeLocal(String fullName) {
         RuntimeScalar original = GlobalVariable.getGlobalVariable(fullName);
         if (original instanceof ScalarSpecialVariable sv && sv.variableId == ScalarSpecialVariable.Id.INPUT_LINE_NUMBER) {

@@ -4435,6 +4435,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.pushCurrent(warningBits);
                 }
+                // Interpreter statement boundaries expose their lexical warning
+                // bits through runtimeWarningBits. A call into JVM-compiled Perl
+                // must replace that value with the callee's definition-time bits
+                // (or null when it has none), otherwise caller warnings leak into
+                // helpers such as test.pl::skip despite `local $^W = 0`.
+                String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+                WarningBitsRegistry.setRuntimeWarningBits(warningBits);
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits();
                 // Save caller's $^H so caller()[8] can retrieve them
@@ -4478,6 +4485,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
+                    WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
                     if (warningBits != null) {
                         WarningBitsRegistry.popCurrent();
                     }

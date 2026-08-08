@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.parser.NumberParser;
+import org.perlonjava.backend.bytecode.FutureAsyncAwaitRuntime;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
@@ -1428,6 +1429,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.ownsScalarReferenceContents || scalarReferenceContentsNeedRetain(value);
         if (!scalarRefContentTrackingNeeded
                 && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned == 0
+                && !WeakRefRegistry.isweak(this)
                 && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
             // Both old and new are non-GLOB references. Check if referents are untracked.
             boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
@@ -1779,7 +1781,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private void noteClearedAggregateElement(RuntimeScalar replacement) {
-        if (!(containerOwner instanceof RuntimeHash owner)
+        if (!FutureAsyncAwaitRuntime.isExecutingAsyncSub()
+                || !(containerOwner instanceof RuntimeHash owner)
                 || !owner.elements.containsValue(this)
                 || replacement == null) {
             return;
