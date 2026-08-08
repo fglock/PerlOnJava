@@ -284,13 +284,14 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Continue Phase 8 with the remaining SQL::Translator producer/list-context
-   failures
-   (`t/44-xml-to-db2-array.t`, the two `t/51-xml-to-oracle*.t` files, and
-   `t/74-filename-arrayref.t`). Determine whether their leading undef values
-   share one list-return boundary before changing producer-specific code.
-2. Then reduce the four focused diff/round-trip assertion files and rerun the
-   complete unchanged 75-file matrix after each shared correction.
+1. Rebuild SQL::Translator's complete unchanged 75-file matrix from the
+   distribution root. The first runner changed into `t/`, which breaks the two
+   upstream diff-script files' relative-path probe, and its XML::Writer source
+   path omitted `blib/lib`. Keep a bounded per-process heap for tests that spawn
+   child jperls so concurrent workspaces cannot trigger host memory pressure.
+2. Complete the corrected `t/60roundtrip.t` run and isolate the two
+   `t/70sqlt-diff_script*.t` open3 subprocess paths if they remain non-passing.
+   Do not classify harness-path or local resource failures as runtime defects.
 3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -810,6 +811,20 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   and a 2 GB heap bound for local machine isolation, SQL::Translator's
   unchanged `t/08postgres-to-mysql.t` passes 1/1 and
   `t/14postgres-parser.t` passes 211/211.
+- The earlier SQL producer/list-context cluster was downstream of the corrected
+  XML attribute semantics, not a shared list-return defect. Unchanged
+  `t/44-xml-to-db2-array.t` passes 1/1, both `t/51-xml-to-oracle*.t` files pass
+  2/2, and `t/74-filename-arrayref.t` passes 2/2. Correcting the temporary
+  XML::Writer source path from the distribution root to `blib/lib` also makes
+  `t/60roundtrip.t` pass its XML, YAML, and SQLite sections through assertion
+  25; completion is still resource-blocked during its MySQL section.
+- JDBC-backed DBI handles now recognize SQL containing only line/block comments
+  and semicolons before preparing it, returning DBI's true zero (`0E0`) instead
+  of passing a finalized no-op statement to SQLite. Regression
+  `dbi_do_comment.t` passes 3/3 under standard Perl, JVM, and interpreter.
+  SQL::Translator's unchanged `sqlite-rename-field.t` advances from 15/16 to
+  16/16 because its generated schema-conversion comment is now a successful
+  no-op.
 
 ### Open questions
 

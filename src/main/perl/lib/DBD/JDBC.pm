@@ -82,6 +82,7 @@ use strict;
 # we install via glob aliasing to an explicitly-named helper.
 sub _do_impl {
     my ($dbh, $statement, $attr, @params) = @_;
+    return "0E0" if DBI::_is_comment_only_sql($statement);
     DBI::_cleanup_before_ddl($statement);
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or do { $sth->finish; return undef };
