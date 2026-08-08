@@ -563,6 +563,12 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
 - Final ecosystem reruns pass: Future 0.52 (`56` files, `784` tests) and
   IO::Async 0.805 (`64` files, `665` tests), with only documented unsupported
   fork, thread, listener, and socketpair cases skipped.
+- The documented `./jcpan -T PAGI::Server` installation now completes from a
+  normal large CPAN metadata cache. CPAN lazily creates cached index objects
+  and limits install-state scans to the current session; PAGI::Server 0.002006
+  and its dependency chain installed successfully with tests skipped as
+  requested. The `examples/pagi/` smoke test passes on both frontends using
+  the installed module.
 
 ## References
 

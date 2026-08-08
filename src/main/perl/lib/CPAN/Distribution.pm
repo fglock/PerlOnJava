@@ -267,15 +267,27 @@ sub containsmods {
     my $self = shift;
     return sort keys %{$self->{CONTAINSMODS}} if exists $self->{CONTAINSMODS};
     my $dist_id = $self->{ID};
-    for my $mod ($CPAN::META->all_objects("CPAN::Module")) {
-        my $mod_file = $mod->cpan_file or next;
-        my $mod_id = $mod->{ID} or next;
-        # warn "mod_file[$mod_file] dist_id[$dist_id] mod_id[$mod_id]";
-        # sleep 1;
+    CPAN::Index->reload;
+
+    # The metadata cache already maps module IDs to CPAN_FILE.  Reading that
+    # map directly avoids creating every CPAN::Module object just to find the
+    # handful supplied by this distribution (currently hundreds of thousands
+    # of objects for a normal CPAN index).
+    my $modules = $CPAN::META->{readonly}{'CPAN::Module'} || {};
+    while (my($mod_id,$ro) = each %$modules) {
         if ($CPAN::Signal) {
             delete $self->{CONTAINSMODS};
             return;
         }
+        $self->{CONTAINSMODS}{$mod_id} = undef
+            if $ro->{CPAN_FILE} && $ro->{CPAN_FILE} eq $dist_id;
+    }
+
+    # Include session-only module objects which are not present in the cache.
+    my $session = $CPAN::META->{readwrite}{'CPAN::Module'} || {};
+    while (my($mod_id,$mod) = each %$session) {
+        next if exists $modules->{$mod_id};
+        my $mod_file = $mod->cpan_file or next;
         $self->{CONTAINSMODS}{$mod_id} = undef if $mod_file eq $dist_id;
     }
     sort keys %{$self->{CONTAINSMODS}||={}};

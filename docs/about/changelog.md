@@ -34,6 +34,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   reference stack with HTTP, WebSocket, and Server-Sent Events; add a verified
   runnable HTTP example under `examples/pagi/`. Process-forking server modes
   remain unsupported.
+- CPAN: load large metadata caches lazily and avoid full-catalog scans during
+  dependency installation and command summaries, so `jcpan -T PAGI::Server`
+  installs the reference server and its dependency chain successfully.
 - Add compatibility modules for `Socket6`, `Email::Address::XS`, and the
   JSONP-used subset of `Want`; add a Java `Net::Gen` XS bridge for Net-ext.
 - Bugfix: subroutine return values are rvalue copies instead of aliases to
