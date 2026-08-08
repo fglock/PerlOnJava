@@ -489,7 +489,7 @@ public class Variable {
                         if (parser.tokenIndex < parser.tokens.size()) {
                             text = parser.tokens.get(parser.tokenIndex).text;
                             switch (text) {
-                                case "[", "{" -> {
+                                case "[", "{", "@*", "$*", "%*", "&*", "$#", "@", "%" -> {
                                     // Dereference followed by access: $var->[0] or $var->{key}
                                     parser.tokenIndex = previousIndex;  // Re-parse "->"
                                     operand = ParseInfix.parseInfixOperation(parser, operand, 0);
@@ -619,7 +619,7 @@ public class Variable {
                         if (parser.tokenIndex < parser.tokens.size()) {
                             text = parser.tokens.get(parser.tokenIndex).text;
                             switch (text) {
-                                case "[", "{" -> {
+                                case "[", "{", "@*", "$*", "%*", "&*", "$#", "@", "%" -> {
                                     // Dereference followed by access: $var->[0] or $var->{key}
                                     parser.tokenIndex = previousIndex;  // Re-parse "->"
                                     Node result = ParseInfix.parseInfixOperation(parser, operand, 0);

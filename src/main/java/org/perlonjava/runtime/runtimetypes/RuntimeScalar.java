@@ -10,6 +10,7 @@ import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.math.BigInteger;
+import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -31,6 +32,32 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * scalar.
  */
 public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference, DynamicState {
+
+    /** Live substr lvalues that must be refreshed when this scalar is replaced. */
+    private transient List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
+
+    void registerSubstrLvalue(RuntimeSubstrLvalue observer) {
+        if (substrLvalueObservers == null) {
+            substrLvalueObservers = new ArrayList<>();
+        }
+        substrLvalueObservers.add(new WeakReference<>(observer));
+    }
+
+    public boolean hasLiveSubstrLvalueObservers() {
+        if (substrLvalueObservers == null) return false;
+        substrLvalueObservers.removeIf(reference -> reference.get() == null);
+        return !substrLvalueObservers.isEmpty();
+    }
+
+    private void refreshSubstrLvalues() {
+        if (substrLvalueObservers == null) return;
+        substrLvalueObservers.removeIf(reference -> {
+            RuntimeSubstrLvalue observer = reference.get();
+            if (observer == null) return true;
+            observer.refreshFromParent();
+            return false;
+        });
+    }
 
     // Static stack to store saved "local" states of RuntimeScalar instances
     private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
@@ -1314,14 +1341,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.numericContextSeen = value.numericContextSeen;
                 this.firstClassRegexScalar = value.firstClassRegexScalar;
             }
+            refreshSubstrLvalues();
             return this;
         }
         if (this != value) {
             RuntimeScalar r = setLarge(value);
             RuntimePosLvalue.invalidatePos(this);
+            refreshSubstrLvalues();
             return r;
         }
-        return setLarge(value);
+        RuntimeScalar result = setLarge(value);
+        refreshSubstrLvalues();
+        return result;
     }
 
     /**
@@ -1754,12 +1785,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // observe that the user's schema lexical is gone. Do not drain all
         // rescued objects here; DBIC can have other live schemas pending.
         if (shouldClearRescuedAfterUndefAssignment && !ModuleInitGuard.inModuleInit()) {
+            boolean externallyReachable =
+                    ReachabilityWalker.isReachableFromExternalRootExcludingRescued(oldBase);
             if (System.getenv("JPERL_PHASE_D_DBG") != null) {
                 System.err.println("DBG Phase D set-undef rescued cleanup for " +
                         (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
-                        " refCount=" + (oldBase != null ? oldBase.refCount : -1));
+                        " refCount=" + (oldBase != null ? oldBase.refCount : -1) +
+                        " externallyReachable=" + externallyReachable);
             }
-            if (ReachabilityWalker.isReachableFromExternalRootExcludingRescued(oldBase)) {
+            if (externallyReachable) {
                 DestroyDispatch.clearRescuedWeakRefsToSelfOnly(oldBase);
             } else {
                 DestroyDispatch.clearRescuedWeakRefsTo(oldBase);

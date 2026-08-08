@@ -945,6 +945,13 @@ public class RegexPreprocessorHelper {
                             sb.setLength(sb.length() - 1);
                             sb.append(Character.toChars(c2));
                             lastChar = c2;
+                        } else if (flag_xx && (c2 == ' ' || c2 == '\t')) {
+                            // Java COMMENTS mode drops escaped horizontal
+                            // whitespace in character classes.  Spell it as hex
+                            // so a Perl /xx literal survives Java compilation.
+                            sb.setLength(sb.length() - 1);
+                            sb.append(c2 == ' ' ? "\\x20" : "\\x09");
+                            lastChar = c2;
                         } else {
                             // Other escape sequences
                             sb.append(Character.toChars(c2));
@@ -961,7 +968,12 @@ public class RegexPreprocessorHelper {
                     break;
                 case ' ':
                     if (flag_xx) {
-                        sb.append(Character.toChars(c));
+                        // Perl /xx ignores unescaped horizontal whitespace even
+                        // inside a bracketed class.  Do not let it affect whether
+                        // a following ^ is the class negator or whether - is an
+                        // endpoint.  Java COMMENTS mode also ignores it, but only
+                        // after our class parser has already made those decisions.
+                        break;
                     } else {
                         // make this space a "token", even inside /x
                         sb.append("\\ ");
@@ -973,7 +985,7 @@ public class RegexPreprocessorHelper {
                     break;
                 case '\t':
                     if (flag_xx) {
-                        sb.append(Character.toChars(c));
+                        break;
                     } else {
                         sb.append("\\t");
                     }

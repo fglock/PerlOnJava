@@ -250,6 +250,7 @@ public abstract class StringSegmentParser {
 
         Node operand;
         var isArray = "@".equals(sigil);
+        var isArrayPostderef = false;
 
         if (TokenUtils.peek(parser).text.equals("{")) {
             // Handle block-like interpolation: ${...} or @{...}
@@ -338,6 +339,15 @@ public abstract class StringSegmentParser {
             // Parse simple variables using shared logic, but keep the exact same flow
             operand = parseSimpleVariableInterpolation(sigil);
 
+            // Postfix array dereferences interpolate like ordinary arrays and
+            // therefore use $" between elements: "$ref->@*" and
+            // "$ref->@[...]" / "$ref->@{...}".
+            if ("$".equals(sigil) && parser.tokenIndex + 1 < parser.tokens.size()
+                    && "->".equals(parser.tokens.get(parser.tokenIndex).text)) {
+                String postderef = parser.tokens.get(parser.tokenIndex + 1).text;
+                isArrayPostderef = postderef.equals("@") || postderef.equals("@*");
+            }
+
             // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
             // Wrap in try-catch to handle malformed access gracefully
             try {
@@ -354,7 +364,7 @@ public abstract class StringSegmentParser {
         }
 
         // For arrays, join elements with the list separator ($")
-        if (isArray) {
+        if (isArray || isArrayPostderef) {
             operand = new BinaryOperatorNode("join",
                     new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex),
                     operand,

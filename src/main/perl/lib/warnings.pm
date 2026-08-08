@@ -72,6 +72,9 @@ our %Offsets = (
     'nonchar'				=> 102,
     'surrogate'				=> 104,
     'experimental'			=> 106,
+    # Compatibility alias used by code targeting Perl 5.20-5.24. Postfix
+    # dereferencing is stable now, but old sources still disable its warning.
+    'experimental::postderef'		=> 106,
     'experimental::regex_sets'		=> 108,
     'syscalls'				=> 110,
     'experimental::re_strict'		=> 112,
@@ -126,7 +129,7 @@ my %CategoryChildren = (
         experimental::args_array_with_signatures experimental::builtin
         experimental::defer experimental::extra_paired_delimiters
         experimental::class experimental::keyword_all experimental::keyword_any
-        experimental::bitwise
+        experimental::bitwise experimental::postderef
     )],
     'io'     => [qw(closed exec layer newline pipe unopened syscalls)],
     'severe' => [qw(debugging inplace internal malloc)],

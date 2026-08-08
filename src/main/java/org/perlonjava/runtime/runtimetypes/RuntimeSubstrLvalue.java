@@ -11,12 +11,12 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
     /**
      * The starting position of the substring within the parent string.
      */
-    private final int offset;
+    private int offset;
 
     /**
      * The length of the substring.
      */
-    private final int length;
+    private int length;
 
     /**
      * Flag indicating the substr offset was out of bounds.
@@ -43,6 +43,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
                 ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
         this.value = str;
         this.tainted = parent.isTainted();
+        parent.registerSubstrLvalue(this);
     }
 
     /**
@@ -77,11 +78,10 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         }
 
         // Update the local type and value
+        String parentValue = lvalue.toString();
+        String newValue = value.toString();
         this.type = value.type;
         this.value = value.value;
-
-        String parentValue = lvalue.toString();
-        String newValue = this.toString();
         int strLength = PerlUtfString.codePointCountPerl(parentValue);
 
         // Calculate the actual offset, handling negative offsets
@@ -139,6 +139,57 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         }
         lvalue.set(updated);
 
+        // The lvalue's extent follows the replacement.  A later assignment
+        // through the same alias replaces the text inserted by this one, not
+        // the original number of characters.
+        int replacementLength = PerlUtfString.codePointCountPerl(newValue);
+        if (this.offset < 0) {
+            // Negative-offset aliases stay anchored to the same suffix of the
+            // parent.  If the replacement changes width, shift the negative
+            // start by the opposite delta so that suffix length remains fixed.
+            this.offset += this.length - replacementLength;
+        }
+        this.length = replacementLength;
+        this.type = value.type;
+        this.value = newValue;
+
         return this;
+    }
+
+    /**
+     * Reads through the live alias instead of returning the substring cached
+     * when substr() was first called.
+     */
+    @Override
+    public String toString() {
+        if (outOfBounds || lvalue == null) {
+            return super.toString();
+        }
+
+        return currentSubstring();
+    }
+
+    void refreshFromParent() {
+        if (outOfBounds || lvalue == null) return;
+        this.type = lvalue.type == RuntimeScalarType.BYTE_STRING
+                ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
+        this.value = currentSubstring();
+    }
+
+    private String currentSubstring() {
+
+        String parentValue = lvalue.toString();
+        int strLength = PerlUtfString.codePointCountPerl(parentValue);
+        int actualOffset = offset < 0 ? strLength + offset : offset;
+        actualOffset = Math.max(0, Math.min(actualOffset, strLength));
+
+        int actualLength = length < 0
+                ? strLength + length - actualOffset
+                : length;
+        actualLength = Math.max(0, Math.min(actualLength, strLength - actualOffset));
+
+        int startIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, 0, actualOffset);
+        int endIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, startIndex, actualLength);
+        return parentValue.substring(startIndex, endIndex);
     }
 }

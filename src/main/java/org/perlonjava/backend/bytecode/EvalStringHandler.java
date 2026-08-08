@@ -8,6 +8,7 @@ import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
+import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -206,6 +207,8 @@ public class EvalStringHandler {
                                              int siteFeatureFlags,
                                              boolean isEvalbytes) {
         List<EvalSeedAlias> seedAliases = new ArrayList<>();
+        ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+        ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
@@ -492,6 +495,10 @@ public class EvalStringHandler {
             return new RuntimeList(new RuntimeScalar());
         } finally {
             deactivateEvalSeedAliases(seedAliases);
+            if (compileTimeMutationScope != savedCurrentScope) {
+                savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+            }
+            SpecialBlockParser.setCurrentScope(savedCurrentScope);
         }
     }
 
@@ -537,6 +544,8 @@ public class EvalStringHandler {
                                            RuntimeBase[] capturedVars,
                                            String sourceName,
                                            int sourceLine) {
+        ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+        ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
         try {
             // Clear $@ at start
             GlobalVariable.setGlobalVariable("main::@", "");
@@ -626,6 +635,11 @@ public class EvalStringHandler {
         } catch (Exception e) {
             WarnDie.catchEval(e);
             return RuntimeScalarCache.scalarUndef;
+        } finally {
+            if (compileTimeMutationScope != savedCurrentScope) {
+                savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+            }
+            SpecialBlockParser.setCurrentScope(savedCurrentScope);
         }
     }
 

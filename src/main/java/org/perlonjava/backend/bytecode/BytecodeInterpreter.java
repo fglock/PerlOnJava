@@ -65,6 +65,7 @@ public class BytecodeInterpreter {
                 || scalar.captureCount > 0
                 || scalar.captureRefCountOwned > 0
                 || scalar.referencedByScalarReference
+                || scalar.hasLiveSubstrLvalueObservers()
                 || scalar.type == RuntimeScalarType.TIED_SCALAR
                 || scalar.type == RuntimeScalarType.READONLY_SCALAR;
     }

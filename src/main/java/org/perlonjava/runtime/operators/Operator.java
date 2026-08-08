@@ -171,6 +171,8 @@ public class Operator {
                         // System.out.println("matcher lastend " + lastEnd + " start " + matchStart + " end " + matchEnd + " length " + inputStr.length());
                         if (lastEnd == 0 && matchEnd == 0) {
                             // A zero-width match at the beginning of EXPR never produces an empty field
+                            // and does not consume one of split's LIMIT slots.
+                            continue;
                         } else if (matchStart == matchEnd && matchStart == lastEnd) {
                             // Skip consecutive zero-width matches at the same position
                             // This handles patterns like / */ that can match zero spaces
@@ -362,6 +364,8 @@ public class Operator {
         // If length is not provided, use the rest of the string
         boolean hasExplicitLength = size > 2;
         int length = hasExplicitLength ? ((RuntimeScalar) args[2]).getInt() : strLength - offset;
+        int lvalueOffset = offset;
+        int lvalueLength = length;
         String replacement = (size > 3) ? args[3].toString() : null;
         RuntimeScalar replacementScalar = (size > 3) ? (RuntimeScalar) args[3] : null;
 
@@ -455,7 +459,11 @@ public class Operator {
         // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
         // This allows for in-place modification of the original string if needed
         // Pass the adjusted offset and length, not the originals
-        var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], result, offset, length);
+        // Keep the caller's signed offset/length in the lvalue proxy.  Perl's
+        // alias remains live: a negative offset is re-evaluated if the parent
+        // scalar is replaced while the alias is still in scope.
+        var lvalue = new RuntimeSubstrLvalue(
+                (RuntimeScalar) args[0], result, lvalueOffset, lvalueLength);
 
         if (replacement != null) {
             // When replacement is provided, save the extracted substring before modifying
