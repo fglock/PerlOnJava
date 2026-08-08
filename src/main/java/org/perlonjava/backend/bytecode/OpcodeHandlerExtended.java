@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.perlmodule.Attributes;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -70,6 +71,7 @@ public class OpcodeHandlerExtended {
         int flagsReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int implicitU = bytecode[pc++];
+        int warningState = bytecode[pc++];
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
         RuntimeScalar replacement = (RuntimeScalar) registers[replacementReg];
@@ -79,6 +81,7 @@ public class OpcodeHandlerExtended {
         }
         RuntimeArray callerArgs = (registers[argsReg] instanceof RuntimeArray) ? (RuntimeArray) registers[argsReg] : new RuntimeArray();
 
+        RegexQuoteMeta.setCallSiteWarningState(warningState);
         registers[rd] = RuntimeRegex.getReplacementRegex(pattern, replacement, flags, callerArgs);
         return pc;
     }

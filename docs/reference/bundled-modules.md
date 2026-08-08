@@ -18,6 +18,7 @@ Recent CPAN compatibility additions include:
 | `PadWalker` | Perl facade over Java runtime metadata | `peek_sub`, `closed_over`, and `set_closed_over`; caller-pad APIs remain unsupported |
 | `Devel::Caller` | Perl facade over Java call frames | `caller_cv` and caller argument compatibility used by lexical tooling |
 | `Devel::LexAlias` | Perl facade over Java lexical cells | Rebinds local and captured scalar, array, and hash lexicals |
+| `Encode::Locale` | Pure Perl facade over bundled locale support | Provides LWP and XML::Parser with locale encoding aliases; includes `Encode::Alias` |
 
 ---
 
@@ -289,6 +290,8 @@ These are loaded automatically or via `use`:
 | `MIME::Base64` | Java | |
 | `MIME::QuotedPrint` | Java | |
 | `Encode` | Java + Perl | |
+| `Encode::Alias` | Perl | Dynamic aliases resolved by the Java-backed `Encode` implementation |
+| `Encode::Locale` | Perl | Reuses bundled `ExtUtils::MakeMaker::Locale` locale detection |
 | `Unicode::Normalize` | Java | |
 | `Unicode::UCD` | Java | |
 

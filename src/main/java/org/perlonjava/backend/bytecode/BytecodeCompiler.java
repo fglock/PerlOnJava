@@ -2337,9 +2337,9 @@ public class BytecodeCompiler implements Visitor {
 
         // Emit the appropriate compound assignment opcode
         switch (op) {
-            case "+=" -> emit(Opcodes.ADD_ASSIGN);
-            case "-=" -> emit(Opcodes.SUBTRACT_ASSIGN);
-            case "*=" -> emit(Opcodes.MULTIPLY_ASSIGN);
+            case "+=" -> emit(useInteger ? Opcodes.INTEGER_ADD_ASSIGN : Opcodes.ADD_ASSIGN);
+            case "-=" -> emit(useInteger ? Opcodes.INTEGER_SUBTRACT_ASSIGN : Opcodes.SUBTRACT_ASSIGN);
+            case "*=" -> emit(useInteger ? Opcodes.INTEGER_MULTIPLY_ASSIGN : Opcodes.MULTIPLY_ASSIGN);
             case "/=" -> emit(useInteger ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
             case "%=" -> emit(useInteger ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
             case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);

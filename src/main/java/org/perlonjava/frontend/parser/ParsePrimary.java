@@ -4,6 +4,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
@@ -387,7 +388,12 @@ public class ParsePrimary {
                     }
                 }
                 operand = parser.parseExpression(parser.getPrecedence(token.text) + 1);
-                return new OperatorNode(operator, operand, parser.tokenIndex);
+                OperatorNode bitwiseNot = new OperatorNode(operator, operand, parser.tokenIndex);
+                if (operator.equals("~")) {
+                    bitwiseNot.setAnnotation("useInteger",
+                            parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER));
+                }
+                return bitwiseNot;
 
             case "~~":
                 // Handle prefix ~~ as double bitwise complement: ~(~EXPR)
@@ -466,7 +472,10 @@ public class ParsePrimary {
                     // Special case: -bareword becomes "-bareword" (string)
                     return new StringNode("-" + identifierNode.name, parser.tokenIndex);
                 }
-                return new OperatorNode("unaryMinus", operand, parser.tokenIndex);
+                OperatorNode unaryMinus = new OperatorNode("unaryMinus", operand, parser.tokenIndex);
+                unaryMinus.setAnnotation("useInteger",
+                        parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER));
+                return unaryMinus;
 
             case "*=":
                 // Special variable glob "="

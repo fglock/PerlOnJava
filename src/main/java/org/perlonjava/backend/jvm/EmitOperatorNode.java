@@ -50,10 +50,21 @@ public class EmitOperatorNode {
             case "eval", "evalbytes" -> EmitEval.handleEvalOperator(emitterVisitor, node);
 
             // Unary operators
-            case "unaryMinus" -> EmitOperator.handleUnaryDefaultCase(node, "unaryMinus", emitterVisitor);
+            case "unaryMinus" -> {
+                Object integerAnnotation = node.getAnnotation("useInteger");
+                boolean useInteger = integerAnnotation instanceof Boolean value
+                        ? value
+                        : emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+                EmitOperator.handleUnaryDefaultCase(node,
+                        useInteger ? "integerUnaryMinus" : "unaryMinus", emitterVisitor);
+            }
             case "~" -> {
                 // Use integer bitwise NOT when "use integer" is in effect
-                if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) {
+                Object integerAnnotation = node.getAnnotation("useInteger");
+                boolean useInteger = integerAnnotation instanceof Boolean value
+                        ? value
+                        : emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER);
+                if (useInteger) {
                     EmitOperator.handleUnaryDefaultCase(node, "integerBitwiseNot", emitterVisitor);
                 } else {
                     // Use the operator key "~" for OperatorHandler lookup

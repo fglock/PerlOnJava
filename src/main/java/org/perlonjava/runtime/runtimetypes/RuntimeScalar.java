@@ -80,6 +80,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public String numericLiteralText;
 
+    /** True for the non-reference scalar produced by dereferencing a qr// value. */
+    public boolean firstClassRegexScalar;
+
     /**
      * True once a string scalar has been used in numeric context. Perl keeps a
      * numeric slot alongside the string slot on the same SV; this lightweight
@@ -361,6 +364,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = scalar.tainted;
         this.numericLiteralText = scalar.numericLiteralText;
         this.numericContextSeen = scalar.numericContextSeen;
+        this.firstClassRegexScalar = scalar.firstClassRegexScalar;
         if (this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
             glob.ioHolderCount++;
@@ -440,6 +444,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tainted = scalar.tainted;
                 this.numericLiteralText = scalar.numericLiteralText;
                 this.numericContextSeen = scalar.numericContextSeen;
+                this.firstClassRegexScalar = scalar.firstClassRegexScalar;
             }
             case Long longValue -> initializeWithLong(longValue);
             default -> {
@@ -547,6 +552,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void initializeWithLong(Long value) {
         this.tainted = false;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             // Java double can only exactly represent integers up to 2^53.
             // Beyond that, storing as DOUBLE loses precision and breaks exact pack/unpack
@@ -1296,6 +1302,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
                 this.numericContextSeen = value.numericContextSeen;
+                this.firstClassRegexScalar = value.firstClassRegexScalar;
                 RuntimePosLvalue.invalidatePos(this);
             } else {
                 this.type = value.type;
@@ -1304,6 +1311,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.tainted = value.tainted;
                 this.numericLiteralText = value.numericLiteralText;
                 this.numericContextSeen = value.numericContextSeen;
+                this.firstClassRegexScalar = value.firstClassRegexScalar;
             }
             return this;
         }
@@ -1357,6 +1365,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.tainted = false;
             this.numericLiteralText = null;
             this.numericContextSeen = false;
+            this.firstClassRegexScalar = false;
             return this;
         }
         // Unwrap source special types via switch dispatcher
@@ -1397,6 +1406,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
         this.numericContextSeen = value.numericContextSeen;
+        this.firstClassRegexScalar = value.firstClassRegexScalar;
         return this;
     }
 
@@ -1558,6 +1568,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
         this.numericContextSeen = value.numericContextSeen;
+        this.firstClassRegexScalar = value.firstClassRegexScalar;
         if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
             code.hadStashRef = true;
         }
@@ -1711,7 +1722,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null
                 && oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED
                 && value.type == UNDEF) {
-            MortalList.requestImmediateWeakSweep();
+            MortalList.requestTargetedWeakSweep(oldBase);
+        }
+        if (undefAssignmentOfDestroyableRef && !ModuleInitGuard.inModuleInit()) {
+            MortalList.requestTargetedWeakSweep(oldBase);
         }
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
@@ -1780,6 +1794,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         return this;
     }
 
@@ -1794,6 +1809,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         return this;
     }
 
@@ -1833,6 +1849,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         return this;
     }
 
@@ -1848,6 +1865,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         return this;
     }
 
@@ -1868,6 +1886,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         return this;
     }
 
@@ -2374,15 +2393,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.REFERENCE;
                 this.numericLiteralText = null;
                 this.numericContextSeen = false;
+                this.firstClassRegexScalar = false;
                 yield newScalar;
             }
             case REFERENCE -> (RuntimeScalar) value;
             case REGEX -> {
-                // Dereferencing a Regexp (qr//) returns its stringified form
-                // In Perl, ${qr/foo/} returns "(?^:foo)"
+                // Dereferencing qr// produces a non-reference scalar whose
+                // string value is the compiled pattern, but whose referent type
+                // remains REGEXP (reftype(\${qr/foo/}) eq "REGEXP").
                 RuntimeScalar result = new RuntimeScalar();
                 result.type = RuntimeScalarType.STRING;
                 result.value = this.value.toString();
+                result.firstClassRegexScalar = true;
                 yield result;
             }
             case GLOB -> {
@@ -2829,12 +2851,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !isRegisteredLexical
                 && captureCount == 0
                 && !isPackageGlobalRoot
-                && containerOwner == null) {
+                && containerOwner == null
+                && !RuntimeCode.isInstalledPadConstant(this)) {
             // An unbound scalar value returned from a subroutine is an
             // ephemeral Perl SV. Birth-track it so weaken(\(sub_return()))
             // consumes its sole owner immediately. Bound lexicals, closure
-            // captures, globals, aggregate elements, and active @_ arguments
-            // retain the established untracked/WEAKLY_TRACKED behavior.
+            // captures, globals, aggregate elements, active @_ arguments, and
+            // constants owned by an installed subroutine's optree retain the
+            // established untracked/WEAKLY_TRACKED behavior.
             this.refCount = 0;
             this.ephemeralScalarReferenceReferent = true;
         }
@@ -2874,6 +2898,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.tainted = false;
             this.numericLiteralText = null;
             this.numericContextSeen = false;
+            this.firstClassRegexScalar = false;
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
             if (releasedCode && WeakRefRegistry.weakRefsExist && !ModuleInitGuard.inModuleInit()) {
@@ -2902,6 +2927,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
         boolean undefOnBlessedWithDestroy = false;
@@ -2962,6 +2988,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        // An explicitly released blessed wrapper may have no DESTROY method
+        // of its own while still owning a tied container whose handler does.
+        // If the wrapper itself is being observed weakly, let the reachability
+        // walker decide immediately whether this was its last strong owner.
+        // Hash::AutoHash's wraptie constructor has exactly this shape.
+        if (!undefOnBlessedWithDestroy
+                && oldBase != null
+                && oldBase.blessId != 0
+                && WeakRefRegistry.hasWeakRefsTo(oldBase)) {
+            undefOnBlessedWithDestroy = true;
+        }
+
         // Flush deferred mortal decrements. Without this, pending DECs from
         // scope exit of locals (e.g., `my ($a,$b) = @_` inside a sub) would
         // not be processed until the next setLarge/apply, making the refCount
@@ -2977,6 +3015,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // check. Skips when we're in module-init to avoid clearing weak refs
         // that require/use chains still depend on.
         if (undefOnBlessedWithDestroy && !ModuleInitGuard.inModuleInit()) {
+            // The current undef call can still have JVM temporaries that make
+            // the just-released wrapper appear live.  Also arm the next Perl
+            // statement boundary, after those temporaries have disappeared.
+            MortalList.requestTargetedWeakSweep(oldBase);
             if (System.getenv("JPERL_PHASE_D_DBG") != null) {
                 System.err.println("DBG Phase D undef-of-blessed trigger for " +
                         (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
@@ -3250,6 +3292,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar preAutoIncrement() {
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
@@ -3370,6 +3413,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 new RuntimeScalar(0) : new RuntimeScalar(this);
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
@@ -3471,6 +3515,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar preAutoDecrement() {
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> // 0
@@ -3575,6 +3620,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeScalar old = new RuntimeScalar(this);
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
@@ -3723,6 +3769,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.tainted = this.tainted;
         currentState.numericLiteralText = this.numericLiteralText;
         currentState.numericContextSeen = this.numericContextSeen;
+        currentState.firstClassRegexScalar = this.firstClassRegexScalar;
         // Push the current state onto the stack
         dynamicStateStack.push(currentState);
         // Clear the current type and value
@@ -3733,6 +3780,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.tainted = false;
         this.numericLiteralText = null;
         this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
     }
 
     /**
@@ -3765,6 +3813,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.tainted = previousState.tainted;
             this.numericLiteralText = previousState.numericLiteralText;
             this.numericContextSeen = previousState.numericContextSeen;
+            this.firstClassRegexScalar = previousState.firstClassRegexScalar;
 
             releaseScalarReferenceContents(scalarReferenceContents);
 

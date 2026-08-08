@@ -152,6 +152,12 @@ public class ScalarUtils {
             if (str.isEmpty()) {
                 return false;
             }
+            // This is Perl's canonical true-but-zero value.  The core numeric
+            // parser accepts it without warning even though the suffix would be
+            // non-numeric for every other string.
+            if (str.equals("0 but true")) {
+                return true;
+            }
             // Check for Inf and NaN (with optional sign prefix)
             String check = str;
             if ((str.charAt(0) == '+' || str.charAt(0) == '-') && str.length() > 1) {

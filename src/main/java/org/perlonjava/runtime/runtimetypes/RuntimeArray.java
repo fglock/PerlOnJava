@@ -1599,6 +1599,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The updated RuntimeArray after undefining.
      */
     public RuntimeArray undefine() {
+        if (this.type == TIED_ARRAY) {
+            TieArray.tiedClear(this);
+            return this;
+        }
         notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();

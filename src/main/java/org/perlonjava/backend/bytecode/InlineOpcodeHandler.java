@@ -189,6 +189,54 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    public static int executeIntegerBinary(int opcode, int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase v1 = registers[rs1];
+        RuntimeBase v2 = registers[rs2];
+        RuntimeScalar s1 = v1 instanceof RuntimeScalar ? (RuntimeScalar) v1 : v1.scalar();
+        RuntimeScalar s2 = v2 instanceof RuntimeScalar ? (RuntimeScalar) v2 : v2.scalar();
+        registers[rd] = switch (opcode) {
+            case Opcodes.INTEGER_ADD -> MathOperators.integerAdd(s1, s2);
+            case Opcodes.INTEGER_SUBTRACT -> MathOperators.integerSubtract(s1, s2);
+            case Opcodes.INTEGER_MULTIPLY -> MathOperators.integerMultiply(s1, s2);
+            case Opcodes.INTEGER_BITWISE_AND -> BitwiseOperators.integerBitwiseAnd(s1, s2);
+            case Opcodes.INTEGER_BITWISE_OR -> BitwiseOperators.integerBitwiseOr(s1, s2);
+            case Opcodes.INTEGER_BITWISE_XOR -> BitwiseOperators.integerBitwiseXor(s1, s2);
+            default -> throw new IllegalArgumentException("unknown integer binary opcode: " + opcode);
+        };
+        return pc;
+    }
+
+    public static int executeIntegerNegate(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        RuntimeBase value = registers[rs];
+        RuntimeScalar scalar = value instanceof RuntimeScalar ? (RuntimeScalar) value : value.scalar();
+        registers[rd] = MathOperators.integerUnaryMinus(scalar);
+        return pc;
+    }
+
+    public static int executeIntegerArithmeticAssign(int[] bytecode, int pc,
+                                                     RuntimeBase[] registers, int operation) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        if (isImmutableProxy(registers[rd])) {
+            registers[rd] = ensureMutableScalar(registers[rd]);
+        }
+        RuntimeScalar left = (RuntimeScalar) registers[rd];
+        RuntimeScalar right = (RuntimeScalar) registers[rs];
+        RuntimeScalar result = switch (operation) {
+            case 0 -> MathOperators.integerAdd(left, right);
+            case 1 -> MathOperators.integerSubtract(left, right);
+            case 2 -> MathOperators.integerMultiplyWarn(left, right);
+            default -> throw new IllegalArgumentException("unknown integer assignment operation");
+        };
+        left.set(result);
+        return pc;
+    }
+
     /**
      * Arithmetic without overload dispatch.
      * Used when {@code no overloading} is in effect at compile time.

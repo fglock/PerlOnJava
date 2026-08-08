@@ -1480,6 +1480,58 @@ public class ReachabilityWalker {
     }
 
     /**
+     * Reconsider only referents explicitly released by {@code undef}. This is
+     * safe to run at a nested statement boundary because it cannot clear weak
+     * references belonging to unrelated in-flight return values.
+     */
+    public static int sweepReleasedWeakReferents(Set<RuntimeBase> referents) {
+        if (referents == null || referents.isEmpty()) return 0;
+        Set<RuntimeBase> live = new ReachabilityWalker().walk();
+        int cleared = 0;
+        boolean releasedObjectNeedsCascade = false;
+        for (RuntimeBase referent : referents) {
+            if (referent == null || referent.currentlyDestroying) {
+                continue;
+            }
+            if (referent.destroyFired || referent.refCount == Integer.MIN_VALUE) {
+                // An eager sweep in RuntimeScalar.undefine() may already have
+                // destroyed this wrapper using a liveness snapshot taken
+                // before its tied/container edges were released. Re-walk
+                // below so newly unreachable dependants are collected too.
+                releasedObjectNeedsCascade = true;
+                continue;
+            }
+            if (live.contains(referent)) continue;
+            if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                    && referent.localBindingExists) {
+                continue;
+            }
+            if (referent.blessId != 0) {
+                referent.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(referent);
+            } else {
+                WeakRefRegistry.clearWeakRefsTo(referent);
+                referent.refCount = Integer.MIN_VALUE;
+            }
+            cleared++;
+            releasedObjectNeedsCascade = true;
+        }
+
+        // Destruction can remove the last strong edge to another weakly
+        // observed object (a tied hash wrapper -> handler -> external hash is
+        // one example). Reachability snapshots are intentionally immutable,
+        // so iterate to a fixed point after this explicit release.
+        if (releasedObjectNeedsCascade) {
+            for (int pass = 0; pass < 8; pass++) {
+                int passCleared = sweepWeakRefs(false, false);
+                cleared += passCleared;
+                if (passCleared == 0) break;
+            }
+        }
+        return cleared;
+    }
+
+    /**
      * Sweep only objects registered by {@link DestroyDispatch} as needing
      * deterministic DESTROY side effects even when they are not weak-ref
      * referents. This is intentionally narrower than {@link #sweepWeakRefs}:

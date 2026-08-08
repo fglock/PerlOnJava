@@ -27,8 +27,8 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((int) runtimeScalar.value) & ((int) arg2.value);
-            return new RuntimeScalar(result);
+            int result = ((int) runtimeScalar.value) & ((int) arg2.value);
+            return new RuntimeScalar(Integer.toUnsignedLong(result));
         }
 
         // Check for overloaded '&' operator on blessed objects
@@ -77,12 +77,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAndBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use long values to preserve full precision
-        long val1 = runtimeScalar.getLong();
-        long val2 = arg2.getLong();
-
-        // Perform AND operation preserving all bits
-        long result = val1 & val2;
+        long val1 = runtimeScalar.getLong() & 0xFFFFFFFFL;
+        long val2 = arg2.getLong() & 0xFFFFFFFFL;
+        long result = (val1 & val2) & 0xFFFFFFFFL;
 
         return new RuntimeScalar(result);
     }
@@ -101,8 +98,8 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((int) runtimeScalar.value) | ((int) arg2.value);
-            return new RuntimeScalar(result);
+            int result = ((int) runtimeScalar.value) | ((int) arg2.value);
+            return new RuntimeScalar(Integer.toUnsignedLong(result));
         }
 
         // Check for overloaded '|' operator on blessed objects
@@ -141,12 +138,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOrBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use long values to preserve full precision
-        long val1 = runtimeScalar.getLong();
-        long val2 = arg2.getLong();
-
-        // Perform OR operation preserving all bits
-        long result = val1 | val2;
+        long val1 = runtimeScalar.getLong() & 0xFFFFFFFFL;
+        long val2 = arg2.getLong() & 0xFFFFFFFFL;
+        long result = (val1 | val2) & 0xFFFFFFFFL;
 
         return new RuntimeScalar(result);
     }
@@ -169,8 +163,8 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((int) runtimeScalar.value) ^ ((int) arg2.value);
-            return new RuntimeScalar(result);
+            int result = ((int) runtimeScalar.value) ^ ((int) arg2.value);
+            return new RuntimeScalar(Integer.toUnsignedLong(result));
         }
 
         // Check for overloaded '^' operator on blessed objects
@@ -209,14 +203,53 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXorBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use long values to preserve full precision
-        long val1 = runtimeScalar.getLong();
-        long val2 = arg2.getLong();
-
-        // Perform XOR operation preserving all bits
-        long result = val1 ^ val2;
+        long val1 = runtimeScalar.getLong() & 0xFFFFFFFFL;
+        long val2 = arg2.getLong() & 0xFFFFFFFFL;
+        long result = (val1 ^ val2) & 0xFFFFFFFFL;
 
         return new RuntimeScalar(result);
+    }
+
+    /** Numeric bitwise operations under {@code use integer}: return a signed IV. */
+    public static RuntimeScalar integerBitwiseAnd(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBitwiseBinary(arg1, arg2, '&');
+    }
+
+    public static RuntimeScalar integerBitwiseOr(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBitwiseBinary(arg1, arg2, '|');
+    }
+
+    public static RuntimeScalar integerBitwiseXor(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return integerBitwiseBinary(arg1, arg2, '^');
+    }
+
+    private static RuntimeScalar integerBitwiseBinary(RuntimeScalar arg1, RuntimeScalar arg2, char operator) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            String symbol = Character.toString(operator);
+            RuntimeScalar overloaded = OverloadContext.tryTwoArgumentOverload(
+                    arg1, arg2, blessId, blessId2, "(" + symbol, symbol);
+            if (overloaded != null) return overloaded;
+        }
+        int a = nativeIntValue(arg1);
+        int b = nativeIntValue(arg2);
+        int result = switch (operator) {
+            case '&' -> a & b;
+            case '|' -> a | b;
+            case '^' -> a ^ b;
+            default -> throw new IllegalArgumentException("unknown bitwise operator: " + operator);
+        };
+        return new RuntimeScalar(result);
+    }
+
+    private static int nativeIntValue(RuntimeScalar value) {
+        RuntimeScalar number = value.getNumber("bitwise operation");
+        if (number.type != RuntimeScalarType.DOUBLE) return (int) number.getLong();
+        double numericValue = number.getDouble();
+        return Double.isFinite(numericValue)
+                ? (int) (long) numericValue
+                : (int) numericValue;
     }
 
     /**

@@ -572,6 +572,13 @@ public class NumberParser {
         // Track whether to emit a "isn't numeric" warning
         boolean shouldWarn = false;
 
+        // Perl gives this conventional module-return value special treatment:
+        // it is numerically zero but true as a string, and numification does
+        // not emit the warning that an arbitrary trailing suffix would.
+        if (str.substring(start, end).equals("0 but true")) {
+            result = getScalarInt(0);
+        }
+
         if (start == end) {
             // Empty or whitespace-only string: value is 0, but warn if string is non-null
             shouldWarn = true;

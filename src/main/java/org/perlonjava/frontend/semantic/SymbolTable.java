@@ -32,6 +32,13 @@ public class SymbolTable {
         if (existing == null) {
             // Variable doesn't exist, add it
             variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
+        } else if (("my".equals(variableDeclType) || "state".equals(variableDeclType))
+                && ast != null && existing.ast != ast) {
+            // A later lexical declaration in the same Perl scope masks the
+            // earlier pad slot from this statement onward. Emission revisits
+            // the same AST, so retain the slot when the declaration node is
+            // identical but allocate a fresh slot for a genuine redeclaration.
+            variableIndex.put(name, new SymbolEntry(index++, name, variableDeclType, perlPackage, ast));
         } else if ("our".equals(variableDeclType) && existing.perlPackage != null 
                    && !existing.perlPackage.equals(perlPackage)) {
             // For 'our' declarations in a different package, create a new entry

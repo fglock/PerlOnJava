@@ -6,6 +6,7 @@ import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -1000,6 +1001,28 @@ public class BytecodeInterpreter {
 
                             case Opcodes.NEG_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeNegScalar(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.INTEGER_ADD, Opcodes.INTEGER_SUBTRACT, Opcodes.INTEGER_MULTIPLY,
+                                 Opcodes.INTEGER_BITWISE_AND, Opcodes.INTEGER_BITWISE_OR,
+                                 Opcodes.INTEGER_BITWISE_XOR -> {
+                                pc = InlineOpcodeHandler.executeIntegerBinary(opcode, bytecode, pc, registers);
+                            }
+
+                            case Opcodes.INTEGER_NEGATE -> {
+                                pc = InlineOpcodeHandler.executeIntegerNegate(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.INTEGER_ADD_ASSIGN -> {
+                                pc = InlineOpcodeHandler.executeIntegerArithmeticAssign(bytecode, pc, registers, 0);
+                            }
+
+                            case Opcodes.INTEGER_SUBTRACT_ASSIGN -> {
+                                pc = InlineOpcodeHandler.executeIntegerArithmeticAssign(bytecode, pc, registers, 1);
+                            }
+
+                            case Opcodes.INTEGER_MULTIPLY_ASSIGN -> {
+                                pc = InlineOpcodeHandler.executeIntegerArithmeticAssign(bytecode, pc, registers, 2);
                             }
 
                             // Arithmetic without overload dispatch (no overloading pragma)
@@ -3067,10 +3090,12 @@ public class BytecodeInterpreter {
                 int patternReg = bytecode[pc++];
                 int flagsReg = bytecode[pc++];
                 int implicitU = bytecode[pc++];
+                int warningState = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
+                RegexQuoteMeta.setCallSiteWarningState(warningState);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
                 return pc;
             }
@@ -3080,10 +3105,12 @@ public class BytecodeInterpreter {
                 int flagsReg = bytecode[pc++];
                 int callsiteId = bytecode[pc++];
                 int implicitU = bytecode[pc++];
+                int warningState = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
+                RegexQuoteMeta.setCallSiteWarningState(warningState);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
                 return pc;
             }

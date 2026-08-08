@@ -558,7 +558,12 @@ public class StringParser {
         elements.add(replace);
         elements.add(modifiers);
         ListNode list = new ListNode(elements, rawStr.index);
-        return new OperatorNode(operator, list, rawStr.index);
+        OperatorNode node = new OperatorNode(operator, list, rawStr.index);
+        node.setAnnotation("regexWarningsEnabled",
+                ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
+        node.setAnnotation("regexWarningsFatal",
+                ctx.symbolTable != null && ctx.symbolTable.isFatalWarningCategory("regexp"));
+        return node;
     }
 
     public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr, Parser parser) {
@@ -601,7 +606,12 @@ public class StringParser {
         elements.add(parsed);
         elements.add(modifiers);
         ListNode list = new ListNode(elements, rawStr.index);
-        return new OperatorNode(operator, list, rawStr.index);
+        OperatorNode node = new OperatorNode(operator, list, rawStr.index);
+        node.setAnnotation("regexWarningsEnabled",
+                ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
+        node.setAnnotation("regexWarningsFatal",
+                ctx.symbolTable != null && ctx.symbolTable.isFatalWarningCategory("regexp"));
+        return node;
     }
 
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {

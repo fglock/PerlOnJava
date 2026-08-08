@@ -935,7 +935,7 @@ public class Opcodes {
 
     /**
      * Quote regex operator: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg)
-     * Format: QUOTE_REGEX rd pattern_reg flags_reg implicit_unicode_strings_u (0 or 1)
+     * Format: QUOTE_REGEX rd pattern_reg flags_reg implicit_unicode_strings_u warning_state
      */
     public static final short QUOTE_REGEX = 159;
 
@@ -1385,7 +1385,7 @@ public class Opcodes {
 
     /**
      * Get replacement regex: rd = RuntimeRegex.getReplacementRegex(pattern, replacement, flags)
-     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u
+     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u warning_state
      */
     public static final short GET_REPLACEMENT_REGEX = 236;
 
@@ -1834,7 +1834,7 @@ public class Opcodes {
 
     /**
      * Quote regex with /o modifier support: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg, callsite_id)
-     * Format: QUOTE_REGEX_O rd pattern_reg flags_reg callsite_id implicit_unicode_strings_u
+     * Format: QUOTE_REGEX_O rd pattern_reg flags_reg callsite_id implicit_unicode_strings_u warning_state
      */
     public static final short QUOTE_REGEX_O = 374;
 
@@ -2410,6 +2410,22 @@ public class Opcodes {
 
     /** Replace a freshly-created lexical cell with a Devel::LexAlias binding. */
     public static final short APPLY_LEXICAL_ALIAS = 499;
+
+    /** 32-bit native-IV arithmetic under lexical {@code use integer}. */
+    public static final short INTEGER_ADD = 500;
+    public static final short INTEGER_SUBTRACT = 501;
+    public static final short INTEGER_MULTIPLY = 502;
+    public static final short INTEGER_NEGATE = 503;
+
+    /** Signed 32-bit numeric bitwise operations under lexical {@code use integer}. */
+    public static final short INTEGER_BITWISE_AND = 504;
+    public static final short INTEGER_BITWISE_OR = 505;
+    public static final short INTEGER_BITWISE_XOR = 506;
+
+    /** In-place 32-bit native-IV arithmetic under lexical {@code use integer}. */
+    public static final short INTEGER_ADD_ASSIGN = 507;
+    public static final short INTEGER_SUBTRACT_ASSIGN = 508;
+    public static final short INTEGER_MULTIPLY_ASSIGN = 509;
 
     private Opcodes() {
     } // Utility class - no instantiation

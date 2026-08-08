@@ -146,10 +146,16 @@ public class ParseInfix {
             if (operator.equals("..") || operator.equals("...")) {
                 // Handle regex in: /3/../5/
                 if (left instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
-                    left = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
+                    OperatorNode quoted = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
+                    quoted.setAnnotation("regexWarningsEnabled", operatorNode.getAnnotation("regexWarningsEnabled"));
+                    quoted.setAnnotation("regexWarningsFatal", operatorNode.getAnnotation("regexWarningsFatal"));
+                    left = quoted;
                 }
                 if (right instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
-                    right = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
+                    OperatorNode quoted = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
+                    quoted.setAnnotation("regexWarningsEnabled", operatorNode.getAnnotation("regexWarningsEnabled"));
+                    quoted.setAnnotation("regexWarningsFatal", operatorNode.getAnnotation("regexWarningsFatal"));
+                    right = quoted;
                 }
             }
 
@@ -171,7 +177,8 @@ public class ParseInfix {
             // state. Lazy sub compilation and interpreter fallback may emit code long
             // after the parser's lexical hint stack has moved on.
             switch (operator) {
-                case "/", "%", "<<", ">>", "/=", "%=", "<<=", ">>=" ->
+                case "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>",
+                     "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=" ->
                         node.setAnnotation("useInteger",
                                 parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER));
                 default -> {

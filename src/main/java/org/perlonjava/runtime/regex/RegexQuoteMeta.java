@@ -8,6 +8,11 @@ import java.util.List;
 
 public class RegexQuoteMeta {
     private static final ThreadLocal<List<String>> WARNINGS_ON_USE = ThreadLocal.withInitial(ArrayList::new);
+    private static final ThreadLocal<Integer> CALL_SITE_WARNING_STATE = new ThreadLocal<>();
+
+    public static void setCallSiteWarningState(int state) {
+        CALL_SITE_WARNING_STATE.set(state);
+    }
 
     public static String escapeQ(String s) {
         WARNINGS_ON_USE.get().clear();
@@ -101,7 +106,21 @@ public class RegexQuoteMeta {
 
     private static void warnUnrecognizedCharClassEscape(char c) {
         String message = "Unrecognized escape \\" + c + " in character class passed through in regex";
-        WARNINGS_ON_USE.get().add(message);
-        WarnDie.warnWithCategory(new RuntimeScalar(message), new RuntimeScalar(""), "regexp");
+        // This warning belongs to construction of the interpolated pattern.
+        // Retaining it on the cached RuntimeRegex re-emits it for every match
+        // and can leak a warning-enabled compilation into a no-warnings use.
+        Integer state = CALL_SITE_WARNING_STATE.get();
+        if (state != null && state == 0) {
+            return;
+        }
+        RuntimeScalar warning = new RuntimeScalar(message);
+        RuntimeScalar where = new RuntimeScalar("");
+        if (state != null && state == 2) {
+            WarnDie.die(warning, where);
+        } else if (state != null) {
+            WarnDie.warn(warning, where);
+        } else {
+            WarnDie.warnWithCategory(warning, where, "regexp");
+        }
     }
 }

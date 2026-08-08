@@ -901,8 +901,22 @@ public class MortalList {
     private static boolean inAutoSweep = false;
     private static boolean immediateWeakSweepRequested = false;
 
+    // Objects explicitly released by undef while JVM statement temporaries may
+    // still make them appear reachable. Recheck only these referents at the
+    // next Perl statement boundary; a full nested-call sweep can invalidate
+    // unrelated weak callback graphs whose caller-owned return values have not
+    // reached a walker-visible lexical yet.
+    private static final Set<RuntimeBase> targetedWeakSweepReferents =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+
     public static void requestImmediateWeakSweep() {
         immediateWeakSweepRequested = true;
+    }
+
+    public static void requestTargetedWeakSweep(RuntimeBase referent) {
+        if (referent != null) {
+            targetedWeakSweepReferents.add(referent);
+        }
     }
 
     // D-W6.18 perf: cached reachable-set, valid for the duration of a
@@ -1132,6 +1146,12 @@ public class MortalList {
     }
 
     private static void maybeAutoSweepAtStatementBoundary(boolean topLevel) {
+        if (!targetedWeakSweepReferents.isEmpty()) {
+            Set<RuntimeBase> targets = Collections.newSetFromMap(new IdentityHashMap<>());
+            targets.addAll(targetedWeakSweepReferents);
+            targetedWeakSweepReferents.clear();
+            ReachabilityWalker.sweepReleasedWeakReferents(targets);
+        }
         if (topLevel) {
             maybeAutoSweep();
         }
