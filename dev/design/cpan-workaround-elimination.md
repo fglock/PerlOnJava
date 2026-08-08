@@ -284,16 +284,20 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Continue Phase 8 with SQL::Translator's complete unchanged source suite,
-   using the now-confirmed `Carp::Clan` and `Parse::RecDescent` dependencies.
-   `t/24yaml.t` passes 2/2, `t/13schema.t` passes, and the much larger
-   `t/02mysql-parser.t` completes all 347 assertions under a 1,200-second
-   bound. Use the complete matrix as the next policy-retirement gate.
-2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
+1. Continue Phase 8 by reducing SQL::Translator's two PostgreSQL parser files,
+   `t/08postgres-to-mysql.t` and `t/14postgres-parser.t`, which share a Java
+   `Pattern` stack overflow in a Parse::RecDescent match. Do not replace this
+   with an unbounded JVM-stack setting; select or improve the bounded regex
+   backend and rerun both unchanged files.
+2. Then separate the remaining SQL::Translator producer/list-context failures
+   (`t/44-xml-to-db2-array.t`, the two `t/51-xml-to-oracle*.t` files, and
+   `t/74-filename-arrayref.t`) from the four focused diff/round-trip assertion
+   files. Rerun the complete 75-file matrix after each shared correction.
+3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-3. Keep the live LWP `t/local/http.t` failure and CGI HTML::Entities failures
+4. Keep the live LWP `t/local/http.t` failure and CGI HTML::Entities failures
    as documented Phase 8/runtime-parity follow-ups.
 
 ### Completed phase deliverables
@@ -783,6 +787,21 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   consequently advances from 1/2 to 2/2; its MySQL parser advances beyond the
   former failure after assertion 204 and completes all 347 assertions under a
   1,200-second bound.
+- SQL::Translator's first complete unchanged source matrix runs all 75 files
+  without a harness timeout: 60 pass, four fail assertions, seven error, and
+  four are incomplete, for 1,382/1,427 passing assertions (96.8%). This is the
+  Phase 8 baseline rather than a policy-retirement pass: it identifies 15
+  non-passing files while confirming the core MySQL, SQLite, Oracle, Access,
+  YAML, JSON, Storable, PostgreSQL-producer, and SQL-Server paths.
+- `XML::LibXML::Node::getAttributes` is now implemented with its DOM behavior:
+  it returns ordinary attribute nodes but excludes namespace declaration
+  nodes, while the existing `attributes` API continues to return both. The new
+  `xml_libxml_get_attributes.t` regression passes 2/2 on JVM and interpreter;
+  the host Perl preflight skips because XML::LibXML is not installed there.
+  Five previously non-passing unchanged SQL::Translator files now pass:
+  `t/16xml-parser.t` (240/240), `t/43xml-to-db2.t` (1/1),
+  `t/46xml-to-pg.t` (1/1), `t/48xml-to-sqlite.t` (2/2), and
+  `t/64xml-to-mysql.t` (2/2).
 
 ### Open questions
 
