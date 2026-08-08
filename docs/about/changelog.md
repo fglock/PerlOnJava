@@ -43,6 +43,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Bugfix: constrain async callback-aggregate lifecycle bookkeeping to active
   async frames, preserve DESTROY-rescued graphs during targeted weak sweeps,
   and assign collision-free async bytecode opcodes after integer operations.
+- Bugfix: the unit-test harness accepts successful `plan skip_all` exits as
+  clean TAP completion, allowing Unix-only socket tests to skip correctly on
+  Windows CI.
 - Add compatibility modules for `Socket6`, `Email::Address::XS`, and the
   JSONP-used subset of `Want`; add a Java `Net::Gen` XS bridge for Net-ext.
 - Bugfix: subroutine return values are rvalue copies instead of aliases to
