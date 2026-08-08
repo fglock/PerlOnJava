@@ -211,7 +211,7 @@ public class PrototypeArgs {
                 // Concatenation is binary-only. An optional named-unary call
                 // such as caller.'::' therefore has no argument and leaves
                 // the dot for the enclosing expression.
-                next.text.equals(".") ||
+                (next.text.equals(".") && !isFractionalNumberStart(parser)) ||
                 next.text.equals("==") ||
                 next.text.equals("!=") ||
                 next.text.equals(">") ||
@@ -221,6 +221,21 @@ public class PrototypeArgs {
                 next.text.equals("=~") ||
                 next.text.equals("!~") ||
                 next.text.equals("?");
+    }
+
+    /** A leading dot followed by digits starts a numeric literal (for example .5). */
+    private static boolean isFractionalNumberStart(Parser parser) {
+        int i = parser.tokenIndex;
+        if (i >= parser.tokens.size() || !parser.tokens.get(i).text.equals(".")) {
+            return false;
+        }
+        i++;
+        while (i < parser.tokens.size()
+                && parser.tokens.get(i).type == LexerTokenType.WHITESPACE) {
+            i++;
+        }
+        return i < parser.tokens.size()
+                && parser.tokens.get(i).type == LexerTokenType.NUMBER;
     }
 
     /**

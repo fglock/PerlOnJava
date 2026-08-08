@@ -66,6 +66,13 @@ our @ISA = ('File::Temp');
 
 package File::Temp;
 
+# The reference implementation blesses the underlying glob, so legacy code
+# commonly accepts File::Temp objects with `isa('GLOB') || isa('FileHandle')`.
+# PerlOnJava stores metadata in a hash and exposes the real handle through *{}
+# overloading; advertise FileHandle compatibility for that equivalent wrapper.
+push @File::Temp::ISA, 'FileHandle'
+    unless grep { $_ eq 'FileHandle' } @File::Temp::ISA;
+
 # Set up overloading at package level
 use overload
     '""' => sub { $_[0]->{_filename} || $_[0]->{_dirname} || '' },

@@ -828,8 +828,19 @@ public class RuntimeList extends RuntimeBase {
         public RuntimeListIterator(List<RuntimeBase> elements) {
             this.elements = elements;
             if (!elements.isEmpty()) {
-                currentIterator = elements.getFirst().iterator();
+                currentIterator = iteratorFor(elements.getFirst());
             }
+        }
+
+        /**
+         * Sparse Perl arrays use null slots internally.  A sparse array can be
+         * flattened into a RuntimeList without materializing those slots first;
+         * in list context each hole is one undef value, not an absent element.
+         */
+        private static Iterator<RuntimeScalar> iteratorFor(RuntimeBase element) {
+            return element == null
+                    ? Collections.singletonList(new RuntimeScalar()).iterator()
+                    : element.iterator();
         }
 
         @Override
@@ -841,7 +852,7 @@ public class RuntimeList extends RuntimeBase {
                 // Move to the next element's iterator
                 currentIndex++;
                 if (currentIndex < elements.size()) {
-                    currentIterator = elements.get(currentIndex).iterator();
+                    currentIterator = iteratorFor(elements.get(currentIndex));
                 } else {
                     currentIterator = null; // No more elements
                 }

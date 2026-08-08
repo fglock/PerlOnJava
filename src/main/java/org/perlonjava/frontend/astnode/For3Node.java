@@ -72,6 +72,12 @@ public class For3Node extends AbstractNode {
     }
 
     private static boolean isMagicWhile(Node node) {
+        // Parentheses around a single condition produce a one-element ListNode.
+        // They do not suppress Perl's implicit `defined($_ = readline(...))`
+        // transformation: `EXPR while (<FH>)` is equivalent to `while <FH>`.
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return isMagicWhile(list.elements.getFirst());
+        }
         String operator = "";
         if (node instanceof OperatorNode) {
             // "<>", "each", "glob"
@@ -146,4 +152,3 @@ public class For3Node extends AbstractNode {
         visitor.visit(this);
     }
 }
-
