@@ -272,6 +272,14 @@ public class ParseInfix {
                         return new OperatorNode("%", left, parser.tokenIndex);
                     case "&*":
                         TokenUtils.consume(parser);
+                        // A postfix code dereference normally invokes the
+                        // referenced subroutine.  Under \ (or another
+                        // reference-taking parser context), Perl instead
+                        // exposes the CODE lvalue so the outer operator can
+                        // return the coderef itself: \'Name'->&* is \&Name.
+                        if (parser.parsingTakeReference) {
+                            return new OperatorNode("&", left, parser.tokenIndex);
+                        }
                         return new BinaryOperatorNode("(",
                                 left,
                                 ParserNodeUtils.atUnderscore(parser),

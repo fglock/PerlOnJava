@@ -4,6 +4,13 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Bugfix: targeted weak-reference sweeps preserve objects rescued by `DESTROY`
+  until rescue-specific reachability cleanup runs, keeping live DBIx::Class
+  storage callbacks valid after a schema self-rescue.
+- CPAN: add a BouncyCastle-backed `Crypt::Twofish2` XS replacement, portable
+  `B::Flags`, bounded balanced-pattern support for `Text::Markdown`, and a
+  PerlOnJava-aware `Char::Latin7` launcher guard; `Text::Markdown::Slidy`,
+  `Text::Fold`, and their dependency suites now pass under `jcpan`.
 - Add Java-backed `PadWalker`, `Devel::Caller`, and `Devel::LexAlias`
   compatibility, including anonymous-sub pad metadata and lexical rebinding
   across JVM and interpreter closures; `Lexical::Persistence` and

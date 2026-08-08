@@ -106,6 +106,13 @@ public class DestroyDispatch {
         }
     }
 
+    public static boolean isRescued(RuntimeBase referent) {
+        if (referent == null) return false;
+        synchronized (rescuedObjects) {
+            return rescuedObjects.contains(referent);
+        }
+    }
+
     public static boolean hasRescuedObjects() {
         return !rescuedObjects.isEmpty();
     }

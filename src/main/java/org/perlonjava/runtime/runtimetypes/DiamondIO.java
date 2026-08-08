@@ -101,6 +101,11 @@ public class DiamondIO {
                 if (argv != null && !(argv.ioHandle instanceof ClosedIOHandle) && getGlobalArray("main::ARGV").isEmpty()) {
                     currentReader = argv;
                 } else if (argvWasInitiallyEmpty) {
+                    RuntimeIO stdin = getGlobalIO("main::STDIN").getRuntimeIO();
+                    if (stdin == null || stdin.ioHandle instanceof ClosedIOHandle) {
+                        eofReached = true;
+                        return scalarUndef;
+                    }
                     // Only use STDIN if @ARGV was initially empty, not if it became empty after processing files
                     RuntimeArray.push(getGlobalArray("main::ARGV"), new RuntimeScalar("-"));
                 }

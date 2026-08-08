@@ -1,0 +1,45 @@
+--- lib/Text/Markdown.pm.orig
++++ lib/Text/Markdown.pm
+@@ -120,25 +120,24 @@ The main function as far as the outside world is concerned. See the SYNOPSIS
+ # Regex to match balanced [brackets]. See Friedl's
+ # "Mastering Regular Expressions", 2nd Ed., pp. 328-331.
+ our ($g_nested_brackets, $g_nested_parens);
+-$g_nested_brackets = qr{
+-    (?>                                 # Atomic matching
+-       [^\[\]]+                         # Anything other than brackets
+-     |
+-       \[
+-         (??{ $g_nested_brackets })     # Recursive set of nested brackets
+-       \]
+-    )*
+-}x;
++# PerlOnJava: java.util.regex has no recursive subpattern operator. Expand
++# the self-reference to a generous fixed depth instead. Each iteration adds
++# one nesting level and remains an ordinary portable regex.
++my $nested_brackets = qr{[^\[\]]*};
++for (1 .. 32) {
++    $nested_brackets = qr{
++        (?> [^\[\]]+ | \[ $nested_brackets \] )*
++    }x;
++}
++$g_nested_brackets = $nested_brackets;
+ # Doesn't allow for whitespace, because we're using it to match URLs:
+-$g_nested_parens = qr{
+-    (?>                                 # Atomic matching
+-       [^()\s]+                            # Anything other than parens or whitespace
+-     |
+-       \(
+-         (??{ $g_nested_parens })        # Recursive set of nested brackets
+-       \)
+-    )*
+-}x;
++my $nested_parens = qr{[^()\s]*};
++for (1 .. 32) {
++    $nested_parens = qr{
++        (?> [^()\s]+ | \( $nested_parens \) )*
++    }x;
++}
++$g_nested_parens = $nested_parens;
+
+ # Table of hash values for escaped characters:
+ our %g_escape_table;

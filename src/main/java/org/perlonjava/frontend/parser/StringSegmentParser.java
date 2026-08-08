@@ -250,6 +250,7 @@ public abstract class StringSegmentParser {
 
         Node operand;
         var isArray = "@".equals(sigil);
+        var isArrayPostderef = false;
 
         if (TokenUtils.peek(parser).text.equals("{")) {
             // Handle block-like interpolation: ${...} or @{...}
@@ -338,13 +339,33 @@ public abstract class StringSegmentParser {
             // Parse simple variables using shared logic, but keep the exact same flow
             operand = parseSimpleVariableInterpolation(sigil);
 
+            // Postfix array dereferences interpolate like ordinary arrays and
+            // therefore use $" between elements: "$ref->@*" and
+            // "$ref->@[...]" / "$ref->@{...}".
+            boolean dereferenceArrowFollows = "$".equals(sigil)
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && "->".equals(parser.tokens.get(parser.tokenIndex).text);
+            boolean postfixDerefFollows = false;
+            if (dereferenceArrowFollows) {
+                postfixDerefFollows = switch (parser.tokens.get(parser.tokenIndex + 1).text) {
+                    case "@*", "$*", "%*", "&*", "$#", "@", "%" -> true;
+                    default -> false;
+                };
+            }
+            boolean postfixDerefInterpolationEnabled = ctx.symbolTable != null
+                    && ctx.symbolTable.isFeatureCategoryEnabled("postderef_qq");
+            if (postfixDerefFollows && postfixDerefInterpolationEnabled) {
+                String postderef = parser.tokens.get(parser.tokenIndex + 1).text;
+                isArrayPostderef = postderef.equals("@") || postderef.equals("@*");
+            }
+
             // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
             // Wrap in try-catch to handle malformed access gracefully
             try {
                 // In regex replacement context, check if $var{N} or $var{N,M} should be treated as quantifier
                 if ("$".equals(sigil) && isRegexReplacement && parser.tokens.get(parser.tokenIndex).text.equals("{") && shouldTreatAsQuantifier()) {
                     // Skip parsing as hash access - leave for regex engine to handle as quantifier
-                } else {
+                } else if (!postfixDerefFollows || postfixDerefInterpolationEnabled) {
                     operand = parseArrayHashAccess(parser, operand, isRegex);
                 }
             } catch (Exception e) {
@@ -354,7 +375,7 @@ public abstract class StringSegmentParser {
         }
 
         // For arrays, join elements with the list separator ($")
-        if (isArray) {
+        if (isArray || isArrayPostderef) {
             operand = new BinaryOperatorNode("join",
                     new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex),
                     operand,
