@@ -25,6 +25,7 @@ These modules have optimized Java implementations built into PerlOnJava:
 | DBI | Dbi.java | - | JDBC backend |
 | Exporter::Lexical | ExporterLexical.java | 0.02 | Installs lexical subs into the enclosing compile-time scope |
 | HTML::Content::Extractor | HTMLContentExtractor.java | 0.17 | Uses jsoup's HTML5 parser with a small legacy tree-compatibility layer |
+| Crypt::Twofish2 | CryptTwofish2.java | 1.03 | Uses BouncyCastle Twofish; ECB, stateful zero-IV CBC, and CFB1 |
 
 ## Modules with PP Fallbacks or Shims
 
@@ -39,6 +40,7 @@ replaced by a bundled PerlOnJava shim:
 | List::Util | List::Util::PP | varies | Some functions only |
 | Params::Util | Params::Util::PP | varies | Separate distribution |
 | Class::XSAccessor | bundled Perl shim | n/a | Pure-Perl hash/array accessors; XS entersub optimizer disabled |
+| B::Flags | bundled Perl shim | n/a | Reads PerlOnJava's portable `B` objects instead of Perl C structs |
 
 ## Modules Requiring Java XS Implementation
 

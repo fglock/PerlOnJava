@@ -13,6 +13,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -506,7 +507,10 @@ public class SystemOperator {
                             baos.write(buffer, 0, bytesRead);
                         }
                         synchronized (finalOutput) {
-                            finalOutput.append(baos.toString());
+                            // Perl strings preserve arbitrary bytes from qx//.  The
+                            // platform-default charset would replace invalid UTF-8
+                            // sequences and silently corrupt binary command output.
+                            finalOutput.append(baos.toString(StandardCharsets.ISO_8859_1));
                         }
                     } catch (IOException e) {
                         // Stream closed - this is normal when process terminates
@@ -637,7 +641,7 @@ public class SystemOperator {
                         baos.write(buffer, 0, bytesRead);
                     }
                     synchronized (finalOutput) {
-                        finalOutput.append(baos.toString());
+                        finalOutput.append(baos.toString(StandardCharsets.ISO_8859_1));
                     }
                 } catch (IOException e) {
                     // Stream closed - this is normal when process terminates
@@ -967,7 +971,7 @@ public class SystemOperator {
                     baos.write(buffer, 0, bytesRead);
                 }
             }
-            String capturedOutput = baos.toString();
+            String capturedOutput = baos.toString(StandardCharsets.ISO_8859_1);
             
             // Wait for process to complete
             int exitCode = process.waitFor();

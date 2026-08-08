@@ -6,6 +6,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimeMutationScope;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
 /**
@@ -294,9 +295,13 @@ public class FeatureFlags {
 
             // Also try to enable it in the symbol table if available
             try {
-                ScopedSymbolTable symbolTable = getCurrentScope();
-                if (symbolTable != null) {
-                    symbolTable.enableFeatureCategory(feature.trim());
+                ScopedSymbolTable currentScope = getCurrentScope();
+                ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
+                if (currentScope != null) {
+                    currentScope.enableFeatureCategory(feature.trim());
+                }
+                if (mutationScope != null && mutationScope != currentScope) {
+                    mutationScope.enableFeatureCategory(feature.trim());
                 }
             } catch (Exception e) {
                 // Ignore if symbol table operations fail
@@ -315,9 +320,13 @@ public class FeatureFlags {
 
             // Also try to disable it in the symbol table if available
             try {
-                ScopedSymbolTable symbolTable = getCurrentScope();
-                if (symbolTable != null) {
-                    symbolTable.disableFeatureCategory(feature.trim());
+                ScopedSymbolTable currentScope = getCurrentScope();
+                ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
+                if (currentScope != null) {
+                    currentScope.disableFeatureCategory(feature.trim());
+                }
+                if (mutationScope != null && mutationScope != currentScope) {
+                    mutationScope.disableFeatureCategory(feature.trim());
                 }
             } catch (Exception e) {
                 // Ignore if symbol table operations fail

@@ -41,10 +41,7 @@ public class MiscOpcodeHandler {
             case Opcodes.UMASK -> UmaskOperator.umask(ctx, argsArray);
             case Opcodes.GETC -> IOOperator.getc(ctx, argsArray);
             case Opcodes.FILENO -> IOOperator.fileno(ctx, argsArray);
-            case Opcodes.QX -> {
-                // qx not implemented yet - return empty string
-                yield new RuntimeScalar("");
-            }
+            case Opcodes.QX -> SystemOperator.systemCommand(args.scalar(), ctx);
             case Opcodes.SYSTEM -> SystemOperator.system(args, false, ctx);
             case Opcodes.KILL -> KillOperator.kill(ctx, argsArray);
             case Opcodes.CALLER -> RuntimeCode.caller(args, ctx);
