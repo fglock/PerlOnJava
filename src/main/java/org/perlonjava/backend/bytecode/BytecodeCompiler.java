@@ -6025,10 +6025,27 @@ public class BytecodeCompiler implements Visitor {
         // reuse the existing register so FOREACH_NEXT_OR_EXIT writes to the same
         // slot the loop body reads from.
         int varReg = -1;
+        List<Integer> multiVarRegs = new ArrayList<>();
+        List<String> lexicalLoopVarNames = new ArrayList<>();
+        if (globalLoopVarName == null && node.variable instanceof OperatorNode declaration
+                && declaration.operator.equals("my")
+                && declaration.operand instanceof ListNode variables) {
+            for (Node variable : variables.elements) {
+                if (variable instanceof OperatorNode sigil
+                        && sigil.operator.equals("$")
+                        && sigil.operand instanceof IdentifierNode identifier) {
+                    multiVarRegs.add(allocateRegister());
+                    lexicalLoopVarNames.add("$" + identifier.name);
+                }
+            }
+        }
         if (globalLoopVarName == null && node.variable instanceof OperatorNode varOp
                 && varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode idNode) {
             String varName = "$" + idNode.name;
             varReg = getVariableRegister(varName);
+        }
+        if (!multiVarRegs.isEmpty()) {
+            varReg = multiVarRegs.get(0);
         }
         if (varReg == -1) {
             varReg = allocateRegister();
@@ -6082,6 +6099,9 @@ public class BytecodeCompiler implements Visitor {
                 }
             }
         }
+        for (int i = 0; i < lexicalLoopVarNames.size(); i++) {
+            registerVariable(lexicalLoopVarNames.get(i), multiVarRegs.get(i));
+        }
 
         // Step 6: Emit initial GOTO to the loop check (do-while structure).
         // This avoids a back-edge GOTO on every iteration: the superinstruction at
@@ -6099,15 +6119,18 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 8: Execute body
         if (lexicalLoopVarName != null) {
-            pushForeachAliasLexical(lexicalLoopVarName);
+            lexicalLoopVarNames.add(lexicalLoopVarName);
+        }
+        for (String varName : lexicalLoopVarNames) {
+            pushForeachAliasLexical(varName);
         }
         try {
             if (node.body != null) {
                 node.body.accept(this);
             }
         } finally {
-            if (lexicalLoopVarName != null) {
-                popForeachAliasLexical(lexicalLoopVarName);
+            for (String varName : lexicalLoopVarNames) {
+                popForeachAliasLexical(varName);
             }
         }
 
@@ -6119,27 +6142,69 @@ public class BytecodeCompiler implements Visitor {
         // Step 10: Emit the loop superinstruction at the bottom (do-while check).
         // If iterator has next: load element (and alias for global vars), jump back to body.
         // If exhausted: fall through to exit.
-        int loopEndJumpPc;
-        if (globalLoopVarName != null) {
+        int multiLoopExitPatch = -1;
+        if (!multiVarRegs.isEmpty()) {
+            int hasNextReg = allocateRegister();
+            emit(Opcodes.ITERATOR_HAS_NEXT);
+            emitReg(hasNextReg);
+            emitReg(iterReg);
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(hasNextReg);
+            multiLoopExitPatch = bytecode.size();
+            emitInt(0);
+
+            for (int i = 0; i < multiVarRegs.size(); i++) {
+                int targetReg = multiVarRegs.get(i);
+                if (i == 0) {
+                    emit(Opcodes.ITERATOR_NEXT);
+                    emitReg(targetReg);
+                    emitReg(iterReg);
+                    continue;
+                }
+
+                emit(Opcodes.ITERATOR_HAS_NEXT);
+                emitReg(hasNextReg);
+                emitReg(iterReg);
+                emit(Opcodes.GOTO_IF_FALSE);
+                emitReg(hasNextReg);
+                int undefPatch = bytecode.size();
+                emitInt(0);
+
+                emit(Opcodes.ITERATOR_NEXT);
+                emitReg(targetReg);
+                emitReg(iterReg);
+                emit(Opcodes.GOTO);
+                int assignedPatch = bytecode.size();
+                emitInt(0);
+
+                patchJump(undefPatch, bytecode.size());
+                emit(Opcodes.LOAD_UNDEF);
+                emitReg(targetReg);
+                patchJump(assignedPatch, bytecode.size());
+            }
+            emit(Opcodes.GOTO);
+            emitInt(bodyStartPc);
+        } else if (globalLoopVarName != null) {
             // FOREACH_GLOBAL_NEXT_OR_EXIT: hasNext + next + aliasGlobalVariable + conditional jump
             int nameIdx = addToStringPool(globalLoopVarName);
             emit(Opcodes.FOREACH_GLOBAL_NEXT_OR_EXIT);
             emitReg(varReg);
             emitReg(iterReg);
             emit(nameIdx);
-            loopEndJumpPc = bytecode.size();
             emitInt(bodyStartPc);   // jump backward to body start if has next
         } else {
             // FOREACH_NEXT_OR_EXIT: hasNext + next + conditional jump (lexical or temp var)
             emit(Opcodes.FOREACH_NEXT_OR_EXIT);
             emitReg(varReg);
             emitReg(iterReg);
-            loopEndJumpPc = bytecode.size();
             emitInt(bodyStartPc);   // jump backward to body start if has next
         }
 
         // Step 11: Loop exit - fall-through after the superinstruction
         int loopEndPc = bytecode.size();
+        if (multiLoopExitPatch >= 0) {
+            patchJump(multiLoopExitPatch, loopEndPc);
+        }
 
         // Step 11b: Restore global loop variable after loop exits.
         // POP_LOCAL_LEVEL(levelReg) pops to the pre-makeLocal level, undoing both

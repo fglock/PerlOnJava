@@ -166,6 +166,27 @@ class FutureAsyncAwaitRuntimeTest {
             };
             die "await in non-lexical foreach was not rejected\n"
                     unless $@ =~ /^await is not allowed inside foreach on non-lexical iterator variable /;
+
+            async sub await_foreach_pairs {
+                my @result;
+                foreach my ($index, $future) (@_) {
+                    await $future;
+                    push @result, ($index, $future->AWAIT_GET);
+                }
+                return \\@result;
+            }
+            my @pair_futures = (Future->new, Future->new, Future->new);
+            my $pair_result = await_foreach_pairs(
+                    0 => $pair_futures[0],
+                    1 => $pair_futures[1],
+                    2 => $pair_futures[2]);
+            $pair_futures[0]->AWAIT_DONE('zero');
+            $pair_futures[1]->AWAIT_DONE('one');
+            $pair_futures[2]->AWAIT_DONE('two');
+            die "async foreach list failed\n"
+                    unless join(',', @{$pair_result->AWAIT_GET}) eq
+                            '0,zero,1,one,2,two';
+
             my $string_eval_error;
             (async sub {
                 eval q{ await $_[0] };

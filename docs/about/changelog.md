@@ -43,6 +43,12 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Bugfix: constrain async callback-aggregate lifecycle bookkeeping to active
   async frames, preserve DESTROY-rescued graphs during targeted weak sweeps,
   and assign collision-free async bytecode opcodes after integer operations.
+- Bugfix: async multi-value `foreach my (...)` preserves every grouped lexical
+  across `await`, and the legacy `experimental::signatures` warning category
+  remains accepted for compatible signature-enabled code.
+- CPAN: test the bundled `Future::AsyncAwait` implementation directly without
+  its replaced XS parser prerequisites; all 52 upstream files and 221
+  assertions pass with `jcpan -t Future::AsyncAwait`.
 - Bugfix: the unit-test harness accepts successful `plan skip_all` exits as
   clean TAP completion, allowing Unix-only socket tests to skip correctly on
   Windows CI.
