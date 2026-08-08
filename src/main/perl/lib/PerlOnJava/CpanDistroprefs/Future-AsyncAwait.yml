@@ -1,0 +1,21 @@
+---
+comment: |
+  PerlOnJava distroprefs for Future::AsyncAwait.
+
+  PerlOnJava bundles the async/await parser and runtime, so the upstream XS
+  parser modules are neither built nor loaded. Remove those native-only
+  prerequisites from static metadata and run the complete upstream test suite
+  directly against the bundled implementation. Configure, build, and install
+  are no-ops because the bundled modules must remain authoritative on @INC.
+match:
+  distribution: "^PEVANS/Future-AsyncAwait-"
+patches:
+  - "Future-AsyncAwait/RemoveNativePrereqs.patch"
+pl:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::FutureAsyncAwait -e "PerlOnJava::Distroprefs::FutureAsyncAwait::prepare()"'
+make:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::FutureAsyncAwait -e "PerlOnJava::Distroprefs::FutureAsyncAwait::noop()"'
+test:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::FutureAsyncAwait -e "PerlOnJava::Distroprefs::FutureAsyncAwait::test_phase()"'
+install:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::FutureAsyncAwait -e "PerlOnJava::Distroprefs::FutureAsyncAwait::noop()"'

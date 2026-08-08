@@ -586,6 +586,13 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   a declared PAGI::Server prerequisite. The documented install command, both
   smoke-test backends, and a live HTTP request now require only PAGI::Server's
   declared dependency chain.
+- [Completed 2026-08-08] Finished the upstream Future::AsyncAwait 0.71 test
+  gate. Interpreter bytecode now groups every lexical in multi-value
+  `foreach my (...)`, preserving those iterator aliases across `await`, and
+  the legacy `experimental::signatures` warnings category remains accepted.
+  All 52 upstream files pass with 221 assertions. Bundled CPAN policy removes
+  the replaced XS parser prerequisites and runs that full suite directly, so
+  `./jcpan -t Future::AsyncAwait` reports success for the native implementation.
 
 ## References
 
