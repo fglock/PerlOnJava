@@ -284,15 +284,13 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Continue Phase 8 by reducing SQL::Translator's two PostgreSQL parser files,
-   `t/08postgres-to-mysql.t` and `t/14postgres-parser.t`, which share a Java
-   `Pattern` stack overflow in a Parse::RecDescent match. Do not replace this
-   with an unbounded JVM-stack setting; select or improve the bounded regex
-   backend and rerun both unchanged files.
-2. Then separate the remaining SQL::Translator producer/list-context failures
+1. Continue Phase 8 with the remaining SQL::Translator producer/list-context
+   failures
    (`t/44-xml-to-db2-array.t`, the two `t/51-xml-to-oracle*.t` files, and
-   `t/74-filename-arrayref.t`) from the four focused diff/round-trip assertion
-   files. Rerun the complete 75-file matrix after each shared correction.
+   `t/74-filename-arrayref.t`). Determine whether their leading undef values
+   share one list-return boundary before changing producer-specific code.
+2. Then reduce the four focused diff/round-trip assertion files and rerun the
+   complete unchanged 75-file matrix after each shared correction.
 3. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -802,6 +800,16 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   `t/16xml-parser.t` (240/240), `t/43xml-to-db2.t` (1/1),
   `t/46xml-to-pg.t` (1/1), `t/48xml-to-sqlite.t` (2/2), and
   `t/64xml-to-mysql.t` (2/2).
+- Quote-delimited token patterns whose repeated alternation cannot consume the
+  closing delimiter now make that repetition possessive in the Java form.
+  Backtracking iterations cannot change a valid result for this shape, and
+  removing them prevents Java `Pattern` from consuming one native stack frame
+  per character. Regression `regex_long_quoted_token.t` passes 5/5 under
+  standard Perl, JVM, and interpreter, covering a 20,000-character capture,
+  an escaped delimiter, and an unterminated failure. With the default stack
+  and a 2 GB heap bound for local machine isolation, SQL::Translator's
+  unchanged `t/08postgres-to-mysql.t` passes 1/1 and
+  `t/14postgres-parser.t` passes 211/211.
 
 ### Open questions
 

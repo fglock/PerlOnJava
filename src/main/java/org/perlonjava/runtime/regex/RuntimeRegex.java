@@ -10,6 +10,8 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Iterator;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +44,74 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:[Ii][sS]|[Ii][nN])[A-Za-z0-9_]*)}");
     // Maximum size for the regex cache
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
+
+    private static String makeDelimitedTokenRepetitionsPossessive(String pattern) {
+        Deque<DelimitedGroup> groups = new ArrayDeque<>();
+        List<Integer> insertions = new ArrayList<>();
+        boolean escaped = false;
+        boolean inClass = false;
+
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass) continue;
+
+            if (ch == '(') {
+                groups.push(new DelimitedGroup(i));
+            } else if (ch == '|' && !groups.isEmpty()) {
+                groups.peek().hasAlternation = true;
+            } else if (ch == ')' && !groups.isEmpty()) {
+                DelimitedGroup group = groups.pop();
+                if (!group.hasAlternation || i + 1 >= pattern.length()
+                        || pattern.charAt(i + 1) != '*') {
+                    continue;
+                }
+
+                String body = pattern.substring(group.start, i + 1);
+                char delimiter = body.contains("[^\"") || body.contains("[^\\\"") ? '"'
+                        : body.contains("[^'") || body.contains("[^\\'") ? '\'' : 0;
+                if (delimiter == 0) continue;
+
+                int suffix = i + 2;
+                while (suffix < pattern.length() && pattern.charAt(suffix) == ')') suffix++;
+                if (suffix < pattern.length() && pattern.charAt(suffix) == delimiter) {
+                    insertions.add(i + 2);
+                }
+            }
+        }
+
+        if (insertions.isEmpty()) return pattern;
+        StringBuilder stackSafe = new StringBuilder(pattern);
+        for (int i = insertions.size() - 1; i >= 0; i--) {
+            stackSafe.insert(insertions.get(i).intValue(), '+');
+        }
+        return stackSafe.toString();
+    }
+
+    private static final class DelimitedGroup {
+        final int start;
+        boolean hasAlternation;
+
+        DelimitedGroup(int start) {
+            this.start = start;
+        }
+    }
+
     // Cache to store compiled regex patterns
     private static final Map<String, RuntimeRegex> regexCache = new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
         @Override
@@ -347,6 +417,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 javaPattern = usesRecursiveBackend
                         ? "(?!)"
                         : preProcessRegex(compilePatternString, regex.regexFlags);
+                if (!usesRecursiveBackend) {
+                    javaPattern = makeDelimitedTokenRepetitionsPossessive(javaPattern);
+                }
 
                 // Debug logging
                 if (DEBUG_REGEX) {
