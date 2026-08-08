@@ -284,15 +284,15 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Continue with the documented LWP `t/local/http.t` Phase 8 parity follow-up;
-   CGI's complete unchanged source matrix now passes.
+1. Establish the separate Phase 8 64-bit-IV baseline with focused standard
+   Perl, JVM, and interpreter gates for integer boundaries, `pack`/`unpack`,
+   bitwise operators, and `sprintf` before changing scalar representation.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-3. After LWP, select the next remaining Phase 8 source-first consumer from the
-   baseline inventory and record its unchanged matrix before changing runtime
-   behavior.
+3. Use that baseline to select the next source-first consumer whose failures
+   are caused by IV width rather than an explicit capability policy.
 
 ### Completed phase deliverables
 
@@ -867,6 +867,18 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   all 64 files and 1,578/1,578 assertions with zero failures, errors, timeouts,
   or incomplete files (10 skips and four upstream TODOs). The full `make` gate
   passes; no CGI distribution preference or patch is required.
+- LWP's Phase 8 follow-up is complete (2026-08-08). The bundled
+  `HTTP::Cookies` implementation now adds request cookie headers with domain,
+  path, secure, port, expiry, version, and pre-existing-header handling, and
+  converts `Max-Age` to an absolute expiry when storing a cookie. The focused
+  `http_cookies_request_header.t` regression passes 6/6 under standard Perl,
+  JVM, and interpreter execution. System Perl and PerlOnJava both pass the
+  unchanged `t/local/http.t` 136/136 localhost-server assertions. With the
+  source graph's already-built `Encode::Locale` prerequisite restored to its
+  isolated test path, libwww-perl 6.83's complete unchanged matrix passes all
+  23 files and 330 assertions (`Result: PASS`; one unstable upstream NNTP file
+  skips). The full `make` gate passes; no libwww-perl preference or patch is
+  required.
 
 ### Open questions
 
