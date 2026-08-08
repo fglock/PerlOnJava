@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 
 import java.io.ByteArrayOutputStream;
@@ -346,6 +347,26 @@ public class PerlScriptExecutionTest {
         } catch (Exception e) {
             // Get the root cause and print its stack trace
             Throwable rootCause = getRootCause(e);
+
+            // Test::Builder implements plan skip_all by exiting successfully.
+            // Treat that exit exactly like normal completion, while still
+            // checking the TAP emitted before exit for failures or bailouts.
+            if (rootCause instanceof PerlExitException exitException
+                    && exitException.getExitCode() == 0) {
+                String output = outputStream.toString();
+                for (String line : output.lines().toList()) {
+                    if (line.trim().startsWith("not ok") && !line.contains("# TODO")) {
+                        fail("Test failure in " + filename + ": " + line);
+                        return;
+                    }
+                    if (line.trim().startsWith("Bail out!")) {
+                        fail("Test bailed out in " + filename + ": " + line);
+                        return;
+                    }
+                }
+                return;
+            }
+
             System.err.println("Root cause error in " + filename + ":");
             rootCause.printStackTrace(System.err);
             String msg = rootCause.getMessage();
