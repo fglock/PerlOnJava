@@ -1215,6 +1215,7 @@ public class BytecodeCompiler implements Visitor {
 
         int regexSaveReg = -1;
         if (!node.getBooleanAnnotation("blockIsSubroutine")
+                && !node.getBooleanAnnotation("skipRegexSaveRestore")
                 && RegexUsageDetector.containsRegexOperation(node)) {
             regexSaveReg = allocateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
@@ -6022,6 +6023,9 @@ public class BytecodeCompiler implements Visitor {
             foreachRegexSaveReg = allocateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(foreachRegexSaveReg);
+            if (node.body != null) {
+                node.body.setAnnotation("skipRegexSaveRestore", true);
+            }
         }
 
         // Step 2: Create iterator from the list
@@ -6359,6 +6363,9 @@ public class BytecodeCompiler implements Visitor {
             loopRegexSaveReg = allocateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(loopRegexSaveReg);
+            if (node.body != null) {
+                node.body.setAnnotation("skipRegexSaveRestore", true);
+            }
         }
 
         // Step 1: Execute initialization (for C-style loops only)
