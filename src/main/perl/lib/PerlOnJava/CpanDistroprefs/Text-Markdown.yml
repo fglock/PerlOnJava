@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava compatibility patch for Text::Markdown.
+
+  Java's regex engine has no recursive-pattern opcode for Perl's
+  `(??{ $self_referential_regex })` construct. Build equivalent balanced
+  bracket and parenthesis patterns to a bounded depth at module load time.
+  This preserves the upstream behavior for practical Markdown inputs while
+  avoiding silent regex substitution; the full upstream suite remains active.
+match:
+  distribution: "^.*/Text-Markdown-[0-9]"
+patches:
+  - "Text-Markdown/BoundedBalancedPatterns.patch"

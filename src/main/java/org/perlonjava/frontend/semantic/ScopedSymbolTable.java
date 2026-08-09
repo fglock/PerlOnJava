@@ -82,6 +82,9 @@ public class ScopedSymbolTable {
     public final Stack<BitSet> warningFatalStack = new Stack<>();
     // Stack to manage feature categories for each scope
     public final Stack<Integer> featureFlagsStack = new Stack<>();
+    // Exact state for postderef_qq. The legacy int mask has more than 32
+    // categories and can alias high bit positions modulo 32.
+    private final Stack<Boolean> postderefQqStack = new Stack<>();
     // Stack to manage strict options for each scope
     public final Stack<Integer> strictOptionsStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
@@ -111,6 +114,7 @@ public class ScopedSymbolTable {
         warningFatalStack.push(new BitSet());
         // Initialize the feature categories stack with an empty map for the global scope
         featureFlagsStack.push(0);
+        postderefQqStack.push(false);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
         // Initialize the package name
@@ -185,6 +189,7 @@ public class ScopedSymbolTable {
         warningFatalStack.push((BitSet) warningFatalStack.peek().clone());
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
+        postderefQqStack.push(postderefQqStack.peek());
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
 
@@ -225,6 +230,7 @@ public class ScopedSymbolTable {
             warningDisabledStack.pop();
             warningFatalStack.pop();
             featureFlagsStack.pop();
+            postderefQqStack.pop();
             strictOptionsStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
@@ -742,6 +748,8 @@ public class ScopedSymbolTable {
         // Clone feature flags
         st.featureFlagsStack.pop(); // Remove the initial value pushed by enterScope
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
+        st.postderefQqStack.pop();
+        st.postderefQqStack.push(this.postderefQqStack.peek());
 
         // Clone strict options
         st.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
@@ -947,6 +955,10 @@ public class ScopedSymbolTable {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
         } else {
             featureFlagsStack.push(featureFlagsStack.pop() | (1 << bitPosition));
+            if (feature.equals("postderef_qq")) {
+                postderefQqStack.pop();
+                postderefQqStack.push(true);
+            }
             
             // Enable the corresponding experimental warning if this is an experimental feature
             // In Perl 5, experimental warnings are ON by default for experimental features
@@ -971,10 +983,17 @@ public class ScopedSymbolTable {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
         } else {
             featureFlagsStack.push(featureFlagsStack.pop() & ~(1 << bitPosition));
+            if (feature.equals("postderef_qq")) {
+                postderefQqStack.pop();
+                postderefQqStack.push(false);
+            }
         }
     }
 
     public boolean isFeatureCategoryEnabled(String feature) {
+        if (feature.equals("postderef_qq")) {
+            return !postderefQqStack.isEmpty() && postderefQqStack.peek();
+        }
         if (isNoOpFeature(feature)) {
             return true;
         }
@@ -1037,6 +1056,10 @@ public class ScopedSymbolTable {
         // Copy feature flags
         this.featureFlagsStack.pop();
         this.featureFlagsStack.push(source.featureFlagsStack.get(index));
+        int postderefIndex = Math.max(0,
+                Math.min(sourceScopeIndex, source.postderefQqStack.size() - 1));
+        this.postderefQqStack.pop();
+        this.postderefQqStack.push(source.postderefQqStack.get(postderefIndex));
 
         // Copy strict options
         this.strictOptionsStack.pop();

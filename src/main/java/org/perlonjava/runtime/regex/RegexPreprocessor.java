@@ -2367,13 +2367,15 @@ public class RegexPreprocessor {
             regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
         }
 
-        if (condition.startsWith("?")) {
+        boolean assertionCondition = condition.startsWith("?=") || condition.startsWith("?!");
+
+        if (condition.startsWith("?") && !assertionCondition) {
             // Marker should be after the first ?
             regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
         }
 
         // Check for non-numeric conditions that aren't valid
-        if (!condition.matches("\\d+") && !condition.matches("<[^>]+>") && !condition.matches("'[^']+'")) {
+        if (!assertionCondition && !condition.matches("\\d+") && !condition.matches("<[^>]+>") && !condition.matches("'[^']+'")) {
             // For single character conditions like "x", marker should be after the character
             if (condition.length() == 1) {
                 regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
@@ -2426,6 +2428,24 @@ public class RegexPreprocessor {
         }
 
         String yesBranch = pipePos >= 0 ? s.substring(branchStart, pipePos) : s.substring(branchStart, pos);
+        String noBranch = pipePos >= 0 ? s.substring(pipePos + 1, pos) : "";
+
+        // Java has lookaround but no Perl conditional syntax. An assertion
+        // conditional can be expressed as two mutually exclusive alternations:
+        // (?(?=A)Y|N) -> (?:(?=A)Y|(?!A)N), with the inverse for (?!A).
+        // Run each branch recursively so nested assertion conditionals work too.
+        if (assertionCondition) {
+            String assertionBody = condition.substring(2);
+            boolean positive = condition.startsWith("?=");
+            sb.append("(?:").append(positive ? "(?=" : "(?!").append(assertionBody).append(")");
+            handleRegex(yesBranch, 0, sb, regexFlags, false);
+            if (pipePos >= 0) {
+                sb.append("|").append(positive ? "(?!" : "(?=").append(assertionBody).append(")");
+                handleRegex(noBranch, 0, sb, regexFlags, false);
+            }
+            sb.append(")");
+            return pos;
+        }
 
         if (condition.matches("\\d+") && pipeCount == 0) {
             sb.append("(?:");

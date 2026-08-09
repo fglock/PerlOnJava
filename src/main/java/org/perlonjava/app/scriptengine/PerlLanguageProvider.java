@@ -19,6 +19,7 @@ import org.perlonjava.frontend.parser.DataSection;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -60,6 +61,10 @@ public class PerlLanguageProvider {
         globalInitialized = false;
         GlobalContext.setThreadTaintMode(false);
         resetAllGlobals();
+        // A prior script may have closed its Perl-level STDIN glob. Script
+        // engine resets run multiple top-level programs in one JVM, so give
+        // the next program a fresh wrapper around the process standard input.
+        RuntimeIO.stdin = new RuntimeIO(new StandardIO(System.in));
         DataSection.reset();
     }
 
@@ -300,6 +305,8 @@ public class PerlLanguageProvider {
         // Save the current scope so we can restore it after execution.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         int savedCurrentScopeIndex = savedCurrentScope != null ? savedCurrentScope.currentScopeIndex() : -1;
+        int savedCallerFeatureFlags = savedCurrentScope != null
+                ? savedCurrentScope.featureFlagsStack.peek() : 0;
 
         // Save and clear the eval runtime context (same reason as executePerlCode)
         RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
@@ -354,7 +361,22 @@ public class PerlLanguageProvider {
             // Propagate pragma changes back to the caller's scope so subsequent
             // code in the same lexical block sees BEGIN-time feature/warning hints.
             if (savedCurrentScope != null) {
+                int callerFeatureFlagsAfterExecution = savedCurrentScope.featureFlagsStack.peek();
                 savedCurrentScope.copyFlagsFrom(ctx.symbolTable, executionFlagScopeIndex);
+                // A nested eval STRING executed by this BEGIN wrapper can call
+                // feature->import at runtime.  That import deliberately mutates
+                // the enclosing parser scope, while the synthetic wrapper's
+                // snapshot remains unchanged.  Preserve just those caller-side
+                // feature-bit changes instead of overwriting them with the stale
+                // wrapper snapshot.  Direct BEGIN imports still arrive through
+                // ctx.symbolTable and are copied above.
+                int changedFeatureBits = savedCallerFeatureFlags ^ callerFeatureFlagsAfterExecution;
+                if (changedFeatureBits != 0) {
+                    int wrapperFeatureFlags = savedCurrentScope.featureFlagsStack.pop();
+                    savedCurrentScope.featureFlagsStack.push(
+                            (wrapperFeatureFlags & ~changedFeatureBits)
+                                    | (callerFeatureFlagsAfterExecution & changedFeatureBits));
+                }
                 // Also update per-call-site hints so caller()[8] and caller()[10] are correct
                 WarningBitsRegistry.setCallSiteHints(savedCurrentScope.getStrictOptions());
                 WarningBitsRegistry.snapshotCurrentHintHash();

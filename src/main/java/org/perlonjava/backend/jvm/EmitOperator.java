@@ -1758,7 +1758,8 @@ public class EmitOperator {
                             "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                             false);
                 } else if (operatorNode.operand instanceof OperatorNode ||
-                        operatorNode.operand instanceof BlockNode) {
+                        operatorNode.operand instanceof BlockNode ||
+                        operatorNode.operand instanceof StringNode) {
                     operatorNode.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     emitterVisitor.pushCurrentPackage();
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,

@@ -1494,6 +1494,14 @@ public class ReachabilityWalker {
                 continue;
             }
             if (referent.destroyFired || referent.refCount == Integer.MIN_VALUE) {
+                // A DESTROY body may have rescued the object by storing $self
+                // into another live container. Rescue-specific cleanup runs
+                // after the undef assignment and decides whether to clear only
+                // the object's own weak refs or its contained graph. Starting a
+                // generic fixed-point cascade here clears live children first.
+                if (DestroyDispatch.isRescued(referent)) {
+                    continue;
+                }
                 // An eager sweep in RuntimeScalar.undefine() may already have
                 // destroyed this wrapper using a liveness snapshot taken
                 // before its tied/container edges were released. Re-walk

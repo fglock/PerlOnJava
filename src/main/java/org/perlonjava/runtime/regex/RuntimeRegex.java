@@ -1538,6 +1538,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         } catch (RegexTimeoutException e) {
             WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
             found = false;
+        } catch (StackOverflowError e) {
+            // Java's backtracking engine uses the native stack for some nested
+            // quantifiers. Perl reports an unsuccessful match when its own
+            // recursion ceiling is reached; do not let the JVM error abort the
+            // whole program for the equivalent pathological failure case.
+            found = false;
         }
 
         // Reset pos() on failed match with /g, unless /c is set

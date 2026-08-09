@@ -13,6 +13,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -35,6 +36,62 @@ public class SystemOperator {
 
     // Shell syntax that prevents Perl's one-string command direct-exec fast path.
     private static final Pattern DIRECT_COMMAND_SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\$%]");
+
+    private static String decodeSubprocessOutput(byte[] bytes) {
+        StringBuilder decoded = new StringBuilder(bytes.length);
+        for (int i = 0; i < bytes.length; ) {
+            int first = bytes[i] & 0xff;
+            if (first < 0x80) {
+                decoded.append((char) first);
+                i++;
+                continue;
+            }
+
+            int length;
+            int codePoint;
+            if (first >= 0xc2 && first <= 0xdf) {
+                length = 2;
+                codePoint = first & 0x1f;
+            } else if (first >= 0xe0 && first <= 0xef) {
+                length = 3;
+                codePoint = first & 0x0f;
+            } else if (first >= 0xf0 && first <= 0xf4) {
+                length = 4;
+                codePoint = first & 0x07;
+            } else {
+                decoded.append((char) first);
+                i++;
+                continue;
+            }
+
+            boolean valid = i + length <= bytes.length;
+            for (int j = 1; valid && j < length; j++) {
+                int continuation = bytes[i + j] & 0xff;
+                valid = (continuation & 0xc0) == 0x80;
+                if (valid) codePoint = (codePoint << 6) | (continuation & 0x3f);
+            }
+            if (valid && length == 3) {
+                int second = bytes[i + 1] & 0xff;
+                valid = (first != 0xe0 || second >= 0xa0)
+                        && (first != 0xed || second <= 0x9f);
+            } else if (valid && length == 4) {
+                int second = bytes[i + 1] & 0xff;
+                valid = (first != 0xf0 || second >= 0x90)
+                        && (first != 0xf4 || second <= 0x8f);
+            }
+
+            if (valid) {
+                decoded.appendCodePoint(codePoint);
+                i += length;
+            } else {
+                // Preserve an invalid octet one-for-one instead of replacing
+                // it with U+FFFD, so qx// remains binary-safe.
+                decoded.append((char) first);
+                i++;
+            }
+        }
+        return decoded.toString();
+    }
 
     /**
      * Executes a system command and returns the output as a RuntimeBase.
@@ -506,7 +563,10 @@ public class SystemOperator {
                             baos.write(buffer, 0, bytesRead);
                         }
                         synchronized (finalOutput) {
-                            finalOutput.append(baos.toString());
+                            // Perl strings preserve arbitrary bytes from qx//.  The
+                            // platform-default charset would replace invalid UTF-8
+                            // sequences and silently corrupt binary command output.
+                            finalOutput.append(decodeSubprocessOutput(baos.toByteArray()));
                         }
                     } catch (IOException e) {
                         // Stream closed - this is normal when process terminates
@@ -637,7 +697,7 @@ public class SystemOperator {
                         baos.write(buffer, 0, bytesRead);
                     }
                     synchronized (finalOutput) {
-                        finalOutput.append(baos.toString());
+                        finalOutput.append(decodeSubprocessOutput(baos.toByteArray()));
                     }
                 } catch (IOException e) {
                     // Stream closed - this is normal when process terminates
@@ -967,7 +1027,7 @@ public class SystemOperator {
                     baos.write(buffer, 0, bytesRead);
                 }
             }
-            String capturedOutput = baos.toString();
+            String capturedOutput = decodeSubprocessOutput(baos.toByteArray());
             
             // Wait for process to complete
             int exitCode = process.waitFor();

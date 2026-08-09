@@ -19,6 +19,8 @@ Recent CPAN compatibility additions include:
 | `Devel::Caller` | Perl facade over Java call frames | `caller_cv` and caller argument compatibility used by lexical tooling |
 | `Devel::LexAlias` | Perl facade over Java lexical cells | Rebinds local and captured scalar, array, and hash lexicals |
 | `Encode::Locale` | Pure Perl facade over bundled locale support | Provides LWP and XML::Parser with locale encoding aliases; includes `Encode::Alias` |
+| `Crypt::Twofish2` | Java XS bridge | BouncyCastle Twofish engine with ECB, CBC, and CFB1 compatibility |
+| `B::Flags` | Pure Perl over portable `B` objects | Named OP/SV flags without access to Perl C structures |
 
 ---
 
@@ -287,6 +289,7 @@ These are loaded automatically or via `use`:
 | `Digest::MD5` | Java | `java.security.MessageDigest` |
 | `Digest::SHA` | Java | `java.security.MessageDigest` |
 | `Digest` | Perl | |
+| `Crypt::Twofish2` | Java + Perl | Uses the bundled BouncyCastle provider; passes all 83 upstream vectors |
 | `MIME::Base64` | Java | |
 | `MIME::QuotedPrint` | Java | |
 | `Encode` | Java + Perl | |
@@ -376,6 +379,7 @@ These are loaded automatically or via `use`:
 | `Class::MOP` | Perl | Upstream 2.4000 source |
 | `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass (no threads). See note below. |
 | `B` | Perl | `svref_2object`, `B::CV`/`GV`/`STASH`, `CVf_ANON`, etc. — enough for `Class::MOP::get_code_info` and `B::Deparse`. |
+| `B::Flags` | Perl | Portable `flagspv`/`privatepv` names for the subset of OP/SV state exposed by `B`. |
 
 ### Testing
 

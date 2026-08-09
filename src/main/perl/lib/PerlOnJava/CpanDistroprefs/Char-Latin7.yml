@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava compatibility patch for Char::Latin7.
+
+  The distribution rejects executables named `jperl` because that name was
+  historically used by a different Japanese Perl implementation. PerlOnJava
+  uses the same launcher name, so retain the guard for that older runtime while
+  exempting the launcher identified by PERLONJAVA_EXECUTABLE. Elatin7's source
+  transformer also uses regex code blocks unsupported by Java regexes: replace
+  those balanced constructs with bounded ordinary patterns, and use system Perl
+  only for the build-time source transformation. Its legacy zero-width split
+  loop is routed through PerlOnJava's native split implementation. The escaped
+  program and the complete upstream suite still execute on PerlOnJava.
+match:
+  distribution: "^.*/Char-Latin7-"
+patches:
+  - "Char-Latin7/PerlOnJavaExecutable.patch"
