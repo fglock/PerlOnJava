@@ -16,6 +16,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   PerlOnJava-aware `Char::Latin7` launcher guard; `Text::Markdown::Slidy`,
   `Text::Fold`, and their dependency suites now pass under `jcpan`.
 - Add a Java-backed `Scalar::Type` port, replacing its native XS scalar-flag probe.
+- Index physical source line numbers so very large generated Perl modules do
+  not repeatedly rescan their complete token streams while parsing strings.
 - Add Java-backed `PadWalker`, `Devel::Caller`, and `Devel::LexAlias`
   compatibility, including anonymous-sub pad metadata and lexical rebinding
   across JVM and interpreter closures; `Lexical::Persistence` and

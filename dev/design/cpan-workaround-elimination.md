@@ -268,7 +268,7 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: Phase 8, deterministic lifetime and remaining parity.
+Current phase: implementation complete; CI validation pending.
 
 ### Phase checklist
 
@@ -280,16 +280,12 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 - [x] Phase 6: Regex engine coverage (2026-08-07; executable callbacks deferred
   by design)
 - [x] Phase 7: CPAN metadata and process services (2026-08-07)
-- [ ] Phase 8: Deterministic lifetime and remaining parity
+- [x] Phase 8: Deterministic lifetime and remaining parity (2026-08-09)
 
 ### Next steps
 
-1. Complete the Number::Phone consumer gate by fixing its module-selection
-   path: source-first resolution and the 305-file build now succeed, but
-   constructors choose `Number::Phone::StubCountry::*` where the unchanged
-   tests require `Number::Phone::UK::*`. Then rerun the full suite with
-   process-tree hard-kill enforcement; its unchanged `libphonenumber.t` corpus
-   currently exceeds the bounded gate and ignores the first TERM timeout.
+1. Validate the completed PR on required Ubuntu and Windows CI before declaring
+   it ready to merge.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -971,12 +967,19 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   With that dependency and exact over-UV literal promotion in place,
   Data::CompactReadonly's unchanged source-first suite passes all 11 files and
   342 assertions without a distribution preference or patch. Number::Phone
-  also resolves and builds all 305 source files without a workaround; one
-  focused country-selection test passes, while `bugfix-rt48581.t` passes 2/3,
-  `constructor.t` passes 32/38, and `uk_data.t` reaches assertion 96 before the
-  unresolved UK-vs-StubCountry loading path aborts. Its full corpus remains the
-  precise next consumer blocker rather than being reported as complete. The
-  full `make` gate passes.
+  also resolves and builds all 305 source files without a workaround. JFR
+  attributed 3,263/3,288 samples from its generated 9.2 MB
+  `Number::Phone::StubCountry::CN` load to repeated full-token scans in
+  `ErrorMessageUtil.getLineNumberAccurate`. A lazily built physical-line index
+  preserves random-access diagnostics while removing that quadratic parser
+  path; the direct CN constructor improves from exceeding 60 seconds to 2.03
+  seconds. Unchanged `example-phone-numbers.t` improves from exhausting a
+  15-minute deadline after 1,804 assertions to passing 9,976/9,976 in 272
+  seconds, and unchanged `libphonenumber.t` passes 917/917 in 13 seconds. The
+  complete unchanged Number::Phone source suite passes all 40 files and
+  13,609/13,609 assertions in 370 seconds (`Result: PASS`; four expected
+  optional/slow tests skip). The full `make` gate passes; no Number::Phone
+  distribution preference or patch is required.
 
 ### Open questions
 
