@@ -28,6 +28,14 @@ ok(!tainted(length('abc')), 'taint propagation does not contaminate cached clean
 ok(tainted(uc($text)), 'case conversion propagates taint');
 ok(tainted(ord($text)), 'ord propagates taint');
 
+my $tainted_counter = 1 + (0 + $empty_taint);
+my $old_counter = $tainted_counter++;
+ok(tainted($old_counter), 'post-increment result preserves input taint');
+ok(tainted($tainted_counter), 'post-increment lvalue remains tainted');
+$old_counter = $tainted_counter--;
+ok(tainted($old_counter), 'post-decrement result preserves input taint');
+ok(tainted($tainted_counter), 'post-decrement lvalue remains tainted');
+
 $text =~ /^(.*)$/;
 ok(!tainted($1), 'regex capture untaints validated input');
 

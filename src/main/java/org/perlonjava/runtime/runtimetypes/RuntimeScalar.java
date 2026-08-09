@@ -3494,7 +3494,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             int intValue = (int) this.value;
             if (intValue < Integer.MAX_VALUE) {
                 this.value = intValue + 1;
-                return new RuntimeScalar(intValue); // return old value directly
+                return new RuntimeScalar(intValue).propagateTaint(this); // return old value directly
             }
         }
         return postAutoIncrementLarge();
