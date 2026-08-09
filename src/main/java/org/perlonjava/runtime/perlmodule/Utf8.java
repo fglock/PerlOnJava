@@ -108,6 +108,7 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for upgrade() method");
         }
         RuntimeScalar scalar = args.get(0);
+        boolean wasTainted = GlobalContext.isTaintModeActive() && scalar.isTainted();
         String string = scalar.toString();
         byte[] utf8Bytes = string.getBytes(StandardCharsets.UTF_8);
 
@@ -125,6 +126,7 @@ public class Utf8 extends PerlModuleBase {
                 // that already contains Unicode code points > 0xFF (e.g. "\x{100}").
                 // This is fine — we just flip the type and preserve the content as-is.
                 scalar.set(string);
+                scalar.tainted = wasTainted;
                 scalar.type = STRING;
             } else if (scalar.type != STRING) {
                 // Other types (INTEGER, DOUBLE, UNDEF, etc.): convert to string and mark as STRING.
@@ -140,6 +142,7 @@ public class Utf8 extends PerlModuleBase {
                 // WARNING: Do NOT skip this set() call, as it will cause regressions where
                 // utf8::upgrade() corrupts Unicode strings to wrong values (e.g., U+0100 -> U+0000).
                 scalar.set(string);
+                scalar.tainted = wasTainted;
                 scalar.type = STRING;
             }
             // If scalar.type == STRING: already upgraded, do nothing.
@@ -162,6 +165,7 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for downgrade() method");
         }
         RuntimeScalar scalar = args.get(0);
+        boolean wasTainted = GlobalContext.isTaintModeActive() && scalar.isTainted();
         boolean failOk = args.size() == 2 && args.get(1).getBoolean();
         String string = scalar.toString();
 
@@ -189,6 +193,7 @@ public class Utf8 extends PerlModuleBase {
                     } catch (PerlCompilerException e) {
                         scalar.value = decodedBytes;
                     }
+                    scalar.tainted = wasTainted;
                     scalar.type = BYTE_STRING;
                 }
                 return new RuntimeScalar(true).getList();
@@ -220,9 +225,11 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for encode() method");
         }
         RuntimeScalar scalar = args.get(0);
+        boolean wasTainted = GlobalContext.isTaintModeActive() && scalar.isTainted();
         String string = scalar.toString();
         byte[] utf8Bytes = string.getBytes(StandardCharsets.UTF_8);
         scalar.set(new String(utf8Bytes, StandardCharsets.ISO_8859_1));
+        scalar.tainted = wasTainted;
         scalar.type = BYTE_STRING;
         return new RuntimeScalar().getList();
     }
@@ -239,6 +246,7 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for decode() method");
         }
         RuntimeScalar scalar = args.get(0);
+        boolean wasTainted = GlobalContext.isTaintModeActive() && scalar.isTainted();
         String string = scalar.toString();
 
         // utf8::decode expects octet data (0-255). If the string contains
@@ -265,6 +273,7 @@ public class Utf8 extends PerlModuleBase {
             CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
             String decodedStr = decoded.toString();
             scalar.set(decodedStr);
+            scalar.tainted = wasTainted;
             // Per Perl 5 docs: "The UTF-8 flag is turned on only if the string
             // contains a multi-byte UTF-8 character (i.e., any char above 0x7F
             // after decoding)." For pure ASCII input (all chars <= 0x7F), the

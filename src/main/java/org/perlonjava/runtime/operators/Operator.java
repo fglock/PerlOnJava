@@ -296,7 +296,7 @@ public class Operator {
             }
         }
 
-        if (string.isTainted()) {
+        if (GlobalContext.isTaintModeActive() && string.isTainted()) {
             for (RuntimeBase element : splitElements) {
                 if (element instanceof RuntimeScalar scalar) {
                     scalar.tainted = true;
@@ -811,7 +811,7 @@ public class Operator {
                 scalarValue = value.scalar();
             }
             RuntimeScalar rv = new RuntimeScalar(scalarValue.toString().repeat(Math.max(0, times)));
-            rv.formatPictureTainted = timesScalar.isTainted();
+            rv.formatPictureTainted = GlobalContext.isTaintModeActive() && timesScalar.isTainted();
             if (scalarValue.type == RuntimeScalarType.BYTE_STRING) {
                 rv.type = RuntimeScalarType.BYTE_STRING;
             }

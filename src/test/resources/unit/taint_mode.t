@@ -24,6 +24,33 @@ ok(!tainted($^O), '$^O is not tainted');
 ok(tainted($empty_taint), 'substr preserves source taint');
 ok(tainted($text), 'concatenation propagates taint');
 
+my $substr_target = $ENV{PATH};
+substr($substr_target, 0) = 'replacement';
+ok(tainted($substr_target), 'lvalue substr assignment preserves target taint');
+
+my $utf8_taint = "ascii$empty_taint";
+utf8::encode($utf8_taint);
+ok(tainted($utf8_taint), 'utf8::encode preserves taint');
+utf8::decode($utf8_taint);
+ok(tainted($utf8_taint), 'utf8::decode preserves taint');
+utf8::upgrade($utf8_taint);
+ok(tainted($utf8_taint), 'utf8::upgrade preserves taint');
+utf8::downgrade($utf8_taint);
+ok(tainted($utf8_taint), 'utf8::downgrade preserves taint');
+
+{
+    package TaintFetchProbe;
+    sub TIESCALAR { bless { value => $_[1], fetches => 0 }, $_[0] }
+    sub FETCH { ++$_[0]{fetches}; $_[0]{value} }
+    sub STORE { $_[0]{value} = $_[1] }
+
+    package main;
+    tie my $tied_substitution, 'TaintFetchProbe', "abc$empty_taint";
+    my $probe = tied $tied_substitution;
+    $tied_substitution =~ s/a/x/;
+    is($probe->{fetches}, 1, 'tainted substitution fetches a tied target once');
+}
+
 my $copy = $text;
 ok(tainted($copy), 'assignment propagates taint');
 {

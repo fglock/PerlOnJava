@@ -124,6 +124,22 @@ subtest 'FETCH operations' => sub {
     is($obj->{fetch_count}, 6, 'FETCH called in numeric context');
 };
 
+subtest 'operators fetch once' => sub {
+    my $scalar;
+    my $obj = tie $scalar, 'TiedScalar';
+    $scalar = 12;
+
+    my $negative = -$scalar;
+    is($negative, -12, 'unary minus uses the tied value');
+    is($obj->{fetch_count}, 1, 'unary minus calls FETCH once');
+
+    $obj->{fetch_count} = 0;
+    my $quotient = $scalar / 3;
+    is($quotient, 4, 'division uses the tied value');
+    is($obj->{fetch_count}, 1, 'division calls FETCH once');
+
+};
+
 subtest 'STORE operations' => sub {
     my $scalar;
     my $obj = tie $scalar, 'TiedScalar';

@@ -1093,6 +1093,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /** Mark this scalar tainted when any scalar input to an operation is tainted. */
     public RuntimeScalar propagateTaint(RuntimeScalar... inputs) {
+        // Outside taint mode there is no provenance to propagate.  In
+        // particular, asking a tied scalar whether it is tainted would invoke
+        // FETCH a second time after the operator has already fetched its
+        // value.
+        if (!GlobalContext.isTaintModeActive()) {
+            return this;
+        }
         for (RuntimeScalar input : inputs) {
             if (input != null && input.isTainted()) {
                 if (isTainted()) {

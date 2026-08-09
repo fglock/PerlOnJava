@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -94,7 +95,7 @@ public class Vec {
 
     private static RuntimeVecLvalue vecResult(RuntimeScalar source, int offset, int bits, long value) {
         RuntimeVecLvalue result = new RuntimeVecLvalue(source, offset, bits, value);
-        result.tainted = source.isTainted();
+        result.tainted = GlobalContext.isTaintModeActive() && source.isTainted();
         return result;
     }
 

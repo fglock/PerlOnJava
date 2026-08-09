@@ -176,7 +176,9 @@ public class SprintfOperator {
                     ProcessResult processResult = processFormatSpecifierTracked(spec, list, argIndex, formatter, bytesMode);
                     result.append(processResult.formatted);
                     charsWritten += processResult.formatted.length();
-                    hasTaintedArgument |= usedArgumentIsTainted(spec, list, argIndex);
+                    if (GlobalContext.isTaintModeActive()) {
+                        hasTaintedArgument |= usedArgumentIsTainted(spec, list, argIndex);
+                    }
 
                     // Only update maxArgIndexUsed if this specifier actually consumed arguments
                     if (spec.conversionChar != '%' || spec.widthFromArg) {
