@@ -13,6 +13,14 @@ my $text = "abc$empty_taint";
 ok(${^TAINT}, '-T enables ${^TAINT}');
 ok(tainted($^X), '$^X is tainted');
 ok(tainted($ENV{PATH}), '%ENV values are tainted');
+ok(!tainted($^O), '$^O is not tainted');
+{
+    local $^O;
+    my $os_assignment_ok = eval { $^O = $^X; 1 };
+    ok(!$os_assignment_ok, '$^O rejects a tainted assignment');
+    like($@, qr/^Insecure dependency in assigning to \$\^O while running with -T switch/,
+        '$^O assignment reports the Perl security error');
+}
 ok(tainted($empty_taint), 'substr preserves source taint');
 ok(tainted($text), 'concatenation propagates taint');
 

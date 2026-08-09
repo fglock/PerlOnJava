@@ -79,7 +79,9 @@ public class GlobalContext {
         // $^S - current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
         GlobalVariable.globalVariables.put("main::" + Character.toString('S' - 'A' + 1),
                 new ScalarSpecialVariable(ScalarSpecialVariable.Id.EVAL_STATE));
-        GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
+        GlobalVariable.globalVariables.put(
+                "main::" + Character.toString('O' - 'A' + 1),
+                new OperatingSystemVariable(SystemUtils.getPerlOsName()));    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
         GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int) (System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
         // Initialize $^W based on -w flag
