@@ -25,7 +25,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                          boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
                          boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
                          boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode,
-                         boolean isAscii, boolean allowEvalGroup) {
+                         boolean isAscii, boolean allowEvalGroup, boolean taintResults) {
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
         // m?PAT? is encoded by StringParser as an extra trailing '?' on the modifier string
@@ -48,13 +48,14 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("p"),
                 modifiers.contains("u"),
                 modifiers.contains("a"),
-                modifiers.contains("E")
+                modifiers.contains("E"),
+                modifiers.contains("T")
         );
     }
 
     public static void validateModifiers(String modifiers) {
         // Valid modifiers based on what's actually handled in fromModifiers
-        String validModifiers = "gcr?noimsxpadeulE"; // Add 'xx' handling separately, 'l' for locale, 'E' for internal re eval
+        String validModifiers = "gcr?noimsxpadeulET"; // E/T are internal lexical flags
 
         for (int i = 0; i < modifiers.length(); i++) {
             char modifier = modifiers.charAt(i);
@@ -149,7 +150,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 newPreservesMatch,
                 newIsUnicode,
                 newIsAscii,
-                this.allowEvalGroup
+                this.allowEvalGroup,
+                this.taintResults
         );
     }
 
@@ -166,6 +168,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (isExtended) flagString.append('x');
         if (isNonCapturing) flagString.append('n');
         if (isNonDestructive) flagString.append('r');
+        if (taintResults) flagString.append('T');
 
         return flagString.toString();
     }

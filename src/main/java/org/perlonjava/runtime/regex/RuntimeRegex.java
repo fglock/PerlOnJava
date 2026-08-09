@@ -73,6 +73,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Track whether the last successful match was on a BYTE_STRING input,
     // so that captures ($1, $2, $&, etc.) preserve BYTE_STRING type.
     public static boolean lastMatchWasByteString = false;
+    public static boolean lastMatchResultsTainted = false;
     public static int[] manualCaptureStarts = null;
     public static int[] manualCaptureEnds = null;
     // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
@@ -896,7 +897,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternFlags = regex.regexFlags.toPatternFlags();
             regex.refCount = 0;  // Track for proper weak ref handling
 
-            return new RuntimeScalar(regex);
+            return new RuntimeScalar(regex).propagateTaint(patternString);
         }
 
         // Check for qr overloading
@@ -929,20 +930,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternFlags = regex.regexFlags.toPatternFlags();
                     regex.refCount = 0;  // Track for proper weak ref handling
 
-                    return new RuntimeScalar(regex);
+                    return new RuntimeScalar(regex).propagateTaint(patternString, overloadedResult);
                 }
 
                 // Try fallback to string conversion
                 RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(patternString, "(\"\"");
                 if (fallbackResult != null) {
-                    return new RuntimeScalar(compile(fallbackResult.toString(), modifierStr).cloneTracked());
+                    return new RuntimeScalar(compile(fallbackResult.toString(), modifierStr).cloneTracked())
+                            .propagateTaint(patternString, fallbackResult);
                 }
             }
         }
 
         // Default: compile as string (cloneTracked() creates a tracked copy
         // so the cached RuntimeRegex is not corrupted by refCount changes)
-        return new RuntimeScalar(compile(patternString.toString(), modifierStr).cloneTracked());
+        return new RuntimeScalar(compile(patternString.toString(), modifierStr).cloneTracked())
+                .propagateTaint(patternString);
     }
 
     /**
@@ -1053,7 +1056,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         regex.replacement = replacement;
-        return new RuntimeScalar(regex);
+        return new RuntimeScalar(regex).propagateTaint(patternString);
     }
 
     /**
@@ -1405,6 +1408,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 found = true;
+                lastMatchResultsTainted = quotedRegex.isTainted()
+                        || (regex.regexFlags.taintResults() && string.isTainted());
                 lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
                 int captureCount = matcher.groupCount();
 
@@ -2432,6 +2437,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (lastMatchWasByteString) {
             scalar.type = RuntimeScalarType.BYTE_STRING;
         }
+        scalar.tainted = lastMatchResultsTainted;
         return scalar;
     }
 
@@ -2605,7 +2611,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 base.preservesMatch() || operation.preservesMatch(),
                 base.isUnicode(),
                 base.isAscii(),
-                base.allowEvalGroup() || operation.allowEvalGroup()
+                base.allowEvalGroup() || operation.allowEvalGroup(),
+                base.taintResults() || operation.taintResults()
         );
     }
 

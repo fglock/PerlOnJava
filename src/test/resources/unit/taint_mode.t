@@ -31,6 +31,17 @@ ok(tainted(ord($text)), 'ord propagates taint');
 $text =~ /^(.*)$/;
 ok(!tainted($1), 'regex capture untaints validated input');
 
+my $tainted_pattern = "(abc)$empty_taint";
+'abc' =~ /$tainted_pattern/;
+ok(tainted($1), 'a tainted regex pattern taints its capture');
+ok(tainted(qr/$tainted_pattern/), 'qr preserves pattern taint');
+
+{
+    use re 'taint';
+    $text =~ /^(.*)$/;
+    ok(tainted($1), q{use re 'taint' preserves input taint in captures});
+}
+
 sub perlsec_tainted {
     return !eval { no warnings; join('', @_), kill 0; 1 };
 }

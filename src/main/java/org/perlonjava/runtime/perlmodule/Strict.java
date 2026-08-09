@@ -39,6 +39,7 @@ public class Strict extends PerlModuleBase {
     public static final int HINT_RE_UNICODE = 0x02000000;   // use re '/u'
     public static final int HINT_RE_ASCII_AA = 0x04000000;  // use re '/aa'
     public static final int HINT_RE_EVAL = 0x08000000;      // use re 'eval'
+    public static final int HINT_RE_TAINT = 0x10000000;     // use re 'taint'
 
     /**
      * Constructor for Strict.
