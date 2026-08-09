@@ -332,4 +332,24 @@ like($@, qr/^Insecure dependency in printf while running with -T switch/,
         'tied hash STORE receives tainted key and value');
 }
 
+{
+    package TaintAutoloadProbe;
+    our @seen;
+    sub AUTOLOAD {
+        our $AUTOLOAD;
+        return if $AUTOLOAD =~ /DESTROY/;
+        push @seen, Scalar::Util::tainted($AUTOLOAD);
+    }
+
+    package main;
+    my $object = bless {}, 'TaintAutoloadProbe';
+    my $tainted_method = "tainted_method$empty_taint";
+    $object->$tainted_method;
+    $object->clean_method;
+    ok($TaintAutoloadProbe::seen[0],
+        'AUTOLOAD name inherits taint from a dynamic method name');
+    ok(!$TaintAutoloadProbe::seen[1],
+        'AUTOLOAD name is reset to clean for a clean method name');
+}
+
 done_testing;
