@@ -58,18 +58,15 @@ public class StringFormatHandler implements FormatHandler {
                 str = state.isUTF8Flagged ? processString(str) : processStringByteMode(str);
             }
 
-            // Pad if needed and not star count
-            // Note: 'A' and 'Z' formats strip content, so don't pad them back!
-            // Only 'a' format needs padding to maintain exact count
-            if (!isStarCount && format == 'a' && str.length() < count) {
-                StringBuilder padded = new StringBuilder(str);
-                while (padded.length() < count) {
-                    padded.append('\0');
-                }
-                str = padded.toString();
+            RuntimeScalar rs = new RuntimeScalar(str);
+            // A non-UTF8 source remains a byte string even when bytes above
+            // 0x7f are present.  Inferring the scalar type from the Java String
+            // would incorrectly mark such output as UTF-8 and make
+            // `use bytes; length(unpack('a*', $binary))` count encoded bytes.
+            if (!state.isUTF8Flagged) {
+                rs.type = RuntimeScalarType.BYTE_STRING;
             }
-
-            output.add(new RuntimeScalar(str));
+            output.add(rs);
         } else {
             // In byte mode, read from buffer — always ISO-8859-1 (BYTE_STRING)
             ByteBuffer buffer = state.getBuffer();
@@ -179,17 +176,6 @@ public class StringFormatHandler implements FormatHandler {
 
             // Apply format-specific processing (byte mode - ASCII whitespace only)
             result = processStringByteMode(result);
-        }
-
-        // Pad if necessary and not star count
-        // Note: 'A' and 'Z' formats strip content, so don't pad them back!
-        // Only 'a' format needs padding to maintain exact count
-        if (!isStarCount && format == 'a' && result.length() < count) {
-            StringBuilder sb = new StringBuilder(result);
-            while (sb.length() < count) {
-                sb.append('\0');
-            }
-            result = sb.toString();
         }
 
         return result;

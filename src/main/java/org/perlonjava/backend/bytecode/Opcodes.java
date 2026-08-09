@@ -2449,6 +2449,9 @@ public class Opcodes {
     /** getpeername SOCKET: Format: GETPEERNAME rd argsReg ctx. */
     public static final short GETPEERNAME = 514;
 
+    /** Restore lexical hints after leaving a nested block. Format: SET_CALL_SITE_HINTS hints. */
+    public static final short SET_CALL_SITE_HINTS = 515;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

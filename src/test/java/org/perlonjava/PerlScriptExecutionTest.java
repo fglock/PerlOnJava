@@ -168,9 +168,13 @@ public class PerlScriptExecutionTest {
                         // Compiler-integration fixtures are kept in the dedicated
                         // shard so adding them does not reshuffle every later test
                         // across the state-sensitive round-robin shards.
+                        "unit/attribute_method_named_sub_deparse.t",
+                        "unit/bytes_scope_interpreter.t",
                         "unit/exporter_lexical_compile_scope.t",
                         "unit/html_content_extractor_jsoup.t",
-                        "unit/jvm_eval_nested_compound_assignment.t"
+                        "unit/json_xs_compat.t",
+                        "unit/jvm_eval_nested_compound_assignment.t",
+                        "unit/unpack_short_string.t"
                     );
                     java.util.function.Predicate<String> isHeavy = s -> {
                         String norm = s.replace('\\', '/');

@@ -979,6 +979,9 @@ public class SubroutineParser {
                 parser.throwMissingRightCurlyOrSquareBracketError();
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            if (attributes != null && !attributes.isEmpty()) {
+                block.setAnnotation("subroutineSourceEndTokenIndex", parser.tokenIndex);
+            }
 
             // Insert signature code in the block
             if (signature != null) {
@@ -1371,6 +1374,19 @@ public class SubroutineParser {
                 : parser.ctx.symbolTable.getCurrentPackage();
         placeholder.isConstantCv = isConstantCvBody(prototype, block);
 
+        // Compile-time attribute handlers can inspect the still-lazy CV with
+        // B::Deparse before compilerSupplier has materialized its body.  Give
+        // attributed placeholders the exact source span that the compiled
+        // RuntimeCode will receive.  Without this, file-backed named subs
+        // inside an eval BLOCK can be mistaken for the enclosing block;
+        // Attribute::Method then deparses its own :Method declaration back
+        // into the replacement and recursively reapplies the attribute.
+        // Keep ordinary lazy CVs untouched: their runtime warning metadata is
+        // established by the normal compilation path below.
+        if (attributes != null && !attributes.isEmpty()) {
+            attachNamedSubDeparseMetadata(placeholder, parser, block);
+        }
+
         // Call MODIFY_CODE_ATTRIBUTES if attributes are present
         // In Perl, this is called at compile time after the sub is defined.
         // The dispatch package is the CvSTASH of the existing code ref (if any),
@@ -1736,6 +1752,27 @@ public class SubroutineParser {
         ListNode result = new ListNode(parser.tokenIndex);
         result.setAnnotation("compileTimeOnly", true);
         return result;
+    }
+
+    private static void attachNamedSubDeparseMetadata(
+            RuntimeCode placeholder, Parser parser, BlockNode block) {
+        if (parser.ctx.errorUtil == null || parser.ctx.compilerOptions == null) {
+            return;
+        }
+        String source = parser.ctx.compilerOptions.deparseSourceCode != null
+                ? parser.ctx.compilerOptions.deparseSourceCode
+                : parser.ctx.compilerOptions.code;
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+        Object endValue = block.getAnnotation("subroutineSourceEndTokenIndex");
+        int startToken = block.getIndex();
+        int endToken = endValue instanceof Integer value ? value : -1;
+        placeholder.deparseSourceText = source;
+        placeholder.deparseSourceOffset = parser.ctx.errorUtil.getSourceOffset(startToken);
+        placeholder.deparseSourceEnd = endToken >= 0
+                ? parser.ctx.errorUtil.getSourceOffset(endToken) : -1;
+
     }
 
     private static void installClosureCaptureMetadata(RuntimeCode code, List<Object> capturedValues) {

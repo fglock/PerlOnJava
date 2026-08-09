@@ -2512,6 +2512,9 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.SET_CALL_SITE_HINTS ->
+                                WarningBitsRegistry.setCallSiteHints(bytecode[pc++]);
+
                             // =================================================================
                             // DEBUGGER SUPPORT
                             // =================================================================

@@ -1750,6 +1750,10 @@ public class Disassemble {
                                 .append(" warningScope=").append(warningScopeId).append("\n");
                         break;
                     }
+                    case Opcodes.SET_CALL_SITE_HINTS:
+                        sb.append("SET_CALL_SITE_HINTS hints=")
+                                .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];
