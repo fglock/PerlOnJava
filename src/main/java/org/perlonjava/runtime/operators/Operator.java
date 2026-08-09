@@ -811,6 +811,7 @@ public class Operator {
                 scalarValue = value.scalar();
             }
             RuntimeScalar rv = new RuntimeScalar(scalarValue.toString().repeat(Math.max(0, times)));
+            rv.formatPictureTainted = timesScalar.isTainted();
             if (scalarValue.type == RuntimeScalarType.BYTE_STRING) {
                 rv.type = RuntimeScalarType.BYTE_STRING;
             }

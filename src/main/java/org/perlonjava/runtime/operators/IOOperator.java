@@ -1815,7 +1815,8 @@ public class IOOperator {
         if (!formatTemplate.contains("@") && !formatTemplate.contains("^")) {
             // Simple case: no format fields, just append the string
             RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
-            boolean resultTainted = accumulator.isTainted() || picture.isTainted();
+            boolean resultTainted = accumulator.isTainted() || picture.isTainted()
+                    || picture.formatPictureTainted;
             String currentValue = accumulator.toString();
             accumulator.set(currentValue + formatTemplate);
             accumulator.tainted = resultTainted;
@@ -1845,7 +1846,8 @@ public class IOOperator {
 
             // Append to $^A
             RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
-            boolean resultTainted = accumulator.isTainted() || picture.isTainted();
+            boolean resultTainted = accumulator.isTainted() || picture.isTainted()
+                    || picture.formatPictureTainted;
             for (int i = 1; i < args.length; i++) {
                 resultTainted |= args[i].scalar().isTainted();
             }

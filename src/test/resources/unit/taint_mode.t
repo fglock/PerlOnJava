@@ -162,6 +162,12 @@ ok(tainted($0), 'the program name is tainted under taint mode');
     $^A = $empty_taint;
     formline '@<<<<', 'clean';
     ok(tainted($^A), 'formline preserves existing accumulator taint');
+    my $tainted_width = 5 + (0 + $empty_taint);
+    my $dynamic_picture = '@' . ('<' x $tainted_width);
+    ok(tainted($dynamic_picture), 'dynamic picture composition exposes repeat-count taint');
+    $^A = '';
+    formline $dynamic_picture, 'clean';
+    ok(tainted($^A), 'tainted repeat count marks a dynamic formline picture');
 }
 
 {

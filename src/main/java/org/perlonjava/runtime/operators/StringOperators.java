@@ -547,9 +547,12 @@ public class StringOperators {
 
     private static RuntimeScalar propagateTaint(RuntimeScalar result, RuntimeScalar... inputs) {
         for (RuntimeScalar input : inputs) {
+            if (input != null && input.formatPictureTainted) {
+                result.formatPictureTainted = true;
+                result.tainted = true;
+            }
             if (input != null && input.isTainted()) {
                 result.tainted = true;
-                break;
             }
         }
         return result;
