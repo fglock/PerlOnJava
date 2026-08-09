@@ -1531,7 +1531,7 @@ public class IOOperator {
         File file = RuntimeIO.resolveFile(fileName);
         if ((mode & O_NOFOLLOW) != 0 && Files.isSymbolicLink(file.toPath())) {
             getGlobalVariable("main::!").set("Too many levels of symbolic links");
-            return scalarFalse;
+            return scalarUndef;
         }
 
         // Determine the base mode
@@ -1559,7 +1559,7 @@ public class IOOperator {
             // O_EXCL: "error if O_CREAT and the file already exists"
             if ((mode & O_EXCL) != 0 && existed) {
                 getGlobalVariable("main::!").set("File exists");
-                return scalarFalse;
+                return scalarUndef;
             }
             if (!existed) {
                 try {
@@ -1569,14 +1569,14 @@ public class IOOperator {
                 } catch (IOException e) {
                     // Failed to create file
                     getGlobalVariable("main::!").set(e.getMessage());
-                    return scalarFalse;
+                    return scalarUndef;
                 }
             }
         }
 
         RuntimeIO fh = RuntimeIO.open(fileName, modeStr);
         if (fh == null) {
-            return scalarFalse;
+            return scalarUndef;
         }
 
         // Set IO slot on the glob, following the same pattern as open() and socket()

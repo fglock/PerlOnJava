@@ -194,6 +194,8 @@ like($@, qr/^Insecure dependency in open while running with -T switch/,
 
 my $sysread_open_ok = eval { sysopen my $fh, $tainted_path, O_RDONLY; 1 };
 ok($sysread_open_ok, 'sysopen permits a tainted read-only path');
+my $missing_sysopen = sysopen my $missing_fh, $tainted_path, O_RDONLY;
+ok(!defined($missing_sysopen), 'failed read-only sysopen returns undef');
 my $syswrite_open_ok = eval { sysopen my $fh, $tainted_path, O_WRONLY; 1 };
 ok(!$syswrite_open_ok, 'sysopen rejects a tainted write path');
 like($@, qr/^Insecure dependency in sysopen while running with -T switch/,
