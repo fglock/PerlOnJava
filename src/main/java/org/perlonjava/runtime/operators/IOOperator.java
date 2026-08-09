@@ -2397,6 +2397,9 @@ public class IOOperator {
             return scalarFalse;
         }
 
+        RuntimeScalar.checkTaint(args[1].scalar(), "fcntl");
+        RuntimeScalar.checkTaint(args[2].scalar(), "fcntl");
+
         try {
             RuntimeScalar fileHandle = args[0].scalar();
             int function = args[1].scalar().getInt();
@@ -2469,6 +2472,9 @@ public class IOOperator {
             getGlobalVariable("main::!").set("Not enough arguments for ioctl");
             return scalarFalse;
         }
+
+        RuntimeScalar.checkTaint(args[1].scalar(), "ioctl");
+        RuntimeScalar.checkTaint(args[2].scalar(), "ioctl");
 
         try {
             RuntimeScalar fileHandle = args[0].scalar();

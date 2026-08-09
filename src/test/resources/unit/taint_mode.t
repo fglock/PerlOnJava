@@ -153,6 +153,15 @@ like($@, qr/^Insecure dependency in eval while running with -T switch/,
 ok(tainted($0), 'the program name is tainted under taint mode');
 
 {
+    open my $ioctl_fh, '<', $^X or die $!;
+    my $ioctl_ok = eval { ioctl $ioctl_fh, 0 + $empty_taint, "x$empty_taint"; 1 };
+    ok(!$ioctl_ok, 'ioctl rejects tainted control arguments');
+    like($@, qr/^Insecure dependency in ioctl while running with -T switch/,
+        'ioctl reports the Perl security error');
+    close $ioctl_fh;
+}
+
+{
     open my $source, '<', $^X or die $!;
     local $/;
     my $contents = <$source>;
