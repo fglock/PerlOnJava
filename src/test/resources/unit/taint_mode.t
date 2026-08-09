@@ -1,6 +1,8 @@
 #!perl -T
 use strict;
 use warnings;
+use feature 'switch';
+no warnings 'experimental::smartmatch';
 use Scalar::Util qw(tainted);
 use Test::More;
 
@@ -77,6 +79,23 @@ for my $case (@file_operations) {
     like($@,
         qr/^Insecure dependency in $operation while running with -T switch/,
         "$operation reports the Perl security error");
+}
+
+for (qw(x y z)) {
+    my $outer_topic = $_;
+    my $letter = "$_$empty_taint";
+    my $result = do {
+        no warnings 'deprecated';
+        given ($_) {
+            when ('x') { $letter }
+            when ('y') { goto leave_given }
+            default { $letter }
+            leave_given: $letter
+        }
+    };
+    is($result, $letter, "given preserves the result for $outer_topic");
+    ok(tainted($result), "given preserves taint for $outer_topic");
+    is($_, $outer_topic, "given restores the foreach topic for $outer_topic");
 }
 
 done_testing;

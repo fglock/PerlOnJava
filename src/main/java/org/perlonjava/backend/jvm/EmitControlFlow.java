@@ -92,7 +92,8 @@ public class EmitControlFlow {
      * @param node The operator node representing the control flow statement
      * @throws PerlCompilerException if the operator is used outside a loop block
      */
-    static void handleNextOperator(EmitterContext ctx, OperatorNode node) {
+    static void handleNextOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(next)");
 
         String operator = node.operator;
@@ -199,9 +200,24 @@ public class EmitControlFlow {
             return;
         }
 
+        // A when-clause's implicit last carries the clause's final value out
+        // of the synthetic given loop. Evaluate it explicitly in scalar
+        // context and leave it on the operand stack for the given block's
+        // result. Ordinary last remains valueless and follows the path below.
+        boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
+        if (implicitGivenLast) {
+            Object resultAnnotation = node.getAnnotation("implicitGivenResult");
+            Node result = resultAnnotation instanceof Node ? (Node) resultAnnotation : null;
+            if (result != null) {
+                result.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+            } else {
+                EmitOperator.emitUndef(ctx.mv);
+            }
+        }
+
         // Handle return values based on context
         if (loopLabels.context != RuntimeContextType.VOID) {
-            if (operator.equals("next") || operator.equals("last")) {
+            if ((operator.equals("next") || operator.equals("last")) && !implicitGivenLast) {
                 // For non-void contexts, ensure an 'undef' value is pushed to maintain stack consistency
                 EmitOperator.emitUndef(ctx.mv);
             }
