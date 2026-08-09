@@ -44,12 +44,7 @@ public class InlineOpcodeHandler {
         }
         if (val instanceof ScalarSpecialVariable sv) {
             RuntimeScalar src = sv.getValueAsScalar();
-            RuntimeScalar copy = new RuntimeScalar();
-            copy.type = src.type;
-            copy.value = src.value;
-            copy.numericLiteralText = src.numericLiteralText;
-            copy.numericContextSeen = src.numericContextSeen;
-            return copy;
+            return new RuntimeScalar(src);
         }
         return (RuntimeScalar) val;
     }

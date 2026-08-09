@@ -40,6 +40,10 @@ ok(tainted(qr/$tainted_pattern/), 'qr preserves pattern taint');
     use re 'taint';
     $text =~ /^(.*)$/;
     ok(tainted($1), q{use re 'taint' preserves input taint in captures});
+
+    my $capture = sub { $_[0] =~ /^(.*)$/; $1 };
+    ok(tainted($capture->($text)), 'capture returned from a sub preserves taint');
+    ok(!tainted($capture->('clean')), 'capture taint does not stick to later matches');
 }
 
 my $sub_source = "abcd$empty_taint";

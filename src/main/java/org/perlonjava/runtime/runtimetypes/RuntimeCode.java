@@ -5014,10 +5014,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeBase elem = elems.get(i);
             if (elem instanceof ScalarSpecialVariable ssv) {
                 RuntimeScalar resolved = ssv.getValueAsScalar();
-                RuntimeScalar concrete = new RuntimeScalar();
-                concrete.type = resolved.type;
-                concrete.value = resolved.value;
-                elems.set(i, concrete);
+                elems.set(i, new RuntimeScalar(resolved));
             } else if (!preserveAggregateLvalues && elem instanceof RuntimeArray arr) {
                 // Copy array elements to ensure independence from local restoration.
                 // For tied arrays, use getList() which dispatches through FETCHSIZE/FETCH,
@@ -5066,10 +5063,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeScalar materializeBlockResult(RuntimeScalar result) {
         if (result instanceof ScalarSpecialVariable ssv) {
             RuntimeScalar resolved = ssv.getValueAsScalar();
-            RuntimeScalar concrete = new RuntimeScalar();
-            concrete.type = resolved.type;
-            concrete.value = resolved.value;
-            return concrete;
+            return new RuntimeScalar(resolved);
         }
         return result;
     }
