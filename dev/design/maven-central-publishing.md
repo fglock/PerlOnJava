@@ -1,496 +1,403 @@
 # Maven Central Publishing for PerlOnJava
 
-## Status: Planned
+## Status: Design refreshed; implementation not started
 
-**Date:** 2025-03-19  
-**Related:** [Roadmap - Distribution and Packaging](../../docs/about/roadmap.md)
+**Originally drafted:** 2025-03-19
 
----
+**Last updated:** 2026-08-09
 
-## Overview
-
-This document describes the plan to publish PerlOnJava to Maven Central, enabling Java developers to easily integrate PerlOnJava as a dependency in their projects.
-
-### Why Maven Central?
-
-Publishing to Maven Central provides:
-- **Discoverability**: Indexed by Maven Central Search, IDE integrations
-- **Easy consumption**: Single dependency line in pom.xml/build.gradle
-- **Trust**: Verified publisher, signed artifacts
-- **Integration**: Works with all major build tools (Maven, Gradle, sbt, etc.)
-
-### Current State
-
-| Requirement | Status |
-|-------------|--------|
-| GroupId (`org.perlonjava`) | ✅ Valid |
-| ArtifactId (`perlonjava`) | ✅ Valid |
-| Version (`5.44.0`) | ✅ Valid (not -SNAPSHOT) |
-| POM `<name>` | ✅ Present |
-| POM `<description>` | ❌ **Missing** |
-| POM `<url>` | ⚠️ Placeholder (`http://maven.apache.org`) |
-| POM `<licenses>` | ❌ **Missing** |
-| POM `<developers>` | ❌ **Missing** |
-| POM `<scm>` | ❌ **Missing** |
-| Sources JAR | ❌ **Missing** |
-| Javadoc JAR | ❌ **Missing** |
-| GPG signatures | ❌ **Missing** |
-| Publishing plugins | ❌ **Missing** |
-| Central Portal account | ❌ **Not created** |
-| Namespace verified | ❌ **Not claimed** |
+**Related:** [Roadmap - Java Platform Alignment](../../docs/about/roadmap.md#maven-central-publishing), [Java Integration](../../docs/guides/java-integration.md)
 
 ---
 
-## Maven Central Requirements
+## Objective
 
-All requirements below are **mandatory** for publishing to Maven Central.
+Publish a supported PerlOnJava release to Maven Central so Java applications can
+embed the runtime with ordinary Maven or Gradle dependency declarations.
 
-### 1. POM Metadata
+The publication must:
 
-Reference: [Sonatype Requirements](https://central.sonatype.org/publish/requirements/)
+- use artifacts produced from the same source and dependency graph as `make`;
+- preserve the standalone single-JAR distribution;
+- provide a conventional dependency-safe artifact for embedded use;
+- include complete Central metadata, sources, Javadocs, signatures, and checksums;
+- be reproducible through a manually triggered GitHub Actions release;
+- never expose signing keys or Central Portal credentials in the repository; and
+- prevent an untested or mismatched tag/version from being published.
 
-#### Required Elements
+## Complexity and Expected Effort
 
-```xml
-<!-- Project coordinates (already present) -->
-<groupId>org.perlonjava</groupId>
-<artifactId>perlonjava</artifactId>
-<version>5.44.0</version>
-<packaging>jar</packaging>
+This is a small release-engineering project, not just a plugin addition. The
+Central mechanics are straightforward; the main work is defining the artifact
+contract and preventing the Gradle and Maven build descriptions from drifting.
 
-<!-- Human-readable info (MISSING) -->
-<name>PerlOnJava</name>
-<description>A Perl 5 compiler and runtime for the JVM that compiles Perl scripts 
-    to Java bytecode, enabling seamless Java integration while maintaining 
-    Perl semantics.</description>
-<url>https://github.com/fglock/PerlOnJava</url>
+| Work | Expected effort | Primary owner |
+|------|-----------------|---------------|
+| Artifact layout and coordinates | 0.5-1 day | Maintainer + implementation |
+| POM metadata and dependency parity | 0.5-1 day | Implementation |
+| Sources/Javadocs and validation fixes | 0.5-1.5 days | Implementation |
+| Signing and Portal publishing configuration | 0.5 day | Implementation |
+| Portal account, namespace, key, and token | 1-2 hours plus verification | Maintainer |
+| Release workflow and dry run | 1 day | Implementation |
+| First Portal validation corrections | 0.5-1 day | Implementation |
 
-<!-- License info - dual licensed same as Perl 5 -->
-<licenses>
-    <license>
-        <name>The Artistic License</name>
-        <url>https://opensource.org/licenses/Artistic-1.0</url>
-    </license>
-    <license>
-        <name>GNU General Public License v1.0 or later</name>
-        <url>https://www.gnu.org/licenses/old-licenses/gpl-1.0.html</url>
-    </license>
-</licenses>
-
-<!-- Developer info (MISSING) -->
-<developers>
-    <developer>
-        <name>Flavio Soibelmann Glock</name>
-        <email>fglock@gmail.com</email>
-        <url>https://github.com/fglock</url>
-    </developer>
-</developers>
-
-<!-- SCM info (MISSING) -->
-<scm>
-    <connection>scm:git:git://github.com/fglock/PerlOnJava.git</connection>
-    <developerConnection>scm:git:ssh://github.com:fglock/PerlOnJava.git</developerConnection>
-    <url>https://github.com/fglock/PerlOnJava/tree/master</url>
-</scm>
-```
-
-### 2. Required Artifacts
-
-For each release, Maven Central requires:
-
-| Artifact | Description |
-|----------|-------------|
-| `perlonjava-5.44.0.jar` | Main JAR (already built) |
-| `perlonjava-5.44.0.pom` | POM file with metadata |
-| `perlonjava-5.44.0-sources.jar` | Source code JAR |
-| `perlonjava-5.44.0-javadoc.jar` | Javadoc JAR |
-| `*.asc` | GPG signatures for all above |
-| `*.md5`, `*.sha1` | Checksums for all above |
-
-### 3. GPG Signing
-
-Reference: [GPG Requirements](https://central.sonatype.org/publish/requirements/gpg/)
-
-All artifacts must be signed with GPG/PGP. Requirements:
-- Generate a GPG key pair
-- Upload public key to a key server (keys.openpgp.org, keyserver.ubuntu.com)
-- Configure build tools to sign during release
-
-### 4. Namespace Verification
-
-Reference: [Namespace Registration](https://central.sonatype.org/register/namespace/)
-
-The `org.perlonjava` namespace must be claimed. Options:
-
-1. **GitHub-based verification** (Recommended for this project):
-   - Use `io.github.fglock` namespace (auto-verified via GitHub)
-   - OR verify `org.perlonjava` by creating a temporary public repo
-
-2. **Domain-based verification**:
-   - Requires DNS TXT record on `perlonjava.org` domain
-   - Not applicable unless you control the domain
-
-**Recommendation**: Use `io.github.fglock` for simplicity, OR verify `org.perlonjava` via GitHub repo method.
+Expected total: **3-5 focused engineering days**, or approximately one week for
+a polished automated release including review and first-Portal validation.
 
 ---
 
-## Recommended Approach: Maven
+## Current Repository State
 
-**Maven is the recommended approach** because:
-- Sonatype provides an **official Maven plugin** (`central-publishing-maven-plugin`)
-- No Groovy required - pure XML configuration
-- Most widely used and documented approach
-- The project already has a working `pom.xml`
+| Requirement | Current state |
+|-------------|---------------|
+| Java build and test authority | Gradle through `make` |
+| Maven build description | `pom.xml` exists and can build the project independently |
+| Group ID | `org.perlonjava` in Gradle and Maven |
+| Artifact ID | `perlonjava` |
+| Version | `5.44.0` |
+| Runtime Java version | Java 22+ |
+| Standalone artifact | Shaded executable JAR; currently replaces the unclassified main JAR |
+| POM project metadata | Incomplete; URL is still the Maven example URL |
+| Sources JAR | Missing |
+| Javadoc JAR | Missing |
+| Artifact signing | Missing |
+| Central Portal plugin/profile | Missing |
+| Release workflow | Missing |
+| Portal account/token | Maintainer setup required |
+| Namespace verification | Maintainer decision and setup required |
 
-Gradle support exists only via community plugins (not officially supported by Sonatype).
+The Maven and Gradle dependency lists are maintained separately. Publication
+must not silently choose one stale list. A dependency-parity check or a single
+generated publication model is required before the first release.
+
+## Current Central Portal Requirements
+
+For each non-`pom` component, Maven Central requires:
+
+- a main JAR;
+- a POM containing valid coordinates, name, description, project URL, license,
+  developer, and SCM information;
+- a corresponding sources JAR;
+- a corresponding Javadoc JAR;
+- detached ASCII-armored GPG/PGP signatures for the POM and all artifacts; and
+- MD5 and SHA-1 checksums for the files being uploaded. SHA-256 and SHA-512 are
+  supported but not mandatory.
+
+Released coordinates are immutable. A bad `groupId:artifactId:version` cannot
+be replaced or deleted; a corrected release must use a new version.
+
+Authoritative references:
+
+- [Central publishing requirements](https://central.sonatype.org/publish/requirements/)
+- [Central Portal registration](https://central.sonatype.org/register/central-portal/)
+- [Namespace registration](https://central.sonatype.org/register/namespace/)
+- [PGP signing](https://central.sonatype.org/publish/requirements/gpg/)
+- [Maven Portal plugin](https://central.sonatype.org/publish/publish-portal-maven/)
+- [Central immutability policy](https://central.sonatype.org/publish/requirements/immutability/)
+
+---
+
+## Decisions Required Before Implementation
+
+### 1. Artifact layout
+
+**Recommendation:** publish a normal embeddable JAR as the primary
+`perlonjava` artifact and retain the standalone shaded JAR as an attached
+artifact with an `all` classifier or as a separate `perlonjava-cli` artifact.
+
+Proposed contract:
+
+| Artifact | Purpose |
+|----------|---------|
+| `perlonjava-<version>.jar` | Thin embeddable runtime with dependencies declared in the POM |
+| `perlonjava-<version>-all.jar` | Existing standalone CLI/runtime distribution |
+| `perlonjava-<version>-sources.jar` | Java sources and appropriate source resources |
+| `perlonjava-<version>-javadoc.jar` | Java API documentation |
+
+Why the distinction matters:
+
+- A thin artifact avoids embedding unrelocated ASM, ICU, Netty, and other
+  libraries into a host application's classpath.
+- The POM can express transitive dependencies normally for Java consumers.
+- The shaded artifact preserves the project's single-JAR command-line promise.
+- Publishing a shaded main artifact while also declaring all dependencies can
+  load duplicate classes and makes embedding behavior difficult to reason about.
+
+Before changing classifiers, audit `jperl`, `jcpan`, distribution packaging,
+tests that locate `target/perlonjava-*.jar`, and documentation that assumes a
+single unclassified JAR.
+
+### 2. Namespace
+
+There are two viable choices:
+
+#### Option A: `org.perlonjava` (preferred if the domain is controlled)
+
+Current Central rules require proof of control over `perlonjava.org`, normally
+with a DNS TXT record on that exact domain. A GitHub repository under a personal
+account does not verify an arbitrary reverse-domain namespace.
+
+#### Option B: `io.github.fglock` (lowest setup effort)
+
+Signing into Central Portal with the `fglock` GitHub account normally provisions
+`io.github.fglock` automatically. This avoids DNS work but changes the existing
+coordinates and all documentation examples.
+
+**Maintainer decision required:** confirm control of `perlonjava.org`; retain
+`org.perlonjava` only if it can be verified through DNS. Do not publish under a
+temporary coordinate with the intention of moving later.
+
+### 3. Versioning
+
+The current project version mirrors the supported Perl language version. Before
+publishing `5.44.0`, decide how subsequent PerlOnJava-only fixes are numbered.
+The scheme must allow multiple runtime releases against the same Perl version
+without overwriting an immutable Central coordinate.
+
+Recommended candidates:
+
+- SemVer with Perl compatibility documented separately, for example `1.0.0`;
+- a fourth numeric component such as `5.44.0.1`; or
+- a SemVer-compatible qualifier whose ordering is documented.
+
+The Git tag, Gradle version, POM version, generated runtime version, and GitHub
+release version must agree before publication.
+
+### 4. Publishing implementation
+
+Sonatype currently supplies an official Maven Portal plugin but no official
+Gradle Portal plugin. Community Gradle integrations exist but are unsupported by
+Sonatype.
+
+**Recommendation:** keep Gradle/`make` authoritative for building and testing,
+and use a Maven release profile only as the Central upload adapter. Expose all
+release operations through `make` targets so contributors and agents do not run
+raw Maven or Gradle publishing commands.
+
+The upload step must consume artifacts verified by the release build, or prove
+byte-for-byte that Maven reproduced the canonical artifacts. It must not build a
+different dependency set unnoticed.
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: POM Metadata (No account needed)
+### Phase 1: Artifact contract and build convergence
 
-#### 1.1 Update pom.xml
+1. Decide the namespace and versioning scheme.
+2. Decide between the `all` classifier and a separate CLI artifact.
+3. Make the normal Java JAR and shaded standalone JAR distinct outputs.
+4. Update launchers, Debian packaging, tests, and documentation for the chosen
+   artifact names.
+5. Compare Maven and Gradle dependencies, scopes, resources, manifest entries,
+   service descriptors, and SBOM behavior.
+6. Add an automated dependency/publication parity check or generate the Maven
+   publication metadata from the canonical Gradle model.
+7. Add an embedding smoke test using only the proposed Central-style dependency
+   graph, including JSR-223 service discovery.
 
-Add the following after line 12 (after `<url>`):
+**Exit gate:** `make` passes and both proposed main and standalone artifacts work
+without relying on stale files in `target/`.
 
-```xml
-<description>A Perl 5 compiler and runtime for the JVM that compiles Perl scripts 
-    to Java bytecode, enabling seamless Java integration while maintaining 
-    Perl semantics.</description>
-<url>https://github.com/fglock/PerlOnJava</url>
+### Phase 2: Publication metadata and required artifacts
 
-<licenses>
-    <license>
-        <name>The Artistic License</name>
-        <url>https://opensource.org/licenses/Artistic-1.0</url>
-    </license>
-    <license>
-        <name>GNU General Public License v1.0 or later</name>
-        <url>https://www.gnu.org/licenses/old-licenses/gpl-1.0.html</url>
-    </license>
-</licenses>
+Add the following POM metadata:
 
-<developers>
-    <developer>
-        <id>fglock</id>
-        <name>Flavio Soibelmann Glock</name>
-        <email>fglock@gmail.com</email>
-        <url>https://github.com/fglock</url>
-    </developer>
-</developers>
+- project name and description;
+- `https://github.com/fglock/PerlOnJava` project URL;
+- Artistic License 1.0 and GPL-1.0-or-later declarations;
+- maintainer/developer identity;
+- read-only and developer SCM connections; and
+- issue tracker and CI URLs where appropriate.
 
-<scm>
-    <connection>scm:git:git://github.com/fglock/PerlOnJava.git</connection>
-    <developerConnection>scm:git:ssh://github.com:fglock/PerlOnJava.git</developerConnection>
-    <url>https://github.com/fglock/PerlOnJava/tree/master</url>
-</scm>
-```
+Generate and attach:
 
-#### 1.2 Add Source and Javadoc JARs
+- sources JAR;
+- Javadoc JAR;
+- the selected standalone artifact; and
+- optional SBOM artifacts only if their Central layout and signing are tested.
 
-Add to `pom.xml` `<plugins>` section:
+Run Javadoc with useful content rather than relying on an empty placeholder.
+Fix malformed documentation or visibility errors found across the Java API. If
+the complete internal API is unsuitable, document and enforce the supported
+public package surface.
 
-```xml
-<!-- Source JAR -->
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-source-plugin</artifactId>
-    <version>3.3.1</version>
-    <executions>
-        <execution>
-            <id>attach-sources</id>
-            <goals>
-                <goal>jar-no-fork</goal>
-            </goals>
-        </execution>
-    </executions>
-</plugin>
+**Exit gate:** a local staging directory contains the exact Central layout and
+passes an automated completeness check.
 
-<!-- Javadoc JAR -->
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-javadoc-plugin</artifactId>
-    <version>3.10.1</version>
-    <executions>
-        <execution>
-            <id>attach-javadocs</id>
-            <goals>
-                <goal>jar</goal>
-            </goals>
-        </execution>
-    </executions>
-    <configuration>
-        <doclint>none</doclint>
-        <quiet>true</quiet>
-    </configuration>
-</plugin>
-```
+### Phase 3: Signing and maintainer setup
 
-### Phase 2: GPG Signing Setup
+Maintainer actions:
 
-#### 2.1 Generate GPG Key (Manual step)
+1. Sign into [Central Portal](https://central.sonatype.com/) with the intended
+   long-term owner account.
+2. Verify the chosen namespace.
+3. Generate or select a long-lived signing key with a protected private key.
+4. Publish the public key to a Central-supported keyserver.
+5. Generate a Central Portal user token.
+6. Store the token, armored private key, and passphrase as GitHub Actions
+   secrets.
 
-```bash
-# Generate key
-gpg --gen-key
-# Enter: Flavio Soibelmann Glock <fglock@gmail.com>
+Implementation actions:
 
-# List keys to get key ID
-gpg --list-keys --keyid-format short
+1. Add a release-only signing profile.
+2. Select the signing key explicitly; do not rely on "first key" behavior.
+3. Sign the POM, main JAR, sources, Javadocs, and attached distributable.
+4. Verify every signature and checksum during the release build.
+5. Ensure secrets are supplied only through environment variables or generated
+   CI settings, never checked-in files or command-line logs.
 
-# Export and upload to key servers
-gpg --keyserver keyserver.ubuntu.com --send-keys <KEY_ID>
-gpg --keyserver keys.openpgp.org --send-keys <KEY_ID>
-```
+Required secret roles, with final names chosen during implementation:
 
-#### 2.2 Add GPG Plugin to pom.xml
+| Secret | Purpose |
+|--------|---------|
+| Central token username | Portal authentication |
+| Central token password | Portal authentication |
+| Armored GPG private key | Artifact signing |
+| GPG passphrase | Unlock signing key |
 
-Add to `pom.xml` in a release profile:
+**Exit gate:** a clean local or disposable CI environment creates and verifies
+all signed artifacts without publishing them.
 
-```xml
-<profiles>
-    <profile>
-        <id>release</id>
-        <build>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-gpg-plugin</artifactId>
-                    <version>3.2.7</version>
-                    <executions>
-                        <execution>
-                            <id>sign-artifacts</id>
-                            <phase>verify</phase>
-                            <goals>
-                                <goal>sign</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-            </plugins>
-        </build>
-    </profile>
-</profiles>
-```
+### Phase 4: Central upload adapter and safe release workflow
 
-### Phase 3: Central Portal Account Setup (Manual)
+Add `make` targets such as:
 
-#### 3.1 Create Account
+- `make release-verify` — full build, tests, artifact checks, signatures, and
+  local staging only;
+- `make release-bundle` — produce the exact Portal upload bundle; and
+- `make release-publish` — CI-only authenticated upload.
 
-1. Go to [https://central.sonatype.com](https://central.sonatype.com)
-2. Sign in with GitHub (recommended)
-3. If signed in with GitHub as `fglock`, namespace `io.github.fglock` is auto-verified
+The implementation may invoke Maven internally, but the supported project
+interface remains `make`.
 
-#### 3.2 Namespace Decision
+Create a dedicated GitHub Actions workflow with these properties:
 
-**Option A: Use `io.github.fglock` (Easiest)**
-- Change groupId from `org.perlonjava` to `io.github.fglock`
-- Automatically verified via GitHub
-- Cons: Less professional-looking, harder to migrate later
+1. Trigger manually or from a published GitHub release, not on ordinary pushes.
+2. Require a release tag and verify it against every project version source.
+3. Build and test with Java 22 through the existing `make` gate.
+4. Require the normal Ubuntu and Windows CI jobs to pass before publishing.
+5. Publish exactly once from Ubuntu.
+6. Use GitHub environment protection for the production publishing job.
+7. Upload the unsigned/signed staging bundle as a retained workflow artifact for
+   audit.
+8. For the first release, use user-managed publication: upload, wait for Portal
+   validation, inspect the result, and publish manually.
+9. Enable automatic publication only after at least one successful release and
+   rollback/recovery documentation exists.
 
-**Option B: Verify `org.perlonjava` (Recommended)**
-- Create temporary public repo at github.com/perlonjava/OSSRH-XXXX
-- Sonatype verifies you control the "organization"
-- Keep using `org.perlonjava` groupId
-- More professional, matches existing coordinates
+Do not use Java 21 in the release workflow; PerlOnJava requires Java 22+.
 
-#### 3.3 Generate Portal Token
+**Exit gate:** a dry-run workflow proves tag validation, artifact provenance,
+secret isolation, and single-uploader behavior.
 
-1. Log in to [https://central.sonatype.com](https://central.sonatype.com)
-2. Click username → "Generate User Token"
-3. Save the token securely (needed for CI/CD)
+### Phase 5: First release and consumer verification
 
-### Phase 4: Publishing Configuration
+Before uploading:
 
-#### 4.1 Add Central Publishing Plugin to pom.xml
+- merge all intended release changes and require a clean tree;
+- run `make` and the release verification target;
+- verify the published coordinates have never been used;
+- inspect the generated POM and dependency scopes;
+- test the thin artifact in a fresh Maven consumer and a fresh Gradle consumer;
+- run the standalone artifact using the documented command; and
+- review licenses and bundled third-party notices.
 
-Reference: [Official Maven Publishing Guide](https://central.sonatype.org/publish/publish-portal-maven/)
+After Portal validation and publication:
 
-Add to `pom.xml`:
-
-```xml
-<!-- In plugins section -->
-<plugin>
-    <groupId>org.sonatype.central</groupId>
-    <artifactId>central-publishing-maven-plugin</artifactId>
-    <version>0.9.0</version>
-    <extensions>true</extensions>
-    <configuration>
-        <publishingServerId>central</publishingServerId>
-        <autoPublish>true</autoPublish>
-    </configuration>
-</plugin>
-```
-
-#### 4.2 Configure Local Credentials
-
-Create or update `~/.m2/settings.xml`:
-
-```xml
-<settings>
-    <servers>
-        <server>
-            <id>central</id>
-            <username><!-- Portal token username --></username>
-            <password><!-- Portal token password --></password>
-        </server>
-    </servers>
-</settings>
-```
-
-#### 4.3 Local Release Command
-
-To publish locally (for testing or manual releases):
-
-```bash
-# Build, sign, and deploy to Maven Central
-mvn clean deploy -Prelease
-```
-
-### Phase 5: CI/CD Release Workflow
-
-#### 5.1 Platform Strategy
-
-The existing CI tests on **Windows** and **Ubuntu**. For releases:
-- **Testing**: Run on all platforms (Windows, Ubuntu, macOS) to catch platform-specific issues
-- **Publishing**: Only run once from Ubuntu (publishing the same artifact multiple times would fail)
-
-#### 5.2 GitHub Actions Workflow
-
-Create `.github/workflows/release.yml`:
-
-```yaml
-name: Release to Maven Central
-
-on:
-  release:
-    types: [published]
-
-jobs:
-  # Test on all platforms before publishing
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      
-      - name: Build and Test (Unix)
-        if: runner.os != 'Windows'
-        run: make ci
-      
-      - name: Build and Test (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: make ci
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
-
-  # Publish only from Ubuntu after all tests pass
-  publish:
-    needs: test
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          server-id: central
-          server-username: MAVEN_USERNAME
-          server-password: MAVEN_PASSWORD
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: GPG_PASSPHRASE
-      
-      - name: Publish to Maven Central
-        run: mvn clean deploy -Prelease -DskipTests
-        env:
-          MAVEN_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-```
-
-#### 5.3 Required GitHub Secrets
-
-| Secret | Description |
-|--------|-------------|
-| `GPG_PRIVATE_KEY` | ASCII-armored GPG private key (`gpg --armor --export-secret-keys KEY_ID`) |
-| `GPG_PASSPHRASE` | GPG key passphrase |
-| `MAVEN_CENTRAL_USERNAME` | Central Portal token username |
-| `MAVEN_CENTRAL_PASSWORD` | Central Portal token password |
+- resolve the artifact from Maven Central in clean Maven and Gradle caches;
+- run a JSR-223 embedding smoke test;
+- run a CLI smoke test with the standalone artifact;
+- verify sources and Javadocs resolve in an IDE;
+- update installation and Java integration documentation; and
+- close or update GitHub issue #32 with the final coordinates.
 
 ---
 
-## Verification Checklist
+## Release Safety Rules
 
-Before first release, verify:
+- Never publish from a pull request or unprotected branch.
+- Never publish the same release from multiple matrix jobs.
+- Never place Portal credentials or a private signing key in the repository.
+- Never log secret-bearing generated settings files.
+- Never use automatic publication for the first release.
+- Never reuse a released version, even when the release is broken.
+- Never publish when Gradle/Maven dependency parity is unknown.
+- Always retain the generated POM, artifact inventory, checksums, and workflow
+  run URL as release evidence.
 
-- [ ] `make` passes (all tests green)
-- [ ] POM has all required metadata (description, licenses, developers, scm)
-- [ ] Sources JAR builds: `mvn source:jar`
-- [ ] Javadoc JAR builds: `mvn javadoc:jar`
-- [ ] GPG key generated and uploaded to key servers
-- [ ] GPG signing works locally: `mvn verify -Prelease`
-- [ ] Central Portal account created
-- [ ] Namespace verified (`org.perlonjava` or `io.github.fglock`)
-- [ ] Portal token generated and stored in GitHub secrets
+## Acceptance Criteria
 
----
+- [ ] Namespace and versioning decisions are recorded.
+- [ ] Primary and standalone artifact contracts are documented and tested.
+- [ ] Gradle and Maven dependency/publication metadata cannot drift silently.
+- [ ] `make` passes on the release commit.
+- [ ] Ubuntu and Windows CI pass on the release commit.
+- [ ] POM satisfies all Central metadata requirements.
+- [ ] Sources and Javadocs are attached and useful.
+- [ ] Every required artifact and POM is signed and signatures verify.
+- [ ] Checksums and Portal bundle layout validate locally.
+- [ ] Release workflow validates tag/version equality and publishes once.
+- [ ] Portal namespace and user token are configured.
+- [ ] Fresh Maven and Gradle consumers resolve and execute PerlOnJava.
+- [ ] Standalone CLI artifact still works.
+- [ ] Published documentation names the final immutable coordinates.
 
-## References
+## Risks and Mitigations
 
-### Official Documentation
-- [Maven Central Requirements](https://central.sonatype.org/publish/requirements/) - What's needed for publishing
-- [Maven Publishing Plugin](https://central.sonatype.org/publish/publish-portal-maven/) - Official plugin docs
-- [GPG Signing Guide](https://central.sonatype.org/publish/requirements/gpg/) - Key generation and setup
-- [Namespace Registration](https://central.sonatype.org/register/namespace/) - Claiming your namespace
-- [Central Portal](https://central.sonatype.com) - Account management and publishing dashboard
-
-### Example Projects
-- [simpligility/ossrh-demo](https://github.com/simpligility/ossrh-demo) - Official example with complete pom.xml
-- [ossrh-pipeline-demo](https://bitbucket.org/simpligility/ossrh-pipeline-demo/src) - CI/CD pipeline example
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Publishing the wrong namespace/version | Permanent misleading coordinate | Decide before implementation; validate tag and coordinate availability |
+| Thin/shaded classpath conflicts | Broken embedding or duplicate classes | Publish distinct artifacts and test in clean consumer projects |
+| Maven/Gradle drift | Published artifact differs from tested artifact | Canonical build plus automated parity/provenance checks |
+| Javadoc failures across a large API | Release blocked late | Run Javadoc in Phase 2 and define the supported API surface |
+| Leaked GPG key or Portal token | Supply-chain compromise | Protected environment, encrypted secrets, no logged settings |
+| Multiple CI jobs publish the same version | Failed or ambiguous deployment | Single Ubuntu publisher after all test jobs |
+| Automatic publication of a bad first bundle | Immutable broken release | User-managed first publication and explicit inspection |
 
 ---
 
 ## Progress Tracking
 
-### Current Status: Phase 0 - Planning
+### Current Status: Phase 0 complete; maintainer decisions required
 
 ### Completed Phases
-- [x] Phase 0: Research and design document (2025-03-19)
+
+- [x] Phase 0: Research and initial design (2025-03-19)
+- [x] Phase 0 refresh: align design with Central Portal and current repository
+  architecture (2026-08-09)
+  - Corrected namespace verification guidance.
+  - Updated the workflow requirement from Java 21 to Java 22.
+  - Defined the thin-versus-standalone artifact boundary.
+  - Kept Gradle/`make` as the canonical build and scoped Maven to the supported
+    Central upload adapter.
+  - Added dependency-parity, provenance, first-release, and consumer gates.
 
 ### Next Steps
-1. Add POM metadata (description, licenses, developers, scm)
-2. Add maven-source-plugin and maven-javadoc-plugin
-3. Set up GPG key and maven-gpg-plugin
-4. Create Central Portal account
-5. Verify namespace (`org.perlonjava`)
-6. Add central-publishing-maven-plugin
-7. Add GitHub secrets for CI/CD
-8. Create release workflow
-9. Test with first release
+
+1. Confirm whether `perlonjava.org` is controlled and choose `org.perlonjava`
+   or `io.github.fglock`.
+2. Choose the first public versioning scheme.
+3. Approve the thin primary JAR plus standalone `all` artifact contract.
+4. Implement Phase 1 build convergence and artifact smoke tests.
+5. Run Phase 2 Javadoc and local staging validation before configuring secrets.
 
 ### Open Questions
-- [ ] Use `io.github.fglock` or verify `org.perlonjava`? (Recommend: verify org.perlonjava)
-- [ ] Who holds the GPG key? (Owner: Flavio)
-- [ ] Release cadence? (Suggest: on demand via GitHub releases)
 
----
+- Is `perlonjava.org` controlled and available for Central DNS verification?
+- Should the standalone distribution use an `all` classifier or a separate
+  `perlonjava-cli` artifact ID?
+- What version follows `5.44.0` when runtime fixes ship without a Perl language
+  version change?
+- Which Java packages constitute the supported public embedding API?
+- Who owns the long-term GPG key and Central Portal account?
+- Should releases be manually triggered or tied to published GitHub releases?
 
 ## Related Documents
 
-- [SBOM Design](sbom.md) - Software Bill of Materials
-- [Versioning](versioning.md) - Version management
-- [Roadmap](../../docs/about/roadmap.md) - Project roadmap
+- [Roadmap](../../docs/about/roadmap.md)
+- [Java Integration](../../docs/guides/java-integration.md)
+- [Versioning](versioning.md)
+- [SBOM Design](sbom.md)
+- [Distribution Design](distro.md)
+- [Project Agent Guidelines](../../AGENTS.md)
