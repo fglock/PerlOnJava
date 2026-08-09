@@ -32,6 +32,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public int type;
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
+    // Set when this hash is installed as %ENV through a typeglob alias.
+    // Perl rejects process execution before inspecting PATH in that case.
+    public String taintEnvironmentAliasDescription;
     // Iterator for traversing the hash elements
     Iterator<RuntimeScalar> hashIterator;
     // Track which keys were stored with BYTE_STRING type (vs STRING/UTF-8).

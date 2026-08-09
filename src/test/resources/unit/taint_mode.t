@@ -343,6 +343,24 @@ like($@, qr/^Insecure dependency in printf while running with -T switch/,
 }
 
 {
+    our %taint_env_alias = (PATH => '/usr/bin');
+    {
+        local *ENV = \%taint_env_alias;
+        my $ok = eval { system 'taint-command-that-does-not-exist'; 1 };
+        ok(!$ok, 'process execution rejects %ENV aliased through a hash reference');
+        like($@, qr/^%ENV is aliased to another variable while running with -T switch/,
+            'hash-reference %ENV alias reports the Perl security error');
+    }
+    {
+        local *ENV = *taint_env_alias;
+        my $ok = eval { system 'taint-command-that-does-not-exist'; 1 };
+        ok(!$ok, 'process execution rejects %ENV aliased through a typeglob');
+        like($@, qr/^%ENV is aliased to %taint_env_alias while running with -T switch/,
+            'typeglob %ENV alias reports the Perl security error');
+    }
+}
+
+{
     package TaintStoreProbe;
     our @seen;
     sub TIEARRAY { bless {}, shift }

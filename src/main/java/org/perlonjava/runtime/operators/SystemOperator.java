@@ -273,6 +273,11 @@ public class SystemOperator {
             return;
         }
         RuntimeHash env = GlobalVariable.getGlobalHash("main::ENV");
+        if (env.taintEnvironmentAliasDescription != null) {
+            throw new PerlCompilerException(
+                    "%ENV is aliased to " + env.taintEnvironmentAliasDescription
+                            + " while running with -T switch");
+        }
         for (String name : List.of("PATH", "IFS", "CDPATH", "ENV", "BASH_ENV")) {
             RuntimeScalar value = env.elements.get(name);
             if (value != null && value.isTainted()) {
