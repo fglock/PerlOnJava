@@ -307,4 +307,29 @@ ok(!$printf_ok, 'printf rejects a tainted format');
 like($@, qr/^Insecure dependency in printf while running with -T switch/,
     'printf reports the Perl security error');
 
+{
+    package TaintStoreProbe;
+    our @seen;
+    sub TIEARRAY { bless {}, shift }
+    sub TIEHASH { bless {}, shift }
+    sub STORE {
+        push @seen, [
+            Scalar::Util::tainted($_[1]),
+            Scalar::Util::tainted($_[2]),
+        ];
+    }
+
+    package main;
+    my $key = "1$empty_taint";
+    my $value = "value$empty_taint";
+    tie my @tied_array, 'TaintStoreProbe';
+    tie my %tied_hash, 'TaintStoreProbe';
+    $tied_array[$key] = $value;
+    $tied_hash{$key} = $value;
+    ok($TaintStoreProbe::seen[0][0] && $TaintStoreProbe::seen[0][1],
+        'tied array STORE receives tainted key and value');
+    ok($TaintStoreProbe::seen[1][0] && $TaintStoreProbe::seen[1][1],
+        'tied hash STORE receives tainted key and value');
+}
+
 done_testing;
