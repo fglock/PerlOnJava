@@ -359,4 +359,20 @@ like($@, qr/^Insecure dependency in printf while running with -T switch/,
         'AUTOLOAD name is reset to clean for a clean method name');
 }
 
+sub IsTaintProbeA { '0041' }
+my $tainted_property = "IsTaintProbeA$empty_taint";
+my $property_ok = eval { 'A' =~ /\p{$tainted_property}/; 1 };
+ok(!$property_ok, 'tainted user-defined regex property is rejected');
+like($@, qr/^Insecure user-defined property "IsTaintProbeA" in regex/,
+    'tainted user-defined property reports the Perl security error');
+
+{
+    use re 'eval';
+    my $tainted_code_pattern = "(?{})$empty_taint";
+    my $code_pattern_ok = eval { 'a' =~ /$tainted_code_pattern/; 1 };
+    ok(!$code_pattern_ok, 'tainted runtime regex code block is rejected');
+    like($@, qr/^Eval-group in insecure regular expression/,
+        'tainted regex code block reports the Perl security error');
+}
+
 done_testing;

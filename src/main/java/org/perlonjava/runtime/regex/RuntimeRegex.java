@@ -38,6 +38,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
+    private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
+            Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:[Ii][sS]|[Ii][nN])[A-Za-z0-9_]*)}");
     // Maximum size for the regex cache
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
     // Cache to store compiled regex patterns
@@ -873,6 +875,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Unwrap readonly scalar
         if (patternString.type == RuntimeScalarType.READONLY_SCALAR) patternString = (RuntimeScalar) patternString.value;
 
+        validateTaintedPatternSecurity(patternString);
+
         // Check if patternString is already a compiled regex
         if (patternString.type == RuntimeScalarType.REGEX) {
             RuntimeRegex originalRegex = (RuntimeRegex) patternString.value;
@@ -946,6 +950,32 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // so the cached RuntimeRegex is not corrupted by refCount changes)
         return new RuntimeScalar(compile(patternString.toString(), modifierStr).cloneTracked())
                 .propagateTaint(patternString);
+    }
+
+    private static void validateTaintedPatternSecurity(RuntimeScalar patternString) {
+        if (!GlobalContext.isTaintModeActive() || patternString == null
+                || !patternString.isTainted() || patternString.type == RuntimeScalarType.REGEX) {
+            return;
+        }
+
+        String pattern = patternString.toString();
+        if (pattern.contains("(?{") || pattern.contains("(??{")) {
+            throw new PerlCompilerException("Eval-group in insecure regular expression");
+        }
+
+        Matcher matcher = USER_DEFINED_PROPERTY_PATTERN.matcher(pattern);
+        if (!matcher.find()) {
+            return;
+        }
+
+        String property = matcher.group(2);
+        String qualified = property.contains("::") ? property : "main::" + property;
+        if (GlobalVariable.isGlobalCodeRefDefined(qualified)) {
+            throw new PerlCompilerException(
+                    "Insecure user-defined property \"" + property + "\" in regex");
+        }
+        throw new PerlCompilerException(
+                "Insecure user-defined property \\" + matcher.group(1) + "{" + qualified + "}");
     }
 
     /**
