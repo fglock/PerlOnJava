@@ -71,6 +71,22 @@ ok(!tainted($sub_target), 'non-destructive substitution leaves its source clean'
 ok(tainted($sub_copy), 'non-destructive substitution preserves replacement taint');
 
 {
+    package TaintStringify;
+    use overload '""' => sub { $_[0]->[0] };
+    sub new { bless [$_[1]], $_[0] }
+}
+
+my $tainted_object = TaintStringify->new("object$empty_taint");
+ok(tainted("$tainted_object"), 'stringification overload preserves result taint');
+ok(tainted("prefix$tainted_object"), 'mixed interpolation preserves overload result taint');
+$sub_target = 'abcd';
+$sub_target =~ s/(.+)/prefix$tainted_object/;
+ok(tainted($sub_target), 'interpolated overloaded replacement preserves taint');
+$sub_target = 'abcd';
+$sub_copy = $sub_target =~ s/(.+)/$tainted_object/r;
+ok(tainted($sub_copy), 'whole overloaded replacement preserves taint');
+
+{
     use re 'taint';
     $sub_source = "abcd$empty_taint";
     $sub_source =~ s/(.+)/xyz/;

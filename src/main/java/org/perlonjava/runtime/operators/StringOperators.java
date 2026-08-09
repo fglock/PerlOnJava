@@ -497,8 +497,8 @@ public class StringOperators {
         RuntimeScalar overloaded = tryStringConcatOverload(runtimeScalar, b);
         if (overloaded != null) return overloaded;
 
-        RuntimeScalar aResolved = resolveTiedStringOperand(runtimeScalar);
-        RuntimeScalar bResolved = resolveTiedStringOperand(b);
+        RuntimeScalar aResolved = stringifyForStringContext(resolveTiedStringOperand(runtimeScalar));
+        RuntimeScalar bResolved = stringifyForStringContext(resolveTiedStringOperand(b));
         String bStr = bResolved.toString();
         String aStr = aResolved.toString();
 
@@ -569,9 +569,9 @@ public class StringOperators {
         // For tied variables, we must only FETCH once, then use the result for both
         // the definedness check and the actual concatenation.
         // First, resolve tied variables to get their actual values (triggers FETCH once per tied var)
-        RuntimeScalar aResolved = (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) 
+        RuntimeScalar aResolved = (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR)
                 ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar bResolved = (b.type == RuntimeScalarType.TIED_SCALAR) 
+        RuntimeScalar bResolved = (b.type == RuntimeScalarType.TIED_SCALAR)
                 ? b.tiedFetch() : b;
         
         // Now check definedness on the resolved values (no additional FETCH)
@@ -582,6 +582,9 @@ public class StringOperators {
 
         RuntimeScalar overloaded = tryStringConcatOverload(aResolved, bResolved);
         if (overloaded != null) return overloaded;
+
+        aResolved = stringifyForStringContext(aResolved);
+        bResolved = stringifyForStringContext(bResolved);
         
         // Get string values from resolved scalars
         String aStr = aResolved.toString();
@@ -838,7 +841,7 @@ public class StringOperators {
                 WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
-            RuntimeScalar resolved = resolveTiedStringOperand(scalar);
+            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
             RuntimeScalar res = new RuntimeScalar(resolved.toString());
             if (resolved.type != RuntimeScalarType.STRING) {
                 res.type = BYTE_STRING;
@@ -853,7 +856,7 @@ public class StringOperators {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
-        RuntimeScalar separatorResolved = resolveTiedStringOperand(runtimeScalar);
+        RuntimeScalar separatorResolved = stringifyForStringContext(resolveTiedStringOperand(runtimeScalar));
         String delimiter = separatorResolved.toString();
 
         // In Perl, join produces a byte-string unless one of the inputs has
@@ -878,7 +881,7 @@ public class StringOperators {
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
 
-            RuntimeScalar resolved = resolveTiedStringOperand(scalar);
+            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
             if (resolved.type == RuntimeScalarType.STRING) {
                 hasUtf8 = true;
             }
@@ -891,6 +894,10 @@ public class StringOperators {
         }
         res.tainted = tainted;
         return recordJoinTaint(res);
+    }
+
+    private static RuntimeScalar stringifyForStringContext(RuntimeScalar scalar) {
+        return RuntimeScalarType.blessedId(scalar) != 0 ? Overload.stringify(scalar) : scalar;
     }
 
     /**
