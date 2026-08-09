@@ -119,6 +119,19 @@ like($@, qr/^Insecure dependency in eval while running with -T switch/,
     ok(!$qx_ok, 'qx rejects a tainted command');
     like($@, qr/^Insecure dependency in `` while running with -T switch/,
         'qx reports the Perl security error');
+
+    local $ENV{PATH} = '.';
+    my $path_ok = eval { qx{/bin/echo path-check}; 1 };
+    ok(!$path_ok, 'process launch rejects a relative PATH directory');
+    like($@, qr/Insecure directory in \$ENV\{PATH\}/,
+        'relative PATH reports the Perl security error');
+
+    local $ENV{PATH} = '/usr/bin';
+    local $ENV{TERM} = "unsafe=$empty_taint";
+    my $term_ok = eval { qx{/bin/echo term-check}; 1 };
+    ok(!$term_ok, 'process launch rejects tainted TERM metacharacters');
+    like($@, qr/Insecure \$ENV\{TERM\}/,
+        'tainted TERM reports the Perl security error');
 }
 
 my $tainted_path = "/tmp/perlonjava-taint-no-such-$$" . $empty_taint;

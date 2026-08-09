@@ -14,6 +14,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -36,6 +40,7 @@ public class SystemOperator {
 
     // Shell syntax that prevents Perl's one-string command direct-exec fast path.
     private static final Pattern DIRECT_COMMAND_SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\$%]");
+    private static final Pattern TAINTED_ENV_METACHARACTERS = Pattern.compile("[^A-Za-z0-9_./-]");
 
     private static String decodeSubprocessOutput(byte[] bytes) {
         StringBuilder decoded = new StringBuilder(bytes.length);
@@ -275,6 +280,51 @@ public class SystemOperator {
                         "Insecure $ENV{" + name + "} while running with -T switch");
             }
         }
+
+        RuntimeScalar path = env.elements.get("PATH");
+        if (path != null && path.getDefinedBoolean()) {
+            checkPathDirectories(path.toString());
+        }
+
+        RuntimeScalar term = env.elements.get("TERM");
+        if (term != null && term.isTainted()
+                && TAINTED_ENV_METACHARACTERS.matcher(term.toString()).find()) {
+            throw new PerlCompilerException(
+                    "Insecure $ENV{TERM} while running with -T switch");
+        }
+    }
+
+    private static void checkPathDirectories(String pathValue) {
+        if (SystemUtils.osIsWindows()) {
+            return;
+        }
+
+        for (String directory : pathValue.split(":", -1)) {
+            try {
+                Path path = Path.of(directory);
+                if (directory.isEmpty() || !path.isAbsolute() || isWorldWritableDirectory(path)) {
+                    throw insecurePathException();
+                }
+            } catch (InvalidPathException e) {
+                throw insecurePathException();
+            }
+        }
+    }
+
+    private static boolean isWorldWritableDirectory(Path path) {
+        if (!Files.isDirectory(path)) {
+            return false;
+        }
+        try {
+            return Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_WRITE);
+        } catch (UnsupportedOperationException | IOException | SecurityException e) {
+            return false;
+        }
+    }
+
+    private static PerlCompilerException insecurePathException() {
+        return new PerlCompilerException(
+                "Insecure directory in $ENV{PATH} while running with -T switch");
     }
 
     private static List<String> splitDirectCommandWords(String command) {
