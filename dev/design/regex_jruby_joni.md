@@ -1,6 +1,13 @@
 
 ## Migration Plan to Joni Regex
 
+> **Scope note (2026-08-09):** This is an older broad migration sketch. PR #895
+> implements a narrower backend-neutral matcher and Joni path for declarative
+> recursive subpatterns. Executable `(?{ ... })`, callback conditions, and
+> `(??{ ... })` require in-match callouts that stock Joni 2.2.7 does not expose.
+> See [`executable-regex-callbacks.md`](executable-regex-callbacks.md) for the
+> current callback design, semantics, phases, and progress tracking.
+
 ### 1. **Dependencies and Imports**
 - Add Joni dependency to the project
 - Replace `java.util.regex.Pattern` and `java.util.regex.Matcher` imports with Joni equivalents
@@ -93,4 +100,3 @@
 - JRuby provides string methods that closely match Perl's string operations
 - Could potentially reuse JRuby's regex match data structures
 - Simplified implementation of Perl's pos() functionality
-
