@@ -694,7 +694,7 @@ public class IOOperator {
 
         if (mode.contains("|")) {
             for (int i = 1; i < args.length; i++) {
-                RuntimeScalar.checkTaint(args[i].scalar(), "open");
+                RuntimeScalar.checkTaint(args[i].scalar(), "piped open");
             }
             // Check for fork-open pattern: open FH, "-|" or open FH, "|-" with no command
             // This is the 2-arg piped open that normally forks in Perl
@@ -713,6 +713,12 @@ public class IOOperator {
         } else if (args.length > 2) {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
+            boolean canWrite = mode.contains(">") || mode.startsWith("+");
+
+            if (canWrite) {
+                RuntimeScalar.checkTaint(args[1].scalar(), "open");
+                RuntimeScalar.checkTaint(secondArg, "open");
+            }
 
             // Check for filehandle duplication modes (<&, >&, >>&, +<&, +>&, +>>& and &= variants)
             if (mode.equals("<&") || mode.equals(">&") || mode.equals(">>&") ||
@@ -835,6 +841,9 @@ public class IOOperator {
             }
         } else {
             // 2-argument open
+            if (mode.startsWith(">") || mode.startsWith("+") || mode.startsWith("|")) {
+                RuntimeScalar.checkTaint(args[1].scalar(), "open");
+            }
             fh = RuntimeIO.open(mode);
         }
         if (fh == null) {
@@ -1485,8 +1494,10 @@ public class IOOperator {
         }
 
         RuntimeScalar fileHandle = args[0].scalar();
-        String fileName = args[1].toString();
-        int mode = args[2].scalar().getInt();
+        RuntimeScalar fileNameArg = args[1].scalar();
+        RuntimeScalar modeArg = args[2].scalar();
+        String fileName = fileNameArg.toString();
+        int mode = modeArg.getInt();
         int perms = 0666; // Default permissions (octal)
 
         if (args.length >= 4) {
@@ -1506,6 +1517,17 @@ public class IOOperator {
         int O_TRUNC = 01000;  // 512 in decimal
         int O_NOFOLLOW = 0400000; // Reject a symlink in the final path component
 
+        int baseMode = mode & 3; // Get the lowest 2 bits
+        boolean canWrite = baseMode != O_RDONLY
+                || (mode & (O_CREAT | O_APPEND | O_TRUNC)) != 0;
+        if (canWrite) {
+            RuntimeScalar.checkTaint(fileNameArg, "sysopen");
+            RuntimeScalar.checkTaint(modeArg, "sysopen");
+            if (args.length >= 4) {
+                RuntimeScalar.checkTaint(args[3].scalar(), "sysopen");
+            }
+        }
+
         File file = RuntimeIO.resolveFile(fileName);
         if ((mode & O_NOFOLLOW) != 0 && Files.isSymbolicLink(file.toPath())) {
             getGlobalVariable("main::!").set("Too many levels of symbolic links");
@@ -1513,8 +1535,6 @@ public class IOOperator {
         }
 
         // Determine the base mode
-        int baseMode = mode & 3; // Get the lowest 2 bits
-
         if (baseMode == O_RDONLY) {
             modeStr = "<";
         } else if (baseMode == O_WRONLY) {
@@ -2284,6 +2304,9 @@ public class IOOperator {
             getGlobalVariable("main::!").set("Not enough arguments for truncate");
             return scalarFalse;
         }
+
+        RuntimeScalar.checkTaint(args[0].scalar(), "truncate");
+        RuntimeScalar.checkTaint(args[1].scalar(), "truncate");
 
         try {
             RuntimeBase firstArg = args[0];

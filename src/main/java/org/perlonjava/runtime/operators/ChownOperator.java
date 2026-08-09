@@ -21,6 +21,12 @@ public class ChownOperator {
      * @return RuntimeScalar with count of successfully changed files
      */
     public static RuntimeScalar chown(int ctx, RuntimeBase... args) {
+        for (RuntimeBase arg : args) {
+            for (RuntimeScalar scalar : arg) {
+                RuntimeScalar.checkTaint(scalar, "chown");
+            }
+        }
+
         if (args.length < 2) {
             // Need at least uid and gid
             return new RuntimeScalar(0);
@@ -47,7 +53,6 @@ public class ChownOperator {
 
             // Handle both scalar filenames and lists of filenames
             for (RuntimeScalar fileArg : arg) {
-                RuntimeScalar.checkTaint(fileArg, "chown");
                 boolean result = false;
                 try {
                     // Check if this is a filehandle (glob reference)

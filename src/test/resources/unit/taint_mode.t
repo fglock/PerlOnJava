@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use feature 'switch';
 no warnings 'experimental::smartmatch';
+use Fcntl qw(O_RDONLY O_WRONLY);
 use Scalar::Util qw(tainted);
 use Test::More;
 
@@ -79,6 +80,51 @@ for my $case (@file_operations) {
     like($@,
         qr/^Insecure dependency in $operation while running with -T switch/,
         "$operation reports the Perl security error");
+}
+
+my $read_open_ok = eval { open my $fh, '<', $tainted_path; 1 };
+ok($read_open_ok, 'three-argument open permits a tainted read path');
+my $write_open_ok = eval { open my $fh, '>', $tainted_path; 1 };
+ok(!$write_open_ok, 'three-argument open rejects a tainted write path');
+like($@, qr/^Insecure dependency in open while running with -T switch/,
+    'write open reports the Perl security error');
+
+my $sysread_open_ok = eval { sysopen my $fh, $tainted_path, O_RDONLY; 1 };
+ok($sysread_open_ok, 'sysopen permits a tainted read-only path');
+my $syswrite_open_ok = eval { sysopen my $fh, $tainted_path, O_WRONLY; 1 };
+ok(!$syswrite_open_ok, 'sysopen rejects a tainted write path');
+like($@, qr/^Insecure dependency in sysopen while running with -T switch/,
+    'sysopen reports the Perl security error');
+
+{
+    no warnings 'numeric';
+    my $tainted_zero = 0 + $empty_taint;
+    ok(tainted(O_WRONLY | $tainted_zero), 'bitwise flags preserve taint');
+    my $tainted_read_mode = O_RDONLY | $tainted_zero;
+    my $tainted_read_ok = eval {
+        sysopen my $fh, '/tmp/perlonjava-taint-no-such', $tainted_read_mode;
+        1;
+    };
+    ok($tainted_read_ok, 'sysopen permits tainted read-only flags');
+    my $tainted_write_mode = O_WRONLY | $tainted_zero;
+    my $tainted_write_ok = eval {
+        sysopen my $fh, '/tmp/perlonjava-taint-no-such', $tainted_write_mode;
+        1;
+    };
+    ok(!$tainted_write_ok, 'sysopen rejects tainted write flags');
+    like($@, qr/^Insecure dependency in sysopen while running with -T switch/,
+        'tainted sysopen flags report the Perl security error');
+    for my $case (
+        [ truncate => sub { truncate '/tmp/perlonjava-taint-no-such', $tainted_zero } ],
+        [ utime    => sub { utime $tainted_zero, $tainted_zero, '/tmp/perlonjava-taint-no-such' } ],
+        [ chown    => sub { chown -1, -1, $tainted_path } ],
+    ) {
+        my ($operation, $code) = @$case;
+        my $ok = eval { $code->(); 1 };
+        ok(!$ok, "$operation rejects tainted arguments");
+        like($@, qr/^Insecure dependency in $operation while running with -T switch/,
+            "$operation reports the Perl security error");
+    }
 }
 
 for (qw(x y z)) {
