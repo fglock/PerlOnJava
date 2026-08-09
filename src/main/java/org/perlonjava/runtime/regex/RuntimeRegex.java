@@ -1992,8 +1992,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private static void updateReplacementMatchState(RuntimeRegex regex, Matcher matcher,
-                                                    String inputStr, RuntimeScalar string) {
+                                                    String inputStr, RuntimeScalar string,
+                                                    boolean resultsTainted) {
         lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+        lastMatchResultsTainted = resultsTainted;
 
         // Initialize $1, $2, @+, @- only when we have a match
         globalMatcher = matcher;
@@ -2041,6 +2043,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Convert the input string to a Java string
         String inputStr = string.toString();
         boolean wasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+        boolean inputTainted = string.isTainted();
+        boolean patternTainted = quotedRegex.isTainted();
         boolean resultNeedsUtf8 = !wasByteString;
 
         // Extract the regex pattern from the quotedRegex object
@@ -2158,6 +2162,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
+        boolean replacementResultTainted = false;
+        boolean captureResultsTainted = patternTainted
+                || (regex.regexFlags.taintResults() && inputTainted);
+        boolean destructiveReplacement = !regex.regexFlags.isNonDestructive();
 
         // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
@@ -2177,7 +2185,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 found++;
-                updateReplacementMatchState(regex, matcher, inputStr, string);
+                updateReplacementMatchState(regex, matcher, inputStr, string, captureResultsTainted);
 
                 String replacementStr;
                 if (replacementIsCode) {
@@ -2185,16 +2193,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
                     RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                     RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
-                    if (Utf8.isUtf8(result.scalar())) {
+                    RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
+                    if (Utf8.isUtf8(replacementValue)) {
                         resultNeedsUtf8 = true;
                     }
-                    replacementStr = result.toString();
+                    replacementResultTainted |= replacementValue.isTainted();
+                    replacementStr = replacementValue.toString();
                 } else {
                     // Replace the match with the replacement string
-                    if (Utf8.isUtf8(replacement)) {
+                    RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
+                    if (Utf8.isUtf8(replacementValue)) {
                         resultNeedsUtf8 = true;
                     }
-                    replacementStr = replacement.toString();
+                    replacementResultTainted |= replacementValue.isTainted();
+                    replacementStr = replacementValue.toString();
+                }
+
+                if (destructiveReplacement
+                        && (inputTainted || patternTainted || replacementResultTainted)) {
+                    string.tainted = true;
                 }
 
                 if (replacementStr != null) {
@@ -2233,21 +2250,30 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             && retryMatcher.start() == zeroLengthOffset
                             && retryMatcher.end() > zeroLengthOffset) {
                         found++;
-                        updateReplacementMatchState(regex, retryMatcher, inputStr, string);
+                        updateReplacementMatchState(regex, retryMatcher, inputStr, string, captureResultsTainted);
 
                         String retryReplacementStr;
                         if (replacementIsCode) {
                             RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                             RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
-                            if (Utf8.isUtf8(result.scalar())) {
+                            RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
+                            if (Utf8.isUtf8(replacementValue)) {
                                 resultNeedsUtf8 = true;
                             }
-                            retryReplacementStr = result.toString();
+                            replacementResultTainted |= replacementValue.isTainted();
+                            retryReplacementStr = replacementValue.toString();
                         } else {
-                            if (Utf8.isUtf8(replacement)) {
+                            RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
+                            if (Utf8.isUtf8(replacementValue)) {
                                 resultNeedsUtf8 = true;
                             }
-                            retryReplacementStr = replacement.toString();
+                            replacementResultTainted |= replacementValue.isTainted();
+                            retryReplacementStr = replacementValue.toString();
+                        }
+
+                        if (destructiveReplacement
+                                && (inputTainted || patternTainted || replacementResultTainted)) {
+                            string.tainted = true;
                         }
 
                         if (retryReplacementStr != null) {
@@ -2299,6 +2325,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags.isNonDestructive()) {
                 // /r modifier: return the modified string
                 RuntimeScalar rv = new RuntimeScalar(finalResult);
+                rv.tainted = inputTainted || patternTainted || replacementResultTainted;
                 if (wasByteString && !resultNeedsUtf8 && !containsWideChars(finalResult)) {
                     rv.type = RuntimeScalarType.BYTE_STRING;
                 }
@@ -2306,11 +2333,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             } else {
                 // Save the modified string back to the original scalar
                 string.set(finalResult);
+                string.tainted = inputTainted || patternTainted || replacementResultTainted;
                 if (wasByteString && !resultNeedsUtf8 && !containsWideChars(finalResult)) {
                     string.type = RuntimeScalarType.BYTE_STRING;
                 }
                 // Return the number of substitutions made
-                return RuntimeScalarCache.getScalarInt(found);
+                RuntimeScalar count = RuntimeScalarCache.getScalarInt(found);
+                if (regex.regexFlags.isGlobalMatch() && (inputTainted || patternTainted)) {
+                    count = count.propagateTaint(string, quotedRegex);
+                }
+                return count;
             }
         } else {
             if (regex.regexFlags.isNonDestructive()) {
@@ -2322,6 +2354,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 return RuntimeScalarCache.scalarEmptyString;
             }
         }
+    }
+
+    private static RuntimeScalar stringifyReplacementValue(RuntimeScalar value) {
+        return RuntimeScalarType.blessedId(value) != 0 ? Overload.stringify(value) : value;
     }
 
     /**

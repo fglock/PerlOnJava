@@ -521,6 +521,11 @@ public class StringParser {
         String operator = "replaceRegex";
         String replaceStr = rawStr.buffers.get(1);
         String modifierStr = rawStr.buffers.get(2);
+        if (ctx.symbolTable != null
+                && ctx.symbolTable.isStrictOptionEnabled(HINT_RE_TAINT)
+                && !modifierStr.contains("T")) {
+            modifierStr = "T" + modifierStr;
+        }
         Node parsed = parseRegexString(ctx, rawStr, parser, modifierStr);
 
         Node replace;

@@ -42,6 +42,41 @@ ok(tainted(qr/$tainted_pattern/), 'qr preserves pattern taint');
     ok(tainted($1), q{use re 'taint' preserves input taint in captures});
 }
 
+my $sub_source = "abcd$empty_taint";
+my $sub_count = $sub_source =~ s/(.+)/xyz/;
+ok(tainted($sub_source), 'substitution preserves source taint on the target');
+ok(!tainted($sub_count), 'single substitution count stays clean');
+ok(!tainted($1), 'ordinary substitution capture untaints input');
+
+$sub_source = "abcd$empty_taint";
+$sub_count = $sub_source =~ s/(.)/x/g;
+ok(tainted($sub_count), 'global substitution count depends on tainted input');
+
+my $sub_pattern = "(.+)$empty_taint";
+my $sub_target = 'abcd';
+$sub_count = $sub_target =~ s/$sub_pattern/xyz/;
+ok(tainted($sub_target), 'tainted substitution pattern taints the target');
+ok(!tainted($sub_count), 'single substitution count ignores pattern taint');
+ok(tainted($1), 'tainted substitution pattern taints captures');
+
+my $sub_replacement = "xyz$empty_taint";
+$sub_target = 'abcd';
+$sub_count = $sub_target =~ s/(.+)/$sub_replacement/;
+ok(tainted($sub_target), 'tainted replacement taints the substitution target');
+ok(!tainted($sub_count), 'substitution count ignores replacement taint');
+
+$sub_target = 'abcd';
+my $sub_copy = $sub_target =~ s/(.+)/$sub_replacement/r;
+ok(!tainted($sub_target), 'non-destructive substitution leaves its source clean');
+ok(tainted($sub_copy), 'non-destructive substitution preserves replacement taint');
+
+{
+    use re 'taint';
+    $sub_source = "abcd$empty_taint";
+    $sub_source =~ s/(.+)/xyz/;
+    ok(tainted($1), q{use re 'taint' taints substitution captures from tainted input});
+}
+
 sub perlsec_tainted {
     return !eval { no warnings; join('', @_), kill 0; 1 };
 }
