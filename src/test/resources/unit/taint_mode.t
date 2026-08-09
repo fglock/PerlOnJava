@@ -319,6 +319,22 @@ like($@, qr/^Insecure dependency in printf while running with -T switch/,
     'printf reports the Perl security error');
 
 {
+    local $ENV{PATH} = '/usr/bin';
+    for my $case (
+        [ 'system PROGRAM LIST without comma',
+          sub { system $empty_taint 'clean-argument' } ],
+        [ 'system { PROGRAM } LIST',
+          sub { system { 'clean-program' } $empty_taint } ],
+    ) {
+        my ($description, $operation) = @$case;
+        my $ok = eval { $operation->(); 1 };
+        ok(!$ok, "$description rejects tainted command data");
+        like($@, qr/^Insecure dependency in system while running with -T switch/,
+            "$description reports the Perl security error");
+    }
+}
+
+{
     package TaintStoreProbe;
     our @seen;
     sub TIEARRAY { bless {}, shift }

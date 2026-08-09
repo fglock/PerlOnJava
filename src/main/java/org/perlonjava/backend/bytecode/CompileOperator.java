@@ -620,7 +620,19 @@ public class CompileOperator {
     private static void visitGenericListOpCase(BytecodeCompiler bc, OperatorNode node, short opcode) {
         int argsReg;
         if (node.operand != null) {
-            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
+            boolean commandWithHandle = (opcode == Opcodes.SYSTEM || opcode == Opcodes.EXEC)
+                    && node.operand instanceof ListNode list && list.handle != null;
+            ListNode commandArgs = commandWithHandle ? (ListNode) node.operand : null;
+            if (commandWithHandle) {
+                commandArgs.elements.addFirst(commandArgs.handle);
+            }
+            try {
+                bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
+            } finally {
+                if (commandWithHandle) {
+                    commandArgs.elements.removeFirst();
+                }
+            }
             int operandReg = bc.lastResultReg;
             argsReg = bc.allocateRegister();
             bc.emit(Opcodes.SCALAR_TO_LIST);
