@@ -30,7 +30,7 @@ public class Vec {
             // Return 0 for undefined values without autovivifying
             int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
             int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
-            return new RuntimeVecLvalue(strScalar, offset, bits, 0);
+            return vecResult(strScalar, offset, bits, 0);
         }
 
         String str = strScalar.toString();
@@ -52,14 +52,14 @@ public class Vec {
 
         // Handle negative offset
         if (offset < 0) {
-            return new RuntimeVecLvalue(strScalar, offset, bits, 0);
+            return vecResult(strScalar, offset, bits, 0);
         }
 
         // Check for potential overflow in offset * bits calculation
         // Use long arithmetic to detect overflow
         long longByteOffset = ((long) offset * bits) / 8;
         if (longByteOffset > Integer.MAX_VALUE || longByteOffset >= data.length) {
-            return new RuntimeVecLvalue(strScalar, offset, bits, 0);
+            return vecResult(strScalar, offset, bits, 0);
         }
 
         int byteOffset = (int) longByteOffset;
@@ -69,16 +69,16 @@ public class Vec {
 
         if (bits == 64 && byteOffset + 8 <= data.length) {
             long longValue = buffer.getLong(byteOffset);
-            return new RuntimeVecLvalue(strScalar, offset, bits, longValue);
+            return vecResult(strScalar, offset, bits, longValue);
         } else if (bits == 32 && byteOffset + 4 <= data.length) {
             long unsignedValue = Integer.toUnsignedLong(buffer.getInt(byteOffset));
-            return new RuntimeVecLvalue(strScalar, offset, bits, unsignedValue);
+            return vecResult(strScalar, offset, bits, unsignedValue);
         } else if (bits == 16 && byteOffset + 2 <= data.length) {
             int value = buffer.getShort(byteOffset) & 0xFFFF;
-            return new RuntimeVecLvalue(strScalar, offset, bits, value);
+            return vecResult(strScalar, offset, bits, value);
         } else if (bits == 8 && byteOffset < data.length) {
             int value = buffer.get(byteOffset) & 0xFF;
-            return new RuntimeVecLvalue(strScalar, offset, bits, value);
+            return vecResult(strScalar, offset, bits, value);
         } else {
             int value = 0;
             for (int i = 0; i < bits; i++) {
@@ -88,8 +88,14 @@ public class Vec {
                     value |= ((data[byteIndex] >> bitIndex) & 1) << i;
                 }
             }
-            return new RuntimeVecLvalue(strScalar, offset, bits, value);
+            return vecResult(strScalar, offset, bits, value);
         }
+    }
+
+    private static RuntimeVecLvalue vecResult(RuntimeScalar source, int offset, int bits, long value) {
+        RuntimeVecLvalue result = new RuntimeVecLvalue(source, offset, bits, value);
+        result.tainted = source.isTainted();
+        return result;
     }
 
     /**

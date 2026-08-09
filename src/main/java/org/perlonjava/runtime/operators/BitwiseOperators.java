@@ -266,7 +266,7 @@ public class BitwiseOperators {
         if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
                     runtimeScalar, blessId, "(~", "~", BitwiseOperators::bitwiseNot);
-            if (result != null) return result;
+            if (result != null) return result.propagateTaint(runtimeScalar);
         }
 
         // Fetch tied/readonly scalar once to avoid redundant FETCH calls
@@ -279,9 +279,9 @@ public class BitwiseOperators {
         // - If it's a string, use string NOT (character-by-character)
         int vt = val.type;
         if (vt == RuntimeScalarType.INTEGER || vt == RuntimeScalarType.DOUBLE) {
-            return bitwiseNotBinary(val);
+            return bitwiseNotBinary(val).propagateTaint(runtimeScalar);
         }
-        return bitwiseNotDot(val);
+        return bitwiseNotDot(val).propagateTaint(runtimeScalar);
     }
 
     /**
@@ -303,7 +303,7 @@ public class BitwiseOperators {
         // Apply bitwise NOT and mask to 32 bits
         long result = (~masked32bit) & 0xFFFFFFFFL;
 
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(runtimeScalar);
     }
 
     /**
@@ -319,7 +319,7 @@ public class BitwiseOperators {
         if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
                     runtimeScalar, blessId, "(~", "~", BitwiseOperators::integerBitwiseNot);
-            if (result != null) return result;
+            if (result != null) return result.propagateTaint(runtimeScalar);
         }
 
         // Fetch tied/readonly scalar once to avoid redundant FETCH calls
@@ -332,7 +332,7 @@ public class BitwiseOperators {
         // - If it's a string, use string NOT (character-by-character)
         int vt = val.type;
         if (vt != RuntimeScalarType.INTEGER && vt != RuntimeScalarType.DOUBLE) {
-            return bitwiseNotDot(val);
+            return bitwiseNotDot(val).propagateTaint(runtimeScalar);
         }
 
         // Must use 32-bit int (not long) to match ivsize=4 in Config.pm.
@@ -341,7 +341,7 @@ public class BitwiseOperators {
 
         int value = (int) val.getLong();
         int result = ~value;
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(runtimeScalar);
     }
 
     /**
@@ -450,7 +450,7 @@ public class BitwiseOperators {
         // Perl's string complement returns an octet string even when the
         // operand carries the UTF-8 flag (for code points representable as
         // bytes, which is the range accepted above).
-        return stringBitwiseResult(result.toString(), false);
+        return stringBitwiseResult(result.toString(), false).propagateTaint(runtimeScalar);
     }
 
     private static RuntimeScalar stringBitwiseResult(String value, boolean utf8) {

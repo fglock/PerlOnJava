@@ -98,4 +98,35 @@ for (qw(x y z)) {
     is($_, $outer_topic, "given restores the foreach topic for $outer_topic");
 }
 
+my @split = split /!/, "left!right$empty_taint";
+ok(tainted($split[0]) && tainted($split[1]), 'split propagates input taint');
+
+{
+    no warnings 'numeric';
+    ok(tainted(~("abc$empty_taint")), 'bitwise complement propagates taint');
+}
+ok(tainted(crypt('secret', "aa$empty_taint")), 'crypt propagates salt taint');
+ok(tainted(vec("A$empty_taint", 0, 8)), 'vec propagates source taint');
+ok(tainted(pack('a*', "packed$empty_taint")), 'pack propagates value taint');
+
+ok(tainted(sprintf('%s', "formatted$empty_taint", 'clean')),
+    'sprintf propagates used argument taint');
+{
+    no warnings 'numeric';
+    my $tainted_zero = 0 + $empty_taint;
+    ok(!tainted(sprintf('%s', 'clean', $tainted_zero)),
+        'sprintf ignores an unused tainted numeric argument');
+}
+
+my $tainted_format = "%s$empty_taint";
+my $sprintf_ok = eval { sprintf($tainted_format, 'value'); 1 };
+ok(!$sprintf_ok, 'sprintf rejects a tainted format');
+like($@, qr/^Insecure dependency in sprintf while running with -T switch/,
+    'sprintf reports the Perl security error');
+
+my $printf_ok = eval { printf($tainted_format, 'value'); 1 };
+ok(!$printf_ok, 'printf rejects a tainted format');
+like($@, qr/^Insecure dependency in printf while running with -T switch/,
+    'printf reports the Perl security error');
+
 done_testing;

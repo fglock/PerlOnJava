@@ -954,6 +954,7 @@ public class IOOperator {
         }
 
         RuntimeScalar format = (RuntimeScalar) flatList.elements.removeFirst(); // Extract the format string from elements
+        RuntimeScalar.checkTaint(format, "printf");
 
         String formattedString;
 

@@ -296,9 +296,17 @@ public class Operator {
             }
         }
 
+        if (string.isTainted()) {
+            for (RuntimeBase element : splitElements) {
+                if (element instanceof RuntimeScalar scalar) {
+                    scalar.tainted = true;
+                }
+            }
+        }
+
         if (ctx == SCALAR) {
             int size = result.elements.size();
-            return getScalarInt(size).getList();
+            return getScalarInt(size).propagateTaint(string).getList();
         }
         return result;
     }
