@@ -34,6 +34,11 @@ public class BitwiseOperators {
         return unsignedResult(value.shiftRight((int) shift));
     }
 
+    private static BigInteger exactInteger(RuntimeScalar scalar) {
+        return scalar.type == RuntimeScalarType.INTEGER && scalar.value instanceof BigInteger
+                ? (BigInteger) scalar.value : null;
+    }
+
     /**
      * Performs a bitwise AND operation on two RuntimeScalar objects.
      * If both arguments are strings, it performs the operation character by character.
@@ -478,7 +483,8 @@ public class BitwiseOperators {
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
-        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
+                && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
             if (shift >= 0) {
                 return unsignedShiftLeft(unsignedValue(runtimeScalar), shift);
@@ -530,6 +536,18 @@ public class BitwiseOperators {
         }
 
         BigInteger value = unsignedValue(runtimeScalar);
+        BigInteger exactShift = exactInteger(arg2);
+        if (exactShift != null) {
+            if (exactShift.signum() >= 0) {
+                return exactShift.compareTo(BigInteger.valueOf(64)) >= 0
+                        ? RuntimeScalarCache.scalarZero
+                        : unsignedShiftLeft(value, exactShift.longValue());
+            }
+            BigInteger magnitude = exactShift.negate();
+            return magnitude.compareTo(BigInteger.valueOf(64)) >= 0
+                    ? RuntimeScalarCache.scalarZero
+                    : unsignedShiftRight(value, magnitude.longValue());
+        }
         long shift = arg2.getLong();
 
         // Handle negative shift (reverse direction: left shift becomes right shift)
@@ -554,7 +572,8 @@ public class BitwiseOperators {
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
-        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
+                && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
             if (shift >= 0) {
                 return unsignedShiftRight(unsignedValue(runtimeScalar), shift);
@@ -607,6 +626,18 @@ public class BitwiseOperators {
         }
 
         BigInteger value = unsignedValue(runtimeScalar);
+        BigInteger exactShift = exactInteger(arg2);
+        if (exactShift != null) {
+            if (exactShift.signum() >= 0) {
+                return exactShift.compareTo(BigInteger.valueOf(64)) >= 0
+                        ? RuntimeScalarCache.scalarZero
+                        : unsignedShiftRight(value, exactShift.longValue());
+            }
+            BigInteger magnitude = exactShift.negate();
+            return magnitude.compareTo(BigInteger.valueOf(64)) >= 0
+                    ? RuntimeScalarCache.scalarZero
+                    : unsignedShiftLeft(value, magnitude.longValue());
+        }
         long shift = arg2.getLong();
 
         // Handle negative shift (reverse direction: right shift becomes left shift)

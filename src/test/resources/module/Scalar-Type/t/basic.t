@@ -1,0 +1,26 @@
+use strict;
+use warnings;
+use Test::More tests => 18;
+use Scalar::Type qw(:all);
+
+is(type(1), 'INTEGER', 'integer type');
+is(type(1.5), 'NUMBER', 'number type');
+is(type('1'), 'SCALAR', 'numeric-looking string type');
+is(type(undef), 'UNDEF', 'undef type');
+is(type([]), 'REF_TO_ARRAY', 'array reference type');
+is(type({}), 'REF_TO_HASH', 'hash reference type');
+is(type(1 == 1), 'BOOL', 'boolean type');
+ok(is_integer(1), 'integer predicate');
+ok(!is_integer(1.0), 'float is not integer');
+ok(is_number(1), 'integer is number');
+ok(is_number(1.5), 'float is number');
+ok(!is_number('1'), 'string is not number');
+ok(is_bool(1 == 1), 'boolean predicate');
+is(sizeof(1), 8, '64-bit integer size');
+is(sizeof(1.5), 8, 'double size');
+my $integer = '7'; $integer + 0;
+is(type($integer), 'INTEGER', 'canonical numified integer string');
+my $number = '7.5'; $number + 0;
+is(type($number), 'NUMBER', 'canonical numified float string');
+my $padded = '007'; $padded + 0;
+is(type($padded), 'SCALAR', 'noncanonical numified string');

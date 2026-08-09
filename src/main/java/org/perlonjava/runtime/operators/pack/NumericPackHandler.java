@@ -304,19 +304,14 @@ public class NumericPackHandler implements PackFormatHandler {
                     }
                     break;
                 case 'j':
-                    // Perl internal signed integer (ivsize=4 bytes) - use endianness if specified
-                    if (modifiers.bigEndian) {
-                        PackWriter.writeIntBigEndian(output, (long) value.getDouble());
-                    } else {
-                        PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
-                    }
-                    break;
                 case 'J':
-                    // Perl internal unsigned integer (uvsize=4 bytes) - use endianness if specified
+                    long intMaxValue = format == 'J'
+                            ? getUnsigned64BitValue(value)
+                            : value.getBigint().longValue();
                     if (modifiers.bigEndian) {
-                        PackWriter.writeIntBigEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongBigEndian(output, intMaxValue);
                     } else {
-                        PackWriter.writeIntLittleEndian(output, (long) value.getDouble());
+                        PackWriter.writeLongLittleEndian(output, intMaxValue);
                     }
                     break;
                 case 'q':

@@ -289,6 +289,7 @@ public class SprintfNumericFormatter {
      */
     public String formatFloatingPoint(double value, String flags, int width,
                                       int precision, char conversion) {
+        int requestedPrecision = precision;
         if (precision < 0) {
             precision = 6;  // Default precision for floating point
         }
@@ -297,6 +298,11 @@ public class SprintfNumericFormatter {
         String cleanFlags = flags.replace("-0", "-").replace("0-", "-");
         if (cleanFlags.contains("-") && cleanFlags.contains("0")) {
             cleanFlags = cleanFlags.replace("0", "");
+        }
+        // Perl lets '+' win when both sign flags are present. Java rejects
+        // the combination before formatting the value.
+        if (cleanFlags.contains("+")) {
+            cleanFlags = cleanFlags.replace(" ", "");
         }
 
         // Java requires width when using - flag, but Perl doesn't
@@ -310,6 +316,21 @@ public class SprintfNumericFormatter {
             return formatGFloatingPoint(value, cleanFlags, width, precision, conversion);
         }
 
+        // Java Formatter rounds large integral doubles through a short decimal
+        // representation (2^64 becomes 18446744073709552000). Perl formats the
+        // exact binary value, which matters once nvsize exposes the 64-bit
+        // sprintf matrix.
+        if ((conversion == 'f' || conversion == 'F') && precision == 0
+                && Double.isFinite(value) && Math.abs(value) >= 0x1.0p53
+                && value == Math.rint(value)) {
+            String result = new BigDecimal(value).setScale(0, RoundingMode.HALF_UP).toPlainString();
+            if (value >= 0) {
+                if (cleanFlags.contains("+")) result = "+" + result;
+                else if (cleanFlags.contains(" ")) result = " " + result;
+            }
+            return SprintfPaddingHelper.applyWidth(result, width, cleanFlags);
+        }
+
         // Build format string for String.format
         StringBuilder format = new StringBuilder("%");
         if (cleanFlags.contains("-")) format.append("-");
@@ -320,7 +341,14 @@ public class SprintfNumericFormatter {
         if (cleanFlags.contains("#")) format.append("#");
 
         if (width > 0) format.append(width);
-        format.append(".").append(precision).append(conversion);
+        // An omitted precision for %a asks for enough hexadecimal digits to
+        // represent the value. Supplying Java's usual floating default of six
+        // loses that distinction.
+        if ((conversion == 'a' || conversion == 'A') && requestedPrecision < 0) {
+            format.append(conversion);
+        } else {
+            format.append(".").append(precision).append(conversion);
+        }
 
         String result = String.format(format.toString(), value);
         // Perl uses 'Inf' instead of Java's 'Infinity'

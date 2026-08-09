@@ -284,9 +284,12 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Switch the 64-bit `Config.pm` declarations, then rerun the unchanged
-   `op/bop.t`, `op/pack.t`, and `op/sprintf2.t` gates and the
-   Data::CompactReadonly/Number::Phone source-first consumer gate.
+1. Complete the Number::Phone consumer gate by fixing its module-selection
+   path: source-first resolution and the 305-file build now succeed, but
+   constructors choose `Number::Phone::StubCountry::*` where the unchanged
+   tests require `Number::Phone::UK::*`. Then rerun the full suite with
+   process-tree hard-kill enforcement; its unchanged `libphonenumber.t` corpus
+   currently exceeds the bounded gate and ignores the first TERM timeout.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -945,6 +948,35 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   overflow-diagnostic, and high-precision `%g` gaps. The full `make` gate
   passes. The runtime gates are now complete; the next step is the final
   64-bit Config declaration switch and consumer verification.
+- The 64-bit Config declaration and first consumer gate are complete
+  (2026-08-09). `Config.pm` now truthfully reports 8-byte IV, UV, size, NV,
+  quad, and long-long types, the native eight-byte byte order, 53 NV-preserved
+  UV bits, and the absence of complete NV-to-UV preservation. Native `j`/`J`
+  pack templates now use eight bytes. Decimal and non-decimal literals retain
+  exact IV/UV values through UV_MAX and promote larger values to NV; arithmetic
+  and bitwise shifts preserve the same boundary on both backends. Config
+  regression `zzzz_iv64_config.t` passes 22/22 and unsigned regression
+  `zzzz_iv64_unsigned_bitwise.t` passes 17/17 under standard Perl, JVM, and
+  interpreter execution. The unchanged core matrices complete all assertions:
+  `op/bop.t` passes 504/522 on JVM and 503/522 on interpreter,
+  `op/pack.t` passes 14,670/14,726 and 14,668/14,726, and `op/sprintf2.t`
+  passes 1,641/1,702 and 1,592/1,702 respectively. The Config-unlocked
+  sprintf path now formats exact large integral doubles and accepts Perl's
+  combined sign flags instead of aborting; remaining failures are known
+  formatting and diagnostic parity gaps.
+- Scalar::Type 1.0.1 is now a bundled pure-Perl/Java provider (2026-08-09),
+  replacing its XS-only scalar introspection with the `_scalar_type` runtime
+  primitive. Its unchanged API contract is covered by 18 passing module-test
+  assertions and is documented in the bundled-module and feature matrices.
+  With that dependency and exact over-UV literal promotion in place,
+  Data::CompactReadonly's unchanged source-first suite passes all 11 files and
+  342 assertions without a distribution preference or patch. Number::Phone
+  also resolves and builds all 305 source files without a workaround; one
+  focused country-selection test passes, while `bugfix-rt48581.t` passes 2/3,
+  `constructor.t` passes 32/38, and `uk_data.t` reaches assertion 96 before the
+  unresolved UK-vs-StubCountry loading path aborts. Its full corpus remains the
+  precise next consumer blocker rather than being reported as complete. The
+  full `make` gate passes.
 
 ### Open questions
 

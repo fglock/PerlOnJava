@@ -184,10 +184,14 @@ public class ConstantFoldingVisitor implements Visitor {
                 if (ScalarUtils.isInteger(value)) {
                     return new RuntimeScalar(Integer.parseInt(value));
                 } else if (value.matches("^-?\\d+$")) {
-                    BigInteger integerValue = new BigInteger(value);
-                    return integerValue.signum() >= 0 && integerValue.bitLength() <= 64
-                            ? new RuntimeScalar(integerValue)
-                            : new RuntimeScalar(Double.parseDouble(value), value);
+                    try {
+                        return new RuntimeScalar(Long.parseLong(value));
+                    } catch (NumberFormatException overflow) {
+                        BigInteger integerValue = new BigInteger(value);
+                        return integerValue.signum() >= 0 && integerValue.bitLength() <= 64
+                                ? new RuntimeScalar(integerValue)
+                                : new RuntimeScalar(Double.parseDouble(value), value);
+                    }
                 } else {
                     return new RuntimeScalar(Double.parseDouble(value), value);
                 }

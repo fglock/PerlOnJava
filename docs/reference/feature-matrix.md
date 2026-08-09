@@ -758,11 +758,11 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ❌  **Safe** module.
 
 ### Non-core modules
-
 - ✅  **Crypt::Twofish2**: Java XS replacement backed by BouncyCastle, with
   upstream-compatible ECB, CBC, and CFB1 modes.
 - 🟡 **B::Flags**: portable OP/SV flag names over the bundled partial `B`
   model; host-Perl allocation flags are intentionally unavailable.
+- ✅  **Scalar::Type** module backed by PerlOnJava scalar metadata (replaces native XS).
 - 🟡 **PadWalker**: `peek_sub`, `closed_over`, and `set_closed_over` use
   runtime-maintained lexical metadata on both backends; caller-pad APIs are
   not implemented.

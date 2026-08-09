@@ -233,24 +233,23 @@ my $startperl = $is_windows
     ## useithreads => 'define',
     ## usethreads => 'define',
 
-    # Sizes (Java platform - 32-bit integer model)
-    # PerlOnJava uses Java int (32-bit) as the native integer type.
-    # ivsize=4 signals a 32-bit Perl, so tests skip 64-bit-only paths.
+    # Sizes (Java platform - 64-bit integer model)
     shortsize => '2',
     intsize => '4',
     longsize => '8',
     ptrsize => '8',
     doublesize => '8',
-    uvsize => '4',
-    sizesize => '4',
+    nvsize => '8',
+    uvsize => '8',
+    sizesize => '8',
     byteorder => _determine_byteorder(),
 
-    ivsize => 4,
+    ivsize => 8,
     lseeksize => 8,
 
-    # Type names (matching a 32-bit Perl on LP64 platform)
-    ivtype => 'int',
-    uvtype => 'unsigned int',
+    # Type names (matching a 64-bit Perl on LP64 platforms)
+    ivtype => 'long',
+    uvtype => 'unsigned long',
     nvtype => 'double',
     i8type => 'signed char',
     u8type => 'unsigned char',
@@ -258,23 +257,24 @@ my $startperl = $is_windows
     u16type => 'unsigned short',
     i32type => 'int',
     u32type => 'unsigned int',
+    i64type => 'long',
+    u64type => 'unsigned long',
 
-    # 64-bit integer support - not enabled (32-bit integer model)
-    # use64bitint and d_quad are left undef so tests correctly skip
-    # 64-bit-only code paths.
+    # 64-bit integer support
+    use64bitint => 'define',
+    d_quad => 'define',
+    d_longlong => 'define',
+    longlongsize => 8,
+    quadtype => 'long',
+    uquadtype => 'unsigned long',
     
     # nv_preserves_uv_bits: Number of bits in an unsigned integer that can be
     # preserved in a floating-point number (NV) without loss of precision.
-    # For 32-bit systems with 32-bit integers (IV), this is typically 32.
-    # This value is critical for pack/unpack checksum tests - when checksums
-    # exceed this bit count, they may lose precision in floating-point math.
-    # Tests use this to skip checksums that would overflow on this architecture.
-    nv_preserves_uv_bits => 32,
+    # IEEE-754 doubles preserve every integer through 53 bits.
+    nv_preserves_uv_bits => 53,
     
-    # d_nv_preserves_uv: Whether NV (double) can preserve UV (unsigned int) values
-    # For 32-bit integers with 64-bit doubles (IEEE 754), this is true since
-    # doubles have 53 bits of precision, which is more than 32 bits.
-    d_nv_preserves_uv => 'define',
+    # A double cannot preserve every 64-bit UV value.
+    d_nv_preserves_uv => undef,
 
     # Features available in PerlOnJava
     d_readlink => 'define',
@@ -468,12 +468,12 @@ sub myconfig {
 
 # Helper functions
 sub _determine_byteorder {
-    my $test = pack("L", 0x12345678);
-    my @bytes = unpack("C4", $test);
-    if ($bytes[0] == 0x78) {
-        return "1234";  # little-endian (32-bit)
-    } elsif ($bytes[0] == 0x12) {
-        return "4321";  # big-endian (32-bit)
+    my $test = pack("Q", 0x0102030405060708);
+    my @bytes = unpack("C8", $test);
+    if ($bytes[0] == 0x08) {
+        return "12345678";
+    } elsif ($bytes[0] == 0x01) {
+        return "87654321";
     } else {
         return "unknown";
     }

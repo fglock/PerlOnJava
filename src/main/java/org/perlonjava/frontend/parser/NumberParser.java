@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -366,11 +367,23 @@ public class NumberParser {
                 return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
             } else {
                 // Integer number
-                long value;
                 try {
-                    value = format.integerParser.apply(numberStr.toString());
+                    String digits = numberStr.toString().replaceAll("_", "");
+                    BigInteger value = new BigInteger(digits, format.radix);
+                    if (value.signum() < 0) {
+                        throw new NumberFormatException("negative non-decimal literal");
+                    }
+                    if (value.bitLength() > 64) {
+                        if (hasConstantHandler("binary")) {
+                            NumberNode numberNode = new NumberNode("0", parser.tokenIndex);
+                            return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                        }
+                        return new NumberNode(Double.toString(value.doubleValue()), parser.tokenIndex);
+                    }
+                    NumberNode numberNode = new NumberNode(value.toString(), parser.tokenIndex);
+                    return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
                 } catch (NumberFormatException overflow) {
-                    // Value doesn't fit in a Perl IV/NV. If a `binary`
+                    // Value doesn't fit in a Perl UV. If a `binary`
                     // overload::constant handler is active (e.g. `use bigint`),
                     // it will consume the original source text and produce a
                     // bignum. Fall through with a 0 placeholder — the handler
@@ -381,8 +394,6 @@ public class NumberParser {
                     }
                     throw overflow;
                 }
-                NumberNode numberNode = new NumberNode(Long.toString(value), parser.tokenIndex);
-                return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
             }
         } catch (NumberFormatException e) {
             parser.throwError("Invalid " + format.name + " number");
