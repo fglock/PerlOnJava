@@ -5,6 +5,7 @@ import org.perlonjava.runtime.operators.BitwiseOperators;
 import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -183,9 +184,10 @@ public class ConstantFoldingVisitor implements Visitor {
                 if (ScalarUtils.isInteger(value)) {
                     return new RuntimeScalar(Integer.parseInt(value));
                 } else if (value.matches("^-?\\d+$")) {
-                    // Large integer that doesn't fit in int - keep as string
-                    // to preserve precision (32-bit Perl emulation)
-                    return new RuntimeScalar(value);
+                    BigInteger integerValue = new BigInteger(value);
+                    return integerValue.signum() >= 0 && integerValue.bitLength() <= 64
+                            ? new RuntimeScalar(integerValue)
+                            : new RuntimeScalar(Double.parseDouble(value), value);
                 } else {
                     return new RuntimeScalar(Double.parseDouble(value), value);
                 }
@@ -751,7 +753,7 @@ public class ConstantFoldingVisitor implements Visitor {
     private static Node createResultNode(RuntimeScalar result, int tokenIndex) {
         switch (result.type) {
             case RuntimeScalarType.INTEGER:
-                return new NumberNode(String.valueOf(result.getLong()), tokenIndex);
+                return new NumberNode(result.toString(), tokenIndex);
             case RuntimeScalarType.DOUBLE:
                 double d = result.getDouble();
                 String str;

@@ -15,6 +15,7 @@ import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
 import java.util.*;
 
 /**
@@ -1450,8 +1451,8 @@ public class BytecodeCompiler implements Visitor {
             // Use ScalarUtils.isInteger() for consistent number parsing with compiler
             boolean isInteger = ScalarUtils.isInteger(value);
 
-            // For 32-bit Perl emulation, check if this is a large integer
-            // that needs to be stored as a string to preserve precision
+            // Values outside the cached int range still need exact integer
+            // storage, including unsigned 64-bit literals above Long.MAX_VALUE.
             boolean isLargeInteger = !isInteger && value.matches("^-?\\d+$");
 
             if (isInteger) {
@@ -1481,7 +1482,10 @@ public class BytecodeCompiler implements Visitor {
                 try {
                     integerScalar = new RuntimeScalar(Long.parseLong(value));
                 } catch (NumberFormatException overflow) {
-                    integerScalar = new RuntimeScalar(Double.parseDouble(value), value);
+                    BigInteger integerValue = new BigInteger(value);
+                    integerScalar = integerValue.signum() >= 0 && integerValue.bitLength() <= 64
+                            ? new RuntimeScalar(integerValue)
+                            : new RuntimeScalar(Double.parseDouble(value), value);
                 }
                 int constIdx = addToConstantPool(integerScalar);
                 emit(Opcodes.LOAD_CONST);

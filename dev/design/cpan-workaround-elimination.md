@@ -284,9 +284,9 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Enable signed/unsigned `q`/`Q` pack and unpack and long `sprintf`
-   modifiers, then switch the 64-bit `Config.pm` declarations and rerun the
-   Data::CompactReadonly/Number::Phone source-first consumer gate.
+1. Enable long `sprintf` modifiers, then switch the 64-bit `Config.pm`
+   declarations and rerun the Data::CompactReadonly/Number::Phone
+   source-first consumer gate.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -919,6 +919,19 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   expectations from the intentionally unchanged `Config.pm`. The full `make`
   gate passes. The next migration gate is `q`/`Q` pack/unpack and long
   `sprintf`, followed by advertising the completed 64-bit runtime in Config.
+- The `q`/`Q` pack/unpack gate is complete (2026-08-09). Decimal literals
+  through UV_MAX now compile to exact integer scalars on JVM and interpreter
+  backends, including when passed through ordinary Perl argument lists;
+  larger literals retain NV promotion. Native, little-endian, and big-endian
+  quad packing writes the low 64-bit word, while unpack reconstructs signed IV
+  or exact unsigned UV values. Regression `zzzz_iv64_pack_quad.t` passes 16/16
+  under standard Perl, JVM, and interpreter execution, covering IV_MIN,
+  IV_MAX, UV_MAX, the unsigned high bit, repeats, endian modifiers, native
+  width, and subroutine-argument preservation. Unchanged `op/pack.t` completes
+  all 14,726 assertions and passes 14,670 on JVM and 14,668 on interpreter;
+  all newly exercised `q`/`Q` round-trip assertions pass. The full `make` gate
+  passes. Long `sprintf` modifiers are the next migration gate before the
+  final 64-bit Config switch.
 
 ### Open questions
 

@@ -5,6 +5,7 @@ import org.perlonjava.runtime.operators.UnpackState;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -214,22 +215,28 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-            // ========================================================================
-            // DO NOT IMPLEMENT q/Q unpack — PerlOnJava is a 32-bit Perl (ivsize=4).
-            //
-            // Enabling q/Q causes cascading test regressions because many Perl tests
-            // gate 64-bit code paths behind `eval { pack 'q', 0 }`. When q/Q works:
-            //   - op/pack.t: +25 new failures (q/Q edge cases with extreme values)
-            //   - op/sprintf2.t: +24 new failures (%lld/%llu formats unlocked)
-            //   - Other tests may assume use64bitint semantics throughout
-            //
-            // If you need 64-bit pack/unpack for a specific module (e.g. Mojo::WebSocket),
-            // the module should use its 32-bit fallback path instead:
-            //   MODERN ? pack('Q>', $len) : pack('NN', 0, $len & 0xffffffff)
-            //
-            // See also: NumericPackHandler.java case 'q'/'Q', SprintfFormatParser.java
-            // ========================================================================
-            throw new PerlCompilerException("Invalid type '" + (signed ? "q" : "Q") + "' in unpack");
+            boolean wasCharacterMode = state.isCharacterMode();
+            if (wasCharacterMode) {
+                state.switchToByteMode();
+            }
+
+            ByteBuffer buffer = state.getBuffer();
+            for (int i = 0; i < count; i++) {
+                if (buffer.remaining() < 8) {
+                    break;
+                }
+                long value = buffer.getLong();
+                if (signed || value >= 0) {
+                    output.add(new RuntimeScalar(value));
+                } else {
+                    BigInteger unsignedValue = BigInteger.valueOf(value & Long.MAX_VALUE).setBit(63);
+                    output.add(new RuntimeScalar(unsignedValue));
+                }
+            }
+
+            if (wasCharacterMode) {
+                state.switchToCharacterMode();
+            }
         }
 
         @Override
