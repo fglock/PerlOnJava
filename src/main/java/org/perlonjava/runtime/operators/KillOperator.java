@@ -31,6 +31,7 @@ public class KillOperator {
 
         // First argument is the signal
         RuntimeScalar signalArg = args[0].getFirst();
+        RuntimeScalar.checkTaint(signalArg, "kill");
         int signal;
 
         // Handle named signals (e.g., "TERM", "KILL", "HUP")
@@ -52,6 +53,7 @@ public class KillOperator {
         // Process each PID starting from second argument
         for (int i = 1; i < args.length; i++) {
             for (RuntimeScalar scalar : args[i]) {
+                RuntimeScalar.checkTaint(scalar, "kill");
                 int pid = scalar.getInt();
 
                 // Special case: negative PID means process group

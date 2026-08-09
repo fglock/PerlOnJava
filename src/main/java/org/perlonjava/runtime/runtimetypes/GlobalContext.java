@@ -76,11 +76,16 @@ public class GlobalContext {
         // Initialize $^X - the name used to execute the current copy of Perl
         // PERLONJAVA_EXECUTABLE is set by the `jperl` or `jperl.bat` launcher
         String perlExecutable = System.getenv("PERLONJAVA_EXECUTABLE");
+        RuntimeScalar executableVariable =
+                GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1));
         if (perlExecutable != null && !perlExecutable.isEmpty()) {
-            GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1)).set(perlExecutable);
+            executableVariable.set(perlExecutable);
         } else {
             // Fallback to "jperl" if environment variable is not set
-            GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1)).set("jperl");
+            executableVariable.set("jperl");
+        }
+        if (compilerOptions.taintMode) {
+            executableVariable.tainted = true;
         }
 
         GlobalVariable.getGlobalVariable("main::]").set(Configuration.getPerlVersionOld());    // initialize $] to Perl version
@@ -210,6 +215,13 @@ public class GlobalContext {
             envValue.tainted = compilerOptions.taintMode;
             env.put(k, envValue);
         });
+
+        // Command-line arguments are external input just like %ENV and file data.
+        if (compilerOptions.taintMode) {
+            for (RuntimeScalar argument : compilerOptions.argumentList.elements) {
+                argument.tainted = true;
+            }
+        }
 
         /* Initialize @INC.
            @INC Search order mirrors Perl 5's site_perl > core pattern:

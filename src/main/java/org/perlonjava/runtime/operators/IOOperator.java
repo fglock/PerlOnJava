@@ -693,6 +693,9 @@ public class IOOperator {
         RuntimeIO fh;
 
         if (mode.contains("|")) {
+            for (int i = 1; i < args.length; i++) {
+                RuntimeScalar.checkTaint(args[i].scalar(), "open");
+            }
             // Check for fork-open pattern: open FH, "-|" or open FH, "|-" with no command
             // This is the 2-arg piped open that normally forks in Perl
             if (args.length == 2 && (mode.equals("-|") || mode.equals("|-"))) {

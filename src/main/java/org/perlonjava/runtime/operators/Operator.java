@@ -54,6 +54,7 @@ public class Operator {
 
         // Process each file in the flattened list
         for (RuntimeScalar fileScalar : fileList) {
+            RuntimeScalar.checkTaint(fileScalar, "chmod");
             String fileName = fileScalar.toString();
             Path resolved = RuntimeIO.resolvePath(fileName, "chmod");
             if (resolved == null) {
@@ -972,8 +973,12 @@ public class Operator {
             throw new PerlCompilerException("Not enough arguments for rename");
         }
 
-        String oldName = args[0].getFirst().toString();
-        String newName = args[1].getFirst().toString();
+        RuntimeScalar oldNameScalar = args[0].getFirst();
+        RuntimeScalar newNameScalar = args[1].getFirst();
+        RuntimeScalar.checkTaint(oldNameScalar, "rename");
+        RuntimeScalar.checkTaint(newNameScalar, "rename");
+        String oldName = oldNameScalar.toString();
+        String newName = newNameScalar.toString();
 
         try {
             Path oldPath = RuntimeIO.resolvePath(oldName);

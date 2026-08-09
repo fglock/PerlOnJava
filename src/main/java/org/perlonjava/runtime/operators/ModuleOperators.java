@@ -142,6 +142,7 @@ public class ModuleOperators {
      * @return Result of execution (undef on error, with $@ or $! set)
      */
     private static RuntimeBase doFile(RuntimeScalar runtimeScalar, boolean setINC, boolean isRequire, int ctx) {
+        RuntimeScalar.checkTaint(runtimeScalar, isRequire ? "require" : "do");
         // Clear error variables at start
         GlobalVariable.setGlobalVariable("main::@", "");
         GlobalVariable.setGlobalVariable("main::!", "");

@@ -25,6 +25,8 @@ public class NativeUtils {
             return new RuntimeScalar(0);
         }
 
+        RuntimeScalar.checkTaint(args[0].scalar(), "symlink");
+        RuntimeScalar.checkTaint(args[1].scalar(), "symlink");
         String oldFile = RuntimeIO.sanitizePathname("symlink", args[0].toString());
         Path link = RuntimeIO.resolvePath(args[1].toString(), "symlink");
 
@@ -72,6 +74,8 @@ public class NativeUtils {
             return new RuntimeScalar(0);
         }
 
+        RuntimeScalar.checkTaint(args[0].scalar(), "link");
+        RuntimeScalar.checkTaint(args[1].scalar(), "link");
         String oldFile = RuntimeIO.resolvePath(args[0].toString()).toString();
         String newFile = RuntimeIO.resolvePath(args[1].toString()).toString();
 

@@ -124,6 +124,9 @@ public class SystemOperator {
             }
         }
 
+        RuntimeScalar.checkTaint(command, "``");
+        checkTaintEnvironment();
+
         String cmd = command.toString();
         CommandResult result;
 
@@ -159,6 +162,8 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar system(RuntimeList args, boolean hasHandle, int ctx) {
+        checkTaintArguments(args, "system");
+        checkTaintEnvironment();
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
         
@@ -233,6 +238,43 @@ public class SystemOperator {
             }
         }
         return result;
+    }
+
+    private static void checkTaintArguments(RuntimeList args, String operation) {
+        if (!GlobalContext.isTaintModeActive()) {
+            return;
+        }
+        for (RuntimeBase value : args.elements) {
+            checkTaintValue(value, operation);
+        }
+    }
+
+    private static void checkTaintValue(RuntimeBase value, String operation) {
+        if (value instanceof RuntimeScalar scalar) {
+            RuntimeScalar.checkTaint(scalar, operation);
+        } else if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                checkTaintValue(element, operation);
+            }
+        } else if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) {
+                RuntimeScalar.checkTaint(element, operation);
+            }
+        }
+    }
+
+    private static void checkTaintEnvironment() {
+        if (!GlobalContext.isTaintModeActive()) {
+            return;
+        }
+        RuntimeHash env = GlobalVariable.getGlobalHash("main::ENV");
+        for (String name : List.of("PATH", "IFS", "CDPATH", "ENV", "BASH_ENV")) {
+            RuntimeScalar value = env.elements.get(name);
+            if (value != null && value.isTainted()) {
+                throw new PerlCompilerException(
+                        "Insecure $ENV{" + name + "} while running with -T switch");
+            }
+        }
     }
 
     private static List<String> splitDirectCommandWords(String command) {
@@ -905,6 +947,8 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar exec(RuntimeList args, boolean hasHandle, int ctx) {
+        checkTaintArguments(args, "exec");
+        checkTaintEnvironment();
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
         

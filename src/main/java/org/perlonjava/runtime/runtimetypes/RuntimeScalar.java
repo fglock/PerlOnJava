@@ -1085,6 +1085,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
+    /** Mark this scalar tainted when any scalar input to an operation is tainted. */
+    public RuntimeScalar propagateTaint(RuntimeScalar... inputs) {
+        for (RuntimeScalar input : inputs) {
+            if (input != null && input.isTainted()) {
+                if (isTainted()) {
+                    return this;
+                }
+                // Operator helpers sometimes return a shared scalar-cache value.
+                // Never attach taint metadata to that shared instance.
+                RuntimeScalar taintedResult = new RuntimeScalar(this);
+                taintedResult.tainted = true;
+                return taintedResult;
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Reject a tainted value at a security-sensitive operation.  Taint is only
+     * meaningful while the current Perl program is running with {@code -T}.
+     */
+    public static void checkTaint(RuntimeScalar scalar, String operation) {
+        if (GlobalContext.isTaintModeActive() && scalar != null && scalar.isTainted()) {
+            throw new PerlCompilerException(
+                    "Insecure dependency in " + operation + " while running with -T switch");
+        }
+    }
+
     // Add itself to a RuntimeArray.
     //
     // ─── WARNING: refCount accounting is intentionally asymmetric here ───

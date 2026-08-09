@@ -11,6 +11,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarZero;
 
 public class ScalarOperators {
     public static RuntimeScalar oct(RuntimeScalar runtimeScalar) {
+        return octUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar octUnpropagated(RuntimeScalar runtimeScalar) {
         String expr = runtimeScalar.toString();
 
         StringParser.assertNoWideCharacters(expr, "oct");
@@ -109,6 +113,10 @@ public class ScalarOperators {
     }
 
     public static RuntimeScalar ord(RuntimeScalar runtimeScalar) {
+        return ordUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar ordUnpropagated(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         long i;
         if (str.isEmpty()) {
@@ -127,6 +135,10 @@ public class ScalarOperators {
      * @return a RuntimeScalar containing the byte value (0-255)
      */
     public static RuntimeScalar ordBytes(RuntimeScalar runtimeScalar) {
+        return ordBytesUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar ordBytesUnpropagated(RuntimeScalar runtimeScalar) {
         // Regex capture variables are read-only proxies. Resolve the current
         // capture so its BYTE_STRING flag participates in byte-wise ord().
         if (runtimeScalar instanceof ScalarSpecialVariable specialVariable) {
@@ -159,6 +171,10 @@ public class ScalarOperators {
     }
 
     public static RuntimeScalar hex(RuntimeScalar runtimeScalar) {
+        return hexUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar hexUnpropagated(RuntimeScalar runtimeScalar) {
         String expr = runtimeScalar.toString();
         long result = 0;
         boolean useDouble = false;

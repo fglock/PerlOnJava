@@ -233,6 +233,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return addUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar addUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
             int a = (int) arg1.value;
@@ -279,6 +283,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar addWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return addWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
             int a = (int) arg1.value;
@@ -389,6 +397,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return subtractUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar subtractUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
             int a = (int) arg1.value;
@@ -435,6 +447,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtractWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return subtractWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar subtractWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
             int a = (int) arg1.value;
@@ -482,6 +498,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the product.
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return multiplyUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar multiplyUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
             int a = (int) arg1.value;
@@ -529,6 +549,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the product.
      */
     public static RuntimeScalar multiplyWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return multiplyWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar multiplyWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
             int a = (int) arg1.value;
@@ -577,6 +601,10 @@ public class MathOperators {
      * @throws PerlCompilerException if division by zero occurs.
      */
     public static RuntimeScalar divide(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return divideUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar divideUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -614,6 +642,10 @@ public class MathOperators {
      * @throws PerlCompilerException if division by zero occurs.
      */
     public static RuntimeScalar divideWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return divideWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar divideWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -650,6 +682,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the modulus.
      */
     public static RuntimeScalar modulus(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return modulusUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar modulusUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -689,6 +725,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the modulus.
      */
     public static RuntimeScalar modulusWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return modulusWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar modulusWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -1105,6 +1145,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the natural logarithm.
      */
     public static RuntimeScalar log(RuntimeScalar runtimeScalar) {
+        return logUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar logUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1126,6 +1170,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the square root.
      */
     public static RuntimeScalar sqrt(RuntimeScalar runtimeScalar) {
+        return sqrtUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar sqrtUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1147,6 +1195,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the cosine.
      */
     public static RuntimeScalar cos(RuntimeScalar runtimeScalar) {
+        return cosUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar cosUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1164,6 +1216,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sine.
      */
     public static RuntimeScalar sin(RuntimeScalar runtimeScalar) {
+        return sinUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar sinUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1181,6 +1237,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the exponential.
      */
     public static RuntimeScalar exp(RuntimeScalar runtimeScalar) {
+        return expUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar expUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1200,6 +1260,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the power.
      */
     public static RuntimeScalar pow(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return powUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar powUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -1220,6 +1284,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the power.
      */
     public static RuntimeScalar powWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return powWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar powWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -1246,6 +1314,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the angle theta in radians.
      */
     public static RuntimeScalar atan2(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return atan2Unpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    private static RuntimeScalar atan2Unpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -1264,6 +1336,10 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the absolute value.
      */
     public static RuntimeScalar abs(RuntimeScalar runtimeScalar) {
+        return absUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar absUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1292,6 +1368,10 @@ public class MathOperators {
      * Fast path - no warning checks.
      */
     public static RuntimeScalar unaryMinus(RuntimeScalar runtimeScalar) {
+        return unaryMinusUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar unaryMinusUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1309,6 +1389,10 @@ public class MathOperators {
      * Called when 'use warnings "uninitialized"' is in effect.
      */
     public static RuntimeScalar unaryMinusWarn(RuntimeScalar runtimeScalar) {
+        return unaryMinusWarnUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar unaryMinusWarnUnpropagated(RuntimeScalar runtimeScalar) {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
@@ -1346,6 +1430,10 @@ public class MathOperators {
     }
 
     public static RuntimeScalar integer(RuntimeScalar arg1) {
+        return integerUnpropagated(arg1).propagateTaint(arg1);
+    }
+
+    private static RuntimeScalar integerUnpropagated(RuntimeScalar arg1) {
         // Check if object is eligible for overloading
         int blessId = blessedId(arg1);
         if (blessId < 0) {

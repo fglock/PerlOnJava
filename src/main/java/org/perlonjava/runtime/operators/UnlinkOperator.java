@@ -35,6 +35,7 @@ public class UnlinkOperator {
         }
 
         for (RuntimeScalar fileScalar : fileList) {
+            RuntimeScalar.checkTaint(fileScalar, "unlink");
             String fileName = fileScalar.toString();
 
             if (deleteFile(fileName)) {
