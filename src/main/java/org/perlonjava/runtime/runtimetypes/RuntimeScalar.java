@@ -2516,7 +2516,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 result.type = RuntimeScalarType.STRING;
                 result.value = this.value.toString();
                 result.firstClassRegexScalar = true;
-                yield result;
+                yield result.propagateTaint(this);
             }
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot

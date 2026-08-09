@@ -43,6 +43,13 @@ my $tainted_pattern = "(abc)$empty_taint";
 'abc' =~ /$tainted_pattern/;
 ok(tainted($1), 'a tainted regex pattern taints its capture');
 ok(tainted(qr/$tainted_pattern/), 'qr preserves pattern taint');
+my $tainted_regex_ref = qr/(.)$empty_taint/;
+my $bare_tainted_regex = $$tainted_regex_ref;
+my $bare_regex_target = 'abc';
+$bare_regex_target =~ s/$bare_tainted_regex/x/;
+ok(tainted($bare_tainted_regex), 'dereferencing qr preserves regex taint');
+ok(tainted($bare_regex_target),
+    'substitution with a dereferenced tainted regex taints the target');
 
 {
     use re 'taint';
