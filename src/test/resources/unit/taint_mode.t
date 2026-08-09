@@ -290,6 +290,10 @@ ok(tainted($split[0]) && tainted($split[1]), 'split propagates input taint');
     no warnings 'numeric';
     ok(tainted(~("abc$empty_taint")), 'bitwise complement propagates taint');
 }
+ok("M$empty_taint" ~~ ['m', 'M'],
+    'tainted scalar smartmatches a later array element');
+ok(!("M$empty_taint" ~~ ['m', undef]),
+    'tainted scalar smartmatch handles undef array elements');
 ok(tainted(crypt('secret', "aa$empty_taint")), 'crypt propagates salt taint');
 ok(tainted(vec("A$empty_taint", 0, 8)), 'vec propagates source taint');
 ok(tainted(pack('a*', "packed$empty_taint")), 'pack propagates value taint');

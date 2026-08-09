@@ -706,6 +706,20 @@ public class CompareOperators {
             if (result != null) return result;
         }
 
+        // Scalar ~~ ARRAY matches when the scalar smartmatches any array
+        // element. Keep the original scalar intact across candidates: tainted
+        // strings must not have their backing value consumed by a failed
+        // comparison before a later element matches.
+        if (arg2.type == RuntimeScalarType.ARRAYREFERENCE
+                && arg2.value instanceof RuntimeArray candidates) {
+            for (RuntimeScalar candidate : candidates) {
+                if (smartmatch(arg1, candidate).getBoolean()) {
+                    return scalarTrue;
+                }
+            }
+            return scalarFalse;
+        }
+
         // Check if both are defined
         if (!arg1.getDefinedBoolean() && !arg2.getDefinedBoolean()) {
             return scalarTrue;  // undef ~~ undef is true
