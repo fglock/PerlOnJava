@@ -2,6 +2,8 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -11,6 +13,13 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * division, modulus, and various mathematical functions.
  */
 public class MathOperators {
+    private static boolean hasWideInteger(RuntimeScalar scalar) {
+        return scalar.type == INTEGER && scalar.value instanceof BigInteger;
+    }
+
+    private static boolean hasWideInteger(RuntimeScalar left, RuntimeScalar right) {
+        return hasWideInteger(left) || hasWideInteger(right);
+    }
 
     /** Largest magnitude such that every integer in [-N, N] is exactly representable as double (2^53). */
     private static final double MAX_EXACT_DOUBLE_INT = 9007199254740992.0;
@@ -179,6 +188,8 @@ public class MathOperators {
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
+        } else if (hasWideInteger(arg1)) {
+            return new RuntimeScalar(arg1.getBigint().add(BigInteger.valueOf(arg2)));
         } else {
             long a = arg1.getLong();
             try {
@@ -239,6 +250,9 @@ public class MathOperators {
     private static RuntimeScalar addUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            if (hasWideInteger(arg1, arg2)) {
+                return new RuntimeScalar(arg1.getBigint().add(arg2.getBigint()));
+            }
             long a = arg1.getLong();
             long b = arg2.getLong();
             try {
@@ -262,6 +276,8 @@ public class MathOperators {
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return new RuntimeScalar(arg1.getBigint().add(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -289,6 +305,9 @@ public class MathOperators {
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            if (hasWideInteger(arg1, arg2)) {
+                return new RuntimeScalar(arg1.getBigint().add(arg2.getBigint()));
+            }
             long a = arg1.getLong();
             long b = arg2.getLong();
             try {
@@ -313,6 +332,8 @@ public class MathOperators {
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return new RuntimeScalar(arg1.getBigint().add(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -345,6 +366,8 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
+        } else if (hasWideInteger(arg1)) {
+            return new RuntimeScalar(arg1.getBigint().subtract(BigInteger.valueOf(arg2)));
         } else {
             long a = arg1.getLong();
             try {
@@ -378,6 +401,8 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
+        } else if (hasWideInteger(arg1)) {
+            return new RuntimeScalar(arg1.getBigint().subtract(BigInteger.valueOf(arg2)));
         } else {
             long a = arg1.getLong();
             try {
@@ -403,6 +428,9 @@ public class MathOperators {
     private static RuntimeScalar subtractUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            if (hasWideInteger(arg1, arg2)) {
+                return new RuntimeScalar(arg1.getBigint().subtract(arg2.getBigint()));
+            }
             long a = arg1.getLong();
             long b = arg2.getLong();
             try {
@@ -426,6 +454,8 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return new RuntimeScalar(arg1.getBigint().subtract(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -453,6 +483,9 @@ public class MathOperators {
     private static RuntimeScalar subtractWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            if (hasWideInteger(arg1, arg2)) {
+                return new RuntimeScalar(arg1.getBigint().subtract(arg2.getBigint()));
+            }
             long a = arg1.getLong();
             long b = arg2.getLong();
             try {
@@ -477,6 +510,8 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return new RuntimeScalar(arg1.getBigint().subtract(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -504,6 +539,9 @@ public class MathOperators {
     private static RuntimeScalar multiplyUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            if (hasWideInteger(arg1, arg2)) {
+                return new RuntimeScalar(arg1.getBigint().multiply(arg2.getBigint()));
+            }
             long a = arg1.getLong();
             long b = arg2.getLong();
             try {
@@ -527,6 +565,8 @@ public class MathOperators {
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return new RuntimeScalar(arg1.getBigint().multiply(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -554,6 +594,9 @@ public class MathOperators {
     private static RuntimeScalar multiplyWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
+            if (hasWideInteger(arg1, arg2)) {
+                return new RuntimeScalar(arg1.getBigint().multiply(arg2.getBigint()));
+            }
             long a = arg1.getLong();
             long b = arg2.getLong();
             try {
@@ -578,6 +621,8 @@ public class MathOperators {
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return new RuntimeScalar(arg1.getBigint().multiply(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();

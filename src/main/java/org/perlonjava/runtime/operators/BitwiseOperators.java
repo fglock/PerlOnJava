@@ -4,6 +4,8 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
 
 /**
@@ -12,6 +14,25 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  * Additionally, it implements Perl-like bitwise string operators.
  */
 public class BitwiseOperators {
+    private static final BigInteger UV_MASK = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+
+    private static BigInteger unsignedValue(RuntimeScalar scalar) {
+        return scalar.getBigint().and(UV_MASK);
+    }
+
+    private static RuntimeScalar unsignedResult(BigInteger value) {
+        return new RuntimeScalar(value.and(UV_MASK));
+    }
+
+    private static RuntimeScalar unsignedShiftLeft(BigInteger value, long shift) {
+        if (shift >= 64) return RuntimeScalarCache.scalarZero;
+        return unsignedResult(value.shiftLeft((int) shift));
+    }
+
+    private static RuntimeScalar unsignedShiftRight(BigInteger value, long shift) {
+        if (shift >= 64) return RuntimeScalarCache.scalarZero;
+        return unsignedResult(value.shiftRight((int) shift));
+    }
 
     /**
      * Performs a bitwise AND operation on two RuntimeScalar objects.
@@ -27,9 +48,8 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = (runtimeScalar.getLong() & 0xFFFFFFFFL)
-                    & (arg2.getLong() & 0xFFFFFFFFL);
-            return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
+            return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
+                    .propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '&' operator on blessed objects
@@ -78,11 +98,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAndBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        long val1 = runtimeScalar.getLong() & 0xFFFFFFFFL;
-        long val2 = arg2.getLong() & 0xFFFFFFFFL;
-        long result = (val1 & val2) & 0xFFFFFFFFL;
-
-        return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
+        // Use long values to preserve full precision
+        return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
+                .propagateTaint(runtimeScalar, arg2);
     }
 
     /**
@@ -99,9 +117,8 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((runtimeScalar.getLong() & 0xFFFFFFFFL)
-                    | (arg2.getLong() & 0xFFFFFFFFL)) & 0xFFFFFFFFL;
-            return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
+            return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
+                    .propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '|' operator on blessed objects
@@ -140,11 +157,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOrBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        long val1 = runtimeScalar.getLong() & 0xFFFFFFFFL;
-        long val2 = arg2.getLong() & 0xFFFFFFFFL;
-        long result = (val1 | val2) & 0xFFFFFFFFL;
-
-        return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
+        // Use long values to preserve full precision
+        return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
+                .propagateTaint(runtimeScalar, arg2);
     }
 
     /**
@@ -165,9 +180,8 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((runtimeScalar.getLong() & 0xFFFFFFFFL)
-                    ^ (arg2.getLong() & 0xFFFFFFFFL)) & 0xFFFFFFFFL;
-            return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
+            return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
+                    .propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '^' operator on blessed objects
@@ -206,11 +220,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXorBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        long val1 = runtimeScalar.getLong() & 0xFFFFFFFFL;
-        long val2 = arg2.getLong() & 0xFFFFFFFFL;
-        long result = (val1 ^ val2) & 0xFFFFFFFFL;
-
-        return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
+        // Use long values to preserve full precision
+        return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
+                .propagateTaint(runtimeScalar, arg2);
     }
 
     /** Numeric bitwise operations under {@code use integer}: return a signed IV. */
@@ -295,18 +307,8 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNotBinary(RuntimeScalar runtimeScalar) {
-        long value = runtimeScalar.getLong();
-
-        // Perl uses 32-bit semantics for bitwise operations
-        // Treat the input as an unsigned 32-bit value, then apply bitwise NOT
-
-        // First, ensure we're working with a 32-bit value by masking
-        long masked32bit = value & 0xFFFFFFFFL;
-
-        // Apply bitwise NOT and mask to 32 bits
-        long result = (~masked32bit) & 0xFFFFFFFFL;
-
-        return new RuntimeScalar(result).propagateTaint(runtimeScalar);
+        return unsignedResult(unsignedValue(runtimeScalar).xor(UV_MASK))
+                .propagateTaint(runtimeScalar);
     }
 
     /**
@@ -478,10 +480,12 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             long shift = arg2.getLong();
-            if (shift >= 0 && shift < 64) {
-                long result = runtimeScalar.getLong() << (int) shift;
-                return new RuntimeScalar(result);
+            if (shift >= 0) {
+                return unsignedShiftLeft(unsignedValue(runtimeScalar), shift);
+            } else if (shift != Long.MIN_VALUE) {
+                return unsignedShiftRight(unsignedValue(runtimeScalar), -shift);
             }
+            return RuntimeScalarCache.scalarZero;
         }
 
         // Check for overloaded '<<' operator on blessed objects
@@ -513,9 +517,7 @@ public class BitwiseOperators {
             double doubleValue = runtimeScalar.getDouble();
             if (Double.isInfinite(doubleValue)) {
                 if (doubleValue > 0) {
-                    // Java's -1 bit pattern is 64-bit UV_MAX. Exact unsigned
-                    // stringification is handled by the unsigned-scalar step.
-                    return new RuntimeScalar(-1L);
+                    return unsignedResult(UV_MASK);
                 } else {
                     // -Inf should convert to 0 for unsigned interpretation
                     return new RuntimeScalar(0L);
@@ -527,23 +529,16 @@ public class BitwiseOperators {
             }
         }
 
-        long value = runtimeScalar.getLong();
+        BigInteger value = unsignedValue(runtimeScalar);
         long shift = arg2.getLong();
 
         // Handle negative shift (reverse direction: left shift becomes right shift)
         if (shift < 0) {
             shift = -shift;
             if (shift < 0) shift = Long.MAX_VALUE;
-            return shiftRightInternal(value, shift, false);
+            return unsignedShiftRight(value, shift);
         }
-
-        if (shift >= 64) {
-            return RuntimeScalarCache.scalarZero;
-        }
-
-        long result = value << (int) shift;
-
-        return new RuntimeScalar(result);
+        return unsignedShiftLeft(value, shift);
     }
 
     /**
@@ -561,10 +556,12 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             long shift = arg2.getLong();
-            if (shift >= 0 && shift < 64) {
-                long result = runtimeScalar.getLong() >>> (int) shift;
-                return new RuntimeScalar(result);
+            if (shift >= 0) {
+                return unsignedShiftRight(unsignedValue(runtimeScalar), shift);
+            } else if (shift != Long.MIN_VALUE) {
+                return unsignedShiftLeft(unsignedValue(runtimeScalar), -shift);
             }
+            return RuntimeScalarCache.scalarZero;
         }
 
         // Check for overloaded '>>' operator on blessed objects
@@ -596,13 +593,8 @@ public class BitwiseOperators {
             double doubleValue = runtimeScalar.getDouble();
             if (Double.isInfinite(doubleValue)) {
                 if (doubleValue > 0) {
-                    // +Inf converts to the 64-bit UV_MAX bit pattern.
-                    long uvMax = -1L;
                     long shift = arg2.getLong();
-                    if (shift >= 64) {
-                        return RuntimeScalarCache.scalarZero;
-                    }
-                    return new RuntimeScalar(uvMax >>> (int) shift);
+                    return unsignedShiftRight(UV_MASK, shift);
                 } else {
                     // -Inf should convert to 0 for unsigned interpretation
                     return RuntimeScalarCache.scalarZero;
@@ -614,47 +606,16 @@ public class BitwiseOperators {
             }
         }
 
-        long value = runtimeScalar.getLong();
+        BigInteger value = unsignedValue(runtimeScalar);
         long shift = arg2.getLong();
 
         // Handle negative shift (reverse direction: right shift becomes left shift)
         if (shift < 0) {
             shift = -shift;
             if (shift < 0) shift = Long.MAX_VALUE;
-            if (shift >= 64) {
-                return RuntimeScalarCache.scalarZero;
-            }
-            long result = value << (int) shift;
-            return new RuntimeScalar(result);
+            return unsignedShiftLeft(value, shift);
         }
-
-        return shiftRightInternal(value, shift, false);
-    }
-
-    /**
-     * Internal helper for right shift operations.
-     *
-     * @param value  The value to shift
-     * @param shift  The shift amount (must be non-negative)
-     * @param signed If true, use signed (arithmetic) shift; if false, use unsigned (logical) shift
-     * @return A new RuntimeScalar with the shifted value
-     */
-    private static RuntimeScalar shiftRightInternal(long value, long shift, boolean signed) {
-        if (shift >= 64) {
-            if (signed) {
-                // For signed right shift, stick to -1 or 0
-                return new RuntimeScalar(value < 0 ? -1 : 0);
-            }
-            return RuntimeScalarCache.scalarZero;
-        }
-
-        if (signed) {
-            long result = value >> (int) shift;
-            return new RuntimeScalar(result);
-        } else {
-            long result = value >>> (int) shift;
-            return new RuntimeScalar(result);
-        }
+        return unsignedShiftRight(value, shift);
     }
 
     /**

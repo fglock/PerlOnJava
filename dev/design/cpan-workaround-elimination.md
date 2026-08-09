@@ -284,16 +284,13 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Add an exact unsigned 64-bit scalar representation, then migrate ordinary
-   numeric NOT and high-bit/negative UV shifts without disturbing
-   warning-category bit masks.
+1. Enable signed/unsigned `q`/`Q` pack and unpack and long `sprintf`
+   modifiers, then switch the 64-bit `Config.pm` declarations and rerun the
+   Data::CompactReadonly/Number::Phone source-first consumer gate.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
-3. Then enable signed/unsigned `q`/`Q` pack and unpack, long `sprintf`
-   modifiers, and finally the 64-bit `Config.pm` declarations before rerunning
-   the Data::CompactReadonly/Number::Phone source-first consumer gate.
 
 ### Completed phase deliverables
 
@@ -907,6 +904,21 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   the cusp/negative-UV group remains blocked on representing UV_MAX exactly.
   Ordinary numeric NOT and unsigned results above IV_MAX therefore remain the
   next atomic step rather than being approximated with a signed Java `long`.
+- The unsigned 64-bit scalar and bitwise step is complete (2026-08-09).
+  Integer scalars above IV_MAX use an exact `BigInteger` representation while
+  ordinary signed values retain the established `Integer`/`Long` fast paths.
+  Arithmetic and numeric comparison preserve those unsigned values, and
+  ordinary numeric NOT, AND, OR, XOR, and shifts now operate over a 64-bit UV
+  word on both backends. Regression `zzzz_iv64_unsigned_bitwise.t` passes
+  12/12 under standard Perl, JVM, and interpreter execution; the interpreter
+  also exposes its pre-existing local numeric-warning suppression gap inside
+  Test::Builder without changing the successful TAP result. The differential
+  baseline now matches standard Perl for numeric NOT and unsigned shifts.
+  Unchanged `op/bop.t` improves to 496/522 on JVM and 495/522 on interpreter;
+  its remaining width-derived assertions continue to select 32-bit
+  expectations from the intentionally unchanged `Config.pm`. The full `make`
+  gate passes. The next migration gate is `q`/`Q` pack/unpack and long
+  `sprintf`, followed by advertising the completed 64-bit runtime in Config.
 
 ### Open questions
 
