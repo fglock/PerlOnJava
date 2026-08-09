@@ -284,9 +284,9 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Enable long `sprintf` modifiers, then switch the 64-bit `Config.pm`
-   declarations and rerun the Data::CompactReadonly/Number::Phone
-   source-first consumer gate.
+1. Switch the 64-bit `Config.pm` declarations, then rerun the unchanged
+   `op/bop.t`, `op/pack.t`, and `op/sprintf2.t` gates and the
+   Data::CompactReadonly/Number::Phone source-first consumer gate.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -932,6 +932,19 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   all newly exercised `q`/`Q` round-trip assertions pass. The full `make` gate
   passes. Long `sprintf` modifiers are the next migration gate before the
   final 64-bit Config switch.
+- The long-`sprintf` gate is complete (2026-08-09). Integer conversions now
+  accept Perl's `ll`, `q`, and `L` quad modifiers, preserving signed IV and
+  unsigned UV reinterpretation across decimal, octal, hexadecimal, and binary
+  output. Decimal formatting also handles IV_MIN without overflowing while
+  deriving its magnitude. Regression `zzzz_iv64_sprintf_long.t` passes 16/16
+  under standard Perl, JVM, and interpreter execution, including UV_MAX,
+  signed aliases, width, precision, and alternate forms. Unchanged
+  `op/sprintf2.t` completes all 1,655 assertions and passes 1,638 on JVM and
+  1,589 on interpreter; all 24 newly unlocked quad-format and warning
+  assertions pass. The remaining failures are pre-existing overload, UTF-8,
+  overflow-diagnostic, and high-precision `%g` gaps. The full `make` gate
+  passes. The runtime gates are now complete; the next step is the final
+  64-bit Config declaration switch and consumer verification.
 
 ### Open questions
 

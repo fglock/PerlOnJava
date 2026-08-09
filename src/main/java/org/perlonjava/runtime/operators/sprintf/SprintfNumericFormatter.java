@@ -78,7 +78,7 @@ public class SprintfNumericFormatter {
                                 int base, boolean usePrefix) {
         String result;
         boolean negative = value < 0 && base == 10;
-        long absValue = negative ? -value : value;
+        long absValue = negative && value != Long.MIN_VALUE ? -value : value;
 
         // For non-decimal bases, treat as unsigned
         if (base != 10 && value < 0) {
@@ -90,11 +90,15 @@ public class SprintfNumericFormatter {
             };
         } else {
             // Convert to string in the specified base
-            result = switch (base) {
-                case 8 -> Long.toOctalString(absValue);
-                case 16 -> Long.toHexString(absValue);
-                default -> Long.toString(absValue);
-            };
+            if (negative && value == Long.MIN_VALUE) {
+                result = "9223372036854775808";
+            } else {
+                result = switch (base) {
+                    case 8 -> Long.toOctalString(absValue);
+                    case 16 -> Long.toHexString(absValue);
+                    default -> Long.toString(absValue);
+                };
+            }
         }
 
         // Store original flags
