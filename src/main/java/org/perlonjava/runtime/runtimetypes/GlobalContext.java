@@ -20,6 +20,8 @@ public class GlobalContext {
 
     private static final ThreadLocal<Boolean> threadTaintMode =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static final ThreadLocal<Boolean> threadJoinTaint =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     // Special variables internal names
     public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
@@ -33,6 +35,18 @@ public class GlobalContext {
 
     public static boolean isTaintModeActive() {
         return threadTaintMode.get();
+    }
+
+    /** Record the taint state left by join(), used by Perl's legacy taint probe. */
+    public static void setThreadJoinTaint(boolean tainted) {
+        threadJoinTaint.set(tainted);
+    }
+
+    /** Return and clear the taint state left by the immediately preceding join(). */
+    public static boolean consumeThreadJoinTaint() {
+        boolean tainted = threadJoinTaint.get();
+        threadJoinTaint.set(false);
+        return tainted;
     }
 
     // Virtual directory names for JAR-embedded Perl resources

@@ -792,6 +792,11 @@ public class StringOperators {
         return joinInternal(runtimeScalar, list, true, false);
     }
 
+    private static RuntimeScalar recordJoinTaint(RuntimeScalar result) {
+        GlobalContext.setThreadJoinTaint(result.isTainted());
+        return result;
+    }
+
     /**
      * Internal join implementation with optional warning control.
      * Used for both explicit join() calls and string interpolation.
@@ -820,7 +825,7 @@ public class StringOperators {
                 WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
-            return new RuntimeScalar("");
+            return recordJoinTaint(new RuntimeScalar(""));
         }
 
         // Fast path: 1 element -> return that element (no separator evaluation needed)
@@ -839,7 +844,7 @@ public class StringOperators {
                 res.type = BYTE_STRING;
             }
             res.tainted = resolved.isTainted();
-            return res;
+            return recordJoinTaint(res);
         }
 
         // 2+ elements: evaluate the separator
@@ -885,7 +890,7 @@ public class StringOperators {
             res.type = BYTE_STRING;
         }
         res.tainted = tainted;
-        return res;
+        return recordJoinTaint(res);
     }
 
     /**

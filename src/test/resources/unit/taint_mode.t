@@ -28,6 +28,13 @@ ok(tainted(ord($text)), 'ord propagates taint');
 $text =~ /^(.*)$/;
 ok(!tainted($1), 'regex capture untaints validated input');
 
+sub perlsec_tainted {
+    return !eval { no warnings; join('', @_), kill 0; 1 };
+}
+
+ok(perlsec_tainted($text), 'legacy perlsec join/kill probe detects taint');
+ok(!perlsec_tainted('clean'), 'legacy perlsec join/kill probe accepts clean data');
+
 my $eval_ok = eval { eval $text; 1 };
 ok(!$eval_ok, 'tainted eval STRING is rejected');
 like($@, qr/^Insecure dependency in eval while running with -T switch/,

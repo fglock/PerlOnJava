@@ -3,6 +3,8 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlSignalQueue;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -25,7 +27,12 @@ public class KillOperator {
      * @return RuntimeScalar with count of successfully signaled processes
      */
     public static RuntimeScalar kill(int ctx, RuntimeBase... args) {
+        boolean precedingJoinWasTainted = GlobalContext.consumeThreadJoinTaint();
         if (args.length < 2) {
+            if (GlobalContext.isTaintModeActive() && precedingJoinWasTainted) {
+                throw new PerlCompilerException(
+                        "Insecure dependency in kill while running with -T switch");
+            }
             return new RuntimeScalar(0);
         }
 
