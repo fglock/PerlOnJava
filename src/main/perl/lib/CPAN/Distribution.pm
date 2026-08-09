@@ -3870,7 +3870,7 @@ sub prereq_pm {
         my $opt_runtime = CPAN::Meta::Requirements->new;
         my $opt_build   = CPAN::Meta::Requirements->new;
         my $opt_test    = CPAN::Meta::Requirements->new;
-        if ( CPAN::HandleConfig->prefs_lookup($self, q{recommends_policy}) ) {
+        if ( _perlonjava_prefs_lookup($self, q{recommends_policy}) ) {
             $opt_runtime->add_requirements( $prereqs->requirements_for(qw/runtime recommends/));
             $opt_build->add_requirements(   $prereqs->requirements_for(qw/build recommends/));
             $opt_test->add_requirements(    $prereqs->requirements_for(qw/test  recommends/));
@@ -3889,7 +3889,7 @@ sub prereq_pm {
         $req =  $yaml->{requires} || {};
         $breq =  $yaml->{build_requires} || {};
         $treq =  $yaml->{test_requires} || {};
-        if ( CPAN::HandleConfig->prefs_lookup($self, q{recommends_policy}) ) {
+        if ( _perlonjava_prefs_lookup($self, q{recommends_policy}) ) {
             $opt_req = $yaml->{recommends} || {};
         }
         undef $req unless ref $req eq "HASH" && %$req;
@@ -4011,6 +4011,13 @@ sub prereq_pm {
            opt_test_requires => $opt_treq,
        };
     }
+}
+
+sub _perlonjava_prefs_lookup {
+    my ($self, $key) = @_;
+    return CPAN::HandleConfig->prefs_lookup($self, $key)
+        if CPAN::HandleConfig->can('prefs_lookup');
+    return $CPAN::Config->{$key};
 }
 
 #-> sub CPAN::Distribution::shortcut_test ;

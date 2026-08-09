@@ -358,11 +358,24 @@ public class EmitRegex {
     private static void emitMatchRegex(EmitterVisitor emitterVisitor) {
         boolean bytesMode = emitterVisitor.ctx.symbolTable != null
                 && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES);
+        emitMatchRegexRuntimeCall(emitterVisitor, bytesMode ? "matchRegexBytes" : "matchRegex");
+    }
+
+    /**
+     * Match a substitution regex that already carries its byte-mode view.
+     * The original target scalar must remain on the stack so replacement writes
+     * through its lvalue rather than through a converted temporary.
+     */
+    private static void emitMatchRegexWithoutBytesView(EmitterVisitor emitterVisitor) {
+        emitMatchRegexRuntimeCall(emitterVisitor, "matchRegex");
+    }
+
+    private static void emitMatchRegexRuntimeCall(EmitterVisitor emitterVisitor, String methodName) {
         emitterVisitor.pushCallContext();
         // Invoke the regex matching operation
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegex",
-                bytesMode ? "matchRegexBytes" : "matchRegex",
+                methodName,
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

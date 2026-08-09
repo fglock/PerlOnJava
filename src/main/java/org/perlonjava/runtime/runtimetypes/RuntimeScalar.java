@@ -3071,6 +3071,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
         boolean undefOnBlessedWithDestroy = false;
+        boolean undefOnWeakObservedBlessedWrapper = false;
         if (oldBase != null) {
             if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
                 // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
@@ -3131,13 +3132,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // An explicitly released blessed wrapper may have no DESTROY method
         // of its own while still owning a tied container whose handler does.
         // If the wrapper itself is being observed weakly, let the reachability
-        // walker decide immediately whether this was its last strong owner.
+        // walker decide at the next statement boundary whether this was its
+        // last strong owner.
         // Hash::AutoHash's wraptie constructor has exactly this shape.
-        if (!undefOnBlessedWithDestroy
-                && oldBase != null
+        if (oldBase != null
                 && oldBase.blessId != 0
                 && WeakRefRegistry.hasWeakRefsTo(oldBase)) {
-            undefOnBlessedWithDestroy = true;
+            undefOnWeakObservedBlessedWrapper = true;
         }
 
         // Flush deferred mortal decrements. Without this, pending DECs from
@@ -3154,7 +3155,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // throttle because this is an explicit release, not an opportunistic
         // check. Skips when we're in module-init to avoid clearing weak refs
         // that require/use chains still depend on.
-        if (undefOnBlessedWithDestroy && !ModuleInitGuard.inModuleInit()) {
+        if ((undefOnBlessedWithDestroy || undefOnWeakObservedBlessedWrapper)
+                && !ModuleInitGuard.inModuleInit()) {
             // The current undef call can still have JVM temporaries that make
             // the just-released wrapper appear live.  Also arm the next Perl
             // statement boundary, after those temporaries have disappeared.
@@ -3164,7 +3166,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
                         " refCount=" + (oldBase != null ? oldBase.refCount : -1));
             }
-            ReachabilityWalker.sweepWeakRefs(false);
+            // The DESTROY path historically needs an immediate global pass so
+            // callbacks after explicit undef observe the released object as
+            // gone. A weak-observed wrapper without DESTROY only needs the
+            // targeted statement-boundary pass: sweeping globally while a
+            // nested call frame is still assembling objects can clear unrelated
+            // weak owner links (for example SQL::Translator index -> table).
+            if (undefOnBlessedWithDestroy) {
+                ReachabilityWalker.sweepWeakRefs(false);
+            }
         }
 
         return this;

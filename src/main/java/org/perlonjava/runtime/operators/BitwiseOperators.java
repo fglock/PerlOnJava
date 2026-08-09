@@ -252,9 +252,9 @@ public class BitwiseOperators {
                     arg1, arg2, blessId, blessId2, "(" + symbol, symbol);
             if (overloaded != null) return overloaded.propagateTaint(arg1, arg2);
         }
-        int a = nativeIntValue(arg1);
-        int b = nativeIntValue(arg2);
-        int result = switch (operator) {
+        long a = nativeIntValue(arg1);
+        long b = nativeIntValue(arg2);
+        long result = switch (operator) {
             case '&' -> a & b;
             case '|' -> a | b;
             case '^' -> a ^ b;
@@ -263,13 +263,10 @@ public class BitwiseOperators {
         return new RuntimeScalar(result).propagateTaint(arg1, arg2);
     }
 
-    private static int nativeIntValue(RuntimeScalar value) {
+    private static long nativeIntValue(RuntimeScalar value) {
         RuntimeScalar number = value.getNumber("bitwise operation");
-        if (number.type != RuntimeScalarType.DOUBLE) return (int) number.getLong();
-        double numericValue = number.getDouble();
-        return Double.isFinite(numericValue)
-                ? (int) (long) numericValue
-                : (int) numericValue;
+        if (number.type != RuntimeScalarType.DOUBLE) return number.getLong();
+        return (long) number.getDouble();
     }
 
     /**

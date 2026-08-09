@@ -62,9 +62,9 @@ public class MathOperators {
         };
         arg1 = warn ? arg1.getNumberWarn(context) : arg1.getNumber(context);
         arg2 = warn ? arg2.getNumberWarn(context) : arg2.getNumber(context);
-        int a = (int) arg1.getLong();
-        int b = (int) arg2.getLong();
-        int result = switch (operation) {
+        long a = arg1.getLong();
+        long b = arg2.getLong();
+        long result = switch (operation) {
             case ADD -> a + b;
             case SUBTRACT -> a - b;
             case MULTIPLY -> a * b;
@@ -126,11 +126,10 @@ public class MathOperators {
         return new RuntimeScalar(-nativeIntValue(arg, "negation (-)"));
     }
 
-    private static int nativeIntValue(RuntimeScalar arg, String operation) {
+    private static long nativeIntValue(RuntimeScalar arg, String operation) {
         RuntimeScalar number = arg.getNumber(operation);
-        if (number.type != DOUBLE) return (int) number.getLong();
-        double value = number.getDouble();
-        return Double.isFinite(value) ? (int) (long) value : (int) value;
+        if (number.type != DOUBLE) return number.getLong();
+        return (long) number.getDouble();
     }
 
     /** Perl's unary-minus string sign toggling, or {@code null} for numeric coercion. */

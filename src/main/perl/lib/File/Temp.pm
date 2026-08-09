@@ -77,6 +77,11 @@ push @File::Temp::ISA, 'FileHandle'
 use overload
     '""' => sub { $_[0]->{_filename} || $_[0]->{_dirname} || '' },
     '0+' => sub { Scalar::Util::refaddr($_[0]) },
+    '${}' => sub {
+        $_[0]->{_scalar_slot} = '*File::Temp::$fh'
+            unless exists $_[0]->{_scalar_slot};
+        return \$_[0]->{_scalar_slot};
+    },
     '*{}' => sub { $_[0]->{_fh} },
     fallback => 1;
 

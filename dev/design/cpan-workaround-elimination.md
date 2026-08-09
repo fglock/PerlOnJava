@@ -981,6 +981,63 @@ Current phase: implementation complete; CI validation pending.
   optional/slow tests skip). The full `make` gate passes; no Number::Phone
   distribution preference or patch is required.
 
+## Progress Tracking
+
+### Current Status: post-rebase verification complete; CI handoff ready
+
+### Completed Phases
+
+- [x] Rebase the workaround-elimination series onto current `origin/master`
+  (2026-08-09).
+  - Rebased all 53 original branch commits plus the post-rebase reconciliation
+    onto `e22f32805` without dropping a commit. The final master advance was
+    documentation-only and did not change the verified runtime or module set.
+  - Reconciled the branch with master's regex byte-view, CPAN phase/prefs,
+    lvalue/caller, integer-width, HTML entity, and Storable UV changes.
+  - Added scalar-glob dereference compatibility to the bundled File::Temp
+    wrapper; the standard-Perl-validated regression passes on both backends and
+    CGI 4.72 again passes all 64 files and 1,603 assertions.
+- [x] Verify master and branch CPAN fixes after the rebase (2026-08-09).
+  - All 21 CPAN targets fixed on master pass their complete `jcpan -t` gates.
+  - Twenty-five branch targets pass their complete gates, including Test::Deep
+    (42 files, 1,268 assertions), Data::CompactReadonly (11 files, 342
+    assertions), and Number::Phone (40 files, 13,609 assertions). Number::Phone
+    requires the supported 4 GB child override after master's default test heap
+    was capped at 768 MB; its unchanged suite is otherwise fully green.
+  - The post-rebase SQL::Translator source-first gate exercised all 75 files
+    and 1,947 assertions. Its only failure was the 16-assertion open3 diff
+    script: master's immediate weak-wrapper sweep cleared an unrelated Moo
+    weak `index -> table` owner link while a nested call frame was still being
+    assembled. Wrappers without `DESTROY` now request only the targeted next-
+    statement-boundary sweep, while the existing immediate global sweep is
+    retained for `DESTROY` classes. The failed file then passes 16/16, and the
+    master-sensitive Hash::AutoHash (32 files, 2,785 assertions),
+    Data::FetchPath (4 files, 19 assertions), and Password::OWASP (4 files, 40
+    assertions) gates remain green.
+  - The final full `make` gate passes. The post-File::Temp bundled-module
+    matrix also passes all 378 files.
+  - Master advanced during the long verification window. After rebasing again,
+    its newly landed module gates also pass: Crypt::Twofish2 (1 file, 83
+    assertions), Text::Markdown (17 files, 64 assertions),
+    Text::Markdown::Slidy (2 files, 5 assertions), Char::Latin7 (210 files,
+    5,711 assertions), and Text::Fold (6 files, 38 assertions). The full
+    `make`, SQL diff 16/16, and Hash::AutoHash 2,785/2,785 gates remain green
+    on the final base.
+
+### Next Steps
+
+1. Let CI exercise platform-specific gates and resolve any failures without
+   restoring distribution-specific CPAN workarounds.
+
+### Verification Notes
+
+- CPAN::FindDependencies 3.13's documented focused gate previously passed 6/6.
+  The current CPAN index supplies 3.14, whose expanded suite adds a hanging
+  `cpandeps-diff` scenario and whose focused test no longer completes the same
+  assertion path in the local source graph. The underlying bundled
+  `PerlOnJava::Process` regressions remain green; do not report the 3.14
+  plan-only direct exit as a successful 6/6 run.
+
 ### Open questions
 
 - How should release tooling detect a newer CPAN version of a forbidden-shadow

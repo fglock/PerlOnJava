@@ -5088,7 +5088,7 @@ public class BytecodeCompiler implements Visitor {
             lastResultReg = rd;
         } else {
             lastResultReg = arrayReg;
-    }
+        }
     }
 
     @Override

@@ -27,7 +27,7 @@ sub encode_entities {
     return undef unless defined $text;
     my $unsafe = @_ > 1 && defined $_[1]
         ? $_[1]
-        : q{\x00-\x1f\x7f-\xff<&>'"};
+        : q{\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\xff<&>'"};
     $text =~ s/([$unsafe])/_encode_char($1)/ge;
     $_[0] = $text if $void;
     return $text;
@@ -39,7 +39,7 @@ sub encode_entities_numeric {
     return undef unless defined $text;
     my $unsafe = @_ > 1 && defined $_[1]
         ? $_[1]
-        : q{\x00-\x1f\x7f-\xff<&>'"};
+        : q{\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\xff<&>'"};
     $text =~ s/([$unsafe])/sprintf('&#x%X;', ord($1))/ge;
     $_[0] = $text if $void;
     return $text;
@@ -47,6 +47,7 @@ sub encode_entities_numeric {
 
 sub _encode_char {
     my ($char) = @_;
+    return '&#39;' if $char eq "'";
     return '&' . $char2entity{$char} . ';' if exists $char2entity{$char};
     return sprintf('&#%d;', ord($char));
 }
