@@ -967,21 +967,22 @@ public class SystemOperator {
             int separatorLength = separator.length();
 
             if (separatorLength == 0) {
-                result.add(new RuntimeScalar(output));
+                result.add(new RuntimeScalar(output).taintFromExternalInput());
             } else {
                 while (index < output.length()) {
                     int nextIndex = output.indexOf(separator, index);
                     if (nextIndex == -1) {
-                        result.add(new RuntimeScalar(output.substring(index)));
+                        result.add(new RuntimeScalar(output.substring(index)).taintFromExternalInput());
                         break;
                     }
-                    result.add(new RuntimeScalar(output.substring(index, nextIndex + separatorLength)));
+                    result.add(new RuntimeScalar(output.substring(index, nextIndex + separatorLength))
+                            .taintFromExternalInput());
                     index = nextIndex + separatorLength;
                 }
             }
             return list;
         } else {
-            return new RuntimeScalar(output);
+            return new RuntimeScalar(output).taintFromExternalInput();
         }
     }
 

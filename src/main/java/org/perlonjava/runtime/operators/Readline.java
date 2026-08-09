@@ -84,7 +84,7 @@ public class Readline {
             // the file contents (possibly the empty string) even if the
             // handle is positioned at EOF; the next call returns undef.
             if (runtimeIO.eof().getBoolean() && runtimeIO.currentLineNumber > 0) {
-                return scalarUndef;
+                return externalUndef();
             }
             StringBuilder content = new StringBuilder();
             boolean isByteData = true;
@@ -165,7 +165,7 @@ public class Readline {
 
         // Return undef if we've reached EOF and no characters were read (excluding skipped newlines)
         if (!inParagraph && runtimeIO.eof().getBoolean()) {
-            return scalarUndef;
+            return externalUndef();
         }
 
         // Increment the line number counter once per paragraph read.
@@ -195,7 +195,7 @@ public class Readline {
 
         // Return undef if we've reached EOF and no characters were read
         if (result.length() == 0 && runtimeIO.eof().getBoolean()) {
-            return scalarUndef;
+            return externalUndef();
         }
 
         // Don't increment line numbers for fixed-length reads
@@ -229,7 +229,7 @@ public class Readline {
 
         // Return undef if we've reached EOF and no characters were read
         if (line.isEmpty() && runtimeIO.eof().getBoolean()) {
-            return scalarUndef;
+            return externalUndef();
         }
 
         RuntimeScalar result = new RuntimeScalar(line.toString());
@@ -269,7 +269,7 @@ public class Readline {
 
         // Return undef if we've reached EOF and no characters were read
         if (line.isEmpty() && runtimeIO.eof().getBoolean()) {
-            return scalarUndef;
+            return externalUndef();
         }
 
         RuntimeScalar result = new RuntimeScalar(line.toString());
@@ -277,6 +277,10 @@ public class Readline {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
         return result.taintFromExternalInput();
+    }
+
+    private static RuntimeScalar externalUndef() {
+        return new RuntimeScalar().taintFromExternalInput();
     }
 
     /**

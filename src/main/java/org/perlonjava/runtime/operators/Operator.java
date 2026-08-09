@@ -946,7 +946,7 @@ public class Operator {
 
             if (Files.isSymbolicLink(linkPath)) {
                 Path targetPath = Files.readSymbolicLink(linkPath);
-                return new RuntimeScalar(targetPath.toString());
+                return new RuntimeScalar(targetPath.toString()).taintFromExternalInput();
             } else {
                 getGlobalVariable("main::!").set("Invalid argument");
                 return RuntimeScalar.undef();

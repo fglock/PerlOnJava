@@ -132,6 +132,9 @@ public class GlobalContext {
         if (!GlobalVariable.globalVariables.containsKey("main::0")) {
             GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
         }
+        if (compilerOptions.taintMode) {
+            GlobalVariable.getGlobalVariable("main::0").tainted = true;
+        }
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set("RUN"); // ${^GLOBAL_PHASE}
         // ${^TAINT} - set to 1 if -T (taint mode) was specified, 0 otherwise
         // Only initialize if not already set (to avoid overwriting during re-initialization)

@@ -131,11 +131,27 @@ like($@, qr/^Insecure dependency in eval while running with -T switch/,
         'relative PATH reports the Perl security error');
 
     local $ENV{PATH} = '/usr/bin';
+    local $ENV{TERM} = 'dumb';
+    my $command_output = qx{/bin/echo external-output};
+    ok(tainted($command_output), 'command output enters Perl as tainted data');
+
     local $ENV{TERM} = "unsafe=$empty_taint";
     my $term_ok = eval { qx{/bin/echo term-check}; 1 };
     ok(!$term_ok, 'process launch rejects tainted TERM metacharacters');
     like($@, qr/Insecure \$ENV\{TERM\}/,
         'tainted TERM reports the Perl security error');
+}
+
+ok(tainted($0), 'the program name is tainted under taint mode');
+
+{
+    open my $source, '<', $^X or die $!;
+    local $/;
+    my $contents = <$source>;
+    my $eof = <$source>;
+    ok(tainted($contents), 'file input enters Perl as tainted data');
+    ok(tainted($eof), 'undef returned at file EOF retains input provenance');
+    close $source;
 }
 
 my $tainted_path = "/tmp/perlonjava-taint-no-such-$$" . $empty_taint;
