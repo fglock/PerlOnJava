@@ -20,10 +20,11 @@ implementation (`BitVector.java`) to replace the C library.
 | Date | Programs Passed | Subtests | Issue |
 |------|----------------|----------|-------|
 | 2026-04-13 | 0/23 | 0 | `Can't load loadable object for module Bit::Vector: no Java XS implementation available` |
+| 2026-08-08 | Net::Frame surface implemented | 11/11 focused tests | Portable `Math::BigInt` implementation covers construction, decimal conversion, concatenation, and chunk reads |
 
-All 23 test files fail at `require Bit::Vector` because `DynaLoader::bootstrap`
-reaches XSLoader's stage 4 (no Java class, no @ISA parent, no PP companion)
-and dies.
+The focused API used by `Net::Frame::Layer::IPv4` is now implemented without XS.
+The full upstream API remains incomplete; unsupported consumers should still be
+tracked against the implementation phases below.
 
 ---
 
@@ -456,3 +457,29 @@ No external dependencies. All backed by JDK standard library.
   - `DigestSHA.java` (OO module wrapping Java APIs)
   - `POSIX.java` (largest, shows method aliasing)
   - `Storable.java` (complex serialization)
+
+---
+
+## Progress Tracking
+
+### Current Status: Net::Frame compatibility complete; full port pending
+
+### Completed Phases
+
+- [x] Net::Frame compatibility surface (2026-08-08)
+  - Added fixed-width `Create`, `new`, `new_Dec`, `from_Dec`, and `to_Dec`
+  - Added `Size`, `Concat`, `Concat_List`, and `Chunk_Read`
+  - Used core `Math::BigInt` so vector values are not machine-word limited
+  - Validated the focused tests against the upstream XS implementation under system Perl
+  - Files: `src/main/perl/lib/Bit/Vector.pm`, `src/test/resources/module/Bit-Vector/t/net-frame-surface.t`
+
+### Next Steps
+
+1. Implement the remaining phases only when another bundled module needs them
+2. Preserve upstream fixed-width and error semantics for each added operation
+3. Run the full 23-file upstream suite once all phases are implemented
+
+### Open Questions
+
+- Whether a future full implementation should remain pure Perl or move the hot
+  operations to the Java `BitSet` design described above

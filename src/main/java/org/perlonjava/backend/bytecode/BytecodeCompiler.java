@@ -1384,6 +1384,16 @@ public class BytecodeCompiler implements Visitor {
                 && !node.getBooleanAnnotation("blockIsDoBlock")
                 && outerResultReg < 0);
 
+        // A pragma inside a nested block (for example `use bytes`) changes the
+        // interpreter's runtime call-site hints through APPLY_COMPILER_FLAGS.
+        // Restore the enclosing lexical hints at block exit, matching
+        // EmitBlock.emitPostBlockStrictOptions() in the JVM backend.
+        Object postBlockStrictOptions = node.getAnnotation("postBlockStrictOptions");
+        if (postBlockStrictOptions instanceof Integer hints) {
+            emit(Opcodes.SET_CALL_SITE_HINTS);
+            emit(hints);
+        }
+
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
             emitReg(localLevelReg);
