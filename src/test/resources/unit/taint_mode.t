@@ -153,6 +153,18 @@ like($@, qr/^Insecure dependency in eval while running with -T switch/,
 ok(tainted($0), 'the program name is tainted under taint mode');
 
 {
+    local $^A = '';
+    formline '@<<<<', $text;
+    ok(tainted($^A), 'tainted formline argument taints the accumulator');
+    $^A = '';
+    formline '@<<<<' . $empty_taint, 'clean';
+    ok(tainted($^A), 'tainted formline picture taints the accumulator');
+    $^A = $empty_taint;
+    formline '@<<<<', 'clean';
+    ok(tainted($^A), 'formline preserves existing accumulator taint');
+}
+
+{
     open my $ioctl_fh, '<', $^X or die $!;
     my $ioctl_ok = eval { ioctl $ioctl_fh, 0 + $empty_taint, "x$empty_taint"; 1 };
     ok(!$ioctl_ok, 'ioctl rejects tainted control arguments');
