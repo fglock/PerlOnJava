@@ -273,6 +273,18 @@ public class SpecialBlockParser {
                     int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
                             ast,
                             k -> EmitterMethodCreator.classCounter++);
+                    // Source filters may pre-populate the shared symbol table
+                    // with declarations that occur later in the rewritten
+                    // source (including locals inside future subroutines).
+                    // A BEGIN block can only capture lexicals declared before
+                    // the block, so do not make those future declarations
+                    // process-persistent merely because they are visible in
+                    // this compiler data structure.
+                    if (ast != null
+                            && ast.tokenIndex < block.getIndex()
+                            && !RuntimeCode.subroutineLocalDeclarationNodes.contains(ast)) {
+                        RuntimeCode.persistentDeclarationIds.putIfAbsent(ast, beginId);
+                    }
                     packageName = PersistentVariable.beginPackage(beginId);
                     // Emit: package BEGIN_PKG
                     nodes.add(

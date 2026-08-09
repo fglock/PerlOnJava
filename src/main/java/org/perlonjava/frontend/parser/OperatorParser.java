@@ -384,6 +384,11 @@ public class OperatorParser {
                     }
                 }
                 
+                if ((operator.equals("my") || operator.equals("state"))
+                        && ctx.symbolTable.isInSubroutineBody()) {
+                    RuntimeCode.subroutineLocalDeclarationNodes.add(node);
+                    RuntimeCode.persistentDeclarationIds.remove(node);
+                }
                 int varIndex = ctx.symbolTable.addVariable(var, operator, node);
                 // Note: the isDeclaredReference flag is stored in node.annotations
                 // and will be used during code generation
