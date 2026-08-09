@@ -338,12 +338,8 @@ public class BitwiseOperators {
             return bitwiseNotDot(val).propagateTaint(runtimeScalar);
         }
 
-        // Must use 32-bit int (not long) to match ivsize=4 in Config.pm.
-        // Using long would make ~3 return -4 as a 64-bit value, breaking bop.t tests
-        // that expect 32-bit signed integer semantics under "use integer".
-
-        int value = (int) val.getLong();
-        int result = ~value;
+        long value = val.getLong();
+        long result = ~value;
         return new RuntimeScalar(result).propagateTaint(runtimeScalar);
     }
 
@@ -477,14 +473,13 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Fast path: both INTEGER with non-negative shift < 32
+        // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            int shift = arg2.getInt();
-            if (shift >= 0 && shift < 32) {
-                long unsignedValue = runtimeScalar.getLong() & 0xFFFFFFFFL;
-                long result = (unsignedValue << shift) & 0xFFFFFFFFL;
+            long shift = arg2.getLong();
+            if (shift >= 0 && shift < 64) {
+                long result = runtimeScalar.getLong() << (int) shift;
                 return new RuntimeScalar(result);
             }
         }
@@ -518,8 +513,9 @@ public class BitwiseOperators {
             double doubleValue = runtimeScalar.getDouble();
             if (Double.isInfinite(doubleValue)) {
                 if (doubleValue > 0) {
-                    // +Inf should convert to UV_MAX (32-bit unsigned maximum)
-                    return new RuntimeScalar(4294967295L); // 2^32 - 1
+                    // Java's -1 bit pattern is 64-bit UV_MAX. Exact unsigned
+                    // stringification is handled by the unsigned-scalar step.
+                    return new RuntimeScalar(-1L);
                 } else {
                     // -Inf should convert to 0 for unsigned interpretation
                     return new RuntimeScalar(0L);
@@ -541,18 +537,11 @@ public class BitwiseOperators {
             return shiftRightInternal(value, shift, false);
         }
 
-        // 32-bit Perl: UV shifts wrap at 32 bits; (1<<32) and larger shifts are 0
-        // (perl5_t/t/op/bop.t; Config ivsize=4).
-        if (shift >= 32) {
+        if (shift >= 64) {
             return RuntimeScalarCache.scalarZero;
         }
 
-        // Treat value as unsigned 32-bit (UV semantics)
-        // Mask to 32 bits first to handle negative numbers correctly
-        long unsignedValue = value & 0xFFFFFFFFL;
-
-        // Perform the shift
-        long result = (unsignedValue << shift) & 0xFFFFFFFFL;
+        long result = value << (int) shift;
 
         return new RuntimeScalar(result);
     }
@@ -567,14 +556,13 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the right shift operation.
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Fast path: both INTEGER with non-negative shift < 32
+        // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            int shift = arg2.getInt();
-            if (shift >= 0 && shift < 32) {
-                long unsignedValue = runtimeScalar.getLong() & 0xFFFFFFFFL;
-                long result = unsignedValue >>> shift;
+            long shift = arg2.getLong();
+            if (shift >= 0 && shift < 64) {
+                long result = runtimeScalar.getLong() >>> (int) shift;
                 return new RuntimeScalar(result);
             }
         }
@@ -608,13 +596,13 @@ public class BitwiseOperators {
             double doubleValue = runtimeScalar.getDouble();
             if (Double.isInfinite(doubleValue)) {
                 if (doubleValue > 0) {
-                    // +Inf should convert to UV_MAX (32-bit), then shift right
-                    long uvMax = 4294967295L; // 2^32 - 1
+                    // +Inf converts to the 64-bit UV_MAX bit pattern.
+                    long uvMax = -1L;
                     long shift = arg2.getLong();
-                    if (shift >= 32) {
+                    if (shift >= 64) {
                         return RuntimeScalarCache.scalarZero;
                     }
-                    return new RuntimeScalar(uvMax >>> shift);
+                    return new RuntimeScalar(uvMax >>> (int) shift);
                 } else {
                     // -Inf should convert to 0 for unsigned interpretation
                     return RuntimeScalarCache.scalarZero;
@@ -633,11 +621,10 @@ public class BitwiseOperators {
         if (shift < 0) {
             shift = -shift;
             if (shift < 0) shift = Long.MAX_VALUE;
-            if (shift >= 32) {
+            if (shift >= 64) {
                 return RuntimeScalarCache.scalarZero;
             }
-            long unsignedValue = value & 0xFFFFFFFFL;
-            long result = (unsignedValue << shift) & 0xFFFFFFFFL;
+            long result = value << (int) shift;
             return new RuntimeScalar(result);
         }
 
@@ -653,9 +640,7 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the shifted value
      */
     private static RuntimeScalar shiftRightInternal(long value, long shift, boolean signed) {
-        // Perl uses 32-bit word size for shift operations
-        // Unsigned shifts >= 32 return 0
-        if (shift >= 32) {
+        if (shift >= 64) {
             if (signed) {
                 // For signed right shift, stick to -1 or 0
                 return new RuntimeScalar(value < 0 ? -1 : 0);
@@ -664,16 +649,10 @@ public class BitwiseOperators {
         }
 
         if (signed) {
-            // Signed (arithmetic) shift - sign bit propagates
-            // First convert to signed 32-bit, then shift, then mask
-            int signedValue = (int) value;
-            long result = signedValue >> shift;
+            long result = value >> (int) shift;
             return new RuntimeScalar(result);
         } else {
-            // Unsigned (logical) shift - zero fill
-            // Treat as unsigned 32-bit value
-            long unsignedValue = value & 0xFFFFFFFFL;
-            long result = unsignedValue >>> shift;
+            long result = value >>> (int) shift;
             return new RuntimeScalar(result);
         }
     }
@@ -682,9 +661,7 @@ public class BitwiseOperators {
      * Performs a left shift operation with signed (integer) semantics.
      * This is used when "use integer" pragma is in effect.
      * <p>
-     * IMPORTANT: Must use 32-bit int arithmetic and >= 32 boundaries (not 64-bit long / >= 64).
-     * PerlOnJava reports ivsize=4 in Config.pm, so bop.t expects 32-bit word-size behavior:
-     * "use integer; 1 << 32" must return 0, and "1 << 31" must return -2147483648 (signed).
+     * Uses Java's 64-bit signed word, matching a 64-bit Perl under `use integer`.
      * The "shift < 0" guard after negation catches Long.MIN_VALUE overflow (-Long.MIN_VALUE == Long.MIN_VALUE).
      *
      * @param runtimeScalar The operand to be shifted.
@@ -705,31 +682,30 @@ public class BitwiseOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        // Use (int) getLong() — see integerBitwiseNot comment for why not getInt().
-        int value = (int) runtimeScalar.getLong();
+        long value = runtimeScalar.getLong();
         long shift = arg2.getLong();
 
         if (shift < 0) {
             shift = -shift;
-            if (shift < 0 || shift >= 32) {
+            if (shift < 0 || shift >= 64) {
                 return new RuntimeScalar(value < 0 ? -1 : 0);
             }
-            int result = value >> (int) shift;
+            long result = value >> (int) shift;
             return new RuntimeScalar(result);
         }
 
-        if (shift >= 32) {
+        if (shift >= 64) {
             return RuntimeScalarCache.scalarZero;
         }
 
-        int result = value << (int) shift;
+        long result = value << (int) shift;
         return new RuntimeScalar(result);
     }
 
     /**
      * Performs a right shift operation with signed (integer) semantics.
      * This is used when "use integer" pragma is in effect.
-     * See integerShiftLeft javadoc for ivsize=4 / 32-bit constraints.
+     * See integerShiftLeft javadoc for signed 64-bit behavior.
      *
      * @param runtimeScalar The operand to be shifted.
      * @param arg2          The number of positions to shift.
@@ -749,24 +725,23 @@ public class BitwiseOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        // Use (int) getLong() — see integerBitwiseNot comment for why not getInt().
-        int value = (int) runtimeScalar.getLong();
+        long value = runtimeScalar.getLong();
         long shift = arg2.getLong();
 
         if (shift < 0) {
             shift = -shift;
-            if (shift < 0 || shift >= 32) {
+            if (shift < 0 || shift >= 64) {
                 return RuntimeScalarCache.scalarZero;
             }
-            int result = value << (int) shift;
+            long result = value << (int) shift;
             return new RuntimeScalar(result);
         }
 
-        if (shift >= 32) {
+        if (shift >= 64) {
             return new RuntimeScalar(value < 0 ? -1 : 0);
         }
 
-        int result = value >> (int) shift;
+        long result = value >> (int) shift;
         return new RuntimeScalar(result);
     }
 }

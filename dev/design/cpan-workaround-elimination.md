@@ -284,9 +284,9 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
 
 ### Next steps
 
-1. Migrate numeric NOT and shift operators from the advertised 32-bit UV model
-   to 64-bit behavior, with warning-category masks and `use integer` covered
-   explicitly before changing `Config.pm`.
+1. Add an exact unsigned 64-bit scalar representation, then migrate ordinary
+   numeric NOT and high-bit/negative UV shifts without disturbing
+   warning-category bit masks.
 2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
@@ -895,6 +895,18 @@ Current phase: Phase 8, deterministic lifetime and remaining parity.
   Perl for all signed integer and arithmetic rows; bitwise width, `q`/`Q`,
   long `sprintf`, unsigned IV_MAX+1 values, and `Config.pm` remain explicit
   next steps. The full `make` gate passes.
+- The signed/within-IV shift step is complete (2026-08-09). Shared runtime
+  operators now use a 64-bit word for left/right shifts, reverse direction for
+  negative shift counts at the 64-bit boundary, propagate the sign bit under
+  `use integer`, and apply signed 64-bit integer NOT. Regression
+  `zzzz_iv64_shift_semantics.t` passes 10/10 under standard Perl, JVM, and
+  interpreter execution, including the signed high bit. The full `make` gate
+  passes. Unchanged upstream `op/bop.t` runs 522 assertions and currently
+  passes 494 on JVM and 493 on interpreter; its width-derived assertions still
+  consult the intentionally unchanged `Config.pm` value of four bytes, while
+  the cusp/negative-UV group remains blocked on representing UV_MAX exactly.
+  Ordinary numeric NOT and unsigned results above IV_MAX therefore remain the
+  next atomic step rather than being approximated with a signed Java `long`.
 
 ### Open questions
 
