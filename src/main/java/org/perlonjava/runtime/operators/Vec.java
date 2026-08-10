@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeVecLvalue;
 
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -25,18 +26,16 @@ public class Vec {
      */
     public static RuntimeScalar vec(RuntimeList args) throws PerlCompilerException {
         RuntimeScalar strScalar = (RuntimeScalar) args.elements.get(0);
+        BigInteger offset = ((RuntimeScalar) args.elements.get(1)).getSignedBigint();
+        int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 
         // Check if the scalar is undefined - vec should not autovivify on read
         if (!strScalar.getDefinedBoolean()) {
             // Return 0 for undefined values without autovivifying
-            int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
-            int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
-            return vecResult(strScalar, offset, bits, 0);
+            return vecLvalue(strScalar, offset, bits, new RuntimeScalar(0));
         }
 
         String str = strScalar.toString();
-        int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
-        int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 
         byte[] data = new byte[str.length()];
         for (int i = 0; i < str.length(); i++) {
@@ -52,50 +51,58 @@ public class Vec {
         }
 
         // Handle negative offset
-        if (offset < 0) {
-            return vecResult(strScalar, offset, bits, 0);
+        if (offset.signum() < 0) {
+            return vecLvalue(strScalar, offset, bits, new RuntimeScalar(0));
         }
 
         // Check for potential overflow in offset * bits calculation
         // Use long arithmetic to detect overflow
-        long longByteOffset = ((long) offset * bits) / 8;
-        if (longByteOffset > Integer.MAX_VALUE || longByteOffset >= data.length) {
-            return vecResult(strScalar, offset, bits, 0);
+        BigInteger bitPosition = offset.multiply(BigInteger.valueOf(bits));
+        BigInteger bytePosition = bitPosition.shiftRight(3);
+        if (bytePosition.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
+                || bytePosition.compareTo(BigInteger.valueOf(data.length)) >= 0) {
+            return vecLvalue(strScalar, offset, bits, new RuntimeScalar(0));
         }
 
-        int byteOffset = (int) longByteOffset;
-        int bitOffset = (offset * bits) % 8;
+        int byteOffset = bytePosition.intValue();
+        int bitOffset = bitPosition.and(BigInteger.valueOf(7)).intValue();
 
-        ByteBuffer buffer = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN);
-
-        if (bits == 64 && byteOffset + 8 <= data.length) {
-            long longValue = buffer.getLong(byteOffset);
-            return vecResult(strScalar, offset, bits, longValue);
-        } else if (bits == 32 && byteOffset + 4 <= data.length) {
-            long unsignedValue = Integer.toUnsignedLong(buffer.getInt(byteOffset));
-            return vecResult(strScalar, offset, bits, unsignedValue);
-        } else if (bits == 16 && byteOffset + 2 <= data.length) {
-            int value = buffer.getShort(byteOffset) & 0xFFFF;
-            return vecResult(strScalar, offset, bits, value);
-        } else if (bits == 8 && byteOffset < data.length) {
-            int value = buffer.get(byteOffset) & 0xFF;
-            return vecResult(strScalar, offset, bits, value);
+        if (bits >= 8) {
+            // Multi-byte vec fields are big-endian and bytes beyond the end of
+            // the source are read as zero. Building the value explicitly also
+            // handles a 64-bit field with only 1..7 source bytes remaining.
+            long value = 0;
+            int byteCount = bits / 8;
+            for (int i = 0; i < byteCount; i++) {
+                value <<= 8;
+                if (byteOffset + i < data.length) {
+                    value |= data[byteOffset + i] & 0xffL;
+                }
+            }
+            RuntimeScalar result = bits == 64 && value < 0
+                    ? new RuntimeScalar(new BigInteger(Long.toUnsignedString(value)))
+                    : new RuntimeScalar(value);
+            return vecLvalue(strScalar, offset, bits, result);
         } else {
-            int value = 0;
+            long value = 0;
             for (int i = 0; i < bits; i++) {
                 int byteIndex = byteOffset + (bitOffset + i) / 8;
                 int bitIndex = (bitOffset + i) % 8;
                 if (byteIndex < data.length) {
-                    value |= ((data[byteIndex] >> bitIndex) & 1) << i;
+                    value |= (long) ((data[byteIndex] >> bitIndex) & 1) << i;
                 }
             }
-            return vecResult(strScalar, offset, bits, value);
+            RuntimeScalar result = bits == 64 && value < 0
+                    ? new RuntimeScalar(new BigInteger(Long.toUnsignedString(value)))
+                    : new RuntimeScalar(value);
+            return vecLvalue(strScalar, offset, bits, result);
         }
     }
 
-    private static RuntimeVecLvalue vecResult(RuntimeScalar source, int offset, int bits, long value) {
-        RuntimeVecLvalue result = new RuntimeVecLvalue(source, offset, bits, value);
-        result.tainted = GlobalContext.isTaintModeActive() && source.isTainted();
+    private static RuntimeVecLvalue vecLvalue(RuntimeScalar parent, BigInteger offset,
+                                               int bits, RuntimeScalar value) {
+        RuntimeVecLvalue result = new RuntimeVecLvalue(parent, offset, bits, value);
+        result.tainted = GlobalContext.isTaintModeActive() && parent.isTainted();
         return result;
     }
 
@@ -109,7 +116,7 @@ public class Vec {
      */
     public static RuntimeScalar set(RuntimeList args, RuntimeScalar value) throws PerlCompilerException {
         String str = args.elements.get(0).toString();
-        int offset = ((RuntimeScalar) args.elements.get(1)).getInt();
+        BigInteger offset = ((RuntimeScalar) args.elements.get(1)).getSignedBigint();
         int bits = ((RuntimeScalar) args.elements.get(2)).getInt();
 
         byte[] data = new byte[str.length()];
@@ -124,21 +131,25 @@ public class Vec {
         if (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 16 && bits != 32 && bits != 64) {
             throw new PerlCompilerException("Illegal number of bits in vec");
         }
-        if (offset < 0) {
+        if (offset.signum() < 0) {
             throw new PerlCompilerException("Negative offset to vec in lvalue context");
         }
 
         // Check for potential overflow in offset * bits calculation
         // Use long arithmetic to detect overflow
-        long longByteOffset = ((long) offset * bits) / 8;
-        if (longByteOffset > Integer.MAX_VALUE) {
+        BigInteger bitPosition = offset.multiply(BigInteger.valueOf(bits));
+        BigInteger bytePosition = bitPosition.shiftRight(3);
+        if (bytePosition.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
             throw new PerlCompilerException("Out of memory during vec in lvalue context");
         }
 
-        int byteOffset = (int) longByteOffset;
-        int bitOffset = (offset * bits) % 8;
+        int byteOffset = bytePosition.intValue();
+        int bitOffset = bitPosition.and(BigInteger.valueOf(7)).intValue();
 
         int bytesToWrite = (bits + bitOffset + 7) / 8;
+        if (byteOffset > Integer.MAX_VALUE - bytesToWrite) {
+            throw new PerlCompilerException("Out of memory during vec in lvalue context");
+        }
         if (byteOffset + bytesToWrite > data.length) {
             byte[] newData = new byte[byteOffset + bytesToWrite];
             System.arraycopy(data, 0, newData, 0, data.length);

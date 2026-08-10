@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.math.BigInteger;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -445,22 +446,27 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
      * Iterator for integer-based ranges.
      */
     private class PerlRangeIntegerIterator implements Iterator<RuntimeScalar> {
-        private final int endInt;
-        private int current;
+        // With 64-bit IVs and 53-bit NVs Perl rejects the low half-ULP fringe
+        // that cannot survive the IV/NV boundary calculations used by range.
+        private static final long MIN_EXACT_RANGE_IV = Long.MIN_VALUE + 513;
+        private final long endInt;
+        private long current;
         private boolean hasNext;
 
         /**
          * Constructs a PerlRangeIntegerIterator for the current range.
          */
         PerlRangeIntegerIterator() {
-            // Check for NaN or Inf before converting to int
+            // Check for NaN or Inf before converting to a signed IV. Perl
+            // rejects integer ranges whose endpoints are outside IV range;
+            // truncating them to int/long can turn a huge finite range into a
+            // short wrapped range.
             if (start.type == RuntimeScalarType.DOUBLE) {
                 double startDouble = start.getDouble();
                 if (Double.isNaN(startDouble) || Double.isInfinite(startDouble)) {
                     throw new PerlCompilerException("Range iterator outside integer range");
                 }
-                // Check if the double value exceeds integer range
-                if (startDouble > Integer.MAX_VALUE || startDouble < Integer.MIN_VALUE) {
+                if (startDouble >= 0x1.0p63 || startDouble < -0x1.0p63) {
                     throw new PerlCompilerException("Range iterator outside integer range");
                 }
             }
@@ -469,15 +475,30 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 if (Double.isNaN(endDouble) || Double.isInfinite(endDouble)) {
                     throw new PerlCompilerException("Range iterator outside integer range");
                 }
-                // Check if the double value exceeds integer range
-                if (endDouble > Integer.MAX_VALUE || endDouble < Integer.MIN_VALUE) {
+                if (endDouble >= 0x1.0p63 || endDouble < -0x1.0p63) {
                     throw new PerlCompilerException("Range iterator outside integer range");
                 }
             }
 
-            current = start.getInt();
-            endInt = end.getInt();
+            current = signedIvEndpoint(start);
+            endInt = signedIvEndpoint(end);
+            if ((current < MIN_EXACT_RANGE_IV && endInt >= MIN_EXACT_RANGE_IV)
+                    || (endInt < MIN_EXACT_RANGE_IV && current >= MIN_EXACT_RANGE_IV)) {
+                throw new PerlCompilerException("Range iterator outside integer range");
+            }
             hasNext = current <= endInt;
+        }
+
+        private long signedIvEndpoint(RuntimeScalar endpoint) {
+            if (endpoint.type == RuntimeScalarType.INTEGER) {
+                BigInteger integer = endpoint.getBigint();
+                if (integer.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                        || integer.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                    throw new PerlCompilerException("Range iterator outside integer range");
+                }
+                return integer.longValue();
+            }
+            return endpoint.getLong();
         }
 
         /**

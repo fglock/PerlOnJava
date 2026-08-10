@@ -474,6 +474,12 @@ public class Pack {
                     case 'A':
                     case 'Z':
                         // These still use PackHelper due to byteMode dependency
+                        if (!byteMode && valueIndex < values.size()
+                                && values.get(valueIndex).type == RuntimeScalarType.STRING) {
+                            // A zero-width string directive still propagates
+                            // the argument's UTF-8 flag to the packed result.
+                            hasUnicodeInNormalMode = true;
+                        }
                         valueIndex = PackHelper.handleStringFormat(valueIndex, values, hasStar, format, count, utf8StringMode, output);
                         break;
                     case '/':
@@ -491,6 +497,10 @@ public class Pack {
                         }
                     case 'U':
                         // Unicode format needs special handling for state management
+                        if (!byteMode) {
+                            // `pack "U*"` is UTF-8 flagged even for an empty list.
+                            hasUnicodeInNormalMode = true;
+                        }
                         hasUnicodeInNormalMode = PackHelper.handleUnicode(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
                         valueIndex += count;
                         break;

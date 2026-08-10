@@ -1101,6 +1101,11 @@ public class StatementParser {
             }
             // Store the version in the symbol table for this package
             if (versionString != null) {
+                // NumberNode retains source precision globally, but package
+                // version scalars use normal numeric stringification.
+                if (versionString.endsWith(".0")) {
+                    versionString = versionString.substring(0, versionString.length() - 2);
+                }
                 parser.ctx.symbolTable.setPackageVersion(packageName, versionString);
             }
         }

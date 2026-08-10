@@ -587,6 +587,9 @@ public class RuntimeIO extends RuntimeScalar {
         getGlobalIO("main::stdout").setIO(stdout);
         getGlobalIO("main::stderr").setIO(stderr);
         getGlobalIO("main::stdin").setIO(stdin);
+        stdout.globName = "main::STDOUT";
+        stderr.globName = "main::STDERR";
+        stdin.globName = "main::STDIN";
         lastAccesseddHandle = null;
         lastWrittenHandle = stdout;
         selectedHandle = stdout;

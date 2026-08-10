@@ -255,14 +255,14 @@ public class PackHelper {
         // Check for Inf/NaN first, before any other processing
         handleInfinity(value, 'W');
 
-        int codePoint;
+        long codePoint;
         String strValue = value.toString();
         if (!strValue.isEmpty() && !Character.isDigit(strValue.charAt(0))) {
             // If it's a character, get its code point
-            codePoint = strValue.codePointAt(0);
+            codePoint = PerlUtfString.firstCodePointPerlUnsigned(strValue);
         } else {
             // If it's a number, use it directly
-            codePoint = value.getInt();
+            codePoint = value.getSignedBigint().longValue();
         }
 
         // Track if W is used in character mode (not byte mode)
@@ -275,30 +275,12 @@ public class PackHelper {
         // - In character mode: write as Unicode character
         if (byteMode) {
             // In byte mode, write as raw byte (modulo 256)
-            output.write(codePoint & 0xFF);
+            output.write((int) codePoint & 0xFF);
         } else {
-            // In character mode, write as Unicode character
-            if (Character.isValidCodePoint(codePoint)) {
-                // For values 0-255, write as single byte
-                // For higher values, write as multi-byte character
-                if (codePoint <= 0xFF) {
-                    // Single byte value - write directly
-                    output.write(codePoint);
-                } else {
-                    // Multi-byte character - write character code
-                    output.writeCharacter(codePoint);
-                }
+            if (Long.compareUnsigned(codePoint, 0xFFL) <= 0) {
+                output.write((int) codePoint);
             } else {
-                // Beyond Unicode range - wrap to valid range without throwing exception
-                int wrappedValue = codePoint & 0x1FFFFF; // 21 bits
-                if (wrappedValue > 0x10FFFF) {
-                    wrappedValue = wrappedValue % 0x110000; // Modulo to fit in Unicode range
-                }
-                if (wrappedValue <= 0xFF) {
-                    output.write(wrappedValue);
-                } else {
-                    output.writeCharacter(wrappedValue);
-                }
+                output.writeCharacter(codePoint);
             }
         }
         return hasUnicodeInNormalMode;

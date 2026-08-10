@@ -316,6 +316,11 @@ public class SprintfNumericFormatter {
             return formatGFloatingPoint(value, cleanFlags, width, precision, conversion);
         }
 
+        if (conversion == 'a' || conversion == 'A') {
+            return formatHexFloatingPoint(value, cleanFlags, width,
+                    requestedPrecision, precision, conversion);
+        }
+
         // Java Formatter rounds large integral doubles through a short decimal
         // representation (2^64 becomes 18446744073709552000). Perl formats the
         // exact binary value, which matters once nvsize exposes the 64-bit
@@ -356,6 +361,43 @@ public class SprintfNumericFormatter {
         return result;
     }
 
+    private String formatHexFloatingPoint(double value, String flags, int width,
+                                          int requestedPrecision, int precision,
+                                          char conversion) {
+        StringBuilder format = new StringBuilder("%");
+        if (flags.contains("+")) format.append('+');
+        else if (flags.contains(" ")) format.append(' ');
+        if (flags.contains("#")) format.append('#');
+        if (requestedPrecision >= 0) {
+            format.append('.').append(precision);
+        }
+        format.append(conversion);
+
+        String result = String.format(format.toString(), value);
+        result = result.replace("Infinity", "Inf");
+        if (Double.isFinite(value)) {
+            int exponent = Math.max(result.lastIndexOf('p'), result.lastIndexOf('P'));
+            if (exponent >= 0 && exponent + 1 < result.length()
+                    && result.charAt(exponent + 1) != '-'
+                    && result.charAt(exponent + 1) != '+') {
+                result = result.substring(0, exponent + 1) + "+"
+                        + result.substring(exponent + 1);
+            }
+
+            if (requestedPrecision < 0 && exponent >= 2
+                    && result.substring(0, exponent).endsWith(".0")) {
+                int dot = exponent - 2;
+                String replacement = flags.contains("#") ? "." : "";
+                result = result.substring(0, dot) + replacement + result.substring(exponent);
+            }
+        }
+
+        if (flags.contains("0") && !flags.contains("-")) {
+            return SprintfPaddingHelper.applyZeroPadding(result, width);
+        }
+        return SprintfPaddingHelper.applyWidth(result, width, flags);
+    }
+
     public String formatFloatingPoint(RuntimeScalar value, String flags, int width,
                                       int precision, char conversion) {
         if (conversion == 'g' || conversion == 'G') {
@@ -387,6 +429,27 @@ public class SprintfNumericFormatter {
                                         int precision, char conversion) {
         boolean useAlternateForm = flags.contains("#");
         String cleanFlags = flags.replace("#", ""); // Remove # flag for Java's formatter
+
+        // Java's Formatter first converts a double to its shortest decimal
+        // spelling.  At precisions beyond a double's usual 17 significant
+        // digits that loses the binary value which Perl exposes (for example,
+        // %.54g of 0.3).  Start from the exact binary value in that case.
+        if (precision > 17 && Double.isFinite(value) && value != 0.0) {
+            BigDecimal exact = new BigDecimal(value)
+                    .round(new MathContext(precision, RoundingMode.HALF_UP));
+            int decimalExponent = exact.precision() - exact.scale() - 1;
+            if (decimalExponent >= -4 && decimalExponent < precision) {
+                String result = exact.toPlainString();
+                if (!useAlternateForm) {
+                    result = removeTrailingZeros(result);
+                }
+                if (value >= 0) {
+                    if (cleanFlags.contains("+")) result = "+" + result;
+                    else if (cleanFlags.contains(" ")) result = " " + result;
+                }
+                return SprintfPaddingHelper.applyWidth(result, width, cleanFlags);
+            }
+        }
 
         // Build the format string
         StringBuilder format = new StringBuilder("%");

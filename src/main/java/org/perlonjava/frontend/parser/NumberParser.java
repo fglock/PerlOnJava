@@ -357,6 +357,7 @@ public class NumberParser {
                     if (!exponentStr.isEmpty()) {
                         hexFloat += "p" + exponentStr;
                     }
+                    warnOnHexFloatOverflow(numberStr.toString(), exponent);
                     value = Double.parseDouble(hexFloat);
                 } else {
                     // Use custom parsing for binary/octal
@@ -500,6 +501,37 @@ public class NumberParser {
     // Helper methods
     private static String cleanUnderscores(String str) {
         return str.replaceAll("_", "");
+    }
+
+    private static void warnOnHexFloatOverflow(String mantissa, int exponent) {
+        String digits = mantissa.replace(".", "").replaceFirst("^0+", "");
+        if (!digits.isEmpty()) {
+            int leadingBits = Integer.SIZE - Integer.numberOfLeadingZeros(
+                    Character.digit(digits.charAt(0), 16));
+            int mantissaBits = leadingBits + 4 * (digits.length() - 1);
+            int lastDigit = Character.digit(digits.charAt(digits.length() - 1), 16);
+            if (lastDigit != 0) {
+                // A final partial nibble can still fit exactly: ...f.8 has
+                // 53 significant binary bits, while ...f.c has 54.  Preserve
+                // explicit trailing zero nibbles because Perl still reports
+                // an overlong lexical mantissa for forms such as 111.000...
+                mantissaBits -= Integer.numberOfTrailingZeros(lastDigit);
+            }
+            if (mantissaBits > 53) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Hexadecimal float: mantissa overflow"),
+                        RuntimeScalarCache.scalarEmptyString, "overflow");
+            }
+        }
+        if (exponent < -1022) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Hexadecimal float: exponent underflow"),
+                    RuntimeScalarCache.scalarEmptyString, "overflow");
+        } else if (exponent > 1023) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Hexadecimal float: exponent overflow"),
+                    RuntimeScalarCache.scalarEmptyString, "overflow");
+        }
     }
 
     // Fractional parsers

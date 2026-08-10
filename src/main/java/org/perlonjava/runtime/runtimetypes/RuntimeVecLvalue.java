@@ -2,6 +2,8 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.operators.Vec;
 
+import java.math.BigInteger;
+
 /**
  * Represents a vector (bit string) that can be used as an lvalue (left-hand value).
  * This class allows for modification of specific bits within a string, similar to Perl's vec function.
@@ -10,7 +12,7 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
     /**
      * The offset in the bit string.
      */
-    private final int offset;
+    private final BigInteger offset;
 
     /**
      * The number of bits to operate on.
@@ -25,31 +27,12 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
      * @param bits   The number of bits to operate on.
      * @param value  The initial value of the vector.
      */
-    public RuntimeVecLvalue(RuntimeScalar parent, int offset, int bits, int value) {
+    public RuntimeVecLvalue(RuntimeScalar parent, BigInteger offset, int bits, RuntimeScalar value) {
         this.lvalue = parent;
         this.offset = offset;
         this.bits = bits;
-
-        this.type = RuntimeScalarType.INTEGER;
-        this.value = value;
-    }
-
-    /**
-     * Constructs a new RuntimeVecLvalue with a long value (for 64-bit vec).
-     */
-    public RuntimeVecLvalue(RuntimeScalar parent, int offset, int bits, long value) {
-        this.lvalue = parent;
-        this.offset = offset;
-        this.bits = bits;
-
-        // Store long values properly - use DOUBLE for values that don't fit in int
-        if (value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = (int) value;
-        } else {
-            this.type = RuntimeScalarType.DOUBLE;
-            this.value = (double) value;
-        }
+        this.type = value.type;
+        this.value = value.value;
     }
 
     /**

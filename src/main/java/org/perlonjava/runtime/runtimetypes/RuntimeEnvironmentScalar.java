@@ -10,6 +10,9 @@ final class RuntimeEnvironmentScalar extends RuntimeScalar {
     RuntimeEnvironmentScalar(RuntimeScalar value) {
         super(value);
         normalizeEnvironmentString();
+        // Values imported from the process environment enter Perl as tainted.
+        // Later assignments preserve the assigned value's own taint state.
+        tainted = true;
     }
 
     private RuntimeScalar normalizeEnvironmentString() {

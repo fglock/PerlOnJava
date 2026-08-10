@@ -69,8 +69,16 @@ public class StringFormatHandler implements FormatHandler {
             output.add(rs);
         } else {
             // In byte mode, read from buffer — always ISO-8859-1 (BYTE_STRING)
-            ByteBuffer buffer = state.getBuffer();
-            String str = readString(buffer, count, isStarCount);
+            byte[] upgradedLatin1 = isStarCount ? state.consumeFlaggedLatin1AsUtf8() : null;
+            String str;
+            if (upgradedLatin1 != null) {
+                // U0 exposes the encoded storage bytes of an upgraded scalar,
+                // even when every character is in the Latin-1 range.
+                str = new String(upgradedLatin1, StandardCharsets.ISO_8859_1);
+            } else {
+                ByteBuffer buffer = state.getBuffer();
+                str = readString(buffer, count, isStarCount);
+            }
             RuntimeScalar rs = new RuntimeScalar(str);
             rs.type = RuntimeScalarType.BYTE_STRING;
             output.add(rs);

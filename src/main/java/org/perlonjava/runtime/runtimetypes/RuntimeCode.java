@@ -217,6 +217,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return stack.isEmpty() ? null : stack.peek();
     }
 
+    /** Resolve the active @_ after a localized *_ replaced its ARRAY slot. */
+    public static RuntimeArray getGotoArgs(RuntimeArray lexicalArgs, String packageName) {
+        String globName = packageName + "::_";
+        if (RuntimeGlob.isLocalizedGlob(globName)) {
+            RuntimeArray localized = GlobalVariable.globalArrays.get(globName);
+            if (localized != null) return localized;
+        }
+        RuntimeArray localized = RuntimeGlob.localizedUnderscoreArray();
+        if (localized != null) return localized;
+        return lexicalArgs;
+    }
+
     public static java.util.List<RuntimeArray> snapshotArgsStack() {
         return new java.util.ArrayList<>(argsStack.get());
     }
@@ -1256,7 +1268,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static RuntimeScalar resolveDirectCallTarget(RuntimeScalar runtimeScalar, String subroutineName) {
         String lookupName = subroutineName;
-        if ((lookupName == null || lookupName.isEmpty()) && runtimeScalar != null) {
+        if ((lookupName == null || lookupName.isEmpty() || "tailcall".equals(lookupName))
+                && runtimeScalar != null
+                && runtimeScalar.globalCodeRefFqn != null) {
             lookupName = runtimeScalar.globalCodeRefFqn;
         }
         return GlobalVariable.getLocalizedCodeRefForDirectCall(lookupName, runtimeScalar);

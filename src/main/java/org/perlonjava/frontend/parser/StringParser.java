@@ -7,6 +7,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -69,6 +70,7 @@ public class StringParser {
         boolean isPair = false;  // Flag to indicate if the delimiters are a pair
         char secondBufferStartDelim = ' ';
         char secondBufferEndDelim = ' ';
+        String markerDelimiter = null;
         StringBuilder buffer = new StringBuilder();  // Buffer to hold the parsed string
         StringBuilder remain = new StringBuilder();  // Buffer to hold the remaining string
         ArrayList<String> buffers = new ArrayList<>();
@@ -82,8 +84,30 @@ public class StringParser {
             if (currentToken.type == LexerTokenType.EOF) {
                 String errorMsg = endDelim == '/'
                         ? "Search pattern not terminated"
-                        : "Can't find string terminator " + endDelim + " anywhere before EOF";
+                        : "Can't find string terminator "
+                        + (markerDelimiter != null ? "\".\"" : endDelim)
+                        + " anywhere before EOF";
                 throw new PerlCompilerException(tokPos, errorMsg, ctx.errorUtil);
+            }
+
+            // A beyond-Unicode quote delimiter is represented by one internal
+            // marker token. Compare it atomically rather than parsing the
+            // marker's printable payload as string contents.
+            if (PerlUtfString.markerEndExclusive(currentToken.text, 0)
+                    == currentToken.text.length()) {
+                if (state == START) {
+                    markerDelimiter = currentToken.text;
+                    startDelim = PerlUtfString.MARKER_LEAD;
+                    endDelim = PerlUtfString.MARKER_LEAD;
+                    state = STRING;
+                    tokPos++;
+                    continue;
+                }
+                if (state == STRING && currentToken.text.equals(markerDelimiter)) {
+                    state = END_TOKEN;
+                    tokPos++;
+                    continue;
+                }
             }
 
             // Process heredocs at newlines during string parsing

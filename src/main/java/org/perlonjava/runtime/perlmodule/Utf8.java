@@ -150,6 +150,8 @@ public class Utf8 extends PerlModuleBase {
             // This is a no-op case and is critical for preserving Unicode strings like "\x{100}".
         }
 
+        scalar.tainted = wasTainted;
+
         return new RuntimeScalar(utf8Bytes.length).getList();
     }
 

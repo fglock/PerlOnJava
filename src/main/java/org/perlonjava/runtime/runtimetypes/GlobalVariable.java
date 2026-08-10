@@ -1015,7 +1015,7 @@ public class GlobalVariable {
                     }
                 }
                 if (var == null) {
-                    var = new RuntimeHash();
+                    var = createNamedGlobalHash(aliasGroup);
                 }
                 markPackageGlobalRoot(var);
                 for (String alias : aliasGroup) {
@@ -1028,16 +1028,7 @@ public class GlobalVariable {
                 if (isStash) {
                     var = new RuntimeStash(key);
                 } else {
-                    var = new RuntimeHash();
-                    if (key.equals("main::!")) {
-                        // %! is magic but remains absent from the stash until
-                        // first accessed, matching Perl's lazy slot creation.
-                        var.elements = new ErrnoHash();
-                    } else if (key.equals("main::+")) {
-                        var.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);
-                    } else if (key.equals("main::-")) {
-                        var.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);
-                    }
+                    var = createNamedGlobalHash(java.util.List.of(key));
                 }
                 // D-W6.18: mark as package-global so values stored here
                 // get the storedInPackageGlobal flag (replaces class-name
@@ -1049,7 +1040,27 @@ public class GlobalVariable {
         } else {
             markPackageGlobalRoot(var);
         }
+        // Merely mentioning *! can create an ordinary HASH slot before the
+        // magic %! value is requested (notably in `*Y = *!`).  Upgrade that
+        // pre-existing slot in place so aliases see Errno's populated hash.
+        if (key.equals("main::!") && !(var.elements instanceof ErrnoHash)) {
+            var.elements = new ErrnoHash();
+        }
         return var;
+    }
+
+    private static RuntimeHash createNamedGlobalHash(java.util.List<String> names) {
+        RuntimeHash hash = new RuntimeHash();
+        if (names.contains("main::!")) {
+            // %! is magic but remains absent from the stash until first
+            // accessed. A glob alias of %! must materialize the same magic.
+            hash.elements = new ErrnoHash();
+        } else if (names.contains("main::+")) {
+            hash.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);
+        } else if (names.contains("main::-")) {
+            hash.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);
+        }
+        return hash;
     }
 
     /**
@@ -1606,7 +1617,11 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global IO reference.
      */
     public static RuntimeGlob getGlobalIO(String key) {
-        String resolvedKey = resolveStashHashRedirect(key);
+        // A stash glob is itself the lvalue that owns an alias. Resolving it
+        // through the currently aliased hash would make a second assignment
+        // (`*Alias:: = *Other::`) replace the old source stash instead.
+        boolean stashGlob = key.endsWith("::") && !key.endsWith(":::");
+        String resolvedKey = stashGlob ? key : resolveStashHashRedirect(key);
         RuntimeGlob glob = globalIORefs.get(resolvedKey);
         if (glob == null) {
             glob = new RuntimeGlob(resolvedKey);

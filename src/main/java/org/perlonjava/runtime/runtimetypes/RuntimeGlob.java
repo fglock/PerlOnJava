@@ -17,6 +17,26 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
 
     private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
+
+    public static boolean isLocalizedGlob(String globName) {
+        for (int i = globSlotStack.size() - 1; i >= 0; i--) {
+            if (java.util.Objects.equals(globSlotStack.get(i).globName(), globName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static RuntimeArray localizedUnderscoreArray() {
+        for (int i = globSlotStack.size() - 1; i >= 0; i--) {
+            String name = globSlotStack.get(i).globName();
+            if (name != null && name.endsWith("::_")) {
+                RuntimeArray array = GlobalVariable.globalArrays.get(name);
+                if (array != null) return array;
+            }
+        }
+        return null;
+    }
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
@@ -736,7 +756,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // it unconditionally for stashes, so we must materialise the alias here
         // even if globalHashes hasn't been populated yet.
         boolean sourceHasHash = GlobalVariable.existsGlobalHash(globName)
-                || isStashGlobName(globName);
+                || isStashGlobName(globName)
+                || (!isLocalizedGlob(this.globName)
+                    && (globName.equals("main::!")
+                        || globName.equals("main::+")
+                        || globName.equals("main::-")));
         if (sourceHasHash) {
             RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
             if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {

@@ -7,6 +7,8 @@ import org.perlonjava.runtime.regex.RegexTimeoutException;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
+
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
@@ -369,14 +371,47 @@ public class Operator {
         int strLength = PerlUtfString.codePointCountPerl(str);
 
         int size = args.length;
-        int offset = ((RuntimeScalar) args[1]).getInt();
+        BigInteger offsetValue = ((RuntimeScalar) args[1]).getSignedBigint();
         // If length is not provided, use the rest of the string
         boolean hasExplicitLength = size > 2;
-        int length = hasExplicitLength ? ((RuntimeScalar) args[2]).getInt() : strLength - offset;
-        int lvalueOffset = offset;
-        int lvalueLength = length;
+        BigInteger lengthValue = hasExplicitLength
+                ? ((RuntimeScalar) args[2]).getSignedBigint() : null;
         String replacement = (size > 3) ? args[3].toString() : null;
         RuntimeScalar replacementScalar = (size > 3) ? (RuntimeScalar) args[3] : null;
+
+        // Preserve the full IV/UV before narrowing to Java string indexes.
+        // A huge read offset warns and yields undef; four-argument substr
+        // throws without modifying its target. Huge positive lengths simply
+        // consume the remainder of the string.
+        if (offsetValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
+                || offsetValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
+            if (replacement != null) {
+                throw new PerlCompilerException("substr outside of string");
+            }
+            if (warnEnabled) {
+                WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                        RuntimeScalarCache.scalarEmptyString);
+            }
+            var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
+            lvalue.setOutOfBounds();
+            lvalue.type = RuntimeScalarType.UNDEF;
+            lvalue.value = null;
+            return lvalue;
+        }
+
+        int offset = offsetValue.intValue();
+        int length;
+        if (!hasExplicitLength) {
+            length = strLength - offset;
+        } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+            length = Integer.MAX_VALUE;
+        } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
+            length = Integer.MIN_VALUE;
+        } else {
+            length = lengthValue.intValue();
+        }
+        int lvalueOffset = offset;
+        int lvalueLength = length;
 
         // Handle negative offsets (count from the end of the string)
         if (offset < 0) {

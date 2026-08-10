@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.math.BigInteger;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -92,11 +93,18 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now(localZone);
         } else {
-            double dval = args.getFirst().getDouble();
+            RuntimeScalar value = args.getFirst().scalar();
+            double dval = value.getDouble();
             if (Double.isNaN(dval) || Double.isInfinite(dval)) {
                 return returnUndefOrEmptyList(ctx);
             }
-            long arg = args.getFirst().getLong();
+            BigInteger exact = value.getSignedBigint();
+            if (exact.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                    || exact.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                emitTimeOverflowWarnings("localtime", value.toString());
+                return returnUndefOrEmptyList(ctx);
+            }
+            long arg = exact.longValue();
             try {
                 date = Instant.ofEpochSecond(arg).atZone(localZone);
             } catch (DateTimeException e) {
@@ -119,11 +127,18 @@ public class Time {
         if (args.isEmpty()) {
             date = ZonedDateTime.now(ZoneOffset.UTC);
         } else {
-            double dval = args.getFirst().getDouble();
+            RuntimeScalar value = args.getFirst().scalar();
+            double dval = value.getDouble();
             if (Double.isNaN(dval) || Double.isInfinite(dval)) {
                 return returnUndefOrEmptyList(ctx);
             }
-            long arg = args.getFirst().getLong();
+            BigInteger exact = value.getSignedBigint();
+            if (exact.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                    || exact.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                emitTimeOverflowWarnings("gmtime", value.toString());
+                return returnUndefOrEmptyList(ctx);
+            }
+            long arg = exact.longValue();
             try {
                 date = Instant.ofEpochSecond(arg).atZone(ZoneId.of("UTC"));
             } catch (DateTimeException e) {
@@ -237,7 +252,12 @@ public class Time {
     }
 
     private static void emitTimeOverflowWarnings(String funcName, long arg) {
-        String direction = arg > 0 ? "too large" : "too small";
+        emitTimeOverflowWarnings(funcName, Long.toString(arg));
+    }
+
+    private static void emitTimeOverflowWarnings(String funcName, String arg) {
+        boolean positive = !arg.startsWith("-");
+        String direction = positive ? "too large" : "too small";
         WarnDie.warn(
                 new RuntimeScalar(funcName + "(" + arg + ") " + direction),
                 new RuntimeScalar("\n")

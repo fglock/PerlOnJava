@@ -414,6 +414,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String javaPattern = null;
             try {
                 boolean usesRecursiveBackend = JoniRegexPattern.requiresRecursiveBackend(compilePatternString);
+                if (usesRecursiveBackend
+                        && compilePatternString.contains("(?&")
+                        && (compilePatternString.contains("(?<=")
+                                || compilePatternString.contains("(?<!"))) {
+                    throw new PerlJavaUnimplementedException(
+                            "Lookbehind longer than 255 not implemented in regex m/"
+                                    + compilePatternString + "/");
+                }
                 javaPattern = usesRecursiveBackend
                         ? "(?!)"
                         : preProcessRegex(compilePatternString, regex.regexFlags);

@@ -9,6 +9,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
@@ -873,6 +874,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return BigInteger.ZERO;
             }
         }
+    }
+
+    /**
+     * Return the scalar's signed integral value without interpreting a
+     * negative floating value as an unsigned bit pattern. Index-like
+     * operators (substr, vec, ranges) need this distinction; getBigint() keeps
+     * its historical checksum-oriented unsigned conversion for negative NVs.
+     */
+    public BigInteger getSignedBigint() {
+        if (type == RuntimeScalarType.DOUBLE) {
+            double number = (double) value;
+            if (!Double.isFinite(number)) {
+                return BigInteger.ZERO;
+            }
+            return BigDecimal.valueOf(number).toBigInteger();
+        }
+        return getBigint();
     }
 
     /**

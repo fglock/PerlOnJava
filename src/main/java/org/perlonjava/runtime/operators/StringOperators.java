@@ -439,7 +439,13 @@ public class StringOperators {
         }
 
         // Find the index of the substring starting from the specified position
-        int result = str.indexOf(sub, pos);
+        boolean hasInternalCharacters = str.indexOf(PerlUtfString.MARKER_LEAD) >= 0;
+        int javaPos = hasInternalCharacters
+                ? PerlUtfString.offsetByPerlCodePoints(str, 0, pos) : pos;
+        int result = str.indexOf(sub, javaPos);
+        if (hasInternalCharacters && result >= 0) {
+            result = PerlUtfString.codePointCountPerl(str.substring(0, result));
+        }
 
         // Return the index or -1 if not found
         return getScalarInt(result);
@@ -489,7 +495,13 @@ public class StringOperators {
         }
 
         // Find the last index of the substring before or at the specified position
-        int result = str.lastIndexOf(sub, pos);
+        boolean hasInternalCharacters = str.indexOf(PerlUtfString.MARKER_LEAD) >= 0;
+        int javaPos = hasInternalCharacters
+                ? PerlUtfString.offsetByPerlCodePoints(str, 0, pos) : pos;
+        int result = str.lastIndexOf(sub, javaPos);
+        if (hasInternalCharacters && result >= 0) {
+            result = PerlUtfString.codePointCountPerl(str.substring(0, result));
+        }
 
         // Return the index or -1 if not found
         return getScalarInt(result);

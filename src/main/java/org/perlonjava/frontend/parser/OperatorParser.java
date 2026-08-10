@@ -374,6 +374,28 @@ public class OperatorParser {
                                 ctx.errorUtil.errorMessage(node.getIndex(),
                                         "\"our\" variable " + var + " redeclared"));
                     }
+
+                    // Perl installs the declared glob slot while compiling the
+                    // declaration, before a following initializer executes.
+                    // BEGIN blocks (and circular module loads such as
+                    // DateTime::Duration -> DateTime::Types) can therefore see
+                    // `our $VERSION` in the package stash immediately.
+                    String fullName = NameNormalizer.normalizeVariableName(
+                            name, ctx.symbolTable.getCurrentPackage());
+                    switch (sigil) {
+                        case "$" -> {
+                            GlobalVariable.getGlobalVariable(fullName);
+                            GlobalVariable.declareGlobalVariable(fullName);
+                        }
+                        case "@" -> {
+                            GlobalVariable.getGlobalArray(fullName);
+                            GlobalVariable.declareGlobalArray(fullName);
+                        }
+                        case "%" -> {
+                            GlobalVariable.getGlobalHash(fullName);
+                            GlobalVariable.declareGlobalHash(fullName);
+                        }
+                    }
                 } else {
                     // For 'my'/'local', warn if redeclared in the same scope (warnings 'shadow')
                     if (WarningFlags.ckWarnForScope(ctx.symbolTable, "shadow")

@@ -983,7 +983,7 @@ Current phase: implementation complete; CI validation pending.
 
 ## Progress Tracking
 
-### Current Status: post-rebase verification complete; CI handoff ready
+### Current Status: final rebase and local validation complete; CI pending
 
 ### Completed Phases
 
@@ -1023,6 +1023,41 @@ Current phase: implementation complete; CI validation pending.
     5,711 assertions), and Text::Fold (6 files, 38 assertions). The full
     `make`, SQL diff 16/16, and Hash::AutoHash 2,785/2,785 gates remain green
     on the final base.
+- [x] Repair the reported post-rebase core regressions (2026-08-10).
+  - Reconciled parser, numeric/string operators, pack/unpack, regex magic,
+    control-flow, taint, symbol-table, and lvalue behavior across the 27
+    reported core files. Against the saved `e22f32805` master baseline, the
+    definitive matrix has no lower pass counts: 17 files are equal and 10 are
+    improved.
+  - Preserved ordinary `%!`, `%+`, and `%-` typeglob aliases without leaking
+    magic hash slots through repeatedly localized introspection globs.
+    `re/reg_namedcapture.t` passes 2/2, `op/runlevel.t` remains at master parity
+    (14/24), and unmodified Devel::Symdump passes 9 files/29 assertions; its
+    focused test also passes under standard Perl.
+  - The full `make` gate and all 378 bundled-module files pass. A fresh sweep
+    of all 26 master-side CPAN targets and all 25 branch targets passes after
+    the Devel::Symdump follow-up, including Number::Phone's complete
+    13,609-assertion suite with the documented 4 GB child override.
+- [x] Rebase onto final `origin/master` and revalidate all affected modules
+  (2026-08-10).
+  - Rebased all 55 branch commits onto `2095f7b55` without dropping a commit,
+    reconciling master's taint-mode and ICU regex work with the branch's
+    byte-regex, exact 64-bit integer, vec, and lifecycle changes.
+  - Against a freshly built `2095f7b55` worktree, the reported 27-file core
+    matrix has no lower pass counts: 17 files are equal and 10 are improved.
+  - The post-rebase CPAN sweep passes all 54 targets: the prior 51-target
+    master/branch matrix plus newly landed Getopt::Param,
+    DateTime::TimeZone::Tzfile, and Unicode::BiDiRule.
+  - The sweep exposed a regression already present on the new master:
+    compile-time `our` declarations did not materialize their package glob
+    slots, so Specio rejected DateTime::Duration during its circular load.
+    PerlOnJava now matches standard Perl by creating scalar, array, and hash
+    slots while compiling `our`; the standard-Perl-validated regression passes
+    6/6 on JVM and interpreter backends, and DateTime passes all 51 files and
+    3,589 assertions.
+  - The final full `make` gate passes. Devel::Symdump passes 9 files/29
+    assertions, aliased passes 6 files/40 assertions, and the bundled-module
+    matrix passes all 378 files.
 
 ### Next Steps
 

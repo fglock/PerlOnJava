@@ -177,7 +177,8 @@ public class ListOperators {
                 // Check for control flow markers (goto/last/next/redo) that tried to escape the sort block.
                 // The marker propagates as the return value (RuntimeControlFlowList), not via the registry.
                 if (result.isNonLocalGoto()) {
-                    ControlFlowType cfType = ((RuntimeControlFlowList) result).getControlFlowType();
+                    RuntimeControlFlowList controlFlow = (RuntimeControlFlowList) result;
+                    ControlFlowType cfType = controlFlow.getControlFlowType();
                     String keyword = switch (cfType) {
                         case GOTO, TAILCALL -> "goto";
                         case LAST -> "last";
@@ -185,7 +186,10 @@ public class ListOperators {
                         case REDO -> "redo";
                         case RETURN -> "return";
                     };
-                    throw new PerlCompilerException("Can't \"" + keyword + "\" out of a pseudo block");
+                    ControlFlowMarker marker = controlFlow.marker;
+                    throw new PerlCompilerException("Can't \"" + keyword
+                            + "\" out of a pseudo block at " + marker.fileName
+                            + " line " + marker.lineNumber + ".\n");
                 }
 
                 // Retrieve the comparison result and return it as an integer
