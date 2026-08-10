@@ -1,0 +1,19 @@
+--- perl5/cpan/CPAN/lib/CPAN/Index.pm	2026-04-10 11:04:21
++++ src/main/perl/lib/CPAN/Index.pm	2026-08-10 10:13:33
+@@ -597,11 +597,11 @@
+     while(my($class,$v) = each %$cache) {
+         next unless $class =~ /^CPAN::/;
+         $CPAN::META->{readonly}{$class} = $v; # unsafe meta access, ok
+-        while (my($id,$ro) = each %$v) {
+-            $CPAN::META->{readwrite}{$class}{$id} ||=
+-                $class->new(ID=>$id, RO=>$ro);
+-            $idcnt++;
+-        }
++        # Mutable CPAN objects are created lazily by CPAN::instance (or in
++        # bulk by CPAN::all_objects).  Eagerly blessing every cached module,
++        # distribution, and author makes a normal jcpan invocation spend
++        # minutes allocating objects it will never use.
++        $idcnt += scalar keys %$v;
+         $clcnt++;
+     }
+     unless ($clcnt) { # sanity check

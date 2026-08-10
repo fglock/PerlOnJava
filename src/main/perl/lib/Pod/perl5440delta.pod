@@ -371,7 +371,7 @@ L<Math::BigInt> has been upgraded from version 2.005002 to 2.005003.
 
 =item *
 
-L<Module::CoreList> has been upgraded from version 5.20250702 to 5.20260708.
+L<Module::CoreList> has been upgraded from version 5.20250702 to 5.20260715.
 
 =item *
 
@@ -655,6 +655,14 @@ L<Use of "goto" to jump into a construct is no longer permitted|perldiag/"Use of
 (F) You have used C<goto LABEL;> or C<goto EXPR;> in an attempt to jump into
 the body of a loop or other block construct from the outside.  As of Perl 5.44,
 this throws an exception.
+
+=item *
+
+L<Pack template structure size is too large|perldiag/"Pack template structure size is too large">
+
+(F) You called C<pack> or C<unpack> to operate on a structure, whose
+computed size is too large to fit in memory.  This usually happens as a
+result of embedding a large number as the repeat count for an item.
 
 =item *
 

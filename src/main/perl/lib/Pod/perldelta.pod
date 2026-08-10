@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file. Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.45.0
+perldelta - what is new for perl v5.45.1
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.44.0 release and the 5.45.0
+This document describes differences between the 5.45.0 release and the 5.45.1
 release.
 
-If you are upgrading from an earlier release such as 5.43.0, first read
-L<perl5440delta>, which describes differences between 5.43.0 and 5.44.0.
+If you are upgrading from an earlier release such as 5.44.0, first read
+L<perl5450delta>, which describes differences between 5.44.0 and 5.45.0.
 
 =head1 Notice
 
@@ -26,6 +26,22 @@ enhancements. Particularly prominent performance optimisations could go
 here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
+
+=head2 Magic v2
+
+This version introduces a whole new set of API functions, data structures, and
+related items that provides a new kind of variable magic; providing the
+ability to attach user-supplied trigger functions to behaviours on existing
+variables.
+
+The eventual intention of this new version is to extend magic with new trigger
+functions that can apply at different times to those currently supported, and
+to allow magic to be attached to new kinds of items than are currently
+permitted. Right now as of this iteration, it does not offer any new abilities
+but simply changes the shape and structure of existing things to allow space
+for those extensions to be made at a later date.
+
+For more details, see L<perlguts/Magic v2>.
 
 =head1 Security
 
@@ -86,6 +102,26 @@ There may well be none in a stable release.
 [ List each enhancement as an =item entry ]
 
 =over 4
+
+=item *
+
+C<OP_REF_CMP> has been added to streamline expressions such as
+C<(ref $x eq 'SCALAR')> where (i) the first operator is C<ref> or
+C<reftype>, (ii) the comparison is C<eq> or C<ne>, and (iii) the value
+being compared against is one of the internal reftype strings mentioned
+in L<perlfunc/ref>, is C<Regexp>, or is the empty string C<''>.
+
+=item *
+
+Counting the number of matches within a string using the following common
+idiom is now more streamlined.
+
+    C<my $count = () = $str =~ /$pat/g;>
+
+Instead of pushing all matches to the stack as mortal SVs, just so that
+the list assignment can count them, C<pp_match> maintains an internal
+count during matching and pushes just that upon completion.
+[GH #24558]
 
 =item *
 
@@ -350,6 +386,48 @@ well.
 
 XXX
 
+=item *
+
+Mutex locks for C<getprotoent> and C<getservent> are removed
+
+The macros C<GETPROTOENT_LOCK> and C<GETSERVENT_LOCK> macros are
+removed, along with their unlocking counterparts.  These macros, though
+never documented, were intended to create thread safety when using their
+corresponding functions in a threaded-perl.  But they didn't actually
+furnish that, so using them would give a false sense of security.
+Another thread simultaneously accessing the database could move the
+pointers, so these would act unpredictably.
+
+=item *
+
+New macros created for thread-safety in libc calls
+
+Many C library functions are not thread safe, but can be made so by
+using mutexes around them to lock out other threads from interrupting
+their execution.  Many macros have now been created for this purpose.
+Guidance for using them, and the functions they protect are listed in
+L<perlapi/Mutex locking macros>; their actual definitions are found in
+F<perl_lock_definitions.h>.  If you call a libc function, look in
+L<perlapi> to see if we have created locking macros for it.  The macros
+are based on man pages (especially Linux ones), and our experience.  We
+also know from experience that man pages can be wrong or incomplete, and
+the behavior of any given function may be platform dependent.  Patches
+to update our knowledge base are welcome.
+
+More detail can be found in
+L<perlclib/Dealing with embedded perls and threads>.
+
+=item *
+
+During compiletime of a named subroutine, the name of the new sub
+currently being compiled is now accessible via C<CvNAME_HEK(PL_compcv)>.
+
+=item *
+
+A new internal function, C<padname_upgrade_sv()> attaches an SV onto a
+PADNAME instance, which is used to store the name string of that padname.
+This SV can be used by code that wishes to attach magic onto the padname.
+
 =back
 
 =head1 Selected Bug Fixes
@@ -366,20 +444,26 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-Allow field lookups within methods in nested scopes to succeed,
-previously they could complain that C<Field $fieldname is not
-accessible outside a method...>.
+Cleanup of field initialization ops for an incomplete class now
+happens within the correct CV.  Previously, if an error was thrown
+with an incomplete class this would release pad entries on the wrong
+CV and eventually crash.  [GH #24616]
 
-This was most confusingly broken with a use:
+=item *
 
-  class A {
-    field $fieldname;
-    use overload '""' => method (@) { $fieldname };
-  }
+sv_set_undef() no longer blindly clears the C<SVs_TEMP> flag.  This
+could break code that expected to detect mortal SVs, like constant
+folding.  [GH #24661]
 
-since the syntax hides the C<BEGIN> sub.
+=item *
 
-[GH #24464]
+The regular expression engine's "super-linear cache" wasn't 64-bit clean
+and so could in principle overflow on huge (>256Mb) strings, resulting in
+incorrect matches and potential memory corruption. (The cache engages on
+nested variable-width patterns such as C</(a+)+/>, to avoid exponential
+backtracking.)
+
+[GH security issue #149]
 
 =back
 
@@ -419,7 +503,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.44.0..HEAD
+  perl Porting/acknowledgements.pl v5.45.1..HEAD
 
 =head1 Reporting Bugs
 
