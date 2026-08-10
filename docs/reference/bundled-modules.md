@@ -20,6 +20,7 @@ Recent CPAN compatibility additions include:
 | `Devel::LexAlias` | Perl facade over Java lexical cells | Rebinds local and captured scalar, array, and hash lexicals |
 | `Encode::Locale` | Pure Perl facade over bundled locale support | Provides LWP and XML::Parser with locale encoding aliases; includes `Encode::Alias` |
 | `Crypt::Twofish2` | Java XS bridge | BouncyCastle Twofish engine with ECB, CBC, and CFB1 compatibility |
+| `Digest::JHash` | Java XS bridge | Jenkins 32-bit hash used by CHI and TimeZone::TimeZoneDB |
 | `B::Flags` | Pure Perl over portable `B` objects | Named OP/SV flags without access to Perl C structures |
 
 ---

@@ -288,21 +288,23 @@ public class RuntimeIO extends RuntimeScalar {
      * Returns -1 if none available.
      */
     private static int tryRecycleLowestFd() {
-        List<Integer> candidates = new ArrayList<>();
+        SortedSet<Integer> candidates = new TreeSet<>();
         Integer recycled;
         while ((recycled = recycledFds.poll()) != null) {
-            if (recycled >= 3) {
+            // Aliased/borrowed handles can keep a descriptor live after another
+            // wrapper releases it. Discard stale recycle entries rather than
+            // letting a new socket overwrite the current fd owner.
+            if (recycled >= 3 && !filenoToIO.containsKey(recycled)) {
                 candidates.add(recycled);
             }
         }
         if (candidates.isEmpty()) {
             return -1;
         }
-        Collections.sort(candidates);
-        int fd = candidates.get(0);
+        int fd = candidates.first();
         // Put back the rest
-        for (int i = 1; i < candidates.size(); i++) {
-            recycledFds.add(candidates.get(i));
+        for (int candidate : candidates.tailSet(fd + 1)) {
+            recycledFds.add(candidate);
         }
         return fd;
     }
@@ -336,6 +338,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
+        recycledFds.removeIf(candidate -> candidate == fd);
         // Advance nextFileno past this fd to avoid collisions
         nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
     }
@@ -347,11 +350,14 @@ public class RuntimeIO extends RuntimeScalar {
     public void unregisterFileno() {
         Integer fd = ioToFileno.remove(this);
         if (fd != null) {
-            filenoToIO.remove(fd);
+            // Only the RuntimeIO that still owns the fd mapping may release it.
+            // Borrowed aliases intentionally share a descriptor; closing an
+            // older alias must not unregister or recycle the newer live owner.
+            boolean released = filenoToIO.remove(fd, this);
             // Return fd to the recycle pool so it can be reused (POSIX: lowest available).
             // Descriptors 0, 1, and 2 are reserved for stdin/stdout/stderr and must
             // never be assigned to lazily-numbered regular filehandles.
-            if (fd >= 3) {
+            if (released && fd >= 3) {
                 recycledFds.add(fd);
             }
         }

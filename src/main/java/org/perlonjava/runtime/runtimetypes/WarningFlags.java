@@ -409,9 +409,12 @@ public class WarningFlags {
         int byteIndex = bitPos / 8;
         int bitInByte = bitPos % 8;
         
-        // Check the specific bit if it's within range
-        if (byteIndex < bits.length() && (bits.charAt(byteIndex) & (1 << bitInByte)) != 0) {
-            return true;
+        // If the mask is long enough to contain the registered category then
+        // its bit is authoritative.  A clear bit can be an explicit
+        // `no warnings 'Category'` and must not be re-enabled by the broader
+        // `all` bit below.
+        if (byteIndex < bits.length()) {
+            return (bits.charAt(byteIndex) & (1 << bitInByte)) != 0;
         }
         
         // For custom categories, fall back to checking if "all" is enabled.
@@ -457,9 +460,9 @@ public class WarningFlags {
         int byteIndex = bitPos / 8;
         int bitInByte = bitPos % 8;
         
-        // Check the specific bit if it's within range
-        if (byteIndex < bits.length() && (bits.charAt(byteIndex) & (1 << bitInByte)) != 0) {
-            return true;
+        // As for the enabled bit, an in-range clear fatal bit is explicit.
+        if (byteIndex < bits.length()) {
+            return (bits.charAt(byteIndex) & (1 << bitInByte)) != 0;
         }
         
         // For custom categories, fall back to checking if "all" is fatal

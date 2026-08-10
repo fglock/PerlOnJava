@@ -1306,7 +1306,10 @@ sub _current_perl_path {
 # rather than failing the whole install.
 sub _shell_cp {
     my ($src, $dest, $autodir) = @_;
-    my $should_autosplit = defined($autodir) && $src =~ /\.pm\z/i && $dest =~ /\.pm\z/i;
+    my $should_autosplit = defined($autodir)
+        && $src =~ /\.pm\z/i
+        && $dest =~ /\.pm\z/i
+        && _source_uses_autoloader($src);
     $src =~ s/'/'\\''/g;  # escape single quotes
     $dest =~ s/'/'\\''/g;
     my $autosplit = '';
@@ -1316,6 +1319,33 @@ sub _shell_cp {
         $autosplit = " && if grep -q '^__END__\$\$' '$dest'; then \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'; fi";
     }
     return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'$autosplit; else echo 'PerlOnJava: skipping missing source: $src'; fi";
+}
+
+# AutoSplit's fourth argument performs this same source check, but doing it
+# after every copy starts a fresh jperl JVM for every module containing an
+# __END__ marker.  Large pure-Perl distributions commonly put POD after that
+# marker, so the otherwise harmless check can add many minutes to a build.
+# Mirror AutoSplit's detection while the Makefile is being generated and only
+# emit an autosplit command for modules that can actually need one.
+sub _source_uses_autoloader {
+    my ($src) = @_;
+    return 0 unless defined $src && -f $src;
+
+    open my $fh, '<', $src or return 0;
+    my $in_pod = 0;
+    while (my $line = <$fh>) {
+        $in_pod = 1 if $line =~ /^=\w/;
+        $in_pod = 0 if $line =~ /^=cut/;
+        next if $in_pod || $line =~ /^=cut/ || $line =~ /^\s*#/;
+        last if $line =~ /^__END__/;
+        if ($line =~ /^\s*(?:use|require)\s+AutoLoader\b/
+                || $line =~ /\bISA\s*=.*\bAutoLoader\b/) {
+            close $fh;
+            return 1;
+        }
+    }
+    close $fh;
+    return 0;
 }
 
 # Helper: rewrite staged script shebangs such as "#!perl -w" to a shell wrapper

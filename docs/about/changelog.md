@@ -4,6 +4,16 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- CPAN: add a Java-backed `Digest::JHash` XS replacement for CHI and
+  `TimeZone::TimeZoneDB` dependency chains, and make CPAN's generated
+  Makefile fallback work when a distribution ships a read-only Makefile.PL.
+- CPAN tooling: avoid launching AutoSplit for POD-only modules, materialize
+  `CORE/keywords.h` for build-time probes, and expose only real control-letter
+  globals through `%main::` stash enumeration.
+- Runtime: avoid redundant global reachability walks while releasing weak
+  references in large object trees, substantially reducing PPI teardown cost.
+- Runtime: honor explicit custom-warning mask bits and prevent stale recycled
+  descriptors from replacing live borrowed-handle mappings.
 - Add Perl taint mode with `-T` on both JVM and interpreter backends, including
   external-input provenance, scalar and regex propagation, capture-based
   untainting, and security checks for process execution, code loading, file

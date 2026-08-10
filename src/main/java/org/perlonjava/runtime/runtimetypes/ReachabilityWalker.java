@@ -1514,27 +1514,25 @@ public class ReachabilityWalker {
      */
     public static int sweepReleasedWeakReferents(Set<RuntimeBase> referents) {
         if (referents == null || referents.isEmpty()) return 0;
+        Set<RuntimeBase> pending = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (RuntimeBase referent : referents) {
+            if (referent == null || referent.currentlyDestroying) continue;
+            // Normal decrement-to-zero destruction already clears the
+            // referent's weak observers and recursively releases contained
+            // objects in DestroyDispatch.callDestroy().  Re-walking every
+            // root after that completed path is both redundant and quadratic
+            // for object trees such as PPI's AST.  A rescued object is handled
+            // by the rescue-specific cleanup path after the assignment.
+            if (referent.destroyFired || referent.refCount == Integer.MIN_VALUE) continue;
+            pending.add(referent);
+        }
+        if (pending.isEmpty()) return 0;
+
         Set<RuntimeBase> live = new ReachabilityWalker().walk();
         int cleared = 0;
         boolean releasedObjectNeedsCascade = false;
-        for (RuntimeBase referent : referents) {
+        for (RuntimeBase referent : pending) {
             if (referent == null || referent.currentlyDestroying) {
-                continue;
-            }
-            if (referent.destroyFired || referent.refCount == Integer.MIN_VALUE) {
-                // A DESTROY body may have rescued the object by storing $self
-                // into another live container. Rescue-specific cleanup runs
-                // after the undef assignment and decides whether to clear only
-                // the object's own weak refs or its contained graph. Starting a
-                // generic fixed-point cascade here clears live children first.
-                if (DestroyDispatch.isRescued(referent)) {
-                    continue;
-                }
-                // An eager sweep in RuntimeScalar.undefine() may already have
-                // destroyed this wrapper using a liveness snapshot taken
-                // before its tied/container edges were released. Re-walk
-                // below so newly unreachable dependants are collected too.
-                releasedObjectNeedsCascade = true;
                 continue;
             }
             if (live.contains(referent)) continue;

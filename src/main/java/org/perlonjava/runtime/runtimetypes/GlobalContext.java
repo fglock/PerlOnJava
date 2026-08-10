@@ -69,8 +69,11 @@ public class GlobalContext {
         RuntimeRegex.initialize();
 
         // Initialize scalar variables
-        for (char c = 'A'; c <= 'Z'; c++) {
-            // Initialize $^A.. $^Z
+        // Only create the control-letter globals that Perl actually defines.
+        // Eagerly populating every $^A..$^Z makes nonexistent typeglobs visible
+        // through %main:: (notably to B::Keywords and other stash inspectors).
+        for (char c : new char[] {'A', 'C', 'D', 'E', 'F', 'H', 'I', 'L', 'M',
+                                  'N', 'O', 'P', 'R', 'S', 'T', 'V', 'W', 'X'}) {
             String varName = "main::" + Character.toString(c - 'A' + 1);
             GlobalVariable.getGlobalVariable(varName);
         }

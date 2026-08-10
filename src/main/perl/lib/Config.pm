@@ -85,6 +85,38 @@ _ensure_core_probe_file(
     _catdir($file_separator, $core_privlib, 'File', 'Find.pm'),
     "# PerlOnJava core-library probe marker.\n# The real File::Find is loaded from jar:PERL5LIB.\n1;\n",
 );
+my @core_keywords = split ' ', <<'END_CORE_KEYWORDS';
+NULL __FILE__ __LINE__ __PACKAGE__ __CLASS__ __DATA__ __END__ __SUB__ ADJUST AUTOLOAD
+BEGIN UNITCHECK DESTROY END INIT CHECK abs accept alarm all and any atan2 bind binmode
+bless break caller catch chdir chmod chomp chop chown chr chroot class close closedir
+cmp connect continue cos crypt dbmclose dbmopen default defer defined delete die do
+dump each else elsif endgrent endhostent endnetent endprotoent endpwent endservent eof
+eq eval evalbytes exec exists exit exp fc fcntl field fileno finally flock for foreach
+fork format formline ge getc getgrent getgrgid getgrnam gethostbyaddr gethostbyname
+gethostent getlogin getnetbyaddr getnetbyname getnetent getpeername getpgrp getppid
+getpriority getprotobyname getprotobynumber getprotoent getpwent getpwnam getpwuid
+getservbyname getservbyport getservent getsockname getsockopt given glob gmtime goto
+grep gt hex if index int ioctl isa join keys kill last lc lcfirst le length link listen
+local localtime lock log lstat lt m map method mkdir msgctl msgget msgrcv msgsnd my ne
+next no not oct open opendir or ord our pack package pipe pop pos print printf
+prototype push q qq qr quotemeta qw qx rand read readdir readline readlink readpipe
+recv redo ref rename require reset return reverse rewinddir rindex rmdir s say scalar
+seek seekdir select semctl semget semop send setgrent sethostent setnetent setpgrp
+setpriority setprotoent setpwent setservent setsockopt shift shmctl shmget shmread
+shmwrite shutdown sin sleep socket socketpair sort splice split sprintf sqrt srand stat
+state study sub substr symlink syscall sysopen sysread sysseek system syswrite tell
+telldir tie tied time times tr try truncate uc ucfirst umask undef unless unlink unpack
+unshift untie until use utime values vec wait waitpid wantarray warn when while write x
+xor y
+END_CORE_KEYWORDS
+my $keyword_number = 0;
+my $keywords_header = join '', map {
+    sprintf "#define KEY_%s\t\t%d\n", $_, $keyword_number++
+} @core_keywords;
+_ensure_core_probe_file(
+    _catdir($file_separator, $core_archlib, 'CORE', 'keywords.h'),
+    $keywords_header,
+) if length $keywords_header;
 
 sub _perl_os_name {
     my ($name) = @_;
