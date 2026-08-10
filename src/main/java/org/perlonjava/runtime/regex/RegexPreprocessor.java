@@ -995,8 +995,11 @@ public class RegexPreprocessor {
                 }
 
                 if (!foundReverseFold) {
-                    String specialExpansion = regexFlags.isAsciiStrict()
-                            ? null : expandSpecialSingleCharFold(codePoint);
+                    String specialExpansion = regexFlags.isAsciiStrict() ? null
+                            : MultiCharFoldMapper.expandSimpleFoldToAlternation(codePoint);
+                    if (specialExpansion == null && !regexFlags.isAsciiStrict()) {
+                        specialExpansion = expandSpecialSingleCharFold(codePoint);
+                    }
                     if (specialExpansion != null) {
                         result.append(specialExpansion);
                     } else {
@@ -1016,6 +1019,7 @@ public class RegexPreprocessor {
         if (regexFlags.isAsciiStrict() || charClass.length() < 3 || charClass.charAt(1) == '^') return null;
 
         LinkedHashSet<String> folds = new LinkedHashSet<>();
+        LinkedHashSet<Integer> simpleVariants = new LinkedHashSet<>();
         boolean escaped = false;
         for (int i = 1; i < charClass.length() - 1; ) {
             int codePoint = charClass.codePointAt(i);
@@ -1032,11 +1036,17 @@ public class RegexPreprocessor {
             if (codePoint == '-' || codePoint == '[' || codePoint == ']') return null;
             String fold = MultiCharFoldMapper.getMultiCharFold(codePoint);
             if (fold != null) folds.add(Pattern.quote(fold));
+            simpleVariants.addAll(MultiCharFoldMapper.getSimpleFoldVariants(codePoint));
             i += Character.charCount(codePoint);
         }
-        if (folds.isEmpty()) return null;
+        if (folds.isEmpty() && simpleVariants.isEmpty()) return null;
 
-        StringBuilder expansion = new StringBuilder("(?:").append(charClass);
+        StringBuilder expandedClass = new StringBuilder(charClass.substring(0, charClass.length() - 1));
+        simpleVariants.forEach(expandedClass::appendCodePoint);
+        expandedClass.append(']');
+        if (folds.isEmpty()) return expandedClass.toString();
+
+        StringBuilder expansion = new StringBuilder("(?:").append(expandedClass);
         for (String fold : folds) expansion.append('|').append(fold);
         return expansion.append(')').toString();
     }
@@ -1058,6 +1068,7 @@ public class RegexPreprocessor {
                         int codePoint = Integer.parseInt(pattern.substring(i + 3, close), 16);
                         if (Character.isValidCodePoint(codePoint)
                                 && (MultiCharFoldMapper.hasMultiCharFold(codePoint)
+                                    || MultiCharFoldMapper.hasSimpleFold(codePoint)
                                     || MultiCharFoldMapper.isFoldComponent(codePoint))) {
                             result.appendCodePoint(codePoint);
                             i = close + 1;
