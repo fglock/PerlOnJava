@@ -1487,7 +1487,7 @@ public class EmitVariable {
                     String className = EmitterMethodCreator.getVariableClassName(sigil);
 
                     if (operator.equals("my")) {
-                        Integer beginId = RuntimeCode.persistentDeclarationIds.get(sigilNode);
+                        Integer beginId = RuntimeCode.evalBeginIds.get(sigilNode);
                         if (beginId == null) {
                             ctx.mv.visitTypeInsn(Opcodes.NEW, className);
                             ctx.mv.visitInsn(Opcodes.DUP);

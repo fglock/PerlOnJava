@@ -2899,7 +2899,7 @@ public class BytecodeCompiler implements Visitor {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
-                    Integer beginId = RuntimeCode.persistentDeclarationIds.get(sigilOp);
+                    Integer beginId = RuntimeCode.evalBeginIds.get(sigilOp);
                     if (beginId != null) {
                         // BEGIN-captured variable: use RETRIEVE_BEGIN_* (destructive removal from global storage)
                         int persistId = beginId;
@@ -3316,7 +3316,7 @@ public class BytecodeCompiler implements Visitor {
                                 continue;
                             }
 
-                            Integer beginId2 = RuntimeCode.persistentDeclarationIds.get(sigilOp);
+                            Integer beginId2 = RuntimeCode.evalBeginIds.get(sigilOp);
                             if (beginId2 != null || op.equals("state")) {
                                 int persistId = beginId2 != null ? beginId2 : sigilOp.id;
                                 int reg = allocateRegister();

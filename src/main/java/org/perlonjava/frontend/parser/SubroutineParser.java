@@ -959,28 +959,9 @@ public class SubroutineParser {
         int definitionFeatureFlags = parser.ctx.symbolTable.featureFlagsStack.peek();
         int definitionStrictOptions = parser.ctx.symbolTable.strictOptionsStack.peek();
 
-        // Remember which declaration nodes existed before the body was parsed.
-        // The symbol table remains available to lazy compilation and therefore
-        // also contains the body's own lexicals afterwards. Source-filtered
-        // subs can lose the explicit `my` wrapper from the collected AST, so
-        // declaration scanning alone cannot reliably distinguish those locals
-        // from lexicals captured from the enclosing compile-time scope.
-        Set<OperatorNode> enclosingLexicalDeclarations =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        for (SymbolTable.SymbolEntry entry
-                : parser.ctx.symbolTable.getAllVisibleVariables().values()) {
-            if (entry.ast() != null) {
-                enclosingLexicalDeclarations.add(entry.ast());
-            }
-        }
-
         try {
             // Parse the block of the subroutine, which contains the actual code.
-            int subroutineBodyStartTokenIndex = parser.tokenIndex;
             BlockNode block = ParseBlock.parseBlock(parser);
-            block.setAnnotation("enclosingLexicalDeclarations", enclosingLexicalDeclarations);
-            block.setAnnotation("subroutineBodyStartTokenIndex", subroutineBodyStartTokenIndex);
-            block.setAnnotation("subroutineBodyEndTokenIndex", parser.tokenIndex);
             if (futureAsyncAwaitSub) {
                 block.setAnnotation("futureAsyncAwaitSub", true);
                 FutureAsyncAwaitParser.markFutureClass(block);
@@ -1438,31 +1419,15 @@ public class SubroutineParser {
         // This prevents hitting JVM's 255 constructor argument limit for named subs
         // in modules like Perl::Tidy that have 200+ lexicals in scope.
         Set<String> usedVars = null;
-        Set<String> declaredVarSet = new LinkedHashSet<>();
         {
             Set<String> usedVarSet = new HashSet<>();
+            Set<String> declaredVarSet = new LinkedHashSet<>();
             VariableCollectorVisitor collector =
                     new VariableCollectorVisitor(usedVarSet, declaredVarSet);
             block.accept(collector);
             placeholder.lexicalVariableNames = declaredVarSet;
             if (!collector.hasEvalString()) {
                 usedVars = usedVarSet;
-            }
-        }
-
-        // Classify body-owned declarations before selective capture skips
-        // them. A local declaration is normally not a free-variable use, so
-        // waiting until the capture loop would miss exactly the entries that
-        // must override an earlier tentative BEGIN classification.
-        Integer bodyStart = (Integer) block.getAnnotation("subroutineBodyStartTokenIndex");
-        Integer bodyEnd = (Integer) block.getAnnotation("subroutineBodyEndTokenIndex");
-        for (SymbolTable.SymbolEntry entry : outerVars.values()) {
-            OperatorNode ast = entry.ast();
-            boolean declaredInBody = ast != null && bodyStart != null && bodyEnd != null
-                    && ast.tokenIndex >= bodyStart && ast.tokenIndex <= bodyEnd;
-            if (ast != null && (declaredVarSet.contains(entry.name()) || declaredInBody)) {
-                RuntimeCode.subroutineLocalDeclarationNodes.add(ast);
-                RuntimeCode.persistentDeclarationIds.remove(ast);
             }
         }
 
@@ -1519,30 +1484,6 @@ public class SubroutineParser {
                         beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
                                 ast,
                                 k -> EmitterMethodCreator.classCounter++);
-                    }
-                    // The parser's symbol table can still contain lexicals
-                    // declared while parsing this body. They may remain in the
-                    // lazy compiler snapshot, but their declaration must create
-                    // a fresh cell on every invocation. Only declaration nodes
-                    // that existed before parsing the body are enclosing
-                    // lexicals recovered from compile-time storage.
-                    @SuppressWarnings("unchecked")
-                    Set<OperatorNode> enclosingDeclarations =
-                            (Set<OperatorNode>) block.getAnnotation("enclosingLexicalDeclarations");
-                    boolean declaredInBody = ast != null && bodyStart != null && bodyEnd != null
-                            && ast.tokenIndex >= bodyStart && ast.tokenIndex <= bodyEnd;
-                    boolean isSubroutineLocal = declaredVarSet.contains(entry.name())
-                            || declaredInBody;
-                    if (isSubroutineLocal && ast != null) {
-                        RuntimeCode.subroutineLocalDeclarationNodes.add(ast);
-                        // A BEGIN block encountered while parsing this body may
-                        // already have tentatively classified the shared symbol
-                        // table entry as persistent. The completed body gives
-                        // us the authoritative lexical ownership information.
-                        RuntimeCode.persistentDeclarationIds.remove(ast);
-                    } else if (enclosingDeclarations != null
-                            && enclosingDeclarations.contains(ast)) {
-                        RuntimeCode.persistentDeclarationIds.putIfAbsent(ast, beginId);
                     }
                     variableName = NameNormalizer.normalizeVariableName(
                             entry.name().substring(1),

@@ -55,18 +55,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
 
     public static final IdentityHashMap<OperatorNode, Integer> evalBeginIds = new IdentityHashMap<>();
-    /**
-     * Declaration nodes whose lexical storage must be recovered from a
-     * compile-time BEGIN capture. Kept separate from {@link #evalBeginIds}:
-     * runtime eval aliases also need a stable package id, but must not turn a
-     * subroutine-local {@code my} into process-persistent storage.
-     */
-    public static final IdentityHashMap<OperatorNode, Integer> persistentDeclarationIds =
-            new IdentityHashMap<>();
-    /** Declaration nodes owned by subroutine bodies, even when a source filter
-     * leaves them visible in the parser's shared symbol table. */
-    public static final Set<OperatorNode> subroutineLocalDeclarationNodes =
-            Collections.newSetFromMap(new IdentityHashMap<>());
 
     /**
      * Flag to control whether eval STRING should use the interpreter backend.
