@@ -749,10 +749,12 @@ imports:
   # CPAN.pm - Main CPAN client
   - source: perl5/cpan/CPAN/lib/CPAN.pm
     target: src/main/perl/lib/CPAN.pm
+    patch: CPAN.pm.patch
 
   # App::Cpan - Command-line interface for CPAN.pm (used by jcpan)
   - source: perl5/cpan/CPAN/lib/App/Cpan.pm
     target: src/main/perl/lib/App/Cpan.pm
+    patch: App-Cpan.pm.patch
 
   # autouse - Postpone loading of modules until a function is used
   - source: perl5/dist/autouse/lib/autouse.pm
@@ -784,6 +786,16 @@ imports:
   - source: perl5/cpan/CPAN/lib/CPAN/HandleConfig.pm
     target: src/main/perl/lib/CPAN/HandleConfig.pm
     patch: CPAN-HandleConfig.pm.patch
+
+  - source: perl5/cpan/CPAN/lib/CPAN/Index.pm
+    target: src/main/perl/lib/CPAN/Index.pm
+    patch: CPAN-Index.pm.patch
+    protected: true
+
+  - source: perl5/cpan/CPAN/lib/CPAN/Shell.pm
+    target: src/main/perl/lib/CPAN/Shell.pm
+    patch: CPAN-Shell.pm.patch
+    protected: true
 
   # CPAN::Meta - Metadata handling for CPAN distributions
   - source: perl5/cpan/CPAN-Meta/lib/CPAN/Meta.pm

@@ -1,12 +1,32 @@
---- perl5/cpan/CPAN/lib/CPAN/HandleConfig.pm
-+++ src/main/perl/lib/CPAN/HandleConfig.pm
-@@ -546,8 +546,11 @@
+--- perl5/cpan/CPAN/lib/CPAN/HandleConfig.pm	2026-04-10 11:04:21
++++ src/main/perl/lib/CPAN/HandleConfig.pm	2026-08-10 10:13:33
+@@ -137,6 +137,7 @@
+      "make",
+      "make_install_make_command",
+      "prefer_installer",
++     "recommends_policy",
+      "test_report",
+     );
+ 
+@@ -527,6 +528,11 @@
+ 
+ # prioritized list of possible places for finding "CPAN/MyConfig.pm"
+ sub cpan_home_dir_candidates {
++    if (defined $ENV{PERLONJAVA_HOME} && length $ENV{PERLONJAVA_HOME}) {
++        my $dir = File::Spec->catdir($ENV{PERLONJAVA_HOME}, 'cpan');
++        return wantarray ? ($dir) : $dir;
++    }
++
+     my @dirs;
+     my $old_v = $CPAN::Config->{load_module_verbosity};
+     $CPAN::Config->{load_module_verbosity} = q[none];
+@@ -546,8 +552,11 @@
      push @dirs, $ENV{USERPROFILE} if $ENV{USERPROFILE};
  
      $CPAN::Config->{load_module_verbosity} = $old_v;
 -    my $dotcpan = $^O eq 'VMS' ? '_cpan' : '.cpan';
 -    @dirs = map { File::Spec->catdir($_, $dotcpan) } grep { defined } @dirs;
-+    # PerlOnJava uses ~/.perlonjava/cpan as its CPAN home to stay separate
++    # PerlOnJava uses ~/.perlonjava/cpan as its default CPAN home to stay separate
 +    # from the user's system CPAN (~/.cpan), which would otherwise override
 +    # our prefs_dir and other PerlOnJava-specific defaults.
 +    my @suffix = $^O eq 'VMS' ? ('_cpan') : ('.perlonjava', 'cpan');

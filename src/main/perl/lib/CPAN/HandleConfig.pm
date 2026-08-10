@@ -137,6 +137,7 @@ my %prefssupport = map { $_ => 1 }
      "make",
      "make_install_make_command",
      "prefer_installer",
+     "recommends_policy",
      "test_report",
     );
 
@@ -527,6 +528,11 @@ sub _try_loading {
 
 # prioritized list of possible places for finding "CPAN/MyConfig.pm"
 sub cpan_home_dir_candidates {
+    if (defined $ENV{PERLONJAVA_HOME} && length $ENV{PERLONJAVA_HOME}) {
+        my $dir = File::Spec->catdir($ENV{PERLONJAVA_HOME}, 'cpan');
+        return wantarray ? ($dir) : $dir;
+    }
+
     my @dirs;
     my $old_v = $CPAN::Config->{load_module_verbosity};
     $CPAN::Config->{load_module_verbosity} = q[none];
@@ -546,7 +552,7 @@ sub cpan_home_dir_candidates {
     push @dirs, $ENV{USERPROFILE} if $ENV{USERPROFILE};
 
     $CPAN::Config->{load_module_verbosity} = $old_v;
-    # PerlOnJava uses ~/.perlonjava/cpan as its CPAN home to stay separate
+    # PerlOnJava uses ~/.perlonjava/cpan as its default CPAN home to stay separate
     # from the user's system CPAN (~/.cpan), which would otherwise override
     # our prefs_dir and other PerlOnJava-specific defaults.
     my @suffix = $^O eq 'VMS' ? ('_cpan') : ('.perlonjava', 'cpan');
