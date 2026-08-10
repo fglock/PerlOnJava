@@ -703,13 +703,6 @@ sub all_objects {
     CPAN::HandleConfig->load unless $CPAN::Config_loaded++;
     CPAN->debug("mgr[$mgr] class[$class]") if $CPAN::DEBUG;
     CPAN::Index->reload;
-    # Metadata caches can contain hundreds of thousands of entries.  Keep
-    # startup cheap by creating their mutable session wrappers only when a
-    # command really asks to enumerate the whole class.
-    for my $id (keys %{ $META->{readonly}{$class} || {} }) {
-        $META->{readwrite}{$class}{$id} ||=
-            $class->new(ID => $id, RO => $META->{readonly}{$class}{$id});
-    }
     values %{ $META->{readwrite}{$class} }; # unsafe meta access, ok
 }
 
@@ -1327,9 +1320,7 @@ sub instance {
     $id ||= "";
     # unsafe meta access, ok?
     return $META->{readwrite}{$class}{$id} if exists $META->{readwrite}{$class}{$id};
-    my $ro = $META->{readonly}{$class}{$id};
-    $META->{readwrite}{$class}{$id} ||=
-        $class->new(ID => $id, defined($ro) ? (RO => $ro) : ());
+    $META->{readwrite}{$class}{$id} ||= $class->new(ID => $id);
 }
 
 #-> sub CPAN::new ;
@@ -1450,10 +1441,7 @@ sub _list_sorted_descending_is_tested {
     if ($foul) {
         $CPAN::Frontend->mywarn("Lost build_dir detected ($foul), giving up all cached test results of currently running session.\n");
         for my $dbd (sort keys %{$self->{is_tested}}) { # distro-build-dir
-        # build_dir and test state exist only on mutable objects touched in
-        # this session; cached read-only distributions cannot match here.
-        SEARCH: for my $d (sort { $a->id cmp $b->id }
-                              values %{ $CPAN::META->{readwrite}{'CPAN::Distribution'} || {} }) {
+        SEARCH: for my $d (sort { $a->id cmp $b->id } $CPAN::META->all_objects("CPAN::Distribution")) {
                 if ($d->{build_dir} && $d->{build_dir} eq $dbd) {
                     $CPAN::Frontend->mywarn(sprintf "Flushing cache for %s\n", $d->pretty_id);
                     $d->fforce("");

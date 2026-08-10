@@ -1111,11 +1111,7 @@ sub failed {
 sub find_failed {
     my($self,$only_id) = @_;
     my @failed;
-  # Failure status is session state.  Iterating the mutable objects is both
-  # sufficient and avoids inflating the complete cached distribution index
-  # merely to print the command summary.
-  DIST: for my $d (sort { $a->id cmp $b->id }
-                         values %{ $CPAN::META->{readwrite}{'CPAN::Distribution'} || {} }) {
+  DIST: for my $d (sort { $a->id cmp $b->id } $CPAN::META->all_objects("CPAN::Distribution")) {
         my $failed = "";
       NAY: for my $nosayer ( # order matters!
                             "unwrapped",

@@ -597,11 +597,11 @@ sub read_metadata_cache {
     while(my($class,$v) = each %$cache) {
         next unless $class =~ /^CPAN::/;
         $CPAN::META->{readonly}{$class} = $v; # unsafe meta access, ok
-        # Mutable CPAN objects are created lazily by CPAN::instance (or in
-        # bulk by CPAN::all_objects).  Eagerly blessing every cached module,
-        # distribution, and author makes a normal jcpan invocation spend
-        # minutes allocating objects it will never use.
-        $idcnt += scalar keys %$v;
+        while (my($id,$ro) = each %$v) {
+            $CPAN::META->{readwrite}{$class}{$id} ||=
+                $class->new(ID=>$id, RO=>$ro);
+            $idcnt++;
+        }
         $clcnt++;
     }
     unless ($clcnt) { # sanity check
