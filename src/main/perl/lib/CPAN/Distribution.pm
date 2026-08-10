@@ -2498,8 +2498,11 @@ sub _try_perlonjava_fallback_pl {
 
     $CPAN::Frontend->myprint("PerlOnJava: Generating fallback Makefile.PL for $module_name $version\n");
 
-    # Write fallback Makefile.PL
-    if (open my $fh, '>', 'Makefile.PL') {
+    # Do not overwrite the distribution's Makefile.PL.  Generated compatibility
+    # files are commonly shipped read-only (Module::Build::Compat does this),
+    # which used to make this fallback silently fail after announcing it.
+    my $fallback_pl = '.perlonjava-fallback-Makefile.PL';
+    if (open my $fh, '>', $fallback_pl) {
         print $fh $self->_perlonjava_fallback_makefile_pl($args);
         close $fh;
     } else {
@@ -2513,7 +2516,7 @@ sub _try_perlonjava_fallback_pl {
     # target even when the module's .pm is already bundled in the PerlOnJava
     # JAR (otherwise MakeMaker emits a no-op skip message as the test target).
     local $ENV{JCPAN_RUN_BUNDLED_TESTS} = 1;
-    my $ret = system($^X, 'Makefile.PL');
+    my $ret = system($^X, $fallback_pl);
     return 0 if $ret != 0;
     return -f "Makefile" ? 1 : 0;
 }

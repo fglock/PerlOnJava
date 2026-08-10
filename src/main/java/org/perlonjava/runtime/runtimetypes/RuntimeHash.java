@@ -139,7 +139,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
     }
 
-    private boolean isPackageRootedHash() {
+    boolean isPackageRootedHash() {
         return isPackageGlobalRoot || isGlobalPackageHash;
     }
 

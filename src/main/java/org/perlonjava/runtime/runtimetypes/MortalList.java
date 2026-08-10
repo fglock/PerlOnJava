@@ -1185,7 +1185,13 @@ public class MortalList {
     }
 
     private static void maybeAutoSweepAtStatementBoundary(boolean topLevel) {
-        if (!targetedWeakSweepReferents.isEmpty()) {
+        // RuntimeScalar.setLargeRefCounted() flushes while protecting the old
+        // and new values as temporary roots.  That is an assignment-internal
+        // flush, not a safe Perl statement boundary.  Defer targeted sweeps
+        // until the emitted boundary flush after those roots are removed;
+        // otherwise every assignment of a DESTROY-able object performs a full
+        // root walk when any weak reference exists anywhere in the program.
+        if (!targetedWeakSweepReferents.isEmpty() && !hasTemporaryRoots()) {
             Set<RuntimeBase> targets = Collections.newSetFromMap(new IdentityHashMap<>());
             targets.addAll(targetedWeakSweepReferents);
             targetedWeakSweepReferents.clear();

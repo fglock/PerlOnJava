@@ -1706,8 +1706,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         //   $source->{schema} = $self  (overwriting weak ref with strong ref)
         // But avoids false positives from:
         //   my $self = shift  (new local variable, oldBase is null)
-        if (DestroyDispatch.currentDestroyTarget != null
+        if (thisWasWeak
+                && DestroyDispatch.currentDestroyTarget != null
                 && oldBase == DestroyDispatch.currentDestroyTarget
+                // Package weak maps (PPI's global parent indexes are the
+                // common case) may briefly replace/reuse an entry while its
+                // target is being destroyed.  That is handled by the normal
+                // refCount>0 resurrection path below; the special rescued-
+                // object lifecycle is only for an owning aggregate such as a
+                // DBIC ResultSource saving its Schema through a weak slot.
+                && containerOwner != null
+                && !(containerOwner instanceof RuntimeHash owner
+                    && owner.isPackageRootedHash())
                 && this.value instanceof RuntimeBase base
                 && base == DestroyDispatch.currentDestroyTarget) {
             DestroyDispatch.destroyTargetRescued = true;
@@ -1877,7 +1887,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // DESTROY, clear weak refs reachable from it now so DBIC-style callbacks
         // observe that the user's schema lexical is gone. Do not drain all
         // rescued objects here; DBIC can have other live schemas pending.
-        if (shouldClearRescuedAfterUndefAssignment && !ModuleInitGuard.inModuleInit()) {
+        if (shouldClearRescuedAfterUndefAssignment
+                && DestroyDispatch.isRescued(oldBase)
+                && !ModuleInitGuard.inModuleInit()) {
             boolean externallyReachable =
                     ReachabilityWalker.isReachableFromExternalRootExcludingRescued(oldBase);
             if (System.getenv("JPERL_PHASE_D_DBG") != null) {
