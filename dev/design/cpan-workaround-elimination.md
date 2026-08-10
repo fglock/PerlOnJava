@@ -268,7 +268,8 @@ The implementation PR is ready for review only when:
 
 ## Implementation status
 
-Current phase: implementation complete; CI validation pending.
+Current status: complete. PR #895 merged on 2026-08-10 after the required
+Ubuntu and Windows CI jobs passed.
 
 ### Phase checklist
 
@@ -284,14 +285,18 @@ Current phase: implementation complete; CI validation pending.
 
 ### Next steps
 
-1. Validate the completed PR on required Ubuntu and Windows CI before declaring
-   it ready to merge.
-2. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
+1. Keep Object::InsideOut/Logger::Simple, ExtUtils::ParseXS, Regexp::Common's
    executable conditional, and Type::Tiny's
    executable `(?{...})`/`(??{...})` paths under explicit capability policy
    until the compiler/runtime callback interface is designed.
+2. Treat that callback interface as a separate follow-up project; it is not a
+   blocker for the completed workaround-elimination phases.
 
 ### Completed phase deliverables
+
+- Final validation: PR #895 passed the `ubuntu-latest` and `windows-latest`
+  Java CI jobs and merged as `cc559b7b1c66c9dc04a909db815fe948a2f05b82`
+  on 2026-08-10.
 
 - Phase 1 implements bytes-mode replacement on the original scalar for JVM and
   interpreter execution, including `/r`, aggregate lvalues, tied scalars, and
