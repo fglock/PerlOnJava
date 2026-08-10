@@ -54,7 +54,7 @@ public class EmitOperatorNode {
             case "our", "state", "my" -> EmitVariable.handleMyOperator(emitterVisitor, node);
 
             // Control flow
-            case "next", "redo", "last" -> EmitControlFlow.handleNextOperator(emitterVisitor.ctx, node);
+            case "next", "redo", "last" -> EmitControlFlow.handleNextOperator(emitterVisitor, node);
             case "return" -> EmitControlFlow.handleReturnOperator(emitterVisitor, node);
             case "goto" -> EmitControlFlow.handleGotoLabel(emitterVisitor, node);
 

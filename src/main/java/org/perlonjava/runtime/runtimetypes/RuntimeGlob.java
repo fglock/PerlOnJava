@@ -410,6 +410,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `*foo = \%bar` creates an alias - both names refer to the same hash
                 // Also update all glob aliases
                 if (value.value instanceof RuntimeHash hash) {
+                    if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
+                        hash.taintEnvironmentAliasDescription = "another variable";
+                    }
                     GlobalVariable.markPackageGlobalRoot(hash);
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
                         GlobalVariable.globalHashes.put(aliasedName, hash);
@@ -654,6 +657,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 || globName.endsWith("::");
         if (sourceHasHash) {
             RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
+            if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
+                String sourceName = globName.startsWith("main::")
+                        ? globName.substring(6) : globName;
+                sourceHash.taintEnvironmentAliasDescription = "%" + sourceName;
+            }
             GlobalVariable.markPackageGlobalRoot(sourceHash);
             GlobalVariable.globalHashes.put(this.globName, sourceHash);
             GlobalVariable.invalidatePackageRootSnapshot();

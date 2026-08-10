@@ -185,12 +185,9 @@ public class EvalStringHandler {
                                              int siteStrictOptions,
                                              int siteFeatureFlags,
                                              boolean isEvalbytes) {
-        try {
-            RuntimeCode.rejectTaintedEval(codeScalar);
-        } catch (PerlCompilerException e) {
-            WarnDie.catchEval(e);
-            return new RuntimeList(new RuntimeScalar());
-        }
+        // The eval whose source is tainted cannot catch its own security error.
+        // Let an enclosing eval block handle it, matching the JVM backend and Perl.
+        RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, isEvalbytes);
     }

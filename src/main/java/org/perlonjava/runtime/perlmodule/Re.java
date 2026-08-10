@@ -166,6 +166,8 @@ public class Re extends PerlModuleBase {
                 Warnings.warningManager.enableWarning("experimental::vlb");
             } else if (opt.equalsIgnoreCase("eval")) {
                 symbolTable.enableStrictOption(Strict.HINT_RE_EVAL);
+            } else if (opt.equalsIgnoreCase("taint")) {
+                symbolTable.enableStrictOption(Strict.HINT_RE_TAINT);
             } else if (opt.equals("/a")) {
                 // use re '/a' - ASCII-restrict regex character classes
                 symbolTable.enableStrictOption(Strict.HINT_RE_ASCII);
@@ -199,6 +201,8 @@ public class Re extends PerlModuleBase {
                 Warnings.warningManager.disableWarning("experimental::vlb");
             } else if (opt.equalsIgnoreCase("eval")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_EVAL);
+            } else if (opt.equalsIgnoreCase("taint")) {
+                symbolTable.disableStrictOption(Strict.HINT_RE_TAINT);
             } else if (opt.equals("/a") || opt.equals("/aa")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
             } else if (opt.equals("/u")) {

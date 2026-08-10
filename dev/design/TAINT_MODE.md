@@ -6,11 +6,30 @@ Perl's taint mode (`-T` flag) tracks data from external sources (environment var
 
 ## Requirements
 
-1. **No extra storage for normal scalars** - RuntimeScalar size must not increase
-2. **No extra runtime checks for normal scalars** - Only tainted scalars incur overhead
-3. **Gradual implementation** - Each phase delivers working functionality
+1. **Low overhead** - Taint metadata is a single boolean on `RuntimeScalar`
+2. **Centralized policy** - Sources, propagation, and dangerous-operation checks use shared helpers
+3. **Backend parity** - JVM and interpreter execution must preserve the same taint metadata
+4. **Gradual implementation** - Each phase delivers tested functionality
 
-## Design: TAINTED Type (Wrapper Pattern)
+## Design: Scalar Taint Flag
+
+> **Decision (2026-08-09):** The wrapper proposal below was superseded by the
+> field-based implementation already present in the runtime. A wrapper adds a
+> new scalar type that every value-access fast path must understand; the boolean
+> flag composes with tied, read-only, special-variable, and reference scalars
+> without changing their existing type.
+
+`RuntimeScalar` owns a `boolean tainted` field. Copies and assignments preserve
+the flag, operations call `propagateTaint(...)`, and external sources call
+`taintFromExternalInput()`. `isTainted()` resolves special, tied, and read-only
+scalars before inspecting the flag. Security-sensitive operations call the
+central `RuntimeScalar.checkTaint(value, operation)` helper, which only enforces
+the flag when the current thread is running under `-T`.
+
+The original wrapper sketch is retained below as historical context, not as an
+implementation target.
+
+### Rejected Alternative: TAINTED Type (Wrapper Pattern)
 
 Add a `TAINTED` type to RuntimeScalarType, following the existing TIED_SCALAR pattern:
 
@@ -132,6 +151,11 @@ public String toString() {
 
 **Goal:** Add TAINTED type and basic taint detection.
 
+**Implemented differently:** source marking and detection use the scalar taint
+flag described above. `$^X`, `%ENV`, `@ARGV`, file reads, `read`, and directory
+reads are tainted while `-T` is active. `Scalar::Util::tainted()` and
+`builtin::is_tainted()` query `RuntimeScalar.isTainted()`.
+
 ### Changes
 
 1. **Add TAINTED constant to RuntimeScalarType.java:**
@@ -189,6 +213,11 @@ public String toString() {
 ## Phase 3: Taint Propagation
 
 **Goal:** Taint propagates through assignment and operations.
+
+**Implemented differently:** constructors and `set()` copy the boolean flag.
+Concatenation, interpolation/join, substring lvalues, the primary arithmetic
+operators and numeric functions, `length`, case conversion, `ord`, `oct`, and
+`hex` preserve taint. Further operator coverage remains an explicit audit item.
 
 ### Changes
 
@@ -280,7 +309,7 @@ public String toString() {
 ```java
 // Helper method
 public static void checkTaint(RuntimeScalar scalar, String operation) {
-    if (scalar.isTainted()) {
+    if (GlobalContext.isTaintModeActive() && scalar.isTainted()) {
         throw new PerlCompilerException(
             "Insecure dependency in " + operation + " while running with -T switch"
         );
@@ -321,6 +350,8 @@ RuntimeScalar capture = new RuntimeScalar(matchedText);
 // The captured value is untainted regardless of source
 ```
 
+This behavior is implemented and covered by the taint regression test.
+
 ---
 
 ## Files to Modify by Phase
@@ -351,37 +382,12 @@ RuntimeScalar capture = new RuntimeScalar(matchedText);
 
 ## Cleanup
 
-After implementing the TAINTED type approach:
-- Remove `RuntimeScalarTaint.java` (no longer needed)
-- Remove any WeakHashMap-based taint tracking code
+The rejected wrapper and WeakHashMap approaches were not introduced. There is
+no `RuntimeScalarTaint.java` cleanup required.
 
 ---
 
-## Progress Tracking
+## Implementation Tracking
 
-### Current Status: Phase 1 complete
-
-### Completed Phases
-
-- [x] **Phase 1: Minimal Fix for IPC::System::Simple** (2026-03-24)
-  - Modified `src/main/perl/lib/IPC/System/Simple.pm` `_check_taint()` to block ALL external commands when `${^TAINT}` is set
-  - Added `isTainted()` method to RuntimeScalar.java (returns false, ready for Phase 2)
-  - Updated `ScalarUtil.tainted()` to use `isTainted()` method
-  - **Bonus fix**: Reset `$?` to 0 before END blocks in SpecialBlock.java (Perl semantics) - this fixed spurious "Looks like your test exited with X" warnings from Test::Builder
-  - **Test results**: IPC::System::Simple 15/17 test programs pass, 169/181 subtests (93%)
-
-### Infrastructure Complete
-- [x] `-T` flag parsing
-- [x] `${^TAINT}` variable
-- [x] `isTainted()` method stub
-
-### Next Steps (Phase 2)
-1. Add TAINTED type constant to RuntimeScalarType.java
-2. Implement `taint()` and `getActualScalar()` methods
-3. Mark `$^X`, `%ENV`, `@ARGV` as tainted sources
-4. Update `tainted()` to return true for TAINTED type
-
-### Open Questions
-- Should @ARGV be tainted? (Yes in Perl)
-- Handle taint in hash/array element access?
-- Taint and references - should $$ref propagate taint?
+Implementation progress and test results are tracked in the commits and draft
+pull request rather than maintained as a second change log in this document.

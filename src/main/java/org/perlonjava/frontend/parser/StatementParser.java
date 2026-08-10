@@ -531,11 +531,29 @@ public class StatementParser {
         BlockNode whenBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // After a successful when match, Perl implicitly breaks out of the
-        // enclosing given block. Append `last;` to the when block so that
-        // execution leaves the surrounding bare-block (which acts as a
-        // single-iteration loop) once the matching block has run.
-        whenBlock.elements.add(new OperatorNode("last", new ListNode(index), index));
+        // After a successful match, Perl returns the value of the when block
+        // and implicitly leaves the enclosing given block. Keep the final
+        // expression attached to our synthetic last so the backends can carry
+        // that value across the control-flow jump instead of compiling it in
+        // void context and replacing it with undef.
+        Node whenResult = null;
+        for (int i = whenBlock.elements.size() - 1; i >= 0; i--) {
+            Node element = whenBlock.elements.get(i);
+            if (element != null) {
+                whenResult = element;
+                whenBlock.elements.remove(i);
+                break;
+            }
+        }
+        if (whenResult == null) {
+            whenResult = new OperatorNode("undef", new ListNode(index), index);
+        }
+        OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
+        implicitLast.setAnnotation("implicitGivenLast", true);
+        // Store the value out-of-band so generic visitors never mistake it for
+        // a user-written dynamic label expression on `last EXPR`.
+        implicitLast.setAnnotation("implicitGivenResult", whenResult);
+        whenBlock.elements.add(implicitLast);
 
         // Determine whether to smart-match against $_ or use the value directly.
         // Per perlsyn, when(EXPR) skips the implicit `$_ ~~` and uses EXPR
@@ -646,12 +664,13 @@ public class StatementParser {
         // Create the complete block: { $_ = EXPR; blockContent }
         List<Node> statements = new ArrayList<>();
 
-        // $_ = condition  (use proper $_ structure)
+        // local $_ = condition  (given dynamically localizes the topic)
         Node dollarUnderscore = new OperatorNode("$",
                 new IdentifierNode("_", index),
                 index);
+        Node localTopic = new OperatorNode("local", dollarUnderscore, index);
         statements.add(new BinaryOperatorNode("=",
-                dollarUnderscore,
+                localTopic,
                 condition,
                 index));
 

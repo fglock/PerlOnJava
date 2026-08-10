@@ -22,6 +22,7 @@ import static org.perlonjava.runtime.operators.UmaskOperator.applyUmask;
 public class Directory {
 
     public static RuntimeScalar chdir(RuntimeScalar runtimeScalar) {
+        RuntimeScalar.checkTaint(runtimeScalar, "chdir");
         //    chdir EXPR
         //    chdir FILEHANDLE
         //    chdir DIRHANDLE
@@ -109,6 +110,7 @@ public class Directory {
     }
 
     public static RuntimeScalar rmdir(RuntimeScalar runtimeScalar) {
+        RuntimeScalar.checkTaint(runtimeScalar, "rmdir");
         String dirName = runtimeScalar.toString();
 
         try {
@@ -238,6 +240,11 @@ public class Directory {
     }
 
     public static RuntimeScalar mkdir(RuntimeList args) {
+        if (!args.elements.isEmpty()) {
+            RuntimeScalar.checkTaint(args.elements.getFirst().scalar(), "mkdir");
+        } else {
+            RuntimeScalar.checkTaint(getGlobalVariable("main::_"), "mkdir");
+        }
         String fileName;
         int mode;
 

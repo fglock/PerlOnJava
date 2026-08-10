@@ -31,6 +31,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the length of the input as an integer
      */
     public static RuntimeScalar length(RuntimeScalar runtimeScalar) {
+        return lengthUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar lengthUnpropagated(RuntimeScalar runtimeScalar) {
         // If the scalar is undefined, return undef
         if (!runtimeScalar.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
@@ -48,6 +52,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the byte length of the input
      */
     public static RuntimeScalar lengthBytes(RuntimeScalar runtimeScalar) {
+        return lengthBytesUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar lengthBytesUnpropagated(RuntimeScalar runtimeScalar) {
         // If the scalar is undefined, return undef
         if (!runtimeScalar.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
@@ -174,6 +182,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the case-folded string
      */
     public static RuntimeScalar fc(RuntimeScalar runtimeScalar) {
+        return fcUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar fcUnpropagated(RuntimeScalar runtimeScalar) {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return caseFoldBytesAsciiOnly(runtimeScalar);
         }
@@ -185,6 +197,10 @@ public class StringOperators {
      * This is used under the unicode_strings feature.
      */
     public static RuntimeScalar fcUnicode(RuntimeScalar runtimeScalar) {
+        return fcUnicodeUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar fcUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         // Perform full Unicode case folding using ICU4J CaseMap
         // Note: We do NOT use NFKC normalization because Perl's fc() preserves
@@ -203,6 +219,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the case-folded bytes
      */
     public static RuntimeScalar fcBytes(RuntimeScalar runtimeScalar) {
+        return fcBytesUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar fcBytesUnpropagated(RuntimeScalar runtimeScalar) {
         // Under 'use bytes', we operate on the UTF-8 bytes of the input
         RuntimeScalar asBytes = toUtf8Bytes(runtimeScalar);
         // Case-fold only ASCII bytes (A-Z -> a-z), leave others unchanged
@@ -217,6 +237,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the lowercase string
      */
     public static RuntimeScalar lc(RuntimeScalar runtimeScalar) {
+        return lcUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar lcUnpropagated(RuntimeScalar runtimeScalar) {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return caseFoldBytesAsciiOnly(runtimeScalar);
         }
@@ -228,6 +252,10 @@ public class StringOperators {
      * This is used under the unicode_strings feature.
      */
     public static RuntimeScalar lcUnicode(RuntimeScalar runtimeScalar) {
+        return lcUnicodeUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar lcUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
         // Convert the string to lowercase using ICU4J for proper Unicode handling
         String str = UCharacter.toLowerCase(runtimeScalar.toString());
         return makeStringResult(str, runtimeScalar);
@@ -238,6 +266,10 @@ public class StringOperators {
      * Operates on the UTF-8 bytes of the input, only affecting ASCII.
      */
     public static RuntimeScalar lcBytes(RuntimeScalar runtimeScalar) {
+        return lcBytesUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar lcBytesUnpropagated(RuntimeScalar runtimeScalar) {
         RuntimeScalar asBytes = toUtf8Bytes(runtimeScalar);
         return caseFoldBytesAsciiOnly(asBytes);
     }
@@ -250,6 +282,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the first character in lowercase
      */
     public static RuntimeScalar lcfirst(RuntimeScalar runtimeScalar) {
+        return lcfirstUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar lcfirstUnpropagated(RuntimeScalar runtimeScalar) {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return lcfirstBytes(runtimeScalar);
         }
@@ -261,6 +297,10 @@ public class StringOperators {
      * This is used under the unicode_strings feature.
      */
     public static RuntimeScalar lcfirstUnicode(RuntimeScalar runtimeScalar) {
+        return lcfirstUnicodeUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar lcfirstUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         // Check if the string is empty
         if (str.isEmpty()) {
@@ -283,6 +323,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the uppercase string
      */
     public static RuntimeScalar uc(RuntimeScalar runtimeScalar) {
+        return ucUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar ucUnpropagated(RuntimeScalar runtimeScalar) {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return uppercaseBytesAsciiOnly(runtimeScalar);
         }
@@ -294,6 +338,10 @@ public class StringOperators {
      * This is used under the unicode_strings feature.
      */
     public static RuntimeScalar ucUnicode(RuntimeScalar runtimeScalar) {
+        return ucUnicodeUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar ucUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
         // Convert the string to uppercase using ICU4J for proper Unicode handling
         String str = UCharacter.toUpperCase(runtimeScalar.toString());
         return makeStringResult(str, runtimeScalar);
@@ -308,6 +356,10 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the first character in titlecase
      */
     public static RuntimeScalar ucfirst(RuntimeScalar runtimeScalar) {
+        return ucfirstUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar ucfirstUnpropagated(RuntimeScalar runtimeScalar) {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return ucfirstBytes(runtimeScalar);
         }
@@ -319,6 +371,10 @@ public class StringOperators {
      * This is used under the unicode_strings feature.
      */
     public static RuntimeScalar ucfirstUnicode(RuntimeScalar runtimeScalar) {
+        return ucfirstUnicodeUnpropagated(runtimeScalar).propagateTaint(runtimeScalar);
+    }
+
+    private static RuntimeScalar ucfirstUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         // Check if the string is empty
         if (str.isEmpty()) {
@@ -351,6 +407,11 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the index of the first occurrence, or -1 if not found
      */
     public static RuntimeScalar index(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {
+        return indexUnpropagated(runtimeScalar, substr, position)
+                .propagateTaint(runtimeScalar, substr, position);
+    }
+
+    private static RuntimeScalar indexUnpropagated(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {
         String str = runtimeScalar.toString();
         String sub = substr.toString();
         int pos = position.type == RuntimeScalarType.UNDEF
@@ -392,6 +453,11 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} containing the index of the last occurrence, or -1 if not found
      */
     public static RuntimeScalar rindex(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {
+        return rindexUnpropagated(runtimeScalar, substr, position)
+                .propagateTaint(runtimeScalar, substr, position);
+    }
+
+    private static RuntimeScalar rindexUnpropagated(RuntimeScalar runtimeScalar, RuntimeScalar substr, RuntimeScalar position) {
         String str = runtimeScalar.toString();
         String sub = substr.toString();
         int pos = position.type == RuntimeScalarType.UNDEF
@@ -431,8 +497,8 @@ public class StringOperators {
         RuntimeScalar overloaded = tryStringConcatOverload(runtimeScalar, b);
         if (overloaded != null) return overloaded;
 
-        RuntimeScalar aResolved = resolveTiedStringOperand(runtimeScalar);
-        RuntimeScalar bResolved = resolveTiedStringOperand(b);
+        RuntimeScalar aResolved = stringifyForStringContext(resolveTiedStringOperand(runtimeScalar));
+        RuntimeScalar bResolved = stringifyForStringContext(resolveTiedStringOperand(b));
         String bStr = bResolved.toString();
         String aStr = aResolved.toString();
 
@@ -481,9 +547,12 @@ public class StringOperators {
 
     private static RuntimeScalar propagateTaint(RuntimeScalar result, RuntimeScalar... inputs) {
         for (RuntimeScalar input : inputs) {
+            if (input != null && input.formatPictureTainted) {
+                result.formatPictureTainted = true;
+                result.tainted = true;
+            }
             if (input != null && input.isTainted()) {
                 result.tainted = true;
-                break;
             }
         }
         return result;
@@ -503,9 +572,9 @@ public class StringOperators {
         // For tied variables, we must only FETCH once, then use the result for both
         // the definedness check and the actual concatenation.
         // First, resolve tied variables to get their actual values (triggers FETCH once per tied var)
-        RuntimeScalar aResolved = (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) 
+        RuntimeScalar aResolved = (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR)
                 ? runtimeScalar.tiedFetch() : runtimeScalar;
-        RuntimeScalar bResolved = (b.type == RuntimeScalarType.TIED_SCALAR) 
+        RuntimeScalar bResolved = (b.type == RuntimeScalarType.TIED_SCALAR)
                 ? b.tiedFetch() : b;
         
         // Now check definedness on the resolved values (no additional FETCH)
@@ -516,6 +585,9 @@ public class StringOperators {
 
         RuntimeScalar overloaded = tryStringConcatOverload(aResolved, bResolved);
         if (overloaded != null) return overloaded;
+
+        aResolved = stringifyForStringContext(aResolved);
+        bResolved = stringifyForStringContext(bResolved);
         
         // Get string values from resolved scalars
         String aStr = aResolved.toString();
@@ -726,6 +798,11 @@ public class StringOperators {
         return joinInternal(runtimeScalar, list, true, false);
     }
 
+    private static RuntimeScalar recordJoinTaint(RuntimeScalar result) {
+        GlobalContext.setThreadJoinTaint(result.isTainted());
+        return result;
+    }
+
     /**
      * Internal join implementation with optional warning control.
      * Used for both explicit join() calls and string interpolation.
@@ -754,7 +831,7 @@ public class StringOperators {
                 WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
-            return new RuntimeScalar("");
+            return recordJoinTaint(new RuntimeScalar(""));
         }
 
         // Fast path: 1 element -> return that element (no separator evaluation needed)
@@ -767,13 +844,13 @@ public class StringOperators {
                 WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
-            RuntimeScalar resolved = resolveTiedStringOperand(scalar);
+            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
             RuntimeScalar res = new RuntimeScalar(resolved.toString());
             if (resolved.type != RuntimeScalarType.STRING) {
                 res.type = BYTE_STRING;
             }
             res.tainted = resolved.isTainted();
-            return res;
+            return recordJoinTaint(res);
         }
 
         // 2+ elements: evaluate the separator
@@ -782,7 +859,7 @@ public class StringOperators {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
-        RuntimeScalar separatorResolved = resolveTiedStringOperand(runtimeScalar);
+        RuntimeScalar separatorResolved = stringifyForStringContext(resolveTiedStringOperand(runtimeScalar));
         String delimiter = separatorResolved.toString();
 
         // In Perl, join produces a byte-string unless one of the inputs has
@@ -807,7 +884,7 @@ public class StringOperators {
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
 
-            RuntimeScalar resolved = resolveTiedStringOperand(scalar);
+            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
             if (resolved.type == RuntimeScalarType.STRING) {
                 hasUtf8 = true;
             }
@@ -819,7 +896,11 @@ public class StringOperators {
             res.type = BYTE_STRING;
         }
         res.tainted = tainted;
-        return res;
+        return recordJoinTaint(res);
+    }
+
+    private static RuntimeScalar stringifyForStringContext(RuntimeScalar scalar) {
+        return RuntimeScalarType.blessedId(scalar) != 0 ? Overload.stringify(scalar) : scalar;
     }
 
     /**

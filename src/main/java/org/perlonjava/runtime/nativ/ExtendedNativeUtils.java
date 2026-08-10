@@ -55,28 +55,28 @@ public class ExtendedNativeUtils extends NativeUtils {
             String shell = pw.shell();
             long expire = pw.expire();
             RuntimeArray.push(result, new RuntimeScalar(name));
-            RuntimeArray.push(result, new RuntimeScalar(passwd));
+            RuntimeArray.push(result, new RuntimeScalar(passwd).taintFromExternalInput());
             RuntimeArray.push(result, new RuntimeScalar(uid));
             RuntimeArray.push(result, new RuntimeScalar(gid));
             RuntimeArray.push(result, new RuntimeScalar(change));
             RuntimeArray.push(result, new RuntimeScalar(""));
-            RuntimeArray.push(result, new RuntimeScalar(gecos));
+            RuntimeArray.push(result, new RuntimeScalar(gecos).taintFromExternalInput());
             RuntimeArray.push(result, new RuntimeScalar(dir));
-            RuntimeArray.push(result, new RuntimeScalar(shell));
+            RuntimeArray.push(result, new RuntimeScalar(shell).taintFromExternalInput());
             RuntimeArray.push(result, new RuntimeScalar(expire));
         } else {
             String gecos = pw.gecos();
             String dir = pw.dir();
             String shell = pw.shell();
             RuntimeArray.push(result, new RuntimeScalar(name));
-            RuntimeArray.push(result, new RuntimeScalar(passwd));
+            RuntimeArray.push(result, new RuntimeScalar(passwd).taintFromExternalInput());
             RuntimeArray.push(result, new RuntimeScalar(uid));
             RuntimeArray.push(result, new RuntimeScalar(gid));
             RuntimeArray.push(result, new RuntimeScalar(""));
             RuntimeArray.push(result, new RuntimeScalar(""));
-            RuntimeArray.push(result, new RuntimeScalar(gecos));
+            RuntimeArray.push(result, new RuntimeScalar(gecos).taintFromExternalInput());
             RuntimeArray.push(result, new RuntimeScalar(dir));
-            RuntimeArray.push(result, new RuntimeScalar(shell));
+            RuntimeArray.push(result, new RuntimeScalar(shell).taintFromExternalInput());
             RuntimeArray.push(result, new RuntimeScalar(""));
         }
         return result.getList();

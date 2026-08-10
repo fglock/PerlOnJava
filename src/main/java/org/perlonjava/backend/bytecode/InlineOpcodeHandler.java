@@ -44,12 +44,7 @@ public class InlineOpcodeHandler {
         }
         if (val instanceof ScalarSpecialVariable sv) {
             RuntimeScalar src = sv.getValueAsScalar();
-            RuntimeScalar copy = new RuntimeScalar();
-            copy.type = src.type;
-            copy.value = src.value;
-            copy.numericLiteralText = src.numericLiteralText;
-            copy.numericContextSeen = src.numericContextSeen;
-            return copy;
+            return new RuntimeScalar(src);
         }
         return (RuntimeScalar) val;
     }
@@ -541,7 +536,7 @@ public class InlineOpcodeHandler {
         RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
 
         if (arrayBase instanceof RuntimeArray arr) {
-            registers[rd] = arr.get(idx.getInt());
+            registers[rd] = arr.get(idx);
         } else if (arrayBase instanceof RuntimeList list) {
             int index = idx.getInt();
             if (index < 0) index = list.elements.size() + index;
@@ -570,7 +565,7 @@ public class InlineOpcodeHandler {
         RuntimeBase valueBase = registers[valueReg];
         RuntimeScalar val = (valueBase instanceof RuntimeScalar)
                 ? (RuntimeScalar) valueBase : valueBase.scalar();
-        RuntimeScalar element = arr.get(idx.getInt());
+        RuntimeScalar element = arr.get(idx);
         element.set(val);
         registers[rd] = element;
         return pc;
@@ -741,10 +736,16 @@ public class InlineOpcodeHandler {
             return pc;
         }
 
-        RuntimeScalar copy = new RuntimeScalar();
-        val.addToScalar(copy);
-        hash.put(key.toString(), copy);
-        registers[rd] = copy;
+        if (hash.type == RuntimeHash.TIED_HASH) {
+            RuntimeScalar element = hash.get(key);
+            element.set(val);
+            registers[rd] = element;
+        } else {
+            RuntimeScalar copy = new RuntimeScalar();
+            val.addToScalar(copy);
+            hash.put(key.toString(), copy);
+            registers[rd] = copy;
+        }
         return pc;
     }
 

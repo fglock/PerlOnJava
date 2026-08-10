@@ -14,6 +14,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -36,6 +40,7 @@ public class SystemOperator {
 
     // Shell syntax that prevents Perl's one-string command direct-exec fast path.
     private static final Pattern DIRECT_COMMAND_SHELL_METACHARACTERS = Pattern.compile("[*?\\[\\]{}()<>|&;`'\"\\$%]");
+    private static final Pattern TAINTED_ENV_METACHARACTERS = Pattern.compile("[^A-Za-z0-9_./-]");
 
     private static String decodeSubprocessOutput(byte[] bytes) {
         StringBuilder decoded = new StringBuilder(bytes.length);
@@ -124,6 +129,9 @@ public class SystemOperator {
             }
         }
 
+        RuntimeScalar.checkTaint(command, "``");
+        checkTaintEnvironment();
+
         String cmd = command.toString();
         CommandResult result;
 
@@ -159,6 +167,8 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar system(RuntimeList args, boolean hasHandle, int ctx) {
+        checkTaintArguments(args, "system");
+        checkTaintEnvironment();
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
         
@@ -233,6 +243,93 @@ public class SystemOperator {
             }
         }
         return result;
+    }
+
+    private static void checkTaintArguments(RuntimeList args, String operation) {
+        if (!GlobalContext.isTaintModeActive()) {
+            return;
+        }
+        for (RuntimeBase value : args.elements) {
+            checkTaintValue(value, operation);
+        }
+    }
+
+    private static void checkTaintValue(RuntimeBase value, String operation) {
+        if (value instanceof RuntimeScalar scalar) {
+            RuntimeScalar.checkTaint(scalar, operation);
+        } else if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                checkTaintValue(element, operation);
+            }
+        } else if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) {
+                RuntimeScalar.checkTaint(element, operation);
+            }
+        }
+    }
+
+    private static void checkTaintEnvironment() {
+        if (!GlobalContext.isTaintModeActive()) {
+            return;
+        }
+        RuntimeHash env = GlobalVariable.getGlobalHash("main::ENV");
+        if (env.taintEnvironmentAliasDescription != null) {
+            throw new PerlCompilerException(
+                    "%ENV is aliased to " + env.taintEnvironmentAliasDescription
+                            + " while running with -T switch");
+        }
+        for (String name : List.of("PATH", "IFS", "CDPATH", "ENV", "BASH_ENV")) {
+            RuntimeScalar value = env.elements.get(name);
+            if (value != null && value.isTainted()) {
+                throw new PerlCompilerException(
+                        "Insecure $ENV{" + name + "} while running with -T switch");
+            }
+        }
+
+        RuntimeScalar path = env.elements.get("PATH");
+        if (path != null && path.getDefinedBoolean()) {
+            checkPathDirectories(path.toString());
+        }
+
+        RuntimeScalar term = env.elements.get("TERM");
+        if (term != null && term.isTainted()
+                && TAINTED_ENV_METACHARACTERS.matcher(term.toString()).find()) {
+            throw new PerlCompilerException(
+                    "Insecure $ENV{TERM} while running with -T switch");
+        }
+    }
+
+    private static void checkPathDirectories(String pathValue) {
+        if (SystemUtils.osIsWindows()) {
+            return;
+        }
+
+        for (String directory : pathValue.split(":", -1)) {
+            try {
+                Path path = Path.of(directory);
+                if (directory.isEmpty() || !path.isAbsolute() || isWorldWritableDirectory(path)) {
+                    throw insecurePathException();
+                }
+            } catch (InvalidPathException e) {
+                throw insecurePathException();
+            }
+        }
+    }
+
+    private static boolean isWorldWritableDirectory(Path path) {
+        if (!Files.isDirectory(path)) {
+            return false;
+        }
+        try {
+            return Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_WRITE);
+        } catch (UnsupportedOperationException | IOException | SecurityException e) {
+            return false;
+        }
+    }
+
+    private static PerlCompilerException insecurePathException() {
+        return new PerlCompilerException(
+                "Insecure directory in $ENV{PATH} while running with -T switch");
     }
 
     private static List<String> splitDirectCommandWords(String command) {
@@ -875,21 +972,22 @@ public class SystemOperator {
             int separatorLength = separator.length();
 
             if (separatorLength == 0) {
-                result.add(new RuntimeScalar(output));
+                result.add(new RuntimeScalar(output).taintFromExternalInput());
             } else {
                 while (index < output.length()) {
                     int nextIndex = output.indexOf(separator, index);
                     if (nextIndex == -1) {
-                        result.add(new RuntimeScalar(output.substring(index)));
+                        result.add(new RuntimeScalar(output.substring(index)).taintFromExternalInput());
                         break;
                     }
-                    result.add(new RuntimeScalar(output.substring(index, nextIndex + separatorLength)));
+                    result.add(new RuntimeScalar(output.substring(index, nextIndex + separatorLength))
+                            .taintFromExternalInput());
                     index = nextIndex + separatorLength;
                 }
             }
             return list;
         } else {
-            return new RuntimeScalar(output);
+            return new RuntimeScalar(output).taintFromExternalInput();
         }
     }
 
@@ -905,6 +1003,8 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution.
      */
     public static RuntimeScalar exec(RuntimeList args, boolean hasHandle, int ctx) {
+        checkTaintArguments(args, "exec");
+        checkTaintEnvironment();
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
         

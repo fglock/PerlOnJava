@@ -1197,7 +1197,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     private static void setAutoloadMethodName(
             String variableName, String fullMethodName, RuntimeScalar methodName) {
-        RuntimeScalar value = new RuntimeScalar(fullMethodName);
+        RuntimeScalar value = new RuntimeScalar(fullMethodName).propagateTaint(methodName);
         if (methodName.type == RuntimeScalarType.BYTE_STRING) {
             value.type = RuntimeScalarType.BYTE_STRING;
         }
@@ -3191,6 +3191,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         String methodName = method.toString();
+        RuntimeScalar requestedMethod = method;
 
         // Unwrap READONLY_SCALAR for method dispatch.
         // Constants created via `use constant` with blessed refs go through
@@ -3354,7 +3355,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String fullMethodName =
                         qualifyAutoloadMethodName(methodName, perlClassName);
                 // Set the $AUTOLOAD variable to the fully qualified name of the method
-                setAutoloadMethodName(autoloadVariableName, fullMethodName, method);
+                setAutoloadMethodName(autoloadVariableName, fullMethodName, requestedMethod);
             }
 
             return apply(method, args, callContext);
@@ -5014,10 +5015,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeBase elem = elems.get(i);
             if (elem instanceof ScalarSpecialVariable ssv) {
                 RuntimeScalar resolved = ssv.getValueAsScalar();
-                RuntimeScalar concrete = new RuntimeScalar();
-                concrete.type = resolved.type;
-                concrete.value = resolved.value;
-                elems.set(i, concrete);
+                elems.set(i, new RuntimeScalar(resolved));
             } else if (!preserveAggregateLvalues && elem instanceof RuntimeArray arr) {
                 // Copy array elements to ensure independence from local restoration.
                 // For tied arrays, use getList() which dispatches through FETCHSIZE/FETCH,
@@ -5066,10 +5064,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeScalar materializeBlockResult(RuntimeScalar result) {
         if (result instanceof ScalarSpecialVariable ssv) {
             RuntimeScalar resolved = ssv.getValueAsScalar();
-            RuntimeScalar concrete = new RuntimeScalar();
-            concrete.type = resolved.type;
-            concrete.value = resolved.value;
-            return concrete;
+            return new RuntimeScalar(resolved);
         }
         return result;
     }

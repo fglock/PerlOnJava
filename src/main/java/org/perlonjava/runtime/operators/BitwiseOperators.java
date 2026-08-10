@@ -28,7 +28,7 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             int result = ((int) runtimeScalar.value) & ((int) arg2.value);
-            return new RuntimeScalar(Integer.toUnsignedLong(result));
+            return new RuntimeScalar(Integer.toUnsignedLong(result)).propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '&' operator on blessed objects
@@ -36,7 +36,7 @@ public class BitwiseOperators {
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(&", "&");
-            if (result != null) return result;
+            if (result != null) return result.propagateTaint(runtimeScalar, arg2);
         }
 
         // Fetch tied/readonly scalars once to avoid redundant FETCH calls
@@ -81,7 +81,7 @@ public class BitwiseOperators {
         long val2 = arg2.getLong() & 0xFFFFFFFFL;
         long result = (val1 & val2) & 0xFFFFFFFFL;
 
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
     }
 
     /**
@@ -99,7 +99,7 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             int result = ((int) runtimeScalar.value) | ((int) arg2.value);
-            return new RuntimeScalar(Integer.toUnsignedLong(result));
+            return new RuntimeScalar(Integer.toUnsignedLong(result)).propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '|' operator on blessed objects
@@ -107,7 +107,7 @@ public class BitwiseOperators {
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(|", "|");
-            if (result != null) return result;
+            if (result != null) return result.propagateTaint(runtimeScalar, arg2);
         }
 
         // Fetch tied/readonly scalars once to avoid redundant FETCH calls
@@ -142,7 +142,7 @@ public class BitwiseOperators {
         long val2 = arg2.getLong() & 0xFFFFFFFFL;
         long result = (val1 | val2) & 0xFFFFFFFFL;
 
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
     }
 
     /**
@@ -164,7 +164,7 @@ public class BitwiseOperators {
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
             int result = ((int) runtimeScalar.value) ^ ((int) arg2.value);
-            return new RuntimeScalar(Integer.toUnsignedLong(result));
+            return new RuntimeScalar(Integer.toUnsignedLong(result)).propagateTaint(runtimeScalar, arg2);
         }
 
         // Check for overloaded '^' operator on blessed objects
@@ -172,7 +172,7 @@ public class BitwiseOperators {
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(^", "^");
-            if (result != null) return result;
+            if (result != null) return result.propagateTaint(runtimeScalar, arg2);
         }
 
         // Fetch tied/readonly scalars once to avoid redundant FETCH calls
@@ -207,7 +207,7 @@ public class BitwiseOperators {
         long val2 = arg2.getLong() & 0xFFFFFFFFL;
         long result = (val1 ^ val2) & 0xFFFFFFFFL;
 
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(runtimeScalar, arg2);
     }
 
     /** Numeric bitwise operations under {@code use integer}: return a signed IV. */
@@ -230,7 +230,7 @@ public class BitwiseOperators {
             String symbol = Character.toString(operator);
             RuntimeScalar overloaded = OverloadContext.tryTwoArgumentOverload(
                     arg1, arg2, blessId, blessId2, "(" + symbol, symbol);
-            if (overloaded != null) return overloaded;
+            if (overloaded != null) return overloaded.propagateTaint(arg1, arg2);
         }
         int a = nativeIntValue(arg1);
         int b = nativeIntValue(arg2);
@@ -240,7 +240,7 @@ public class BitwiseOperators {
             case '^' -> a ^ b;
             default -> throw new IllegalArgumentException("unknown bitwise operator: " + operator);
         };
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(arg1, arg2);
     }
 
     private static int nativeIntValue(RuntimeScalar value) {
@@ -266,7 +266,7 @@ public class BitwiseOperators {
         if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
                     runtimeScalar, blessId, "(~", "~", BitwiseOperators::bitwiseNot);
-            if (result != null) return result;
+            if (result != null) return result.propagateTaint(runtimeScalar);
         }
 
         // Fetch tied/readonly scalar once to avoid redundant FETCH calls
@@ -279,9 +279,9 @@ public class BitwiseOperators {
         // - If it's a string, use string NOT (character-by-character)
         int vt = val.type;
         if (vt == RuntimeScalarType.INTEGER || vt == RuntimeScalarType.DOUBLE) {
-            return bitwiseNotBinary(val);
+            return bitwiseNotBinary(val).propagateTaint(runtimeScalar);
         }
-        return bitwiseNotDot(val);
+        return bitwiseNotDot(val).propagateTaint(runtimeScalar);
     }
 
     /**
@@ -303,7 +303,7 @@ public class BitwiseOperators {
         // Apply bitwise NOT and mask to 32 bits
         long result = (~masked32bit) & 0xFFFFFFFFL;
 
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(runtimeScalar);
     }
 
     /**
@@ -319,7 +319,7 @@ public class BitwiseOperators {
         if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
                     runtimeScalar, blessId, "(~", "~", BitwiseOperators::integerBitwiseNot);
-            if (result != null) return result;
+            if (result != null) return result.propagateTaint(runtimeScalar);
         }
 
         // Fetch tied/readonly scalar once to avoid redundant FETCH calls
@@ -332,7 +332,7 @@ public class BitwiseOperators {
         // - If it's a string, use string NOT (character-by-character)
         int vt = val.type;
         if (vt != RuntimeScalarType.INTEGER && vt != RuntimeScalarType.DOUBLE) {
-            return bitwiseNotDot(val);
+            return bitwiseNotDot(val).propagateTaint(runtimeScalar);
         }
 
         // Must use 32-bit int (not long) to match ivsize=4 in Config.pm.
@@ -341,7 +341,7 @@ public class BitwiseOperators {
 
         int value = (int) val.getLong();
         int result = ~value;
-        return new RuntimeScalar(result);
+        return new RuntimeScalar(result).propagateTaint(runtimeScalar);
     }
 
     /**
@@ -369,7 +369,8 @@ public class BitwiseOperators {
 
         return stringBitwiseResult(result.toString(),
                 runtimeScalar.type == RuntimeScalarType.STRING
-                        || arg2.type == RuntimeScalarType.STRING);
+                        || arg2.type == RuntimeScalarType.STRING)
+                .propagateTaint(runtimeScalar, arg2);
     }
 
     /**
@@ -397,7 +398,8 @@ public class BitwiseOperators {
 
         return stringBitwiseResult(result.toString(),
                 runtimeScalar.type == RuntimeScalarType.STRING
-                        || arg2.type == RuntimeScalarType.STRING);
+                        || arg2.type == RuntimeScalarType.STRING)
+                .propagateTaint(runtimeScalar, arg2);
     }
 
     /**
@@ -425,7 +427,8 @@ public class BitwiseOperators {
 
         return stringBitwiseResult(result.toString(),
                 runtimeScalar.type == RuntimeScalarType.STRING
-                        || arg2.type == RuntimeScalarType.STRING);
+                        || arg2.type == RuntimeScalarType.STRING)
+                .propagateTaint(runtimeScalar, arg2);
     }
 
     /**
@@ -450,7 +453,7 @@ public class BitwiseOperators {
         // Perl's string complement returns an octet string even when the
         // operand carries the UTF-8 flag (for code points representable as
         // bytes, which is the range accepted above).
-        return stringBitwiseResult(result.toString(), false);
+        return stringBitwiseResult(result.toString(), false).propagateTaint(runtimeScalar);
     }
 
     private static RuntimeScalar stringBitwiseResult(String value, boolean utf8) {

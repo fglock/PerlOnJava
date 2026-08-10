@@ -129,6 +129,15 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
 
         // Update the parent RuntimeScalar with the modified string
         RuntimeScalar updated = new RuntimeScalar(updatedValue.toString());
+        // Assignment through substr is an in-place mutation.  Perl preserves
+        // existing taint on the target and also propagates taint from the
+        // replacement value.
+        if (GlobalContext.isTaintModeActive()) {
+            // The proxy cached its parent's provenance when it was created;
+            // consulting the tied parent again here would perform another
+            // FETCH for the same lvalue operation.
+            updated.tainted = this.tainted || value.isTainted();
+        }
         // Preserve BYTE_STRING type: if the parent was a byte string and the replacement
         // doesn't introduce UTF-8 characters, keep the result as BYTE_STRING.
         // In Perl, substr assignment on a byte string with a byte replacement stays bytes.
@@ -167,6 +176,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         this.length = replacementLength;
         this.type = value.type;
         this.value = newValue;
+        this.tainted = updated.tainted;
 
         return this;
     }

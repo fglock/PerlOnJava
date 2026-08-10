@@ -4,6 +4,10 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Add Perl taint mode with `-T` on both JVM and interpreter backends, including
+  external-input provenance, scalar and regex propagation, capture-based
+  untainting, and security checks for process execution, code loading, file
+  mutation, and other sensitive operations.
 - Bugfix: targeted weak-reference sweeps preserve objects rescued by `DESTROY`
   until rescue-specific reachability cleanup runs, keeping live DBIx::Class
   storage callbacks valid after a schema self-rescue.

@@ -19,6 +19,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_TAINT;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_LOCALE;
 import static org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
@@ -520,6 +521,11 @@ public class StringParser {
         String operator = "replaceRegex";
         String replaceStr = rawStr.buffers.get(1);
         String modifierStr = rawStr.buffers.get(2);
+        if (ctx.symbolTable != null
+                && ctx.symbolTable.isStrictOptionEnabled(HINT_RE_TAINT)
+                && !modifierStr.contains("T")) {
+            modifierStr = "T" + modifierStr;
+        }
         Node parsed = parseRegexString(ctx, rawStr, parser, modifierStr);
 
         Node replace;
@@ -592,6 +598,9 @@ public class StringParser {
             }
             if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_EVAL) && !modStr.contains("E")) {
                 modStr = "E" + modStr;
+            }
+            if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_TAINT) && !modStr.contains("T")) {
+                modStr = "T" + modStr;
             }
         }
         

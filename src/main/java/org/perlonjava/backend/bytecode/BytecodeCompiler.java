@@ -1239,6 +1239,7 @@ public class BytecodeCompiler implements Visitor {
             // valid target for unlabeled last/next/redo (matches JVM
             // EmitBlock's pushLoopLabels(... isBareBlock, isBareBlock)).
             blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc, true);
+            blockLoopInfo.resultReg = outerResultReg;
             loopStack.push(blockLoopInfo);
         }
 
@@ -6915,11 +6916,12 @@ public class BytecodeCompiler implements Visitor {
      * Extracted for use by CompileOperator.
      */
     void handleLoopControlOperator(OperatorNode node, String op) {
+        boolean implicitGivenLast = node.getBooleanAnnotation("implicitGivenLast");
         // Extract label if present
         String labelStr = null;
         boolean isDynamicLabel = false;
         int dynamicLabelReg = -1;
-        if (node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
+        if (!implicitGivenLast && node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
             Node arg = labelNode.elements.getFirst();
             if (arg instanceof IdentifierNode) {
                 labelStr = ((IdentifierNode) arg).name;
@@ -7052,6 +7054,22 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Can't \"" + op + "\" outside a loop block", node.getIndex());
         }
 
+        // Preserve the final expression of a when clause as the result of its
+        // enclosing given block before jumping to that block's end.
+        if (implicitGivenLast) {
+            Object resultAnnotation = node.getAnnotation("implicitGivenResult");
+            Node result = resultAnnotation instanceof Node ? (Node) resultAnnotation : null;
+            if (result != null) {
+                compileNode(result, -1, RuntimeContextType.SCALAR);
+                if (targetLoop.resultReg >= 0 && lastResultReg >= 0) {
+                    emitAliasWithTarget(targetLoop.resultReg, lastResultReg);
+                }
+            } else if (targetLoop.resultReg >= 0) {
+                emit(Opcodes.LOAD_UNDEF);
+                emitReg(targetLoop.resultReg);
+            }
+        }
+
         // Emit the opcode and record the PC to be patched later
         short opcode = op.equals("last") ? Opcodes.LAST
                 : op.equals("next") ? Opcodes.NEXT
@@ -7085,6 +7103,7 @@ public class BytecodeCompiler implements Visitor {
         final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
         int continuePc;              // PC for next (continue block or increment)
         int cleanupScopeIndex;       // Lower bound for scopes bypassed by local loop control
+        int resultReg;               // Result register for value-producing synthetic blocks
 
         LoopInfo(String label, int startPc, boolean isTrueLoop) {
             this.label = label;
@@ -7092,6 +7111,7 @@ public class BytecodeCompiler implements Visitor {
             this.isTrueLoop = isTrueLoop;
             this.continuePc = -1;  // Will be set later
             this.cleanupScopeIndex = -1;
+            this.resultReg = -1;
             this.breakPcs = new ArrayList<>();
             this.nextPcs = new ArrayList<>();
             this.redoPcs = new ArrayList<>();

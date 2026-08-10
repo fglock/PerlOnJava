@@ -273,10 +273,15 @@ public class Pack {
         boolean shouldUpgrade = !result.byteModeUsed()
                 && (result.hasUnicodeInNormalMode() || output.hasUnicodeCharacters());
 
-        if (shouldUpgrade) {
-            return new RuntimeScalar(output.toUpgradedString());
+        RuntimeScalar packed = shouldUpgrade
+                ? new RuntimeScalar(output.toUpgradedString())
+                : new RuntimeScalar(output.toByteArray());
+        for (RuntimeBase input : args.elements) {
+            if (input instanceof RuntimeScalar scalar) {
+                packed = packed.propagateTaint(scalar);
+            }
         }
-        return new RuntimeScalar(output.toByteArray());
+        return packed;
     }
 
     public static PackResult packInto(String template, List<RuntimeScalar> values, int startValueIndex,

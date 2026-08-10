@@ -38,6 +38,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
+    private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
+            Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:[Ii][sS]|[Ii][nN])[A-Za-z0-9_]*)}");
     // Maximum size for the regex cache
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
     // Cache to store compiled regex patterns
@@ -73,6 +75,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Track whether the last successful match was on a BYTE_STRING input,
     // so that captures ($1, $2, $&, etc.) preserve BYTE_STRING type.
     public static boolean lastMatchWasByteString = false;
+    public static boolean lastMatchResultsTainted = false;
     public static int[] manualCaptureStarts = null;
     public static int[] manualCaptureEnds = null;
     // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
@@ -872,6 +875,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Unwrap readonly scalar
         if (patternString.type == RuntimeScalarType.READONLY_SCALAR) patternString = (RuntimeScalar) patternString.value;
 
+        validateTaintedPatternSecurity(patternString);
+
         // Check if patternString is already a compiled regex
         if (patternString.type == RuntimeScalarType.REGEX) {
             RuntimeRegex originalRegex = (RuntimeRegex) patternString.value;
@@ -896,7 +901,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternFlags = regex.regexFlags.toPatternFlags();
             regex.refCount = 0;  // Track for proper weak ref handling
 
-            return new RuntimeScalar(regex);
+            return new RuntimeScalar(regex).propagateTaint(patternString);
         }
 
         // Check for qr overloading
@@ -929,20 +934,48 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternFlags = regex.regexFlags.toPatternFlags();
                     regex.refCount = 0;  // Track for proper weak ref handling
 
-                    return new RuntimeScalar(regex);
+                    return new RuntimeScalar(regex).propagateTaint(patternString, overloadedResult);
                 }
 
                 // Try fallback to string conversion
                 RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(patternString, "(\"\"");
                 if (fallbackResult != null) {
-                    return new RuntimeScalar(compile(fallbackResult.toString(), modifierStr).cloneTracked());
+                    return new RuntimeScalar(compile(fallbackResult.toString(), modifierStr).cloneTracked())
+                            .propagateTaint(patternString, fallbackResult);
                 }
             }
         }
 
         // Default: compile as string (cloneTracked() creates a tracked copy
         // so the cached RuntimeRegex is not corrupted by refCount changes)
-        return new RuntimeScalar(compile(patternString.toString(), modifierStr).cloneTracked());
+        return new RuntimeScalar(compile(patternString.toString(), modifierStr).cloneTracked())
+                .propagateTaint(patternString);
+    }
+
+    private static void validateTaintedPatternSecurity(RuntimeScalar patternString) {
+        if (!GlobalContext.isTaintModeActive() || patternString == null
+                || !patternString.isTainted() || patternString.type == RuntimeScalarType.REGEX) {
+            return;
+        }
+
+        String pattern = patternString.toString();
+        if (pattern.contains("(?{") || pattern.contains("(??{")) {
+            throw new PerlCompilerException("Eval-group in insecure regular expression");
+        }
+
+        Matcher matcher = USER_DEFINED_PROPERTY_PATTERN.matcher(pattern);
+        if (!matcher.find()) {
+            return;
+        }
+
+        String property = matcher.group(2);
+        String qualified = property.contains("::") ? property : "main::" + property;
+        if (GlobalVariable.isGlobalCodeRefDefined(qualified)) {
+            throw new PerlCompilerException(
+                    "Insecure user-defined property \"" + property + "\" in regex");
+        }
+        throw new PerlCompilerException(
+                "Insecure user-defined property \\" + matcher.group(1) + "{" + qualified + "}");
     }
 
     /**
@@ -1053,7 +1086,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         regex.replacement = replacement;
-        return new RuntimeScalar(regex);
+        return new RuntimeScalar(regex).propagateTaint(patternString);
     }
 
     /**
@@ -1405,6 +1438,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 found = true;
+                lastMatchResultsTainted = GlobalContext.isTaintModeActive()
+                        && (quotedRegex.isTainted()
+                        || (regex.regexFlags.taintResults() && string.isTainted()));
                 lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
                 int captureCount = matcher.groupCount();
 
@@ -1987,8 +2023,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private static void updateReplacementMatchState(RuntimeRegex regex, Matcher matcher,
-                                                    String inputStr, RuntimeScalar string) {
+                                                    String inputStr, RuntimeScalar string,
+                                                    boolean resultsTainted) {
         lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+        lastMatchResultsTainted = resultsTainted;
 
         // Initialize $1, $2, @+, @- only when we have a match
         globalMatcher = matcher;
@@ -2033,9 +2071,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static RuntimeBase replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
-        // Convert the input string to a Java string
-        String inputStr = string.toString();
-        boolean wasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+        // Resolve a tied target exactly once for all reads.  Keep `string` as
+        // the lvalue used for STORE after the substitution.
+        RuntimeScalar inputValue = string.type == RuntimeScalarType.TIED_SCALAR
+                ? string.tiedFetch() : string;
+        String inputStr = inputValue.toString();
+        boolean wasByteString = (inputValue.type == RuntimeScalarType.BYTE_STRING);
+        boolean taintMode = GlobalContext.isTaintModeActive();
+        boolean inputTainted = taintMode && inputValue.isTainted();
+        boolean patternTainted = taintMode && quotedRegex.isTainted();
         boolean resultNeedsUtf8 = !wasByteString;
 
         // Extract the regex pattern from the quotedRegex object
@@ -2099,7 +2143,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         regex.emitWarningsOnUse();
 
-        Pattern pattern = regex.selectPattern(string, inputStr);
+        Pattern pattern = regex.selectPattern(inputValue, inputStr);
         
         // Select appropriate pattern based on string's UTF-8 flag (same logic as matchRegex)
         if (pattern == regex.pattern && regex.patternUnicode != null && regex.patternUnicode != regex.pattern) {
@@ -2109,9 +2153,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             } else if (hasInlineAsciiModifier(regex.patternString)) {
                 // Inline (?a...) in pattern - use ASCII to be safe
                 pattern = regex.pattern;
-            } else if (Utf8.isUtf8(string)) {
+            } else if (Utf8.isUtf8(inputValue)) {
                 // UTF-8 string - use Unicode matching for \w, \d, \s semantics
-                pattern = regex.selectPattern(string, inputStr);
+                pattern = regex.selectPattern(inputValue, inputStr);
             }
             // else: BYTE_STRING - keep ASCII pattern (default)
         }
@@ -2153,6 +2197,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
+        boolean replacementResultTainted = false;
+        boolean captureResultsTainted = patternTainted
+                || (regex.regexFlags.taintResults() && inputTainted);
+        boolean destructiveReplacement = !regex.regexFlags.isNonDestructive();
 
         // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
@@ -2172,7 +2220,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 found++;
-                updateReplacementMatchState(regex, matcher, inputStr, string);
+                updateReplacementMatchState(regex, matcher, inputStr, inputValue, captureResultsTainted);
 
                 String replacementStr;
                 if (replacementIsCode) {
@@ -2180,16 +2228,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
                     RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                     RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
-                    if (Utf8.isUtf8(result.scalar())) {
+                    RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
+                    if (Utf8.isUtf8(replacementValue)) {
                         resultNeedsUtf8 = true;
                     }
-                    replacementStr = result.toString();
+                    replacementResultTainted |= taintMode && replacementValue.isTainted();
+                    replacementStr = replacementValue.toString();
                 } else {
                     // Replace the match with the replacement string
-                    if (Utf8.isUtf8(replacement)) {
+                    RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
+                    if (Utf8.isUtf8(replacementValue)) {
                         resultNeedsUtf8 = true;
                     }
-                    replacementStr = replacement.toString();
+                    replacementResultTainted |= taintMode && replacementValue.isTainted();
+                    replacementStr = replacementValue.toString();
+                }
+
+                if (destructiveReplacement
+                        && (inputTainted || patternTainted || replacementResultTainted)) {
+                    string.tainted = true;
                 }
 
                 if (replacementStr != null) {
@@ -2228,21 +2285,30 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             && retryMatcher.start() == zeroLengthOffset
                             && retryMatcher.end() > zeroLengthOffset) {
                         found++;
-                        updateReplacementMatchState(regex, retryMatcher, inputStr, string);
+                        updateReplacementMatchState(regex, retryMatcher, inputStr, inputValue, captureResultsTainted);
 
                         String retryReplacementStr;
                         if (replacementIsCode) {
                             RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                             RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
-                            if (Utf8.isUtf8(result.scalar())) {
+                            RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
+                            if (Utf8.isUtf8(replacementValue)) {
                                 resultNeedsUtf8 = true;
                             }
-                            retryReplacementStr = result.toString();
+                            replacementResultTainted |= taintMode && replacementValue.isTainted();
+                            retryReplacementStr = replacementValue.toString();
                         } else {
-                            if (Utf8.isUtf8(replacement)) {
+                            RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
+                            if (Utf8.isUtf8(replacementValue)) {
                                 resultNeedsUtf8 = true;
                             }
-                            retryReplacementStr = replacement.toString();
+                            replacementResultTainted |= taintMode && replacementValue.isTainted();
+                            retryReplacementStr = replacementValue.toString();
+                        }
+
+                        if (destructiveReplacement
+                                && (inputTainted || patternTainted || replacementResultTainted)) {
+                            string.tainted = true;
                         }
 
                         if (retryReplacementStr != null) {
@@ -2294,18 +2360,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags.isNonDestructive()) {
                 // /r modifier: return the modified string
                 RuntimeScalar rv = new RuntimeScalar(finalResult);
+                rv.tainted = inputTainted || patternTainted || replacementResultTainted;
                 if (wasByteString && !resultNeedsUtf8 && !containsWideChars(finalResult)) {
                     rv.type = RuntimeScalarType.BYTE_STRING;
                 }
                 return rv;
             } else {
                 // Save the modified string back to the original scalar
-                string.set(finalResult);
+                RuntimeScalar substitutedValue = new RuntimeScalar(finalResult);
+                substitutedValue.tainted = inputTainted || patternTainted || replacementResultTainted;
                 if (wasByteString && !resultNeedsUtf8 && !containsWideChars(finalResult)) {
-                    string.type = RuntimeScalarType.BYTE_STRING;
+                    substitutedValue.type = RuntimeScalarType.BYTE_STRING;
                 }
+                string.set(substitutedValue);
+                string.tainted = substitutedValue.tainted;
                 // Return the number of substitutions made
-                return RuntimeScalarCache.getScalarInt(found);
+                RuntimeScalar count = RuntimeScalarCache.getScalarInt(found);
+                if (regex.regexFlags.isGlobalMatch() && (inputTainted || patternTainted)) {
+                    count = count.propagateTaint(inputValue, quotedRegex);
+                }
+                return count;
             }
         } else {
             if (regex.regexFlags.isNonDestructive()) {
@@ -2317,6 +2391,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 return RuntimeScalarCache.scalarEmptyString;
             }
         }
+    }
+
+    private static RuntimeScalar stringifyReplacementValue(RuntimeScalar value) {
+        return RuntimeScalarType.blessedId(value) != 0 ? Overload.stringify(value) : value;
     }
 
     /**
@@ -2432,6 +2510,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (lastMatchWasByteString) {
             scalar.type = RuntimeScalarType.BYTE_STRING;
         }
+        scalar.tainted = lastMatchResultsTainted;
         return scalar;
     }
 
@@ -2605,7 +2684,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 base.preservesMatch() || operation.preservesMatch(),
                 base.isUnicode(),
                 base.isAscii(),
-                base.allowEvalGroup() || operation.allowEvalGroup()
+                base.allowEvalGroup() || operation.allowEvalGroup(),
+                base.taintResults() || operation.taintResults()
         );
     }
 

@@ -26,6 +26,10 @@ public class UtimeOperator {
             }
         }
 
+        for (RuntimeScalar scalar : flat) {
+            RuntimeScalar.checkTaint(scalar, "utime");
+        }
+
         if (flat.size() < 3) {
             return new RuntimeScalar(0);
         }

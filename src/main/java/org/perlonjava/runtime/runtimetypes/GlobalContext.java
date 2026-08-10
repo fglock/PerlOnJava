@@ -20,6 +20,8 @@ public class GlobalContext {
 
     private static final ThreadLocal<Boolean> threadTaintMode =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static final ThreadLocal<Boolean> threadJoinTaint =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     // Special variables internal names
     public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
@@ -33,6 +35,18 @@ public class GlobalContext {
 
     public static boolean isTaintModeActive() {
         return threadTaintMode.get();
+    }
+
+    /** Record the taint state left by join(), used by Perl's legacy taint probe. */
+    public static void setThreadJoinTaint(boolean tainted) {
+        threadJoinTaint.set(tainted);
+    }
+
+    /** Return and clear the taint state left by the immediately preceding join(). */
+    public static boolean consumeThreadJoinTaint() {
+        boolean tainted = threadJoinTaint.get();
+        threadJoinTaint.set(false);
+        return tainted;
     }
 
     // Virtual directory names for JAR-embedded Perl resources
@@ -65,7 +79,9 @@ public class GlobalContext {
         // $^S - current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
         GlobalVariable.globalVariables.put("main::" + Character.toString('S' - 'A' + 1),
                 new ScalarSpecialVariable(ScalarSpecialVariable.Id.EVAL_STATE));
-        GlobalVariable.getGlobalVariable("main::" + Character.toString('O' - 'A' + 1)).set(SystemUtils.getPerlOsName());    // initialize $^O
+        GlobalVariable.globalVariables.put(
+                "main::" + Character.toString('O' - 'A' + 1),
+                new OperatingSystemVariable(SystemUtils.getPerlOsName()));    // initialize $^O
         GlobalVariable.getGlobalVariable("main::" + Character.toString('V' - 'A' + 1)).set(Configuration.getPerlVersionVString());    // initialize $^V
         GlobalVariable.getGlobalVariable("main::" + Character.toString('T' - 'A' + 1)).set((int) (System.currentTimeMillis() / 1000));    // initialize $^T to epoch time
         // Initialize $^W based on -w flag
@@ -76,11 +92,16 @@ public class GlobalContext {
         // Initialize $^X - the name used to execute the current copy of Perl
         // PERLONJAVA_EXECUTABLE is set by the `jperl` or `jperl.bat` launcher
         String perlExecutable = System.getenv("PERLONJAVA_EXECUTABLE");
+        RuntimeScalar executableVariable =
+                GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1));
         if (perlExecutable != null && !perlExecutable.isEmpty()) {
-            GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1)).set(perlExecutable);
+            executableVariable.set(perlExecutable);
         } else {
             // Fallback to "jperl" if environment variable is not set
-            GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1)).set("jperl");
+            executableVariable.set("jperl");
+        }
+        if (compilerOptions.taintMode) {
+            executableVariable.tainted = true;
         }
 
         GlobalVariable.getGlobalVariable("main::]").set(Configuration.getPerlVersionOld());    // initialize $] to Perl version
@@ -112,6 +133,9 @@ public class GlobalContext {
         // (e.g., when require() is called during module initialization)
         if (!GlobalVariable.globalVariables.containsKey("main::0")) {
             GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
+        }
+        if (compilerOptions.taintMode) {
+            GlobalVariable.getGlobalVariable("main::0").tainted = true;
         }
         GlobalVariable.getGlobalVariable(GLOBAL_PHASE).set("RUN"); // ${^GLOBAL_PHASE}
         // ${^TAINT} - set to 1 if -T (taint mode) was specified, 0 otherwise
@@ -210,6 +234,13 @@ public class GlobalContext {
             envValue.tainted = compilerOptions.taintMode;
             env.put(k, envValue);
         });
+
+        // Command-line arguments are external input just like %ENV and file data.
+        if (compilerOptions.taintMode) {
+            for (RuntimeScalar argument : compilerOptions.argumentList.elements) {
+                argument.tainted = true;
+            }
+        }
 
         /* Initialize @INC.
            @INC Search order mirrors Perl 5's site_perl > core pattern:

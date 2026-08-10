@@ -221,7 +221,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                 }
                 case LAST_PAREN_MATCH -> {
                     String lastCapture = RuntimeRegex.lastCaptureString();
-                    yield lastCapture != null ? new RuntimeScalar(lastCapture) : scalarUndef;
+                    yield lastCapture != null ? makeRegexResultScalar(lastCapture) : scalarUndef;
                 }
                 case LAST_SUCCESSFUL_PATTERN -> RuntimeRegex.lastSuccessfulPattern != null
                         ? new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern) : scalarUndef;
@@ -500,6 +500,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         if (RuntimeRegex.lastMatchWasByteString) {
             scalar.type = RuntimeScalarType.BYTE_STRING;
         }
+        scalar.tainted = RuntimeRegex.lastMatchResultsTainted;
         return scalar;
     }
 

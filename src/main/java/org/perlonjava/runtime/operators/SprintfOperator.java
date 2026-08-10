@@ -44,6 +44,7 @@ public class SprintfOperator {
     }
 
     private static RuntimeScalar sprintfInternal(RuntimeScalar runtimeScalar, RuntimeList list, boolean bytesMode) {
+        RuntimeScalar.checkTaint(runtimeScalar, "sprintf");
         charsWritten = 0;  // Reset counter
         // Expand the list to ensure all elements are available
         list = new RuntimeList((RuntimeBase) list);
@@ -66,6 +67,7 @@ public class SprintfOperator {
         boolean hasValidSpecifier = false;  // Track if we have any valid specifiers
         boolean hasPositionalParameter = false; // Track if any positional parameters are used
         boolean hasInvalidSpecifier = false; // Track if any invalid specifiers were found
+        boolean hasTaintedArgument = false;
 
         // Parse the format string into literals and format specifiers
         SprintfFormatParser.ParseResult parsed = SprintfFormatParser.parse(format);
@@ -174,6 +176,9 @@ public class SprintfOperator {
                     ProcessResult processResult = processFormatSpecifierTracked(spec, list, argIndex, formatter, bytesMode);
                     result.append(processResult.formatted);
                     charsWritten += processResult.formatted.length();
+                    if (GlobalContext.isTaintModeActive()) {
+                        hasTaintedArgument |= usedArgumentIsTainted(spec, list, argIndex);
+                    }
 
                     // Only update maxArgIndexUsed if this specifier actually consumed arguments
                     if (spec.conversionChar != '%' || spec.widthFromArg) {
@@ -221,7 +226,45 @@ public class SprintfOperator {
         if (!hasUtf8Input) {
             res.type = RuntimeScalarType.BYTE_STRING;
         }
+        if (hasTaintedArgument) {
+            res.tainted = true;
+        }
         return res;
+    }
+
+    private static boolean usedArgumentIsTainted(FormatSpecifier spec, RuntimeList list, int argIndex) {
+        java.util.LinkedHashSet<Integer> used = new java.util.LinkedHashSet<>();
+        int current = argIndex;
+
+        if (spec.vectorFlag && spec.widthFromArg && spec.raw.matches(".*\\*v.*")) {
+            used.add(current++); // vector separator
+            if (spec.precisionFromArg) {
+                used.add(current++); // vector element width
+            }
+            used.add(current); // vector value
+        } else {
+            if (spec.widthFromArg) {
+                used.add(spec.widthArgIndex != null ? spec.widthArgIndex - 1 : current++);
+            }
+            if (spec.precisionFromArg) {
+                used.add(spec.precisionArgIndex != null ? spec.precisionArgIndex - 1 : current++);
+            }
+            if (spec.conversionChar != '%') {
+                used.add(spec.parameterIndex != null ? spec.parameterIndex - 1 : current);
+            }
+            if (spec.vectorFlag && spec.separatorArgIndex != null) {
+                used.add(spec.separatorArgIndex - 1);
+            }
+        }
+
+        for (int index : used) {
+            if (index >= 0 && index < list.size()
+                    && list.elements.get(index) instanceof RuntimeScalar scalar
+                    && scalar.isTainted()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void handlePercentN(FormatSpecifier spec,

@@ -50,7 +50,7 @@ public class Crypt {
         }
 
         String hashed = hashWithSalt(plaintext, salt);
-        return new RuntimeScalar(hashed);
+        return new RuntimeScalar(hashed).propagateTaint(plaintextScalar, saltScalar);
     }
 
     /**

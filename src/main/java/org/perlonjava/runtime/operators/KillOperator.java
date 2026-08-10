@@ -3,6 +3,8 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlSignalQueue;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -25,12 +27,18 @@ public class KillOperator {
      * @return RuntimeScalar with count of successfully signaled processes
      */
     public static RuntimeScalar kill(int ctx, RuntimeBase... args) {
+        boolean precedingJoinWasTainted = GlobalContext.consumeThreadJoinTaint();
         if (args.length < 2) {
+            if (GlobalContext.isTaintModeActive() && precedingJoinWasTainted) {
+                throw new PerlCompilerException(
+                        "Insecure dependency in kill while running with -T switch");
+            }
             return new RuntimeScalar(0);
         }
 
         // First argument is the signal
         RuntimeScalar signalArg = args[0].getFirst();
+        RuntimeScalar.checkTaint(signalArg, "kill");
         int signal;
 
         // Handle named signals (e.g., "TERM", "KILL", "HUP")
@@ -52,6 +60,7 @@ public class KillOperator {
         // Process each PID starting from second argument
         for (int i = 1; i < args.length; i++) {
             for (RuntimeScalar scalar : args[i]) {
+                RuntimeScalar.checkTaint(scalar, "kill");
                 int pid = scalar.getInt();
 
                 // Special case: negative PID means process group

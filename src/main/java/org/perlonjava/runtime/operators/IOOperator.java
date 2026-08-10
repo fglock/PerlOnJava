@@ -693,6 +693,9 @@ public class IOOperator {
         RuntimeIO fh;
 
         if (mode.contains("|")) {
+            for (int i = 1; i < args.length; i++) {
+                RuntimeScalar.checkTaint(args[i].scalar(), "piped open");
+            }
             // Check for fork-open pattern: open FH, "-|" or open FH, "|-" with no command
             // This is the 2-arg piped open that normally forks in Perl
             if (args.length == 2 && (mode.equals("-|") || mode.equals("|-"))) {
@@ -710,6 +713,12 @@ public class IOOperator {
         } else if (args.length > 2) {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();
+            boolean canWrite = mode.contains(">") || mode.startsWith("+");
+
+            if (canWrite) {
+                RuntimeScalar.checkTaint(args[1].scalar(), "open");
+                RuntimeScalar.checkTaint(secondArg, "open");
+            }
 
             // Check for filehandle duplication modes (<&, >&, >>&, +<&, +>&, +>>& and &= variants)
             if (mode.equals("<&") || mode.equals(">&") || mode.equals(">>&") ||
@@ -832,6 +841,9 @@ public class IOOperator {
             }
         } else {
             // 2-argument open
+            if (mode.startsWith(">") || mode.startsWith("+") || mode.startsWith("|")) {
+                RuntimeScalar.checkTaint(args[1].scalar(), "open");
+            }
             fh = RuntimeIO.open(mode);
         }
         if (fh == null) {
@@ -951,6 +963,7 @@ public class IOOperator {
         }
 
         RuntimeScalar format = (RuntimeScalar) flatList.elements.removeFirst(); // Extract the format string from elements
+        RuntimeScalar.checkTaint(format, "printf");
 
         String formattedString;
 
@@ -1481,8 +1494,10 @@ public class IOOperator {
         }
 
         RuntimeScalar fileHandle = args[0].scalar();
-        String fileName = args[1].toString();
-        int mode = args[2].scalar().getInt();
+        RuntimeScalar fileNameArg = args[1].scalar();
+        RuntimeScalar modeArg = args[2].scalar();
+        String fileName = fileNameArg.toString();
+        int mode = modeArg.getInt();
         int perms = 0666; // Default permissions (octal)
 
         if (args.length >= 4) {
@@ -1502,15 +1517,24 @@ public class IOOperator {
         int O_TRUNC = 01000;  // 512 in decimal
         int O_NOFOLLOW = 0400000; // Reject a symlink in the final path component
 
+        int baseMode = mode & 3; // Get the lowest 2 bits
+        boolean canWrite = baseMode != O_RDONLY
+                || (mode & (O_CREAT | O_APPEND | O_TRUNC)) != 0;
+        if (canWrite) {
+            RuntimeScalar.checkTaint(fileNameArg, "sysopen");
+            RuntimeScalar.checkTaint(modeArg, "sysopen");
+            if (args.length >= 4) {
+                RuntimeScalar.checkTaint(args[3].scalar(), "sysopen");
+            }
+        }
+
         File file = RuntimeIO.resolveFile(fileName);
         if ((mode & O_NOFOLLOW) != 0 && Files.isSymbolicLink(file.toPath())) {
             getGlobalVariable("main::!").set("Too many levels of symbolic links");
-            return scalarFalse;
+            return scalarUndef;
         }
 
         // Determine the base mode
-        int baseMode = mode & 3; // Get the lowest 2 bits
-
         if (baseMode == O_RDONLY) {
             modeStr = "<";
         } else if (baseMode == O_WRONLY) {
@@ -1535,7 +1559,7 @@ public class IOOperator {
             // O_EXCL: "error if O_CREAT and the file already exists"
             if ((mode & O_EXCL) != 0 && existed) {
                 getGlobalVariable("main::!").set("File exists");
-                return scalarFalse;
+                return scalarUndef;
             }
             if (!existed) {
                 try {
@@ -1545,14 +1569,14 @@ public class IOOperator {
                 } catch (IOException e) {
                     // Failed to create file
                     getGlobalVariable("main::!").set(e.getMessage());
-                    return scalarFalse;
+                    return scalarUndef;
                 }
             }
         }
 
         RuntimeIO fh = RuntimeIO.open(fileName, modeStr);
         if (fh == null) {
-            return scalarFalse;
+            return scalarUndef;
         }
 
         // Set IO slot on the glob, following the same pattern as open() and socket()
@@ -1783,15 +1807,19 @@ public class IOOperator {
         }
 
         // Get the format template
-        String formatTemplate = args[0].scalar().toString();
+        RuntimeScalar picture = args[0].scalar();
+        String formatTemplate = picture.toString();
 
         // For simple cases (like constants in index.t), if there are no format fields,
         // just append the template string directly to $^A
         if (!formatTemplate.contains("@") && !formatTemplate.contains("^")) {
             // Simple case: no format fields, just append the string
             RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
+            boolean resultTainted = accumulator.isTainted() || picture.isTainted()
+                    || picture.formatPictureTainted;
             String currentValue = accumulator.toString();
             accumulator.set(currentValue + formatTemplate);
+            accumulator.tainted = resultTainted;
             return scalarTrue;
         }
 
@@ -1818,8 +1846,14 @@ public class IOOperator {
 
             // Append to $^A
             RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
+            boolean resultTainted = accumulator.isTainted() || picture.isTainted()
+                    || picture.formatPictureTainted;
+            for (int i = 1; i < args.length; i++) {
+                resultTainted |= args[i].scalar().isTainted();
+            }
             String currentValue = accumulator.toString();
             accumulator.set(currentValue + formattedOutput);
+            accumulator.tainted = resultTainted;
 
             // Return success (1)
             return scalarTrue;
@@ -2281,6 +2315,9 @@ public class IOOperator {
             return scalarFalse;
         }
 
+        RuntimeScalar.checkTaint(args[0].scalar(), "truncate");
+        RuntimeScalar.checkTaint(args[1].scalar(), "truncate");
+
         try {
             RuntimeBase firstArg = args[0];
             long length = args[1].scalar().getLong();
@@ -2370,6 +2407,9 @@ public class IOOperator {
             return scalarFalse;
         }
 
+        RuntimeScalar.checkTaint(args[1].scalar(), "fcntl");
+        RuntimeScalar.checkTaint(args[2].scalar(), "fcntl");
+
         try {
             RuntimeScalar fileHandle = args[0].scalar();
             int function = args[1].scalar().getInt();
@@ -2442,6 +2482,9 @@ public class IOOperator {
             getGlobalVariable("main::!").set("Not enough arguments for ioctl");
             return scalarFalse;
         }
+
+        RuntimeScalar.checkTaint(args[1].scalar(), "ioctl");
+        RuntimeScalar.checkTaint(args[2].scalar(), "ioctl");
 
         try {
             RuntimeScalar fileHandle = args[0].scalar();

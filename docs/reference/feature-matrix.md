@@ -45,6 +45,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - DBI with JDBC integration
 - Subroutine prototypes
 - Tied variables
+- Taint mode (`-T`)
 - Method Resolution Order
 
 🚧 Partially Supported:
@@ -138,10 +139,9 @@ The built-in Perl debugger (`perl -d`) provides interactive debugging. See [Debu
 - ✅  UTF-16 is accepted in source code.
 
 - ✅  Accept command line switches from the shebang line.
-- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-d`, `-f`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
+- ✅  Accept command line switches: `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-I`, `-0`, `-a`, `-d`, `-f`, `-F`, `-m`, `-M`, `-g`, `-l`, `-h`, `-s`, `-S`, `-T`, `-x`, `-v`, `-V`, `-?`, `-w`, `-W`, `-X` are implemented.
 - ❌  Missing command line switches include:
-  - `-T`: Taint checks.
-  - `-t`: Taint checks with warnings.
+  - `-t`: Taint checks with warnings. The option is accepted, but warning-mode taint semantics are not implemented.
   - `-u`: Dumps core after compiling.
   - `-U`: Allows unsafe operations.
   - `-D[number/list]`: Sets debugging flags.
@@ -213,7 +213,10 @@ my @copy = @{$z};         # ERROR
 - ✅  **Typeglob as hash**: `*$val{$k}` for `SCALAR`, `ARRAY`, `HASH`, `CODE`, `IO` is implemented.
 - ✅  **Use string as a scalar reference**: Support for scalar references from strings is implemented.
 - ✅  **Tied Scalars**: Support for tying scalars to classes is implemented. See also [Tied Arrays](#arrays-hashes-and-lists), [Tied Hashes](#arrays-hashes-and-lists), [Tied Handles](#io-operations).
-- ❌  **Taint checks**: Support for taint checks is not implemented.
+- ✅  **Taint checks**: `-T` marks external inputs, propagates taint through
+  scalar and regular-expression operations, supports capture-based untainting,
+  and rejects tainted values at security-sensitive operations. Supported by
+  both JVM and interpreter backends.
 - ❌  **`local` special cases**: `local *HANDLE = *HANDLE` doesn't create a new typeglob.
 - 🚧  **Variable attributes**: `my $x : attr` supported via `MODIFY_SCALAR_ATTRIBUTES` etc.
 
