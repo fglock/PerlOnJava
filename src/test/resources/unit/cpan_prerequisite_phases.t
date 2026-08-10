@@ -13,6 +13,8 @@ if ($is_perlonjava) {
     require CPAN::Distribution;
     require CPAN::Queue;
 } else {
+    require './src/main/perl/lib/PerlOnJava/Process.pm';
+    $INC{'PerlOnJava/Process.pm'} = './src/main/perl/lib/PerlOnJava/Process.pm';
     require './src/main/perl/lib/CPAN/Distribution.pm';
     require './src/main/perl/lib/CPAN/Queue.pm';
 }
@@ -202,6 +204,28 @@ OUTPUT
     [],
     'noncanonical test failures do not trigger dependency discovery',
 );
+
+{
+    my %process_args;
+    my ($capture_ok, $captured_output) =
+        CPAN::Distribution::_perlonjava_capture_test_command(
+            'test command',
+            sub {
+                %process_args = @_;
+                return {
+                    exit_code => 0,
+                    output => "cpan-live-marker\n",
+                    timed_out => 0,
+                    error => '',
+                };
+            },
+        );
+    ok($capture_ok, 'retry-aware CPAN test command preserves successful status');
+    is($captured_output, "cpan-live-marker\n",
+        'retry-aware CPAN test command retains output for prerequisite analysis');
+    ok($process_args{tee},
+        'retry-aware CPAN test command requests live output streaming');
+}
 
 {
     local $CPAN::CurrentCommandId = 42;

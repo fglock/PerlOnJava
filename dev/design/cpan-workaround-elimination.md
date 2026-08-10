@@ -983,7 +983,7 @@ Current phase: implementation complete; CI validation pending.
 
 ## Progress Tracking
 
-### Current Status: final rebase and local validation complete; CI pending
+### Current Status: final rebase, live CPAN output repair, and local validation complete; CI pending
 
 ### Completed Phases
 
@@ -1058,6 +1058,22 @@ Current phase: implementation complete; CI validation pending.
   - The final full `make` gate passes. Devel::Symdump passes 9 files/29
     assertions, aliased passes 6 files/40 assertions, and the bundled-module
     matrix passes all 378 files.
+- [x] Restore live `jcpan` test output while retaining missing-prerequisite
+  recovery (2026-08-10).
+  - The canonical missing-module retry introduced retry-aware test-output
+    capture, but replayed the captured TAP only after the complete distribution
+    suite exited. Long suites such as DBIx::Class therefore appeared silent
+    even while their worker JVMs were making progress.
+  - `PerlOnJava::Process` now has an opt-in live tee mode. Each merged child
+    output chunk is flushed through the current Perl STDOUT immediately and is
+    also retained byte-for-byte for the existing canonical `Can't locate`
+    parser. CPAN still promotes discovered test prerequisites and retries no
+    more than once per command; it no longer replays output at the end.
+  - A timing regression has the child verify that its first marker reached the
+    tee destination before the child exits. A CPAN-level regression verifies
+    successful status, retained analysis output, and that live tee mode is
+    requested. Both tests pass under standard Perl, JVM, and interpreter
+    execution.
 
 ### Next Steps
 

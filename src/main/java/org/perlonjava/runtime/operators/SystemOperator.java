@@ -895,7 +895,7 @@ public class SystemOperator {
      * This ensures output goes through any Perl-level redirections (e.g.,
      * when STDOUT has been reopened to a file via open STDOUT, ">", $file).
      */
-    private static void writeToPerlStdoutBytes(byte[] buffer, int bytesRead) {
+    public static void writeToPerlStdoutBytes(byte[] buffer, int bytesRead) {
         try {
             RuntimeIO perlStdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
             if (writeRawBytesToPerlHandle(perlStdout, buffer, bytesRead)) {

@@ -35,14 +35,15 @@ public class PerlOnJavaProcess extends PerlModuleBase {
     }
 
     public static RuntimeList _run(RuntimeArray args, int ctx) {
-        if (args.size() < 3) {
-            throw new IllegalArgumentException("_run requires timeout, cwd, and argv");
+        if (args.size() < 4) {
+            throw new IllegalArgumentException("_run requires timeout, cwd, tee, and argv");
         }
 
         double timeoutSeconds = args.get(0).getDouble();
         String cwd = args.get(1).toString();
+        boolean tee = args.get(2).getBoolean();
         List<String> argv = new ArrayList<>();
-        for (int i = 2; i < args.size(); i++) {
+        for (int i = 3; i < args.size(); i++) {
             argv.add(args.get(i).toString());
         }
 
@@ -66,7 +67,7 @@ public class PerlOnJavaProcess extends PerlModuleBase {
             process.getOutputStream().close();
 
             Process activeProcess = process;
-            reader = new Thread(() -> copyOutput(activeProcess.getInputStream(), output),
+            reader = new Thread(() -> copyOutput(activeProcess.getInputStream(), output, tee),
                 "perlonjava-process-output");
             reader.setDaemon(true);
             reader.start();
@@ -115,13 +116,17 @@ public class PerlOnJavaProcess extends PerlModuleBase {
         }
     }
 
-    private static void copyOutput(InputStream input, ByteArrayOutputStream output) {
+    private static void copyOutput(InputStream input, ByteArrayOutputStream output,
+            boolean tee) {
         try (input) {
             byte[] buffer = new byte[8192];
             int read;
             while ((read = input.read(buffer)) != -1) {
                 synchronized (output) {
                     output.write(buffer, 0, read);
+                }
+                if (tee) {
+                    SystemOperator.writeToPerlStdoutBytes(buffer, read);
                 }
             }
         } catch (IOException ignored) {

@@ -800,24 +800,18 @@ sub _perlonjava_missing_modules_from_test_output {
 }
 
 sub _perlonjava_capture_test_command {
-    my ($system) = @_;
-    require File::Temp;
+    my ($system, $run_process) = @_;
+    require PerlOnJava::Process;
+    $run_process ||= sub { PerlOnJava::Process::run_process(@_) };
 
-    my ($capture, $capture_path) = File::Temp::tempfile(
-        'perlonjava-cpan-test-XXXXXX',
-        TMPDIR => 1,
-        UNLINK => 1,
+    my @argv = $^O eq 'MSWin32'
+        ? ('cmd.exe', '/c', $system)
+        : ('/bin/sh', '-c', $system);
+    my $result = $run_process->(
+        argv => \@argv,
+        tee => 1,
     );
-    my $tests_ok;
-    {
-        local *STDOUT = $capture;
-        local *STDERR = $capture;
-        $tests_ok = system($system) == 0;
-    }
-    seek $capture, 0, 0;
-    my $output = do { local $/; <$capture> };
-    close $capture;
-    return ($tests_ok, defined($output) ? $output : '');
+    return ($result->{exit_code} == 0, $result->{output});
 }
 
 sub _perlonjava_missing_module_retry_available {
@@ -4395,13 +4389,12 @@ sub test {
         }
     } # FORK
     } else {
-        # No fork is available on PerlOnJava. Capture and replay the complete
-        # output so a single canonical missing-module failure can be promoted
-        # to a test prerequisite below.
+        # No fork is available on PerlOnJava. Tee the output live while retaining
+        # a complete copy, so a canonical missing-module failure can be promoted
+        # to a test prerequisite below without hiding long-running test progress.
         my $test_output;
         ($tests_ok, $test_output) =
             CPAN::Distribution::_perlonjava_capture_test_command($system);
-        $CPAN::Frontend->myprint($test_output) if length $test_output;
 
         if (!$tests_ok && $self->_perlonjava_missing_module_retry_available) {
             my @missing =

@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Test::More;
 use File::Temp qw(tempdir);
+use File::Spec;
 use Cwd qw(abs_path);
 use lib 'src/main/perl/lib';
 use PerlOnJava::Process qw(run_process);
@@ -15,6 +16,26 @@ is($result->{exit_code}, 0, 'argv process exits successfully');
 like($result->{output}, qr/out\n/, 'stdout is captured');
 like($result->{output}, qr/err\n/, 'stderr is captured');
 ok(!$result->{timed_out}, 'successful process does not time out');
+
+my $tee_path = File::Spec->catfile(tempdir(CLEANUP => 1), 'live-output.txt');
+open my $saved_stdout, '>&', STDOUT or die "duplicate STDOUT: $!";
+open STDOUT, '>', $tee_path or die "open $tee_path: $!";
+$result = run_process(
+    argv => [
+        $^X,
+        '-e',
+        '$|=1; print "live marker\\n"; select undef,undef,undef,0.5; '
+            . 'open my $fh,"<",$ARGV[0] or exit 7; '
+            . 'local $/; exit((<$fh> || "") =~ /live marker/ ? 0 : 8)',
+        $tee_path,
+    ],
+    timeout => 10,
+    tee => 1,
+);
+open STDOUT, '>&', $saved_stdout or die "restore STDOUT: $!";
+close $saved_stdout;
+is($result->{exit_code}, 0, 'tee output is visible before the child exits');
+like($result->{output}, qr/live marker/, 'tee mode also retains captured output');
 
 my $dir = tempdir(CLEANUP => 1);
 $result = run_process(
