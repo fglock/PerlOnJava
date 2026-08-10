@@ -2684,6 +2684,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 base.preservesMatch() || operation.preservesMatch(),
                 base.isUnicode(),
                 base.isAscii(),
+                base.isAsciiStrict(),
                 base.allowEvalGroup() || operation.allowEvalGroup(),
                 base.taintResults() || operation.taintResults()
         );

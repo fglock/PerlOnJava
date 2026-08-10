@@ -20,12 +20,13 @@ import static java.util.regex.Pattern.*;
  * @param preservesMatch       p flag - preserve match after failed matches
  * @param isUnicode            u flag - Unicode semantics (\w, \d, \s match Unicode)
  * @param isAscii              a flag - ASCII-restrict (\w, \d, \s match only ASCII)
+ * @param isAsciiStrict        aa flags - also forbid ASCII/non-ASCII case-fold crossings
  */
 public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
                          boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
                          boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
                          boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode,
-                         boolean isAscii, boolean allowEvalGroup, boolean taintResults) {
+                         boolean isAscii, boolean isAsciiStrict, boolean allowEvalGroup, boolean taintResults) {
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
         // m?PAT? is encoded by StringParser as an extra trailing '?' on the modifier string
@@ -48,6 +49,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("p"),
                 modifiers.contains("u"),
                 modifiers.contains("a"),
+                modifiers.indexOf('a') >= 0
+                        && modifiers.indexOf('a', modifiers.indexOf('a') + 1) >= 0,
                 modifiers.contains("E"),
                 modifiers.contains("T")
         );
@@ -87,9 +90,9 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         
         if (isCaseInsensitive) {
             flags |= CASE_INSENSITIVE;
-            // For Unicode case-insensitive matching, add UNICODE_CASE
-            // But NOT if /a flag (ASCII-restrict) is set - /a restricts case folding to ASCII
-            if (!isAscii) {
+            // /a restricts character classes such as \w but retains Unicode
+            // case folding. Only /aa forbids ASCII/non-ASCII fold crossings.
+            if (!isAsciiStrict) {
                 flags |= UNICODE_CASE;
             }
         }
@@ -114,6 +117,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         boolean newPreservesMatch = this.preservesMatch;
         boolean newIsUnicode = this.isUnicode;
         boolean newIsAscii = this.isAscii;
+        boolean newIsAsciiStrict = this.isAsciiStrict;
 
         // Handle positive flags
         if (positiveFlags.indexOf('n') >= 0) newFlagN = true;
@@ -123,7 +127,11 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (positiveFlags.indexOf('x') >= 0) newIsExtended = true;
         if (positiveFlags.indexOf('p') >= 0) newPreservesMatch = true;
         if (positiveFlags.indexOf('u') >= 0) newIsUnicode = true;
-        if (positiveFlags.indexOf('a') >= 0) newIsAscii = true;
+        if (positiveFlags.indexOf('a') >= 0) {
+            newIsAscii = true;
+            int firstA = positiveFlags.indexOf('a');
+            if (positiveFlags.indexOf('a', firstA + 1) >= 0) newIsAsciiStrict = true;
+        }
 
         // Handle negative flags
         if (negativeFlags.indexOf('n') >= 0) newFlagN = false;
@@ -132,7 +140,10 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (negativeFlags.indexOf('s') >= 0) newIsDotAll = false;
         if (negativeFlags.indexOf('x') >= 0) newIsExtended = false;
         if (negativeFlags.indexOf('u') >= 0) newIsUnicode = false;
-        if (negativeFlags.indexOf('a') >= 0) newIsAscii = false;
+        if (negativeFlags.indexOf('a') >= 0) {
+            newIsAscii = false;
+            newIsAsciiStrict = false;
+        }
 
         return new RegexFlags(
                 this.isGlobalMatch,
@@ -150,6 +161,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 newPreservesMatch,
                 newIsUnicode,
                 newIsAscii,
+                newIsAsciiStrict,
                 this.allowEvalGroup,
                 this.taintResults
         );
@@ -160,7 +172,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
         if (isGlobalMatch) flagString.append('g');
         if (preservesMatch) flagString.append('p');
-        if (isAscii) flagString.append('a');
+        if (isAscii) flagString.append(isAsciiStrict ? "aa" : "a");
         if (isUnicode) flagString.append('u');
         if (isMultiLine) flagString.append('m');
         if (isDotAll) flagString.append('s');
@@ -180,7 +192,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
      */
     public String toModifierString() {
         StringBuilder sb = new StringBuilder();
-        if (isAscii) sb.append('a');
+        if (isAscii) sb.append(isAsciiStrict ? "aa" : "a");
         if (isUnicode) sb.append('u');
         if (isMultiLine) sb.append('m');
         if (isDotAll) sb.append('s');
