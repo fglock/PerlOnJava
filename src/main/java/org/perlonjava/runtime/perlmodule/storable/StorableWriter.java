@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -490,6 +491,14 @@ public final class StorableWriter {
         }
         // integers
         if (v.type == RuntimeScalarType.INTEGER) {
+            if (v.value instanceof BigInteger integer
+                    && (integer.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0
+                        || integer.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0)) {
+                // Upstream Storable serializes UVs outside signed-IV range as
+                // decimal strings so thaw preserves their positive numeric tag.
+                writeStringBody(c, integer.toString().getBytes(StandardCharsets.US_ASCII), false);
+                return;
+            }
             long iv = v.getLong();
             writeInteger(c, iv);
             return;

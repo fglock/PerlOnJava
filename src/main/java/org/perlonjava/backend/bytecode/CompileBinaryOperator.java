@@ -158,9 +158,15 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.throwCompilerException("Hash dereference requires key");
                 }
 
-                // Use helper for hash deref get (handles superoperator + fallback)
-                bytecodeCompiler.lastResultReg = bytecodeCompiler.emitHashDerefGet(
-                        scalarRefReg, keyNode.elements.get(0), node.getIndex());
+                if (keyNode.elements.size() > 1) {
+                    int keyReg = bytecodeCompiler.compileMultidimensionalHashKey(keyNode);
+                    bytecodeCompiler.lastResultReg = bytecodeCompiler.emitHashDerefGetWithKeyReg(
+                            scalarRefReg, keyReg, node.getIndex());
+                } else {
+                    // Use helper for hash deref get (handles superoperator + fallback)
+                    bytecodeCompiler.lastResultReg = bytecodeCompiler.emitHashDerefGet(
+                            scalarRefReg, keyNode.elements.get(0), node.getIndex());
+                }
                 return;
             } else if (node.right instanceof ArrayLiteralNode indexNode) {
                 // Arrayref dereference: $ref->[index]

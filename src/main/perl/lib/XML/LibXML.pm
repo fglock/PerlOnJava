@@ -1310,6 +1310,14 @@ sub attributes {
     return wantarray ? @attr : XML::LibXML::NamedNodeMap->new( @attr );
 }
 
+sub getAttributes {
+    my $self = shift;
+    my @attr = grep {
+        $_->nodeType != XML::LibXML::XML_NAMESPACE_DECL()
+    } $self->attributes(@_);
+    return wantarray ? @attr : XML::LibXML::NamedNodeMap->new( @attr );
+}
+
 
 sub findnodes {
     my ($node, $xpath) = @_;

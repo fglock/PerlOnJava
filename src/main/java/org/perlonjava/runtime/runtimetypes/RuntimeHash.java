@@ -55,6 +55,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public boolean isGlobalPackageHash = false;
 
+    /** Values stored in Perl's magical %ENV are byte-oriented strings. */
+    public boolean isEnvironmentHash = false;
+
     /**
      * Constructor for RuntimeHash.
      * Initializes an empty hash map to store elements.
@@ -87,6 +90,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
+            if (owner.isEnvironmentHash
+                    && value != null
+                    && !(value instanceof RuntimeEnvironmentScalar)) {
+                value = new RuntimeEnvironmentScalar(value);
+            }
             RuntimeScalar previous = super.get(key);
             owner.notePackageRootMutation(previous, value);
             if (value != null) value.markContainerOwner(owner);

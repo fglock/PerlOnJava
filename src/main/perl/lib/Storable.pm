@@ -34,6 +34,13 @@ our $Deparse = 0;
 our $Eval = 0;
 our $restrict_universe = 0;
 
+# Java's SX_CODE reader delegates source evaluation here so lexical Perl eval
+# and user-supplied Safe callbacks follow Storable's normal semantics.
+sub _perlonjava_eval_code {
+    my ($source) = @_;
+    return ref($Eval) eq 'CODE' ? $Eval->($source) : eval $source;
+}
+
 =head1 NAME
 
 Storable - Persistent storage and retrieval of Perl data structures

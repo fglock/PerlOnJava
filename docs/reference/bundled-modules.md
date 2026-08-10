@@ -225,6 +225,7 @@ These are loaded automatically or via `use`:
 | `Storable` | Java + Perl | `freeze`, `thaw`, `dclone`, `store`, `retrieve`, `nstore`, `nfreeze` — produces and consumes the native Perl `pst0` binary format, interoperable with system perl in both directions. See `dev/modules/storable_binary_format.md`. |
 | `Clone` | Java + Perl | Deep copy |
 | `Scalar::Util` | Java | `blessed`, `reftype`, `weaken`, `dualvar`, etc. |
+| `Scalar::Type` | Java + Perl | Scalar storage-type introspection without native XS |
 | `List::Util` | Java | `reduce`, `first`, `min`, `max`, `sum`, `mesh`/`zip`, etc. |
 | `Hash::Util` | Java | `lock_keys`, `lock_hash`, etc. |
 

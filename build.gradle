@@ -221,6 +221,7 @@ dependencies {
     implementation libs.sqlite.jdbc                    // SQLite JDBC driver
     implementation libs.bcprov                         // Bouncy Castle crypto (SHA-3, Keccak, etc.)
     implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
+    implementation 'org.jruby.joni:joni:2.2.7'         // Stack-safe recursive regex backend
     implementation 'io.netty:netty-codec-http:4.1.115.Final'  // Netty HTTP codec for PSGI server
 
     // Testing dependencies
@@ -420,6 +421,7 @@ sourceSets {
             include '**/*.pod'
             include '**/*.dd'
             include '**/*.yml'
+            include '**/*.json'
             include '**/*.patch'
             include '**/media.types'
             include 'lib/ExtUtils/xsubpp'
@@ -442,6 +444,7 @@ tasks.named('processResources', Copy) {
         include '**/*.pod'
         include '**/*.dd'
         include '**/*.yml'
+        include '**/*.json'
         include '**/media.types'
         include 'bin/**'
         include 'META-INF/services/**'

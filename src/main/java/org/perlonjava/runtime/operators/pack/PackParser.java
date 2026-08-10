@@ -684,7 +684,7 @@ public class PackParser {
             case 'i', 'I', 'V', 'N', 'f', 'F' -> 4;
             case 'l', 'L' -> nativeSize ? 8 : 4; // Native long is 8 bytes with !
             case 'q', 'Q', 'd', 'D' -> 8;
-            case 'j', 'J' -> 4; // ivsize=4, uvsize=4
+            case 'j', 'J' -> 8;
             case 'p', 'P' -> 8; // Pointer size (always 8 on modern 64-bit systems)
             case 'w' -> 1; // BER compressed integer - variable but use 1 as base
             case 'b', 'B', 'h', 'H' -> 1; // Bit/hex strings - 1 byte per 2 chars (approximation)

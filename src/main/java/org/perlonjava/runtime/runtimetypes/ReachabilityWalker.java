@@ -730,6 +730,17 @@ public class ReachabilityWalker {
                         && sc.value instanceof RuntimeBase rb
                         && seen.add(rb)) todo.addLast(rb);
             } else if (cur instanceof RuntimeCode code) {
+                if (code.closedOverVariables != null) {
+                    for (RuntimeBase captured : code.closedOverVariables.values()) {
+                        if (captured == null) continue;
+                        if (captured instanceof RuntimeScalar scalar
+                                && WeakRefRegistry.isweak(scalar)) {
+                            continue;
+                        }
+                        if (captured == target) return true;
+                        if (seen.add(captured)) todo.addLast(captured);
+                    }
+                }
                 if (code.capturedScalars != null) {
                     for (RuntimeScalar cap : code.capturedScalars) {
                         if (cap == null) continue;
@@ -749,6 +760,23 @@ public class ReachabilityWalker {
                     }
                 });
                 if (foundReflectiveCapture[0]) return true;
+                visitReflectiveCodeBases(code, base -> {
+                    if (seen.add(base)) {
+                        todo.addLast(base);
+                    }
+                });
+                if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                        && interpreted.capturedVars != null) {
+                    for (RuntimeBase captured : interpreted.capturedVars) {
+                        if (captured == null) continue;
+                        if (captured instanceof RuntimeScalar scalar
+                                && WeakRefRegistry.isweak(scalar)) {
+                            continue;
+                        }
+                        if (captured == target) return true;
+                        if (seen.add(captured)) todo.addLast(captured);
+                    }
+                }
             }
         }
         return false;

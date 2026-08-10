@@ -234,9 +234,14 @@ public class EmitRegex {
         // @_ is at local variable slot 1 in subroutines
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, 1);
 
-        // Create the replacement regex (4-argument version with caller's @_)
+        // Create the replacement regex (4-argument version with caller's @_).
+        // Substitution carries lexical `use bytes` on the regex object so the
+        // runtime can match a byte view and still write through the original lvalue.
+        String replacementFactory = emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)
+                ? "getBytesReplacementRegex" : "getReplacementRegex";
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/regex/RuntimeRegex", "getReplacementRegex",
+                "org/perlonjava/runtime/regex/RuntimeRegex", replacementFactory,
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
@@ -256,7 +261,7 @@ public class EmitRegex {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
 
-        emitMatchRegex(emitterVisitor);
+        emitMatchRegexWithoutBytesView(emitterVisitor);
     }
 
     /**
@@ -353,11 +358,24 @@ public class EmitRegex {
     private static void emitMatchRegex(EmitterVisitor emitterVisitor) {
         boolean bytesMode = emitterVisitor.ctx.symbolTable != null
                 && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES);
+        emitMatchRegexRuntimeCall(emitterVisitor, bytesMode ? "matchRegexBytes" : "matchRegex");
+    }
+
+    /**
+     * Match a substitution regex that already carries its byte-mode view.
+     * The original target scalar must remain on the stack so replacement writes
+     * through its lvalue rather than through a converted temporary.
+     */
+    private static void emitMatchRegexWithoutBytesView(EmitterVisitor emitterVisitor) {
+        emitMatchRegexRuntimeCall(emitterVisitor, "matchRegex");
+    }
+
+    private static void emitMatchRegexRuntimeCall(EmitterVisitor emitterVisitor, String methodName) {
         emitterVisitor.pushCallContext();
         // Invoke the regex matching operation
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegex",
-                bytesMode ? "matchRegexBytes" : "matchRegex",
+                methodName,
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

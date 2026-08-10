@@ -577,7 +577,8 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
-                                RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
+                                RuntimeList retList = RuntimeCode.returnList(
+                                        retVal, callContext, !RuntimeCode.isLvalueCode(code));
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
                                 frame.returnedClosures = collectReturnedClosures(retList);
                                 if (!returnListContainsTrackedReference(retList)) {
@@ -596,7 +597,8 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
-                                RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
+                                RuntimeList retList = RuntimeCode.returnList(
+                                        retVal, callContext, !RuntimeCode.isLvalueCode(code));
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
                                 frame.returnedClosures = collectReturnedClosures(retList);
 
@@ -613,6 +615,9 @@ public class BytecodeInterpreter {
                                 // Dynamic goto: evaluate register to get label name, look up PC
                                 int rs = bytecode[pc++];
                                 RuntimeScalar target = (RuntimeScalar) registers[rs];
+                                if (target.type == RuntimeScalarType.TIED_SCALAR) {
+                                    target = target.tiedFetch();
+                                }
                                 // Dereference if target is a reference to CODE (e.g., goto \&sub)
                                 if (target.type == RuntimeScalarType.REFERENCE) {
                                     RuntimeScalar deref = (RuntimeScalar) target.value;
@@ -1758,6 +1763,10 @@ public class BytecodeInterpreter {
                                 }
 
                                 RuntimeArray callArgs = registers[argsReg].getTailCallArrayOfAlias();
+                                RuntimeArray localizedArgs = RuntimeGlob.localizedUnderscoreArray();
+                                if (localizedArgs != null) {
+                                    callArgs = localizedArgs;
+                                }
 
                                 // Create TAILCALL marker with eval scope for runtime check
                                 String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;

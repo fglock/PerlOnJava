@@ -416,11 +416,21 @@ public class GlobalVariable {
     }
 
     public static void setStashAlias(String dstNamespace, String srcNamespace) {
-        String dst = dstNamespace.endsWith("::") ? dstNamespace : dstNamespace + "::";
-        String src = srcNamespace.endsWith("::") ? srcNamespace : srcNamespace + "::";
+        String dst = normalizeStashNamespace(dstNamespace);
+        String src = normalizeStashNamespace(srcNamespace);
         stashAliases.put(dst, src);
         resolvedStashAliasCache.clear();
         invalidatePackageRootSnapshot();
+    }
+
+    private static String normalizeStashNamespace(String namespace) {
+        String normalized = namespace.endsWith("::") ? namespace : namespace + "::";
+        // Packages are children of main::, so main::Foo:: and Foo:: name the
+        // same stash. Keep main:: itself intact.
+        if (normalized.length() > 6 && normalized.startsWith("main::")) {
+            return normalized.substring(6);
+        }
+        return normalized;
     }
 
     public static void clearStashAlias(String namespace) {
@@ -470,6 +480,21 @@ public class GlobalVariable {
         String current = pkgWithColons;
         for (int hop = 0; hop < STASH_ALIAS_HOP_CAP; hop++) {
             String next = stashAliases.get(current);
+            if (next == null) {
+                // A stash entry aliases the entire package subtree. Find the
+                // longest matching package prefix so recursive constructs such
+                // as Acme::Meta::Meta::Meta:: resolve one level at a time.
+                String bestPrefix = null;
+                for (String prefix : stashAliases.keySet()) {
+                    if (current.startsWith(prefix)
+                            && (bestPrefix == null || prefix.length() > bestPrefix.length())) {
+                        bestPrefix = prefix;
+                    }
+                }
+                if (bestPrefix != null) {
+                    next = stashAliases.get(bestPrefix) + current.substring(bestPrefix.length());
+                }
+            }
             if (next == null || next.equals(current)) {
                 break;
             }
@@ -652,8 +677,9 @@ public class GlobalVariable {
         // a value, use it; otherwise fall through to the raw key. See
         // getGlobalCodeRef for the rationale (preserve compile-time-qualified
         // refs while letting runtime symbolic refs follow the alias).
+        String resolvedKey = key;
         if (!stashAliases.isEmpty()) {
-            String resolvedKey = resolveAliasedFqn(key);
+            resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
                 RuntimeScalar resolved = globalVariables.get(resolvedKey);
                 if (resolved != null) {
@@ -663,9 +689,13 @@ public class GlobalVariable {
         }
         RuntimeScalar var = globalVariables.get(key);
         if (var == null) {
+            // No scalar was pinned to the original package before the stash
+            // alias. New symbols belong to the aliased stash; retain the raw
+            // fallback only for an already-existing compile-time-qualified SV.
+            String storageKey = resolvedKey != key ? resolvedKey : key;
             // Need to initialize global variable
-            Matcher matcher = regexVariablePattern.matcher(key);
-            if (matcher.matches() && !key.equals("main::0")) {
+            Matcher matcher = regexVariablePattern.matcher(storageKey);
+            if (matcher.matches() && !storageKey.equals("main::0")) {
                 // Regex capture variable like $1
                 // Extract the numeric capture group as a string
                 String capturedNumber = matcher.group(1);
@@ -678,7 +708,7 @@ public class GlobalVariable {
                 var = new RuntimeScalar();
             }
             markPackageGlobalRoot(var);
-            globalVariables.put(key, var);
+            globalVariables.put(storageKey, var);
             invalidatePackageRootSnapshot();
         } else {
             markPackageGlobalRoot(var);
@@ -985,7 +1015,7 @@ public class GlobalVariable {
                     }
                 }
                 if (var == null) {
-                    var = new RuntimeHash();
+                    var = createNamedGlobalHash(aliasGroup);
                 }
                 markPackageGlobalRoot(var);
                 for (String alias : aliasGroup) {
@@ -998,7 +1028,7 @@ public class GlobalVariable {
                 if (isStash) {
                     var = new RuntimeStash(key);
                 } else {
-                    var = new RuntimeHash();
+                    var = createNamedGlobalHash(java.util.List.of(key));
                 }
                 // D-W6.18: mark as package-global so values stored here
                 // get the storedInPackageGlobal flag (replaces class-name
@@ -1010,7 +1040,27 @@ public class GlobalVariable {
         } else {
             markPackageGlobalRoot(var);
         }
+        // Merely mentioning *! can create an ordinary HASH slot before the
+        // magic %! value is requested (notably in `*Y = *!`).  Upgrade that
+        // pre-existing slot in place so aliases see Errno's populated hash.
+        if (key.equals("main::!") && !(var.elements instanceof ErrnoHash)) {
+            var.elements = new ErrnoHash();
+        }
         return var;
+    }
+
+    private static RuntimeHash createNamedGlobalHash(java.util.List<String> names) {
+        RuntimeHash hash = new RuntimeHash();
+        if (names.contains("main::!")) {
+            // %! is magic but remains absent from the stash until first
+            // accessed. A glob alias of %! must materialize the same magic.
+            hash.elements = new ErrnoHash();
+        } else if (names.contains("main::+")) {
+            hash.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);
+        } else if (names.contains("main::-")) {
+            hash.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);
+        }
+        return hash;
     }
 
     /**
@@ -1567,7 +1617,11 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global IO reference.
      */
     public static RuntimeGlob getGlobalIO(String key) {
-        String resolvedKey = resolveStashHashRedirect(key);
+        // A stash glob is itself the lvalue that owns an alias. Resolving it
+        // through the currently aliased hash would make a second assignment
+        // (`*Alias:: = *Other::`) replace the old source stash instead.
+        boolean stashGlob = key.endsWith("::") && !key.endsWith(":::");
+        String resolvedKey = stashGlob ? key : resolveStashHashRedirect(key);
         RuntimeGlob glob = globalIORefs.get(resolvedKey);
         if (glob == null) {
             glob = new RuntimeGlob(resolvedKey);

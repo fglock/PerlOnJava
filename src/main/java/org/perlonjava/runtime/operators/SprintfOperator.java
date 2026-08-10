@@ -6,6 +6,8 @@ import org.perlonjava.runtime.operators.sprintf.SprintfNumericFormatter;
 import org.perlonjava.runtime.operators.sprintf.SprintfValueFormatter;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
+
 /**
  * Implements Perl's sprintf operator for formatted string output.
  * <p>
@@ -80,8 +82,14 @@ public class SprintfOperator {
                 result.append(literal);
                 charsWritten += literal.length();
             } else if (element instanceof FormatSpecifier spec) {
+                if (spec.width != null && spec.width == Integer.MAX_VALUE) {
+                    if ("aAeEfFgG".indexOf(spec.conversionChar) >= 0) {
+                        throw new PerlCompilerException("Numeric format result too large");
+                    }
+                    throw new PerlCompilerException("Integer overflow in format string for sprintf ");
+                }
                 // Check for integer overflow FIRST
-                if ((spec.width != null && (spec.width == Integer.MAX_VALUE || spec.width > MAX_PRACTICAL_FORMAT_SIZE)) ||
+                if ((spec.width != null && spec.width > MAX_PRACTICAL_FORMAT_SIZE) ||
                         (spec.precision != null && (spec.precision == Integer.MAX_VALUE || spec.precision > MAX_PRACTICAL_FORMAT_SIZE)) ||
                         (spec.parameterIndex != null && spec.parameterIndex == Integer.MAX_VALUE) ||
                         (spec.widthArgIndex != null && spec.widthArgIndex == Integer.MAX_VALUE) ||
@@ -579,14 +587,15 @@ public class SprintfOperator {
             }
 
             if (widthArgIndex < list.size()) {
-                long widthLong = ((RuntimeScalar) list.elements.get(widthArgIndex)).getLong();
+                BigInteger widthValue = ((RuntimeScalar) list.elements.get(widthArgIndex)).getSignedBigint();
 
                 // Check for overflow when converting to int
-                if (widthLong > Integer.MAX_VALUE || widthLong <= Integer.MIN_VALUE) {
+                if (widthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
+                        || widthValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) <= 0) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
 
-                args.width = (int) widthLong;
+                args.width = widthValue.intValue();
                 if (args.width < 0) {
                     spec.flags += "-";
                     args.width = -args.width;
@@ -625,14 +634,15 @@ public class SprintfOperator {
             }
 
             if (precArgIndex < list.size()) {
-                long precLong = ((RuntimeScalar) list.elements.get(precArgIndex)).getLong();
+                BigInteger precisionValue = ((RuntimeScalar) list.elements.get(precArgIndex)).getSignedBigint();
 
                 // Check for overflow - including extreme negative values
-                if (precLong > Integer.MAX_VALUE || precLong <= Integer.MIN_VALUE) {
+                if (precisionValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
+                        || precisionValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) <= 0) {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
 
-                args.precision = (int) precLong;
+                args.precision = precisionValue.intValue();
                 if (args.precision < 0) {
                     // For precision, check if negating would cause issues
                     if (args.precision < -MAX_PRACTICAL_FORMAT_SIZE) {

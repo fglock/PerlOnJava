@@ -217,6 +217,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return stack.isEmpty() ? null : stack.peek();
     }
 
+    /** Resolve the active @_ after a localized *_ replaced its ARRAY slot. */
+    public static RuntimeArray getGotoArgs(RuntimeArray lexicalArgs, String packageName) {
+        String globName = packageName + "::_";
+        if (RuntimeGlob.isLocalizedGlob(globName)) {
+            RuntimeArray localized = GlobalVariable.globalArrays.get(globName);
+            if (localized != null) return localized;
+        }
+        RuntimeArray localized = RuntimeGlob.localizedUnderscoreArray();
+        if (localized != null) return localized;
+        return lexicalArgs;
+    }
+
     public static java.util.List<RuntimeArray> snapshotArgsStack() {
         return new java.util.ArrayList<>(argsStack.get());
     }
@@ -382,6 +394,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ra.elements = new java.util.ArrayList<>(list);
                 return ra;
             }
+        }
+        return null;
+    }
+
+    /**
+     * Return the pristine arguments belonging to a specific active code object.
+     * The formatted caller stack collapses compiler/interpreter wrapper pairs,
+     * while the argument stack retains both entries, so a logical caller frame
+     * cannot always be used as a raw argument-stack index.
+     */
+    private static RuntimeArray getOriginalArgsForCode(RuntimeCode target) {
+        if (target == null) return null;
+        Iterator<RuntimeCode> codeIt = activeCodeStack.get().iterator();
+        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack.get().iterator();
+        while (codeIt.hasNext() && argsIt.hasNext()) {
+            if (codeIt.next() == target) {
+                java.util.List<RuntimeScalar> list = argsIt.next();
+                RuntimeArray result = new RuntimeArray();
+                result.elements = new java.util.ArrayList<>(list);
+                return result;
+            }
+            argsIt.next();
         }
         return null;
     }
@@ -744,6 +778,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // only declared; RuntimeCode.defined() still reports whether the subroutine
     // itself has an implementation.
     public boolean isSymbolicReference = false;
+    // Stash slot from which an explicit CODE reference such as `\&Pkg::name`
+    // was taken. Stored on the CV so detached scalar snapshots retain it.
+    public String referenceOriginFqn = null;
+    // An undefined named CV assigned into a different typeglob must remain a
+    // live alias when the source CV is defined later. Module::Install uses
+    // `*authors = \&author` before dynamically installing `author`.
+    public boolean hasForwardGlobAlias = false;
+    // Undefined CV placeholders can already be cached independently by call
+    // sites for both glob names. Keep those placeholders in one alias group so
+    // a later definition can populate every cached CV in place.
+    public List<RuntimeCode> forwardGlobAliases = new ArrayList<>();
+    // Set only when interpreter bytecode lowers `*target = \&source` to a live
+    // source-slot load. JVM compilation resolves later named subs at compile
+    // time and must retain its existing replacement behavior.
+    public boolean requiresForwardGlobAliasGroup = false;
     // Flag to indicate this is a built-in operator
     public boolean isBuiltin = false;
     // Flag to indicate this was explicitly declared (sub foo; or sub foo { ... })
@@ -1219,7 +1268,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static RuntimeScalar resolveDirectCallTarget(RuntimeScalar runtimeScalar, String subroutineName) {
         String lookupName = subroutineName;
-        if ((lookupName == null || lookupName.isEmpty()) && runtimeScalar != null) {
+        if ((lookupName == null || lookupName.isEmpty() || "tailcall".equals(lookupName))
+                && runtimeScalar != null
+                && runtimeScalar.globalCodeRefFqn != null) {
             lookupName = runtimeScalar.globalCodeRefFqn;
         }
         return GlobalVariable.getLocalizedCodeRefForDirectCall(lookupName, runtimeScalar);
@@ -1660,11 +1711,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public void adoptDefinitionFrom(RuntimeCode codeFrom) {
         Supplier<Void> sourceCompilerSupplier = codeFrom.compilerSupplier;
-        boolean sourceIsLazyOnly = sourceCompilerSupplier != null
+        boolean sourceNeedsDelegation = (codeFrom instanceof InterpretedCode && this.hasForwardGlobAlias)
+                || (sourceCompilerSupplier != null
                 && codeFrom.constantValue == null
                 && codeFrom.subroutine == null
                 && codeFrom.methodHandle == null
-                && codeFrom.codeObject == null;
+                && codeFrom.codeObject == null);
 
         this.methodHandle = codeFrom.methodHandle;
         this.subroutine = codeFrom.subroutine;
@@ -1702,7 +1754,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.stateArray = codeFrom.stateArray;
         this.stateHash = codeFrom.stateHash;
         this.constantValue = codeFrom.constantValue;
-        if (sourceIsLazyOnly) {
+        if (sourceNeedsDelegation) {
             this.subroutine = (runtimeArgs, callContext) ->
                     RuntimeCode.apply(new RuntimeScalar(codeFrom), runtimeArgs, callContext);
             this.codeObject = codeFrom;
@@ -3098,7 +3150,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 
                                 MortalList.pushMark();
                                 try {
-                                    return cachedCode.apply(a, callContext);
+                                    return applyCachedMethod(cachedCode, a, callContext);
                                 } finally {
                                     MortalList.popMark();
                                 }
@@ -3148,7 +3200,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             MortalList.pushMark();
                             try {
-                                return code.apply(a, callContext);
+                                return applyCachedMethod(code, a, callContext);
                             } finally {
                                 MortalList.popMark();
                             }
@@ -3168,6 +3220,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
+        }
+    }
+
+    /**
+     * Preserve the normal Perl-subroutine boundary when the method inline cache
+     * invokes a resolved RuntimeCode directly. In particular, an explicit
+     * return inside map/grep must cross generated block callbacks but stop at
+     * the method that owns those blocks; letting the marker escape makes the
+     * method's caller return as well.
+     */
+    private static RuntimeList applyCachedMethod(
+            RuntimeCode code, RuntimeArray args, int callContext) {
+        int effectiveContext = effectiveCallContext(code, callContext);
+        try {
+            // Preserve LVALUE here: generated code performs the callable check
+            // from the raw context. Normalizing it first would silently turn a
+            // forbidden lvalue method assignment into an ordinary scalar call.
+            return code.apply(args, callContext);
+        } catch (PerlNonLocalReturnException e) {
+            if (code.isMapGrepBlock) {
+                throw e;
+            }
+            RuntimeList result = e.returnValue != null
+                    ? e.returnValue.getList() : new RuntimeList();
+            return coerceScalarCallResult(
+                    result, effectiveContext, callContext, !isLvalueCode(code));
         }
     }
 
@@ -3450,6 +3528,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ArrayList<String> syntheticFrame = new ArrayList<>(it.next());
                 if (isSyntheticOwnSubFrame(syntheticFrame)) {
                     stackTrace.add(syntheticOwnSubInsertAt(stackTrace, syntheticFrame), syntheticFrame);
+                } else if (isVirtualEvalFrame(syntheticFrame)) {
+                    stackTrace.add(virtualEvalInsertAt(stackTrace), syntheticFrame);
                 } else {
                     framesToInsert.add(syntheticFrame);
                 }
@@ -3462,7 +3542,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // the sub's own location (not the call site). For interpreter code, the first
         // frame from CallerStack already IS the call site, so no skip is needed.
         int argsFrame = frame; // Save pre-skip frame for argsStack indexing
-        if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()) {
+        boolean currentFrameIsInterpreter = frame < stackTraceSize
+                && stackTrace.get(frame).size() > 4
+                && "interpreter".equals(stackTrace.get(frame).get(4));
+        if (!currentFrameIsInterpreter) {
+            currentFrameIsInterpreter = frame < javaClassNames.size()
+                    && javaClassNames.get(frame) != null
+                    && javaClassNames.get(frame).startsWith("interpreter:");
+        }
+        boolean currentFrameIsVirtualEval = frame < stackTraceSize
+                && isVirtualEvalFrame(stackTrace.get(frame));
+        boolean interpreterFrameBeforeVirtualEval = currentFrameIsInterpreter
+                && frame + 1 < stackTraceSize
+                && isVirtualEvalFrame(stackTrace.get(frame + 1));
+        if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()
+                && !currentFrameIsVirtualEval && !interpreterFrameBeforeVirtualEval) {
             frame++;
         }
 
@@ -3481,12 +3575,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         if (frame >= 0 && frame < stackTraceSize) {
+            // An interpreted subroutine immediately inside an eval BLOCK has
+            // its own frame directly before the synthetic eval frame.  Keep
+            // the interpreted frame for caller()[3] (the callee name), but
+            // take caller()[0..2] from the eval frame, which is the actual
+            // Perl call site.  Advancing the whole frame would instead report
+            // `(eval)` as the called subroutine.
+            ArrayList<String> frameInfo = stackTrace.get(frame);
+            ArrayList<String> locationFrameInfo = interpreterFrameBeforeVirtualEval
+                    ? stackTrace.get(frame + 1)
+                    : frameInfo;
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
-                String pkg = stackTrace.get(frame).getFirst();
+                String pkg = locationFrameInfo.getFirst();
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));
             } else {
-                ArrayList<String> frameInfo = stackTrace.get(frame);
                 int syntheticOwnSubFramesBefore = countSyntheticOwnSubFramesBefore(stackTrace, frame);
                 int trackedOriginalFrame = Math.max(0, originalFrame - syntheticOwnSubFramesBefore);
                 // Interpreter stack traces may contain a synthetic entry for the
@@ -3496,10 +3599,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int trackedActiveCodeFrame = activeCodeFrameForCaller(
                         result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
                 int trackedArgsFrame = Math.max(0, argsFrame - syntheticOwnSubFramesBefore);
-                String pkg = frameInfo.get(0);
+                String pkg = locationFrameInfo.get(0);
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
-                res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
-                res.add(new RuntimeScalar(frameInfo.get(2)));  // line
+                res.add(new RuntimeScalar(locationFrameInfo.get(1)));  // filename
+                res.add(new RuntimeScalar(locationFrameInfo.get(2)));  // line
 
                 // Perl's caller() without EXPR returns only 3 elements: (package, filename, line).
                 // caller(EXPR) returns 11 elements including subroutine name, hasargs, etc.
@@ -3535,7 +3638,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 boolean previousFrameIsEval = previousFrameSubName != null
                         && previousFrameSubName.startsWith("(eval");
 
+                // Ordinary interpreter entries describe the subroutine whose
+                // own bytecode produced that frame. After the normal own-frame
+                // skip, the previous formatted entry is therefore the Perl
+                // caller name. The frame immediately before a virtual eval is
+                // deliberately not skipped, so its own name is authoritative.
+                // Prefer this source-level metadata over activeCodeStack, whose
+                // eval compiler wrappers can be one logical frame out of phase.
+                if (subName == null && currentFrameIsInterpreter) {
+                    String interpreterSubName = interpreterFrameBeforeVirtualEval
+                            ? frameSubName : previousFrameSubName;
+                    if (interpreterSubName != null && !interpreterSubName.startsWith("(eval")) {
+                        subName = interpreterSubName;
+                    }
+                }
+
                 RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                if (virtualEvalFrame && activeCode != null) {
+                    // A synthetic eval frame can occupy the formatted slot for
+                    // a still-active named subroutine. At that same logical
+                    // depth the active-code stack is authoritative; only keep
+                    // `(eval)` when no named Perl code exists (the next outer
+                    // caller really is the eval itself).
+                    String activeSubName = callerSubNameForCode(activeCode);
+                    if (activeSubName != null && !activeSubName.startsWith("(eval")) {
+                        subName = activeSubName;
+                    }
+                }
                 if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
                     if (subName == null && !activeCode.explicitlyRenamed
@@ -3619,6 +3748,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // args here — critical for DBIC TxnScopeGuard double-DESTROY
                         // detection.
                         RuntimeArray frameArgs = getOriginalArgsAt(trackedArgsFrame);
+                        RuntimeArray codeFrameArgs = getOriginalArgsForCode(activeCode);
+                        if (codeFrameArgs != null) {
+                            frameArgs = codeFrameArgs;
+                        }
                         if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
                             RuntimeArray activeFrameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
                             if (activeFrameArgs != null) {
@@ -3805,6 +3938,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static String callerSubNameForCode(RuntimeCode code) {
         if (code == null || code.subName == null || code.subName.isEmpty()
                 || code.subName.startsWith("(")) {
+            if (code != null) {
+                String registeredName = registeredCodeName(code);
+                if (registeredName != null) {
+                    return registeredName;
+                }
+            }
             return null;
         }
         if (code.subName.contains("::")) {
@@ -3812,6 +3951,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    /**
+     * Interpreter calls through imported or prototyped aliases may retain the
+     * code object without retaining its declared subName.  Recover the Perl
+     * name from the live symbol table before reporting an anonymous frame.
+     */
+    private static String registeredCodeName(RuntimeCode code) {
+        String packagePrefix = code.packageName == null || code.packageName.isEmpty()
+                ? null : code.packageName + "::";
+        String fallback = null;
+        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
+            RuntimeScalar value = entry.getValue();
+            if (value == null || value.type != RuntimeScalarType.CODE || value.value != code) {
+                continue;
+            }
+            String name = entry.getKey();
+            if (packagePrefix != null && name.startsWith(packagePrefix)) {
+                return name;
+            }
+            if (fallback == null) {
+                fallback = name;
+            }
+        }
+        return fallback;
     }
 
     private static int activeCodeFrameForCaller(int originalFrame) {
@@ -3860,6 +4024,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static boolean isSyntheticOwnSubFrame(ArrayList<String> frame) {
         return frame.size() > 4 && "synthetic-own-sub".equals(frame.get(4));
+    }
+
+    private static boolean isVirtualEvalFrame(ArrayList<String> frame) {
+        return frame.size() > 4 && "virtual-eval".equals(frame.get(4));
+    }
+
+    /** Place an eval outside the contiguous interpreted calls executing inside it. */
+    private static int virtualEvalInsertAt(ArrayList<ArrayList<String>> stackTrace) {
+        int index = 0;
+        while (index < stackTrace.size()) {
+            ArrayList<String> frame = stackTrace.get(index);
+            if (frame.size() <= 4 || !"interpreter".equals(frame.get(4))) {
+                break;
+            }
+            index++;
+        }
+        return index;
     }
 
     private static int syntheticOwnSubInsertAt(ArrayList<ArrayList<String>> stackTrace, ArrayList<String> syntheticFrame) {
@@ -4393,6 +4574,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
+            // The interpreter's shared-argument call opcode intentionally does
+            // not carry a source-level name. Recover it from the registered
+            // code reference so stack traces retain the called subroutine.
+            if ((subroutineName == null || subroutineName.isEmpty())
+                    && (code.subName == null || code.subName.isEmpty())) {
+                String registeredName = registeredCodeName(code);
+                if (registeredName != null) {
+                    subroutineName = registeredName;
+                }
+            }
+
             // Check for closure prototype — calling one should die
             if (code.isClosurePrototype) {
                 throw new PerlDieException(new RuntimeScalar("Closure prototype called"));
@@ -4843,6 +5035,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Special case: if the scalar already contains a CODE reference (lexical sub hidden variable),
         // just return it directly
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
+            if (runtimeScalar.globalCodeRefFqn != null) {
+                ((RuntimeCode) runtimeScalar.value).referenceOriginFqn = runtimeScalar.globalCodeRefFqn;
+            }
             // Ensure the subroutine is fully compiled before returning the reference
             // This is important for compile-time usage (e.g., use overload qr => \&lexical_sub)
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
@@ -4948,6 +5143,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeScalar snapshot = new RuntimeScalar();
         snapshot.type = codeRef.type;
         snapshot.value = codeRef.value;
+        if (codeRef.value instanceof RuntimeCode referencedCode) {
+            referencedCode.referenceOriginFqn = name;
+        }
         return snapshot;
     }
 

@@ -18,10 +18,10 @@ import java.util.List;
  * Latin-1 characters (0x00-0xFF and Unicode > 255), matching Perl's utf8::upgrade behavior.
  */
 public class PackBuffer {
-    private final List<Integer> values = new ArrayList<>();
+    private final List<Long> values = new ArrayList<>();
     private final List<Boolean> isCharacter = new ArrayList<>();
 
-    private static int utf8Length(int codePoint) {
+    private static int utf8Length(long codePoint) {
         if (codePoint <= 0x7F) {
             return 1;
         }
@@ -38,7 +38,7 @@ public class PackBuffer {
      * Write a raw byte value (from binary formats like N, V, s, etc.)
      */
     public void writeByte(int b) {
-        values.add(b & 0xFF);
+        values.add((long) (b & 0xFF));
         isCharacter.add(false);
     }
 
@@ -79,7 +79,7 @@ public class PackBuffer {
      * For characters 0-255, stored as-is
      * For characters > 255, stored as the character code
      */
-    public void writeCharacter(int codePoint) {
+    public void writeCharacter(long codePoint) {
         values.add(codePoint);
         isCharacter.add(true);
     }
@@ -90,17 +90,17 @@ public class PackBuffer {
     public byte[] toByteArray() {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         for (int i = 0; i < values.size(); i++) {
-            int value = values.get(i);
+            long value = values.get(i);
             if (isCharacter.get(i) && value > 255) {
                 // Character > 255 needs UTF-8 encoding
-                String ch = new String(Character.toChars(value));
+                String ch = new String(Character.toChars((int) value));
                 try {
                     out.write(ch.getBytes(StandardCharsets.UTF_8));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
             } else {
-                out.write(value & 0xFF);
+                out.write((int) value & 0xFF);
             }
         }
         return out.toByteArray();
@@ -113,15 +113,15 @@ public class PackBuffer {
     public String toUpgradedString() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < values.size(); i++) {
-            int value = values.get(i);
+            long value = values.get(i);
             // All values become characters: bytes 0-255 map to U+0000-U+00FF
             // Character codes > 255 are already Unicode characters
             if (value > 0x10FFFF) {
-                sb.append(PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(value)));
+                sb.append(PerlUtfString.encodeBeyondUnicode(value));
             } else {
                 // Includes U+D800..U+DFFF from pack "U" / "W": one logical Perl character as a single
                 // UTF-16 code unit (not the FFFD+<hex> internal-marker form used elsewhere).
-                sb.appendCodePoint(value);
+                sb.appendCodePoint((int) value);
             }
         }
         return sb.toString();
@@ -158,7 +158,7 @@ public class PackBuffer {
     public int sizeInUtf8Bytes() {
         int total = 0;
         for (int i = 0; i < values.size(); i++) {
-            int value = values.get(i);
+            long value = values.get(i);
             if (isCharacter.get(i)) {
                 total += utf8Length(value);
             } else {
@@ -172,7 +172,7 @@ public class PackBuffer {
         int limit = Math.max(0, Math.min(index, values.size()));
         int total = 0;
         for (int i = 0; i < limit; i++) {
-            int value = values.get(i);
+            long value = values.get(i);
             if (isCharacter.get(i)) {
                 total += utf8Length(value);
             } else {
@@ -191,7 +191,7 @@ public class PackBuffer {
         int total = 0;
         int keep = 0;
         while (keep < values.size()) {
-            int value = values.get(keep);
+            long value = values.get(keep);
             int len = isCharacter.get(keep) ? utf8Length(value) : 1;
             if (total + len > bytePos) {
                 break;

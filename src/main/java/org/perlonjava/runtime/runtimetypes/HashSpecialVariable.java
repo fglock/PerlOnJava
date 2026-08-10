@@ -231,12 +231,24 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                                                          List<StashEntryName> entries) {
         boolean isMainStash = "main::".equals(namespace);
         String entryKey = stashEntryKeyFromGlobalKey(namespace, key, isMainStash);
-        if (entryKey == null || entryKey.isEmpty() || entryKey.equals("a") || entryKey.equals("b")) {
+        if (entryKey == null || entryKey.isEmpty()) {
+            return;
+        }
+        if ((entryKey.equals("a") || entryKey.equals("b"))
+                && !hasNonScalarSortSlot(namespace + entryKey)) {
             return;
         }
         if (uniqueKeys.add(entryKey)) {
             entries.add(new StashEntryName(entryKey, stashGlobNameForEntryKey(namespace, entryKey, key)));
         }
+    }
+
+    private static boolean hasNonScalarSortSlot(String fullName) {
+        return GlobalVariable.globalArrays.containsKey(fullName)
+                || GlobalVariable.globalHashes.containsKey(fullName)
+                || GlobalVariable.globalCodeRefs.containsKey(fullName)
+                || GlobalVariable.globalIORefs.containsKey(fullName)
+                || GlobalVariable.globalFormatRefs.containsKey(fullName);
     }
 
     private static String stashEntryKeyFromGlobalKey(String namespace, String key, boolean isMainStash) {

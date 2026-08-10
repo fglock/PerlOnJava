@@ -9,6 +9,8 @@ import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
+
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_SUBS;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.isInteger;
@@ -561,8 +563,8 @@ public class EmitLiteral {
         String value = node.value.replace("_", "");
         boolean isInteger = isInteger(value);
 
-        // For 32-bit Perl emulation, check if this is a large integer
-        // that needs to be stored as a string to preserve precision
+        // Values outside the cached int range still need exact integer
+        // storage, including unsigned 64-bit literals above Long.MAX_VALUE.
         boolean isLargeInteger = !isInteger && value.matches("^-?\\d+$");
         // This looks like an integer but failed Integer.parseInt
         // It must be too large for 32-bit int
@@ -578,11 +580,8 @@ public class EmitLiteral {
                         "getScalarInt",
                         "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (isLargeInteger) {
-                // Store large integers with precision preservation.
-                // Try long first (exact for values up to 2^63-1).
-                // RuntimeScalar(long) uses initializeWithLong() which stores values
-                // within 2^53 as DOUBLE and larger ones as STRING for full precision.
-                // Fall back to double for values that overflow long (e.g., unsigned 64-bit).
+                // Store large integers with precision preservation. Try long first,
+                // then construct an exact BigInteger-backed scalar for UV literals.
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit large integer");
                 boolean fitsInLong = true;
                 long longVal = 0;
@@ -591,6 +590,9 @@ public class EmitLiteral {
                 } catch (NumberFormatException e) {
                     fitsInLong = false;
                 }
+                BigInteger bigValue = fitsInLong ? null : new BigInteger(value);
+                boolean fitsInUnsignedLong = bigValue != null
+                        && bigValue.signum() >= 0 && bigValue.bitLength() <= 64;
                 mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
                 mv.visitInsn(Opcodes.DUP);
                 if (fitsInLong) {
@@ -598,8 +600,17 @@ public class EmitLiteral {
                     mv.visitMethodInsn(
                             Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                             "<init>", "(J)V", false);
+                } else if (fitsInUnsignedLong) {
+                    mv.visitTypeInsn(Opcodes.NEW, "java/math/BigInteger");
+                    mv.visitInsn(Opcodes.DUP);
+                    mv.visitLdcInsn(value);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESPECIAL, "java/math/BigInteger",
+                            "<init>", "(Ljava/lang/String;)V", false);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "<init>", "(Ljava/math/BigInteger;)V", false);
                 } else {
-                    // Value exceeds long range — store as double (Perl NV promotion)
                     mv.visitLdcInsn(Double.valueOf(value));
                     mv.visitMethodInsn(
                             Opcodes.INVOKESPECIAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",

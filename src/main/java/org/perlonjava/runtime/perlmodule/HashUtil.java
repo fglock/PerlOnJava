@@ -201,19 +201,50 @@ public class HashUtil extends PerlModuleBase {
     }
 
     public static RuntimeList lock_hash(RuntimeArray args, int ctx) {
-        // TODO: Implement full hash locking
         if (args.size() > 0) {
+            RuntimeHash hash = hashArgument(args.get(0));
+            for (RuntimeScalar scalar : hash.elements.values()) {
+                makeScalarReadOnly(scalar);
+            }
+            hash.type = RuntimeHash.READONLY_HASH;
             return args.get(0).getList();  // Return the hash reference
         }
         return RuntimeScalarCache.scalarUndef.getList();
     }
 
     public static RuntimeList unlock_hash(RuntimeArray args, int ctx) {
-        // TODO: Implement full hash unlocking
         if (args.size() > 0) {
+            RuntimeHash hash = hashArgument(args.get(0));
+            for (RuntimeScalar scalar : hash.elements.values()) {
+                if (scalar.type == RuntimeScalarType.READONLY_SCALAR
+                        && scalar.value instanceof RuntimeScalar inner) {
+                    scalar.type = inner.type;
+                    scalar.value = inner.value;
+                }
+            }
+            hash.type = RuntimeHash.PLAIN_HASH;
             return args.get(0).getList();  // Return the hash reference
         }
         return RuntimeScalarCache.scalarUndef.getList();
+    }
+
+    private static RuntimeHash hashArgument(RuntimeScalar arg) {
+        if (arg.type == RuntimeScalarType.HASHREFERENCE && arg.value instanceof RuntimeHash hash) {
+            return hash;
+        }
+        return arg.hashDeref();
+    }
+
+    private static void makeScalarReadOnly(RuntimeScalar scalar) {
+        if (scalar.type == RuntimeScalarType.READONLY_SCALAR
+                || scalar instanceof RuntimeScalarReadOnly) {
+            return;
+        }
+        RuntimeScalar inner = new RuntimeScalar();
+        inner.type = scalar.type;
+        inner.value = scalar.value;
+        scalar.type = RuntimeScalarType.READONLY_SCALAR;
+        scalar.value = inner;
     }
 
     public static RuntimeList hash_seed(RuntimeArray args, int ctx) {

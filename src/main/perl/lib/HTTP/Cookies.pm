@@ -21,15 +21,86 @@ sub load { return 1 }
 
 sub save { return 1 }
 
+sub add_cookie_header {
+    my ($self, $request) = @_;
+    return unless $request;
+
+    my $uri = $request->uri;
+    my $scheme = lc($uri->scheme || '');
+    return unless $scheme eq 'http' || $scheme eq 'https';
+
+    my $host = lc($uri->host || '');
+    $host .= '.local' unless $host =~ /\./;
+    my $request_path = $uri->path;
+    $request_path = '/' unless defined($request_path) && length($request_path);
+    my $request_port = $uri->port;
+    my $now = time;
+    my @values;
+    my $set_version;
+
+    for my $domain (sort keys %{ $self->{COOKIES} }) {
+        my $match_domain = lc $domain;
+        $match_domain =~ s/^\.//;
+        next unless $host eq $match_domain || $host =~ /\.\Q$match_domain\E\z/;
+
+        my $paths = $self->{COOKIES}{$domain};
+        for my $path (sort { length($b) <=> length($a) } keys %$paths) {
+            next unless index($request_path, $path) == 0;
+            for my $key (sort keys %{ $paths->{$path} }) {
+                my ($version, $value, $port, $path_spec, $secure, $expires)
+                    = @{ $paths->{$path}{$key} };
+                next if $secure && $scheme ne 'https';
+                next if $expires && $expires < $now;
+                if (defined $port) {
+                    $port =~ s/^_//;
+                    my %allowed = map { $_ => 1 } split /,/, $port;
+                    next unless $allowed{$request_port};
+                }
+
+                if (!$set_version++) {
+                    if ($version && $version >= 1) {
+                        push @values, "\$Version=$version";
+                    }
+                    elsif (!$self->{hide_cookie2}) {
+                        $request->header(Cookie2 => '\$Version="1"');
+                    }
+                }
+
+                if ($version && $value =~ /\W/) {
+                    $value =~ s/([\\"])/\\$1/g;
+                    $value = qq("$value");
+                }
+                push @values, "$key=$value";
+                if ($version && $version >= 1) {
+                    push @values, qq(\$Path="$path") if $path_spec;
+                    push @values, qq(\$Domain="$domain") if $domain =~ /^\./;
+                }
+            }
+        }
+    }
+
+    if (@values) {
+        my $old = $request->header('Cookie');
+        unshift @values, $old if defined($old) && length($old);
+        $request->header(Cookie => join('; ', @values));
+    }
+    return $request;
+}
+
 sub set_cookie {
     my ($self, $version, $key, $val, $path, $domain, $port,
         $path_spec, $secure, $maxage, $discard) = @_;
     $domain = defined($domain) && length($domain) ? $domain : '.local';
     $path = defined($path) && length($path) ? $path : '/';
+    if (defined($maxage) && $maxage <= 0) {
+        delete $self->{COOKIES}{$domain}{$path}{$key};
+        return $self;
+    }
+    my $expires = defined($maxage) ? time + $maxage : undef;
     $self->{COOKIES}{$domain}{$path}{$key} = [
-        $version, $val, $port, $path_spec, $secure, $maxage, $discard
+        $version, $val, $port, $path_spec, $secure, $expires, $discard
     ];
-    return 1;
+    return $self;
 }
 
 sub scan {

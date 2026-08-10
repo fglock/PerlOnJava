@@ -2,8 +2,12 @@ package org.perlonjava.runtime.perlmodule.storable;
 
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.TieArray;
@@ -44,7 +48,44 @@ public final class Misc {
     private Misc() {}
 
     public static RuntimeScalar readCode(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("Can't retrieve code references");
+        RuntimeScalar eval = GlobalVariable.getGlobalVariable("Storable::Eval");
+        if (!eval.getBoolean()) {
+            throw new StorableFormatException("Can't retrieve code references");
+        }
+
+        // SX_CODE itself is a seen-table candidate. Upstream installs a dummy
+        // entry before reading the nested source scalar, then replaces that
+        // entry with the evaluated CV so subsequent backrefs retain their tag.
+        int codeTag = c.recordSeen(new RuntimeScalar(0));
+        RuntimeScalar storedSource = r.dispatch(c);
+        String source = storedSource.toString();
+        String evalSource = source.stripLeading().startsWith("sub")
+                ? source : "sub " + source;
+
+        RuntimeArray args = new RuntimeArray();
+        RuntimeArray.push(args, new RuntimeScalar(evalSource));
+        RuntimeList result;
+        try {
+            result = RuntimeCode.apply(
+                    GlobalVariable.getGlobalCodeRef("Storable::_perlonjava_eval_code"),
+                    args,
+                    RuntimeContextType.SCALAR);
+        } finally {
+            org.perlonjava.runtime.perlmodule.Storable.releaseApplyArgs(args);
+        }
+
+        RuntimeScalar code = result.scalar();
+        if (code == null || code.type != RuntimeScalarType.CODE) {
+            throw new StorableFormatException(
+                    "code " + evalSource + " did not evaluate to a subroutine reference");
+        }
+        c.replaceSeen(codeTag, code);
+        // RuntimeScalarType.CODE already represents a Perl reference level.
+        // Signal a surrounding SX_REF to collapse instead of wrapping the
+        // callable in an extra scalar reference.
+        c.takeBareContainerFlag();
+        c.markBareContainer();
+        return code;
     }
 
     public static RuntimeScalar readRegexp(StorableReader r, StorableContext c) {

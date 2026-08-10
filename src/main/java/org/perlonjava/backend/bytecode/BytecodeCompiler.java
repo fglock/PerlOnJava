@@ -15,6 +15,7 @@ import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
 import java.util.*;
 
 /**
@@ -90,6 +91,28 @@ public class BytecodeCompiler implements Visitor {
     // Callers set this before accept(); callees consume it via allocateOutputRegister().
     // Compound visitors save/restore around non-final children.
     int targetOutputReg = -1;
+
+    /**
+     * Emit Perl's normal scalar value for a completed loop.
+     *
+     * <p>A loop expression evaluates to a defined empty string in scalar
+     * context. Runtime string evals use this bytecode backend even when the
+     * surrounding program uses JVM compilation, so leaving no result register
+     * here made an eval-generated sub ending in {@code for} return undef.</p>
+     */
+    private void emitNormalLoopResult() {
+        if (currentCallContext == RuntimeContextType.SCALAR
+                || currentCallContext == RuntimeContextType.RUNTIME) {
+            int resultReg = allocateOutputRegister();
+            int constIdx = addToConstantPool(RuntimeScalarCache.scalarEmptyString);
+            emit(Opcodes.LOAD_CONST);
+            emitReg(resultReg);
+            emit(constIdx);
+            lastResultReg = resultReg;
+        } else {
+            lastResultReg = -1;
+        }
+    }
 
     /**
      * When {@code localHashLvalueCompileDepth > 0}, hash element / arrow-hash fetches emit
@@ -712,10 +735,13 @@ public class BytecodeCompiler implements Visitor {
         // This mirrors the allowIfAlreadyExists logic in EmitVariable.java
         String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, getCurrentPackage());
         boolean allowIfAlreadyExists = sigil.equals("$") && GlobalVariable.existsGlobalVariable(normalizedName);
-        if (sigil.equals("@") && GlobalVariable.existsGlobalArray(normalizedName)) {
+        if (sigil.equals("@") && (GlobalVariable.existsGlobalArray(normalizedName)
+                || GlobalVariable.isDeclaredGlobalArray(normalizedName))) {
             allowIfAlreadyExists = true;
         }
-        if (sigil.equals("%") && !normalizedName.endsWith("::") && GlobalVariable.existsGlobalHash(normalizedName)) {
+        if (sigil.equals("%") && !normalizedName.endsWith("::")
+                && (GlobalVariable.existsGlobalHash(normalizedName)
+                    || GlobalVariable.isDeclaredGlobalHash(normalizedName))) {
             allowIfAlreadyExists = true;
         }
 
@@ -1425,8 +1451,8 @@ public class BytecodeCompiler implements Visitor {
             // Use ScalarUtils.isInteger() for consistent number parsing with compiler
             boolean isInteger = ScalarUtils.isInteger(value);
 
-            // For 32-bit Perl emulation, check if this is a large integer
-            // that needs to be stored as a string to preserve precision
+            // Values outside the cached int range still need exact integer
+            // storage, including unsigned 64-bit literals above Long.MAX_VALUE.
             boolean isLargeInteger = !isInteger && value.matches("^-?\\d+$");
 
             if (isInteger) {
@@ -1452,9 +1478,16 @@ public class BytecodeCompiler implements Visitor {
                     emitInt(intValue);
                 }
             } else if (isLargeInteger) {
-                // Large integer - store as double to match Perl 5 IV-to-NV promotion
-                RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
-                int constIdx = addToConstantPool(doubleScalar);
+                RuntimeScalar integerScalar;
+                try {
+                    integerScalar = new RuntimeScalar(Long.parseLong(value));
+                } catch (NumberFormatException overflow) {
+                    BigInteger integerValue = new BigInteger(value);
+                    integerScalar = integerValue.signum() >= 0 && integerValue.bitLength() <= 64
+                            ? new RuntimeScalar(integerValue)
+                            : new RuntimeScalar(Double.parseDouble(value), value);
+                }
+                int constIdx = addToConstantPool(integerScalar);
                 emit(Opcodes.LOAD_CONST);
                 emitReg(rd);
                 emit(constIdx);
@@ -2054,8 +2087,36 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
             }
         } else {
-            throwCompilerException("Multi-element hash access not yet implemented");
+            int keyReg = compileMultidimensionalHashKey(keyNode);
+            int rd = allocateOutputRegister();
+            emit(opcodeForHashElementGet());
+            emitReg(rd);
+            emitReg(hashReg);
+            emitReg(keyReg);
+            lastResultReg = rd;
         }
+    }
+
+    /**
+     * Compile Perl's legacy multidimensional hash-key syntax. Expressions in
+     * {@code $hash{a, b}} form one scalar key by joining their values with the
+     * current value of {@code $;} (SUBSEP); they are not a hash slice.
+     */
+    int compileMultidimensionalHashKey(HashLiteralNode keyNode) {
+        int separatorReg = allocateRegister();
+        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+        emitReg(separatorReg);
+        emit(addToStringPool("main::;"));
+
+        compileNode(keyNode.asListNode(), -1, RuntimeContextType.LIST);
+        int elementsReg = lastResultReg;
+
+        int keyReg = allocateOutputRegister();
+        emit(Opcodes.JOIN);
+        emitReg(keyReg);
+        emitReg(separatorReg);
+        emitReg(elementsReg);
+        return keyReg;
     }
 
     void handleHashSlice(BinaryOperatorNode node, OperatorNode leftOp) {
@@ -2575,6 +2636,10 @@ public class BytecodeCompiler implements Visitor {
             keyReg = lastResultReg;
         }
 
+        return emitHashDerefGetWithKeyReg(baseReg, keyReg, tokenIndex);
+    }
+
+    int emitHashDerefGetWithKeyReg(int baseReg, int keyReg, int tokenIndex) {
         int hashReg = allocateRegister();
         if (isStrictRefsEnabled()) {
             emitWithToken(Opcodes.DEREF_HASH, tokenIndex);
@@ -2789,7 +2854,24 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = emitHashDerefGet(baseReg, keyExpr, node.getIndex());
             }
         } else {
-            throwCompilerException("Multi-element hash access not yet implemented");
+            int keyReg = compileMultidimensionalHashKey(keyNode);
+            int hashReg = allocateRegister();
+            if (isStrictRefsEnabled()) {
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(hashReg);
+                emitReg(baseReg);
+            } else {
+                emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                emitReg(hashReg);
+                emitReg(baseReg);
+                emit(addToStringPool(getCurrentPackage()));
+            }
+            int rd = allocateOutputRegister();
+            emit(opcodeForHashElementGet());
+            emitReg(rd);
+            emitReg(hashReg);
+            emitReg(keyReg);
+            lastResultReg = rd;
         }
     }
 
@@ -4587,17 +4669,7 @@ public class BytecodeCompiler implements Visitor {
                 // Special case: @_ is register 1
                 if (varName.equals("@_")) {
                     int arrayReg = 1; // @_ is always in register 1
-
-                    // Check if we're in scalar context - if so, return array size
-                    if (currentCallContext == RuntimeContextType.SCALAR) {
-                        int rd = allocateOutputRegister();
-                        emit(Opcodes.ARRAY_SIZE);
-                        emitReg(rd);
-                        emitReg(arrayReg);
-                        lastResultReg = rd;
-                    } else {
-                        lastResultReg = arrayReg;
-                    }
+                    setArrayResultForContext(arrayReg);
                     return;
                 }
 
@@ -4635,25 +4707,7 @@ public class BytecodeCompiler implements Visitor {
                     emit(nameIdx);
                 }
 
-                // Check if we're in scalar context - if so, return array size
-                if (currentCallContext == RuntimeContextType.SCALAR) {
-                    int rd = allocateOutputRegister();
-                    emit(Opcodes.ARRAY_SIZE);
-                    emitReg(rd);
-                    emitReg(arrayReg);
-                    lastResultReg = rd;
-                } else if (currentCallContext == RuntimeContextType.RUNTIME) {
-                    // In RUNTIME context (e.g., return @a), check wantarray at runtime
-                    // and convert to scalar (count) if scalar context
-                    int rd = allocateOutputRegister();
-                    emit(Opcodes.SCALAR_IF_WANTARRAY);
-                    emitReg(rd);
-                    emitReg(arrayReg);
-                    emitReg(2); // wantarray is in register 2
-                    lastResultReg = rd;
-                } else {
-                    lastResultReg = arrayReg;
-                }
+                setArrayResultForContext(arrayReg);
             } else if (node.operand instanceof OperatorNode operandOp) {
                 // Dereference: @$arrayref or @{$hashref}
 
@@ -4677,10 +4731,7 @@ public class BytecodeCompiler implements Visitor {
                     emit(pkgIdx);
                 }
 
-                lastResultReg = rd;
-                // Note: We don't check scalar context here because dereferencing
-                // should return the array itself. The slice or other operation
-                // will handle scalar context conversion if needed.
+                setArrayResultForContext(rd);
             } else if (node.operand instanceof BlockNode blockNode) {
                 // @{ block } - evaluate block and dereference the result
                 // The block should return an arrayref
@@ -4701,7 +4752,7 @@ public class BytecodeCompiler implements Visitor {
                     emit(pkgIdx);
                 }
 
-                lastResultReg = rd;
+                setArrayResultForContext(rd);
             } else if (node.operand instanceof StringNode strNode) {
                 // Symbolic ref: @{'name'} or 'name'->@* — load global array by string name
                 String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
@@ -4710,7 +4761,7 @@ public class BytecodeCompiler implements Visitor {
                 emit(Opcodes.LOAD_GLOBAL_ARRAY);
                 emitReg(rd);
                 emit(nameIdx);
-                lastResultReg = rd;
+                setArrayResultForContext(rd);
             } else {
                 throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
             }
@@ -4943,6 +4994,7 @@ public class BytecodeCompiler implements Visitor {
                         if (codeRef.type == RuntimeScalarType.CODE
                                 && codeRef.value instanceof RuntimeCode rc) {
                             rc.isSymbolicReference = true;
+                            rc.referenceOriginFqn = subName;
                         }
                     }
                     // For both \&name and \&$var (lexical subs), the & operator
@@ -5012,6 +5064,31 @@ public class BytecodeCompiler implements Visitor {
         emit(Opcodes.APPLY_LEXICAL_ALIAS);
         emitReg(register);
         emit(addToStringPool(variableName));
+    }
+
+    /**
+     * Apply Perl's context conversion to an array value. This is shared by
+     * named arrays and dereferenced arrays: scalar {@code @$ref} is the array
+     * length just like scalar {@code @array}, while runtime context defers the
+     * choice to {@code wantarray}.
+     */
+    private void setArrayResultForContext(int arrayReg) {
+        if (currentCallContext == RuntimeContextType.SCALAR) {
+            int rd = allocateOutputRegister();
+            emit(Opcodes.ARRAY_SIZE);
+            emitReg(rd);
+            emitReg(arrayReg);
+            lastResultReg = rd;
+        } else if (currentCallContext == RuntimeContextType.RUNTIME) {
+            int rd = allocateOutputRegister();
+            emit(Opcodes.SCALAR_IF_WANTARRAY);
+            emitReg(rd);
+            emitReg(arrayReg);
+            emitReg(2); // wantarray is in register 2
+            lastResultReg = rd;
+        } else {
+            lastResultReg = arrayReg;
+        }
     }
 
     @Override
@@ -6255,7 +6332,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(foreachRegexSaveReg);
         }
 
-        lastResultReg = -1;  // For loop returns empty
+        emitNormalLoopResult();
     }
 
     @Override
@@ -6392,6 +6469,7 @@ public class BytecodeCompiler implements Visitor {
         loopStack.push(loopInfo);
 
         int loopEndJumpPc = -1;
+        int redoTargetPc = loopStartPc;
         MyVarCleanupRegisters conditionMyCleanup = MyVarCleanupRegisters.empty();
 
         if (node.isDoWhile) {
@@ -6471,6 +6549,8 @@ public class BytecodeCompiler implements Visitor {
             emitInt(0);  // Placeholder for jump target (will be patched)
 
             // Step 5: Execute body
+            // Perl redo restarts the body without re-evaluating the condition.
+            redoTargetPc = bytecode.size();
             if (node.body != null) {
                 loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
                 node.body.accept(this);
@@ -6516,7 +6596,7 @@ public class BytecodeCompiler implements Visitor {
             patchJump(pc, loopInfo.continuePc);
         }
         for (int pc : loopInfo.redoPcs) {
-            patchJump(pc, loopStartPc);
+            patchJump(pc, redoTargetPc);
         }
 
         // Step 12: Pop loop info
@@ -6527,7 +6607,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(loopRegexSaveReg);
         }
 
-        lastResultReg = -1;  // For loop returns empty
+        emitNormalLoopResult();
     }
 
     @Override

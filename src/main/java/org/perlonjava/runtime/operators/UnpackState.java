@@ -118,9 +118,6 @@ public class UnpackState {
         }
 
         // If we have Unicode characters beyond Latin-1, use extended UTF-8 (Perl semantics).
-        // Only use UTF-8 byte encoding when there are actual high-Unicode characters.
-        // The utf8Flagged hint only affects character-mode operations (like A* trimming),
-        // not the byte representation used by numeric formats (f, d, N, V, etc.).
         this.isUTF8Flagged = utf8Flagged || hasHighUnicode || hasSurrogates || hasBeyondUnicode;
         this.isUTF8Data = hasHighUnicode || hasSurrogates || hasBeyondUnicode;
         if (isUTF8Data) {
@@ -169,6 +166,18 @@ public class UnpackState {
             baos.write(out, 0, out.length);
         }
         return baos.toByteArray();
+    }
+
+    /**
+     * Return the UTF-8 storage bytes for an all-Latin-1 upgraded scalar when
+     * a trailing U0 string directive consumes the complete value.
+     */
+    public byte[] consumeFlaggedLatin1AsUtf8() {
+        if (!isUTF8Flagged || isUTF8Data || buffer.position() != 0) {
+            return null;
+        }
+        buffer.position(buffer.limit());
+        return encodeUtf8Extended(codePoints);
     }
 
     /**

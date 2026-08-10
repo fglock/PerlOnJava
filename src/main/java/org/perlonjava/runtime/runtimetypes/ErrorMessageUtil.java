@@ -17,6 +17,7 @@ public class ErrorMessageUtil {
     private String fileName;
     private int tokenIndex;
     private int lastLineNumber;
+    private volatile int[] physicalLineNumbers;
 
     /**
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
@@ -40,6 +41,7 @@ public class ErrorMessageUtil {
      */
     public void updateTokens(List<LexerToken> newTokens) {
         this.tokens = newTokens;
+        this.physicalLineNumbers = null;
     }
 
     /**
@@ -454,15 +456,36 @@ public class ErrorMessageUtil {
      * @return the line number
      */
     public int getLineNumberAccurate(int index) {
-        int lineNumber = 1;
-        for (int i = 0; i <= index && i < tokens.size(); i++) {
-            LexerToken tok = tokens.get(i);
-            if (tok.type == LexerTokenType.EOF) break;
-            if (tok.type == LexerTokenType.NEWLINE) {
-                lineNumber++;
+        if (index < 0 || tokens == null || tokens.isEmpty()) {
+            return 1;
+        }
+        int[] lineNumbers = physicalLineNumbers;
+        if (lineNumbers == null) {
+            synchronized (this) {
+                lineNumbers = physicalLineNumbers;
+                if (lineNumbers == null) {
+                    lineNumbers = buildPhysicalLineNumbers();
+                    physicalLineNumbers = lineNumbers;
+                }
             }
         }
-        return lineNumber;
+        return lineNumbers[Math.min(index, lineNumbers.length - 1)];
+    }
+
+    private int[] buildPhysicalLineNumbers() {
+        int[] lineNumbers = new int[tokens.size()];
+        int lineNumber = 1;
+        boolean reachedEof = false;
+        for (int i = 0; i < tokens.size(); i++) {
+            LexerToken tok = tokens.get(i);
+            if (!reachedEof && tok.type == LexerTokenType.EOF) {
+                reachedEof = true;
+            } else if (!reachedEof && tok.type == LexerTokenType.NEWLINE) {
+                lineNumber++;
+            }
+            lineNumbers[i] = lineNumber;
+        }
+        return lineNumbers;
     }
 
     public SourceLocation getSourceLocationAccurate(int index) {

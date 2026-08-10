@@ -72,6 +72,12 @@ public class EmitControlFlow {
         EmitterContext ctx = emitterVisitor.ctx;
         if (isAtUnderscore(argsNode)) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, 1);
+            ctx.mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "getGotoArgs",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                    false);
             return;
         }
         argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));

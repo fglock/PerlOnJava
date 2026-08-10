@@ -5,13 +5,39 @@ import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class CompileAssignment {
+
+    private static boolean compileForwardCodeGlobAlias(
+            BytecodeCompiler bc, Node lhs, Node rhs) {
+        if (!RuntimeCode.USE_INTERPRETER
+                || !(lhs instanceof OperatorNode globOp) || !globOp.operator.equals("*")
+                || !(rhs instanceof OperatorNode refOp) || !refOp.operator.equals("\\")
+                || !(refOp.operand instanceof OperatorNode codeOp) || !codeOp.operator.equals("&")
+                || !(codeOp.operand instanceof IdentifierNode idNode)) {
+            return false;
+        }
+        String sourceName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
+        RuntimeScalar source = GlobalVariable.getGlobalCodeRef(sourceName);
+        if (!(source.value instanceof RuntimeCode code) || code.defined()) {
+            return false;
+        }
+        code.requiresForwardGlobAliasGroup = true;
+        int valueReg = bc.allocateRegister();
+        int nameIdx = bc.addToStringPool(sourceName);
+        bc.emit(Opcodes.LOAD_GLOBAL_CODE);
+        bc.emitReg(valueReg);
+        bc.emit(nameIdx);
+        bc.lastResultReg = valueReg;
+        return true;
+    }
 
     private static boolean shouldReleaseConsumedRhsTemp(Node rhs) {
         if (rhs instanceof HashLiteralNode || rhs instanceof ArrayLiteralNode) {
@@ -892,7 +918,9 @@ public class CompileAssignment {
 
             // Regular assignment: $x = value (no optimization)
             // Compile RHS first
-            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+            if (!compileForwardCodeGlobAlias(bytecodeCompiler, node.left, node.right)) {
+                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+            }
             int valueReg = bytecodeCompiler.lastResultReg;
 
             // Assign to LHS
@@ -1503,14 +1531,16 @@ public class CompileAssignment {
                             String arrayVarName = "@" + varName;
 
                             if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(arrayVarName)) {
+                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(arrayVarName)
+                                    && !bytecodeCompiler.isDynamicOurVariable(arrayVarName)) {
                                 arrayReg = bytecodeCompiler.allocateRegister();
                                 int nameIdx = bytecodeCompiler.addToStringPool(arrayVarName);
                                 bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
                                 bytecodeCompiler.emitReg(arrayReg);
                                 bytecodeCompiler.emit(nameIdx);
                                 bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                            } else if (bytecodeCompiler.hasVariable(arrayVarName)) {
+                            } else if (bytecodeCompiler.hasVariable(arrayVarName)
+                                    && !bytecodeCompiler.isOurVariable(arrayVarName)) {
                                 arrayReg = bytecodeCompiler.getVariableRegister(arrayVarName);
                             } else {
                                 arrayReg = bytecodeCompiler.allocateRegister();
@@ -1590,14 +1620,16 @@ public class CompileAssignment {
                                 String hashVarName = "%" + varName;
 
                                 if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)) {
+                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)
+                                        && !bytecodeCompiler.isDynamicOurVariable(hashVarName)) {
                                     hashReg = bytecodeCompiler.allocateRegister();
                                     int nameIdx = bytecodeCompiler.addToStringPool(hashVarName);
                                     bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                     bytecodeCompiler.emitReg(hashReg);
                                     bytecodeCompiler.emit(nameIdx);
                                     bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                                } else if (bytecodeCompiler.hasVariable(hashVarName)) {
+                                } else if (bytecodeCompiler.hasVariable(hashVarName)
+                                        && !bytecodeCompiler.isOurVariable(hashVarName)) {
                                     hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
                                 } else {
                                     hashReg = bytecodeCompiler.allocateRegister();
@@ -1697,14 +1729,16 @@ public class CompileAssignment {
                                 String hashVarName = "%" + varName;
 
                                 if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)) {
+                                        && bytecodeCompiler.currentSubroutineClosureVars.contains(hashVarName)
+                                        && !bytecodeCompiler.isDynamicOurVariable(hashVarName)) {
                                     hashReg = bytecodeCompiler.allocateRegister();
                                     int nameIdx = bytecodeCompiler.addToStringPool(hashVarName);
                                     bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
                                     bytecodeCompiler.emitReg(hashReg);
                                     bytecodeCompiler.emit(nameIdx);
                                     bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                                } else if (bytecodeCompiler.hasVariable(hashVarName)) {
+                                } else if (bytecodeCompiler.hasVariable(hashVarName)
+                                        && !bytecodeCompiler.isOurVariable(hashVarName)) {
                                     hashReg = bytecodeCompiler.getVariableRegister(hashVarName);
                                 } else {
                                     hashReg = bytecodeCompiler.allocateRegister();

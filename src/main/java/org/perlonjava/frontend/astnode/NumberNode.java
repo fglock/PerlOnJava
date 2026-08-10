@@ -20,12 +20,7 @@ public class NumberNode extends AbstractNode {
      * @param value the numeric value to be stored in this node
      */
     public NumberNode(String value, int tokenIndex) {
-        // Check if the value ends with ".0" and remove it if present
-        if (value.endsWith(".0")) {
-            this.value = value.substring(0, value.length() - 2);
-        } else {
-            this.value = value;
-        }
+        this.value = value;
         this.tokenIndex = tokenIndex;
     }
 

@@ -2193,6 +2193,12 @@ public class RegexPreprocessor {
         // System.err.println();
 
         int start = offset + 4; // Skip past (?<= or (?<!
+        // A recursive subpattern has no finite maximum that this backend can
+        // prove. Perl reports this through its over-255 lookbehind diagnostic.
+        if (s.indexOf("(?&", start) >= 0) {
+            throw new PerlJavaUnimplementedException(
+                    "Lookbehind longer than 255 not implemented in regex m/" + s + "/");
+        }
         int maxLength = calculateMaxLength(s, start);
 
         if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more

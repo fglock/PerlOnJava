@@ -150,6 +150,28 @@ public class Lexer {
         char current = input.charAt(position);
         int currentCp = getCurrentCodePoint();
 
+        // A byte-sourced eval can contain Perl's historical seven-byte UTF-8
+        // form for code points above U+7fffffff. Java cannot represent those
+        // directly, so fold the complete sequence into PerlUtfString's one-
+        // character marker before normal identifier/operator tokenization.
+        if (current == 0xFE && position + 6 < length) {
+            long extendedCodePoint = 0;
+            boolean validExtended = true;
+            for (int i = 1; i <= 6; i++) {
+                int continuation = input.charAt(position + i);
+                if (continuation < 0x80 || continuation > 0xBF) {
+                    validExtended = false;
+                    break;
+                }
+                extendedCodePoint = (extendedCodePoint << 6) | (continuation & 0x3F);
+            }
+            if (validExtended) {
+                position += 7;
+                return new LexerToken(LexerTokenType.STRING,
+                        PerlUtfString.encodeBeyondUnicode(extendedCodePoint));
+            }
+        }
+
         if (isAsciiWhitespace(current)) {
             if (current == '\n') {
                 position++;
@@ -200,6 +222,19 @@ public class Lexer {
         advanceCodePoint(cp); // Move past the initial character we already validated
 
         while (position < length) {
+            if (input.charAt(position) == 0xFE && position + 6 < length) {
+                boolean extendedDelimiter = true;
+                for (int i = 1; i <= 6; i++) {
+                    int continuation = input.charAt(position + i);
+                    if (continuation < 0x80 || continuation > 0xBF) {
+                        extendedDelimiter = false;
+                        break;
+                    }
+                }
+                if (extendedDelimiter) {
+                    break;
+                }
+            }
             int curCp = getCurrentCodePoint();
             if (isPerlIdentifierPart(curCp)) {
                 advanceCodePoint(curCp);
@@ -487,4 +522,3 @@ public class Lexer {
         return new LexerToken(LexerTokenType.OPERATOR, input.substring(start, start + 1));
     }
 }
-

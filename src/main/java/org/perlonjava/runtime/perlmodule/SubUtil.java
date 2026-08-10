@@ -38,6 +38,7 @@ public class SubUtil extends PerlModuleBase {
             // by Class::MOP::get_code_info even if the renamed sub was
             // never installed into the target package's stash.
             subUtil.registerMethod("_is_renamed", "$");
+            subUtil.registerMethodInPackage("Sub::Name", "_is_renamed", "_is_renamed");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Sub::Util method: " + e.getMessage());
         }

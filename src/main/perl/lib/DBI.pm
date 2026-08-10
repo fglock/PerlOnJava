@@ -779,8 +779,17 @@ sub STORE {
     return 1;
 }
 
+sub _is_comment_only_sql {
+    my ($statement) = @_;
+    return 0 unless defined $statement;
+    $statement =~ s{/\*.*?\*/}{}gs;
+    $statement =~ s{--[^\r\n]*}{}g;
+    return $statement !~ /[^\s;]/;
+}
+
 sub do {
     my ($dbh, $statement, $attr, @params) = @_;
+    return "0E0" if _is_comment_only_sql($statement);
     _cleanup_before_ddl($statement) if _is_jdbc_handle($dbh);
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;

@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -356,6 +357,7 @@ public class NumberParser {
                     if (!exponentStr.isEmpty()) {
                         hexFloat += "p" + exponentStr;
                     }
+                    warnOnHexFloatOverflow(numberStr.toString(), exponent);
                     value = Double.parseDouble(hexFloat);
                 } else {
                     // Use custom parsing for binary/octal
@@ -366,11 +368,23 @@ public class NumberParser {
                 return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
             } else {
                 // Integer number
-                long value;
                 try {
-                    value = format.integerParser.apply(numberStr.toString());
+                    String digits = numberStr.toString().replaceAll("_", "");
+                    BigInteger value = new BigInteger(digits, format.radix);
+                    if (value.signum() < 0) {
+                        throw new NumberFormatException("negative non-decimal literal");
+                    }
+                    if (value.bitLength() > 64) {
+                        if (hasConstantHandler("binary")) {
+                            NumberNode numberNode = new NumberNode("0", parser.tokenIndex);
+                            return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                        }
+                        return new NumberNode(Double.toString(value.doubleValue()), parser.tokenIndex);
+                    }
+                    NumberNode numberNode = new NumberNode(value.toString(), parser.tokenIndex);
+                    return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
                 } catch (NumberFormatException overflow) {
-                    // Value doesn't fit in a Perl IV/NV. If a `binary`
+                    // Value doesn't fit in a Perl UV. If a `binary`
                     // overload::constant handler is active (e.g. `use bigint`),
                     // it will consume the original source text and produce a
                     // bignum. Fall through with a 0 placeholder — the handler
@@ -381,8 +395,6 @@ public class NumberParser {
                     }
                     throw overflow;
                 }
-                NumberNode numberNode = new NumberNode(Long.toString(value), parser.tokenIndex);
-                return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
             }
         } catch (NumberFormatException e) {
             parser.throwError("Invalid " + format.name + " number");
@@ -489,6 +501,37 @@ public class NumberParser {
     // Helper methods
     private static String cleanUnderscores(String str) {
         return str.replaceAll("_", "");
+    }
+
+    private static void warnOnHexFloatOverflow(String mantissa, int exponent) {
+        String digits = mantissa.replace(".", "").replaceFirst("^0+", "");
+        if (!digits.isEmpty()) {
+            int leadingBits = Integer.SIZE - Integer.numberOfLeadingZeros(
+                    Character.digit(digits.charAt(0), 16));
+            int mantissaBits = leadingBits + 4 * (digits.length() - 1);
+            int lastDigit = Character.digit(digits.charAt(digits.length() - 1), 16);
+            if (lastDigit != 0) {
+                // A final partial nibble can still fit exactly: ...f.8 has
+                // 53 significant binary bits, while ...f.c has 54.  Preserve
+                // explicit trailing zero nibbles because Perl still reports
+                // an overlong lexical mantissa for forms such as 111.000...
+                mantissaBits -= Integer.numberOfTrailingZeros(lastDigit);
+            }
+            if (mantissaBits > 53) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Hexadecimal float: mantissa overflow"),
+                        RuntimeScalarCache.scalarEmptyString, "overflow");
+            }
+        }
+        if (exponent < -1022) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Hexadecimal float: exponent underflow"),
+                    RuntimeScalarCache.scalarEmptyString, "overflow");
+        } else if (exponent > 1023) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Hexadecimal float: exponent overflow"),
+                    RuntimeScalarCache.scalarEmptyString, "overflow");
+        }
     }
 
     // Fractional parsers

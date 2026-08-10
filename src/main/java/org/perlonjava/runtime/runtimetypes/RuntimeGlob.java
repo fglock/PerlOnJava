@@ -4,6 +4,7 @@ import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
@@ -16,6 +17,26 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
 
     private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
+
+    public static boolean isLocalizedGlob(String globName) {
+        for (int i = globSlotStack.size() - 1; i >= 0; i--) {
+            if (java.util.Objects.equals(globSlotStack.get(i).globName(), globName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static RuntimeArray localizedUnderscoreArray() {
+        for (int i = globSlotStack.size() - 1; i >= 0; i--) {
+            String name = globSlotStack.get(i).globName();
+            if (name != null && name.endsWith("::_")) {
+                RuntimeArray array = GlobalVariable.globalArrays.get(name);
+                if (array != null) return array;
+            }
+        }
+        return null;
+    }
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
@@ -65,6 +86,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         this.IO = new RuntimeScalar();
     }
 
+    private static boolean isStashGlobName(String name) {
+        // `main:::` is the fully-qualified spelling of the special variable
+        // named ":", not a package stash. Valid stash names end in exactly a
+        // double colon, not three consecutive colons.
+        return name != null && name.endsWith("::") && !name.endsWith(":::");
+    }
+
     /**
      * Creates a detached copy of this glob that has its own independent IO slot.
      * 
@@ -109,7 +137,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         if (this.hashSlot != null) {
             copy.hashSlot = this.hashSlot;
-        } else if (GlobalVariable.existsGlobalHash(this.globName) || this.globName.endsWith("::")) {
+            if (!GlobalVariable.existsGlobalHash(this.globName)
+                    && GlobalVariable.peekGlobalIO(this.globName) == this) {
+                copy.hashSlotAliasesNamedGlob = true;
+            }
+        } else if (GlobalVariable.existsGlobalHash(this.globName) || isStashGlobName(this.globName)) {
             copy.hashSlot = GlobalVariable.getGlobalHash(this.globName);
         } else if (GlobalVariable.peekGlobalIO(this.globName) == this) {
             copy.hashSlotAliasesNamedGlob = true;
@@ -195,8 +227,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 || codeContainer.type != CODE
                 || !(codeContainer.value instanceof RuntimeCode existingCode)
                 || existingCode.defined()
-                || !existingCode.isDeclared
-                || !existingCode.isSymbolicReference
+                || (!(existingCode.isDeclared && existingCode.isSymbolicReference)
+                    && !existingCode.hasForwardGlobAlias)
                 || value == null
                 || value.type != CODE
                 || !(value.value instanceof RuntimeCode newCode)
@@ -218,7 +250,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return false;
         }
 
+        List<RuntimeCode> forwardAliases = existingCode.forwardGlobAliases;
         existingCode.adoptDefinitionFrom(newCode);
+        for (RuntimeCode alias : forwardAliases) {
+            if (alias != existingCode) {
+                alias.adoptDefinitionFrom(newCode);
+            }
+        }
         attachCoderefToNamedGlob(existingCode, globName);
         existingCode.hadStashRef = true;
         existingCode.stashRefCount++;
@@ -325,8 +363,72 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case READONLY_SCALAR:
                 return set((RuntimeScalar) value.value);
             case CODE:
+                if (value.value instanceof RuntimeCode aliasedCode
+                        && !aliasedCode.defined()) {
+                    String sourceName = aliasedCode.referenceOriginFqn;
+                    if (sourceName == null
+                            && aliasedCode.packageName != null
+                            && aliasedCode.subName != null
+                            && !aliasedCode.subName.isEmpty()) {
+                        sourceName = aliasedCode.packageName + "::" + aliasedCode.subName;
+                    }
+                    if (sourceName == null || sourceName.equals(this.globName)) {
+                        for (var entry : GlobalVariable.globalCodeRefs.entrySet()) {
+                            if (!entry.getKey().equals(this.globName)
+                                    && entry.getValue() != null
+                                    && entry.getValue().value == aliasedCode) {
+                                sourceName = entry.getKey();
+                                break;
+                            }
+                        }
+                    }
+                    if (sourceName != null && !sourceName.equals(this.globName)) {
+                        // Bytecode constants retain the parse-time CV across the
+                        // interpreter's runtime-global reset. Rebind an undefined
+                        // named reference to the live source slot so both glob
+                        // names observe the CV body installed later.
+                        RuntimeScalar sourceContainer =
+                                GlobalVariable.getGlobalCodeRefForFreshLookup(sourceName);
+                        if (sourceContainer.value instanceof RuntimeCode sourceCode) {
+                            sourceCode.hasForwardGlobAlias = true;
+                            value = sourceContainer;
+                        } else {
+                            aliasedCode.hasForwardGlobAlias = true;
+                        }
+                    }
+                }
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+
+                if (value.value instanceof RuntimeCode sourceCode
+                        && !sourceCode.defined()
+                        && sourceCode.hasForwardGlobAlias
+                        && sourceCode.requiresForwardGlobAliasGroup
+                        && codeContainer.value instanceof RuntimeCode targetCode
+                        && targetCode != sourceCode
+                        && !targetCode.defined()) {
+                    List<RuntimeCode> aliasGroup = sourceCode.forwardGlobAliases;
+                    if (aliasGroup.isEmpty()) {
+                        aliasGroup.add(sourceCode);
+                    }
+                    if (targetCode.forwardGlobAliases != aliasGroup) {
+                        for (RuntimeCode alias : targetCode.forwardGlobAliases) {
+                            if (!aliasGroup.contains(alias)) {
+                                aliasGroup.add(alias);
+                            }
+                        }
+                    }
+                    if (!aliasGroup.contains(targetCode)) {
+                        aliasGroup.add(targetCode);
+                    }
+                    for (RuntimeCode alias : aliasGroup) {
+                        alias.hasForwardGlobAlias = true;
+                        alias.forwardGlobAliases = aliasGroup;
+                    }
+                    // Preserve the target's cached placeholder; the shared
+                    // alias group will populate it when either name is defined.
+                    value = codeContainer;
+                }
 
                 if (fillForwardCodeRefInPlace(this.globName, codeContainer, value)) {
                     InheritanceResolver.invalidateCache();
@@ -532,7 +634,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             return value.scalar();
         }
 
-        if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
+        if (isStashGlobName(this.globName) && isStashGlobName(value.globName)) {
             GlobalVariable.setStashAlias(this.globName, value.globName);
             // Unify the stash-view hash so `\%Dst:: == \%Src::` and `*Dst::{HASH} == *Src::{HASH}`.
             // Without this, the two RuntimeStash objects remain distinct even though name-level
@@ -654,7 +756,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // it unconditionally for stashes, so we must materialise the alias here
         // even if globalHashes hasn't been populated yet.
         boolean sourceHasHash = GlobalVariable.existsGlobalHash(globName)
-                || globName.endsWith("::");
+                || isStashGlobName(globName)
+                || (!isLocalizedGlob(this.globName)
+                    && (globName.equals("main::!")
+                        || globName.equals("main::+")
+                        || globName.equals("main::-")));
         if (sourceHasHash) {
             RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
             if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
@@ -821,6 +927,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     yield this.hashSlot.createReference();
                 }
                 if (this.slotSnapshot) {
+                    if (this.hashSlotAliasesNamedGlob
+                            && !GlobalVariable.existsGlobalHash(this.globName)) {
+                        yield new RuntimeScalar();
+                    }
                     if (this.hashSlot == null && this.hashSlotAliasesNamedGlob
                             && GlobalVariable.existsGlobalHash(this.globName)) {
                         this.hashSlot = GlobalVariable.getGlobalHash(this.globName);
@@ -833,7 +943,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // even if it hasn't been explicitly materialized. This mirrors Perl 5
                 // where the stash is an intrinsic property of the package.
                 // getGlobalHash() internally normalizes "main::Foo::" -> "Foo::".
-                if (this.globName.endsWith("::")) {
+                if (isStashGlobName(this.globName)) {
                     yield GlobalVariable.getGlobalHash(this.globName).createReference();
                 }
                 // Only return reference if hash exists (has elements or was explicitly created)
@@ -893,7 +1003,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // For stash globs (name ends with ::), resolve to the correct package stash.
         // The glob for $::{"UNIVERSAL::"} has globName "main::UNIVERSAL::" but the
         // stash is stored with key "UNIVERSAL::". Strip "main::" for top-level packages.
-        if (this.globName.endsWith("::")) {
+        if (isStashGlobName(this.globName)) {
             // Strip a leading "main::" only when there is something after it
             // (e.g. "main::Foo::" -> "Foo::"). For the bare "main::" stash,
             // keep the key intact so we don't end up looking up "" and
@@ -1210,7 +1320,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
-        if (this.globName.endsWith("::")) {
+        if (isStashGlobName(this.globName)) {
             // `undef *Pkg::` removes the stash slot from the parent package but
             // does not anonymize previously-blessed objects (Perl semantics: old
             // refs keep their package name; only `undef %Pkg::` anonymizes).

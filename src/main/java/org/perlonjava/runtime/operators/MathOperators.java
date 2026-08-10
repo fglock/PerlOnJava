@@ -2,6 +2,8 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -11,6 +13,23 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * division, modulus, and various mathematical functions.
  */
 public class MathOperators {
+    private static final BigInteger MIN_IV = BigInteger.valueOf(Long.MIN_VALUE);
+    private static final BigInteger MAX_UV = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+
+    private static RuntimeScalar integerResult(BigInteger result) {
+        if (result.compareTo(MIN_IV) >= 0 && result.compareTo(MAX_UV) <= 0) {
+            return new RuntimeScalar(result);
+        }
+        return new RuntimeScalar(result.doubleValue());
+    }
+
+    private static boolean hasWideInteger(RuntimeScalar scalar) {
+        return scalar.type == INTEGER && scalar.value instanceof BigInteger;
+    }
+
+    private static boolean hasWideInteger(RuntimeScalar left, RuntimeScalar right) {
+        return hasWideInteger(left) || hasWideInteger(right);
+    }
 
     /** Largest magnitude such that every integer in [-N, N] is exactly representable as double (2^53). */
     private static final double MAX_EXACT_DOUBLE_INT = 9007199254740992.0;
@@ -43,9 +62,9 @@ public class MathOperators {
         };
         arg1 = warn ? arg1.getNumberWarn(context) : arg1.getNumber(context);
         arg2 = warn ? arg2.getNumberWarn(context) : arg2.getNumber(context);
-        int a = (int) arg1.getLong();
-        int b = (int) arg2.getLong();
-        int result = switch (operation) {
+        long a = arg1.getLong();
+        long b = arg2.getLong();
+        long result = switch (operation) {
             case ADD -> a + b;
             case SUBTRACT -> a - b;
             case MULTIPLY -> a * b;
@@ -107,11 +126,10 @@ public class MathOperators {
         return new RuntimeScalar(-nativeIntValue(arg, "negation (-)"));
     }
 
-    private static int nativeIntValue(RuntimeScalar arg, String operation) {
+    private static long nativeIntValue(RuntimeScalar arg, String operation) {
         RuntimeScalar number = arg.getNumber(operation);
-        if (number.type != DOUBLE) return (int) number.getLong();
-        double value = number.getDouble();
-        return Double.isFinite(value) ? (int) (long) value : (int) value;
+        if (number.type != DOUBLE) return number.getLong();
+        return (long) number.getDouble();
     }
 
     /** Perl's unary-minus string sign toggling, or {@code null} for numeric coercion. */
@@ -179,6 +197,8 @@ public class MathOperators {
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
+        } else if (hasWideInteger(arg1)) {
+            return integerResult(arg1.getBigint().add(BigInteger.valueOf(arg2)));
         } else {
             long a = arg1.getLong();
             try {
@@ -186,7 +206,7 @@ public class MathOperators {
                 return new RuntimeScalar(Math.addExact(a, arg2));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a + (double) arg2);
+                return integerResult(BigInteger.valueOf(a).add(BigInteger.valueOf(arg2)));
             }
         }
     }
@@ -220,7 +240,7 @@ public class MathOperators {
                 return new RuntimeScalar(Math.addExact(a, arg2));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a + (double) arg2);
+                return integerResult(BigInteger.valueOf(a).add(BigInteger.valueOf(arg2)));
             }
         }
     }
@@ -239,12 +259,15 @@ public class MathOperators {
     private static RuntimeScalar addUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            if (hasWideInteger(arg1, arg2)) {
+                return integerResult(arg1.getBigint().add(arg2.getBigint()));
+            }
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.addExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((double) a + (double) b);
+                return integerResult(BigInteger.valueOf(a).add(BigInteger.valueOf(b)));
             }
         }
 
@@ -262,6 +285,8 @@ public class MathOperators {
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return integerResult(arg1.getBigint().add(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -269,7 +294,7 @@ public class MathOperators {
                 return getScalarInt(Math.addExact(a, b));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a + (double) b);
+                return integerResult(BigInteger.valueOf(a).add(BigInteger.valueOf(b)));
             }
         }
     }
@@ -289,12 +314,15 @@ public class MathOperators {
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            if (hasWideInteger(arg1, arg2)) {
+                return integerResult(arg1.getBigint().add(arg2.getBigint()));
+            }
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.addExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((double) a + (double) b);
+                return integerResult(BigInteger.valueOf(a).add(BigInteger.valueOf(b)));
             }
         }
 
@@ -313,6 +341,8 @@ public class MathOperators {
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return integerResult(arg1.getBigint().add(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -320,7 +350,7 @@ public class MathOperators {
                 return getScalarInt(Math.addExact(a, b));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a + (double) b);
+                return integerResult(BigInteger.valueOf(a).add(BigInteger.valueOf(b)));
             }
         }
     }
@@ -345,13 +375,15 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
+        } else if (hasWideInteger(arg1)) {
+            return integerResult(arg1.getBigint().subtract(BigInteger.valueOf(arg2)));
         } else {
             long a = arg1.getLong();
             try {
                 return getScalarInt(Math.subtractExact(a, arg2));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a - (double) arg2);
+                return integerResult(BigInteger.valueOf(a).subtract(BigInteger.valueOf(arg2)));
             }
         }
     }
@@ -378,13 +410,15 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
+        } else if (hasWideInteger(arg1)) {
+            return integerResult(arg1.getBigint().subtract(BigInteger.valueOf(arg2)));
         } else {
             long a = arg1.getLong();
             try {
                 return getScalarInt(Math.subtractExact(a, arg2));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a - (double) arg2);
+                return integerResult(BigInteger.valueOf(a).subtract(BigInteger.valueOf(arg2)));
             }
         }
     }
@@ -403,12 +437,15 @@ public class MathOperators {
     private static RuntimeScalar subtractUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            if (hasWideInteger(arg1, arg2)) {
+                return integerResult(arg1.getBigint().subtract(arg2.getBigint()));
+            }
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.subtractExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((double) a - (double) b);
+                return integerResult(BigInteger.valueOf(a).subtract(BigInteger.valueOf(b)));
             }
         }
 
@@ -426,6 +463,8 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return integerResult(arg1.getBigint().subtract(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -433,7 +472,7 @@ public class MathOperators {
                 return getScalarInt(Math.subtractExact(a, b));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a - (double) b);
+                return integerResult(BigInteger.valueOf(a).subtract(BigInteger.valueOf(b)));
             }
         }
     }
@@ -453,12 +492,15 @@ public class MathOperators {
     private static RuntimeScalar subtractWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            if (hasWideInteger(arg1, arg2)) {
+                return integerResult(arg1.getBigint().subtract(arg2.getBigint()));
+            }
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.subtractExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((double) a - (double) b);
+                return integerResult(BigInteger.valueOf(a).subtract(BigInteger.valueOf(b)));
             }
         }
 
@@ -477,6 +519,8 @@ public class MathOperators {
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return integerResult(arg1.getBigint().subtract(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -484,7 +528,7 @@ public class MathOperators {
                 return getScalarInt(Math.subtractExact(a, b));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a - (double) b);
+                return integerResult(BigInteger.valueOf(a).subtract(BigInteger.valueOf(b)));
             }
         }
     }
@@ -504,13 +548,15 @@ public class MathOperators {
     private static RuntimeScalar multiplyUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            if (hasWideInteger(arg1, arg2)) {
+                return integerResult(arg1.getBigint().multiply(arg2.getBigint()));
+            }
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
-                // Widen to long — int*int product always fits in long; avoid double mantissa loss.
-                return new RuntimeScalar((long) a * (long) b);
+                return integerResult(BigInteger.valueOf(a).multiply(BigInteger.valueOf(b)));
             }
         }
 
@@ -528,6 +574,8 @@ public class MathOperators {
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return integerResult(arg1.getBigint().multiply(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -535,7 +583,7 @@ public class MathOperators {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a * (double) b);
+                return integerResult(BigInteger.valueOf(a).multiply(BigInteger.valueOf(b)));
             }
         }
     }
@@ -555,12 +603,15 @@ public class MathOperators {
     private static RuntimeScalar multiplyWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
-            int a = (int) arg1.value;
-            int b = (int) arg2.value;
+            if (hasWideInteger(arg1, arg2)) {
+                return integerResult(arg1.getBigint().multiply(arg2.getBigint()));
+            }
+            long a = arg1.getLong();
+            long b = arg2.getLong();
             try {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((long) a * (long) b);
+                return integerResult(BigInteger.valueOf(a).multiply(BigInteger.valueOf(b)));
             }
         }
 
@@ -579,6 +630,8 @@ public class MathOperators {
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
+        } else if (hasWideInteger(arg1, arg2)) {
+            return integerResult(arg1.getBigint().multiply(arg2.getBigint()));
         } else {
             long a = arg1.getLong();
             long b = arg2.getLong();
@@ -586,7 +639,7 @@ public class MathOperators {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
                 // Overflow: promote to double (Perl NV semantics)
-                return new RuntimeScalar((double) a * (double) b);
+                return integerResult(BigInteger.valueOf(a).multiply(BigInteger.valueOf(b)));
             }
         }
     }
@@ -1468,7 +1521,7 @@ public class MathOperators {
             return Overload.bool_not(runtimeScalar);
         }
         return switch (runtimeScalar.type) {
-            case INTEGER -> getScalarBoolean((int) runtimeScalar.value == 0);
+            case INTEGER -> getScalarBoolean(runtimeScalar.getLong() == 0);
             case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
             case STRING, BYTE_STRING -> {
                 String s = (String) runtimeScalar.value;
@@ -1512,6 +1565,14 @@ public class MathOperators {
                 default -> throw new IllegalStateException();
             };
         }
+        if (hasWideInteger(a, b) && op <= 2) {
+            return switch (op) {
+                case 0 -> integerResult(a.getBigint().add(b.getBigint()));
+                case 1 -> integerResult(a.getBigint().subtract(b.getBigint()));
+                case 2 -> integerResult(a.getBigint().multiply(b.getBigint()));
+                default -> throw new IllegalStateException();
+            };
+        }
         long x = a.getLong();
         long y = b.getLong();
         try {
@@ -1529,9 +1590,9 @@ public class MathOperators {
             };
         } catch (ArithmeticException ignored) {
             return switch (op) {
-                case 0 -> new RuntimeScalar((double) x + (double) y);
-                case 1 -> new RuntimeScalar((double) x - (double) y);
-                case 2 -> new RuntimeScalar((double) x * (double) y);
+                case 0 -> integerResult(BigInteger.valueOf(x).add(BigInteger.valueOf(y)));
+                case 1 -> integerResult(BigInteger.valueOf(x).subtract(BigInteger.valueOf(y)));
+                case 2 -> integerResult(BigInteger.valueOf(x).multiply(BigInteger.valueOf(y)));
                 case 3 -> new RuntimeScalar((double) x / (double) y);
                 case 4 -> new RuntimeScalar((double) x % (double) y);
                 case 5 -> new RuntimeScalar(Math.pow((double) x, (double) y));

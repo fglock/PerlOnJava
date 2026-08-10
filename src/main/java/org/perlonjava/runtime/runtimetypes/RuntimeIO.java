@@ -582,6 +582,14 @@ public class RuntimeIO extends RuntimeScalar {
         getGlobalIO("main::STDOUT").setIO(stdout);
         getGlobalIO("main::STDERR").setIO(stderr);
         getGlobalIO("main::STDIN").setIO(stdin);
+        // Perl exposes lowercase aliases for the three standard handles in
+        // main's symbol table as well.
+        getGlobalIO("main::stdout").setIO(stdout);
+        getGlobalIO("main::stderr").setIO(stderr);
+        getGlobalIO("main::stdin").setIO(stdin);
+        stdout.globName = "main::STDOUT";
+        stderr.globName = "main::STDERR";
+        stdin.globName = "main::STDIN";
         lastAccesseddHandle = null;
         lastWrittenHandle = stdout;
         selectedHandle = stdout;
