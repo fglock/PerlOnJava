@@ -111,9 +111,11 @@ public class Readline {
             return readParagraphMode(runtimeIO);
         }
 
-        if (rs != null && rs.isRecordLengthMode()) {
+        int recordLength = rs != null && rs.isRecordLengthMode()
+                ? rs.getRecordLength()
+                : recordLengthFromLocalizedSeparator(rsScalar);
+        if (recordLength > 0) {
             // Handle record length mode when $/ = \N
-            int recordLength = rs.getRecordLength();
             return readFixedLength(runtimeIO, recordLength);
         }
 
@@ -133,6 +135,31 @@ public class Readline {
             // Multi-character separator
             return readUntilString(runtimeIO, sep);
         }
+    }
+
+    /**
+     * A dynamically localized special variable is represented by the saved
+     * global binding rather than by the original InputRecordSeparator
+     * subclass. Preserve Perl's $/ = \N mode across that representation
+     * change.
+     */
+    private static int recordLengthFromLocalizedSeparator(RuntimeScalar separator) {
+        if (separator.type != RuntimeScalarType.REFERENCE
+                || !(separator.value instanceof RuntimeScalar referenced)) {
+            return -1;
+        }
+        if (referenced.type == RuntimeScalarType.INTEGER) {
+            return referenced.getInt();
+        }
+        if (referenced.type == RuntimeScalarType.STRING
+                || referenced.type == RuntimeScalarType.BYTE_STRING) {
+            try {
+                return Integer.parseInt(referenced.toString());
+            } catch (NumberFormatException ignored) {
+                return -1;
+            }
+        }
+        return -1;
     }
 
     private static RuntimeScalar readParagraphMode(RuntimeIO runtimeIO) {

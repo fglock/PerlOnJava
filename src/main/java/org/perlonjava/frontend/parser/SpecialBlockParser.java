@@ -2,6 +2,7 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
+import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -14,8 +15,10 @@ import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.BitSet;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalContext.GLOBAL_PHASE;
@@ -246,6 +249,10 @@ public class SpecialBlockParser {
 
         // Declare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        Set<String> usedVars = new HashSet<>();
+        VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
+        block.accept(collector);
+        boolean captureAllVisibleVariables = collector.hasEvalString();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
                 // Skip lexical subs (entries starting with &) - they are stored as hidden variables
@@ -255,6 +262,9 @@ public class SpecialBlockParser {
                 }
                 if (entry.decl().equals("field") || entry.name().isEmpty()
                         || "$@%*".indexOf(entry.name().charAt(0)) < 0) {
+                    continue;
+                }
+                if (!captureAllVisibleVariables && !usedVars.contains(entry.name())) {
                     continue;
                 }
 
