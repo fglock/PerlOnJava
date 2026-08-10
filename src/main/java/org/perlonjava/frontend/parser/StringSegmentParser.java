@@ -942,9 +942,6 @@ public abstract class StringSegmentParser {
         if (!isRegexQuoteConstruction) {
             return false;
         }
-        if (hasRemainingNonEofTokens()) {
-            return false;
-        }
         Node node = block;
         if (node instanceof BlockNode blockNode) {
             if (blockNode.elements.size() != 1) {
@@ -964,15 +961,6 @@ public abstract class StringSegmentParser {
         return operatorNode.operand instanceof OperatorNode scalarOp
                 && scalarOp.operator.equals("$")
                 && scalarOp.operand instanceof IdentifierNode;
-    }
-
-    private boolean hasRemainingNonEofTokens() {
-        for (int i = parser.tokenIndex; i < tokens.size(); i++) {
-            if (tokens.get(i).type != LexerTokenType.EOF) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

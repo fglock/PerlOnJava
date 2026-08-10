@@ -858,6 +858,37 @@ public class RegexPreprocessorHelper {
                         } else {
                             RegexPreprocessor.regexError(s, offset, "Missing right brace on \\x{}");
                         }
+                    } else if (s.codePointAt(offset) == 'x') {
+                        // Bare \xNN inside a character class has the same
+                        // up-to-two-hex-digit semantics as it does outside a
+                        // class.  Consume the digits here so they do not become
+                        // independent range endpoints (for example, Perl's
+                        // [\x00-\ ] was previously misread as [0- ]).
+                        int hexValue = 0;
+                        int hexDigits = 0;
+                        int pos = offset + 1;
+                        while (hexDigits < 2 && pos < length) {
+                            char ch = s.charAt(pos);
+                            if ((ch >= '0' && ch <= '9')
+                                    || (ch >= 'a' && ch <= 'f')
+                                    || (ch >= 'A' && ch <= 'F')) {
+                                hexValue = hexValue * 16 + Character.digit(ch, 16);
+                                hexDigits++;
+                                pos++;
+                            } else {
+                                break;
+                            }
+                        }
+                        if (hexDigits == 2) {
+                            sb.append('x');
+                            sb.append(s.charAt(offset + 1));
+                            sb.append(s.charAt(offset + 2));
+                            offset += 2;
+                        } else {
+                            sb.append(String.format("x{%X}", hexValue));
+                            offset = pos - 1;
+                        }
+                        lastChar = hexValue;
                     } else if (s.codePointAt(offset) == 'b') {
                         // \b inside character class = backspace in Perl
                         // Java doesn't support \b in [...], so convert to \x08

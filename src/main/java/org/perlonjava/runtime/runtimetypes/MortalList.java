@@ -934,6 +934,50 @@ public class MortalList {
         }
     }
 
+    /**
+     * Register weakly tracked referents whose last strong edge may disappear
+     * with a container temporary.  References to ordinary scalar referents
+     * cannot participate in the selective refCount scheme, so a discarded
+     * anonymous array/hash must explicitly ask the statement-boundary walker
+     * to reconsider them.  This is the aggregate equivalent of assigning
+     * {@code undef} to a scalar that contains a WEAKLY_TRACKED reference.
+     */
+    public static void requestWeakSweepsForDestroyedContainer(RuntimeBase container) {
+        if (!(container instanceof RuntimeArray) && !(container instanceof RuntimeHash)) return;
+
+        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        work.add(container);
+
+        while (!work.isEmpty()) {
+            RuntimeBase current = work.removeFirst();
+            if (!visited.add(current)) continue;
+
+            Iterable<RuntimeScalar> values;
+            if (current instanceof RuntimeArray array) {
+                values = array.elements;
+            } else if (current instanceof RuntimeHash hash) {
+                values = hash.elements.values();
+            } else {
+                continue;
+            }
+
+            for (RuntimeScalar value : values) {
+                if (value == null
+                        || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                        || !(value.value instanceof RuntimeBase referent)) {
+                    continue;
+                }
+                if (WeakRefRegistry.hasWeakRefsTo(referent)) {
+                    requestTargetedWeakSweep(referent);
+                }
+                if (referent instanceof RuntimeArray || referent instanceof RuntimeHash) {
+                    work.add(referent);
+                }
+            }
+        }
+    }
+
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
         if (!active
                 || base == null

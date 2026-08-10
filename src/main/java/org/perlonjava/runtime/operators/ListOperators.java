@@ -152,68 +152,73 @@ public class ListOperators {
         // Create the sort variables
         RuntimeScalar varA = getGlobalVariable(packageName + "::a");
         RuntimeScalar varB = getGlobalVariable(packageName + "::b");
+        int sortLocalLevel = DynamicVariableManager.getLocalLevel();
+        DynamicVariableManager.pushLocalVariable(varA);
+        DynamicVariableManager.pushLocalVariable(varB);
 
-        // Sort the new array using the Perl comparator subroutine
-        array.elements.sort((a, b) -> {
-            try {
-                // Create $a, $b arguments for the comparator
-                varA.set(a);
-                varB.set(b);
+        try {
+            // Sort the new array using the Perl comparator subroutine. Perl
+            // dynamically localizes the package globals $a and $b for the
+            // duration of sort; restoring them is essential when callers use
+            // package variables with those conventional names.
+            array.elements.sort((a, b) -> {
+                try {
+                    // Create $a, $b arguments for the comparator
+                    varA.set(a);
+                    varB.set(b);
 
-                // For $$-prototyped comparators, pass elements via @_;
-                // otherwise inherit the outer @_ so the block can use $_[N].
-                RuntimeArray comparatorArgs;
-                if (stackedComparator) {
-                    comparatorArgs = new RuntimeArray();
-                    comparatorArgs.push(a);
-                    comparatorArgs.push(b);
-                } else {
-                    comparatorArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+                    // For $$-prototyped comparators, pass elements via @_;
+                    // otherwise inherit the outer @_ so the block can use $_[N].
+                    RuntimeArray comparatorArgs;
+                    if (stackedComparator) {
+                        comparatorArgs = new RuntimeArray();
+                        comparatorArgs.push(a);
+                        comparatorArgs.push(b);
+                    } else {
+                        comparatorArgs = outerArgs != null ? outerArgs : new RuntimeArray();
+                    }
+
+                    // Apply the Perl comparator subroutine with the arguments
+                    RuntimeList result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
+
+                    // Check for control flow markers that tried to escape the
+                    // sort block. Preserve upstream's source location detail.
+                    if (result.isNonLocalGoto()) {
+                        RuntimeControlFlowList controlFlow = (RuntimeControlFlowList) result;
+                        ControlFlowType cfType = controlFlow.getControlFlowType();
+                        String keyword = switch (cfType) {
+                            case GOTO, TAILCALL -> "goto";
+                            case LAST -> "last";
+                            case NEXT -> "next";
+                            case REDO -> "redo";
+                            case RETURN -> "return";
+                        };
+                        ControlFlowMarker marker = controlFlow.marker;
+                        throw new PerlCompilerException("Can't \"" + keyword
+                                + "\" out of a pseudo block at " + marker.fileName
+                                + " line " + marker.lineNumber + ".\n");
+                    }
+
+                    // Retrieve the comparison result and return it as an integer
+                    return result.getFirst().getInt();
+                } catch (PerlExitException e) {
+                    // exit() should propagate immediately - don't wrap it
+                    throw e;
+                } catch (PerlCompilerException e) {
+                    // Propagate Perl errors directly so eval {} can catch them
+                    throw e;
+                } catch (Exception e) {
+                    // Wrap any exceptions thrown by the comparator in a RuntimeException
+                    throw new RuntimeException(e);
                 }
+            });
 
-                // Apply the Perl comparator subroutine with the arguments
-                RuntimeList result = RuntimeCode.apply(finalComparator, comparatorArgs, RuntimeContextType.SCALAR);
-
-                // Check for control flow markers (goto/last/next/redo) that tried to escape the sort block.
-                // The marker propagates as the return value (RuntimeControlFlowList), not via the registry.
-                if (result.isNonLocalGoto()) {
-                    RuntimeControlFlowList controlFlow = (RuntimeControlFlowList) result;
-                    ControlFlowType cfType = controlFlow.getControlFlowType();
-                    String keyword = switch (cfType) {
-                        case GOTO, TAILCALL -> "goto";
-                        case LAST -> "last";
-                        case NEXT -> "next";
-                        case REDO -> "redo";
-                        case RETURN -> "return";
-                    };
-                    ControlFlowMarker marker = controlFlow.marker;
-                    throw new PerlCompilerException("Can't \"" + keyword
-                            + "\" out of a pseudo block at " + marker.fileName
-                            + " line " + marker.lineNumber + ".\n");
-                }
-
-                // Retrieve the comparison result and return it as an integer
-                return result.getFirst().getInt();
-            } catch (PerlExitException e) {
-                // exit() should propagate immediately - don't wrap it
-                throw e;
-            } catch (PerlCompilerException e) {
-                // Propagate Perl errors directly so eval {} can catch them
-                throw e;
-            } catch (Exception e) {
-                // Wrap any exceptions thrown by the comparator in a RuntimeException
-                throw new RuntimeException(e);
-            }
-        });
-
-        // Create a new RuntimeList to hold the sorted elements
-        RuntimeList sortedList = new RuntimeList(array);
-
-        // Release captures from ephemeral sort block closure
-        releaseEphemeralCaptures(perlComparatorClosure);
-
-        // Return the sorted RuntimeList
-        return sortedList;
+            // Create a new RuntimeList to hold the sorted elements
+            return new RuntimeList(array);
+        } finally {
+            DynamicVariableManager.popToLocalLevel(sortLocalLevel);
+            releaseEphemeralCaptures(perlComparatorClosure);
+        }
     }
 
     /**

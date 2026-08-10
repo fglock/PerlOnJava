@@ -3010,9 +3010,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         referencedByScalarReference = true;
         boolean isRegisteredLexical =
                 this.refCount == -1 && MyVarCleanupStack.isRegistered(this);
-        if (this.refCount == -1
-                && isRegisteredLexical
-                && !RuntimeCode.hasActiveCode()) {
+        if (this.refCount == -1 && isRegisteredLexical) {
             this.refCount = 0;
             this.localBindingExists = true;
         } else if (this.refCount == -1
@@ -3291,6 +3289,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && scalar.localBindingExists
                 && scalar.captureCount == 0) {
             cleanupScalarReferenceBinding(scalar);
+            // A reference to the lexical escaped its declaring scope.  The
+            // RuntimeScalar is now the Perl SV container, so its current value
+            // must live until the final scalar reference is released.
+            if (scalar.refCount > 0) return;
         }
 
         // Fast path: skip if no special state (most common case for integer/string vars).

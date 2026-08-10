@@ -31,7 +31,8 @@ sub length { return scalar @{ $_[0]->{clusters} }; }
 sub as_string { return $_[0]->{str}; }
 
 sub substr {
-    my ($self, $start, $len) = @_;
+    my ($self, $start, $len, $replacement) = @_;
+    my $replace = @_ >= 4;
     my @c = @{ $self->{clusters} };
     my $total = scalar @c;
     $start = 0 if !defined $start;
@@ -48,7 +49,19 @@ sub substr {
     }
     $end = $start  if $end < $start;
     $end = $total  if $end > $total;
-    my $piece = join '', @c[$start .. $end - 1];
+    my @removed = $end > $start ? @c[$start .. $end - 1] : ();
+    my $piece = join '', @removed;
+
+    if ($replace) {
+        $replacement = '' unless defined $replacement;
+        $replacement = $replacement->as_string
+            if ref($replacement) && eval { $replacement->can('as_string') };
+        my @replacement_clusters = ($replacement =~ /(\X)/gs);
+        splice @c, $start, $end - $start, @replacement_clusters;
+        $self->{clusters} = \@c;
+        $self->{str} = join '', @c;
+    }
+
     return Unicode::GCString->new($piece);
 }
 

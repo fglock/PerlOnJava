@@ -339,6 +339,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             base.releaseOwner(result, "RuntimeArray.pop");
                         }
                         base.releaseActiveOwner(result);
+                        MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrement(base);
                     }
                     yield result;
@@ -383,6 +384,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             base.releaseOwner(result, "RuntimeArray.shift");
                         }
                         base.releaseActiveOwner(result);
+                        MortalList.requestWeakSweepsForDestroyedContainer(base);
                         MortalList.deferDecrement(base);
                     }
                     yield result;
@@ -1196,6 +1198,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         for (RuntimeScalar elem : this.elements) {
             RuntimeScalar.incrementRefCountForContainerStore(elem);
         }
+        // The literal owns the element copies above. Removal paths use this
+        // aggregate flag in addition to each scalar's refCountOwned bit when
+        // deciding whether shift/pop must mortalize the removed value.
+        this.elementsOwned = true;
+        this.elementsAliased = false;
+        this.ownedAliasElements = null;
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;
         result.value = this;

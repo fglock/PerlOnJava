@@ -38,7 +38,9 @@ public class MIMEQuotedPrint extends PerlModuleBase {
         }
 
         String encoded = encodeQuotedPrintable(str.toString(), eol.toString(), binaryMode);
-        return new RuntimeScalar(encoded).getList();
+        // MIME::QuotedPrint's XS API returns an octet scalar even when the
+        // input was UTF-8 flagged.  The encoded representation is ASCII.
+        return new RuntimeScalar(encoded.getBytes(StandardCharsets.ISO_8859_1)).getList();
     }
 
     public static RuntimeList decode_qp(RuntimeArray args, int ctx) {
@@ -47,7 +49,7 @@ public class MIMEQuotedPrint extends PerlModuleBase {
         }
         RuntimeScalar input = args.get(0);
         String decoded = decodeQuotedPrintable(input.toString());
-        return new RuntimeScalar(decoded).getList();
+        return new RuntimeScalar(decoded.getBytes(StandardCharsets.ISO_8859_1)).getList();
     }
 
     private static String encodeQuotedPrintable(String input, String eol, boolean binaryMode) {
