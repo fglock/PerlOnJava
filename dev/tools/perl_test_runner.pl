@@ -86,7 +86,7 @@ my %feature_patterns = (
 my $total_files = @test_files;
 
 print "Found $total_files test files\n";
-print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s timeout)\n";
+print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout)\n";
 print "-" x 60, "\n";
 
 # Run tests in parallel
@@ -233,6 +233,13 @@ sub process_test_result {
 sub run_single_test {
     my ($test_file) = @_;
 
+    # lib/croak.t launches a fresh jperl process for each of its 300+ cases.
+    # Under a full parallel run it competes with the other workers and has
+    # repeatedly finished within a second of the normal per-file deadline.
+    # Give this subprocess-heavy test a stable minimum wall-clock allowance
+    # while preserving any larger timeout requested by the caller.
+    my $test_timeout = timeout_for_test($test_file);
+
     # Temporarily disable fatal unimplemented errors
     # so we can run tests that mix implemented and unimplemented features
     local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{
@@ -347,10 +354,10 @@ sub run_single_test {
     my $kill_after = 10;  # seconds between SIGTERM and SIGKILL
     if (!$is_windows) {
         if (system('which timeout >/dev/null 2>&1') == 0) {
-            $timeout_cmd = "timeout -k ${kill_after}s ${timeout}s ";
+            $timeout_cmd = "timeout -k ${kill_after}s ${test_timeout}s ";
         } elsif (system('which gtimeout >/dev/null 2>&1') == 0) {
             # macOS with coreutils
-            $timeout_cmd = "gtimeout -k ${kill_after}s ${timeout}s ";
+            $timeout_cmd = "gtimeout -k ${kill_after}s ${test_timeout}s ";
         }
     }
 
@@ -369,7 +376,7 @@ sub run_single_test {
         # Fallback to alarm-based timeout
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };
-            alarm($timeout);
+            alarm($test_timeout);
             $output = `$abs_jperl $test_name 2>&1`;
             $exit_code = $? >> 8;
             alarm(0);
@@ -406,6 +413,14 @@ sub run_single_test {
     my $result = parse_tap_output($output, $exit_code);
     $result->{raw_output_path} = $raw_output_path;
     return $result;
+}
+
+sub timeout_for_test {
+    my ($test_file) = @_;
+
+    return 600 if $test_file =~ m{(?:^|/)perl5_t/t/lib/croak\.t$}
+        && $timeout < 600;
+    return $timeout;
 }
 
 sub start_test_job {
@@ -708,7 +723,8 @@ Run Perl tests against PerlOnJava
 
 Options:
   --jperl PATH     Path to jperl executable (default: ./jperl)
-  --timeout SEC    Timeout per test in seconds (default: 3)
+  --timeout SEC    Base timeout per test in seconds (default: 300; selected
+                   subprocess-heavy tests have a documented minimum)
   --jobs|-j NUM    Number of parallel jobs (default: 4)
   --output FILE    Save detailed results to JSON file
   --help           Show this help message
