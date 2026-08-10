@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * BytecodeCompiler traverses the AST and generates interpreter bytecode.
@@ -84,7 +85,7 @@ public class BytecodeCompiler implements Visitor {
     // outermost expression's first line.
     int callerLineTokenOverride = -1;
     // Callsite ID counter for /o modifier support (unique across all compilations)
-    private static int nextCallsiteId = 1;
+    private static final AtomicInteger nextCallsiteId = new AtomicInteger(1);
     // Track last result register for expression chaining
     int lastResultReg = -1;
     // Target output register for ALIAS elimination (same save/restore pattern as currentCallContext).
@@ -5123,7 +5124,7 @@ public class BytecodeCompiler implements Visitor {
      * Each callsite with /o gets a unique ID so the pattern is compiled only once per callsite.
      */
     int allocateCallsiteId() {
-        return nextCallsiteId++;
+        return nextCallsiteId.getAndIncrement();
     }
 
     int allocateOutputRegister() {
@@ -5633,7 +5634,7 @@ public class BytecodeCompiler implements Visitor {
 
         int beginId = 0;
         if (!closureVarIndices.isEmpty()) {
-            beginId = EmitterMethodCreator.classCounter++;
+            beginId = EmitterMethodCreator.classCounter.getAndIncrement();
 
             // Store each closure variable in PersistentVariable globals
             for (int i = 0; i < closureVarNames.size(); i++) {

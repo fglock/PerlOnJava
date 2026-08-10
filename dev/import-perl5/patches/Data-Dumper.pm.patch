@@ -1,14 +1,13 @@
 --- perl5/dist/Data-Dumper/Dumper.pm
 +++ src/main/perl/lib/Data/Dumper.pm
-@@ -580,6 +580,11 @@
+@@ -580,7 +580,9 @@
        $out .= sprintf "v%vd", $val;
      }
      # \d here would treat "1\x{660}" as a safe decimal number
+-    elsif ($val =~ /^(?:0|-?[1-9][0-9]{0,8})\z/) { # safe decimal number
 +    elsif (defined &Data::Dumper::_perlonjava_numified_safe_decimal
 +       ? Data::Dumper::_perlonjava_numified_safe_decimal($val)
 +       : $val =~ /^(?:0|-?[1-9][0-9]{0,8})\z/) {
-+      $out .= $val;
-+    }
--    elsif ($val =~ /^(?:0|-?[1-9][0-9]{0,8})\z/) { # safe decimal number
--      $out .= $val;
--    }
+       $out .= $val;
+     }
+     else {                 # string

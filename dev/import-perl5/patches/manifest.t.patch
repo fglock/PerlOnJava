@@ -9,13 +9,14 @@
  
      my $result = runperl('progfile' => 'Porting/manisort',
                           'args'     => [ '-c', $manifest ],
-@@ -84,7 +86,8 @@
+@@ -87,7 +89,8 @@
  }
  
  SKIP: {
 -    find_git_or_skip(6);
 +    ## PerlOnJava - skip git tests (not running in perl5 git repo)
 +    skip("Not applicable in PerlOnJava - requires perl5 git repo", 6);
+     my $skip = maniskip;
      my %seen; # De-dup ls-files output (can appear more than once)
      my @repo= grep {
          chomp();

@@ -1483,7 +1483,7 @@ public class SubroutineParser {
                     } else {
                         beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
                                 ast,
-                                k -> EmitterMethodCreator.classCounter++);
+                                k -> EmitterMethodCreator.classCounter.getAndIncrement());
                     }
                     variableName = NameNormalizer.normalizeVariableName(
                             entry.name().substring(1),

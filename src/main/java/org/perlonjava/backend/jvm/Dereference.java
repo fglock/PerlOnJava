@@ -14,9 +14,11 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import static org.perlonjava.backend.jvm.EmitSubroutine.handleSelfCallOperator;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class Dereference {
     // Callsite ID counter for inline method caching (unique across all compilations)
-    private static int nextMethodCallsiteId = 0;
+    private static final AtomicInteger nextMethodCallsiteId = new AtomicInteger(0);
     
     /**
      * Handles the postfix `[]` operator.
@@ -970,7 +972,7 @@ public class Dereference {
             // pushCallContext() is a side-effect-free inline emission and can be called at each use point.
 
             // Allocate a unique callsite ID for inline method caching
-            int callsiteId = nextMethodCallsiteId++;
+            int callsiteId = nextMethodCallsiteId.getAndIncrement();
             // Perl reports the method expression start for ordinary multi-line
             // calls, but literal anon sub/block arguments report the block line.
             Object annotatedCallerLine = node.getAnnotation("callerLineTokenOverride");
