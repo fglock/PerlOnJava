@@ -38,6 +38,11 @@ possible.
   - Deferred targeted weak sweeps until temporary assignment roots are gone.
   - Avoided redundant global walks after ordinary destruction and restricted
     rescued-object cleanup to genuine aggregate rescue cases.
+- [x] Full-suite runtime isolation (2026-08-10)
+  - Explicit registered-warning bits now override the broader `all` bit, so
+    `no warnings 'Category'` remains effective through native warning helpers.
+  - Virtual descriptor recycling now skips occupied descriptors and closing an
+    older borrowed alias cannot unregister a newer live descriptor owner.
 
 ### Validation
 
@@ -50,16 +55,11 @@ possible.
   failure before its 900-second guard. Before the reachability fixes it reached
   only 82 assertions in 120 seconds; this remains a long-running dependency
   test rather than a complete pass.
-- Full `make` completed all compilation and test shards except two
-  order/environment-sensitive baseline tests: `native_module_warning_caller.t`
-  (also fails standalone on master) and `socket_borrowed_name.t` (passes
-  standalone on both master and this branch). A clean master worktree's full
-  `make` passed.
+- Full `make` passes all compilation and unit-test shards.
 
 ### Next Steps
 
-1. Investigate the pre-existing warning-test order dependence separately.
-2. Continue profiling PPI if a sub-15-minute full round-trip run is required.
+1. Continue profiling PPI if a sub-15-minute full round-trip run is required.
 
 ### Open Questions
 
