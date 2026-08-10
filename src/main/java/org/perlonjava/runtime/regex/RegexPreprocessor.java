@@ -162,8 +162,9 @@ public class RegexPreprocessor {
         s = optimizeTerminatedLazyNegatedClasses(s);
 
         // Expand multi-character case folds when case-insensitive flag is set
-        if (regexFlags.isCaseInsensitive()) {
-            s = expandMultiCharFolds(s);
+        if (regexFlags.isCaseInsensitive() && !regexFlags.isAsciiStrict()
+                && !containsInlineAsciiStrictModifier(s)) {
+            s = expandMultiCharFolds(materializeFoldableHexEscapes(s), regexFlags);
         }
 
         StringBuilder sb = new StringBuilder();
@@ -781,7 +782,7 @@ public class RegexPreprocessor {
      * For example: ß → (?:ß|ss|SS|Ss|sS)
      * This is needed because Java's UNICODE_CASE flag doesn't handle multi-char folds.
      */
-    private static String expandMultiCharFolds(String pattern) {
+    private static String expandMultiCharFolds(String pattern, RegexFlags regexFlags) {
         StringBuilder result = new StringBuilder();
         int i = 0;
         int len = pattern.length();
@@ -823,6 +824,16 @@ public class RegexPreprocessor {
             // Track if we're inside a character class [...]
             if (!escaped) {
                 if (ch == '[') {
+                    int classEnd = findRegularCharacterClassEnd(pattern, i);
+                    if (classEnd > i) {
+                        String classExpansion = expandMultiCharFoldClass(
+                                pattern.substring(i, classEnd + 1), regexFlags);
+                        if (classExpansion != null) {
+                            result.append(classExpansion);
+                            i = classEnd + 1;
+                            continue;
+                        }
+                    }
                     inCharClass = true;
                 } else if (ch == ']') {
                     inCharClass = false;
@@ -956,7 +967,7 @@ public class RegexPreprocessor {
 
             // Check if this character has a multi-char fold
             int codePoint = pattern.codePointAt(i);
-            if (MultiCharFoldMapper.hasMultiCharFold(codePoint)) {
+            if (!regexFlags.isAsciiStrict() && MultiCharFoldMapper.hasMultiCharFold(codePoint)) {
                 // Expand it (e.g., ß → (?:ß|ss|SS|Ss|sS))
                 String expansion = MultiCharFoldMapper.expandToAlternation(codePoint);
                 result.append(expansion);
@@ -968,13 +979,14 @@ public class RegexPreprocessor {
                 for (int seqLen = 3; seqLen >= 2 && !foundReverseFold; seqLen--) {
                     if (i + seqLen <= len) {
                         String sequence = pattern.substring(i, i + seqLen);
-                        if (MultiCharFoldMapper.hasReverseFold(sequence)) {
-                            Integer reverseFoldChar = MultiCharFoldMapper.getReverseFold(sequence);
+                        if (!regexFlags.isAsciiStrict() && MultiCharFoldMapper.hasReverseFold(sequence)) {
                             // Expand to include both the sequence and its reverse fold
                             result.append("(?:");
                             result.append(sequence);
-                            result.append("|");
-                            result.appendCodePoint(reverseFoldChar);
+                            for (int reverseFoldChar : MultiCharFoldMapper.getReverseFolds(sequence)) {
+                                result.append("|");
+                                result.appendCodePoint(reverseFoldChar);
+                            }
                             result.append(")");
                             i += seqLen;
                             foundReverseFold = true;
@@ -983,7 +995,8 @@ public class RegexPreprocessor {
                 }
 
                 if (!foundReverseFold) {
-                    String specialExpansion = expandSpecialSingleCharFold(codePoint);
+                    String specialExpansion = regexFlags.isAsciiStrict()
+                            ? null : expandSpecialSingleCharFold(codePoint);
                     if (specialExpansion != null) {
                         result.append(specialExpansion);
                     } else {
@@ -997,6 +1010,94 @@ public class RegexPreprocessor {
         }
 
         return result.toString();
+    }
+
+    private static String expandMultiCharFoldClass(String charClass, RegexFlags regexFlags) {
+        if (regexFlags.isAsciiStrict() || charClass.length() < 3 || charClass.charAt(1) == '^') return null;
+
+        LinkedHashSet<String> folds = new LinkedHashSet<>();
+        boolean escaped = false;
+        for (int i = 1; i < charClass.length() - 1; ) {
+            int codePoint = charClass.codePointAt(i);
+            if (!escaped && codePoint == '\\') {
+                escaped = true;
+                i++;
+                continue;
+            }
+            if (escaped) {
+                escaped = false;
+                i += Character.charCount(codePoint);
+                continue;
+            }
+            if (codePoint == '-' || codePoint == '[' || codePoint == ']') return null;
+            String fold = MultiCharFoldMapper.getMultiCharFold(codePoint);
+            if (fold != null) folds.add(Pattern.quote(fold));
+            i += Character.charCount(codePoint);
+        }
+        if (folds.isEmpty()) return null;
+
+        StringBuilder expansion = new StringBuilder("(?:").append(charClass);
+        for (String fold : folds) expansion.append('|').append(fold);
+        return expansion.append(')').toString();
+    }
+
+    /**
+     * Materialize only hex escapes relevant to full case folds. Keeping all
+     * other escapes intact avoids turning escaped regex metacharacters into
+     * syntax while allowing sequences such as \x{73}\x{73} to be recognized
+     * as the reverse fold of sharp-s.
+     */
+    private static String materializeFoldableHexEscapes(String pattern) {
+        StringBuilder result = new StringBuilder(pattern.length());
+        for (int i = 0; i < pattern.length(); ) {
+            if (pattern.charAt(i) == '\\' && i + 3 < pattern.length()
+                    && pattern.charAt(i + 1) == 'x' && pattern.charAt(i + 2) == '{') {
+                int close = pattern.indexOf('}', i + 3);
+                if (close > i + 3) {
+                    try {
+                        int codePoint = Integer.parseInt(pattern.substring(i + 3, close), 16);
+                        if (Character.isValidCodePoint(codePoint)
+                                && (MultiCharFoldMapper.hasMultiCharFold(codePoint)
+                                    || MultiCharFoldMapper.isFoldComponent(codePoint))) {
+                            result.appendCodePoint(codePoint);
+                            i = close + 1;
+                            continue;
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // Leave malformed escapes to the normal regex parser.
+                    }
+                }
+            }
+            int codePoint = pattern.codePointAt(i);
+            result.appendCodePoint(codePoint);
+            i += Character.charCount(codePoint);
+        }
+        return result.toString();
+    }
+
+    /**
+     * Full-fold rewriting currently operates on the whole pattern. Avoid
+     * applying it across a scoped (?aa:...) boundary, where Perl forbids
+     * ASCII/non-ASCII fold crossings. The regular parser still handles the
+     * scoped modifier itself.
+     */
+    private static boolean containsInlineAsciiStrictModifier(String pattern) {
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            if (pattern.charAt(i) != '(' || pattern.charAt(i + 1) != '?') continue;
+            int asciiModifiers = 0;
+            for (int j = i + 2; j < pattern.length(); j++) {
+                char modifier = pattern.charAt(j);
+                if (modifier == 'a') {
+                    asciiModifiers++;
+                    if (asciiModifiers == 2) return true;
+                } else if (modifier == ':' || modifier == ')' || modifier == '-') {
+                    break;
+                } else if (!Character.isLetter(modifier) && modifier != '^') {
+                    break;
+                }
+            }
+        }
+        return false;
     }
 
     private static String expandSpecialSingleCharFold(int codePoint) {
