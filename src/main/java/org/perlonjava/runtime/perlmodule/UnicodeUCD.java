@@ -35,9 +35,15 @@ public class UnicodeUCD extends PerlModuleBase {
             unicodeUCD.registerMethod("prop_invmap", null);
             unicodeUCD.registerMethod("prop_invlist", null);
             unicodeUCD.registerMethod("all_casefolds", null);
+            unicodeUCD.registerMethod("UnicodeVersion", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Unicode::UCD method: " + e.getMessage());
         }
+    }
+
+    /** Return the Unicode Character Database version supplied by ICU4J. */
+    public static RuntimeList UnicodeVersion(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(UCharacter.getUnicodeVersion().toString()).getList();
     }
 
     /**

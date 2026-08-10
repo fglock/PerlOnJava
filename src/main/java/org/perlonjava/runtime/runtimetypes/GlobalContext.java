@@ -326,6 +326,7 @@ public class GlobalContext {
         // TimeHiRes.initialize();  // Has XSLoader in Perl file
         // Encode.initialize();  // Has XSLoader in Perl file - deferred for Encode::Alias support
         UnicodeUCD.initialize();  // No XSLoader in Perl file - needed at startup
+        UnicodeBiDiRule.initialize();  // Java replacement for Unicode::BiDiRule XS
         Charnames.initialize();   // Java-side charnames::viacode via ICU4J
         TermReadLine.initialize();  // No Perl file - needed at startup
         TermReadKey.initialize();  // No Perl file - needed at startup
