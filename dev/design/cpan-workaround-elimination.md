@@ -1069,6 +1069,11 @@ Current phase: implementation complete; CI validation pending.
     also retained byte-for-byte for the existing canonical `Can't locate`
     parser. CPAN still promotes discovered test prerequisites and retries no
     more than once per command; it no longer replays output at the end.
+  - The process runner also resolves an omitted `cwd` from Perl's current
+    logical directory. Java `ProcessBuilder` otherwise inherited the launch
+    directory of the outer JVM, causing CPAN's `make test` to run the
+    PerlOnJava repository Makefile instead of the distribution Makefile after
+    CPAN had changed directory internally.
   - A timing regression has the child verify that its first marker reached the
     tee destination before the child exits. A CPAN-level regression verifies
     successful status, retained analysis output, and that live tee mode is

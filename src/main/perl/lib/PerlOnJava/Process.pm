@@ -20,7 +20,14 @@ sub run_process {
         unless ref($argv) eq 'ARRAY' && @$argv;
 
     my $timeout = defined($args{timeout}) ? $args{timeout} : 0;
-    my $cwd = defined($args{cwd}) ? $args{cwd} : '';
+    my $cwd;
+    if (defined $args{cwd}) {
+        $cwd = $args{cwd};
+    } else {
+        require Cwd;
+        $cwd = Cwd::getcwd();
+        $cwd = '' unless defined $cwd;
+    }
     my $tee = $args{tee} ? 1 : 0;
     return _run($timeout, $cwd, $tee, @$argv)
         if $Config::Config{archname} =~ /^java-/;

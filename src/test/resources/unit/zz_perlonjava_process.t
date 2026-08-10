@@ -3,7 +3,7 @@ use warnings;
 use Test::More;
 use File::Temp qw(tempdir);
 use File::Spec;
-use Cwd qw(abs_path);
+use Cwd qw(abs_path getcwd);
 use lib 'src/main/perl/lib';
 use PerlOnJava::Process qw(run_process);
 use CPAN::FindDependencies::MakeMaker qw(getreqs_from_mm);
@@ -44,6 +44,17 @@ $result = run_process(
     timeout => 10,
 );
 is(abs_path($result->{output}), abs_path($dir), 'working directory is explicit');
+
+my $original_dir = getcwd();
+my $implicit_dir = tempdir(CLEANUP => 1);
+chdir $implicit_dir or die "chdir $implicit_dir: $!";
+$result = run_process(
+    argv => [ $^X, '-MCwd=getcwd', '-e', 'print getcwd()' ],
+    timeout => 10,
+);
+chdir $original_dir or die "chdir $original_dir: $!";
+is(abs_path($result->{output}), abs_path($implicit_dir),
+    'child inherits the current logical working directory');
 
 $result = run_process(
     argv => [ $^X, '-e', 'sleep 5' ],
