@@ -1079,6 +1079,11 @@ Current phase: implementation complete; CI validation pending.
     successful status, retained analysis output, and that live tee mode is
     requested. Both tests pass under standard Perl, JVM, and interpreter
     execution.
+  - Clean Ubuntu CI also exposed that the focused HTTP::Cookies request-header
+    regression had been loading HTTP::Request from the developer CPAN home.
+    The Java unit harness now includes its existing `unit/lib` fixture tree,
+    with a minimal test-only request/URI object; production module lookup and
+    the unchanged regression remain untouched.
 
 ### Next Steps
 

@@ -318,6 +318,7 @@ public class PerlScriptExecutionTest {
 
             // Add the path to the Perl modules
             RuntimeArray.push(options.inc, new RuntimeScalar("src/main/perl/lib"));
+            RuntimeArray.push(options.inc, new RuntimeScalar("src/test/resources/unit/lib"));
 
             // Execute the Perl code
             PerlLanguageProvider.executePerlCode(options, true);
