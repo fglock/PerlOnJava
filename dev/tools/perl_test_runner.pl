@@ -417,9 +417,14 @@ sub run_single_test {
 sub timeout_for_test {
     my ($test_file) = @_;
 
+    # The through-pipe matrix starts hundreds of child processes and performs
+    # blocking reads for each read/write combination.  Give both line-ending
+    # variants twice the caller's normal allowance, while keeping custom
+    # --timeout values proportional and leaving every other test unchanged.
+    return $timeout * 2 if $test_file =~ m{(?:^|/)perl5_t/t/io/(?:crlf_)?through\.t$};
+
     return 600 if $test_file =~ m{
           (?:^|/)perl5_t/t/lib/croak\.t$
-        | (?:^|/)perl5_t/t/io/(?:crlf_)?through\.t$
         | (?:^|/)perl5_t/t/re/pat\.t$
     }x && $timeout < 600;
     return $timeout;
