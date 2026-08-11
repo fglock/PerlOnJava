@@ -3068,8 +3068,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     releasedCode = true;
                 }
             }
-            // Clear the code value but keep the type as CODE
-            this.value = new RuntimeCode((String) null, null);
+            // Clear the body but keep a declared CODE slot. Perl preserves the
+            // glob's CODE entry after both `undef &existing` and
+            // `undef &previously_unknown`: exists(&name) remains true while
+            // defined(&name) becomes false.
+            RuntimeCode undefinedCode = new RuntimeCode((String) null, null);
+            undefinedCode.isDeclared = true;
+            int separator = globalCodeRefFqn.lastIndexOf("::");
+            if (separator > 0) {
+                undefinedCode.packageName = globalCodeRefFqn.substring(0, separator);
+                undefinedCode.subName = globalCodeRefFqn.substring(separator + 2);
+            } else {
+                undefinedCode.packageName = "main";
+                undefinedCode.subName = globalCodeRefFqn;
+            }
+            this.value = undefinedCode;
             this.tainted = false;
             this.numericLiteralText = null;
             this.numericContextSeen = false;

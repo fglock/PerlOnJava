@@ -93,12 +93,10 @@ public class PerlLanguageProvider {
         }
     }
 
-    private static boolean globalInitialized = false;
-
     public static void resetAll() {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.bindCurrentOrNew();
              CompilationLockGuard ignored = acquireCompilationLock()) {
-            globalInitialized = false;
+            PerlRuntime.current().globalState().resetCoreGlobalsInitialization();
             GlobalContext.setThreadTaintMode(false);
             resetAllGlobals();
             WeakRefRegistry.resetState();
@@ -219,8 +217,8 @@ public class PerlLanguageProvider {
                 new RuntimeArray()
         );
 
-        if (!globalInitialized) {
-            globalInitialized = true;
+        if (!PerlRuntime.current().globalState().coreGlobalsInitialized()) {
+            PerlRuntime.current().globalState().markCoreGlobalsInitialized();
             GlobalContext.initializeGlobals(compilerOptions);
         }
 
@@ -421,8 +419,8 @@ public class PerlLanguageProvider {
                 new RuntimeArray()
         );
 
-        if (!globalInitialized) {
-            globalInitialized = true;
+        if (!PerlRuntime.current().globalState().coreGlobalsInitialized()) {
+            PerlRuntime.current().globalState().markCoreGlobalsInitialized();
             GlobalContext.initializeGlobals(compilerOptions);
         }
 
@@ -838,8 +836,8 @@ public class PerlLanguageProvider {
                 new RuntimeArray()
         );
 
-        if (!globalInitialized) {
-            globalInitialized = true;
+        if (!PerlRuntime.current().globalState().coreGlobalsInitialized()) {
+            PerlRuntime.current().globalState().markCoreGlobalsInitialized();
             GlobalContext.initializeGlobals(compilerOptions);
         }
 

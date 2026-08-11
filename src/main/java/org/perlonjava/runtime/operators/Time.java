@@ -366,18 +366,25 @@ public class Time {
         alarmStartTime = System.currentTimeMillis();
         alarmDuration = seconds;
         alarmTargetThread = Thread.currentThread();
+        PerlRuntime alarmOwner = PerlRuntime.current();
+        Thread targetThread = alarmTargetThread;
 
-        currentAlarmTask = alarmScheduler.schedule(() -> {
+        currentAlarmTask = alarmScheduler.schedule(
+                () -> dispatchAlarm(alarmOwner, targetThread), seconds, TimeUnit.SECONDS);
+
+        return new RuntimeScalar(remainingTime);
+    }
+
+    static void dispatchAlarm(PerlRuntime owner, Thread targetThread) {
+        try (PerlRuntime.Binding ignored = owner.bind()) {
             RuntimeScalar sig = getGlobalHash("main::SIG").get("ALRM");
             if (sig.getDefinedBoolean()) {
                 // Queue the signal for processing in the target thread
                 PerlSignalQueue.enqueue("ALRM", sig);
                 // Interrupt the target thread to break out of blocking operations
-                alarmTargetThread.interrupt();
+                targetThread.interrupt();
             }
-        }, seconds, TimeUnit.SECONDS);
-
-        return new RuntimeScalar(remainingTime);
+        }
     }
 
     /**
