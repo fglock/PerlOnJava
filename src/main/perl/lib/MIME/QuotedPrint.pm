@@ -13,6 +13,7 @@ package MIME::QuotedPrint;
 
 our $VERSION = '3.16';
 
+use MIME::Base64;  # matches the core module; both codecs share one XS library
 use XSLoader;
 XSLoader::load( 'MIME::QuotedPrint' );
 
@@ -46,4 +47,3 @@ This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
 
 =cut
-

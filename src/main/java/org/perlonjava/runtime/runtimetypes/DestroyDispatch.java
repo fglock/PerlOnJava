@@ -280,7 +280,10 @@ public class DestroyDispatch {
                 MortalList.scopeExitCleanupHash(hash);
             } else if (referent instanceof RuntimeArray arr) {
                 MortalList.scopeExitCleanupArray(arr);
+            } else if (referent instanceof RuntimeScalar scalar) {
+                RuntimeScalar.scopeExitCleanup(scalar);
             }
+            MortalList.requestWeakSweepsForDestroyedContainer(referent);
             return;
         }
 

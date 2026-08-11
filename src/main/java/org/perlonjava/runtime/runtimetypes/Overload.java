@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
  * The {@code Overload} class implements Perl's operator overloading system in Java.
@@ -48,6 +49,10 @@ public class Overload {
     /** Maximum {@code stringify} recursion before we give up and return default. */
     private static final int STRINGIFY_MAX_DEPTH = 10;
 
+    private static RuntimeArray unaryOverloadArgs(RuntimeScalar value) {
+        return new RuntimeArray(value, scalarUndef, new RuntimeScalar(""));
+    }
+
     /**
      * Converts a {@link RuntimeScalar} object to its string representation following
      * Perl's stringification rules.
@@ -77,7 +82,7 @@ public class Overload {
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {
                     // Try primary overload method
-                    RuntimeScalar result = ctx.tryOverload("(\"\"", new RuntimeArray(runtimeScalar));
+                    RuntimeScalar result = ctx.tryOverload("(\"\"", unaryOverloadArgs(runtimeScalar));
                     if (result != null) return result;
                     // Try fallback
                     result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
@@ -132,7 +137,7 @@ public class Overload {
 
             if (ctx != null) {
                 // Try primary overload method
-                RuntimeScalar result = ctx.tryOverload("(0+", new RuntimeArray(runtimeScalar));
+                RuntimeScalar result = ctx.tryOverload("(0+", unaryOverloadArgs(runtimeScalar));
 
                 if (TRACE_OVERLOAD) {
                     System.err.println("  tryOverload (0+: " + (result != null ? result : "NULL"));
@@ -186,7 +191,7 @@ public class Overload {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try primary overload method
-                RuntimeScalar result = ctx.tryOverload("(bool", new RuntimeArray(runtimeScalar));
+                RuntimeScalar result = ctx.tryOverload("(bool", unaryOverloadArgs(runtimeScalar));
                 if (result != null) return result;
                 // Try fallback
                 result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"");
@@ -215,7 +220,7 @@ public class Overload {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try primary overload method
-                RuntimeScalar result = ctx.tryOverload("(!", new RuntimeArray(runtimeScalar));
+                RuntimeScalar result = ctx.tryOverload("(!", unaryOverloadArgs(runtimeScalar));
                 if (result != null) return result;
                 // Try fallback with negation of result
                 result = ctx.tryOverloadFallback(runtimeScalar, "(bool", "(0+", "(\"\"");

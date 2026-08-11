@@ -303,7 +303,11 @@ sub get_symbol {
         if ($type eq 'CODE') {
             if (BROKEN_GLOB_ASSIGNMENT || defined($self->{package})) {
                 no strict 'refs';
-                return \&{ $self->name . '::' . $name };
+                # PerlOnJava pseudo-constants expose a real CODE glob slot, but
+                # symbolic \&name lookup can still resolve the scalar proxy.
+                # Reading the slot directly matches the normal typeglob branch
+                # above and lets Class::MOP discover constant role methods.
+                return *{ $self->name . '::' . $name }{CODE};
             }
 
             # XXX we should really be able to support arbitrary anonymous

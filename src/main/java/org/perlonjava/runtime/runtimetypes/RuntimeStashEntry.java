@@ -104,10 +104,11 @@ public class RuntimeStashEntry extends RuntimeGlob {
                         targetScalar.type == READONLY_SCALAR
                                 && !(targetScalar instanceof RuntimeScalarReadOnly);
                 if (explicitReadonlyScalarRef) {
-                    RuntimeCode code = new RuntimeCode("", null);
+                    RuntimeCode code = createConstantCode();
                     code.constantValue = value.scalarDeref().getList();
                     GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
+                    notifyCodeSlotChanged();
                 } else {
                     // Ordinary scalar references alias the stash scalar slot,
                     // even when the scalar contains an object or another ref.
@@ -115,6 +116,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     // lookup without installing an actual CODE slot.
                     super.set(value);
                     GlobalVariable.setGlobalPseudoConstant(this.globName, targetScalar);
+                    notifyCodeSlotChanged();
                 }
             }
             return value;
@@ -126,10 +128,11 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 GlobalVariable.globalArrays.put(this.globName, targetArray);
 
                 // Also create a constant subroutine for bareword access
-                RuntimeCode code = new RuntimeCode("", null);
+                RuntimeCode code = createConstantCode();
                 code.constantValue = targetArray.getList();
                 GlobalVariable.defineGlobalCodeRef(this.globName).set(
                         new RuntimeScalar(code));
+                notifyCodeSlotChanged();
             }
             return value;
         }
@@ -244,14 +247,16 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     RuntimeCode code = new RuntimeCode(value.toString(), null);
                     codeRef.set(new RuntimeScalar(code));
                 }
+                notifyCodeSlotChanged();
                 return value;
             case GLOBREFERENCE:
                 // `$stash->{foo} = \*bar` creates a constant subroutine returning the glob
                 if (value.value instanceof RuntimeGlob glob) {
-                    RuntimeCode code = new RuntimeCode("", null);
+                    RuntimeCode code = createConstantCode();
                     code.constantValue = new RuntimeList(new RuntimeScalar(glob));
                     GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
+                    notifyCodeSlotChanged();
                 } else if (value.value instanceof RuntimeIO runtimeIO) {
                     // *foo = *{$old}{IO} — restore the IO slot
                     RuntimeScalar ioSlot = GlobalVariable.getGlobalIO(this.globName);
@@ -261,6 +266,24 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 return value;
         }
         throw new IllegalStateException("typeglob assignment not implemented for " + value.type);
+    }
+
+    /** Build the anonymous constant CV shape reported by Perl's constant.pm. */
+    private static RuntimeCode createConstantCode() {
+        RuntimeCode code = new RuntimeCode("", null);
+        code.packageName = "constant";
+        code.subName = "__ANON__";
+        return code;
+    }
+
+    /** Notify method introspection caches after pseudo-constant CODE installation. */
+    private void notifyCodeSlotChanged() {
+        InheritanceResolver.invalidateCache();
+        int lastColonIdx = this.globName.lastIndexOf("::");
+        if (lastColonIdx > 0) {
+            org.perlonjava.runtime.perlmodule.Mro.incrementPackageGeneration(
+                    this.globName.substring(0, lastColonIdx));
+        }
     }
 
     /**

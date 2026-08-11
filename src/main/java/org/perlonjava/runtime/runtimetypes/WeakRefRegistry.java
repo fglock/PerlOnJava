@@ -54,6 +54,14 @@ public class WeakRefRegistry {
      */
     public static final int WEAKLY_TRACKED = -2;
 
+    /** Drop references belonging to the previous top-level script. */
+    public static void resetState() {
+        weakScalars.clear();
+        referentToWeakRefs.clear();
+        // Keep weakRefsExist conservative. Once enabled, the associated
+        // lexical/root bookkeeping must remain enabled for this JVM.
+    }
+
     /**
      * Make a reference weak. The reference no longer counts as a strong reference
      * for refCount purposes. If this was the last strong reference, DESTROY fires.

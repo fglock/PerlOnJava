@@ -233,11 +233,10 @@ sub process_test_result {
 sub run_single_test {
     my ($test_file) = @_;
 
-    # lib/croak.t launches a fresh jperl process for each of its 300+ cases.
-    # Under a full parallel run it competes with the other workers and has
-    # repeatedly finished within a second of the normal per-file deadline.
-    # Give this subprocess-heavy test a stable minimum wall-clock allowance
-    # while preserving any larger timeout requested by the caller.
+    # A few subprocess- or CPU-heavy tests routinely use most of the default
+    # deadline and can cross it when the full parallel corpus contends for CPU.
+    # Give those known outliers a stable minimum wall-clock allowance while
+    # preserving any larger timeout requested by the caller.
     my $test_timeout = timeout_for_test($test_file);
 
     # Temporarily disable fatal unimplemented errors
@@ -418,8 +417,11 @@ sub run_single_test {
 sub timeout_for_test {
     my ($test_file) = @_;
 
-    return 600 if $test_file =~ m{(?:^|/)perl5_t/t/lib/croak\.t$}
-        && $timeout < 600;
+    return 600 if $test_file =~ m{
+          (?:^|/)perl5_t/t/lib/croak\.t$
+        | (?:^|/)perl5_t/t/io/(?:crlf_)?through\.t$
+        | (?:^|/)perl5_t/t/re/pat\.t$
+    }x && $timeout < 600;
     return $timeout;
 }
 

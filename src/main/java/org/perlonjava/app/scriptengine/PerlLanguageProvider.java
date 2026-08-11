@@ -101,6 +101,9 @@ public class PerlLanguageProvider {
             globalInitialized = false;
             GlobalContext.setThreadTaintMode(false);
             resetAllGlobals();
+            WeakRefRegistry.resetState();
+            ScalarRefRegistry.resetState();
+            MortalList.clearSuspendedRoots();
             // A prior script may have closed its Perl-level STDIN glob. Script
             // engine resets run multiple top-level programs in one JVM, so give
             // the next program a fresh wrapper around the process standard input.

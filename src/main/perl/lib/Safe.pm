@@ -5,15 +5,15 @@ use warnings;
 
 our $VERSION = '2.44_perlonjava';
 
-# Safe.pm stub for PerlOnJava
+# Safe.pm compatibility layer for PerlOnJava
 #
 # This is a minimal implementation that provides the interface used by CPAN.pm.
 # CPAN.pm uses Safe->reval() to evaluate trusted CPAN metadata (package indexes,
 # CHECKSUMS files). Since this metadata comes from CPAN mirrors and is trusted,
 # we use regular eval instead of actual sandboxing.
 #
-# Note: This does NOT provide actual code sandboxing/compartmentalization.
-# Do not use this for evaluating untrusted code.
+# Note: opcode masks use conservative source-level checks rather than Perl's
+# internal optree sandbox. Do not use this for evaluating untrusted code.
 
 my $root_counter = 0;
 
@@ -24,11 +24,46 @@ sub new {
         namespace => $namespace,
         permit    => {},
         deny      => {},
+        mask_mode => 'none',
     }, $class;
+}
+
+my %restricted_op = map { $_ => 1 } qw(
+    accept bind chdir chmod chown connect exec fcntl fork ioctl kill
+    link listen lstat mkdir open readlink rename rmdir shutdown socket
+    stat symlink sysopen system truncate unlink
+);
+
+my %browse_op = map { $_ => 1 } qw(lstat readlink stat);
+
+sub _masked_operation {
+    my ($self, $code) = @_;
+    return if ($self->{mask_mode} // 'none') eq 'none';
+
+    # PerlOnJava does not expose Perl's internal op tree. Conservatively scan
+    # for security-sensitive builtins so permit_only(':default') still rejects
+    # filesystem/process operations. Explicit op names extend the permit mask;
+    # :browse additionally allows read-only filesystem metadata probes.
+    for my $op (keys %restricted_op) {
+        next unless $code =~ /\b\Q$op\E\b/;
+        if ($self->{mask_mode} eq 'deny') {
+            return $op if $self->{deny}{$op};
+            next;
+        }
+        next if $self->{permit}{$op};
+        next if $self->{permit}{':browse'} && $browse_op{$op};
+        return $op;
+    }
+    return;
 }
 
 sub reval {
     my ($self, $code, $strict) = @_;
+
+    if (my $op = $self->_masked_operation($code)) {
+        $@ = "'$op' trapped by operation mask";
+        return undef;
+    }
     
     # For PerlOnJava, we trust CPAN metadata - no sandboxing needed
     # The $strict parameter is ignored (would enable 'use strict' in real Safe)
@@ -67,15 +102,17 @@ sub rdo {
     return do $file;
 }
 
-# Permission methods - stubs that accept but ignore
+# Permission methods
 sub permit {
     my ($self, @ops) = @_;
+    $self->{mask_mode} = 'permit';
     $self->{permit}{$_} = 1 for @ops;
     return $self;
 }
 
 sub permit_only {
     my ($self, @ops) = @_;
+    $self->{mask_mode} = 'permit';
     $self->{permit} = {};
     $self->{permit}{$_} = 1 for @ops;
     return $self;
@@ -83,12 +120,14 @@ sub permit_only {
 
 sub deny {
     my ($self, @ops) = @_;
+    $self->{mask_mode} = 'deny' if $self->{mask_mode} eq 'none';
     $self->{deny}{$_} = 1 for @ops;
     return $self;
 }
 
 sub deny_only {
     my ($self, @ops) = @_;
+    $self->{mask_mode} = 'deny';
     $self->{deny} = {};
     $self->{deny}{$_} = 1 for @ops;
     return $self;
@@ -163,12 +202,12 @@ Safe - PerlOnJava stub for Safe compartments
 
 =head1 DESCRIPTION
 
-This is a stub implementation of Safe.pm for PerlOnJava. It provides the
-interface used by CPAN.pm to evaluate trusted CPAN metadata.
+This is a compatibility implementation of Safe.pm for PerlOnJava. It provides
+the interface used by CPAN.pm to evaluate trusted CPAN metadata and enforces a
+conservative source-level subset of opcode masks.
 
-B<WARNING>: This does NOT provide actual code sandboxing. The C<reval()>
-method simply uses Perl's built-in C<eval>. Do not use this module to
-evaluate untrusted code.
+B<WARNING>: This is not an optree sandbox. Do not use this module to evaluate
+untrusted code.
 
 =head1 METHODS
 
@@ -185,8 +224,8 @@ Evaluate $code using regular eval and return the result.
 
 =item permit(@ops), permit_only(@ops), deny(@ops), deny_only(@ops)
 
-Accept opcode specifications but do not enforce them. These are no-ops
-that exist for API compatibility.
+Apply conservative checks for security-sensitive filesystem, process, and
+socket operations. Tag and explicit-op support is intentionally incomplete.
 
 =item root()
 
@@ -204,9 +243,9 @@ This stub does not provide:
 
 =over 4
 
-=item * Actual code sandboxing
+=item * Optree-level code sandboxing
 
-=item * Opcode restriction (requires Opcode.pm which needs Perl internals)
+=item * Complete Opcode tag and operation coverage
 
 =item * Namespace isolation
 

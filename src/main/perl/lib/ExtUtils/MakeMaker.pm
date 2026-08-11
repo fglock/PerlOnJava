@@ -306,6 +306,20 @@ sub _handle_xs_module {
     return _install_pure_perl($name, $version, $args);
 }
 
+# Match ExtUtils::MM_Unix::init_PM: files below PMLIBDIRS are library
+# payloads regardless of extension.  CPAN distributions legitimately keep
+# databases, templates, and even extensionless resources beside their .pm
+# files.  Only editor/version-control artefacts are filtered here.
+sub _installable_library_file {
+    my ($path) = @_;
+    return 0 unless defined $path && -f $path;
+    return 0 if $path =~ /#/;
+    return 0 if $path =~ /(?:~|,v|\.swp)$/;
+    return 0 if grep { /^(?:RCS|CVS|SCCS|\.svn|_darcs)$/ }
+                     File::Spec->splitdir($path);
+    return 1;
+}
+
 sub _install_pure_perl {
     my ($name, $version, $args) = @_;
     
@@ -349,16 +363,15 @@ sub _install_pure_perl {
             $pm{$key} = $val;
         }
     } else {
-        # Default: scan lib/ directory
-        # Include .pm, .pl, and common data files (.dat, .json, .yml, .yaml, .xml, .txt, .pem)
-        # Some modules like Image::ExifTool use .pl files loaded via require,
-        # .dat files for data (e.g., Geolocation.dat), and Mozilla::CA uses .pem
-        my $installable_re = qr/\.(?:pm|pl|pod|dat|json|ya?ml|xml|txt|cfg|conf|ini|pem)$/i;
+        # Default: recursively stage every library payload, as standard
+        # MakeMaker does for PMLIBDIRS.  Do not guess from extensions: modules
+        # such as MIME::Types ship a required types.db beside their .pm files.
+        my $package_source_re = qr/\.(?:pm|pl|pod)$/i;
         my %pm_rel_seen;
         if (-d 'lib') {
             find({
                 wanted => sub {
-                    return unless -f && /$installable_re/;
+                    return unless _installable_library_file($File::Find::name);
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^lib/}{};
                     $pm{$src} = _install_dest($INSTALL_BASE, $rel);
@@ -374,7 +387,7 @@ sub _install_pure_perl {
         if (-d 'blib/lib') {
             find({
                 wanted => sub {
-                    return unless -f && /$installable_re/;
+                    return unless _installable_library_file($File::Find::name);
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^blib/lib/}{};
                     return if $pm_rel_seen{$rel};
@@ -427,7 +440,7 @@ sub _install_pure_perl {
             if ($baseext && -d $baseext) {
                 find({
                     wanted => sub {
-                        return unless -f && /$installable_re/;
+                        return unless _installable_library_file($File::Find::name);
                         my $src = $File::Find::name;
                         my $rel = $parent_dir
                             ? File::Spec->catfile($parent_dir, $src)
@@ -450,7 +463,7 @@ sub _install_pure_perl {
                     next unless -d $entry;
                     find({
                         wanted => sub {
-                            return unless -f && /$installable_re/;
+                            return unless -f && /$package_source_re/;
                             my $src = $File::Find::name;
                             open my $fh, '<', $src or return;
                             while (my $line = <$fh>) {

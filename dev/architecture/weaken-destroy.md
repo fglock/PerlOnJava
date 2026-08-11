@@ -1076,8 +1076,9 @@ Correctness validation completed with `make` and the full DBIx::Class suite:
    infeasible to change how weak references store their referent without a
    prerequisite refactoring to introduce accessors.
 
-7. **Reachability walker can't see live JVM-call-stack lexicals.** Phase 4's
-   `ReachabilityWalker` walks from globals and `rescuedObjects` but not into
+7. **Reachability walker can't see arbitrary JVM-call-stack lexicals.** Phase
+   4's `ReachabilityWalker` walks from globals, `rescuedObjects`, registered
+   Perl lexicals, and explicit suspended-async roots, but not arbitrary
    per-frame Java locals. A *full* auto-triggered sweep is therefore still
    unsafe in general — it would clear weak refs to objects that are alive
    in some live lexical. The narrow auto-gate at `MortalList.flush()`

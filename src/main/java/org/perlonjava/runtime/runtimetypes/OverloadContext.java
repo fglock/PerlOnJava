@@ -167,6 +167,24 @@ public class OverloadContext {
                 + "argument in overloaded package " + ctx.perlClassName);
     }
 
+    private boolean hasOverload(String methodName) {
+        return InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0) != null;
+    }
+
+    /**
+     * Perl invokes the {@code =} copy constructor immediately before an
+     * overloaded mutator.  The constructor's return value replaces the value
+     * in the lvalue scalar so an alias made by {@code my $other = $value} keeps
+     * referring to the original object.
+     */
+    private void copyForMutator(RuntimeScalar lvalue) {
+        RuntimeScalar copy = tryOverload("(=", new RuntimeArray(
+                lvalue, scalarUndef, new RuntimeScalar("")));
+        if (copy != null) {
+            lvalue.set(copy);
+        }
+    }
+
     /**
      * Factory method to create overload context if applicable for a given RuntimeScalar.
      * Checks if the scalar is a blessed object and has overloading enabled.
@@ -271,7 +289,8 @@ public class OverloadContext {
         OverloadContext ctx = OverloadContext.prepare(blessId);
         if (ctx == null) return null;
         // Try primary overload method
-        RuntimeScalar result = ctx.tryOverload(operator, new RuntimeArray(runtimeScalar));
+        RuntimeArray unaryArgs = new RuntimeArray(runtimeScalar, scalarUndef, new RuntimeScalar(""));
+        RuntimeScalar result = ctx.tryOverload(operator, unaryArgs);
         if (result != null) return result;
         // Try fallback
         result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
@@ -355,6 +374,9 @@ public class OverloadContext {
             // Try primary overload method
             ctx1 = prepare(blessId);
             if (ctx1 != null) {
+                if (overloadName.endsWith("=") && ctx1.hasOverload(overloadName)) {
+                    ctx1.copyForMutator(arg1);
+                }
                 RuntimeScalar result = ctx1.tryOverload(overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
                 if (result != null) return result;
             }
@@ -391,6 +413,9 @@ public class OverloadContext {
 
         if (ctx1 != null) {
             // Try first nomethod
+            if (overloadName.endsWith("=") && ctx1.hasOverload("(nomethod")) {
+                ctx1.copyForMutator(arg1);
+            }
             RuntimeScalar result = ctx1.tryOverload("(nomethod", new RuntimeArray(arg1, arg2, scalarFalse, new RuntimeScalar(methodName)));
             if (result != null) return result;
         }
@@ -414,7 +439,7 @@ public class OverloadContext {
     }
 
     public RuntimeScalar tryOverloadNomethod(RuntimeScalar runtimeScalar, String methodName) {
-        return tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, scalarUndef, new RuntimeScalar(methodName)));
+        return tryOverload("(nomethod", new RuntimeArray(runtimeScalar, scalarUndef, new RuntimeScalar(""), new RuntimeScalar(methodName)));
     }
 
     /**
@@ -438,7 +463,8 @@ public class OverloadContext {
         // All other cases: try autogeneration
         // (no glob found, fallback=undef, fallback=1)
         for (String fallbackMethod : fallbackMethods) {
-            RuntimeScalar result = this.tryOverload(fallbackMethod, new RuntimeArray(runtimeScalar));
+            RuntimeScalar result = this.tryOverload(fallbackMethod,
+                    new RuntimeArray(runtimeScalar, scalarUndef, new RuntimeScalar("")));
             if (result != null) return result;
         }
         return null;

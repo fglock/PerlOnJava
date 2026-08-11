@@ -53,6 +53,13 @@ public class MortalList {
     private static final ThreadLocal<ArrayDeque<RuntimeBase>> temporaryRoots =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    // Heap-resident interpreter frames are Perl-visible owners while an async
+    // sub is suspended.  They are not ordinary lexical roots (and therefore
+    // are invisible to MyVarCleanupStack), but a weak-reference sweep must not
+    // collect the Future or other value that the frame is actively awaiting.
+    private static final IdentityHashMap<RuntimeBase, Integer> suspendedRoots =
+            new IdentityHashMap<>();
+
     public static void pushTemporaryRoot(RuntimeBase root) {
         if (root != null) {
             temporaryRoots.get().push(root);
@@ -76,6 +83,32 @@ public class MortalList {
 
     public static boolean hasTemporaryRoots() {
         return !temporaryRoots.get().isEmpty();
+    }
+
+    public static void retainSuspendedRoot(RuntimeBase root) {
+        if (root != null) {
+            suspendedRoots.merge(root, 1, Integer::sum);
+            invalidateAllRootSnapshots();
+        }
+    }
+
+    public static void releaseSuspendedRoot(RuntimeBase root) {
+        if (root == null) return;
+        Integer count = suspendedRoots.get(root);
+        if (count == null) return;
+        if (count <= 1) suspendedRoots.remove(root);
+        else suspendedRoots.put(root, count - 1);
+        invalidateAllRootSnapshots();
+    }
+
+    public static java.util.List<RuntimeBase> snapshotSuspendedRoots() {
+        return new java.util.ArrayList<>(suspendedRoots.keySet());
+    }
+
+    public static void clearSuspendedRoots() {
+        suspendedRoots.clear();
+        temporaryRoots.remove();
+        invalidateAllRootSnapshots();
     }
 
     /**
@@ -934,6 +967,50 @@ public class MortalList {
         }
     }
 
+    /**
+     * Register weakly tracked referents whose last strong edge may disappear
+     * with a container temporary.  References to ordinary scalar referents
+     * cannot participate in the selective refCount scheme, so a discarded
+     * anonymous array/hash must explicitly ask the statement-boundary walker
+     * to reconsider them.  This is the aggregate equivalent of assigning
+     * {@code undef} to a scalar that contains a WEAKLY_TRACKED reference.
+     */
+    public static void requestWeakSweepsForDestroyedContainer(RuntimeBase container) {
+        if (!(container instanceof RuntimeArray) && !(container instanceof RuntimeHash)) return;
+
+        ArrayDeque<RuntimeBase> work = new ArrayDeque<>();
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        work.add(container);
+
+        while (!work.isEmpty()) {
+            RuntimeBase current = work.removeFirst();
+            if (!visited.add(current)) continue;
+
+            Iterable<RuntimeScalar> values;
+            if (current instanceof RuntimeArray array) {
+                values = array.elements;
+            } else if (current instanceof RuntimeHash hash) {
+                values = hash.elements.values();
+            } else {
+                continue;
+            }
+
+            for (RuntimeScalar value : values) {
+                if (value == null
+                        || (value.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                        || !(value.value instanceof RuntimeBase referent)) {
+                    continue;
+                }
+                if (WeakRefRegistry.hasWeakRefsTo(referent)) {
+                    requestTargetedWeakSweep(referent);
+                }
+                if (referent instanceof RuntimeArray || referent instanceof RuntimeHash) {
+                    work.add(referent);
+                }
+            }
+        }
+    }
+
     static void finalizeClearedAggregateOwnerAfterScopeExit(RuntimeBase base) {
         if (!active
                 || base == null
@@ -1017,6 +1094,21 @@ public class MortalList {
         }
         if (base.refCount > 0 && --base.refCount == 0) {
             if (base.localBindingExists) {
+                if (base instanceof RuntimeScalar scalar
+                        && scalar.referencedByScalarReference
+                        && scalar.captureCount == 0
+                        && !MyVarCleanupStack.isRegistered(scalar)) {
+                    // The declaring lexical is gone and this was the last
+                    // counted scalar reference.  A returned blessed CODE
+                    // scalar can miss the normal binding cleanup because the
+                    // compiler conservatively treats it as captured while its
+                    // subroutine exits.  Do not let that stale lexical marker
+                    // suppress DESTROY after the final container deletion.
+                    base.localBindingExists = false;
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                    return;
+                }
                 // Named container: local variable may still exist. Skip callDestroy.
                 // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 //

@@ -1081,7 +1081,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeCode code = (RuntimeCode) value;
                 yield code.packageName != null || code.subName != null || code.defined();
             }
-            default -> Overload.boolify(this).getBoolean();
+            default -> {
+                RuntimeScalar overloaded = Overload.boolify(this);
+                // A legal bool overload may return $_[0]. Perl treats that
+                // self-result as a true object instead of recursively invoking
+                // the same overload until the C stack is exhausted.
+                if (isSameOverloadTarget(overloaded, this)) yield true;
+                yield overloaded.getBoolean();
+            }
         };
     }
 
@@ -2107,14 +2114,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // we. Detect by identity first, then by depth via a ThreadLocal
                 // guard inside Overload.stringify (handles the transitive case).
                 RuntimeScalar overloaded = Overload.stringify(this);
-                if (isSameOverloadStringificationTarget(overloaded, this)) yield toStringRef();
+                if (isSameOverloadTarget(overloaded, this)) yield toStringRef();
                 yield overloaded.toString();
             }
         };
     }
 
-    private static boolean isSameOverloadStringificationTarget(RuntimeScalar overloaded,
-                                                               RuntimeScalar original) {
+    private static boolean isSameOverloadTarget(RuntimeScalar overloaded,
+                                                RuntimeScalar original) {
         RuntimeScalar resolvedOverloaded = unwrapReadonlyScalar(overloaded);
         RuntimeScalar resolvedOriginal = unwrapReadonlyScalar(original);
         if (resolvedOverloaded == resolvedOriginal) return true;
@@ -3010,9 +3017,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         referencedByScalarReference = true;
         boolean isRegisteredLexical =
                 this.refCount == -1 && MyVarCleanupStack.isRegistered(this);
-        if (this.refCount == -1
-                && isRegisteredLexical
-                && !RuntimeCode.hasActiveCode()) {
+        if (this.refCount == -1 && isRegisteredLexical) {
             this.refCount = 0;
             this.localBindingExists = true;
         } else if (this.refCount == -1
@@ -3291,6 +3296,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && scalar.localBindingExists
                 && scalar.captureCount == 0) {
             cleanupScalarReferenceBinding(scalar);
+            // A reference to the lexical escaped its declaring scope.  The
+            // RuntimeScalar is now the Perl SV container, so its current value
+            // must live until the final scalar reference is released.
+            // A tied scalar must still release its tie wrapper below.  In a
+            // scalar self-tie that wrapper owns the remaining counted
+            // reference to this same scalar; returning here would leave the
+            // cycle intact and suppress the handler's DESTROY.
+            if (scalar.refCount > 0 && scalar.type != RuntimeScalarType.TIED_SCALAR) return;
         }
 
         // Fast path: skip if no special state (most common case for integer/string vars).

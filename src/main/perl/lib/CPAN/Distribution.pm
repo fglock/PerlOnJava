@@ -2088,6 +2088,7 @@ sub prepare {
     local $ENV{PERL5_CPAN_IS_EXECUTING} = $ENV{PERL5_CPAN_IS_EXECUTING} || '';
     local $ENV{PERL_MM_USE_DEFAULT} = 1 if $CPAN::Config->{use_prompt_default};
     local $ENV{NONINTERACTIVE_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
+    local $ENV{AUTOMATED_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
     if ($pl_commandline) {
         $system = $pl_commandline;
         $ENV{PERL} = $^X;
@@ -2691,6 +2692,7 @@ is part of the perl-%s distribution. To install that, you need to run
     local $ENV{PERL} = defined $ENV{PERL}? $ENV{PERL} : $^X;
     local $ENV{PERL_MM_USE_DEFAULT} = 1 if $CPAN::Config->{use_prompt_default};
     local $ENV{NONINTERACTIVE_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
+    local $ENV{AUTOMATED_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
     if ($make_commandline) {
         $system = $make_commandline;
         $ENV{PERL} = CPAN::find_perl();
@@ -3972,6 +3974,37 @@ sub prereq_pm {
             }
         }
     }
+
+    # Generated MYMETA commonly omits optional relationships that remain in the
+    # distribution's static META.  Honour recommends_policy/suggests_policy by
+    # merging those static declarations back in, regardless of which metadata
+    # branch supplied the mandatory prerequisites above.  This matters for
+    # split distributions such as Mail::Message 4.x, whose transport support is
+    # a runtime recommendation in META rather than a generated MYMETA require.
+    if (my $static_meta = $self->_perlonjava_static_meta) {
+        my $static_prereqs = eval { $static_meta->effective_prereqs };
+        if ($static_prereqs) {
+            CPAN->use_inst('CPAN::Meta::Requirements');
+            for my $optional (
+                [ \$opt_req,  'runtime' ],
+                [ \$opt_breq, 'build'   ],
+                [ \$opt_treq, 'test'    ],
+            ) {
+                my ($target, $phase) = @$optional;
+                my $merged = CPAN::Meta::Requirements->new;
+                $merged->add_requirements(
+                    CPAN::Meta::Requirements->from_string_hash($$target)
+                ) if ref $$target eq 'HASH';
+                $merged->add_requirements(
+                    $static_prereqs->requirements_for($phase, 'recommends')
+                ) if _perlonjava_prefs_lookup($self, 'recommends_policy');
+                $merged->add_requirements(
+                    $static_prereqs->requirements_for($phase, 'suggests')
+                ) if $CPAN::Config->{suggests_policy};
+                $$target = $merged->as_string_hash;
+            }
+        }
+    }
     unless ($req || $breq || $treq) {
         my $build_dir = $self->{build_dir} or die "Panic: no build_dir?";
         my $buildfile = File::Spec->catfile($build_dir,"Build");
@@ -4199,6 +4232,7 @@ sub test {
     local $ENV{MAKEFLAGS}; # protect us from outer make calls
     local $ENV{PERL_MM_USE_DEFAULT} = 1 if $CPAN::Config->{use_prompt_default};
     local $ENV{NONINTERACTIVE_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
+    local $ENV{AUTOMATED_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
 
     if ($run_allow_installing_within_test) {
         my($allow_installing, $why) = $self->_allow_installing;
@@ -4850,6 +4884,7 @@ sub install {
     $CPAN::META->set_perl5lib;
     local $ENV{PERL_MM_USE_DEFAULT} = 1 if $CPAN::Config->{use_prompt_default};
     local $ENV{NONINTERACTIVE_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
+    local $ENV{AUTOMATED_TESTING} = 1 if $CPAN::Config->{use_prompt_default};
 
     my $install_env;
     if ($self->prefs->{install}) {

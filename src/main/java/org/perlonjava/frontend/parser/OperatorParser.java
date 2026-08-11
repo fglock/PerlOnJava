@@ -412,7 +412,24 @@ public class OperatorParser {
                     }
                 }
                 
-                int varIndex = ctx.symbolTable.addVariable(var, operator, node);
+                ctx.symbolTable.addVariable(var, operator, node);
+
+                // An `our` declaration creates its typeglob during compilation,
+                // before the declaration's runtime initializer executes.  BEGIN
+                // blocks and modules loaded later in the same compilation can
+                // therefore observe entries such as VERSION and ISA in the
+                // package stash.  Materialize the matching PerlOnJava global at
+                // parse time to preserve that ordering.
+                if (operator.equals("our")) {
+                    String globalName = NameNormalizer.normalizeVariableName(
+                            name, ctx.symbolTable.getCurrentPackage());
+                    switch (sigil) {
+                        case "$" -> GlobalVariable.getGlobalVariable(globalName);
+                        case "@" -> GlobalVariable.getGlobalArray(globalName);
+                        case "%" -> GlobalVariable.getGlobalHash(globalName);
+                        default -> { }
+                    }
+                }
                 // Note: the isDeclaredReference flag is stored in node.annotations
                 // and will be used during code generation
             }

@@ -1251,6 +1251,8 @@ public class GlobalVariable {
         }
 
         RuntimeCode runtimeCode = new RuntimeCode("", null);
+        runtimeCode.packageName = "constant";
+        runtimeCode.subName = "__ANON__";
         runtimeCode.constantValue = scalar.getList();
         return new RuntimeScalar(runtimeCode);
     }

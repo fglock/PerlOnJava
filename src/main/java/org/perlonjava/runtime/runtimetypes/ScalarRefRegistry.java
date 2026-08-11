@@ -146,4 +146,10 @@ public class ScalarRefRegistry {
     public static int approximateSize() {
         return scalarRegistry.size();
     }
+
+    /** Drop weak-key bookkeeping belonging to the previous top-level script. */
+    public static void resetState() {
+        scalarRegistry.clear();
+        registerStacks.clear();
+    }
 }

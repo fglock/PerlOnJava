@@ -27,7 +27,8 @@ our %DriverPrefix = (
 # dispatch through their ImplementorClass packages.
 our ($JDBC_CONNECT, $JDBC_PREPARE, $JDBC_EXECUTE, $JDBC_FINISH,
      $JDBC_DISCONNECT, $JDBC_PING, $JDBC_FETCHROW_ARRAYREF,
-     $JDBC_FETCHROW_HASHREF);
+     $JDBC_FETCHROW_HASHREF, $JDBC_BEGIN_WORK, $JDBC_COMMIT,
+     $JDBC_ROLLBACK);
 
 # SQL type constants exported on demand, e.g. `use DBI qw(SQL_BLOB SQL_VARCHAR)`
 # or via the :sql_types tag. Mirrors real DBI's export interface so modules
@@ -87,6 +88,9 @@ sub DBD::_::st::finish {
     $JDBC_FINISH  = \&DBI::finish;
     $JDBC_DISCONNECT = \&DBI::disconnect;
     $JDBC_PING = \&DBI::ping;
+    $JDBC_BEGIN_WORK = \&DBI::begin_work;
+    $JDBC_COMMIT = \&DBI::commit;
+    $JDBC_ROLLBACK = \&DBI::rollback;
     $JDBC_FETCHROW_ARRAYREF = \&DBI::fetchrow_arrayref;
     $JDBC_FETCHROW_HASHREF = \&DBI::fetchrow_hashref;
 
@@ -211,6 +215,56 @@ sub DBD::_::st::finish {
         }
         return $JDBC_PING->(@_);
     };
+
+    *DBI::begin_work = sub {
+        return $JDBC_BEGIN_WORK->(@_) if _is_jdbc_handle($_[0]);
+        die "begin_work invalidates a transaction already in progress\n"
+            unless $_[0]->{AutoCommit};
+        $_[0]->{AutoCommit} = 0;
+        $_[0]->{BegunWork} = 1;
+        return 1;
+    };
+
+    *DBI::commit = sub {
+        return $JDBC_COMMIT->(@_) if _is_jdbc_handle($_[0]);
+        if (delete $_[0]->{BegunWork}) {
+            $_[0]->{AutoCommit} = 1;
+        }
+        return 1;
+    };
+
+    *DBI::rollback = sub {
+        return $JDBC_ROLLBACK->(@_) if _is_jdbc_handle($_[0]);
+        if (delete $_[0]->{BegunWork}) {
+            $_[0]->{AutoCommit} = 1;
+        }
+        return 1;
+    };
+}
+
+# Native DBI installs handle operations in the concrete DBI::db and DBI::st
+# globs, in addition to making them available through inheritance.  Hooking
+# tools inspect and temporarily replace those CODE slots directly (for example
+# DBIx::Connector's tests hook DBI::db::ping), so inherited-only Java bridge
+# methods are observably different even though ordinary method dispatch works.
+{
+    no strict 'refs';
+    no warnings 'redefine';
+
+    for my $method (qw(
+        prepare disconnect last_insert_id begin_work commit rollback
+        table_info column_info primary_key_info primary_key foreign_key_info
+        type_info ping get_info
+    )) {
+        *{"DBI::db::$method"} = \&{"DBI::$method"};
+    }
+
+    for my $method (qw(
+        execute fetchrow_arrayref fetchrow_hashref rows finish
+        bind_param bind_param_inout bind_col
+    )) {
+        *{"DBI::st::$method"} = \&{"DBI::$method"};
+    }
 }
 
 # DESTROY for statement handles — calls finish() if still active.
@@ -442,7 +496,7 @@ sub _init_handle_attrs {
     $h->{ActiveKids} = 0 unless exists $h->{ActiveKids};
     $h->{CachedKids} ||= {};
     $h->{AutoCommit} = 1 unless exists $h->{AutoCommit};
-    $h->{PrintError} = 0 unless exists $h->{PrintError};
+    $h->{PrintError} = 1 unless exists $h->{PrintError};
     $h->{RaiseError} = 0 unless exists $h->{RaiseError};
     return $h;
 }
@@ -472,7 +526,11 @@ sub _new_dbh {
     $dbh->{Type} = 'db';
     $dbh->{Driver} = $drh;
     $dbh->{ImplementorClass} = $db_class;
-    $dbh = bless $dbh, $db_class;
+    # Native DBI returns an outer DBI::db handle and keeps the driver package
+    # as ImplementorClass.  The wrapper methods above dispatch to that class.
+    # Blessing the outer handle directly into the implementor bypasses hooks on
+    # DBI::db methods and is observably different to DBI's outer/inner handles.
+    $dbh = bless $dbh, 'DBI::db';
     return wantarray ? ($dbh, $dbh) : $dbh;
 }
 
@@ -505,7 +563,7 @@ sub _new_sth {
         eval "require $root" unless $root->isa('DBI');
         $sth = bless $sth, $root_st;
     } else {
-        $sth = bless $sth, $st_class;
+        $sth = bless $sth, 'DBI::st';
     }
     return wantarray ? ($sth, $sth) : $sth;
 }
@@ -524,8 +582,10 @@ sub _is_jdbc_handle {
     my ($handle) = @_;
     return 0 unless ref($handle);
     return 1 if exists $handle->{connection} || exists $handle->{statement};
+    return 1 if ref($handle) =~ /^DBI::(?:db|st)$/
+        && !defined $handle->{ImplementorClass};
     my $impl = $handle->{ImplementorClass} || ref($handle);
-    return $impl =~ /^DBD::(?:JDBC|SQLite)::/ || ref($handle) =~ /^DBI::(?:db|st)$/;
+    return $impl =~ /^DBD::(?:JDBC|SQLite)::/;
 }
 
 sub _apply_root_class {
@@ -673,6 +733,24 @@ use constant {
 # DSN translation: convert Perl DBI DSN format to JDBC URL
 # This wraps the Java-side connect() to support dbi:Driver:... format
 # Handles attribute syntax: dbi:Driver(RaiseError=1):rest
+sub parse_dsn {
+    my ($class, $dsn) = @_;
+    return unless defined $dsn
+        && $dsn =~ /^([^:]+):([^:(]*)(?:\(([^)]*)\))?:(.*)$/s;
+
+    my ($scheme, $driver, $attr_text, $tail) = ($1, $2, $3, $4);
+    my $attrs;
+    if (defined $attr_text) {
+        $attrs = {};
+        for my $pair (split /,/, $attr_text) {
+            if ($pair =~ /^\s*(\w+)\s*=>?\s*(.*?)\s*$/) {
+                $attrs->{$1} = $2;
+            }
+        }
+    }
+    return ($scheme, $driver, $attr_text, $attrs, $tail);
+}
+
 {
     no warnings 'redefine';
     *connect = sub {
@@ -721,6 +799,11 @@ use constant {
                 _apply_root_class($dbh, $attr);
             }
             return $dbh;
+        }
+
+        if ($dsn !~ /^jdbc:/i) {
+            die "Can't connect to data source '$dsn' because I can't work out what driver to use "
+              . "(it doesn't seem to contain a 'dbi:driver:' prefix and the DBI_DRIVER env var is not set)\n";
         }
 
         my $dbh = $JDBC_CONNECT->($class, $dsn, $user, $pass, $attr);

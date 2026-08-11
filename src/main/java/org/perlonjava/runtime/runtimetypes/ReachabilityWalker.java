@@ -51,6 +51,12 @@ public class ReachabilityWalker {
     // WeakHashMap has already been GC-pruned to live lexicals only).
     private boolean useLexicalSeeds = true;
 
+    // Ordinary sweeps must retain values that are still in expression
+    // temporaries. A targeted sweep requested by destruction of that very
+    // temporary must be able to exclude those stale JVM register roots: Perl's
+    // FREETMPS has already released them at the statement boundary.
+    private boolean useTemporaryRoots = true;
+
     /** Enable walking closures' captured scalars. */
     public ReachabilityWalker withCodeCaptures(boolean v) {
         this.walkCodeCaptures = v;
@@ -60,6 +66,11 @@ public class ReachabilityWalker {
     /** Disable the ScalarRefRegistry root seed (globals-only walk). */
     public ReachabilityWalker withLexicalSeeds(boolean v) {
         this.useLexicalSeeds = v;
+        return this;
+    }
+
+    public ReachabilityWalker withTemporaryRoots(boolean v) {
+        this.useTemporaryRoots = v;
         return this;
     }
 
@@ -116,6 +127,9 @@ public class ReachabilityWalker {
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
         }
+        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
+            addReachable(suspended, todo);
+        }
         if (useLexicalSeeds) {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc.captureCount > 0) continue;
@@ -160,8 +174,10 @@ public class ReachabilityWalker {
             for (RuntimeArray args : RuntimeCode.snapshotArgsStack()) {
                 addReachable(args, todo);
             }
-            for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
-                addReachable(tempRoot, todo);
+            if (useTemporaryRoots) {
+                for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
+                    addReachable(tempRoot, todo);
+                }
             }
         }
 
@@ -1528,7 +1544,9 @@ public class ReachabilityWalker {
         }
         if (pending.isEmpty()) return 0;
 
-        Set<RuntimeBase> live = new ReachabilityWalker().walk();
+        Set<RuntimeBase> live = new ReachabilityWalker()
+                .withTemporaryRoots(false)
+                .walk();
         int cleared = 0;
         boolean releasedObjectNeedsCascade = false;
         for (RuntimeBase referent : pending) {
