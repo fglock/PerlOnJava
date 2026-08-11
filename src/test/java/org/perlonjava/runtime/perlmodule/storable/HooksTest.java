@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.PerlRuntimeTestBase;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </ul>
  */
 @Tag("unit")
-public class HooksTest {
+public class HooksTest extends PerlRuntimeTestBase {
 
     private static final Path FIXTURES =
             Paths.get("src/test/resources/storable_fixtures").toAbsolutePath();

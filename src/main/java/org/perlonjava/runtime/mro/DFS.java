@@ -12,13 +12,14 @@ public class DFS {
     private static final boolean DEBUG_DFS = Boolean.getBoolean("debug.dfs");
 
     public static List<String> linearizeDFS(String className) {
+        MroRuntimeState state = InheritanceResolver.currentState();
         if (DEBUG_DFS) {
             System.out.println("DEBUG DFS: Starting linearization for " + className);
         }
 
         // Check cache first
         String cacheKey = className + "::DFS";
-        List<String> cached = InheritanceResolver.linearizedClassesCache.get(cacheKey);
+        List<String> cached = state.linearizedClassesCache().get(cacheKey);
         if (cached != null) {
             if (DEBUG_DFS) {
                 System.out.println("DEBUG DFS: Using cached result for " + className + ": " + cached);
@@ -65,7 +66,7 @@ public class DFS {
         }
 
         // Cache the result (store a copy to prevent external modifications)
-        InheritanceResolver.linearizedClassesCache.put(cacheKey, new ArrayList<>(result));
+        state.linearizedClassesCache().put(cacheKey, new ArrayList<>(result));
         return result;
     }
 

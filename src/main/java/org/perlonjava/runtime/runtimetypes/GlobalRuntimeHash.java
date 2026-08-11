@@ -12,7 +12,11 @@ import java.util.Stack;
  * <p>Follows the same pattern as {@link GlobalRuntimeScalar} for scalars.
  */
 public class GlobalRuntimeHash implements DynamicState {
-    private static final Stack<SavedGlobalHashState> localizedStack = new Stack<>();
+    @SuppressWarnings("unchecked")
+    private static Stack<SavedGlobalHashState> localizedStack() {
+        return (Stack<SavedGlobalHashState>) (Stack<?>)
+                PerlRuntime.current().executionState().globalHashStates;
+    }
     private final String fullName;
 
     public GlobalRuntimeHash(String fullName) {
@@ -37,7 +41,7 @@ public class GlobalRuntimeHash implements DynamicState {
     public void dynamicSaveState() {
         // Save the current hash reference from the global map
         RuntimeHash original = GlobalVariable.globalHashes.get(fullName);
-        localizedStack.push(new SavedGlobalHashState(fullName, original));
+        localizedStack().push(new SavedGlobalHashState(fullName, original));
 
         // Install a fresh empty hash in the global map
         RuntimeHash newLocal = new RuntimeHash();
@@ -55,6 +59,7 @@ public class GlobalRuntimeHash implements DynamicState {
 
     @Override
     public void dynamicRestoreState() {
+        Stack<SavedGlobalHashState> localizedStack = localizedStack();
         if (!localizedStack.isEmpty()) {
             SavedGlobalHashState saved = localizedStack.peek();
             if (saved.fullName.equals(this.fullName)) {

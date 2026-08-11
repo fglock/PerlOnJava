@@ -294,7 +294,7 @@ public class BytecodeInterpreter {
                 ? frame.suspendedPackage : framePackageName);
         frame.suspended = false;
         if (frame.pc > 0 && !frame.evalCatchStack.isEmpty()) {
-            RuntimeCode.evalDepth += frame.evalCatchStack.size();
+            RuntimeCode.adjustEvalDepth(frame.evalCatchStack.size());
             for (int i = 0; i < frame.evalCatchStack.size(); i++) {
                 if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
                     frame.virtualEvalFrameDepth++;
@@ -1588,7 +1588,7 @@ public class BytecodeInterpreter {
                                             }
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
-                                            RuntimeCode.evalDepth--;
+                                            RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
                                         return result;
@@ -1703,7 +1703,7 @@ public class BytecodeInterpreter {
                                                         savedLocalLevel + relativeLevel);
                                             }
                                             pc = evalCatchStack.pop();
-                                            RuntimeCode.evalDepth--;
+                                            RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
                                         return result;
@@ -2099,7 +2099,7 @@ public class BytecodeInterpreter {
                                         DynamicVariableManager.getLocalLevel() - savedLocalLevel);
 
                                 // Track eval depth for $^S
-                                RuntimeCode.evalDepth++;
+                                RuntimeCode.incrementEvalDepth();
 
                                 if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
                                     frame.virtualEvalFrameDepth++;
@@ -2135,7 +2135,7 @@ public class BytecodeInterpreter {
                                 }
 
                                 // Track eval depth for $^S
-                                RuntimeCode.evalDepth--;
+                                RuntimeCode.decrementEvalDepth();
 
                                 if (frame.virtualEvalFrameDepth > 0) {
                                     InterpreterState.pop();
@@ -2772,7 +2772,7 @@ public class BytecodeInterpreter {
                             DynamicVariableManager.popToLocalLevel(
                                     savedLocalLevel + relativeLevel);
                         }
-                        RuntimeCode.evalDepth--;
+                        RuntimeCode.decrementEvalDepth();
                         if (frame.virtualEvalFrameDepth > 0) {
                             InterpreterState.pop();
                             frame.virtualEvalFrameDepth--;
@@ -2850,7 +2850,7 @@ public class BytecodeInterpreter {
                         }
 
                         // Track eval depth for $^S
-                        RuntimeCode.evalDepth--;
+                        RuntimeCode.decrementEvalDepth();
 
                         if (frame.virtualEvalFrameDepth > 0) {
                             InterpreterState.pop();
@@ -2963,7 +2963,7 @@ public class BytecodeInterpreter {
             }
             currentPackageScalar.set(savedPackage);
             if (frame.suspended && !frame.evalCatchStack.isEmpty()) {
-                RuntimeCode.evalDepth -= frame.evalCatchStack.size();
+                RuntimeCode.adjustEvalDepth(-frame.evalCatchStack.size());
             }
             while (frame.virtualEvalFrameDepth > 0) {
                 InterpreterState.pop();

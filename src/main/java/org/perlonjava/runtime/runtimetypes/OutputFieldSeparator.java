@@ -19,12 +19,9 @@ public class OutputFieldSeparator extends RuntimeScalar {
      * The internal OFS value that print reads.
      * Only updated by OutputFieldSeparator.set() calls.
      */
-    private static String internalOFS = "";
-
-    /**
-     * Stack for save/restore during local $, and for $, (list).
-     */
-    private static final Stack<String> ofsStack = new Stack<>();
+    private static ExecutionRuntimeState state() {
+        return PerlRuntime.current().executionState();
+    }
 
     public OutputFieldSeparator() {
         super();
@@ -34,7 +31,7 @@ public class OutputFieldSeparator extends RuntimeScalar {
      * Returns the internal OFS value for use by print.
      */
     public static String getInternalOFS() {
-        return internalOFS;
+        return state().outputFieldSeparator;
     }
 
     /**
@@ -42,7 +39,8 @@ public class OutputFieldSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicSaveState() when localizing $,.
      */
     public static void saveInternalOFS() {
-        ofsStack.push(internalOFS);
+        ExecutionRuntimeState state = state();
+        state.outputFieldSeparatorStates.push(state.outputFieldSeparator);
     }
 
     /**
@@ -50,50 +48,51 @@ public class OutputFieldSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicRestoreState() when restoring $,.
      */
     public static void restoreInternalOFS() {
-        if (!ofsStack.isEmpty()) {
-            internalOFS = ofsStack.pop();
+        ExecutionRuntimeState state = state();
+        if (!state.outputFieldSeparatorStates.isEmpty()) {
+            state.outputFieldSeparator = state.outputFieldSeparatorStates.pop();
         }
     }
 
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         super.set(value);
-        internalOFS = this.toString();
+        state().outputFieldSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(String value) {
         super.set(value);
-        internalOFS = this.toString();
+        state().outputFieldSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(int value) {
         super.set(value);
-        internalOFS = this.toString();
+        state().outputFieldSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(long value) {
         super.set(value);
-        internalOFS = this.toString();
+        state().outputFieldSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(boolean value) {
         super.set(value);
-        internalOFS = this.toString();
+        state().outputFieldSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(Object value) {
         super.set(value);
-        internalOFS = this.toString();
+        state().outputFieldSeparator = this.toString();
         return this;
     }
 }

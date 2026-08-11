@@ -81,7 +81,7 @@ public class Internals extends PerlModuleBase {
      * Return a reference to the live END block queue for B::end_av().
      */
     public static RuntimeList jperlEndAvRef(RuntimeArray args, int ctx) {
-        return SpecialBlock.endBlocks.createReference().getList();
+        return SpecialBlock.getEndBlocks().createReference().getList();
     }
 
     /**

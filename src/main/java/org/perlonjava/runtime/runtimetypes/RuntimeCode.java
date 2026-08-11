@@ -52,6 +52,14 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
+    private PerlRuntime boundRuntime;
+
+    /** Bind Java callbacks that may be invoked by an arbitrary worker thread. */
+    public RuntimeCode bindCallbackTo(PerlRuntime runtime) {
+        this.boundRuntime = runtime;
+        return this;
+    }
+
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
 
@@ -104,10 +112,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * eval compilations don't interfere with each other. A stack is required because eval STRING
      * compilation can re-enter eval STRING compilation via BEGIN/use/require.
      */
-    private static final ThreadLocal<ArrayDeque<EvalRuntimeContext>> evalRuntimeContextStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
-    private static final ThreadLocal<ArrayDeque<ArrayList<String>>> syntheticCallerFrames =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static ArrayDeque<EvalRuntimeContext> evalRuntimeContextStack() {
+        return PerlRuntime.current().executionState().evalRuntimeContexts;
+    }
+    private static ArrayDeque<ArrayList<String>> syntheticCallerFrames() {
+        return PerlRuntime.current().executionState().syntheticCallerFrames;
+    }
     // Cache for memoization of evalStringHelper results
     private static final int CLASS_CACHE_SIZE = 100;
     private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
@@ -144,7 +154,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * 0 = not inside any eval, >0 = inside eval (eval STRING or eval BLOCK).
      * Incremented on eval entry, decremented on eval exit (success or failure).
      */
-    public static int evalDepth = 0;
+    public static int getEvalDepth() {
+        return PerlRuntime.current().executionState().evalDepth;
+    }
+
+    public static void incrementEvalDepth() {
+        PerlRuntime.current().executionState().evalDepth++;
+    }
+
+    public static void decrementEvalDepth() {
+        PerlRuntime.current().executionState().evalDepth--;
+    }
+
+    public static void adjustEvalDepth(int delta) {
+        PerlRuntime.current().executionState().evalDepth += delta;
+    }
 
     /**
      * Thread-local stack of @_ arrays for each active subroutine call.
@@ -154,21 +178,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Push/pop is handled by RuntimeCode.apply() methods.
      * Access via getCurrentArgs() for Java-implemented functions that need caller's @_.
      */
-    private static final ThreadLocal<Deque<RuntimeArray>> argsStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static Deque<RuntimeArray> argsStack() {
+        return PerlRuntime.current().executionState().argsStack;
+    }
 
     /**
      * Thread-local stack of RuntimeCode objects currently executing on this
      * Java thread. Weak CODE backrefs, especially Sub::Defer's self slot, must
      * not be cleared while the referent CODE is still running.
      */
-    private static final ThreadLocal<Deque<RuntimeCode>> activeCodeStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static Deque<RuntimeCode> activeCodeStack() {
+        return PerlRuntime.current().executionState().activeCodeStack;
+    }
 
     private record ActiveLexicalFrame(RuntimeCode code, Map<String, RuntimeBase> cells) {}
     private static volatile boolean lexicalAliasSupportEnabled;
-    private static final ThreadLocal<Deque<ActiveLexicalFrame>> activeLexicalFrames =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    @SuppressWarnings("unchecked")
+    private static Deque<ActiveLexicalFrame> activeLexicalFrames() {
+        return (Deque<ActiveLexicalFrame>) (Deque<?>)
+                PerlRuntime.current().executionState().activeLexicalFrames;
+    }
 
     /**
      * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
@@ -184,8 +213,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * The snapshot is a cheap new ArrayList of the same RuntimeScalar element
      * references; subsequent shifts/modifications of the live @_ don't affect it.
      */
-    private static final ThreadLocal<Deque<java.util.List<RuntimeScalar>>> pristineArgsStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static Deque<java.util.List<RuntimeScalar>> pristineArgsStack() {
+        return PerlRuntime.current().executionState().pristineArgsStack;
+    }
 
     /**
      * Thread-local stack tracking whether each call frame created a fresh @_ (hasargs).
@@ -195,16 +225,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      *
      * Push/pop is handled alongside argsStack in the apply() methods.
      */
-    private static final ThreadLocal<Deque<Boolean>> hasArgsStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static Deque<Boolean> hasArgsStack() {
+        return PerlRuntime.current().executionState().hasArgsStack;
+    }
 
     /**
      * Thread-local stack tracking the context each active subroutine was called in.
      * Perl exposes this as caller(EXPR)[5]: undef for void, false for scalar, true
      * for list context.
      */
-    private static final ThreadLocal<Deque<Integer>> callContextStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static Deque<Integer> callContextStack() {
+        return PerlRuntime.current().executionState().callContextStack;
+    }
 
     /**
      * Get the current subroutine's @_ array.
@@ -214,7 +246,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The current @_ array, or null if not in a subroutine
      */
     public static RuntimeArray getCurrentArgs() {
-        Deque<RuntimeArray> stack = argsStack.get();
+        Deque<RuntimeArray> stack = argsStack();
         return stack.isEmpty() ? null : stack.peek();
     }
 
@@ -231,30 +263,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static java.util.List<RuntimeArray> snapshotArgsStack() {
-        return new java.util.ArrayList<>(argsStack.get());
+        return new java.util.ArrayList<>(argsStack());
     }
 
     public static int argsStackDepth() {
-        return argsStack.get().size();
+        return argsStack().size();
     }
 
     public static void pushActiveCode(RuntimeCode code) {
-        activeCodeStack.get().push(code);
+        activeCodeStack().push(code);
         if (lexicalAliasSupportEnabled) {
-            activeLexicalFrames.get().push(new ActiveLexicalFrame(code, new HashMap<>()));
+            activeLexicalFrames().push(new ActiveLexicalFrame(code, new HashMap<>()));
         }
     }
 
     public static void popActiveCode(RuntimeCode code) {
         if (lexicalAliasSupportEnabled) {
-            Deque<ActiveLexicalFrame> frames = activeLexicalFrames.get();
+            Deque<ActiveLexicalFrame> frames = activeLexicalFrames();
             if (!frames.isEmpty() && frames.peek().code() == code) {
                 frames.pop();
             } else {
                 frames.removeIf(frame -> frame.code() == code);
             }
         }
-        Deque<RuntimeCode> stack = activeCodeStack.get();
+        Deque<RuntimeCode> stack = activeCodeStack();
         if (!stack.isEmpty() && stack.peek() == code) {
             stack.pop();
             return;
@@ -264,7 +296,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static boolean isActiveCode(RuntimeCode code) {
         if (code == null) return false;
-        for (RuntimeCode active : activeCodeStack.get()) {
+        for (RuntimeCode active : activeCodeStack()) {
             if (active == code) return true;
         }
         return false;
@@ -273,7 +305,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeCode getActiveCodeAt(int depth) {
         if (depth < 0) return null;
         int i = 0;
-        for (RuntimeCode active : activeCodeStack.get()) {
+        for (RuntimeCode active : activeCodeStack()) {
             if (i++ == depth) {
                 return active;
             }
@@ -282,7 +314,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static boolean hasActiveCode() {
-        return !activeCodeStack.get().isEmpty();
+        return !activeCodeStack().isEmpty();
     }
 
     public static void enableLexicalAliasSupport() {
@@ -298,7 +330,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void registerActiveLexical(
             RuntimeCode code, String variableName, RuntimeBase cell) {
         if (!lexicalAliasSupportEnabled) return;
-        for (ActiveLexicalFrame frame : activeLexicalFrames.get()) {
+        for (ActiveLexicalFrame frame : activeLexicalFrames()) {
             if (sameLogicalCode(frame.code(), code)) {
                 frame.cells().put(variableName, cell);
                 return;
@@ -308,7 +340,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static RuntimeBase findActiveLexical(RuntimeCode code, String variableName) {
         if (!lexicalAliasSupportEnabled) return null;
-        for (ActiveLexicalFrame frame : activeLexicalFrames.get()) {
+        for (ActiveLexicalFrame frame : activeLexicalFrames()) {
             if (sameLogicalCode(frame.code(), code)) {
                 RuntimeBase cell = frame.cells().get(variableName);
                 if (cell != null) return cell;
@@ -329,7 +361,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The caller's @_ array, or null if not available
      */
     public static RuntimeArray getCallerArgs() {
-        Deque<RuntimeArray> stack = argsStack.get();
+        Deque<RuntimeArray> stack = argsStack();
         if (stack.size() < 2) {
             return null;
         }
@@ -343,15 +375,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void pushArgs(RuntimeArray args) {
-        argsStack.get().push(args);
+        argsStack().push(args);
         // Snapshot the args list so @DB::args stays pristine even if the sub
         // later shifts/pops from @_.
-        pristineArgsStack.get().push(
+        pristineArgsStack().push(
                 args != null ? new java.util.ArrayList<>(args.elements) : new java.util.ArrayList<>());
     }
 
     public static void pushCallContext(int callContext) {
-        callContextStack.get().push(callContext);
+        callContextStack().push(callContext);
     }
 
     /**
@@ -360,19 +392,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void popArgs() {
-        Deque<RuntimeArray> stack = argsStack.get();
+        Deque<RuntimeArray> stack = argsStack();
         if (!stack.isEmpty()) {
             stack.pop();
         }
-        Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack.get();
+        Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack();
         if (!pStack.isEmpty()) {
             pStack.pop();
         }
-        Deque<Boolean> haStack = hasArgsStack.get();
+        Deque<Boolean> haStack = hasArgsStack();
         if (!haStack.isEmpty()) {
             haStack.pop();
         }
-        Deque<Integer> ctxStack = callContextStack.get();
+        Deque<Integer> ctxStack = callContextStack();
         if (!ctxStack.isEmpty()) {
             ctxStack.pop();
         }
@@ -386,7 +418,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return a RuntimeArray wrapping the snapshot, or null if frame is out of range
      */
     public static RuntimeArray getOriginalArgsAt(int frame) {
-        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack.get();
+        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
         if (frame < 0 || frame >= stack.size()) return null;
         int i = 0;
         for (java.util.List<RuntimeScalar> list : stack) {
@@ -407,8 +439,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     private static RuntimeArray getOriginalArgsForCode(RuntimeCode target) {
         if (target == null) return null;
-        Iterator<RuntimeCode> codeIt = activeCodeStack.get().iterator();
-        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack.get().iterator();
+        Iterator<RuntimeCode> codeIt = activeCodeStack().iterator();
+        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack().iterator();
         while (codeIt.hasNext() && argsIt.hasNext()) {
             if (codeIt.next() == target) {
                 java.util.List<RuntimeScalar> list = argsIt.next();
@@ -435,7 +467,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      *         inherited @_ (via &amp;func with no parens), null if depth is out of range
      */
     public static Boolean getHasArgsAt(int depth) {
-        Deque<Boolean> stack = hasArgsStack.get();
+        Deque<Boolean> stack = hasArgsStack();
         int i = 0;
         for (Boolean b : stack) {
             if (i == depth) return b;
@@ -445,7 +477,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static Integer getCallContextAt(int depth) {
-        Deque<Integer> stack = callContextStack.get();
+        Deque<Integer> stack = callContextStack();
         int i = 0;
         for (Integer callContext : stack) {
             if (i == depth) return callContext;
@@ -866,11 +898,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Depth of active recursive calls to this subroutine, used by the
     // "Deep recursion on subroutine" warning. Incremented on entry and
     // decremented in a finally-block on exit.
-    public transient int callDepth = 0;
-    // Whether a "Deep recursion" warning has already been emitted for the
-    // currently-active recursion chain. Reset when callDepth returns to 0.
-    public transient boolean deepRecursionWarned = false;
-
     // Depth threshold for the "Deep recursion on subroutine" warning.
     // Matches Perl's default PERL_SUB_DEPTH_WARN value.
     public static final int DEEP_RECURSION_WARN_DEPTH = 100;
@@ -882,8 +909,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // tail calls don't consume real Java stack, so a depth warning for
     // them is misleading anyway. Nested tail-call trampolines use an int
     // counter so re-entries only skip tracking for the outermost trampoline.
-    private static final ThreadLocal<Integer> inTailCallTrampoline =
-            ThreadLocal.withInitial(() -> 0);
+    private static int tailCallTrampolineDepth() {
+        return PerlRuntime.current().executionState().tailCallTrampolineDepth;
+    }
 
     /**
      * Increment the recursion depth counter and, if we've just crossed the
@@ -899,12 +927,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (isMapGrepBlock || isEvalBlock || isBuiltin) {
             return;
         }
-        if (inTailCallTrampoline.get() > 0) {
+        if (tailCallTrampolineDepth() > 0) {
             return;
         }
-        int depth = ++callDepth;
-        if (depth > DEEP_RECURSION_WARN_DEPTH && !deepRecursionWarned) {
-            deepRecursionWarned = true;
+        ExecutionRuntimeState.CallDepthState callState =
+                PerlRuntime.current().executionState().callDepth(this);
+        int depth = ++callState.depth;
+        if (depth > DEEP_RECURSION_WARN_DEPTH && !callState.warned) {
+            callState.warned = true;
             String name = (packageName != null && subName != null)
                     ? packageName + "::" + subName
                     : (subName != null ? subName : "__ANON__");
@@ -920,12 +950,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (isMapGrepBlock || isEvalBlock || isBuiltin) {
             return;
         }
-        if (inTailCallTrampoline.get() > 0) {
+        if (tailCallTrampolineDepth() > 0) {
             return;
         }
-        if (--callDepth <= 0) {
-            callDepth = 0;
-            deepRecursionWarned = false;
+        ExecutionRuntimeState.CallDepthState callState =
+                PerlRuntime.current().executionState().callDepth(this);
+        if (--callState.depth <= 0) {
+            callState.depth = 0;
+            callState.warned = false;
+            PerlRuntime.current().executionState().releaseCallDepth(this);
         }
     }
     // State variables
@@ -1529,7 +1562,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The current eval runtime context, or null if not in eval STRING compilation
      */
     public static EvalRuntimeContext getEvalRuntimeContext() {
-        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack.get();
+        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack();
         return stack.isEmpty() ? null : stack.peekFirst();
     }
 
@@ -1541,13 +1574,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The saved eval runtime context (may be null)
      */
     public static EvalRuntimeContext saveAndClearEvalRuntimeContext() {
-        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack.get();
+        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack();
         if (stack.isEmpty()) {
             return null;
         }
         EvalRuntimeContext saved = stack.removeFirst();
         if (stack.isEmpty()) {
-            evalRuntimeContextStack.remove();
+            evalRuntimeContextStack().clear();
         }
         return saved;
     }
@@ -1567,17 +1600,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void restoreEvalRuntimeContext(EvalRuntimeContext saved) {
         if (saved != null) {
-            evalRuntimeContextStack.get().addFirst(saved);
+            evalRuntimeContextStack().addFirst(saved);
             reactivateEvalRuntimeAliases(saved);
         }
     }
 
     private static void pushEvalRuntimeContext(EvalRuntimeContext context) {
-        evalRuntimeContextStack.get().addFirst(context);
+        evalRuntimeContextStack().addFirst(context);
     }
 
     private static void popEvalRuntimeContext(EvalRuntimeContext context) {
-        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack.get();
+        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack();
         if (!stack.isEmpty()) {
             if (stack.peekFirst() == context) {
                 stack.removeFirst();
@@ -1591,7 +1624,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         if (stack.isEmpty()) {
-            evalRuntimeContextStack.remove();
+            evalRuntimeContextStack().clear();
         }
     }
 
@@ -1610,16 +1643,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         frame.add(String.valueOf(line));
         frame.add(subName);
         frame.add(marker);
-        syntheticCallerFrames.get().addLast(frame);
+        syntheticCallerFrames().addLast(frame);
     }
 
     public static void popSyntheticCallerFrame() {
-        ArrayDeque<ArrayList<String>> stack = syntheticCallerFrames.get();
+        ArrayDeque<ArrayList<String>> stack = syntheticCallerFrames();
         if (!stack.isEmpty()) {
             stack.removeLast();
         }
         if (stack.isEmpty()) {
-            syntheticCallerFrames.remove();
+            syntheticCallerFrames().clear();
         }
     }
 
@@ -1692,7 +1725,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         anonSubs.clear();
         interpretedSubs.clear();
         evalContext.clear();
-        evalRuntimeContextStack.remove();
+        evalRuntimeContextStack().clear();
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
@@ -2704,7 +2737,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     int level = DynamicVariableManager.getLocalLevel();
                     DynamicVariableManager.pushLocalVariable(sig);
 
-                    evalDepth++;
+                    incrementEvalDepth();
                     boolean pushedEvalFrame = InterpreterState.pushEvalFrameForCurrentInterpreter();
                     boolean pushedSyntheticEvalFrame = false;
                     if (!pushedEvalFrame) {
@@ -2739,7 +2772,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         if (pushedSyntheticEvalFrame) {
                             popSyntheticEvalCallerFrame();
                         }
-                        evalDepth--;
+                        decrementEvalDepth();
                         // Restore $SIG{__DIE__}
                         DynamicVariableManager.popToLocalLevel(level);
                     }
@@ -2765,7 +2798,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Execute the interpreted code
             // Track eval depth for $^S support
-            evalDepth++;
+            incrementEvalDepth();
             try {
                 result = interpretedCode.apply(args, callContext);
 
@@ -2822,7 +2855,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return new RuntimeList(new RuntimeScalar());
                 }
             } finally {
-                evalDepth--;
+                decrementEvalDepth();
             }
 
         } finally {
@@ -3542,7 +3575,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Throwable t = new Throwable();
         ExceptionFormatter.StackTraceResult result = ExceptionFormatter.formatExceptionDetailed(t);
         ArrayList<ArrayList<String>> stackTrace = result.frames();
-        ArrayDeque<ArrayList<String>> syntheticFrames = syntheticCallerFrames.get();
+        ArrayDeque<ArrayList<String>> syntheticFrames = syntheticCallerFrames();
         if (!syntheticFrames.isEmpty()) {
             int baseSkip = result.firstFrameFromInterpreter() ? 0 : 1;
             int insertAt = Math.min(baseSkip + 1, stackTrace.size());
@@ -4021,7 +4054,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         RuntimeCode previous = null;
         int logicalIndex = 0;
-        for (RuntimeCode active : activeCodeStack.get()) {
+        for (RuntimeCode active : activeCodeStack()) {
             if (active == previous || isCompilerWrapperPair(active, previous)) {
                 continue;
             }
@@ -4101,7 +4134,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static boolean hasExplicitlyRenamedActiveCode() {
-        for (RuntimeCode active : activeCodeStack.get()) {
+        for (RuntimeCode active : activeCodeStack()) {
             if (active.explicitlyRenamed) {
                 return true;
             }
@@ -4474,7 +4507,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Eval STRING must allow next/last/redo to propagate to the enclosing scope.
     // The caller is responsible for handling RuntimeControlFlowList markers.
     public static RuntimeList applyEval(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
-        evalDepth++;
+        incrementEvalDepth();
         try {
             RuntimeList result = apply(runtimeScalar, a, callContext);
             // Perl clears $@ on successful eval (even if nested evals previously set it).
@@ -4507,7 +4540,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return new RuntimeList(new RuntimeScalar());
         } finally {
-            evalDepth--;
+            decrementEvalDepth();
             // Release captured variable references from the eval's code object.
             // After eval STRING finishes executing, its captures are no longer needed.
             if (runtimeScalar.type == RuntimeScalarType.CODE && runtimeScalar.value instanceof RuntimeCode code) {
@@ -4835,11 +4868,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // tracking. See enterCall() / inTailCallTrampoline for the rationale.
         boolean isTailCall = "tailcall".equals(subroutineName);
         if (isTailCall) {
-            inTailCallTrampoline.set(inTailCallTrampoline.get() + 1);
+            PerlRuntime.current().executionState().tailCallTrampolineDepth++;
             try {
                 return applyImpl(runtimeScalar, subroutineName, list, callContext);
             } finally {
-                inTailCallTrampoline.set(inTailCallTrampoline.get() - 1);
+                PerlRuntime.current().executionState().tailCallTrampolineDepth--;
             }
         }
         return applyImpl(runtimeScalar, subroutineName, list, callContext);
@@ -5314,6 +5347,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return the result of the subroutine execution as a RuntimeList
      */
     public RuntimeList apply(RuntimeArray a, int callContext) {
+        if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
+            try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
+                return apply(a, callContext);
+            }
+        }
         if (constantValue != null) {
             requireLvalueCallable(this, callContext, null);
             return new RuntimeList(constantValue);
@@ -5391,7 +5429,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // which inherits the caller's @_ instead of creating a fresh one.
             // Perl's caller()[4] (hasargs) should be false/empty for these calls.
             // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
-            hasArgsStack.get().push(false);
+            hasArgsStack().push(false);
 
             // Check deep recursion BEFORE pushing the callee's warning bits,
             // so the "Deep recursion on subroutine" warning is gated on the
@@ -5451,6 +5489,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public RuntimeList apply(String subroutineName, RuntimeArray a, int callContext) {
+        if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
+            try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
+                return apply(subroutineName, a, callContext);
+            }
+        }
         if (constantValue != null) {
             requireLvalueCallable(this, callContext, subroutineName);
             return new RuntimeList(constantValue);
@@ -5520,7 +5563,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // which create a new @_ from the supplied arguments.
             // Perl's caller()[4] (hasargs) should be true (1) for these calls.
             // See also: the 2-arg instance method apply(array, ctx) which pushes false.
-            hasArgsStack.get().push(true);
+            hasArgsStack().push(true);
 
             // Check deep recursion BEFORE pushing the callee's warning bits,
             // so the "Deep recursion on subroutine" warning is gated on the

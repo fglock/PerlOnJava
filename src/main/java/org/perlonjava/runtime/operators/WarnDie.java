@@ -127,7 +127,7 @@ public class WarnDie {
         if (unwrapped instanceof PerlDieException || unwrapped instanceof PerlExitException) {
             return e;
         }
-        if (RuntimeCode.evalDepth > 0) {
+        if (RuntimeCode.getEvalDepth() > 0) {
             return e;
         }
 
@@ -220,7 +220,7 @@ public class WarnDie {
             // By the time we reach catchEval(), evalDepth has already been decremented
             // by the eval catch block, but the handler should see $^S=1 since we are
             // conceptually still inside eval (Perl 5 calls the handler before unwinding).
-            RuntimeCode.evalDepth++;
+            RuntimeCode.incrementEvalDepth();
             boolean pushedEvalFrame = InterpreterState.pushEvalFrameForCurrentInterpreter();
             try {
                 RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
@@ -242,7 +242,7 @@ public class WarnDie {
                 if (pushedEvalFrame) {
                     InterpreterState.pop();
                 }
-                RuntimeCode.evalDepth--;
+                RuntimeCode.decrementEvalDepth();
                 // Restore $SIG{__DIE__}
                 DynamicVariableManager.popToLocalLevel(level);
             }
@@ -577,7 +577,7 @@ public class WarnDie {
             int level = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(sig);
 
-            boolean pushedEvalFrame = RuntimeCode.evalDepth > 0
+            boolean pushedEvalFrame = RuntimeCode.getEvalDepth() > 0
                     && InterpreterState.pushEvalFrameForCurrentInterpreter();
             try {
                 // Perl passes the actual value stored in $@ to __DIE__.  For a

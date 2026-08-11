@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.PerlRuntimeTestBase;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * other parallel agents (scalars, refs).
  */
 @Tag("unit")
-public class ContainersTest {
+public class ContainersTest extends PerlRuntimeTestBase {
 
     private static final Path FIXTURES =
             Paths.get("src/test/resources/storable_fixtures").toAbsolutePath();

@@ -16,9 +16,14 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
 
-    private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
+    @SuppressWarnings("unchecked")
+    private static Stack<GlobSlotSnapshot> globSlotStack() {
+        return (Stack<GlobSlotSnapshot>) (Stack<?>)
+                PerlRuntime.current().executionState().globSlotStates;
+    }
 
     public static boolean isLocalizedGlob(String globName) {
+        Stack<GlobSlotSnapshot> globSlotStack = globSlotStack();
         for (int i = globSlotStack.size() - 1; i >= 0; i--) {
             if (java.util.Objects.equals(globSlotStack.get(i).globName(), globName)) {
                 return true;
@@ -28,6 +33,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public static RuntimeArray localizedUnderscoreArray() {
+        Stack<GlobSlotSnapshot> globSlotStack = globSlotStack();
         for (int i = globSlotStack.size() - 1; i >= 0; i--) {
             String name = globSlotStack.get(i).globName();
             if (name != null && name.endsWith("::_")) {
@@ -1406,7 +1412,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             savedSelectedHandle = RuntimeIO.getSelectedHandle();
             isSelectedHandle = true;
         }
-        globSlotStack.push(new GlobSlotSnapshot(this.globName,
+        globSlotStack().push(new GlobSlotSnapshot(this.globName,
                 savedScalar, savedArray, savedHash,
                 savedCode, savedIO, savedSelectedHandle, savedIOVisible));
 
@@ -1483,7 +1489,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     @Override
     public void dynamicRestoreState() {
-        GlobSlotSnapshot snap = globSlotStack.pop();
+        GlobSlotSnapshot snap = globSlotStack().pop();
 
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;

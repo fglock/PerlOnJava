@@ -2,7 +2,7 @@
 
 **Status:** Active implementation plan
 **Version:** 2.0
-**Date:** 2026-08-10
+**Date:** 2026-08-11
 **Supersedes:** the previous `concurrency.md` proposal and
 `dev/prompts/multiplicity-v2-plan.md`
 
@@ -14,9 +14,9 @@ unless their storage was explicitly marked shared.
 
 Each numbered phase below normally forms an independent pull request. A phase
 may be split further when its audit shows that it cannot be reviewed or reverted
-safely. Phases 3 and 4 are the sole current exception: the maintainer explicitly
-requested that the empty binding shell and the first state migration remain in
-one PR. At every merge boundary:
+safely. Phases 3 and 4 were combined at the maintainer's request, as were
+Phases 5 through 7; both combined changesets preserve the same green-boundary
+requirements. At every merge boundary:
 
 - the compiler and both execution backends remain functional;
 - `make` passes;
@@ -248,11 +248,15 @@ existing IO tests pass.
 
 ### Phase 5 — Execution stacks and special blocks
 
-Move caller stacks, dynamic scope, every `local` save/restore stack, cleanup
-stacks, and `BEGIN`/`CHECK`/`INIT`/`UNITCHECK`/`END` collections.
+Move caller stacks, interpreter/eval frames, dynamic scope, every `local`
+save/restore stack, lexical cleanup registrations, and the runtime-owned
+`CHECK`/`INIT`/`END` collections. `BEGIN` remains immediate under the compile
+lock and `UNITCHECK` remains attached to its compilation context. The coupled
+mortal/weak/`DESTROY` sweep machinery moves atomically in Phase 11.
 
-Acceptance: `local`, caller, defer/lifecycle, and special-block tests show no
-cross-runtime state.
+Acceptance: execution/save-stack ownership, caller, defer, callback binding,
+and special-block tests show no cross-runtime state. Package-global values
+themselves remain shared until Phase 8 and are not claimed isolated here.
 
 ### Phase 6 — Regex state and timeout binding
 
@@ -260,16 +264,21 @@ Move all numbered/named captures, whole/prior/post-match values, last-capture
 state, match offsets, and `/g` state, and bind the regex-timeout worker in the
 same PR.
 
-Acceptance: simultaneous matches are isolated; alarm-based matching retains
-state; Scalar::Util/Moo regression gates pass.
+Acceptance: simultaneous matches, `/g` positions, `/o`, and match-once state
+are isolated; alarm-mediated matching retains the captured runtime; and
+Scalar::Util/Moo regression gates pass. Concurrent independent alarms remain a
+Phase 11 signal/alarm-state concern.
 
 ### Phase 7 — Inheritance and method caches
 
-Move MRO/package state, method/overload/ISA caches, generations, and
-invalidation state.
+Move MRO policy, method/overload/ISA caches, generations, reverse-ISA data, and
+invalidation state. Until Phase 8 migrates symbol tables, a shared mutation
+epoch lazily invalidates derived caches in every runtime.
 
-Acceptance: runtimes may define conflicting packages and methods; method and
-closure benchmarks remain within budget.
+Acceptance: cache and policy state are runtime-owned, shared symbol mutations
+cannot leave another runtime's cache stale, and method/closure benchmarks stay
+within budget. Conflicting package and method definitions become possible only
+after the Phase 8 symbol-table migrations.
 
 ### Phase 8a — Core global values
 
@@ -446,7 +455,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 3 and 4 complete; combined PR ready for review
+### Current Status: Phases 5 through 7 complete; combined PR ready for review
 
 ### Completed Phases
 
@@ -522,6 +531,43 @@ measured benefit over platform threads/full clone.
   - The interpreter-only TAP miss in `nonblocking_pipe_syswrite.t` assertion 8
     was reproduced on the exact PR #918 base and is therefore pre-existing;
     the JVM backend and the remaining focused assertions pass.
+- [x] Phase 5: Execution stacks and special blocks (2026-08-11)
+  - Added per-runtime execution state for caller/dynamic scope, interpreter and
+    eval frames, argument/context/lexical stacks, recursion tracking, control
+    flow, lexical cleanup registrations, and every current localization stack.
+  - Moved live output separators and `CHECK`/`INIT`/`END` queues with their
+    reset and `Internals::B::end_av` consumers, preserving current ordering.
+  - Captured the owning runtime for asynchronous Future callbacks before they
+    resume Perl execution on an arbitrary Java thread.
+  - Kept package-global values shared until Phase 8 and kept the coupled
+    mortal/weak/`DESTROY` sweep machinery together for Phase 11.
+- [x] Phase 6: Regex state and timeout binding (2026-08-11)
+  - Moved all match/capture metadata, offsets, `/g` positions, compiled-regex
+    caches, `/o`, and match-once state into the bound runtime.
+  - Made regex snapshots restore the complete state and reject cross-runtime
+    restoration.
+  - Captured and scoped the runtime in timeout workers, made those workers
+    daemon and cancellation-aware, and serialized the remaining compile-only
+    regex-preprocessor scratch behind the compilation boundary.
+  - Deferred process-wide alarm/signal ownership to Phase 11 while covering
+    the sequential alarm-mediated regex path that regressed PR #480.
+- [x] Phase 7: Inheritance and method caches (2026-08-11)
+  - Moved MRO policy, method/overload/ISA caches, package generations,
+    reverse-ISA data, and AUTOLOAD policy into each runtime.
+  - Added temporary process-wide symbol and ISA mutation epochs so a runtime
+    cannot retain stale derived entries while symbol tables remain shared.
+  - Kept conflicting package/method declarations explicitly deferred to the
+    Phase 8 symbol-table migrations.
+  - Added deterministic low-level isolation tests for all three phases and
+    retained existing Storable assertions while giving affected fixtures an
+    explicit runtime binding.
+  - Validation: the exact-tree `make` completed successfully; 38 focused Perl
+    runs passed across JVM and interpreter backends except one interpreter
+    caller-context failure reproduced identically on PR #920's merge base.
+    Scalar::Util 1.70 and Moo 2.005005 loaded on both backends. Method and
+    closure benchmarks improved; regex matching is approximately 10% slower
+    from the required runtime lookup and is recorded for Phase 13 recovery.
+    The comprehensive gate completed at core 82.9% and bundled modules 81.0%.
 
 ### Phase 1 Work Completed (2026-08-10)
 
@@ -540,10 +586,10 @@ measured benefit over platform threads/full clone.
 
 ### Next Steps
 
-1. Review and merge the combined binding and I/O-isolation PR while `Config` thread
-   flags remain disabled.
-2. Start Phase 5 from updated `master`: migrate execution/local/special-block
-   stacks without combining it with later runtime-state phases.
+1. Review and merge the combined Phase 5-7 runtime-state PR while `Config`
+   thread flags remain disabled.
+2. Start Phase 8a from updated `master`: migrate core global scalar, array, and
+   hash storage without combining it with the later Phase 8 subphases.
 
 ### Open Questions
 

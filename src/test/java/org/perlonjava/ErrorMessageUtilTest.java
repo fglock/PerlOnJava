@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * or wrapped exceptions where raw Java toString() would otherwise surface.
  */
 @Tag("unit")
-public class ErrorMessageUtilTest {
+public class ErrorMessageUtilTest extends PerlRuntimeTestBase {
 
     @Test
     void stripJavaExceptionPrefix_stripsFullyQualifiedJavaException() {

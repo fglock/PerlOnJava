@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -10,21 +9,9 @@ import java.util.Map;
  */
 public class RuntimePosLvalue {
 
-    // Maximum size of the cache to prevent excessive memory usage
-    private static final int MAX_CACHE_SIZE = 1000;
-
-    /**
-     * A cache that stores the position of {@code RuntimeScalar} values and their hashes.
-     * It uses a LinkedHashMap to maintain insertion order and automatically remove the eldest entry
-     * when the cache exceeds the maximum size. This ensures that the cache does not grow indefinitely.
-     */
-    private static final Map<RuntimeScalar, CacheEntry> positionCache = new LinkedHashMap<>(MAX_CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<RuntimeScalar, CacheEntry> eldest) {
-            // Remove the eldest entry if the cache size exceeds the maximum limit
-            return size() > MAX_CACHE_SIZE;
-        }
-    };
+    private static Map<RuntimeScalar, CacheEntry> positionCache() {
+        return PerlRuntime.current().regexState.positionCache;
+    }
 
     /**
      * Retrieves the position of the given {@code RuntimeScalar} value from the cache.
@@ -42,7 +29,7 @@ public class RuntimePosLvalue {
         RuntimeScalar position;
 
         // Retrieve the cached entry for the given value
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
 
         // Check if the value is missing or it has changed
         int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
@@ -51,7 +38,7 @@ public class RuntimePosLvalue {
             // create a new undefined RuntimeScalar to represent the position
             position = new PosLvalueScalar(perlVariable);
             // Cache the new position with the current hash of the value
-            positionCache.put(perlVariable, new CacheEntry(code, position));
+            positionCache().put(perlVariable, new CacheEntry(code, position));
         } else {
             // Use the cached position if the value has not changed
             position = cachedEntry.regexPosition;
@@ -62,8 +49,8 @@ public class RuntimePosLvalue {
     /** Copy pos() and zero-length /g bookkeeping between equivalent scalar views. */
     public static void copyPositionState(RuntimeScalar source, RuntimeScalar target) {
         RuntimeScalar targetPosition = pos(target);
-        CacheEntry sourceEntry = positionCache.get(source);
-        CacheEntry targetEntry = positionCache.get(target);
+        CacheEntry sourceEntry = positionCache().get(source);
+        CacheEntry targetEntry = positionCache().get(target);
         if (sourceEntry == null || sourceEntry.regexPosition.type == RuntimeScalarType.UNDEF) {
             targetPosition.type = RuntimeScalarType.UNDEF;
             targetPosition.value = null;
@@ -87,13 +74,13 @@ public class RuntimePosLvalue {
      * @param perlVariable the scalar whose pos should be invalidated
      */
     public static void invalidatePos(RuntimeScalar perlVariable) {
-        if (perlVariable == null) {
+        if (perlVariable == null || PerlRuntime.currentOrNull() == null) {
             return;
         }
         // Reset the canonical pos lvalue in place. Removing the cache entry orphans the
         // PosLvalueScalar that matchRegexDirect may already hold (local posScalar), breaking
         // /g and \\G after (?{ }) or other mid-match assignments to the target scalar.
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
         if (cachedEntry != null) {
             int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
             cachedEntry.valueHash = code;
@@ -108,7 +95,7 @@ public class RuntimePosLvalue {
     }
 
     private static void clearZeroLengthMatchTracking(RuntimeScalar perlVariable) {
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
         if (cachedEntry != null) {
             cachedEntry.lastMatchWasZeroLength = false;
             cachedEntry.lastMatchPosition = -1;
@@ -121,7 +108,7 @@ public class RuntimePosLvalue {
      * This is used to prevent infinite loops in global regex matches.
      */
     public static boolean hadZeroLengthMatchAt(RuntimeScalar perlVariable, int position, String patternKey) {
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
         if (cachedEntry == null) {
             return false;
         }
@@ -134,7 +121,7 @@ public class RuntimePosLvalue {
      * Record that a zero-length match occurred at the given position with the given pattern.
      */
     public static void recordZeroLengthMatch(RuntimeScalar perlVariable, int position, String patternKey) {
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
         if (cachedEntry != null) {
             cachedEntry.lastMatchWasZeroLength = true;
             cachedEntry.lastMatchPosition = position;
@@ -146,7 +133,7 @@ public class RuntimePosLvalue {
      * Clear the zero-length match tracking (called after successful non-zero-length match).
      */
     public static void recordNonZeroLengthMatch(RuntimeScalar perlVariable) {
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
         if (cachedEntry != null) {
             cachedEntry.lastMatchWasZeroLength = false;
             cachedEntry.lastMatchPattern = null;
@@ -202,7 +189,7 @@ public class RuntimePosLvalue {
      * A cache entry that stores the hash of a {@code RuntimeScalar} value and its regex position.
      * This helps in determining if the cached position is still valid for the given scalar.
      */
-    private static class CacheEntry {
+    static final class CacheEntry {
         int valueHash; // Hash of the RuntimeScalar value to detect changes
         RuntimeScalar regexPosition; // Cached position of the regex match
         boolean lastMatchWasZeroLength; // Track if last match was zero-length
@@ -233,7 +220,7 @@ public class RuntimePosLvalue {
             return false;
         }
         
-        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
         // Use the same hash calculation as pos() for consistency
         int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
         
@@ -261,7 +248,7 @@ public class RuntimePosLvalue {
             RuntimeScalar position = new PosLvalueScalar(perlVariable);
             cachedEntry = new CacheEntry(code, position);
             cachedEntry.hasUnicodeChars = result;
-            positionCache.put(perlVariable, cachedEntry);
+            positionCache().put(perlVariable, cachedEntry);
         }
         
         return result;

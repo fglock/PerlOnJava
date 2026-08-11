@@ -15,9 +15,17 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
 public class SpecialBlock {
 
     // Arrays to store different types of blocks
-    public static RuntimeArray endBlocks = new RuntimeArray();
-    public static RuntimeArray initBlocks = new RuntimeArray();
-    public static RuntimeArray checkBlocks = new RuntimeArray();
+    public static RuntimeArray getEndBlocks() {
+        return PerlRuntime.current().executionState().endBlocks;
+    }
+
+    public static RuntimeArray getInitBlocks() {
+        return PerlRuntime.current().executionState().initBlocks;
+    }
+
+    public static RuntimeArray getCheckBlocks() {
+        return PerlRuntime.current().executionState().checkBlocks;
+    }
 
     /**
      * Saves a code reference to the endBlocks array.
@@ -29,7 +37,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveEndBlock(RuntimeScalar codeRef) {
-        RuntimeArray.unshift(endBlocks, codeRef);
+        RuntimeArray.unshift(getEndBlocks(), codeRef);
     }
 
     /**
@@ -39,7 +47,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveInitBlock(RuntimeScalar codeRef) {
-        RuntimeArray.unshift(initBlocks, codeRef);
+        RuntimeArray.unshift(getInitBlocks(), codeRef);
     }
 
     /**
@@ -49,7 +57,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveCheckBlock(RuntimeScalar codeRef) {
-        RuntimeArray.push(checkBlocks, codeRef);
+        RuntimeArray.push(getCheckBlocks(), codeRef);
     }
 
     /**
@@ -65,6 +73,7 @@ public class SpecialBlock {
             getGlobalVariable("main::?").set(0);
         }
         
+        RuntimeArray endBlocks = getEndBlocks();
         while (!endBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.shift(endBlocks);
             if (block.getDefinedBoolean()) {
@@ -85,6 +94,7 @@ public class SpecialBlock {
      * Executes all code blocks stored in the initBlocks array in FIFO order.
      */
     public static void runInitBlocks() {
+        RuntimeArray initBlocks = getInitBlocks();
         while (!initBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(initBlocks);
             if (block.getDefinedBoolean()) {
@@ -97,6 +107,7 @@ public class SpecialBlock {
      * Executes all code blocks stored in the checkBlocks array in LIFO order.
      */
     public static void runCheckBlocks() {
+        RuntimeArray checkBlocks = getCheckBlocks();
         while (!checkBlocks.isEmpty()) {
             RuntimeScalar block = RuntimeArray.pop(checkBlocks);
             if (block.getDefinedBoolean()) {

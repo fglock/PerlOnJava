@@ -9,7 +9,9 @@ package org.perlonjava.runtime.runtimetypes;
  */
 public class RuntimeControlFlowRegistry {
     // Thread-local storage for control flow markers
-    private static final ThreadLocal<ControlFlowMarker> currentMarker = new ThreadLocal<>();
+    private static ExecutionRuntimeState state() {
+        return PerlRuntime.current().executionState();
+    }
 
     /**
      * Register a control flow marker.
@@ -18,7 +20,7 @@ public class RuntimeControlFlowRegistry {
      * @param marker The control flow marker to register
      */
     public static void register(ControlFlowMarker marker) {
-        currentMarker.set(marker);
+        state().controlFlowMarker = marker;
     }
 
     /**
@@ -27,7 +29,7 @@ public class RuntimeControlFlowRegistry {
      * @return true if a marker is registered
      */
     public static boolean hasMarker() {
-        return currentMarker.get() != null;
+        return state().controlFlowMarker != null;
     }
 
     /**
@@ -36,7 +38,7 @@ public class RuntimeControlFlowRegistry {
      * @return The marker, or null if none
      */
     public static ControlFlowMarker getMarker() {
-        return currentMarker.get();
+        return state().controlFlowMarker;
     }
 
     /**
@@ -44,7 +46,7 @@ public class RuntimeControlFlowRegistry {
      * This is called after the marker has been handled by a loop.
      */
     public static void clear() {
-        currentMarker.remove();
+        state().controlFlowMarker = null;
     }
 
     /**
@@ -56,7 +58,7 @@ public class RuntimeControlFlowRegistry {
      * @return true if the marker matches and was cleared
      */
     public static boolean checkAndClear(ControlFlowType type, String label) {
-        ControlFlowMarker marker = currentMarker.get();
+        ControlFlowMarker marker = state().controlFlowMarker;
         if (marker == null) {
             return false;
         }
@@ -90,7 +92,7 @@ public class RuntimeControlFlowRegistry {
      * @return true if there's a GOTO marker for this label
      */
     public static boolean checkGoto(String label) {
-        ControlFlowMarker marker = currentMarker.get();
+        ControlFlowMarker marker = state().controlFlowMarker;
         if (marker == null || marker.type != ControlFlowType.GOTO) {
             return false;
         }
@@ -111,7 +113,7 @@ public class RuntimeControlFlowRegistry {
      * @return 0=no action, 1=LAST, 2=NEXT, 3=REDO, 4=GOTO (leave in registry)
      */
     public static int checkLoopAndGetAction(String labelName) {
-        ControlFlowMarker marker = currentMarker.get();
+        ControlFlowMarker marker = state().controlFlowMarker;
         if (marker == null) {
             return 0;  // No marker
         }
@@ -162,7 +164,7 @@ public class RuntimeControlFlowRegistry {
      * This is called at program exit or when returning from a subroutine to the top level.
      */
     public static void throwIfUncaught() {
-        ControlFlowMarker marker = currentMarker.get();
+        ControlFlowMarker marker = state().controlFlowMarker;
         if (marker != null) {
             clear();
             marker.throwError();
@@ -190,4 +192,3 @@ public class RuntimeControlFlowRegistry {
         return RuntimeControlFlowList.createFromAction(action, labelName);
     }
 }
-

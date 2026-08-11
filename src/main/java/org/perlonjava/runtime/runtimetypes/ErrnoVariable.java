@@ -341,13 +341,15 @@ public class ErrnoVariable extends RuntimeScalar {
     }
 
     // Stack to save errno/message during local()
-    private static final java.util.Stack<int[]> errnoStack = new java.util.Stack<>();
-    private static final java.util.Stack<String> messageStack = new java.util.Stack<>();
+    @SuppressWarnings("unchecked")
+    private static java.util.Stack<SavedErrno> errnoStack() {
+        return (java.util.Stack<SavedErrno>) (java.util.Stack<?>)
+                PerlRuntime.current().executionState().errnoStates;
+    }
 
     @Override
     public void dynamicSaveState() {
-        errnoStack.push(new int[]{errno});
-        messageStack.push(message);
+        errnoStack().push(new SavedErrno(errno, message));
         super.dynamicSaveState();
         // After saving, reset to the default "no error" state so that
         // `local $!;` actually clears the variable inside the dynamic scope,
@@ -361,11 +363,11 @@ public class ErrnoVariable extends RuntimeScalar {
     @Override
     public void dynamicRestoreState() {
         super.dynamicRestoreState();
+        java.util.Stack<SavedErrno> errnoStack = errnoStack();
         if (!errnoStack.isEmpty()) {
-            errno = errnoStack.pop()[0];
-        }
-        if (!messageStack.isEmpty()) {
-            message = messageStack.pop();
+            SavedErrno saved = errnoStack.pop();
+            errno = saved.errno;
+            message = saved.message;
         }
     }
 
@@ -387,6 +389,9 @@ public class ErrnoVariable extends RuntimeScalar {
             this.value = active.value.value;
             this.blessId = active.value.blessId;
         }
+    }
+
+    private record SavedErrno(int errno, String message) {
     }
 
     private record ErrnoState(int errno, String message, RuntimeScalar value) {

@@ -61,7 +61,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Static stack to store saved "local" states of RuntimeScalar instances
-    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+    private static Stack<RuntimeScalar> dynamicStateStack() {
+        return PerlRuntime.current().executionState().scalarDynamicStates;
+    }
 
     // Pre-compiled regex pattern for decimal numification fast-path
     // INTEGER_PATTERN replaced with isIntegerString() for better performance
@@ -3984,7 +3986,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.firstClassRegexScalar = this.firstClassRegexScalar;
         currentState.formatPictureTainted = this.formatPictureTainted;
         // Push the current state onto the stack
-        dynamicStateStack.push(currentState);
+        dynamicStateStack().push(currentState);
         // Clear the current type and value
         this.type = UNDEF;
         this.value = null;
@@ -4005,6 +4007,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     @Override
     public void dynamicRestoreState() {
+        Stack<RuntimeScalar> dynamicStateStack = dynamicStateStack();
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();

@@ -87,7 +87,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public Set<Entry<String, RuntimeScalar>> entrySet() {
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
             if (namedCaptures != null) {
                 for (Map.Entry<String, List<String>> e : namedCaptures.entrySet()) {
                     if (this.mode == Id.CAPTURE_ALL) {
@@ -123,7 +123,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     @Override
     public RuntimeScalar get(Object key) {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
             if (namedCaptures != null && key instanceof String name) {
                 List<String> captures = namedCaptures.get(name);
                 if (captures == null) return scalarUndef;
@@ -153,12 +153,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public boolean containsKey(Object key) {
         if (this.mode == Id.CAPTURE_ALL) {
             // For %-, all named groups exist (even non-participating ones)
-            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
             return namedCaptures != null && key instanceof String name && namedCaptures.containsKey(name);
         }
         if (this.mode == Id.CAPTURE) {
             // For %+, only groups that actually captured
-            Map<String, List<String>> namedCaptures = RuntimeRegex.lastNamedCaptureGroups;
+            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
             if (namedCaptures != null && key instanceof String name) {
                 List<String> captures = namedCaptures.get(name);
                 return captures != null && captures.stream().anyMatch(v -> v != null);
