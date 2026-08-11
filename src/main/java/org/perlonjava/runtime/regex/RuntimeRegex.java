@@ -2300,6 +2300,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 String replacementStr;
                 if (replacementIsCode) {
                     // Evaluate the replacement as code
+                    // During a destructive s///e, Perl exposes the current
+                    // match start through pos($target) to replacement code.
+                    // The final string mutation invalidates pos again. A
+                    // non-destructive /r substitution leaves the target's
+                    // original pos untouched.
+                    if (destructiveReplacement) {
+                        RuntimePosLvalue.pos(string).set(matcher.start());
+                    }
                     // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
                     RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                     RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
@@ -2365,6 +2373,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                         String retryReplacementStr;
                         if (replacementIsCode) {
+                            if (destructiveReplacement) {
+                                RuntimePosLvalue.pos(string).set(retryMatcher.start());
+                            }
                             RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                             RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
                             RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());

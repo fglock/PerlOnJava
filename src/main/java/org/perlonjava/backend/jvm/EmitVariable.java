@@ -1028,7 +1028,14 @@ public class EmitVariable {
                 if (pooledRhsList) {
                     ctx.javaClassInfo.releaseSpillSlot();
                 }
-                EmitOperator.handleScalarContext(emitterVisitor, node);
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+                    // A final list assignment in a subroutine inherits the
+                    // caller's context. RuntimeArray.scalar() uses the RHS
+                    // element count recorded by setFromList().
+                    emitRuntimeContextConversion(emitterVisitor, "@");
+                } else {
+                    EmitOperator.handleScalarContext(emitterVisitor, node);
+                }
                 break;
             default:
                 // Check if this is a chop/chomp that can't be an lvalue

@@ -324,7 +324,7 @@ public class DigestSHA3 extends PerlModuleBase {
         if (s == null) return scalarUndef.getList();
         byte[] out = s.finishDigest();
         s.rewind();
-        return new RuntimeScalar(new String(out, StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(out).getList();
     }
 
     /** hexdigest($self) -> hex string; auto-rewinds */
@@ -351,7 +351,7 @@ public class DigestSHA3 extends PerlModuleBase {
         if (s == null) return scalarUndef.getList();
         byte[] out = s.squeeze();
         if (out == null) return scalarUndef.getList();
-        return new RuntimeScalar(new String(out, StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(out).getList();
     }
 
     /** clone($self) -> new blessed object with duplicated state */
@@ -420,7 +420,7 @@ public class DigestSHA3 extends PerlModuleBase {
 
     // SHA3-224
     public static RuntimeList sha3_224(RuntimeArray a, int c) {
-        return new RuntimeScalar(new String(oneShot(224, a), StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(oneShot(224, a)).getList();
     }
     public static RuntimeList sha3_224_hex(RuntimeArray a, int c) {
         return new RuntimeScalar(toHex(oneShot(224, a))).getList();
@@ -431,7 +431,7 @@ public class DigestSHA3 extends PerlModuleBase {
 
     // SHA3-256
     public static RuntimeList sha3_256(RuntimeArray a, int c) {
-        return new RuntimeScalar(new String(oneShot(256, a), StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(oneShot(256, a)).getList();
     }
     public static RuntimeList sha3_256_hex(RuntimeArray a, int c) {
         return new RuntimeScalar(toHex(oneShot(256, a))).getList();
@@ -442,7 +442,7 @@ public class DigestSHA3 extends PerlModuleBase {
 
     // SHA3-384
     public static RuntimeList sha3_384(RuntimeArray a, int c) {
-        return new RuntimeScalar(new String(oneShot(384, a), StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(oneShot(384, a)).getList();
     }
     public static RuntimeList sha3_384_hex(RuntimeArray a, int c) {
         return new RuntimeScalar(toHex(oneShot(384, a))).getList();
@@ -453,7 +453,7 @@ public class DigestSHA3 extends PerlModuleBase {
 
     // SHA3-512
     public static RuntimeList sha3_512(RuntimeArray a, int c) {
-        return new RuntimeScalar(new String(oneShot(512, a), StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(oneShot(512, a)).getList();
     }
     public static RuntimeList sha3_512_hex(RuntimeArray a, int c) {
         return new RuntimeScalar(toHex(oneShot(512, a))).getList();
@@ -464,7 +464,7 @@ public class DigestSHA3 extends PerlModuleBase {
 
     // SHAKE128 — default output 168 bytes per CPAN module
     public static RuntimeList shake128(RuntimeArray a, int c) {
-        return new RuntimeScalar(new String(oneShot(128000, a), StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(oneShot(128000, a)).getList();
     }
     public static RuntimeList shake128_hex(RuntimeArray a, int c) {
         return new RuntimeScalar(toHex(oneShot(128000, a))).getList();
@@ -475,7 +475,7 @@ public class DigestSHA3 extends PerlModuleBase {
 
     // SHAKE256 — default output 136 bytes per CPAN module
     public static RuntimeList shake256(RuntimeArray a, int c) {
-        return new RuntimeScalar(new String(oneShot(256000, a), StandardCharsets.ISO_8859_1)).getList();
+        return new RuntimeScalar(oneShot(256000, a)).getList();
     }
     public static RuntimeList shake256_hex(RuntimeArray a, int c) {
         return new RuntimeScalar(toHex(oneShot(256000, a))).getList();

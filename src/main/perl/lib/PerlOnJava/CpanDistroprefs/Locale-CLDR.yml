@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Locale::CLDR.
+
+  Run the upstream suite except for t/06-Segmentation.t. That test compiles
+  Perl recursive regex subroutines such as (?&set), which Java's regex engine
+  does not provide. All other locale, date/time, number, plural, collation,
+  and data tests stay enabled.
+match:
+  distribution: "^JGNI/Locale-CLDR-v"
+test:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::LocaleCLDR -e "PerlOnJava::Distroprefs::LocaleCLDR::test_phase()"'

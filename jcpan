@@ -92,6 +92,18 @@ fi
 # Override: JPERL_TEST_TIMEOUT=0 (disable) or JPERL_TEST_TIMEOUT=900 (15 min)
 export JPERL_TEST_TIMEOUT="${JPERL_TEST_TIMEOUT:-900}"
 
+# CPAN suites routinely contain parser and regex stress tests whose recursion
+# depth is valid for Perl but exceeds the JVM's small default thread stack.
+# Give test subprocesses the same bounded large-stack baseline used by the
+# core compatibility runner. Preserve an explicit per-test override and any
+# caller-supplied JVM options.
+if [[ -z "${PERLONJAVA_TEST_JPERL_OPTS:-}" ]]; then
+    case " ${JPERL_OPTS:-} " in
+        *" -Xss"*) export PERLONJAVA_TEST_JPERL_OPTS="$JPERL_OPTS" ;;
+        *) export PERLONJAVA_TEST_JPERL_OPTS="${JPERL_OPTS:+$JPERL_OPTS }-Xss256m" ;;
+    esac
+fi
+
 # Enable the orphan-exit watchdog in every jperl this run spawns. If the
 # parent jcpan / test_harness process is killed (e.g. SIGKILL'd by the
 # user, or terminated by a CI step), each child JVM polls its initial

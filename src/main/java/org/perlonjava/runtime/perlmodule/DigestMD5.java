@@ -354,7 +354,7 @@ public class DigestMD5 extends PerlModuleBase {
 
                 // Add a fake 16-byte state buffer (MD5 internal state)
                 byte[] stateBuffer = new byte[16];
-                RuntimeArray.push(result, new RuntimeScalar(new String(stateBuffer, StandardCharsets.ISO_8859_1)));
+                RuntimeArray.push(result, new RuntimeScalar(stateBuffer));
 
                 // No unprocessed data in our implementation
 

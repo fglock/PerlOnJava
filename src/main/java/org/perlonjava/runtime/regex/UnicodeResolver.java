@@ -500,6 +500,14 @@ public class UnicodeResolver {
 
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
         try {
+            // Perl accepts a leading caret inside the braces as property
+            // negation: \p{^Latin} is equivalent to \P{Latin}, while
+            // \P{^Latin} cancels the negation. Java does not accept the caret
+            // form, so fold it into the outer negation flag before resolving.
+            if (property.startsWith("^")) {
+                property = property.substring(1).trim();
+                negated = !negated;
+            }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
                 if (!userPropertyName.matches("[A-Za-z_][A-Za-z0-9_]*")) {

@@ -72,6 +72,8 @@ our @EXPORT = qw(
     LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
     HUGE_VAL
     localeconv mktime setlocale strftime
+    abs acos asin atan atan2 ceil cos cosh exp fabs floor fmod frexp
+    ldexp log log10 modf pow sin sinh sqrt tan tanh strtod
 );
 our @EXPORT_OK = qw(
     # Process functions

@@ -1151,6 +1151,19 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId == 0
                     && hasWeakRefs
+                    && RuntimeCode.argsStackDepth() > 1) {
+                // A returned aggregate can be reparented into another aggregate
+                // while a nested call still owns the only compiler-visible
+                // temporary. Mojo::DOM58 does this when it parses replacement
+                // markup, weakens child-to-parent links, and splices the parsed
+                // nodes into the live DOM. Selective refcounts can hit zero as
+                // the temporary parser tree unwinds even though the outer call
+                // already holds the parent strongly. Defer the unblessed weak
+                // target just as we do for ordinary blessed objects below; a
+                // later top-level sweep can still clear a genuinely dead tree.
+                base.refCount = 1;
+            } else if (base.blessId == 0
+                    && hasWeakRefs
                     && ReachabilityWalker.hasStrongCycle(base)) {
                 // Unblessed self-retaining cycles are intentionally leaked by
                 // Perl's refcounting. AnyEvent timers use this shape: the weak

@@ -2030,6 +2030,17 @@ public class CompileAssignment {
                 if (outerContext == RuntimeContextType.SCALAR) {
                     // In scalar context, return the RHS element count.
                     bytecodeCompiler.lastResultReg = countReg;
+                } else if (outerContext == RuntimeContextType.RUNTIME) {
+                    // A final list assignment in a subroutine inherits the
+                    // caller's context. Preserve the list-assignment result
+                    // for list callers, but expose its recorded RHS count to
+                    // scalar callers (for example: sub { () = /.../g }).
+                    int dynamicResultReg = bytecodeCompiler.allocateOutputRegister();
+                    bytecodeCompiler.emit(Opcodes.SCALAR_IF_WANTARRAY);
+                    bytecodeCompiler.emitReg(dynamicResultReg);
+                    bytecodeCompiler.emitReg(resultReg);
+                    bytecodeCompiler.emitReg(2); // wantarray register
+                    bytecodeCompiler.lastResultReg = dynamicResultReg;
                 } else {
                     // In list context, return the assigned values (after hash dedup etc.)
                     bytecodeCompiler.lastResultReg = resultReg;

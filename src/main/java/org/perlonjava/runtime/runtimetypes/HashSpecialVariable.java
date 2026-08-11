@@ -135,7 +135,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             if (containsNamespace(GlobalVariable.globalVariables, prefix) ||
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
                     containsNamespace(GlobalVariable.globalHashes, prefix) ||
-                    containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
+                    containsVisibleCodeWithPrefix(prefix) ||
                     GlobalVariable.containsVisibleGlobalIORefWithPrefix(prefix) ||
                     containsNamespace(GlobalVariable.globalFormatRefs, prefix)) {
                 return new RuntimeStashEntry(prefix, true);
@@ -204,7 +204,21 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalVariables.keySet(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalArrays.keySet(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalHashes.keySet(), uniqueKeys, entries);
-        addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalCodeRefs.keySet(), uniqueKeys, entries);
+        // getGlobalCodeRef() pins undefined lookup placeholders so compiled call
+        // sites can be filled later. Those internal entries are not Perl stash
+        // globs. Only expose a CODE key after it has a definition or an explicit
+        // forward declaration; otherwise `exists $Pkg::{name}` becomes true
+        // merely because the compiler probed the name.
+        for (Map.Entry<String, RuntimeScalar> codeEntry : GlobalVariable.globalCodeRefs.entrySet()) {
+            RuntimeScalar scalar = codeEntry.getValue();
+            if (scalar == null || scalar.type != RuntimeScalarType.CODE
+                    || !(scalar.value instanceof RuntimeCode code)
+                    || (!code.defined() && !code.isDeclared)) {
+                continue;
+            }
+            addCachedStashEntryFromGlobalKey(
+                    namespace, codeEntry.getKey(), uniqueKeys, entries);
+        }
         addCachedStashEntriesFromGlobalKeys(
                 namespace, GlobalVariable.visibleGlobalIOKeys(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalFormatRefs.keySet(), uniqueKeys, entries);
@@ -390,7 +404,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
      */
     private boolean containsNamespace(Map<String, ?> map, String prefix) {
         for (String key : map.keySet()) {
-            if (key.startsWith(prefix)) {
+            if (matchesStashPrefix(key, prefix)) {
                 return true;
             }
         }
@@ -428,9 +442,30 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         return containsNamespace(GlobalVariable.globalVariables, prefix) ||
                 containsNamespace(GlobalVariable.globalArrays, prefix) ||
                 containsNamespace(GlobalVariable.globalHashes, prefix) ||
-                containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
+                containsVisibleCodeWithPrefix(prefix) ||
                 GlobalVariable.containsVisibleGlobalIORefWithPrefix(prefix) ||
                 containsNamespace(GlobalVariable.globalFormatRefs, prefix);
+    }
+
+    private boolean containsVisibleCodeWithPrefix(String prefix) {
+        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
+            if (!matchesStashPrefix(entry.getKey(), prefix)) {
+                continue;
+            }
+            RuntimeScalar scalar = entry.getValue();
+            if (scalar != null && scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode code
+                    && (code.defined() || code.isDeclared)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesStashPrefix(String key, String prefix) {
+        // Package entries own all child globs, but leaf glob lookups are exact:
+        // `exists $Pkg::{foo}` must not match `$Pkg::foobar`.
+        return prefix.endsWith("::") ? key.startsWith(prefix) : key.equals(prefix);
     }
 
     // Enum to represent the mode of operation for HashSpecialVariable
