@@ -50,6 +50,7 @@ public class PackWriter {
      * @param format The format character indicating the hex string type ('h' for low nybble first, 'H' for high nybble first).
      */
     public static void writeHexString(PackBuffer output, String str, int count, char format) {
+        int initialSize = output.size();
         int nulPos = str.indexOf('\0');
         int effectiveLen = nulPos >= 0 ? nulPos : str.length();
         int hexDigitsToProcess = Math.min(effectiveLen, count);
@@ -59,13 +60,11 @@ public class PackWriter {
         for (i = 0; i + 1 < hexDigitsToProcess; i += 2) {
             // Get first nybble
             char c1 = str.charAt(i);
-            int nybble1 = Character.digit(c1, 16);
-            if (nybble1 == -1) nybble1 = 0; // Default to 0 for invalid hex digit
+            int nybble1 = perlHexNybble(c1);
 
             // Get second nybble
             char c2 = str.charAt(i + 1);
-            int nybble2 = Character.digit(c2, 16);
-            if (nybble2 == -1) nybble2 = 0; // Default to 0 for invalid hex digit
+            int nybble2 = perlHexNybble(c2);
 
             int byteValue;
             if (format == 'h') {
@@ -82,8 +81,7 @@ public class PackWriter {
         // Handle the last hex digit if we have an odd count from input string
         if (i < hexDigitsToProcess) {
             char c = str.charAt(i);
-            int nybble = Character.digit(c, 16);
-            if (nybble == -1) nybble = 0;
+            int nybble = perlHexNybble(c);
 
             int byteValue;
             if (format == 'h') {
@@ -98,16 +96,19 @@ public class PackWriter {
             i++;
         }
 
-        // Zero-pad if count is larger than available hex digits
-        // Each pair of hex digits produces one byte, so we need (count - hexDigitsToProcess) / 2 more bytes
-        int remainingHexDigits = count - hexDigitsToProcess;
-        if (remainingHexDigits > 0) {
-            // Write zero bytes for the remaining hex digit pairs
-            int zeroBytesToWrite = (remainingHexDigits + 1) / 2; // Round up for odd counts
-            for (int j = 0; j < zeroBytesToWrite; j++) {
-                output.write(0);
-            }
+        // The requested nibble width rounds up once for the whole field.  An
+        // odd input nibble already occupies half of its output byte, so do not
+        // round the remaining padding independently (H16 with "0" is 8 bytes,
+        // not 9).
+        int targetBytes = (count + 1) / 2;
+        while (output.size() - initialSize < targetBytes) {
+            output.write(0);
         }
+    }
+
+    /** Perl folds every input character into a nibble, not just [0-9A-Fa-f]. */
+    private static int perlHexNybble(char value) {
+        return ((value & 0x0f) + (value > '9' ? 9 : 0)) & 0x0f;
     }
 
     /**

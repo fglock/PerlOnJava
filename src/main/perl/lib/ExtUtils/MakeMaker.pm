@@ -460,6 +460,11 @@ sub _install_pure_perl {
             if ($root_dh) {
                 while (my $entry = readdir($root_dh)) {
                     next if $entry =~ /^\.{1,2}$/ || $entry eq 'lib' || $entry eq 'blib';
+                    # Test helpers sometimes reopen a production package to
+                    # install fixture-only methods (IO-All's t/IO_Dumper.pm
+                    # reopens IO::All::Filesys).  They are not PMLIBDIRS and
+                    # must not overwrite the real library file in blib.
+                    next if $entry eq 't' || $entry eq 'xt';
                     next unless -d $entry;
                     find({
                         wanted => sub {
