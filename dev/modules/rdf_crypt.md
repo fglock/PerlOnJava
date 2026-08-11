@@ -9,7 +9,7 @@ distribution preferences.
 
 ## Progress Tracking
 
-### Current Status: Phase 3 verification in progress
+### Current Status: Phase 3 completed with upstream/unsupported exclusions
 
 ### Completed Phases
 
@@ -89,8 +89,31 @@ distribution preferences.
     receive the object, `undef`, and an empty string. This fixes recursive
     Set::Scalar rendering and other overloads that distinguish top-level calls
     from recursion using the extra arguments.
+  - Accepted leading dash-named arguments in qualified indirect-object calls,
+    such as `throw RDF::Trine::Error -text => $message`, without changing
+    ordinary unary-minus parsing.
+  - Made pseudo-constant CODE installation advance the package MRO generation
+    and report the `constant::__ANON__` CV identity expected by Class::MOP.
+    Package::Stash's pure-Perl backend now reads that real CODE glob slot
+    directly, allowing Moose roles to provide constant methods.
+  - Merged optional relationships from static META back into generated MYMETA
+    prerequisites according to CPAN's existing recommends/suggests policies.
+    This discovers split runtime packages such as `Mail::Transport` without a
+    distribution preference.
+  - Propagated `AUTOMATED_TESTING=1` alongside CPAN's other noninteractive
+    environment settings. This prevents dependency build scripts such as
+    DBD::CSV's from waiting forever for input despite `use_prompt_default`.
+  - Corrected the existing Bouncy Castle-backed `Crypt::OpenSSL::RSA`
+    `use_pkcs1_padding` selector. PKCS#1 v1.5 is now selectable for the legacy
+    signature/encryption API instead of dying at mode-selection time.
+  - Restored the normal Exporter interface in the bundled
+    `Crypt::OpenSSL::Random` wrapper. Consumers can import the Java
+    `SecureRandom`-backed `random_bytes` and related functions.
+  - Prevented recursive boolification when an overload legally returns its own
+    object. Perl treats that result as true; PerlOnJava previously exhausted
+    the JVM stack in `RDF::Trine::Iterator`.
 
-- [ ] Phase 3: End-to-end verification
+- [x] Phase 3: End-to-end verification (2026-08-11)
   - System Perl: `Algorithm::Combinatorics` passes 17 files / 361 tests;
     `Cache::LRU` passes 2 files / 38 tests.
   - PerlOnJava: `Algorithm::Combinatorics` passes 17 files / 361 tests;
@@ -102,12 +125,31 @@ distribution preferences.
     PerlOnJava, including overload mutator copying (7 assertions), unary ABI
     (6), and sort localization (4). The exact Type::Tiny
     `t/21-types/StrMatch-more.t` failure passes 9/9 after the regex fix.
-  - The exact `./jcpan -t RDF::Crypt` traversal progressed beyond the former
-    loop and then exposed the DBI handle-model issue above. A targeted
-    `./jcpan -t RDF::Trine` verification passed the repaired
+  - The bounded exact `./jcpan -t RDF::Crypt` traversal completes dependency
+    resolution rather than looping and exposed the reusable DBI,
+    indirect-object, Moose constant-method, static-recommendation,
+    noninteractive-build, RSA selector, random export, and bool-overload issues
+    above.
+    A targeted `./jcpan -t RDF::Trine` verification passed the repaired
     `DBIx::Connector` stage and ran 9,052 Type::Tiny assertions before exposing
-    the embedded-code-block compiler gap above. The exact requested
-    `./jcpan -t RDF::Crypt` traversal is now being rerun after that fix.
+    the embedded-code-block compiler gap.
+  - With the final shared fixes packaged, RDF::Crypt's plain encryption test
+    passes 5/5 and its RDF model encryption test passes 1/1. Its basic and RDF
+    signing files also pass. No RDF::Crypt preference was added.
+  - Two target-distribution results remain intentionally outside this work:
+    `t/03signing.t` fails only its Unicode case because RDF::Crypt encodes text
+    before signing but not before verification, and `t/06manifests.t` uses
+    `Test::HTTP::Server`'s unsupported `fork`, producing duplicate TAP plans.
+    System Perl cannot load the locally absent `Crypt::OpenSSL::RSA`, so the
+    distribution is not a system-Perl passing baseline under the requested
+    rule.
+  - New focused tests for indirect named arguments, MRO generation,
+    Package::Stash constant CODE lookup, Moose role constants, static META
+    recommendations, PKCS#1 selection, OpenSSL random exports, and self-returning
+    bool overloads pass on both PerlOnJava backends. The final focused totals
+    are 14 assertions on the JVM backend and 12 on the interpreter (Moose skips
+    there). System Perl passes 10 assertions and skips the three unavailable
+    optional modules.
   - Set::Scalar's `basic.t`, `custom_display.t`, and recursive `set_set.t` now
     pass. Its system-Perl suite passes 22 files / 2,652 tests. Two PerlOnJava
     gaps remain: indirect-constructor parsing in `intersection.t` and lifetime
@@ -121,19 +163,15 @@ distribution preferences.
 
 ### Next Steps
 
-1. Let the bounded exact `./jcpan -t RDF::Crypt` verification complete.
-2. Reduce and fix any new PerlOnJava-only failure after the current dependency
-   frontier, or record a
-   dependency as ignorable if its distribution fails under system Perl too.
-3. Protect earlier object-valued call arguments while later arguments are
+1. Protect earlier object-valued call arguments while later arguments are
    evaluated, then fix the legacy indirect-constructor dereference parse in
    Set::Scalar's `intersection.t`.
-4. Run final focused regressions and process cleanup checks.
+2. Revisit `t/06manifests.t` only if PerlOnJava gains process `fork` support or
+   Test::HTTP::Server gains a Java-thread transport.
 
 ### Open Questions
 
-- Does the remaining RDF dependency graph complete inside the clean bounded
-  run, or expose another PerlOnJava-only failure after Set::Scalar?
+- None for the RDF::Crypt compiler and CPAN tooling path.
 
 ## Related
 

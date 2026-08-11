@@ -257,6 +257,10 @@ public class SubroutineParser {
                 }
             }
             LexerToken token = peek(parser);
+            boolean qualifiedNamedArgument = packageName.contains("::")
+                    && token.text.equals("-")
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.IDENTIFIER;
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
             boolean isKnownSub = false;
@@ -309,7 +313,8 @@ public class SubroutineParser {
             } else {
                 // Not a known subroutine, check if it's valid indirect object syntax
                 if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
-                    if (!(token.text.equals("->") || token.text.equals("=>") || INFIX_OP.contains(token.text))) {
+                    if (!(token.text.equals("->") || token.text.equals("=>")
+                            || (INFIX_OP.contains(token.text) && !qualifiedNamedArgument))) {
                         // System.out.println("  package loaded: " + packageName + "->" + subName);
 
                         ListNode arguments;

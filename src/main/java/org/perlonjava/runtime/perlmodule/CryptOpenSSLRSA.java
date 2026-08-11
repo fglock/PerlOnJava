@@ -721,12 +721,7 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
         return scalarTrue.getList();
     }
     public static RuntimeList use_no_padding(RuntimeArray args, int ctx)         { return setPadding(args, Padding.NONE); }
-    public static RuntimeList use_pkcs1_padding(RuntimeArray args, int ctx) {
-        // Crypt::OpenSSL::RSA 0.35+ makes this fatal. We match that.
-        die(new RuntimeScalar("use_pkcs1_padding: PKCS#1 v1.5 padding is insecure and disabled"),
-                new RuntimeScalar("\n"));
-        return scalarFalse.getList();
-    }
+    public static RuntimeList use_pkcs1_padding(RuntimeArray args, int ctx)      { return setPadding(args, Padding.PKCS1); }
     public static RuntimeList use_pkcs1_oaep_padding(RuntimeArray args, int ctx) { return setPadding(args, Padding.PKCS1_OAEP); }
     public static RuntimeList use_pkcs1_pss_padding(RuntimeArray args, int ctx)  { return setPadding(args, Padding.PKCS1_PSS); }
     public static RuntimeList use_sslv23_padding(RuntimeArray args, int ctx)     { return setPadding(args, Padding.SSLV23); }

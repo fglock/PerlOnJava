@@ -1081,7 +1081,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 RuntimeCode code = (RuntimeCode) value;
                 yield code.packageName != null || code.subName != null || code.defined();
             }
-            default -> Overload.boolify(this).getBoolean();
+            default -> {
+                RuntimeScalar overloaded = Overload.boolify(this);
+                // A legal bool overload may return $_[0]. Perl treats that
+                // self-result as a true object instead of recursively invoking
+                // the same overload until the C stack is exhausted.
+                if (isSameOverloadTarget(overloaded, this)) yield true;
+                yield overloaded.getBoolean();
+            }
         };
     }
 
@@ -2107,14 +2114,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // we. Detect by identity first, then by depth via a ThreadLocal
                 // guard inside Overload.stringify (handles the transitive case).
                 RuntimeScalar overloaded = Overload.stringify(this);
-                if (isSameOverloadStringificationTarget(overloaded, this)) yield toStringRef();
+                if (isSameOverloadTarget(overloaded, this)) yield toStringRef();
                 yield overloaded.toString();
             }
         };
     }
 
-    private static boolean isSameOverloadStringificationTarget(RuntimeScalar overloaded,
-                                                               RuntimeScalar original) {
+    private static boolean isSameOverloadTarget(RuntimeScalar overloaded,
+                                                RuntimeScalar original) {
         RuntimeScalar resolvedOverloaded = unwrapReadonlyScalar(overloaded);
         RuntimeScalar resolvedOriginal = unwrapReadonlyScalar(original);
         if (resolvedOverloaded == resolvedOriginal) return true;
