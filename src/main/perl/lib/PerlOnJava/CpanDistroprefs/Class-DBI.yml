@@ -7,6 +7,6 @@ comment: |
   HasA cache lookup, so a false-overloaded live object is not treated as a
   cache miss.
 match:
-  distribution: "^.*/Class-DBI-"
+  distribution: "^.*/Class-DBI-v?[0-9]"
 patches:
   - "Class-DBI/Class-DBI.pm.patch"

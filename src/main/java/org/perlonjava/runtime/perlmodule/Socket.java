@@ -204,10 +204,6 @@ public class Socket extends PerlModuleBase {
             if (ipAddress.length() == 4) {
                 // Already in binary format
                 ipBytes = ipAddress.getBytes(StandardCharsets.ISO_8859_1);
-            } else if (ipAddress.length() == 1) {
-                // Handle case where gethostbyname returns a single character in scalar context
-                // This is likely a bug - let's use localhost IP as fallback
-                ipBytes = new byte[]{127, 0, 0, 1}; // 127.0.0.1
             } else {
                 // Parse as dotted decimal notation
                 String[] parts = ipAddress.split("\\.");

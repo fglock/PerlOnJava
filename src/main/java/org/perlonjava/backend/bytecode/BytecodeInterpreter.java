@@ -2300,7 +2300,8 @@ public class BytecodeInterpreter {
                                  Opcodes.GETLOGIN, Opcodes.GETPWNAM, Opcodes.GETPWUID,
                                  Opcodes.GETGRNAM, Opcodes.GETGRGID, Opcodes.GETGRENT,
                                  Opcodes.SETGRENT, Opcodes.ENDGRENT,
-                                 Opcodes.GETHOSTBYADDR, Opcodes.GETSERVBYNAME,
+                                 Opcodes.GETHOSTBYNAME, Opcodes.GETHOSTBYADDR,
+                                 Opcodes.GETSERVBYNAME,
                                  Opcodes.GETSERVBYPORT, Opcodes.GETPROTOBYNAME,
                                  Opcodes.GETPROTOBYNUMBER, Opcodes.ENDHOSTENT,
                                  Opcodes.ENDNETENT, Opcodes.ENDPROTOENT,
@@ -3573,6 +3574,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.GETHOSTBYADDR -> {
                 return MiscOpcodeHandler.execute(Opcodes.GETHOSTBYADDR, bytecode, pc, registers);
+            }
+            case Opcodes.GETHOSTBYNAME -> {
+                return MiscOpcodeHandler.execute(Opcodes.GETHOSTBYNAME, bytecode, pc, registers);
             }
             case Opcodes.GETSERVBYNAME -> {
                 return MiscOpcodeHandler.execute(Opcodes.GETSERVBYNAME, bytecode, pc, registers);

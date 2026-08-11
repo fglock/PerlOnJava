@@ -44,7 +44,12 @@ final class JoniRegexPattern {
         // Oniguruma's MULTILINE option controls whether dot matches newline.
         if (flags.isDotAll()) options |= Option.MULTILINE;
         if (flags.isAscii()) options |= Option.ASCII_RANGE;
+        // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
+        // when a pattern also contains named groups. Perl keeps both kinds of
+        // captures numbered. Force that behavior unless /n explicitly disables
+        // unnamed captures.
         if (flags.isNonCapturing()) options |= Option.DONT_CAPTURE_GROUP;
+        else options |= Option.CAPTURE_GROUP;
         return options;
     }
 
