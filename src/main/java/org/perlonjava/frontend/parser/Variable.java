@@ -128,6 +128,24 @@ public class Variable {
             return new StringNode("", parser.tokenIndex);
         }
 
+        // `$#{@{...}}` is the last-index operator applied to a braced array
+        // dereference. Do not treat the `{` as hash access on a variable
+        // named `@`; parse the array expression as the operand of `$#`.
+        if (sigil.equals("$#") && nextNonWsToken.text.equals("{")) {
+            int contentIndex = Whitespace.skipWhitespace(parser, nextNonWsIndex + 1, parser.tokens);
+            if (contentIndex < parser.tokens.size()
+                    && parser.tokens.get(contentIndex).text.equals("@")) {
+                parser.tokenIndex = nextNonWsIndex;
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+                Node arrayExpression = parser.parseExpression(0);
+                if (!TokenUtils.peek(parser).text.equals("}")) {
+                    parser.throwError("Missing closing brace in $# array expression");
+                }
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                return new OperatorNode("$#", arrayExpression, parser.tokenIndex);
+            }
+        }
+
         // Special case 3: ${...}, @{...}, %{...} - braced variable forms
         // PRE-CHECK: If next token is '{', skip identifier parsing and go directly to parseBracedVariable
         // This avoids backtracking and heredoc processing issues

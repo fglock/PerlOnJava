@@ -1480,6 +1480,10 @@ public class CompileOperator {
                 arrayReg = bc.allocateRegister();
                 if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
                 else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
+            } else if (operandOp.operator.equals("@")) {
+                // `$#{@{...}}` already produces the dereferenced array.
+                operandOp.accept(bc);
+                arrayReg = bc.lastResultReg;
             } else bc.throwCompilerException("$# requires array variable or dereferenced array");
         } else if (node.operand instanceof IdentifierNode) {
             String varName = "@" + ((IdentifierNode) node.operand).name;
