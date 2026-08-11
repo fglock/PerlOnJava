@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
@@ -10,7 +11,6 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
-import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -203,6 +203,8 @@ public class EvalStringHandler {
                                              int siteStrictOptions,
                                              int siteFeatureFlags,
                                              boolean isEvalbytes) {
+        PerlLanguageProvider.CompilationLockGuard compilationLock =
+                PerlLanguageProvider.acquireCompilationLock();
         List<EvalSeedAlias> seedAliases = new ArrayList<>();
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
@@ -455,10 +457,14 @@ public class EvalStringHandler {
                 evalCode = evalCode.withCapturedVars(currentCode.capturedVars);
             }
 
-            // These aliases are parser/compile-time helpers only. Direct eval
-            // body references use captured registers, and named subs have
-            // already captured the aliased cells by this point.
+            // Compiler-only aliases and scope must be restored before another
+            // compiler is admitted. Ordinary eval execution runs unlocked.
             deactivateEvalSeedAliases(seedAliases);
+            if (compileTimeMutationScope != savedCurrentScope) {
+                savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+            }
+            SpecialBlockParser.setCurrentScope(savedCurrentScope);
+            compilationLock.close();
 
             // Step 6: Execute the compiled code.
             // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
@@ -491,11 +497,17 @@ public class EvalStringHandler {
             WarnDie.catchEval(e);
             return new RuntimeList(new RuntimeScalar());
         } finally {
-            deactivateEvalSeedAliases(seedAliases);
-            if (compileTimeMutationScope != savedCurrentScope) {
-                savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+            PerlLanguageProvider.COMPILE_LOCK.lock();
+            try {
+                deactivateEvalSeedAliases(seedAliases);
+                if (compileTimeMutationScope != savedCurrentScope) {
+                    savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+                }
+                SpecialBlockParser.setCurrentScope(savedCurrentScope);
+            } finally {
+                PerlLanguageProvider.COMPILE_LOCK.unlock();
+                compilationLock.close();
             }
-            SpecialBlockParser.setCurrentScope(savedCurrentScope);
         }
     }
 
@@ -541,6 +553,8 @@ public class EvalStringHandler {
                                            RuntimeBase[] capturedVars,
                                            String sourceName,
                                            int sourceLine) {
+        PerlLanguageProvider.CompilationLockGuard compilationLock =
+                PerlLanguageProvider.acquireCompilationLock();
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
         try {
@@ -612,6 +626,12 @@ public class EvalStringHandler {
             // Attach captured variables
             evalCode = evalCode.withCapturedVars(capturedVars);
 
+            if (compileTimeMutationScope != savedCurrentScope) {
+                savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+            }
+            SpecialBlockParser.setCurrentScope(savedCurrentScope);
+            compilationLock.close();
+
             // Scope currentPackage around eval — see Step 6 comment in evalStringHelper above.
             int pkgLevel = DynamicVariableManager.getLocalLevel();
             String savedPkg = InterpreterState.currentPackage.get().toString();
@@ -633,10 +653,16 @@ public class EvalStringHandler {
             WarnDie.catchEval(e);
             return RuntimeScalarCache.scalarUndef;
         } finally {
-            if (compileTimeMutationScope != savedCurrentScope) {
-                savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+            PerlLanguageProvider.COMPILE_LOCK.lock();
+            try {
+                if (compileTimeMutationScope != savedCurrentScope) {
+                    savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+                }
+                SpecialBlockParser.setCurrentScope(savedCurrentScope);
+            } finally {
+                PerlLanguageProvider.COMPILE_LOCK.unlock();
+                compilationLock.close();
             }
-            SpecialBlockParser.setCurrentScope(savedCurrentScope);
         }
     }
 

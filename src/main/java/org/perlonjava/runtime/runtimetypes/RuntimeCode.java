@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
@@ -1843,6 +1844,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
 
+        try (PerlLanguageProvider.CompilationLockGuard ignored =
+                     PerlLanguageProvider.acquireCompilationLock()) {
+
         rejectTaintedEval(code);
 
         // Retrieve the eval context that was saved at program compile-time
@@ -2227,6 +2231,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // IMPORTANT: Always pop in the finally block even if compilation fails.
             popEvalRuntimeContext(runtimeCtx);
         }
+        }
     }
 
     /**
@@ -2360,6 +2365,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Object[] runtimeValues,
             RuntimeArray args,
             int callContext) throws Throwable {
+
+        PerlLanguageProvider.CompilationLockGuard compilationLock =
+                PerlLanguageProvider.acquireCompilationLock();
+        try {
 
         rejectTaintedEval(code);
 
@@ -2749,6 +2758,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // RuntimeScalar object instead of creating a fresh one.
             deactivateEvalRuntimeAliases(runtimeCtx);
             runtimeCtx.aliases().clear();
+            setCurrentScope(savedCurrentScope);
+            compilationLock.close();
 
             // Execute the interpreted code
             // Track eval depth for $^S support
@@ -2813,6 +2824,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
         } finally {
+            PerlLanguageProvider.COMPILE_LOCK.lock();
+            try {
             evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
                     " $@=" + GlobalVariable.getGlobalVariable("main::@"));
             // Restore dynamic variables (local) to their state before eval
@@ -2833,6 +2846,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Clean up this eval's ThreadLocal stack entry.
             popEvalRuntimeContext(runtimeCtx);
+            } finally {
+                PerlLanguageProvider.COMPILE_LOCK.unlock();
+                compilationLock.close();
+            }
+        }
+        } finally {
+            compilationLock.close();
         }
     }
 
