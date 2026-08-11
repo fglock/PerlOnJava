@@ -29,6 +29,7 @@ import org.perlonjava.runtime.WarningBitsRegistry;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.resetAllGlobals;
 import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
@@ -55,17 +56,56 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
  */
 public class PerlLanguageProvider {
 
+    /**
+     * Serializes source parsing and code generation while compiler state is still
+     * process-global. The lock is deliberately reentrant because BEGIN, use,
+     * require, and eval STRING can compile recursively on the parser thread.
+     */
+    public static final ReentrantLock COMPILE_LOCK = new ReentrantLock();
+
+    /** Acquire exactly one compilation-lock hold. */
+    public static CompilationLockGuard acquireCompilationLock() {
+        COMPILE_LOCK.lock();
+        return new CompilationLockGuard();
+    }
+
+    /**
+     * An idempotent lexical owner for one lock hold. Idempotence lets mixed
+     * compile/execute methods release before ordinary execution while retaining
+     * reliable cleanup on every exceptional path.
+     */
+    public static final class CompilationLockGuard implements AutoCloseable {
+        private boolean closed;
+
+        private CompilationLockGuard() {
+        }
+
+        public boolean isClosed() {
+            return closed;
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                COMPILE_LOCK.unlock();
+            }
+        }
+    }
+
     private static boolean globalInitialized = false;
 
     public static void resetAll() {
-        globalInitialized = false;
-        GlobalContext.setThreadTaintMode(false);
-        resetAllGlobals();
-        // A prior script may have closed its Perl-level STDIN glob. Script
-        // engine resets run multiple top-level programs in one JVM, so give
-        // the next program a fresh wrapper around the process standard input.
-        RuntimeIO.stdin = new RuntimeIO(new StandardIO(System.in));
-        DataSection.reset();
+        try (CompilationLockGuard ignored = acquireCompilationLock()) {
+            globalInitialized = false;
+            GlobalContext.setThreadTaintMode(false);
+            resetAllGlobals();
+            // A prior script may have closed its Perl-level STDIN glob. Script
+            // engine resets run multiple top-level programs in one JVM, so give
+            // the next program a fresh wrapper around the process standard input.
+            RuntimeIO.stdin = new RuntimeIO(new StandardIO(System.in));
+            DataSection.reset();
+        }
     }
 
     /**
@@ -93,6 +133,12 @@ public class PerlLanguageProvider {
                                               boolean isTopLevelScript,
                                               int callerContext) throws Exception {
 
+        CompilationLockGuard compilationLock = acquireCompilationLock();
+        ScopedSymbolTable savedCurrentScope = null;
+        RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext = null;
+        boolean evalRuntimeContextSaved = false;
+        try {
+
         // The compiler options are also the source of truth for nested loads.
         // ModuleOperators creates fresh CompilerOptions instances for require/use
         // and reads RuntimeCode.USE_INTERPRETER when choosing their backend.  If
@@ -115,15 +161,15 @@ public class PerlLanguageProvider {
 
         // Save the current scope so we can restore it after execution.
         // This is critical because require/do should not leak their scope to the caller.
-        ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+        savedCurrentScope = SpecialBlockParser.getCurrentScope();
 
         // Save and clear the eval runtime context so that modules loaded via require/do
         // during eval STRING execution don't see the eval's captured variables.
         // Without this, SpecialBlockParser.runSpecialBlock would incorrectly alias
         // local variables in required modules to the eval's captured variables when
         // they share the same name (e.g., $caller in constant.pm vs $caller in eval scope).
-        RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
-                RuntimeCode.saveAndClearEvalRuntimeContextAndAliases();
+        savedEvalRuntimeContext = RuntimeCode.saveAndClearEvalRuntimeContextAndAliases();
+        evalRuntimeContextSaved = true;
 
         // Store the isMainProgram flag in CompilerOptions for use during code generation
         compilerOptions.isMainProgram = isTopLevelScript;
@@ -261,13 +307,21 @@ public class PerlLanguageProvider {
         ctx.symbolTable = ctx.symbolTable.snapShot();
         SpecialBlockParser.setCurrentScope(ctx.symbolTable);
 
-        try {
-            // Compile to executable (compiler or interpreter based on flag)
-            RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
+        // Compile to executable (compiler or interpreter based on flag)
+        RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
-            // Execute (unified path for both backends)
-            return executeCode(runtimeCode, ast, ctx, isTopLevelScript, callerContext);
+        // Ordinary program execution is not compiler work. Release this
+        // invocation's hold; an enclosing BEGIN compilation, if any, keeps
+        // its own reentrant hold until that compilation completes.
+        compilationLock.close();
+
+        // Execute (unified path for both backends)
+        return executeCode(runtimeCode, ast, ctx, isTopLevelScript, callerContext);
         } finally {
+            // Scope restoration mutates compiler-global state. Reacquire when
+            // ordinary execution already released this invocation's hold.
+            COMPILE_LOCK.lock();
+            try {
             // Restore the caller's scope so require/do doesn't leak its scope to the caller.
             // But do NOT restore for top-level scripts - we want the main script's pragmas to persist.
             if (savedCurrentScope != null && !isTopLevelScript) {
@@ -275,7 +329,13 @@ public class PerlLanguageProvider {
             }
             // Restore the eval runtime context so the caller's eval STRING compilation
             // can continue with its captured variables.
-            RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
+            if (evalRuntimeContextSaved) {
+                RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
+            }
+            } finally {
+                COMPILE_LOCK.unlock();
+                compilationLock.close();
+            }
         }
     }
 
@@ -307,6 +367,8 @@ public class PerlLanguageProvider {
                                              List<LexerToken> tokens,
                                              CompilerOptions compilerOptions,
                                              int contextType) throws Exception {
+
+        try (CompilationLockGuard ignored = acquireCompilationLock()) {
 
         // Keep AST execution consistent with source execution.  ASTs are used
         // by BEGIN-block wrappers, and those wrappers can themselves execute
@@ -399,6 +461,7 @@ public class PerlLanguageProvider {
             }
             // Restore the eval runtime context
             RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
+        }
         }
     }
 
@@ -497,11 +560,14 @@ public class PerlLanguageProvider {
                     if (CompilerOptions.DEBUG_ENABLED) {
                         ctx.logDebug("Falling back to bytecode interpreter after runtime verify error: " + t);
                     }
-                    BytecodeCompiler compiler = new BytecodeCompiler(
-                            ctx.compilerOptions.fileName,
-                            1,
-                            ctx.errorUtil);
-                    InterpretedCode interpretedCode = compiler.compile(ast, ctx);
+                    InterpretedCode interpretedCode;
+                    try (CompilationLockGuard ignored = acquireCompilationLock()) {
+                        BytecodeCompiler compiler = new BytecodeCompiler(
+                                ctx.compilerOptions.fileName,
+                                1,
+                                ctx.errorUtil);
+                        interpretedCode = compiler.compile(ast, ctx);
+                    }
                     result = interpretedCode.apply(new RuntimeArray(), executionContext);
                 } else {
                     throw t;
@@ -737,6 +803,9 @@ public class PerlLanguageProvider {
      * @throws Exception if compilation fails
      */
     public static Object compilePerlCode(CompilerOptions compilerOptions) throws Exception {
+        try (CompilationLockGuard ignored = acquireCompilationLock()) {
+        ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+        try {
         ArgumentParser.applyPerlShebangSwitches(compilerOptions.code, compilerOptions);
         GlobalContext.setThreadTaintMode(compilerOptions.taintMode);
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
@@ -785,5 +854,9 @@ public class PerlLanguageProvider {
 
         // Use unified compilation path (works for JSR 223 too!)
         return compileToExecutable(ast, ctx);
+        } finally {
+            SpecialBlockParser.setCurrentScope(savedCurrentScope);
+        }
+        }
     }
 }

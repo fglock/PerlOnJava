@@ -219,8 +219,10 @@ Acceptance:
 ### Phase 2 — Serialized compilation
 
 Add one documented `ReentrantLock` around every initial and runtime compilation
-path. Preserve reentrant nested compilation and release the lock before code
-execution.
+path, including lazy named-sub materialization and verifier fallback. Preserve
+reentrant nested compilation and release each entry point's own hold before
+ordinary code execution. `executePerlAST` remains locked because it runs
+compile-time `BEGIN` wrappers inside an enclosing parse.
 
 Acceptance: concurrent JVM/bytecode compilations, nested `BEGIN`/`require`, and
 both `eval STRING` paths are deterministic and deadlock-free.
@@ -442,7 +444,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 1 complete; awaiting review
+### Current Status: Phase 2 complete; awaiting review
 
 ### Completed Phases
 
@@ -454,6 +456,27 @@ measured benefit over platform threads/full clone.
   - Added concurrent generated-class-name coverage.
   - Validation: `make` passed; `make test-all` completed with the recorded
     compatibility baseline (core 82.9%, bundled modules 80.8%).
+  - Merged as PR #915 on 2026-08-11.
+- [x] Phase 2: Serialized compilation (2026-08-11)
+  - Added one reentrant compilation lock with an idempotent, one-hold guard.
+  - Serialized initial source/AST compilation, both interpreter eval roots,
+    JVM eval compilation, lazy named-sub materialization, reset, and verifier
+    fallback compilation.
+  - Kept ordinary program/eval execution outside each entry point's own hold;
+    compile-time `BEGIN` wrapper execution remains inside the enclosing hold.
+  - Restored compiler scope, eval aliases, and hint state under the lock and
+    made lexer/parser failures release their exact acquisition.
+  - Added deterministic queueing, reentrancy, failure-cleanup, mixed-backend
+    concurrency, nested `BEGIN`/eval, and unlocked-execution tests.
+  - Files: `PerlLanguageProvider.java`, `EvalStringHandler.java`,
+    `RuntimeCode.java`, `SubroutineParser.java`, and `CompilationLockTest.java`.
+  - Validation: `make` passed; focused eval regressions passed under system
+    Perl and both PerlOnJava backends; Scalar::Util 1.70 and Moo 2.005005 loaded
+    successfully on both backends; `make test-all` completed at core 83.0% and
+    bundled modules 80.8%.
+  - Audit delta: no runtime state moved and no production worker was added; the
+    new lock is the only mutable static and covers the newly identified lazy-sub
+    and verifier-fallback compiler escape paths.
 
 ### Phase 1 Work Completed (2026-08-10)
 
@@ -472,9 +495,10 @@ measured benefit over platform threads/full clone.
 
 ### Next Steps
 
-1. Complete Phase 1 validation and open its PR.
-2. Merge Phase 1 before starting Phase 2.
-3. Implement the global reentrant compilation boundary in Phase 2.
+1. Open and merge the independent Phase 2 PR.
+2. Start Phase 3 from updated `master` only after Phase 2 merges.
+3. Introduce the `PerlRuntime` shell and scoped explicit binding without moving
+   mutable runtime state yet.
 
 ### Open Questions
 

@@ -1,6 +1,7 @@
 package org.perlonjava.frontend.parser;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
@@ -1623,6 +1624,13 @@ public class SubroutineParser {
         // - For InterpretedCode, we replace codeRef.value (not just code fields)
 
         Supplier<Void> subroutineCreationTaskSupplier = () -> {
+            try (PerlLanguageProvider.CompilationLockGuard ignored =
+                         PerlLanguageProvider.acquireCompilationLock()) {
+            // A second first caller may have waited for the first materializer.
+            // Recheck publication under the same lock before compiling again.
+            if (placeholder.compilerSupplier == null) {
+                return null;
+            }
             // Try unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
             if (placeholder.attributes != null && placeholder.attributes.contains("lvalue")) {
                 block.setAnnotation("subroutineIsLvalue", true);
@@ -1743,6 +1751,7 @@ public class SubroutineParser {
             // This prevents the Supplier from being invoked multiple times
             placeholder.compilerSupplier = null;
             return null;
+            }
         };
 
         // Store the supplier in the placeholder
