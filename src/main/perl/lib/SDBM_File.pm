@@ -2,19 +2,31 @@ package SDBM_File;
 
 use strict;
 use warnings;
+use Fcntl qw(O_CREAT O_RDWR);
 use Tie::Hash;
 
 our @ISA = qw(Tie::StdHash);
 our $VERSION = '1.14';
 
 sub TIEHASH {
-    my ($class, $filename) = @_;
+    my ($class, $filename, $flags, $mode) = @_;
+    return unless defined $filename && length $filename;
+
+    # The bundled shim historically accepted a zero flag for a new database;
+    # retain that compatibility while still honoring read-only opens of an
+    # existing file.
+    $flags = O_CREAT | O_RDWR
+        unless defined $flags && ($flags != 0 || -e $filename);
+    $mode = 0666 unless defined $mode;
+    sysopen(my $probe, $filename, $flags, $mode) or return;
+    close $probe;
+
     my $self = bless {
         filename => $filename,
         data     => {},
+        dirty    => 0,
     }, $class;
     $self->_load;
-    $self->_flush unless -e $filename;
     return $self;
 }
 
@@ -56,12 +68,15 @@ sub _flush {
     my ($self) = @_;
     my $filename = $self->{filename};
     return unless defined $filename;
+    return 1 unless $self->{dirty};
 
     open my $fh, '>', $filename or return;
     for my $key (sort keys %{ $self->{data} }) {
         print {$fh} _encode($key), "\t", _encode($self->{data}{$key}), "\n";
     }
     close $fh;
+    $self->{dirty} = 0;
+    return 1;
 }
 
 sub FETCH { $_[0]{data}{ $_[1] } }
@@ -69,20 +84,20 @@ sub FETCH { $_[0]{data}{ $_[1] } }
 sub STORE {
     my ($self, $key, $value) = @_;
     $self->{data}{$key} = $value;
-    $self->_flush;
+    $self->{dirty} = 1;
 }
 
 sub DELETE {
     my ($self, $key) = @_;
     my $value = delete $self->{data}{$key};
-    $self->_flush;
+    $self->{dirty} = 1;
     return $value;
 }
 
 sub CLEAR {
     my ($self) = @_;
     %{ $self->{data} } = ();
-    $self->_flush;
+    $self->{dirty} = 1;
 }
 
 sub EXISTS { exists $_[0]{data}{ $_[1] } }
@@ -95,6 +110,7 @@ sub filter_store_value { $_[0]{filter_store_value} = $_[1]; return $_[0] }
 sub filter_fetch_key { $_[0]{filter_fetch_key} = $_[1]; return $_[0] }
 sub filter_fetch_value { $_[0]{filter_fetch_value} = $_[1]; return $_[0] }
 
+sub sync { $_[0]->_flush }
 sub UNTIE { $_[0]->_flush }
 sub DESTROY { $_[0]->_flush }
 

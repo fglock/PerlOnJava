@@ -7,6 +7,6 @@ comment: |
   because callback execution is not implemented, so patch only those tests out
   of the CPAN test phase.
 match:
-  distribution: "^TOBYINK/Type-Tiny-"
+  distribution: "^TOBYINK/Type-Tiny-[0-9]"
 patches:
   - "Type-Tiny/SkipRegexCallbackTests.patch"

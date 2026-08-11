@@ -458,7 +458,10 @@ $CPAN::Config = {
     'prefer_installer' => q[MB],
     'prefs_dir' => File::Spec->catdir($cpan_home, 'prefs'),
     'prerequisites_policy' => q[follow],
-    'recommends_policy' => q[1],
+    # Native accelerator recommendations frequently have no JVM value and can
+    # pull large XS-only dependency trees into otherwise pure-Perl installs.
+    # Required dependencies are still followed normally; users may opt back in.
+    'recommends_policy' => q[0],
     'scan_cache' => q[atstart],
     'shell' => $is_windows ? $ENV{COMSPEC} || 'cmd.exe' : '/bin/bash',
     'show_unparsable_versions' => q[0],
