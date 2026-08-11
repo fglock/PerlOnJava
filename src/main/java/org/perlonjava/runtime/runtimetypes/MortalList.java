@@ -1094,6 +1094,21 @@ public class MortalList {
         }
         if (base.refCount > 0 && --base.refCount == 0) {
             if (base.localBindingExists) {
+                if (base instanceof RuntimeScalar scalar
+                        && scalar.referencedByScalarReference
+                        && scalar.captureCount == 0
+                        && !MyVarCleanupStack.isRegistered(scalar)) {
+                    // The declaring lexical is gone and this was the last
+                    // counted scalar reference.  A returned blessed CODE
+                    // scalar can miss the normal binding cleanup because the
+                    // compiler conservatively treats it as captured while its
+                    // subroutine exits.  Do not let that stale lexical marker
+                    // suppress DESTROY after the final container deletion.
+                    base.localBindingExists = false;
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                    return;
+                }
                 // Named container: local variable may still exist. Skip callDestroy.
                 // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 //

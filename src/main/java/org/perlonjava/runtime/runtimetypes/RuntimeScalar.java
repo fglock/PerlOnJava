@@ -3299,7 +3299,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // A reference to the lexical escaped its declaring scope.  The
             // RuntimeScalar is now the Perl SV container, so its current value
             // must live until the final scalar reference is released.
-            if (scalar.refCount > 0) return;
+            // A tied scalar must still release its tie wrapper below.  In a
+            // scalar self-tie that wrapper owns the remaining counted
+            // reference to this same scalar; returning here would leave the
+            // cycle intact and suppress the handler's DESTROY.
+            if (scalar.refCount > 0 && scalar.type != RuntimeScalarType.TIED_SCALAR) return;
         }
 
         // Fast path: skip if no special state (most common case for integer/string vars).
