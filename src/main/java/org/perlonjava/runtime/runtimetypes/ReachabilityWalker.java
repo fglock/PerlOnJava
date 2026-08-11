@@ -127,6 +127,9 @@ public class ReachabilityWalker {
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
         }
+        for (RuntimeBase suspended : MortalList.snapshotSuspendedRoots()) {
+            addReachable(suspended, todo);
+        }
         if (useLexicalSeeds) {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc.captureCount > 0) continue;

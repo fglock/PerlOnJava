@@ -53,6 +53,13 @@ public class MortalList {
     private static final ThreadLocal<ArrayDeque<RuntimeBase>> temporaryRoots =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    // Heap-resident interpreter frames are Perl-visible owners while an async
+    // sub is suspended.  They are not ordinary lexical roots (and therefore
+    // are invisible to MyVarCleanupStack), but a weak-reference sweep must not
+    // collect the Future or other value that the frame is actively awaiting.
+    private static final IdentityHashMap<RuntimeBase, Integer> suspendedRoots =
+            new IdentityHashMap<>();
+
     public static void pushTemporaryRoot(RuntimeBase root) {
         if (root != null) {
             temporaryRoots.get().push(root);
@@ -76,6 +83,32 @@ public class MortalList {
 
     public static boolean hasTemporaryRoots() {
         return !temporaryRoots.get().isEmpty();
+    }
+
+    public static void retainSuspendedRoot(RuntimeBase root) {
+        if (root != null) {
+            suspendedRoots.merge(root, 1, Integer::sum);
+            invalidateAllRootSnapshots();
+        }
+    }
+
+    public static void releaseSuspendedRoot(RuntimeBase root) {
+        if (root == null) return;
+        Integer count = suspendedRoots.get(root);
+        if (count == null) return;
+        if (count <= 1) suspendedRoots.remove(root);
+        else suspendedRoots.put(root, count - 1);
+        invalidateAllRootSnapshots();
+    }
+
+    public static java.util.List<RuntimeBase> snapshotSuspendedRoots() {
+        return new java.util.ArrayList<>(suspendedRoots.keySet());
+    }
+
+    public static void clearSuspendedRoots() {
+        suspendedRoots.clear();
+        temporaryRoots.remove();
+        invalidateAllRootSnapshots();
     }
 
     /**

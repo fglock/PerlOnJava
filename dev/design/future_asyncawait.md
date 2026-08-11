@@ -593,6 +593,15 @@ and encourage code that deadlocks when real asynchronous I/O is introduced.
   All 52 upstream files pass with 221 assertions. Bundled CPAN policy removes
   the replaced XS parser prerequisites and runs that full suite directly, so
   `./jcpan -t Future::AsyncAwait` reports success for the native implementation.
+- [Completed 2026-08-11] Made suspended await operands explicit reachability
+  roots. The Java-owned `InterpreterSuspension` frame now retains its awaited
+  referent in the weak-reference walk until resume or abandonment cleanup. This
+  prevents an inner async Future from falsely reporting abandonment while a
+  suspended outer frame still owns it, so nested chains report the discarded
+  outer Future. Script-engine reset also releases abandoned suspended roots and
+  clears per-script weak/scalar registries, removing order-dependent lifetime
+  state between unit scripts. Both frontends pass the nested abandonment test;
+  a forced rerun of every unit-test shard passes.
 
 ## References
 
