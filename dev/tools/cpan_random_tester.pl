@@ -473,7 +473,9 @@ sub parse_all_module_results {
 
         my %failure_counts = parse_harness_failure_counts($text);
 
-        if (($text =~ /All tests successful/ || $text =~ /Result: PASS/)
+        if (($text =~ /All tests successful/
+                || $text =~ /Result: PASS/
+                || $text =~ /(?:make|Build) test -- OK/)
             && $text !~ /Result: FAIL/
             && $text !~ /(?:make|Build) test -- NOT OK/) {
             $r{status}     = 'PASS';
@@ -700,6 +702,7 @@ sub new_streamed_test_block {
         all_tests_successful => 0,
         result_pass          => 0,
         result_fail          => 0,
+        test_ok              => 0,
         test_not_ok          => 0,
         bundled_skip         => 0,
         distropref_skip      => 0,
@@ -723,6 +726,7 @@ sub update_streamed_test_block {
     $block->{all_tests_successful} = 1 if $line =~ /All tests successful/;
     $block->{result_pass}          = 1 if $line =~ /Result: PASS/;
     $block->{result_fail}          = 1 if $line =~ /Result: FAIL/;
+    $block->{test_ok}              = 1 if $line =~ /(?:make|Build) test -- OK/;
     $block->{test_not_ok}          = 1 if $line =~ /(?:make|Build) test -- NOT OK/;
     $block->{bundled_skip}         = 1 if is_bundled_skip_output($line);
     $block->{distropref_skip}      = 1 if is_perlonjava_distropref_skip_output($line);
@@ -781,7 +785,9 @@ sub finish_streamed_test_block {
 
     my $total_tests = $block->{total_tests} || 0;
 
-    if (($block->{all_tests_successful} || $block->{result_pass})
+    if (($block->{all_tests_successful}
+            || $block->{result_pass}
+            || $block->{test_ok})
         && !$block->{result_fail}
         && !$block->{test_not_ok}) {
         $r{status}     = 'PASS';
