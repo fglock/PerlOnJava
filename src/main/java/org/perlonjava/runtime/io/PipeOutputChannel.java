@@ -124,6 +124,12 @@ public class PipeOutputChannel implements IOHandle {
                 // String-form pipe commands have shell semantics. This is also
                 // required for cmd built-ins such as `type`, which have no
                 // executable that ProcessBuilder can launch directly.
+                // Unlike Unix `cat`, bare `type` does not consume standard
+                // input; `more` is the cmd-provided stdin filter with the
+                // behavior Perl's portable pipe idiom expects here.
+                if (command.trim().equalsIgnoreCase("type")) {
+                    command = "more";
+                }
                 shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c", command};
             } else {
                 shellCommand = new String[]{"/bin/sh", "-c", command};

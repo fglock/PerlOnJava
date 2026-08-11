@@ -14,7 +14,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -96,38 +95,18 @@ public class FileSpec extends PerlModuleBase {
             return new RuntimeScalar("").getList();
         }
         
-        String canonPath;
-        if (SystemUtils.osIsWindows()) {
-            String sep = File.separator;
-            String quotedSep = Pattern.quote(sep);
-            String replSep = Matcher.quoteReplacement(sep);
-
-            canonPath = path.replaceAll("[/\\\\]+", replSep);
-            canonPath = canonPath.replaceAll("(?:" + quotedSep + "\\.)+(?:"
-                    + quotedSep + "|$)", replSep);
-
-            if (!canonPath.equals("." + sep) && !canonPath.equals(".")) {
-                while (canonPath.startsWith("." + sep)) {
-                    canonPath = canonPath.substring(1 + sep.length());
-                }
-            }
-
-            if (!canonPath.equals(sep) && canonPath.endsWith(sep)) {
-                canonPath = canonPath.substring(0, canonPath.length() - sep.length());
-            }
-        } else {
-            // Match File::Spec::Unix::canonpath. Backslash is a literal path
-            // character on Unix, not a directory separator.
-            canonPath = path.replaceAll("/{2,}", "/");
-            canonPath = canonPath.replaceAll("(?:/\\.)+(?:/|$)", "/");
-            if (!canonPath.equals("./")) {
-                canonPath = canonPath.replaceFirst("^(?:\\./)+", "");
-            }
-            canonPath = canonPath.replaceFirst("^/(?:\\.\\./)+", "/");
-            canonPath = canonPath.replaceFirst("^/\\.\\.$", "/");
-            if (!canonPath.equals("/") && canonPath.endsWith("/")) {
-                canonPath = canonPath.substring(0, canonPath.length() - 1);
-            }
+        // These Java methods are installed in File::Spec::Unix. Platform
+        // subclasses (including File::Spec::Win32) override them in Perl, so
+        // their behavior must remain Unix-specific even on a Windows host.
+        String canonPath = path.replaceAll("/{2,}", "/");
+        canonPath = canonPath.replaceAll("(?:/\\.)+(?:/|$)", "/");
+        if (!canonPath.equals("./")) {
+            canonPath = canonPath.replaceFirst("^(?:\\./)+", "");
+        }
+        canonPath = canonPath.replaceFirst("^/(?:\\.\\./)+", "/");
+        canonPath = canonPath.replaceFirst("^/\\.\\.$", "/");
+        if (!canonPath.equals("/") && canonPath.endsWith("/")) {
+            canonPath = canonPath.substring(0, canonPath.length() - 1);
         }
         
         // If we reduced to empty string from a non-empty input, return "."
@@ -151,8 +130,7 @@ public class FileSpec extends PerlModuleBase {
         }
 
         StringBuilder result = new StringBuilder();
-        boolean isWindows = SystemUtils.osIsWindows();
-        String separator = File.separator;
+        String separator = "/";
         boolean isFirst = true;
 
         for (int i = 1; i < args.size(); i++) {
@@ -160,7 +138,7 @@ public class FileSpec extends PerlModuleBase {
 
             // Empty first element represents root directory on Unix
             if (part.isEmpty()) {
-                if (isFirst && !isWindows) {
+                if (isFirst) {
                     // First empty element = absolute path (root)
                     result.append(separator);
                 }
@@ -168,11 +146,6 @@ public class FileSpec extends PerlModuleBase {
                 continue;
             }
             isFirst = false;
-
-            // For Windows, normalize slashes to the system separator
-            if (isWindows) {
-                part = part.replace('/', '\\');
-            }
 
             if (result.length() == 0) {
                 // First component
@@ -251,7 +224,7 @@ public class FileSpec extends PerlModuleBase {
         }
         
         // Ensure proper separator between dir and file
-        String separator = File.separator;
+        String separator = "/";
         char lastChar = dir.charAt(dir.length() - 1);
         if (lastChar == '/' || lastChar == '\\') {
             return new RuntimeScalar(dir + filePart).getList();

@@ -607,7 +607,7 @@ public class SystemOperator {
             String[] shellCommand;
             if (SystemUtils.osIsWindows()) {
                 // Windows
-                shellCommand = new String[]{"cmd.exe", "/c", command};
+                shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c", command};
             } else {
                 // Unix-like (Linux, macOS)
                 shellCommand = new String[]{"/bin/sh", "-c", command};
@@ -1104,7 +1104,7 @@ public class SystemOperator {
                     command = directCommand;
                 } else {
                     if (SystemUtils.osIsWindows()) {
-                        command = Arrays.asList("cmd.exe", "/c", cmdStr);
+                        command = Arrays.asList("cmd.exe", "/d", "/s", "/c", cmdStr);
                     } else {
                         command = Arrays.asList("/bin/sh", "-c", cmdStr);
                     }
@@ -1185,7 +1185,7 @@ public class SystemOperator {
         String[] shellCommand;
         if (SystemUtils.osIsWindows()) {
             // Windows
-            shellCommand = new String[]{"cmd.exe", "/c", command};
+            shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c", command};
         } else {
             // Unix-like (Linux, macOS)
             shellCommand = new String[]{"/bin/sh", "-c", command};
