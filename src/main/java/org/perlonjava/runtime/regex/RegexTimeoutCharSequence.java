@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.regex;
 
+import java.util.concurrent.CancellationException;
+
 public class RegexTimeoutCharSequence implements CharSequence {
     private static final long DEFAULT_TIMEOUT_MS = 10_000;
     private static final int CHECK_INTERVAL = 4096;
@@ -24,8 +26,14 @@ public class RegexTimeoutCharSequence implements CharSequence {
 
     @Override
     public char charAt(int index) {
-        if (++checkCount % CHECK_INTERVAL == 0
-                && (Thread.currentThread().isInterrupted() || System.nanoTime() > deadlineNanos)) {
+        if (++checkCount % CHECK_INTERVAL == 0 && Thread.currentThread().isInterrupted()) {
+            // An active alarm runs the match in a worker and cancels that worker
+            // before dispatching SIGALRM on the owning Perl thread.  Cancellation
+            // is not Perl's built-in catastrophic-backtracking timeout and must
+            // not emit that timeout warning before the signal handler runs.
+            throw new CancellationException("Regex matching cancelled");
+        }
+        if (checkCount % CHECK_INTERVAL == 0 && System.nanoTime() > deadlineNanos) {
             throw new RegexTimeoutException(
                     "Regex matching timed out after " + DEFAULT_TIMEOUT_MS + "ms (catastrophic backtracking detected)");
         }

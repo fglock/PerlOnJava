@@ -218,6 +218,10 @@ public class GlobalContext {
         // @_ is implemented as a call-frame lexical, but its main-package glob
         // still has an ARRAY slot for symbol-table introspection.
         GlobalVariable.getGlobalArray("main::_");
+        // CompilerOptions can be constructed by an unbound embedding caller.
+        // Once the provider binds the owning runtime, install its detached
+        // argument array as this runtime's @ARGV slot.
+        GlobalVariable.globalArrays.put("main::ARGV", compilerOptions.argumentList);
 
         // Initialize default formats
         // Create a default STDOUT format to prevent "Undefined format" errors

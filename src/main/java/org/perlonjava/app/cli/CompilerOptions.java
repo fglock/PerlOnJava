@@ -1,6 +1,5 @@
 package org.perlonjava.app.cli;
 
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
@@ -59,7 +58,9 @@ public class CompilerOptions implements Cloneable {
     public boolean autoSplit = false; // For -a
     public boolean useVersion = false; // For -E
     // Initialize @ARGV
-    public RuntimeArray argumentList = GlobalVariable.getGlobalArray("main::ARGV");
+    // Kept detached until a provider entry point binds its owning PerlRuntime.
+    // GlobalContext installs this exact array as that runtime's @ARGV.
+    public RuntimeArray argumentList = new RuntimeArray();
     public RuntimeArray inc = new RuntimeArray();
     public String splitPattern = "' '"; // Default split pattern for -a
     public boolean lineEndingProcessing = false; // For -l

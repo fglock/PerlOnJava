@@ -15,8 +15,8 @@ unless their storage was explicitly marked shared.
 Each numbered phase below normally forms an independent pull request. A phase
 may be split further when its audit shows that it cannot be reviewed or reverted
 safely. Phases 3 and 4 were combined at the maintainer's request, as were
-Phases 5 through 7; both combined changesets preserve the same green-boundary
-requirements. At every merge boundary:
+Phases 5 through 7 and Phases 8a through 8c; each combined changeset preserves
+the same green-boundary requirements. At every merge boundary:
 
 - the compiler and both execution backends remain functional;
 - `make` passes;
@@ -282,15 +282,22 @@ after the Phase 8 symbol-table migrations.
 
 ### Phase 8a — Core global values
 
-Move global scalar, array, and hash storage.
+Move global scalar, array, and hash storage, foreach alias bookkeeping, stash
+enumeration invalidation, and per-runtime core-global initialization. Keep
+`CompilerOptions` detached until its provider binds the owning runtime and
+installs that exact argument array as `@ARGV`.
 
 ### Phase 8b — Code and subroutine globals
 
-Move code references, pinned code, prototypes, and `is_sub` state.
+Move code references, pseudo constants, pinned/deleted pins, compiled-reference
+IDs, localization bookkeeping, prototypes, imported-sub state, and operator
+override flags. Preserve a declared-but-undefined CODE slot after `undef &name`.
 
 ### Phase 8c — IO and format globals
 
-Move global IO slots and formats, reconciling them with Phase 4 ownership.
+Move named global IO slots, hidden-after-stash-delete state, and formats,
+reconciling them with Phase 4's runtime-owned standard handles/globs. Glob and
+stash alias tables remain Phase 8d state.
 
 ### Phase 8d — Globs, aliases, and stashes
 
@@ -301,9 +308,12 @@ Move glob tables, stash/package objects, and alias maps.
 Move declared-global sets, package-existence caches, class-loader ownership, and
 remaining symbol-table runtime state.
 
-Each Phase 8 subphase is its own PR. Acceptance for each: conflicting global
-state in two runtimes remains isolated on JVM and interpreter backends; global,
-lexical, and eval benchmarks meet the budget.
+Each remaining Phase 8 subphase normally forms its own PR; 8a through 8c are a
+maintainer-requested combined exception. Acceptance for each: conflicting
+in-scope global state in two runtimes remains isolated on JVM and interpreter
+backends; global, lexical, and eval benchmarks meet the budget. No phase claims
+alias/stash isolation before 8d or declaration/package-service isolation before
+8e.
 
 ### Phase 9 — RuntimeCode and eval caches
 
@@ -455,7 +465,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 5 through 7 complete; combined PR ready for review
+### Current Status: Phases 8a through 8c complete; combined PR ready for review
 
 ### Completed Phases
 
@@ -568,6 +578,34 @@ measured benefit over platform threads/full clone.
     closure benchmarks improved; regex matching is approximately 10% slower
     from the required runtime lookup and is recorded for Phase 13 recovery.
     The comprehensive gate completed at core 82.9% and bundled modules 81.0%.
+- [x] Phases 8a-8c: Runtime-owned globals, CODE, IO, and formats (2026-08-11)
+  - Added `GlobalRuntimeState` and moved scalar, array, hash, foreach-alias,
+    CODE, pseudo-constant, pin, compiled-CV, named IO, hidden-IO, and format
+    storage behind the existing `GlobalVariable` facades.
+  - Made core-global initialization and stash-enumeration invalidation
+    runtime-owned. `CompilerOptions` now builds a detached argument array and
+    installs that exact object as the bound runtime's `@ARGV` during global
+    initialization.
+  - Preserved CODE identity and Perl's declared-but-undefined semantics across
+    `undef &name`, including package/subroutine metadata and pin behavior.
+  - Added nested-binding, simultaneous-runtime, reset, JSR-223, JVM, and
+    interpreter coverage for conflicting global values, named subs/prototypes,
+    named filehandles, and formats. New Perl semantic tests pass first under
+    system Perl and then under both PerlOnJava backends.
+  - Repaired the `re/pat.t` regression discovered after PR #921: regex-worker
+    cancellation now unwinds silently instead of reporting the internal
+    ten-second deadline, and the alarm scheduler binds its captured runtime
+    before reading `%SIG` and queuing `ALRM`. The exact pre-PR result is restored
+    at 1098/1302, including test 1149 on both compiler backends' reproducer.
+  - Validation: exact-tree `make` passed; Scalar::Util 1.70 and Moo 2.005005
+    loaded on both backends; the comprehensive gate completed at core 83.0%
+    and bundled modules 80.8%.
+  - Same-base three-run medians: lexical improved about 1%; global access is
+    about 34% slower and eval-string about 15% slower from the required bound-
+    runtime lookup. These exceed the normal 5% budget and are explicitly
+    presented for review as a temporary exception, with generated-code runtime
+    caching deferred to the dedicated performance-recovery phase. Thread
+    compatibility flags remain disabled.
 
 ### Phase 1 Work Completed (2026-08-10)
 
@@ -586,10 +624,13 @@ measured benefit over platform threads/full clone.
 
 ### Next Steps
 
-1. Review and merge the combined Phase 5-7 runtime-state PR while `Config`
-   thread flags remain disabled.
-2. Start Phase 8a from updated `master`: migrate core global scalar, array, and
-   hash storage without combining it with the later Phase 8 subphases.
+1. Review and merge the combined Phase 8a-8c runtime-global PR while `Config`
+   thread flags remain disabled, including the documented temporary benchmark
+   exception.
+2. Start Phase 8d from updated `master`: migrate glob tables, aliases, and
+   stashes as one atomic symbol-identity change.
+3. Keep Phase 8e declarations, package services, and class-loader ownership in
+   its own independently green PR.
 
 ### Open Questions
 

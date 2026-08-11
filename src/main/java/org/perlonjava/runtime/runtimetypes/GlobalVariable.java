@@ -6,11 +6,16 @@ import org.perlonjava.frontend.parser.ParserTables;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.ArrayList;
+import java.util.AbstractMap;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.AbstractSet;
+import java.util.Iterator;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,32 +29,28 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  */
 public class GlobalVariable {
     // Global variables and subroutines
-    public static final Map<String, RuntimeScalar> globalVariables = new PackageRootMap<>();
-    public static final Map<String, RuntimeArray> globalArrays = new PackageRootMap<>();
-    public static final Map<String, RuntimeHash> globalHashes = new PackageRootMap<>();
+    public static final Map<String, RuntimeScalar> globalVariables =
+            new CurrentRuntimeMap<>(state -> state.scalarValues());
+    public static final Map<String, RuntimeArray> globalArrays =
+            new CurrentRuntimeMap<>(state -> state.arrayValues());
+    public static final Map<String, RuntimeHash> globalHashes =
+            new CurrentRuntimeMap<>(state -> state.hashValues());
     // Cache for package existence checks
     public static final Map<String, Boolean> packageExistsCache = new HashMap<>();
     // isSubs: Tracks subroutines declared via 'use subs' pragma (e.g., use subs 'hex')
     // Maps fully-qualified names (package::subname) to indicate they should be called
     // as user-defined subroutines instead of built-in operators
-    public static final Map<String, Boolean> isSubs = new HashMap<>();
+    public static final Map<String, Boolean> isSubs =
+            new CurrentRuntimePlainMap<>(state -> state.importedSubs());
     public static final Map<String, RuntimeScalar> globalCodeRefs = new GlobalCodeRefMap();
-    private static final Map<String, RuntimeScalar> globalPseudoConstants = new HashMap<>();
-    static final Map<String, RuntimeGlob> globalIORefs = new StashSlotMap<>();
-    static final Map<String, RuntimeFormat> globalFormatRefs = new StashSlotMap<>();
-    private static final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
-    private static final IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs =
-            new IdentityHashMap<>();
-    private static final Set<String> hiddenIORefsAfterStashDelete = new HashSet<>();
+    static final Map<String, RuntimeGlob> globalIORefs =
+            new StashSlotMap<>(state -> state.ioSlots());
+    static final Map<String, RuntimeFormat> globalFormatRefs =
+            new StashSlotMap<>(state -> state.formatSlots());
 
     // Pinned code references: RuntimeScalars that were accessed at compile time
     // and should survive stash deletion. This matches Perl's behavior where
     // compiled bytecode holds direct references to CVs that survive stash deletion.
-    private static final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
-    private static final Set<String> deletedCodeRefPins = new HashSet<>();
-    private static final Map<Integer, RuntimeScalar> compiledCodeRefs = new HashMap<>();
-    private static int nextCompiledCodeRefId = 1;
-
     // Stash aliasing: `*{Dst::} = *{Src::}` effectively makes Dst:: symbol table
     // behave like Src:: for method lookup and stash operations.
     // We keep this separate from globalCodeRefs/globalVariables so existing references
@@ -60,12 +61,12 @@ public class GlobalVariable {
     // Maps glob names to their canonical (target) name.
     // When looking up or assigning to glob slots, we resolve through this map.
     static final Map<String, String> globAliases = new HashMap<>();
-    private static final Map<String, RuntimeScalar> foreachGlobalAliases = new HashMap<>();
 
     // Flags used by operator override
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
     // Used to detect when built-in operators have been globally overridden
-    static final Map<String, Boolean> globalGlobs = new HashMap<>();
+    static final Map<String, Boolean> globalGlobs =
+            new CurrentRuntimePlainMap<>(state -> state.operatorOverrideGlobs());
     // Global class loader for all generated classes - not final so we can replace it
     public static CustomClassLoader globalClassLoader =
             new CustomClassLoader(GlobalVariable.class.getClassLoader());
@@ -80,23 +81,121 @@ public class GlobalVariable {
     private static final Set<String> declaredGlobalVariables = new HashSet<>();
     private static final Set<String> declaredGlobalArrays = new HashSet<>();
     private static final Set<String> declaredGlobalHashes = new HashSet<>();
-    private static long stashEnumerationVersion = 0;
-
     static long stashEnumerationVersion() {
-        return stashEnumerationVersion;
+        return globalState().stashEnumerationVersion();
     }
 
     static void invalidateStashEnumerationCache() {
-        stashEnumerationVersion++;
+        globalState().invalidateStashEnumeration();
     }
 
-    private static final class PackageRootMap<T extends RuntimeBase> extends HashMap<String, T> {
+    private static GlobalRuntimeState globalState() {
+        return PerlRuntime.current().globalState;
+    }
+
+    private static Map<String, RuntimeScalar> foreachGlobalAliases() {
+        return globalState().foreachScalarAliases();
+    }
+
+    private static Map<String, RuntimeScalar> globalPseudoConstants() {
+        return globalState().pseudoConstants();
+    }
+
+    private static Map<String, RuntimeScalar> pinnedCodeRefs() {
+        return globalState().pinnedCodeRefs();
+    }
+
+    private static Set<String> deletedCodeRefPins() {
+        return globalState().deletedCodeRefPins();
+    }
+
+    private static Map<Integer, RuntimeScalar> compiledCodeRefs() {
+        return globalState().compiledCodeRefs();
+    }
+
+    private static Map<String, Integer> localizedCodeRefDepth() {
+        return globalState().localizedCodeRefDepth();
+    }
+
+    private static IdentityHashMap<RuntimeScalar, String> displacedLocalizedCodeRefs() {
+        return globalState().displacedLocalizedCodeRefs();
+    }
+
+    private static Set<String> hiddenIORefsAfterStashDelete() {
+        return globalState().hiddenIoSlotsAfterStashDelete();
+    }
+
+    /** Stable facade for runtime-owned maps that do not need package-root hooks. */
+    private static final class CurrentRuntimePlainMap<T> extends AbstractMap<String, T> {
+        private final Function<GlobalRuntimeState, Map<String, T>> table;
+
+        private CurrentRuntimePlainMap(Function<GlobalRuntimeState, Map<String, T>> table) {
+            this.table = table;
+        }
+
+        private Map<String, T> delegate() {
+            return table.apply(globalState());
+        }
+
+        @Override public T get(Object key) { return delegate().get(key); }
+        @Override public boolean containsKey(Object key) { return delegate().containsKey(key); }
+        @Override public int size() { return delegate().size(); }
+        @Override public boolean isEmpty() { return delegate().isEmpty(); }
+        @Override public T put(String key, T value) { return delegate().put(key, value); }
+        @Override public T putIfAbsent(String key, T value) { return delegate().putIfAbsent(key, value); }
+        @Override public T remove(Object key) { return delegate().remove(key); }
+        @Override public void clear() { delegate().clear(); }
+        @Override public Set<Entry<String, T>> entrySet() { return delegate().entrySet(); }
+        @Override public Set<String> keySet() { return delegate().keySet(); }
+        @Override public Collection<T> values() { return delegate().values(); }
+    }
+
+    /**
+     * Stable facade retained for source and generated-bytecode compatibility.
+     * Each operation resolves the table from the currently bound runtime.
+     */
+    private static final class CurrentRuntimeMap<T extends RuntimeBase> extends AbstractMap<String, T> {
+        private final Function<GlobalRuntimeState, Map<String, T>> table;
+
+        private CurrentRuntimeMap(Function<GlobalRuntimeState, Map<String, T>> table) {
+            this.table = table;
+        }
+
+        private Map<String, T> delegate() {
+            return table.apply(globalState());
+        }
+
+        @Override
+        public T get(Object key) {
+            return delegate().get(key);
+        }
+
+        @Override
+        public boolean containsKey(Object key) {
+            return delegate().containsKey(key);
+        }
+
+        @Override
+        public boolean containsValue(Object value) {
+            return delegate().containsValue(value);
+        }
+
+        @Override
+        public int size() {
+            return delegate().size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return delegate().isEmpty();
+        }
+
         @Override
         public T put(String key, T value) {
-            boolean newKey = !containsKey(key);
+            boolean newKey = !delegate().containsKey(key);
             markStashEntryVisible(key);
             markPackageGlobalRoot(value);
-            T previous = super.put(key, value);
+            T previous = delegate().put(key, value);
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
@@ -106,21 +205,17 @@ public class GlobalVariable {
 
         @Override
         public T putIfAbsent(String key, T value) {
-            markStashEntryVisible(key);
-            markPackageGlobalRoot(value);
-            T previous = super.putIfAbsent(key, value);
-            if (previous == null) {
-                invalidateStashEnumerationCache();
-                invalidatePackageRootSnapshot();
-            } else {
+            T previous = delegate().get(key);
+            if (previous != null) {
                 markPackageGlobalRoot(previous);
+                return previous;
             }
-            return previous;
+            return put(key, value);
         }
 
         @Override
         public T remove(Object key) {
-            T previous = super.remove(key);
+            T previous = delegate().remove(key);
             if (previous != null) {
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
@@ -130,11 +225,54 @@ public class GlobalVariable {
 
         @Override
         public void clear() {
-            if (!isEmpty()) {
+            if (!delegate().isEmpty()) {
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
             }
-            super.clear();
+            delegate().clear();
+        }
+
+        @Override
+        public Set<Entry<String, T>> entrySet() {
+            Map<String, T> entries = delegate();
+            return new AbstractSet<>() {
+                @Override
+                public Iterator<Entry<String, T>> iterator() {
+                    Iterator<Entry<String, T>> iterator = entries.entrySet().iterator();
+                    return new Iterator<>() {
+                        private boolean canRemove;
+
+                        @Override public boolean hasNext() { return iterator.hasNext(); }
+
+                        @Override
+                        public Entry<String, T> next() {
+                            Entry<String, T> current = iterator.next();
+                            canRemove = true;
+                            String key = current.getKey();
+                            return new SimpleEntry<>(key, current.getValue()) {
+                                @Override
+                                public T setValue(T value) {
+                                    T previous = CurrentRuntimeMap.this.put(key, value);
+                                    super.setValue(value);
+                                    return previous;
+                                }
+                            };
+                        }
+
+                        @Override
+                        public void remove() {
+                            if (!canRemove) throw new IllegalStateException("next() has not been called");
+                            iterator.remove();
+                            canRemove = false;
+                            invalidateStashEnumerationCache();
+                            invalidatePackageRootSnapshot();
+                        }
+                    };
+                }
+
+                @Override public int size() { return entries.size(); }
+                @Override public void clear() { CurrentRuntimeMap.this.clear(); }
+            };
         }
     }
 
@@ -143,7 +281,11 @@ public class GlobalVariable {
      * lines that depend on the sub's leaf name when the map entry is meaningfully
      * created or replaced (see {@link InheritanceResolver#invalidateMethodLookupCachesForStashSubKey}).
      */
-    private static final class GlobalCodeRefMap extends HashMap<String, RuntimeScalar> {
+    private static final class GlobalCodeRefMap extends AbstractMap<String, RuntimeScalar> {
+        private Map<String, RuntimeScalar> delegate() {
+            return globalState().codeRefs();
+        }
+
         private static void maybeInvalidateMethodCacheForCodeRefPut(String key, RuntimeScalar previous, RuntimeScalar value) {
             if (key == null || value == null) {
                 return;
@@ -157,10 +299,10 @@ public class GlobalVariable {
 
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
-            boolean newKey = !containsKey(key);
+            boolean newKey = !delegate().containsKey(key);
             markStashEntryVisible(key);
             markPackageGlobalRoot(value);
-            RuntimeScalar old = super.put(key, value);
+            RuntimeScalar old = delegate().put(key, value);
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
@@ -187,7 +329,7 @@ public class GlobalVariable {
 
         @Override
         public RuntimeScalar remove(Object key) {
-            RuntimeScalar prev = super.remove(key);
+            RuntimeScalar prev = delegate().remove(key);
             if (prev != null) {
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
@@ -203,22 +345,92 @@ public class GlobalVariable {
         public void clear() {
             if (!isEmpty()) {
                 invalidateStashEnumerationCache();
-                for (RuntimeScalar s : values()) {
+                for (Map.Entry<String, RuntimeScalar> entry : delegate().entrySet()) {
+                    RuntimeScalar s = entry.getValue();
                     if (s != null) {
                         s.globalCodeRefFqn = null;
                     }
+                    InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(entry.getKey());
                 }
                 invalidatePackageRootSnapshot();
             }
-            super.clear();
+            delegate().clear();
+        }
+
+        @Override public RuntimeScalar get(Object key) { return delegate().get(key); }
+        @Override public boolean containsKey(Object key) { return delegate().containsKey(key); }
+        @Override public int size() { return delegate().size(); }
+        @Override public boolean isEmpty() { return delegate().isEmpty(); }
+        @Override
+        public Set<Entry<String, RuntimeScalar>> entrySet() {
+            Map<String, RuntimeScalar> entries = delegate();
+            return new AbstractSet<>() {
+                @Override
+                public Iterator<Entry<String, RuntimeScalar>> iterator() {
+                    Iterator<Entry<String, RuntimeScalar>> iterator = entries.entrySet().iterator();
+                    return new Iterator<>() {
+                        private Entry<String, RuntimeScalar> current;
+                        private boolean canRemove;
+
+                        @Override public boolean hasNext() { return iterator.hasNext(); }
+
+                        @Override
+                        public Entry<String, RuntimeScalar> next() {
+                            current = iterator.next();
+                            canRemove = true;
+                            String key = current.getKey();
+                            return new SimpleEntry<>(key, current.getValue()) {
+                                @Override
+                                public RuntimeScalar setValue(RuntimeScalar value) {
+                                    RuntimeScalar previous = GlobalCodeRefMap.this.put(key, value);
+                                    super.setValue(value);
+                                    return previous;
+                                }
+                            };
+                        }
+
+                        @Override
+                        public void remove() {
+                            if (!canRemove) throw new IllegalStateException("next() has not been called");
+                            String key = current.getKey();
+                            RuntimeScalar value = current.getValue();
+                            iterator.remove();
+                            canRemove = false;
+                            if (value != null) value.globalCodeRefFqn = null;
+                            invalidateStashEnumerationCache();
+                            invalidatePackageRootSnapshot();
+                            InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(key);
+                        }
+                    };
+                }
+
+                @Override public int size() { return entries.size(); }
+                @Override public void clear() { GlobalCodeRefMap.this.clear(); }
+            };
         }
     }
 
-    private static final class StashSlotMap<T> extends HashMap<String, T> {
+    /** Runtime-selecting facade for named IO and FORMAT stash slots. */
+    private static final class StashSlotMap<T> extends AbstractMap<String, T> {
+        private final Function<GlobalRuntimeState, Map<String, T>> table;
+
+        private StashSlotMap(Function<GlobalRuntimeState, Map<String, T>> table) {
+            this.table = table;
+        }
+
+        private Map<String, T> delegate() {
+            return table.apply(globalState());
+        }
+
+        @Override public T get(Object key) { return delegate().get(key); }
+        @Override public boolean containsKey(Object key) { return delegate().containsKey(key); }
+        @Override public int size() { return delegate().size(); }
+        @Override public boolean isEmpty() { return delegate().isEmpty(); }
+
         @Override
         public T put(String key, T value) {
-            boolean newKey = !containsKey(key);
-            T previous = super.put(key, value);
+            boolean newKey = !delegate().containsKey(key);
+            T previous = delegate().put(key, value);
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
@@ -227,7 +439,7 @@ public class GlobalVariable {
 
         @Override
         public T putIfAbsent(String key, T value) {
-            T previous = super.putIfAbsent(key, value);
+            T previous = delegate().putIfAbsent(key, value);
             if (previous == null) {
                 invalidateStashEnumerationCache();
             }
@@ -236,7 +448,7 @@ public class GlobalVariable {
 
         @Override
         public T remove(Object key) {
-            T previous = super.remove(key);
+            T previous = delegate().remove(key);
             if (previous != null) {
                 invalidateStashEnumerationCache();
             }
@@ -248,7 +460,50 @@ public class GlobalVariable {
             if (!isEmpty()) {
                 invalidateStashEnumerationCache();
             }
-            super.clear();
+            delegate().clear();
+        }
+
+        @Override
+        public Set<Entry<String, T>> entrySet() {
+            Map<String, T> entries = delegate();
+            return new AbstractSet<>() {
+                @Override
+                public Iterator<Entry<String, T>> iterator() {
+                    Iterator<Entry<String, T>> iterator = entries.entrySet().iterator();
+                    return new Iterator<>() {
+                        private Entry<String, T> current;
+                        private boolean canRemove;
+
+                        @Override public boolean hasNext() { return iterator.hasNext(); }
+
+                        @Override
+                        public Entry<String, T> next() {
+                            current = iterator.next();
+                            canRemove = true;
+                            String key = current.getKey();
+                            return new SimpleEntry<>(key, current.getValue()) {
+                                @Override
+                                public T setValue(T value) {
+                                    T previous = StashSlotMap.this.put(key, value);
+                                    super.setValue(value);
+                                    return previous;
+                                }
+                            };
+                        }
+
+                        @Override
+                        public void remove() {
+                            if (!canRemove) throw new IllegalStateException("next() has not been called");
+                            iterator.remove();
+                            canRemove = false;
+                            invalidateStashEnumerationCache();
+                        }
+                    };
+                }
+
+                @Override public int size() { return entries.size(); }
+                @Override public void clear() { StashSlotMap.this.clear(); }
+            };
         }
     }
 
@@ -362,19 +617,17 @@ public class GlobalVariable {
         globalVariables.clear();
         globalArrays.clear();
         globalHashes.clear();
+        globalState().clearCoreValues();
         globalCodeRefs.clear();
-        globalPseudoConstants.clear();
-        pinnedCodeRefs.clear();
-        deletedCodeRefPins.clear();
-        compiledCodeRefs.clear();
-        nextCompiledCodeRefId = 1;
+        globalState().clearCodeValues();
         globalIORefs.clear();
-        hiddenIORefsAfterStashDelete.clear();
+        hiddenIORefsAfterStashDelete().clear();
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime != null) {
             runtime.resetStandardIOGlobVisibility();
         }
         globalFormatRefs.clear();
+        globalState().clearIoAndFormatValues();
         globalGlobs.clear();
         isSubs.clear();
         stashAliases.clear();
@@ -561,8 +814,8 @@ public class GlobalVariable {
                 String newKey = srcNs + key.substring(dstLen);
                 RuntimeGlob value = globalIORefs.remove(key);
                 if (value != null) globalIORefs.putIfAbsent(newKey, value);
-                if (hiddenIORefsAfterStashDelete.remove(key)) {
-                    hiddenIORefsAfterStashDelete.add(newKey);
+                if (hiddenIORefsAfterStashDelete().remove(key)) {
+                    hiddenIORefsAfterStashDelete().add(newKey);
                 }
             }
         }
@@ -576,7 +829,7 @@ public class GlobalVariable {
             return;
         }
         if (key != null && globalIORefs.containsKey(key)) {
-            if (hiddenIORefsAfterStashDelete.add(key)) {
+            if (hiddenIORefsAfterStashDelete().add(key)) {
                 invalidateStashEnumerationCache();
             }
         }
@@ -589,7 +842,7 @@ public class GlobalVariable {
                 runtime.showStandardIOGlob(key);
                 invalidateStashEnumerationCache();
             }
-            if (hiddenIORefsAfterStashDelete.remove(key)) {
+            if (hiddenIORefsAfterStashDelete().remove(key)) {
                 invalidateStashEnumerationCache();
             }
         }
@@ -600,7 +853,7 @@ public class GlobalVariable {
         if (runtime != null && runtime.standardIOGlob(key) != null) {
             return !runtime.isStandardIOGlobVisible(key);
         }
-        return key != null && hiddenIORefsAfterStashDelete.contains(key);
+        return key != null && hiddenIORefsAfterStashDelete().contains(key);
     }
 
     static boolean isVisibleGlobalIORef(String key) {
@@ -610,7 +863,7 @@ public class GlobalVariable {
         }
         return key != null
                 && globalIORefs.containsKey(key)
-                && !hiddenIORefsAfterStashDelete.contains(key);
+                && !hiddenIORefsAfterStashDelete().contains(key);
     }
 
     static boolean containsVisibleGlobalIORefWithPrefix(String prefix) {
@@ -623,7 +876,7 @@ public class GlobalVariable {
             }
         }
         for (String key : globalIORefs.keySet()) {
-            if (key.startsWith(prefix) && !hiddenIORefsAfterStashDelete.contains(key)) {
+            if (key.startsWith(prefix) && !hiddenIORefsAfterStashDelete().contains(key)) {
                 return true;
             }
         }
@@ -641,7 +894,7 @@ public class GlobalVariable {
             }
         }
         for (String key : globalIORefs.keySet()) {
-            if (!hiddenIORefsAfterStashDelete.contains(key)) {
+            if (!hiddenIORefsAfterStashDelete().contains(key)) {
                 keys.add(key);
             }
         }
@@ -649,7 +902,7 @@ public class GlobalVariable {
     }
 
     static void clearHiddenIORefsForNamespace(String prefix) {
-        if (hiddenIORefsAfterStashDelete.removeIf(k -> k.startsWith(prefix))) {
+        if (hiddenIORefsAfterStashDelete().removeIf(k -> k.startsWith(prefix))) {
             invalidateStashEnumerationCache();
         }
     }
@@ -784,14 +1037,14 @@ public class GlobalVariable {
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
         clearForeachGlobalAlias(key);
         retainForeachAlias(var);
-        foreachGlobalAliases.put(key, var);
+        foreachGlobalAliases().put(key, var);
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
         invalidatePackageRootSnapshot();
     }
 
     public static void clearForeachGlobalAlias(String key) {
-        RuntimeScalar previous = foreachGlobalAliases.remove(key);
+        RuntimeScalar previous = foreachGlobalAliases().remove(key);
         if (previous != null) {
             releaseForeachAlias(previous);
         }
@@ -883,9 +1136,9 @@ public class GlobalVariable {
         }
         String resolvedKey = resolveAliasedFqn(key);
         markPackageGlobalRoot(scalar);
-        globalPseudoConstants.put(resolvedKey, scalar);
+        globalPseudoConstants().put(resolvedKey, scalar);
         if (resolvedKey != key) {
-            globalPseudoConstants.remove(key);
+            globalPseudoConstants().remove(key);
         }
     }
 
@@ -893,10 +1146,10 @@ public class GlobalVariable {
         if (key == null) {
             return;
         }
-        globalPseudoConstants.remove(key);
+        globalPseudoConstants().remove(key);
         String resolvedKey = resolveAliasedFqn(key);
         if (resolvedKey != key) {
-            globalPseudoConstants.remove(resolvedKey);
+            globalPseudoConstants().remove(resolvedKey);
         }
     }
 
@@ -904,18 +1157,18 @@ public class GlobalVariable {
         if (childPrefix == null || childPrefix.isEmpty()) {
             return;
         }
-        globalPseudoConstants.keySet().removeIf(key -> key.startsWith(childPrefix));
+        globalPseudoConstants().keySet().removeIf(key -> key.startsWith(childPrefix));
     }
 
     public static boolean hasGlobalPseudoConstant(String key) {
         if (key == null) {
             return false;
         }
-        if (globalPseudoConstants.containsKey(key)) {
+        if (globalPseudoConstants().containsKey(key)) {
             return true;
         }
         String resolvedKey = resolveAliasedFqn(key);
-        return resolvedKey != key && globalPseudoConstants.containsKey(resolvedKey);
+        return resolvedKey != key && globalPseudoConstants().containsKey(resolvedKey);
     }
 
     /**
@@ -1179,13 +1432,13 @@ public class GlobalVariable {
         if (!stashAliases.isEmpty()) {
             String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
-                RuntimeScalar resolvedPinned = pinnedCodeRefs.get(resolvedKey);
+                RuntimeScalar resolvedPinned = pinnedCodeRefs().get(resolvedKey);
                 if (resolvedPinned != null) {
                     return resolvedPinned;
                 }
                 RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
                 if (resolvedVar != null) {
-                    pinnedCodeRefs.put(resolvedKey, resolvedVar);
+                    pinnedCodeRefs().put(resolvedKey, resolvedVar);
                     return resolvedVar;
                 }
             }
@@ -1193,7 +1446,7 @@ public class GlobalVariable {
         // First check if we have a pinned reference that survives stash deletion.
         // Runtime lookups emitted into already-compiled code use this path so
         // those call sites keep their original CV even after delete $Pkg::{sub}.
-        RuntimeScalar pinned = pinnedCodeRefs.get(key);
+        RuntimeScalar pinned = pinnedCodeRefs().get(key);
         if (pinned != null) {
             return pinned;
         }
@@ -1209,7 +1462,7 @@ public class GlobalVariable {
         }
 
         // Pin the RuntimeScalar so it survives stash deletion
-        pinnedCodeRefs.put(key, var);
+        pinnedCodeRefs().put(key, var);
 
         return var;
     }
@@ -1238,11 +1491,11 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar createPseudoConstantCodeRef(String key) {
-        RuntimeScalar scalar = globalPseudoConstants.get(key);
+        RuntimeScalar scalar = globalPseudoConstants().get(key);
         if (scalar == null) {
             String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
-                scalar = globalPseudoConstants.get(resolvedKey);
+                scalar = globalPseudoConstants().get(resolvedKey);
                 key = resolvedKey;
             }
         }
@@ -1271,8 +1524,8 @@ public class GlobalVariable {
             if (resolvedKey != key) {
                 RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
                 if (resolvedVar != null) {
-                    if (!deletedCodeRefPins.contains(resolvedKey)) {
-                        pinnedCodeRefs.put(resolvedKey, resolvedVar);
+                    if (!deletedCodeRefPins().contains(resolvedKey)) {
+                        pinnedCodeRefs().put(resolvedKey, resolvedVar);
                     }
                     return resolvedVar;
                 }
@@ -1288,8 +1541,8 @@ public class GlobalVariable {
         } else {
             markPackageGlobalRoot(var);
         }
-        if (!deletedCodeRefPins.contains(key)) {
-            pinnedCodeRefs.put(key, var);
+        if (!deletedCodeRefPins().contains(key)) {
+            pinnedCodeRefs().put(key, var);
         }
         return var;
     }
@@ -1309,7 +1562,7 @@ public class GlobalVariable {
         String resolvedKey = resolveAliasedFqn(key);
         RuntimeScalar ref = globalCodeRefs.get(resolvedKey);
         if (ref == null) {
-            RuntimeScalar pinned = pinnedCodeRefs.get(resolvedKey);
+            RuntimeScalar pinned = pinnedCodeRefs().get(resolvedKey);
             if (pinned != null
                     && pinned.type == RuntimeScalarType.CODE
                     && pinned.value instanceof RuntimeCode pinnedCode
@@ -1335,19 +1588,17 @@ public class GlobalVariable {
         } else {
             markPackageGlobalRoot(ref);
         }
-        deletedCodeRefPins.remove(resolvedKey);
-        pinnedCodeRefs.put(resolvedKey, ref);
+        deletedCodeRefPins().remove(resolvedKey);
+        pinnedCodeRefs().put(resolvedKey, ref);
         return ref;
     }
 
-    public static synchronized int registerCompiledCodeRef(RuntimeScalar ref) {
-        int id = nextCompiledCodeRefId++;
-        compiledCodeRefs.put(id, ref);
-        return id;
+    public static int registerCompiledCodeRef(RuntimeScalar ref) {
+        return globalState().registerCompiledCodeRef(ref);
     }
 
     public static RuntimeScalar getCompiledCodeRef(int id) {
-        RuntimeScalar ref = compiledCodeRefs.get(id);
+        RuntimeScalar ref = compiledCodeRefs().get(id);
         return ref != null ? ref : new RuntimeScalar();
     }
 
@@ -1376,38 +1627,38 @@ public class GlobalVariable {
      * @param codeRef The new RuntimeScalar to pin (typically a new empty one).
      */
     static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {
-        if (pinnedCodeRefs.containsKey(key)) {
-            pinnedCodeRefs.put(key, codeRef);
+        if (pinnedCodeRefs().containsKey(key)) {
+            pinnedCodeRefs().put(key, codeRef);
         }
     }
 
     static void enterLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
-        localizedCodeRefDepth.merge(key, 1, Integer::sum);
+        localizedCodeRefDepth().merge(key, 1, Integer::sum);
         if (displacedCodeRef != null) {
-            displacedLocalizedCodeRefs.put(displacedCodeRef, key);
+            displacedLocalizedCodeRefs().put(displacedCodeRef, key);
         }
     }
 
     static void exitLocalizedCodeRef(String key, RuntimeScalar displacedCodeRef) {
         if (displacedCodeRef != null) {
-            displacedLocalizedCodeRefs.remove(displacedCodeRef);
+            displacedLocalizedCodeRefs().remove(displacedCodeRef);
         }
-        Integer depth = localizedCodeRefDepth.get(key);
+        Integer depth = localizedCodeRefDepth().get(key);
         if (depth == null) {
             return;
         }
         if (depth <= 1) {
-            localizedCodeRefDepth.remove(key);
+            localizedCodeRefDepth().remove(key);
         } else {
-            localizedCodeRefDepth.put(key, depth - 1);
+            localizedCodeRefDepth().put(key, depth - 1);
         }
     }
 
     public static RuntimeScalar getLocalizedCodeRefForDirectCall(String key, RuntimeScalar fallback) {
         if ((key == null || key.isEmpty()) && fallback != null) {
-            key = displacedLocalizedCodeRefs.get(fallback);
+            key = displacedLocalizedCodeRefs().get(fallback);
         }
-        if (key == null || key.isEmpty() || !localizedCodeRefDepth.containsKey(key)) {
+        if (key == null || key.isEmpty() || !localizedCodeRefDepth().containsKey(key)) {
             return fallback;
         }
         RuntimeScalar localized = globalCodeRefs.get(key);
@@ -1528,8 +1779,8 @@ public class GlobalVariable {
 
     public static RuntimeScalar removeGlobalCodeRefForStashDelete(String key) {
         RuntimeScalar deleted = globalCodeRefs.remove(key);
-        if (deleted != null || pinnedCodeRefs.containsKey(key)) {
-            deletedCodeRefPins.add(key);
+        if (deleted != null || pinnedCodeRefs().containsKey(key)) {
+            deletedCodeRefPins().add(key);
             clearPackageCache();
             invalidatePackageRootSnapshot();
         }
@@ -1574,8 +1825,8 @@ public class GlobalVariable {
      * @param prefix The namespace prefix (e.g., "Foo::") to clear.
      */
     public static void clearPinnedCodeRefsForNamespace(String prefix) {
-        pinnedCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
-        deletedCodeRefPins.removeIf(k -> k.startsWith(prefix));
+        pinnedCodeRefs().keySet().removeIf(k -> k.startsWith(prefix));
+        deletedCodeRefPins().removeIf(k -> k.startsWith(prefix));
     }
 
     /**
