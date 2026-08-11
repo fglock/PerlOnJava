@@ -2522,6 +2522,52 @@ sub _try_perlonjava_fallback_pl {
     return -f "Makefile" ? 1 : 0;
 }
 
+# A distribution can load an ordinary runtime prerequisite from Makefile.PL
+# before CPAN has had a chance to install it.  The metadata fallback lets CPAN
+# discover and build that prerequisite, but the original configure step may
+# also create required files or custom make rules.  Retry it once after
+# satisfy_requires() succeeds, retaining the generated fallback Makefile if
+# the original configure still cannot run (for example because it probes a
+# native-only library).
+sub _retry_perlonjava_original_pl_after_prereqs {
+    my ($self) = @_;
+
+    my $fallback_pl = '.perlonjava-fallback-Makefile.PL';
+    my $marker = '.perlonjava-original-pl-retried';
+    return 0 unless -f $fallback_pl && -f 'Makefile.PL';
+    return 0 if -f $marker;
+
+    if (open my $marker_fh, '>', $marker) {
+        print {$marker_fh} "retried\n";
+        close $marker_fh;
+    } else {
+        return 0;
+    }
+
+    $CPAN::Frontend->myprint(
+        "PerlOnJava: Retrying original Makefile.PL after prerequisites\n"
+    );
+    # This retry happens inside an unattended jcpan run and cannot inherit the
+    # original configure process's terminal input.  ExtUtils::MakeMaker's
+    # prompt() honors PERL_MM_USE_DEFAULT, which selects each advertised
+    # default instead of blocking forever on a closed stdin.
+    local $ENV{PERL_MM_USE_DEFAULT} = 1;
+    my $ret = system($^X, 'Makefile.PL');
+    if ($ret == 0 && -f 'Makefile') {
+        $CPAN::Frontend->myprint(
+            "PerlOnJava: Original Makefile.PL retry succeeded\n"
+        );
+        return 1;
+    }
+
+    $CPAN::Frontend->mywarn(
+        "PerlOnJava: Original Makefile.PL retry still failed; retaining fallback\n"
+    );
+    local $ENV{JCPAN_RUN_BUNDLED_TESTS} = 1;
+    system($^X, $fallback_pl);
+    return 0;
+}
+
 #-> sub CPAN::Distribution::shortcut_make ;
 # return values: undef means don't shortcut; 0 means shortcut as fail;
 # and 1 means shortcut as success
@@ -2683,6 +2729,8 @@ is part of the perl-%s distribution. To install that, you need to run
         $self->post_make();
         return;
     }
+
+    $self->_retry_perlonjava_original_pl_after_prereqs;
 
     my $system;
     my $make_commandline;

@@ -10,6 +10,7 @@ XSLoader::load('IO::Socket::SSL', $VERSION);
 use base qw(IO::Socket::IP);
 
 use Carp qw(croak);
+use Exporter qw(import);
 
 # SSL verification modes (match OpenSSL constants)
 use constant SSL_VERIFY_NONE                 => 0x00;
@@ -29,6 +30,13 @@ use constant SSL_WANT_CONNECT      => 7;
 use constant SSL_WANT_ACCEPT       => 8;
 
 our $SSL_ERROR = '';
+
+our @EXPORT = qw(
+    SSL_WANT_READ SSL_WANT_WRITE
+    SSL_VERIFY_NONE SSL_VERIFY_PEER
+    SSL_VERIFY_FAIL_IF_NO_PEER_CERT SSL_VERIFY_CLIENT_ONCE
+    $SSL_ERROR
+);
 
 our @EXPORT_OK = qw(
     SSL_VERIFY_NONE SSL_VERIFY_PEER

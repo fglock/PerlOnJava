@@ -18,7 +18,6 @@ sub usage {
     local $Carp::CarpLevel = 2;
     croak "Usage: $subroutine(@_)";
 }
-
 sub blocksize   { 8 }
 sub keysize     { 0 }
 sub min_keysize { 8 }

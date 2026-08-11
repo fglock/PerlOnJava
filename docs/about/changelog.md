@@ -30,6 +30,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   `B::Flags`, bounded balanced-pattern support for `Text::Markdown`, and a
   PerlOnJava-aware `Char::Latin7` launcher guard; `Text::Markdown::Slidy`,
   `Text::Fold`, and their dependency suites now pass under `jcpan`.
+- CPAN: add BouncyCastle-backed `Crypt::Blowfish` block-cipher support and
+  reusable noninteractive configure retry, library-staging, and SDBM
+  writeback fixes for legacy distributions.
 - Add a Java-backed `Scalar::Type` port, replacing its native XS scalar-flag probe.
 - Index physical source line numbers so very large generated Perl modules do
   not repeatedly rescan their complete token streams while parsing strings.

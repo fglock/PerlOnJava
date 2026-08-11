@@ -435,9 +435,18 @@ sub _install_pure_perl {
                 closedir($dh);
             }
             
-            # Also scan BASEEXT directory recursively (standard MakeMaker PMLIBDIRS)
-            # e.g. for XML::Parser, scan Parser/ which contains Style/*.pm
-            if ($baseext && -d $baseext) {
+            # Scan the configured PMLIBDIRS recursively.  Standard MakeMaker
+            # defaults this to ['lib', $BASEEXT], but old distributions may
+            # explicitly name a sibling package tree.  LockFile::Simple, for
+            # example, declares PMLIBDIRS => ['Lock'] and expects
+            # Lock/Simple.pm to become LockFile/Lock/Simple.pm.
+            my @pmlibdirs = ref($args->{PMLIBDIRS}) eq 'ARRAY'
+                ? @{$args->{PMLIBDIRS}}
+                : ('lib', $baseext);
+            for my $pmlibdir (@pmlibdirs) {
+                next unless defined $pmlibdir && length $pmlibdir;
+                $pmlibdir =~ s{^\./}{};
+                next if $pmlibdir eq 'lib' || !-d $pmlibdir;
                 find({
                     wanted => sub {
                         return unless _installable_library_file($File::Find::name);
@@ -449,22 +458,26 @@ sub _install_pure_perl {
                             unless exists $pm{$src};
                     },
                     no_chdir => 1,
-                }, $baseext);
+                }, $pmlibdir);
             }
 
             # Some distributions keep package trees beside BASEEXT rather
             # than below it (NetAddr::IP/Lite/Lite.pm is a notable example).
             # Map files by their declared package so nested pure-Perl helper
-            # modules are staged into the same blib as the parent module.
+            # modules are staged into the same blib as the parent module.  Do
+            # not inspect test/build/support trees: test programs can declare
+            # the production package temporarily to reach private methods and
+            # must never overwrite the real module in blib (Email::Fingerprint
+            # has exactly this layout).
+            my %non_library_root_dir = map { $_ => 1 } qw(
+                t xt inc blib _build build local author examples example demo
+                script scripts bin share
+            );
             opendir(my $root_dh, '.') or undef $root_dh;
             if ($root_dh) {
                 while (my $entry = readdir($root_dh)) {
                     next if $entry =~ /^\.{1,2}$/ || $entry eq 'lib' || $entry eq 'blib';
-                    # Test helpers sometimes reopen a production package to
-                    # install fixture-only methods (IO-All's t/IO_Dumper.pm
-                    # reopens IO::All::Filesys).  They are not PMLIBDIRS and
-                    # must not overwrite the real library file in blib.
-                    next if $entry eq 't' || $entry eq 'xt';
+                    next if $non_library_root_dir{$entry};
                     next unless -d $entry;
                     find({
                         wanted => sub {
@@ -1670,6 +1683,16 @@ sub prompt {
     my ($msg, $default) = @_;
     $default //= '';
     print "$msg [$default] ";
+
+    # Match standard ExtUtils::MakeMaker: unattended CPAN clients select the
+    # advertised default, and a closed non-terminal stdin must never block a
+    # configure process forever.
+    my $is_tty = -t STDIN && (-t STDOUT || !(-f STDOUT || -c STDOUT));
+    if ($ENV{PERL_MM_USE_DEFAULT} || (!$is_tty && eof STDIN)) {
+        print "$default\n";
+        return $default;
+    }
+
     my $answer = <STDIN>;
     chomp $answer if defined $answer;
     return (defined $answer && $answer ne '') ? $answer : $default;
