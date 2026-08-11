@@ -1,0 +1,78 @@
+--- perl5/cpan/CPAN/lib/CPAN/Module.pm
++++ src/main/perl/lib/CPAN/Module.pm
+@@ -16,0 +17,6 @@
++sub perlonjava_provider {
++    my ($self) = @_;
++    require PerlOnJava::ProviderManifest;
++    return PerlOnJava::ProviderManifest->provider_for($self->{ID});
++}
++
+@@ -460,7 +466,7 @@
+     CPAN->debug("dist-reqtype[$pack->{reqtype}]".
+                 "self-reqtype[$self->{reqtype}]") if $CPAN::DEBUG;
+         if ($pack->{reqtype}) {
+-            if ($pack->{reqtype} eq "b" && $self->{reqtype} =~ /^[rc]$/) {
++            if ($pack->{reqtype} =~ /^(?:b|t|q)$/ && $self->{reqtype} =~ /^[rc]$/) {
+                 $pack->{reqtype} = $self->{reqtype};
+                 if (
+                     exists $pack->{install}
+@@ -473,7 +479,7 @@
+                    ) {
+                     delete $pack->{install};
+                     $CPAN::Frontend->mywarn
+-                        ("Promoting $pack->{ID} from 'build_requires' to 'requires'");
++                        ("Promoting $pack->{ID} from a non-runtime prerequisite to 'requires'");
+                 }
+             }
+         } else {
+@@ -509,6 +515,14 @@
+ #-> sub CPAN::Module::test ;
+ sub test   {
+     my $self = shift;
++    if ($ENV{PERLONJAVA_PROVIDER_CONFORMANCE}) {
++        my $provider = $self->perlonjava_provider
++            or die $self->id . " is not declared in PerlOnJava's provider manifest\n";
++        $CPAN::Frontend->myprint(sprintf(
++            "Testing upstream %s conformance for PerlOnJava's %s provider (%s); installation remains disabled.\n",
++            $self->id, $provider->{provider}, $provider->{version},
++        ));
++    }
+     # $self->{badtestcnt} ||= 0;
+     $self->rematein('test',@_);
+ }
+@@ -532,6 +546,8 @@
+ #-> sub CPAN::Module::uptodate ;
+ sub uptodate {
+     my ($self) = @_;
++    my $provider = $self->perlonjava_provider;
++    return 1 if $provider && $provider->{shadow_policy} eq 'forbidden';
+     local ($_);
+     my $inst = $self->inst_version or return 0;
+     my $cpan = $self->cpan_version;
+@@ -569,6 +585,16 @@
+ #-> sub CPAN::Module::install ;
+ sub install {
+     my($self) = @_;
++    if (my $provider = $self->perlonjava_provider) {
++        if ($provider->{shadow_policy} eq 'forbidden') {
++            $CPAN::Frontend->myprint(sprintf(
++                "%s is supplied by PerlOnJava's %s provider (%s); refusing a shadowing install.\n",
++                $self->id, $provider->{provider}, $provider->{version},
++            ));
++            delete $self->{force_update};
++            return 1;
++        }
++    }
+     my($doit) = 0;
+     if ($self->uptodate
+         &&
+@@ -652,6 +678,9 @@
+ #-> sub CPAN::Module::inst_version ;
+ sub inst_version {
+     my($self) = @_;
++    if (my $provider = $self->perlonjava_provider) {
++        return $provider->{version};
++    }
+     my $parsefile = $self->inst_file or return;
+     my $have = $self->parse_version($parsefile);
+     $have;

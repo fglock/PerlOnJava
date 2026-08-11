@@ -43,6 +43,7 @@ imports:
   # CPAN client script - required by jcpan wrapper
   - source: perl5/cpan/CPAN/scripts/cpan
     target: src/main/perl/bin/cpan
+    patch: CPAN-cpan.patch
 
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
@@ -781,6 +782,16 @@ imports:
   - source: perl5/cpan/CPAN/lib/CPAN
     target: src/main/perl/lib/CPAN
     type: directory
+
+  # PerlOnJava dependency-slot and bundled-provider integration. These are
+  # replayed after the CPAN directory import so a full sync remains idempotent.
+  - source: perl5/cpan/CPAN/lib/CPAN/Module.pm
+    target: src/main/perl/lib/CPAN/Module.pm
+    patch: CPAN-Module.pm.patch
+
+  - source: perl5/cpan/CPAN/lib/CPAN/Queue.pm
+    target: src/main/perl/lib/CPAN/Queue.pm
+    patch: CPAN-Queue.pm.patch
 
   # PerlOnJava tweaks (see git history / CPAN client integration)
   - source: perl5/cpan/CPAN/lib/CPAN/HandleConfig.pm

@@ -27,6 +27,7 @@ import java.lang.reflect.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * EmitterMethodCreator is a utility class that uses the ASM library to dynamically generate Java
@@ -70,13 +71,13 @@ public class EmitterMethodCreator implements Opcodes {
         SPILL_SLOT_COUNT = (s != null) ? Integer.parseInt(s) : 16;
     }
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
-    public static int skipVariables = 3;
+    public static final int skipVariables = 3;
     // Counter for generating unique class names
-    public static int classCounter = 0;
+    public static final AtomicInteger classCounter = new AtomicInteger(0);
 
     // Generate a unique internal class name
     public static String generateClassName() {
-        return "org/perlonjava/anon" + classCounter++;
+        return "org/perlonjava/anon" + classCounter.getAndIncrement();
     }
 
     private static String insnToString(AbstractInsnNode n) {

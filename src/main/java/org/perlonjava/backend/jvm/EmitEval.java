@@ -135,7 +135,7 @@ public class EmitEval {
 
         // Generate unique identifier for this eval site
         // This counter is incremented globally, ensuring each eval gets a unique tag
-        int counter = EmitterMethodCreator.classCounter++;
+        int counter = EmitterMethodCreator.classCounter.getAndIncrement();
 
         // Create compiler options specific to this eval
         // The filename becomes "(eval N)" for better error messages

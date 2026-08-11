@@ -9,6 +9,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The EmitRegex class is responsible for handling regex-related operations
@@ -18,7 +19,7 @@ import java.util.HashMap;
  */
 public class EmitRegex {
     // Callsite ID counter for /o modifier support (unique across all JVM compilations)
-    private static int nextCallsiteId = 100000;  // Start at 100000 to avoid collision with interpreter IDs
+    private static final AtomicInteger nextCallsiteId = new AtomicInteger(100000);
 
     private static boolean unicodeStringsEnabled(EmitterVisitor emitterVisitor) {
         return emitterVisitor.ctx.symbolTable != null
@@ -318,7 +319,7 @@ public class EmitRegex {
 
         // Create the regex matcher (use 3-argument version for /o or m?PAT?)
         if (needsCallsiteCache) {
-            int callsiteId = nextCallsiteId++;
+            int callsiteId = nextCallsiteId.getAndIncrement();
             emitterVisitor.ctx.mv.visitLdcInsn(callsiteId);
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",

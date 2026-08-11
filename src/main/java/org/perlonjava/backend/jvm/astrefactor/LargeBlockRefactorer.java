@@ -24,9 +24,6 @@ import static org.perlonjava.backend.jvm.astrefactor.BlockRefactor.*;
  */
 public class LargeBlockRefactorer {
 
-    // Reusable visitor for control flow detection
-    private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
-
     private static long estimateTotalBytecodeSizeCapped(List<Node> nodes, long capInclusive) {
         long total = 0;
         for (Node node : nodes) {
@@ -103,7 +100,7 @@ public class LargeBlockRefactorer {
     private static boolean tryWholeBlockRefactoring(EmitterVisitor emitterVisitor, BlockNode node) {
         // Check for unsafe control flow using ControlFlowDetectorVisitor
         // This properly handles loop depth - unlabeled next/last/redo inside loops are safe
-        controlFlowDetector.reset();
+        ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
         controlFlowDetector.scan(node);
         if (controlFlowDetector.hasUnsafeControlFlow()) {
             return false;

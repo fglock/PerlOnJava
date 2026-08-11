@@ -287,7 +287,7 @@ public class EvalStringHandler {
                 adjustedRegistry.put("@_", 1);
                 adjustedRegistry.put("wantarray", 2);
                 // Per-eval-invocation unique alias namespace for seeded lexicals.
-                int seedBeginId = EmitterMethodCreator.classCounter++;
+                int seedBeginId = EmitterMethodCreator.classCounter.getAndIncrement();
                 String seedPkg = PersistentVariable.beginPackage(seedBeginId);
                 int captureIndex = 0;
                 for (Map.Entry<String, Integer> entry : sortedVars) {

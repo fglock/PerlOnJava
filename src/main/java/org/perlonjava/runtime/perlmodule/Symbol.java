@@ -49,7 +49,7 @@ public class Symbol extends PerlModuleBase {
      */
     public static RuntimeList gensym(RuntimeArray args, int ctx) {
         // Create a unique anonymous glob
-        String globName = "Symbol::GEN" + EmitterMethodCreator.classCounter++;
+        String globName = "Symbol::GEN" + EmitterMethodCreator.classCounter.getAndIncrement();
         RuntimeGlob glob = new RuntimeGlob(globName);
         
         // Return a reference to the glob (not the glob itself)
@@ -101,7 +101,7 @@ public class Symbol extends PerlModuleBase {
      */
     public static RuntimeList geniosym(RuntimeArray args, int ctx) {
         // Create a unique anonymous glob (same as gensym)
-        String globName = "Symbol::GEN" + EmitterMethodCreator.classCounter++;
+        String globName = "Symbol::GEN" + EmitterMethodCreator.classCounter.getAndIncrement();
         RuntimeGlob glob = new RuntimeGlob(globName);
 
         // Initialize the IO slot (equivalent to Perl's: select(select $sym))
