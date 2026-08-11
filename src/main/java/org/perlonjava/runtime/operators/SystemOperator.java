@@ -340,15 +340,61 @@ public class SystemOperator {
             return null;
         }
 
+        if (SystemUtils.osIsWindows()) {
+            return splitWindowsDirectCommandWords(trimmed);
+        }
+
         if (DIRECT_COMMAND_SHELL_METACHARACTERS.matcher(trimmed).find()) {
             return null;
         }
 
-        if (!SystemUtils.osIsWindows() && trimmed.contains("\\")) {
+        if (trimmed.contains("\\")) {
             return null;
         }
 
         return Arrays.asList(trimmed.split("\\s+"));
+    }
+
+    /**
+     * Split a Windows one-string command when it only needs argv quoting, not
+     * cmd.exe expansion. Shell metacharacters inside a quoted argument are
+     * ordinary argument data (notably Perl source passed through {@code -e}).
+     */
+    static List<String> splitWindowsDirectCommandWords(String command) {
+        List<String> words = new ArrayList<>();
+        StringBuilder word = new StringBuilder();
+        boolean quoted = false;
+        boolean started = false;
+
+        for (int i = 0; i < command.length(); i++) {
+            char ch = command.charAt(i);
+            if (ch == '"') {
+                quoted = !quoted;
+                started = true;
+                continue;
+            }
+            if (!quoted && Character.isWhitespace(ch)) {
+                if (started) {
+                    words.add(word.toString());
+                    word.setLength(0);
+                    started = false;
+                }
+                continue;
+            }
+            if (!quoted && "*?[]{}()<>|&;`'$%".indexOf(ch) >= 0) {
+                return null;
+            }
+            word.append(ch);
+            started = true;
+        }
+
+        if (quoted) {
+            return null;
+        }
+        if (started) {
+            words.add(word.toString());
+        }
+        return words.isEmpty() ? null : words;
     }
 
     /**
