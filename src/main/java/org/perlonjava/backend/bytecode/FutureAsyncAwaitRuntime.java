@@ -3,18 +3,12 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.util.ArrayDeque;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runtime bridge to the Future::AsyncAwait::Awaitable method contract. */
 public final class FutureAsyncAwaitRuntime {
     private static final RuntimeScalar EMPTY_CURRENT_SUB = new RuntimeScalar("");
-    private static final ThreadLocal<ArrayDeque<Runnable>> RESUME_QUEUE =
-            ThreadLocal.withInitial(ArrayDeque::new);
-    private static final ThreadLocal<Boolean> DRAINING =
-            ThreadLocal.withInitial(() -> false);
-
     private FutureAsyncAwaitRuntime() {
     }
 
@@ -340,18 +334,19 @@ public final class FutureAsyncAwaitRuntime {
     }
 
     private static void enqueue(Runnable action) {
-        ArrayDeque<Runnable> queue = RESUME_QUEUE.get();
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        var queue = state.futureResumeQueue;
         queue.addLast(action);
-        if (DRAINING.get()) {
+        if (state.futureResumeDraining) {
             return;
         }
-        DRAINING.set(true);
+        state.futureResumeDraining = true;
         try {
             while (!queue.isEmpty()) {
                 queue.removeFirst().run();
             }
         } finally {
-            DRAINING.set(false);
+            state.futureResumeDraining = false;
             queue.clear();
         }
     }

@@ -6,6 +6,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.io.ScalarBackedIO;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -21,20 +22,22 @@ public class DataSection {
     /**
      * Set of package names that have already processed their DATA section
      */
-    private static final Set<String> processedPackages = new HashSet<>();
+    public static final class State {
+        final Set<String> processedPackages = new HashSet<>();
+        final Set<String> placeholderCreated = new HashSet<>();
+    }
 
-    /**
-     * Set of package names that have already created placeholder DATA handles
-     */
-    private static final Set<String> placeholderCreated = new HashSet<>();
+    private static State state() {
+        return PerlRuntime.current().dataSectionState;
+    }
 
     /**
      * Resets all static state for DataSection.
      * Called between test runs to prevent stale state from interfering.
      */
     public static void reset() {
-        processedPackages.clear();
-        placeholderCreated.clear();
+        state().processedPackages.clear();
+        state().placeholderCreated.clear();
     }
 
     /**
@@ -46,11 +49,11 @@ public class DataSection {
     public static void createPlaceholderDataHandle(Parser parser) {
         String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
 
-        if (placeholderCreated.contains(handleName)) {
+        if (state().placeholderCreated.contains(handleName)) {
             return; // Already created placeholder for this package
         }
 
-        placeholderCreated.add(handleName);
+        state().placeholderCreated.add(handleName);
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Creating placeholder DATA handle for package: " + handleName);
 
@@ -186,18 +189,19 @@ public class DataSection {
         // However, allow re-processing if the DATA handle was closed (e.g., module
         // was re-required after delete $INC{...}). This is needed because modules
         // like ConfigData.pm close DATA after reading and expect a fresh handle on reload.
-        if (processedPackages.contains(handleName)) {
+        State state = state();
+        if (state.processedPackages.contains(handleName)) {
             RuntimeIO existingIO = GlobalVariable.getGlobalIO(handleName).getRuntimeIO();
             if (existingIO != null && !(existingIO.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle)) {
                 return tokens.size();
             }
             // Handle was closed — allow re-processing
-            processedPackages.remove(handleName);
-            placeholderCreated.remove(handleName);
+            state.processedPackages.remove(handleName);
+            state.placeholderCreated.remove(handleName);
         }
 
         if (token.text.equals("__DATA__") || token.text.equals("__END__")) {
-            processedPackages.add(handleName);
+            state.processedPackages.add(handleName);
 
             // __END__ should always stop parsing, but only top-level scripts (and __DATA__) should
             // populate the DATA handle content.

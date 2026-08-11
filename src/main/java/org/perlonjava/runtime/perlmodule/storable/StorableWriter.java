@@ -445,7 +445,7 @@ public final class StorableWriter {
                     && org.perlonjava.runtime.runtimetypes.OverloadContext
                             .prepare(blessId) != null;
             boolean isWeak =
-                    org.perlonjava.runtime.runtimetypes.WeakRefRegistry.weakRefsExist
+                    org.perlonjava.runtime.runtimetypes.WeakRefRegistry.weakRefsExist()
                             && org.perlonjava.runtime.runtimetypes.WeakRefRegistry.isweak(value);
             int opcode;
             if (isWeak) {

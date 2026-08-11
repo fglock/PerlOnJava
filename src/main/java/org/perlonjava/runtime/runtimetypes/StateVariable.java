@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
@@ -12,7 +11,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  */
 public class StateVariable {
     // A map to track whether a state variable has been initialized.
-    static Map<String, Boolean> stateVariableInitialized = new HashMap<>();
+    private static Map<String, Boolean> stateVariableInitialized() {
+        return PerlRuntime.current().stateVariableInitialized;
+    }
 
     /**
      * Checks if a state variable has been initialized.
@@ -26,7 +27,7 @@ public class StateVariable {
         String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
         if (!codeRef.getDefinedBoolean()) {
             // For top-level code without __SUB__, check global initialization.
-            Boolean initialized = stateVariableInitialized.get(beginVar);
+            Boolean initialized = stateVariableInitialized().get(beginVar);
             if (initialized == null || !initialized) {
                 return scalarFalse;
             }
@@ -52,7 +53,7 @@ public class StateVariable {
     public static void markInitializedStateVariable(RuntimeScalar codeRef, String var, int id) {
         String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
         if (!codeRef.getDefinedBoolean()) {
-            stateVariableInitialized.put(beginVar, true);
+            stateVariableInitialized().put(beginVar, true);
         } else {
             RuntimeCode code = (RuntimeCode) codeRef.value;
             code.stateVariableInitialized.put(beginVar, true);

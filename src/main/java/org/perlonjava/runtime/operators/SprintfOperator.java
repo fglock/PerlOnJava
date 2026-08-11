@@ -21,8 +21,6 @@ public class SprintfOperator {
 
     // Maximum practical limit for width/precision to prevent memory issues
     public static final int MAX_PRACTICAL_FORMAT_SIZE = 8192;
-    private static int charsWritten = 0;
-
     /**
      * Formats the elements according to the specified format string.
      * <p>
@@ -47,7 +45,7 @@ public class SprintfOperator {
 
     private static RuntimeScalar sprintfInternal(RuntimeScalar runtimeScalar, RuntimeList list, boolean bytesMode) {
         RuntimeScalar.checkTaint(runtimeScalar, "sprintf");
-        charsWritten = 0;  // Reset counter
+        int charsWritten = 0;
         // Expand the list to ensure all elements are available
         list = new RuntimeList((RuntimeBase) list);
         String format = runtimeScalar.toString();
@@ -165,7 +163,7 @@ public class SprintfOperator {
                     // %n doesn't produce output, but does consume an argument
                     int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
                     maxArgIndexUsed = Math.max(maxArgIndexUsed, targetIndex);
-                    handlePercentN(spec, list, argIndex);
+                    handlePercentN(spec, list, argIndex, charsWritten);
 
                     // Update sequential argument index for non-positional width/precision
                     if (spec.parameterIndex == null) {
@@ -276,7 +274,7 @@ public class SprintfOperator {
     }
 
     private static void handlePercentN(FormatSpecifier spec,
-                                       RuntimeList list, int argIndex) {
+                                       RuntimeList list, int argIndex, int charsWritten) {
         int targetIndex = spec.parameterIndex != null ? spec.parameterIndex - 1 : argIndex;
         if (targetIndex >= list.size()) {
             // Missing argument for %n

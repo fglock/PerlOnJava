@@ -21,39 +21,24 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DestroyDispatch {
 
-    // BitSet indexed by |blessId| — set if the class defines DESTROY (or AUTOLOAD)
-    private static final BitSet destroyClasses = new BitSet();
-
-    // Cache of resolved DESTROY methods per blessId (avoids hierarchy traversal on every call)
-    private static final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCache =
-            new ConcurrentHashMap<>();
-
-    // Cursor objects whose classes define DESTROY. Weak-ref sweeps already
-    // clean unreachable weak referents; this registry covers DBIC-style
-    // storage cursors that are not themselves weakened, but whose finish()
-    // side-effect must happen deterministically.
-    private static final Set<RuntimeBase> destroyableObjects =
-            Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
-
-    // DESTROY rescue detection: when DESTROY stores $self in a hash element,
-    // the object should survive (like Perl 5's Schema::DESTROY self-save pattern).
-    // These fields track the current DESTROY target so RuntimeHash.put can detect
-    // when the referent is being "rescued" by storing it elsewhere.
-    static volatile RuntimeBase currentDestroyTarget = null;
-    static volatile boolean destroyTargetRescued = false;
-
-    // Phase D: sweep-pending flag. Set by RuntimeScalar.set() when it
-    // releases a blessed-with-DESTROY ref whose refCount stays > 0
-    // (cyclic) *while inside* a DESTROY body. Drained by doCallDestroy's
-    // outermost finally: if set, fire the reachability walker once to
-    // catch any newly-orphaned subgraphs that would otherwise keep weak
-    // refs defined past their owners' lives. Amortizes what would
-    // otherwise be a sweep on every set() — only the outermost DESTROY
-    // pays the cost.
-    static boolean sweepPendingAfterOuterDestroy = false;
+    private static LifecycleRuntimeState state() {
+        return PerlRuntime.current().lifecycleState;
+    }
 
     public static boolean isInsideDestroy() {
-        return currentDestroyTarget != null;
+        return state().currentDestroyTarget != null;
+    }
+
+    static RuntimeBase currentDestroyTarget() {
+        return state().currentDestroyTarget;
+    }
+
+    static void markDestroyTargetRescued() {
+        state().destroyTargetRescued = true;
+    }
+
+    static void requestSweepAfterOuterDestroy() {
+        state().sweepPendingAfterOuterDestroy = true;
     }
 
     public static void registerIfDestroyable(RuntimeBase referent, int blessId) {
@@ -62,26 +47,27 @@ public class DestroyDispatch {
         if (className != null
                 && className.endsWith("::Cursor")
                 && classHasDestroy(blessId, className)) {
-            destroyableObjects.add(referent);
+            state().destroyableObjects.add(referent);
         } else {
-            destroyableObjects.remove(referent);
+            state().destroyableObjects.remove(referent);
         }
     }
 
     public static void unregisterDestroyable(RuntimeBase referent) {
         if (referent != null) {
-            destroyableObjects.remove(referent);
+            state().destroyableObjects.remove(referent);
         }
     }
 
     public static ArrayList<RuntimeBase> snapshotDestroyableObjects() {
-        synchronized (destroyableObjects) {
-            return new ArrayList<>(destroyableObjects);
+        Set<RuntimeBase> objects = state().destroyableObjects;
+        synchronized (objects) {
+            return new ArrayList<>(objects);
         }
     }
 
     public static boolean hasDestroyableObjects() {
-        return !destroyableObjects.isEmpty();
+        return !state().destroyableObjects.isEmpty();
     }
 
     // Rescued objects whose weak refs need deferred clearing.
@@ -91,9 +77,6 @@ public class DestroyDispatch {
     // and clear their weak refs (with a deep sweep into nested blessed objects)
     // just before END blocks run, when all test code has finished and the
     // back-references are no longer needed.
-    private static final java.util.List<RuntimeBase> rescuedObjects =
-            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-
     /**
      * Phase 4 (refcount_alignment_plan.md): Snapshot the rescued-objects
      * list for use by {@link ReachabilityWalker}. Rescued objects (the
@@ -101,20 +84,22 @@ public class DestroyDispatch {
      * graph even though they've "already fired" DESTROY.
      */
     public static java.util.List<RuntimeBase> snapshotRescuedForWalk() {
-        synchronized (rescuedObjects) {
-            return new java.util.ArrayList<>(rescuedObjects);
+        java.util.List<RuntimeBase> objects = state().rescuedObjects;
+        synchronized (objects) {
+            return new java.util.ArrayList<>(objects);
         }
     }
 
     public static boolean isRescued(RuntimeBase referent) {
         if (referent == null) return false;
-        synchronized (rescuedObjects) {
-            return rescuedObjects.contains(referent);
+        java.util.List<RuntimeBase> objects = state().rescuedObjects;
+        synchronized (objects) {
+            return objects.contains(referent);
         }
     }
 
     public static boolean hasRescuedObjects() {
-        return !rescuedObjects.isEmpty();
+        return !state().rescuedObjects.isEmpty();
     }
 
     /**
@@ -144,12 +129,10 @@ public class DestroyDispatch {
      * get the gate; they were already broken on master and need a
      * separate fix path.
      */
-    private static final java.util.BitSet walkerGateClasses = new java.util.BitSet();
-    private static final java.util.BitSet walkerGateChecked = new java.util.BitSet();
-
     public static boolean classNeedsWalkerGate(int blessId) {
+        LifecycleRuntimeState state = state();
         int idx = Math.abs(blessId);
-        if (walkerGateChecked.get(idx)) return walkerGateClasses.get(idx);
+        if (state.walkerGateChecked.get(idx)) return state.walkerGateClasses.get(idx);
         String cn = NameNormalizer.getBlessStr(blessId);
         boolean needs = cn != null && (
                 cn.startsWith("Class::MOP")
@@ -158,21 +141,22 @@ public class DestroyDispatch {
              || cn.startsWith("Moo::")
              || cn.equals("Moo")
         );
-        walkerGateChecked.set(idx);
-        if (needs) walkerGateClasses.set(idx);
+        state.walkerGateChecked.set(idx);
+        if (needs) state.walkerGateClasses.set(idx);
         return needs;
     }
 
     public static boolean classHasDestroy(int blessId, String className) {
+        LifecycleRuntimeState state = state();
         int idx = Math.abs(blessId);
-        if (destroyClasses.get(idx)) return true;
+        if (state.destroyClasses.get(idx)) return true;
         // First time for this class — check hierarchy.
         // findMethodInHierarchy already falls through to AUTOLOAD if no explicit DESTROY exists.
         RuntimeScalar m = InheritanceResolver.findMethodInHierarchy("DESTROY", className, null, 0);
         if (m != null) {
-            destroyClasses.set(idx);
+            state.destroyClasses.set(idx);
             // Activate the mortal mechanism now that we know DESTROY classes exist
-            MortalList.active = true;
+            MortalList.setActive(true);
             return true;
         }
         return false;
@@ -183,8 +167,8 @@ public class DestroyDispatch {
      * Clears both the destroyClasses BitSet and the DESTROY method cache.
      */
     public static void invalidateCache() {
-        destroyClasses.clear();
-        destroyMethodCache.clear();
+        state().destroyClasses.clear();
+        state().destroyMethodCache.clear();
     }
 
     /**
@@ -242,7 +226,7 @@ public class DestroyDispatch {
             // refs and internal fields must remain intact because the phantom chain
             // (or other code) may still access the object through its weak refs.
             // Proper cleanup happens at END time via clearRescuedWeakRefs.
-            if (rescuedObjects.contains(referent)) {
+            if (state().rescuedObjects.contains(referent)) {
                 return;
             }
             WeakRefRegistry.clearWeakRefsTo(referent);
@@ -300,13 +284,14 @@ public class DestroyDispatch {
      * Perform the actual DESTROY method call.
      */
     private static void doCallDestroy(RuntimeBase referent, String className) {
+        LifecycleRuntimeState state = state();
         // Use cached method if available
-        RuntimeScalar destroyMethod = destroyMethodCache.get(referent.blessId);
+        RuntimeScalar destroyMethod = state.destroyMethodCache.get(referent.blessId);
         if (destroyMethod == null) {
             destroyMethod = InheritanceResolver.findMethodInHierarchy(
                     "DESTROY", className, null, 0);
             if (destroyMethod != null) {
-                destroyMethodCache.put(referent.blessId, destroyMethod);
+                state.destroyMethodCache.put(referent.blessId, destroyMethod);
             }
         }
 
@@ -354,10 +339,10 @@ public class DestroyDispatch {
         // Schema::DESTROY reattaching to a ResultSource), RuntimeHash.put
         // will detect the referent and set destroyTargetRescued = true.
         // After DESTROY, if rescued, skip cascade to keep internals alive.
-        RuntimeBase savedTarget = currentDestroyTarget;
-        boolean savedRescued = destroyTargetRescued;
-        currentDestroyTarget = referent;
-        destroyTargetRescued = false;
+        RuntimeBase savedTarget = state.currentDestroyTarget;
+        boolean savedRescued = state.destroyTargetRescued;
+        state.currentDestroyTarget = referent;
+        state.destroyTargetRescued = false;
 
         // Phase 3 (refcount_alignment_plan.md): Transition from MIN_VALUE
         // back to 0 so increments/decrements inside DESTROY work normally.
@@ -440,7 +425,7 @@ public class DestroyDispatch {
             // self-save). Mark needsReDestroy and let the next decrement-to-0
             // re-invoke DESTROY. Don't clear weak refs or cascade — the object
             // is still alive.
-            if (referent.refCount > 0 && !destroyTargetRescued) {
+            if (referent.refCount > 0 && !state.destroyTargetRescued) {
                 referent.needsReDestroy = true;
                 return;
             }
@@ -455,7 +440,7 @@ public class DestroyDispatch {
             //   $source->{schema} = $self
             // This triggers rescue detection because the old value ($source->{schema},
             // a weak ref to Schema) is being replaced by a strong ref to Schema.
-            if (destroyTargetRescued) {
+            if (state.destroyTargetRescued) {
                 // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
                 //
                 // refCount has been set to 1 by setLargeRefCounted during rescue
@@ -480,7 +465,7 @@ public class DestroyDispatch {
                 //
                 // Track rescued objects so clearRescuedWeakRefs can clean up
                 // at END time.
-                rescuedObjects.add(referent);
+                state.rescuedObjects.add(referent);
                 MortalList.invalidateExternalRootSnapshot();
                 return;
             }
@@ -516,8 +501,8 @@ public class DestroyDispatch {
                     new RuntimeScalar(""));
         } finally {
             // Restore the DESTROY target and rescue flag for nested DESTROY calls
-            currentDestroyTarget = savedTarget;
-            destroyTargetRescued = savedRescued;
+            state.currentDestroyTarget = savedTarget;
+            state.destroyTargetRescued = savedRescued;
             // Phase 3: Exit DESTROY state. If refCount is still 0 and we're
             // not taking the resurrection path, set MIN_VALUE so future
             // callDestroy enters the normal cleanup path.
@@ -535,9 +520,9 @@ public class DestroyDispatch {
             // the sweep cost to at most one per top-level DESTROY instead
             // of per-set(). Gated by ModuleInitGuard to avoid tripping
             // during require/use load.
-            if (savedTarget == null && sweepPendingAfterOuterDestroy
+            if (savedTarget == null && state.sweepPendingAfterOuterDestroy
                     && !ModuleInitGuard.inModuleInit()) {
-                sweepPendingAfterOuterDestroy = false;
+                state.sweepPendingAfterOuterDestroy = false;
                 ReachabilityWalker.sweepWeakRefs(false, false);
             }
         }
@@ -561,6 +546,7 @@ public class DestroyDispatch {
      * into elements. This ensures DBIC's leak tracer sees the weak refs as undef.
      */
     public static void processRescuedObjects() {
+        java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
         if (rescuedObjects.isEmpty()) return;
         // Snapshot and clear to avoid ConcurrentModificationException
         java.util.List<RuntimeBase> snapshot;
@@ -606,6 +592,7 @@ public class DestroyDispatch {
      *    and clear their weak refs too
      */
     public static void clearRescuedWeakRefs() {
+        java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
         if (rescuedObjects.isEmpty()) return;
         java.util.List<RuntimeBase> snapshot;
         synchronized (rescuedObjects) {
@@ -629,6 +616,7 @@ public class DestroyDispatch {
      */
     public static boolean clearRescuedWeakRefsTo(RuntimeBase rescued) {
         if (rescued == null) return false;
+        java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
         boolean removed;
         synchronized (rescuedObjects) {
             removed = rescuedObjects.remove(rescued);
@@ -652,6 +640,7 @@ public class DestroyDispatch {
      */
     public static boolean clearRescuedWeakRefsToSelfOnly(RuntimeBase rescued) {
         if (rescued == null) return false;
+        java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
         boolean present;
         synchronized (rescuedObjects) {
             present = rescuedObjects.contains(rescued);

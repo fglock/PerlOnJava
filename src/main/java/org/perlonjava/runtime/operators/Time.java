@@ -33,10 +33,16 @@ public class Time {
         t.setDaemon(true);  // Daemon thread won't prevent JVM shutdown
         return t;
     });
-    private static ScheduledFuture<?> currentAlarmTask = null;
-    private static long alarmStartTime;
-    private static int alarmDuration;
-    private static Thread alarmTargetThread;
+    public static final class State {
+        ScheduledFuture<?> currentAlarmTask;
+        long alarmStartTime;
+        int alarmDuration;
+        Thread alarmTargetThread;
+    }
+
+    private static State state() {
+        return PerlRuntime.current().timeState;
+    }
 
     /**
      * Returns the current time in seconds since the Unix epoch with second precision.
@@ -344,6 +350,7 @@ public class Time {
      * @return a RuntimeScalar representing the seconds remaining from previous alarm
      */
     public static RuntimeScalar alarm(int ctx, RuntimeBase... args) {
+        State state = state();
         int seconds = 0;
         if (args.length > 0) {
             seconds = args[0].scalar().getInt();
@@ -351,25 +358,25 @@ public class Time {
 
         // Calculate remaining time on previous timer
         int remainingTime = 0;
-        if (currentAlarmTask != null && !currentAlarmTask.isDone()) {
-            long elapsedTime = (System.currentTimeMillis() - alarmStartTime) / 1000;
-            remainingTime = Math.max(0, alarmDuration - (int) elapsedTime);
-            currentAlarmTask.cancel(false);
+        if (state.currentAlarmTask != null && !state.currentAlarmTask.isDone()) {
+            long elapsedTime = (System.currentTimeMillis() - state.alarmStartTime) / 1000;
+            remainingTime = Math.max(0, state.alarmDuration - (int) elapsedTime);
+            state.currentAlarmTask.cancel(false);
         }
 
         if (seconds == 0) {
-            currentAlarmTask = null;
+            state.currentAlarmTask = null;
             return new RuntimeScalar(remainingTime);
         }
 
         // Set up new alarm
-        alarmStartTime = System.currentTimeMillis();
-        alarmDuration = seconds;
-        alarmTargetThread = Thread.currentThread();
+        state.alarmStartTime = System.currentTimeMillis();
+        state.alarmDuration = seconds;
+        state.alarmTargetThread = Thread.currentThread();
         PerlRuntime alarmOwner = PerlRuntime.current();
-        Thread targetThread = alarmTargetThread;
+        Thread targetThread = state.alarmTargetThread;
 
-        currentAlarmTask = alarmScheduler.schedule(
+        state.currentAlarmTask = alarmScheduler.schedule(
                 () -> dispatchAlarm(alarmOwner, targetThread), seconds, TimeUnit.SECONDS);
 
         return new RuntimeScalar(remainingTime);
@@ -402,7 +409,8 @@ public class Time {
      * @return true if alarm is active, false otherwise
      */
     public static boolean hasActiveAlarm() {
-        return currentAlarmTask != null && !currentAlarmTask.isDone();
+        State state = state();
+        return state.currentAlarmTask != null && !state.currentAlarmTask.isDone();
     }
 
     /**
@@ -411,11 +419,20 @@ public class Time {
      * @return seconds remaining, or 0 if no alarm active
      */
     public static int getAlarmRemainingSeconds() {
+        State state = state();
         if (!hasActiveAlarm()) {
             return 0;
         }
-        long elapsedTime = (System.currentTimeMillis() - alarmStartTime) / 1000;
-        return Math.max(0, alarmDuration - (int) elapsedTime);
+        long elapsedTime = (System.currentTimeMillis() - state.alarmStartTime) / 1000;
+        return Math.max(0, state.alarmDuration - (int) elapsedTime);
+    }
+
+    public static void cancelCurrentAlarm() {
+        State state = state();
+        if (state.currentAlarmTask != null) {
+            state.currentAlarmTask.cancel(false);
+            state.currentAlarmTask = null;
+        }
     }
 
     /**
@@ -423,9 +440,11 @@ public class Time {
      * This method is called by the shutdown hook and can also be called manually.
      */
     public static void shutdownAlarmScheduler() {
-        if (currentAlarmTask != null && !currentAlarmTask.isDone()) {
-            currentAlarmTask.cancel(false);
-            currentAlarmTask = null;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.timeState.currentAlarmTask != null
+                && !runtime.timeState.currentAlarmTask.isDone()) {
+            runtime.timeState.currentAlarmTask.cancel(false);
+            runtime.timeState.currentAlarmTask = null;
         }
 
         if (!alarmScheduler.isShutdown()) {

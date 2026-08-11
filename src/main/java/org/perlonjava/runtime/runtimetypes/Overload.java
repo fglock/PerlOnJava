@@ -43,9 +43,6 @@ public class Overload {
      * overloaded objects inside overload methods (e.g., an overload that
      * stringifies a DIFFERENT overloaded object).
      */
-    private static final ThreadLocal<Integer> stringifyDepth =
-            ThreadLocal.withInitial(() -> 0);
-
     /** Maximum {@code stringify} recursion before we give up and return default. */
     private static final int STRINGIFY_MAX_DEPTH = 10;
 
@@ -62,7 +59,8 @@ public class Overload {
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
         // Recursion guard — see STRINGIFY_MAX_DEPTH javadoc.
-        int depth = stringifyDepth.get();
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        int depth = state.overloadStringifyDepth;
         if (depth >= STRINGIFY_MAX_DEPTH) {
             // Skip overload dispatch and return the raw reference form directly.
             if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
@@ -74,7 +72,7 @@ public class Overload {
             return new RuntimeScalar("");
         }
 
-        stringifyDepth.set(depth + 1);
+        state.overloadStringifyDepth = depth + 1;
         try {
             // Prepare overload context and check if object is eligible for overloading
             int blessId = RuntimeScalarType.blessedId(runtimeScalar);
@@ -101,7 +99,7 @@ public class Overload {
             }
             return new RuntimeScalar(((RuntimeBase) runtimeScalar.value).toStringRef());
         } finally {
-            stringifyDepth.set(depth);
+            state.overloadStringifyDepth = depth;
         }
     }
 

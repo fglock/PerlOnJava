@@ -2,12 +2,11 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Registry for compile-time %^H (hints hash) scoping and per-call-site tracking.
@@ -28,24 +27,9 @@ public class HintHashRegistry {
     // Compile-time scope stack for %^H save/restore.
     // Each entry is a snapshot of %^H taken when entering a scope.
     // On scope exit, the global %^H is restored from this stack.
-    private static final Deque<Map<String, RuntimeScalar>> compileTimeStack =
-        new ArrayDeque<>();
-
-    // ---- Snapshot registry (compile-time -> runtime bridge) ----
-
-    // Maps snapshot IDs to frozen hint hash maps. ID 0 means empty/no hints.
-    private static final Map<Integer, Map<String, String>> snapshotRegistry =
-        new ConcurrentHashMap<>();
-    private static final AtomicInteger nextSnapshotId = new AtomicInteger(0);
-
-    // ThreadLocal tracking the current call site's snapshot ID.
-    // Updated at runtime from emitted bytecode.
-    private static final ThreadLocal<Integer> callSiteSnapshotId =
-        ThreadLocal.withInitial(() -> 0);
-
-    // ThreadLocal stack saving caller's snapshot ID across subroutine calls.
-    private static final ThreadLocal<Deque<Integer>> callerSnapshotIdStack =
-        ThreadLocal.withInitial(ArrayDeque::new);
+    private static CompilationRuntimeState state() {
+        return PerlRuntime.current().compilationState;
+    }
 
     // ---- Compile-time %^H scoping ----
 
@@ -60,7 +44,7 @@ public class HintHashRegistry {
         for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
             snapshot.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
         }
-        compileTimeStack.push(snapshot);
+        state().hintCompileTimeStack.push(snapshot);
     }
 
     /**
@@ -68,8 +52,9 @@ public class HintHashRegistry {
      * Called at block exit during parsing.
      */
     public static void exitScope() {
-        if (!compileTimeStack.isEmpty()) {
-            Map<String, RuntimeScalar> savedState = compileTimeStack.pop();
+        Deque<Map<String, RuntimeScalar>> stack = state().hintCompileTimeStack;
+        if (!stack.isEmpty()) {
+            Map<String, RuntimeScalar> savedState = stack.pop();
             // Restore global %^H to the state saved when we entered this scope
             RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
             hintHash.elements.clear();
@@ -92,12 +77,13 @@ public class HintHashRegistry {
         if (hintHash.elements.isEmpty()) {
             return 0;
         }
-        int id = nextSnapshotId.incrementAndGet();
+        CompilationRuntimeState state = state();
+        int id = state.nextHintSnapshotId.incrementAndGet();
         Map<String, String> snapshot = new HashMap<>();
         for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
             snapshot.put(entry.getKey(), entry.getValue().toString());
         }
-        snapshotRegistry.put(id, snapshot);
+        state.hintSnapshots.put(id, snapshot);
         return id;
     }
 
@@ -110,7 +96,7 @@ public class HintHashRegistry {
      * @param id the snapshot ID (0 = empty/no hints)
      */
     public static void setCallSiteHintHashId(int id) {
-        callSiteSnapshotId.set(id);
+        state().callSiteHintHashId = id;
     }
 
     /**
@@ -120,11 +106,15 @@ public class HintHashRegistry {
      * Called by RuntimeCode.apply() before entering a subroutine.
      */
     public static void pushCallerHintHash() {
-        int currentId = callSiteSnapshotId.get();
-        callerSnapshotIdStack.get().push(currentId);
+        pushCallerHintHash(state());
+    }
+
+    public static void pushCallerHintHash(CompilationRuntimeState state) {
+        int currentId = state.callSiteHintHashId;
+        state.callerHintHashIdStack.push(currentId);
         // Reset callsite for the callee - it should not inherit the caller's hints.
         // The callee's own CompilerFlagNodes will set the correct ID if needed.
-        callSiteSnapshotId.set(0);
+        state.callSiteHintHashId = 0;
     }
 
     /**
@@ -133,12 +123,16 @@ public class HintHashRegistry {
      * Called by RuntimeCode.apply() after a subroutine returns.
      */
     public static void popCallerHintHash() {
-        Deque<Integer> stack = callerSnapshotIdStack.get();
+        popCallerHintHash(state());
+    }
+
+    public static void popCallerHintHash(CompilationRuntimeState state) {
+        Deque<Integer> stack = state.callerHintHashIdStack;
         if (!stack.isEmpty()) {
             int restoredId = stack.pop();
             // Restore the callsite ID so eval STRING and subsequent code
             // see the correct hint hash, not one clobbered by the callee.
-            callSiteSnapshotId.set(restoredId);
+            state.callSiteHintHashId = restoredId;
         }
     }
 
@@ -150,7 +144,8 @@ public class HintHashRegistry {
      * @return The hint hash map, or null if not available
      */
     public static Map<String, String> getCallerHintHashAtFrame(int frame) {
-        Deque<Integer> stack = callerSnapshotIdStack.get();
+        CompilationRuntimeState state = state();
+        Deque<Integer> stack = state.callerHintHashIdStack;
         if (stack.isEmpty()) {
             return null;
         }
@@ -158,7 +153,7 @@ public class HintHashRegistry {
         for (int id : stack) {
             if (index == frame) {
                 if (id == 0) return null;
-                return snapshotRegistry.get(id);
+                return state.hintSnapshots.get(id);
             }
             index++;
         }
@@ -172,9 +167,10 @@ public class HintHashRegistry {
      * @return the hint hash map, or null if empty/not set
      */
     public static Map<String, String> getCurrentCallSiteHintHash() {
-        int id = callSiteSnapshotId.get();
+        CompilationRuntimeState state = state();
+        int id = state.callSiteHintHashId;
         if (id == 0) return null;
-        return snapshotRegistry.get(id);
+        return state.hintSnapshots.get(id);
     }
 
     /**
@@ -182,10 +178,11 @@ public class HintHashRegistry {
      * Called by PerlLanguageProvider.resetAll() during reinitialization.
      */
     public static void clear() {
-        compileTimeStack.clear();
-        snapshotRegistry.clear();
-        nextSnapshotId.set(0);
-        callSiteSnapshotId.set(0);
-        callerSnapshotIdStack.get().clear();
+        CompilationRuntimeState state = state();
+        state.hintCompileTimeStack.clear();
+        state.hintSnapshots.clear();
+        state.nextHintSnapshotId.set(0);
+        state.callSiteHintHashId = 0;
+        state.callerHintHashIdStack.clear();
     }
 }

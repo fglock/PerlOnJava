@@ -26,24 +26,16 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarZero;
  */
 public class FilterUtilCall extends PerlModuleBase {
 
-    /**
-     * Thread-local storage for source filter context.
-     * Each thread can have its own stack of active filters.
-     */
-    private static final ThreadLocal<FilterContext> filterContext = ThreadLocal.withInitial(FilterContext::new);
-
-    /**
-     * Thread-local flag to track if a filter was installed during the current use statement.
-     * This is used by the parser to know when to rejoin/re-tokenize remaining source.
-     */
-    private static final ThreadLocal<Boolean> filterInstalledDuringUse = ThreadLocal.withInitial(() -> false);
+    private static FilterRuntimeState state() {
+        return PerlRuntime.current().filterState;
+    }
 
     /**
      * Mark that a filter was installed during the current use statement.
      * Called by real_import() when a filter is added to the stack.
      */
     public static void markFilterInstalled() {
-        filterInstalledDuringUse.set(true);
+        state().installedDuringUse = true;
     }
 
     /**
@@ -53,8 +45,8 @@ public class FilterUtilCall extends PerlModuleBase {
      * @return true if a filter was installed, false otherwise
      */
     public static boolean wasFilterInstalled() {
-        boolean result = filterInstalledDuringUse.get();
-        filterInstalledDuringUse.set(false);  // Reset after checking
+        boolean result = state().installedDuringUse;
+        state().installedDuringUse = false;  // Reset after checking
         return result;
     }
 
@@ -64,7 +56,7 @@ public class FilterUtilCall extends PerlModuleBase {
      * @return true if filters are active, false otherwise
      */
     public static boolean hasActiveFilters() {
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
         return context.filterStack.size() > 0;
     }
 
@@ -112,7 +104,7 @@ public class FilterUtilCall extends PerlModuleBase {
         RuntimeScalar packageName = args.get(1);
         RuntimeScalar isCodeRef = args.get(2);
 
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
 
         // Create a filter entry
         RuntimeArray filterEntry = new RuntimeArray();
@@ -143,7 +135,7 @@ public class FilterUtilCall extends PerlModuleBase {
      * @return status code
      */
     public static RuntimeList filter_read(RuntimeArray args, int ctx) {
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
 
         // Prevent infinite recursion
         if (context.inFilterRead) {
@@ -219,7 +211,7 @@ public class FilterUtilCall extends PerlModuleBase {
      * @return true on success
      */
     public static RuntimeList filter_del(RuntimeArray args, int ctx) {
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
 
         // Remove the top filter from the stack
         if (context.filterStack.size() > 0) {
@@ -239,7 +231,7 @@ public class FilterUtilCall extends PerlModuleBase {
      * @return The filtered source code
      */
     public static String applyFilters(String sourceCode) {
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
 
         if (context.filterStack.size() == 0) {
             // No filters active
@@ -468,7 +460,7 @@ public class FilterUtilCall extends PerlModuleBase {
      * Used when starting a new do/eval.
      */
     public static void clearFilters() {
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
         context.filterStack = new RuntimeList();
         context.sourceLines = null;
         context.currentLine = 0;
@@ -506,13 +498,13 @@ public class FilterUtilCall extends PerlModuleBase {
      * @return a snapshot to pass back to {@link #restoreFilterState(FilterStateSnapshot)}
      */
     public static FilterStateSnapshot saveAndResetFilterState() {
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
         FilterStateSnapshot snapshot =
-                new FilterStateSnapshot(context.filterStack, filterInstalledDuringUse.get());
+                new FilterStateSnapshot(context.filterStack, context.installedDuringUse);
         context.filterStack = new RuntimeList();
         context.sourceLines = null;
         context.currentLine = 0;
-        filterInstalledDuringUse.set(false);
+        context.installedDuringUse = false;
         return snapshot;
     }
 
@@ -524,25 +516,11 @@ public class FilterUtilCall extends PerlModuleBase {
      */
     public static void restoreFilterState(FilterStateSnapshot snapshot) {
         if (snapshot == null) return;
-        FilterContext context = filterContext.get();
+        FilterRuntimeState context = state();
         context.filterStack = snapshot.filterStack;
         context.sourceLines = null;
         context.currentLine = 0;
-        filterInstalledDuringUse.set(snapshot.installedDuringUse);
+        context.installedDuringUse = snapshot.installedDuringUse;
     }
 
-    /**
-     * Context for managing active source filters.
-     */
-    static class FilterContext {
-        // Stack of active filters (LIFO - last added is first applied)
-        RuntimeList filterStack = new RuntimeList();
-
-        // Current input source being filtered (set during do/eval)
-        String[] sourceLines = null;
-        int currentLine = 0;
-
-        // Whether we're currently inside a filter_read() call
-        boolean inFilterRead = false;
-    }
 }

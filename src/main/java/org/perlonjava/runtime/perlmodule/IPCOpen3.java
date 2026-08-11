@@ -176,7 +176,7 @@ public class IPCOpen3 extends PerlModuleBase {
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(command);
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
 
             // Copy %ENV to the subprocess
@@ -536,7 +536,7 @@ public class IPCOpen3 extends PerlModuleBase {
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(command);
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
 
             // Copy %ENV to the subprocess

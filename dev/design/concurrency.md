@@ -17,7 +17,8 @@ may be split further when its audit shows that it cannot be reviewed or reverted
 safely. Phases 3 and 4 were combined at the maintainer's request, as were
 Phases 5 through 7 and Phases 8a through 8c; each combined changeset preserves
 the same green-boundary requirements. Phases 8d, 8e, and 9 form one further
-maintainer-requested combined PR. At every merge boundary:
+maintainer-requested combined PR, as do Phases 10 through 12. At every merge
+boundary:
 
 - the compiler and both execution backends remain functional;
 - `make` passes;
@@ -72,8 +73,12 @@ and remove an empty binding. Do not use `InheritableThreadLocal`: executor
 workers are reused and inherited state leaks between tasks. Every callback or
 worker that accesses Perl state must capture a runtime and bind it explicitly.
 
-One runtime may move between Java threads when idle, but it must never execute
-concurrently on two threads.
+One runtime may move between Java threads when idle, but managed Perl execution
+must never run concurrently on two threads. `execute` is the exclusive ownership
+boundary. A scoped `bind` may also be used by captured infrastructure workers
+that perform narrowly classified state delivery (for example, enqueuing an
+alarm or routing process bytes); it does not authorize arbitrary concurrent
+Perl execution.
 
 ### 3.2 Compilation boundary
 
@@ -344,6 +349,13 @@ finds unrelated ownership domains; document the split here before coding.
 Worker binding for alarms, pipes, system stream routers, and callbacks lands
 with the state each worker accesses.
 
+The implementation groups this inventory into explicit runtime-owned domains:
+lifecycle/reachability, signals/alarms, process and IO registries, filesystem
+environment/stat state, debugger state, parser data sections, random/state
+variables, native/module registries, and object-name/bless identity. Opaque
+Net::SSLeay handles and provider registries are interpreter-owned; cryptographic
+algorithms and native bindings remain immutable process services.
+
 Acceptance: the mutable-static/thread-spawn audit has no unclassified
 runtime-dependent state.
 
@@ -466,18 +478,39 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 8d through 9 complete; combined PR ready for review
+### Current Status: Phases 10 through 12 implemented and validated
 
-Runtime-owned state now includes glob/stash aliases and enumeration caches;
-declarations, package/class/field/version services, and generated classloaders;
-and RuntimeCode eval registries, caches, callsites, inline caches, and backend
-selection flags. `Config` thread flags remain disabled. The paired six-benchmark
-matrix is within budget after batching hot-path runtime lookups. Exact-tree
-`make` passes; the comprehensive gate is core 83.0% and bundled modules 80.8%.
-Scalar::Util 1.70, Moo 2.005005, and focused stash/glob/strict/eval tests pass
-on both backends, apart from one interpreter eval/goto miss reproduced exactly
-on merged master. Three-run CPU medians versus the same base improved by about
-9% global, 14% lexical, 14% method, 3% closure, 2% regex, and 4% eval-string.
+Hints, warnings, filters, and source maps are runtime-owned while compiler-only
+scratch remains protected by the global compile lock. The Phase 11 inventory is
+split internally into explicit state holders for lifecycle/reachability,
+signals/alarms, process and IO registries, filesystem/stat/random state,
+debugging, data sections, native/module registries, and bless identity. The
+mutable-static and spawned-worker audit classifies remaining statics as immutable
+caches/constants, synchronized process services, globally unique ID allocators,
+or compile-only state under the Phase 2 lock.
+
+`PerlRuntime` now provides idempotent initialization and close plus exclusive,
+reentrant managed execution. Closing releases alarms, signals, I/O and native
+registries, and lifecycle roots. Concurrent integration tests run conflicting
+JVM and interpreter programs in separate runtimes. `Config` thread flags remain
+disabled; no Perl `threads` API is exposed.
+
+Validation completed with the full unit build and the comprehensive compatibility
+gate. `make test-all` retained the established partial-support baseline while
+slightly improving the aggregate counts: Perl core reached 83.1% and bundled
+modules reached 81.0%. Focused JVM/interpreter checks covered warning and hint
+state, source locations, filters, CWD, alarms/signals, random and regex state,
+data sections, I/O registries, lifecycle/weak references, and runtime close.
+Scalar::Util reports 1.70 on both backends; the JVM Moo constructor smoke passes.
+The interpreter's pre-existing parser rejection of Moo attribute syntax remains
+outside this runtime-state migration.
+
+Three-run same-base benchmark medians are within the 5% gate. The measured
+current/base rates were global 37030/35671 (+3.8%), lexical 127349/118820
+(+7.2%), method 91.45/94.40 (-3.1%), closure 34.68/32.37 (+7.1%), regex
+21657.60/22048.45 (-1.8%), and eval-string 15070.22/14910.07 (+1.1%). The
+runtime lookup batching and idle lifecycle fast paths used to recover these
+results preserve the runtime-owned state boundaries.
 
 ### Implementation History
 
@@ -488,12 +521,12 @@ request history.
 
 ### Next Steps
 
-1. Finish validation and review the combined Phase 8d-through-9 PR while
-   `Config` thread flags remain disabled.
-2. Start Phase 10 from updated `master`: classify compile-only versus runtime
-   hints, warnings, filters, and source maps before migrating runtime state.
-3. Re-audit and split Phase 11's lifecycle/miscellaneous inventory into atomic,
-   independently green ownership domains before implementation.
+1. Land the combined Phase 10-through-12 pull request while `Config` thread
+   flags remain disabled.
+2. Start Phase 13 performance recovery only from new measured profiles; retain
+   the global compilation lock and do not optimize already-green paths speculatively.
+3. Re-run the mutable-static and worker audit before beginning Phase 14's graph
+   cloner so newly introduced state cannot escape runtime ownership.
 
 ### Open Questions
 

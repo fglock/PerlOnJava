@@ -551,8 +551,8 @@ public class ArgumentParser {
                     // Run under debugger
                     parsedArgs.runUnderDebugger = true;
                     parsedArgs.useInterpreter = true;  // Force interpreter mode for debugging
-                    DebugState.debugMode = true;       // Enable debug opcode emission
-                    DebugState.single = true;          // Start in single-step mode
+                    DebugState.setDebugMode(true);       // Enable debug opcode emission
+                    DebugState.current().single = true;  // Start in single-step mode
                     DebugHooks.initializeDebugVariables();  // Initialize $DB::single etc.
                     break;
                 case 't':
@@ -935,7 +935,7 @@ public class ArgumentParser {
         if (directory != null) {
             try {
                 // Change to the specified directory
-                System.setProperty("user.dir", directory);
+                org.perlonjava.runtime.runtimetypes.RuntimeEnvironment.setCurrentDirectory(directory);
             } catch (SecurityException e) {
                 System.err.println("Error: Unable to change directory to " + directory);
                 System.exit(1);

@@ -18,11 +18,6 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeIO.initStdHandles;
  */
 public class GlobalContext {
 
-    private static final ThreadLocal<Boolean> threadTaintMode =
-            ThreadLocal.withInitial(() -> Boolean.FALSE);
-    private static final ThreadLocal<Boolean> threadJoinTaint =
-            ThreadLocal.withInitial(() -> Boolean.FALSE);
-
     // Special variables internal names
     public static final String GLOBAL_PHASE = encodeSpecialVar("GLOBAL_PHASE"); // $^GLOBAL_PHASE
     public static final String OPEN = encodeSpecialVar("OPEN"); // $^OPEN
@@ -30,22 +25,23 @@ public class GlobalContext {
 
     /** Keep command-line taint mode isolated between concurrently executing scripts. */
     public static void setThreadTaintMode(boolean enabled) {
-        threadTaintMode.set(enabled);
+        PerlRuntime.current().executionState().taintMode = enabled;
     }
 
     public static boolean isTaintModeActive() {
-        return threadTaintMode.get();
+        return PerlRuntime.current().executionState().taintMode;
     }
 
     /** Record the taint state left by join(), used by Perl's legacy taint probe. */
     public static void setThreadJoinTaint(boolean tainted) {
-        threadJoinTaint.set(tainted);
+        PerlRuntime.current().executionState().joinTaint = tainted;
     }
 
     /** Return and clear the taint state left by the immediately preceding join(). */
     public static boolean consumeThreadJoinTaint() {
-        boolean tainted = threadJoinTaint.get();
-        threadJoinTaint.set(false);
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        boolean tainted = state.joinTaint;
+        state.joinTaint = false;
         return tainted;
     }
 
@@ -130,7 +126,7 @@ public class GlobalContext {
             ors.set(compilerOptions.outputRecordSeparator);    // initialize $\
             GlobalVariable.globalVariables.put("main::\\", ors);
         }
-        GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
+        GlobalVariable.getGlobalVariable("main::$").set(RuntimeEnvironment.pid()); // initialize `$$` to runtime process id
         GlobalVariable.getGlobalVariable("main::?");
         // Only set $0 if it hasn't been set yet - prevents overwriting during re-entrant calls
         // (e.g., when require() is called during module initialization)

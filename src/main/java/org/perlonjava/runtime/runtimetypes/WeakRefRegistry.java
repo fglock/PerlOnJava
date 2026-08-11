@@ -13,13 +13,9 @@ import java.util.Set;
  */
 public class WeakRefRegistry {
 
-    // Forward map: is this RuntimeScalar a weak ref?
-    private static final Set<RuntimeScalar> weakScalars =
-            Collections.newSetFromMap(new IdentityHashMap<>());
-
-    // Reverse map: referent → set of weak RuntimeScalars pointing to it.
-    private static final IdentityHashMap<RuntimeBase, Set<RuntimeScalar>> referentToWeakRefs =
-            new IdentityHashMap<>();
+    private static LifecycleRuntimeState state() {
+        return PerlRuntime.current().lifecycleState;
+    }
 
     /**
      * Fast-path flag: has {@code weaken()} ever been called in this JVM?
@@ -31,7 +27,9 @@ public class WeakRefRegistry {
      * unblessed containers may have weak refs that need clearing on scope
      * exit, so those sites must walk elements when weak refs exist.
      */
-    public static volatile boolean weakRefsExist = false;
+    public static boolean weakRefsExist() {
+        return state().weakRefsExist;
+    }
 
     /**
      * Special refCount value for objects that have weak refs but whose strong
@@ -56,8 +54,8 @@ public class WeakRefRegistry {
 
     /** Drop references belonging to the previous top-level script. */
     public static void resetState() {
-        weakScalars.clear();
-        referentToWeakRefs.clear();
+        state().weakScalars.clear();
+        state().referentToWeakRefs.clear();
         // Keep weakRefsExist conservative. Once enabled, the associated
         // lexical/root bookkeeping must remain enabled for this JVM.
     }
@@ -80,7 +78,8 @@ public class WeakRefRegistry {
             throw new PerlCompilerException("Can't weaken a nonreference");
         }
         if (!(ref.value instanceof RuntimeBase base)) return;
-        if (weakScalars.contains(ref)) return;  // already weak
+        LifecycleRuntimeState state = state();
+        if (state.weakScalars.contains(ref)) return;  // already weak
 
         // If referent was already destroyed, immediately undef the weak ref.
         // CODE refs are an exception: Sub::Quote compiles named, no-install
@@ -100,8 +99,8 @@ public class WeakRefRegistry {
             }
         }
 
-        weakScalars.add(ref);
-        referentToWeakRefs
+        state.weakScalars.add(ref);
+        state.referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
         base.activateOwnerTracking();
@@ -120,8 +119,9 @@ public class WeakRefRegistry {
         // merge cost on weakRefsExist; without backfill, my-vars
         // declared before the first weaken would never appear in
         // liveCounts and the walker would miss them.
-        if (!weakRefsExist) {
-            weakRefsExist = true;
+        if (!state.weakRefsExist) {
+            MortalList.noteBoundaryWork();
+            state.weakRefsExist = true;
             MyVarCleanupStack.snapshotStackToLiveCounts();
         }
 
@@ -230,7 +230,7 @@ public class WeakRefRegistry {
                 && !ModuleInitGuard.inModuleInit();
         if (base instanceof RuntimeCode code
                 && code.refCount >= 0
-                && weakRefsExist
+                && state.weakRefsExist
                 && (shouldCheckLiveCodeRef
                 || (code.hadStashRef
                 && code.stashRefCount <= 0
@@ -259,19 +259,20 @@ public class WeakRefRegistry {
      * Check if a RuntimeScalar is a weak reference.
      */
     public static boolean isweak(RuntimeScalar ref) {
-        return weakScalars.contains(ref);
+        return state().weakScalars.contains(ref);
     }
 
     /**
      * Make a weak reference strong again.
      */
     public static void unweaken(RuntimeScalar ref) {
-        if (!weakScalars.remove(ref)) return;
+        LifecycleRuntimeState state = state();
+        if (!state.weakScalars.remove(ref)) return;
         if (ref.value instanceof RuntimeBase base) {
-            Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(base);
+            Set<RuntimeScalar> weakRefs = state.referentToWeakRefs.get(base);
             if (weakRefs != null) {
                 weakRefs.remove(ref);
-                if (weakRefs.isEmpty()) referentToWeakRefs.remove(base);
+                if (weakRefs.isEmpty()) state.referentToWeakRefs.remove(base);
             }
             if (base.refCount >= 0) {
                 base.refCount++;  // restore strong count
@@ -287,17 +288,18 @@ public class WeakRefRegistry {
      * skip refCount decrement for the old referent).
      */
     public static boolean removeWeakRef(RuntimeScalar ref, RuntimeBase oldReferent) {
-        if (!weakScalars.remove(ref)) return false;
+        LifecycleRuntimeState state = state();
+        if (!state.weakScalars.remove(ref)) return false;
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKREMOVE] ref=" + System.identityHashCode(ref)
                 + " oldReferent=" + System.identityHashCode(oldReferent)
                 + " (" + (oldReferent == null ? "null" : oldReferent.getClass().getSimpleName()) + ")");
             new Throwable().printStackTrace(System.err);
         }
-        Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(oldReferent);
+        Set<RuntimeScalar> weakRefs = state.referentToWeakRefs.get(oldReferent);
         if (weakRefs != null) {
             weakRefs.remove(ref);
-            if (weakRefs.isEmpty()) referentToWeakRefs.remove(oldReferent);
+            if (weakRefs.isEmpty()) state.referentToWeakRefs.remove(oldReferent);
         }
         return true;
     }
@@ -306,7 +308,7 @@ public class WeakRefRegistry {
      * Check if any weak references point to a given referent.
      */
     public static boolean hasWeakRefsTo(RuntimeBase referent) {
-        Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(referent);
+        Set<RuntimeScalar> weakRefs = state().referentToWeakRefs.get(referent);
         return weakRefs != null && !weakRefs.isEmpty();
     }
 
@@ -322,7 +324,8 @@ public class WeakRefRegistry {
         // leaving those weak scalars defined keeps the whole quoted/deferred
         // metadata graph Java-reachable and leaks until global destruction.
         if (referent instanceof RuntimeCode code && shouldKeepCodeWeakRefs(code)) return;
-        Set<RuntimeScalar> weakRefs = referentToWeakRefs.remove(referent);
+        LifecycleRuntimeState state = state();
+        Set<RuntimeScalar> weakRefs = state.referentToWeakRefs.remove(referent);
         if (weakRefs == null) return;
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
             System.err.println("[WEAKCLEAR] referent=" + System.identityHashCode(referent)
@@ -333,7 +336,7 @@ public class WeakRefRegistry {
         for (RuntimeScalar weak : weakRefs) {
             weak.type = RuntimeScalarType.UNDEF;
             weak.value = null;
-            weakScalars.remove(weak);
+            state.weakScalars.remove(weak);
         }
     }
 
@@ -373,14 +376,14 @@ public class WeakRefRegistry {
      * clearing during the walk).
      */
     public static java.util.List<RuntimeBase> snapshotWeakRefReferents() {
-        return new java.util.ArrayList<>(referentToWeakRefs.keySet());
+        return new java.util.ArrayList<>(state().referentToWeakRefs.keySet());
     }
 
     public static void clearAllBlessedWeakRefs() {
         // Snapshot the keys to avoid ConcurrentModificationException,
         // since clearWeakRefsTo modifies referentToWeakRefs.
         java.util.List<RuntimeBase> referents =
-                new java.util.ArrayList<>(referentToWeakRefs.keySet());
+                new java.util.ArrayList<>(state().referentToWeakRefs.keySet());
         for (RuntimeBase referent : referents) {
             if (referent instanceof RuntimeCode) continue;
             // Phase H3: skip unblessed containers (ARRAY/HASH) at pre-END

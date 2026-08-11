@@ -477,10 +477,10 @@ public class CompileBinaryOperatorHelper {
                 // Flip-flop operator (.. and ...) - per-call-site state via unique ID
                 // Note: numeric range (..) is handled earlier in visitBinaryOperator for list context;
                 // this case handles scalar-context flip-flop.
-                int flipFlopId = org.perlonjava.runtime.operators.ScalarFlipFlopOperator.currentId++;
+                int flipFlopId = org.perlonjava.runtime.operators.ScalarFlipFlopOperator.allocateId();
                 org.perlonjava.runtime.operators.ScalarFlipFlopOperator op =
                         new org.perlonjava.runtime.operators.ScalarFlipFlopOperator(operator.equals("..."));
-                org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops.putIfAbsent(flipFlopId, op);
+                org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops().putIfAbsent(flipFlopId, op);
                 bytecodeCompiler.emit(Opcodes.FLIP_FLOP);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emit(flipFlopId);

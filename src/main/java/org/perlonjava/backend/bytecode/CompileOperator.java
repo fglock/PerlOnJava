@@ -1600,7 +1600,7 @@ public class CompileOperator {
     }
 
     private static void visitGlob(BytecodeCompiler bc, OperatorNode node) {
-        int globId = ScalarGlobOperator.currentId++;
+        int globId = ScalarGlobOperator.allocateId();
         bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
         int patternReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();

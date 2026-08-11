@@ -1,8 +1,22 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
+import org.perlonjava.frontend.parser.DataSection;
+import org.perlonjava.runtime.CompilationRuntimeState;
+import org.perlonjava.runtime.ForkOpenState;
+import org.perlonjava.runtime.debugger.DebugRuntimeState;
 import org.perlonjava.runtime.io.IOHandle;
+import org.perlonjava.runtime.io.IORuntimeRegistryState;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.mro.MroRuntimeState;
+import org.perlonjava.runtime.operators.Time;
+import org.perlonjava.runtime.operators.Random;
+import org.perlonjava.runtime.operators.ScalarFlipFlopOperator;
+import org.perlonjava.runtime.operators.ScalarGlobOperator;
+import org.perlonjava.runtime.operators.FileTestOperator;
+import org.perlonjava.runtime.perlmodule.FilterRuntimeState;
+import org.perlonjava.runtime.perlmodule.NetSSLeay;
+import org.perlonjava.runtime.nativ.ExtendedNativeUtils;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -10,6 +24,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.concurrent.Callable;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Identity and scoped thread binding for one Perl interpreter instance.
@@ -19,14 +37,40 @@ import java.util.Set;
  * they do not inherit into child or executor threads, whose tasks must capture
  * and bind the intended runtime themselves.</p>
  */
-public final class PerlRuntime {
+public final class PerlRuntime implements AutoCloseable {
     private static final ThreadLocal<BindingFrame> CURRENT = new ThreadLocal<>();
+    public final long pid = ProcessHandle.current().pid();
+    String currentDirectory = System.getProperty("user.dir");
+    private final ReentrantLock executionLock = new ReentrantLock();
+    private volatile boolean initialized;
+    private volatile boolean closed;
 
     public final ExecutionRuntimeState executionState = new ExecutionRuntimeState();
     public final RuntimeRegexState regexState = new RuntimeRegexState();
     public final MroRuntimeState mroState = new MroRuntimeState();
     public final GlobalRuntimeState globalState = new GlobalRuntimeState();
     public final RuntimeCodeRuntimeState runtimeCodeState = new RuntimeCodeRuntimeState();
+    public final CompilationRuntimeState compilationState = new CompilationRuntimeState();
+    public final ByteCodeSourceMapper.State sourceMapperState = new ByteCodeSourceMapper.State();
+    public final FilterRuntimeState filterState = new FilterRuntimeState();
+    public final Time.State timeState = new Time.State();
+    public final PerlSignalQueue.State signalState = new PerlSignalQueue.State();
+    public final Random.State randomState = new Random.State();
+    public final DataSection.State dataSectionState = new DataSection.State();
+    public final Map<Integer, ScalarFlipFlopOperator> flipFlopState = new HashMap<>();
+    public final Map<Integer, ScalarGlobOperator> scalarGlobState = new HashMap<>();
+    public final Map<Integer, String> pointerPackState = new HashMap<>();
+    public final IORuntimeRegistryState ioRegistryState = new IORuntimeRegistryState();
+    public final FileTestOperator.State fileTestState = new FileTestOperator.State();
+    public final DebugRuntimeState debugState = new DebugRuntimeState();
+    public final DiamondIO.State diamondIOState = new DiamondIO.State();
+    public final ExtendedNativeUtils.State nativeState = new ExtendedNativeUtils.State();
+    public final Deque<Long> netSslErrorQueue = new ArrayDeque<>();
+    public final NetSSLeay.State netSslState = new NetSSLeay.State();
+    public ForkOpenState.PendingForkOpen pendingForkOpen;
+    public RuntimeArray libOriginalInc;
+    public boolean storableLastOpInNetorder;
+    public final Set<String> xsShimLoadingInProgress = new HashSet<>();
 
     RuntimeIO ioStdout;
     RuntimeIO ioStderr;
@@ -51,6 +95,9 @@ public final class PerlRuntime {
     };
     private final Map<String, RuntimeGlob> standardIOGlobs = new HashMap<>();
     private final Set<String> hiddenStandardIOGlobs = new HashSet<>();
+    final Map<String, Boolean> stateVariableInitialized = new HashMap<>();
+    final LifecycleRuntimeState lifecycleState = new LifecycleRuntimeState();
+    final NameNormalizer.State nameNormalizerState = new NameNormalizer.State();
 
     public PerlRuntime() {
         ioStdout = new RuntimeIO(new StandardIO(System.out, true));
@@ -89,6 +136,9 @@ public final class PerlRuntime {
 
     /** Bind this runtime until the returned scope is closed. */
     public Binding bind() {
+        if (closed) {
+            throw new IllegalStateException("PerlRuntime is closed");
+        }
         BindingFrame frame = new BindingFrame(this, CURRENT.get());
         CURRENT.set(frame);
         return new Binding(frame, Thread.currentThread());
@@ -127,6 +177,84 @@ public final class PerlRuntime {
 
     public RuntimeCodeRuntimeState runtimeCodeState() {
         return runtimeCodeState;
+    }
+
+    /** Initialize this independent interpreter's globals and runtime services. */
+    public PerlRuntime initialize() {
+        executionLock.lock();
+        try {
+            if (closed) throw new IllegalStateException("PerlRuntime is closed");
+            if (initialized) return this;
+            try (Binding ignored = bind()) {
+                org.perlonjava.app.scriptengine.PerlLanguageProvider.resetAll();
+            }
+            initialized = true;
+            return this;
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    /** Execute one operation while enforcing exclusive runtime ownership. */
+    public <T> T execute(Callable<T> operation) throws Exception {
+        Objects.requireNonNull(operation, "operation");
+        executionLock.lock();
+        try {
+            if (!initialized) initialize();
+            try (Binding ignored = bind()) {
+                return operation.call();
+            }
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    /** Execute a void operation while enforcing exclusive runtime ownership. */
+    public void execute(Runnable operation) {
+        Objects.requireNonNull(operation, "operation");
+        try {
+            execute(() -> {
+                operation.run();
+                return null;
+            });
+        } catch (RuntimeException | Error error) {
+            throw error;
+        } catch (Exception impossible) {
+            throw new IllegalStateException("Runnable execution failed", impossible);
+        }
+    }
+
+    public boolean isInitialized() {
+        return initialized;
+    }
+
+    public boolean isClosed() {
+        return closed;
+    }
+
+    /** Release runtime-owned I/O, alarms, signals, and lifecycle registries. */
+    @Override
+    public void close() {
+        executionLock.lock();
+        try {
+            if (closed) return;
+            try (Binding ignored = bind()) {
+                Time.cancelCurrentAlarm();
+                PerlSignalQueue.clearSignals();
+                RuntimeIO.closeAllHandles();
+                NetSSLeay.resetState();
+                MortalList.clearCurrentRuntimeState();
+                stateVariableInitialized.clear();
+                ioRegistryState.clear();
+                nativeState.clear();
+                flipFlopState.clear();
+                scalarGlobState.clear();
+                pointerPackState.clear();
+            }
+            closed = true;
+        } finally {
+            executionLock.unlock();
+        }
     }
 
     RuntimeGlob standardIOGlob(String name) {

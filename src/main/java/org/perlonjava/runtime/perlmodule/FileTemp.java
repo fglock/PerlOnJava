@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeEnvironment;
 import org.perlonjava.runtime.runtimetypes.SystemUtils;
 
 import java.io.IOException;
@@ -208,7 +209,7 @@ public class FileTemp extends PerlModuleBase {
             if (prefix.isEmpty()) {
                 // Template is only trailing X's (e.g. "XXXXXX") with no path: Perl creates
                 // the file in the current working directory, not File::Spec->tmpdir.
-                dir = Paths.get(System.getProperty("user.dir"));
+                dir = Paths.get(RuntimeEnvironment.currentDirectory());
                 namePrefix = "";
             } else if (prefix.endsWith("/") || prefix.endsWith("\\")) {
                 // Prefix is a directory path with trailing separator
@@ -224,7 +225,7 @@ public class FileTemp extends PerlModuleBase {
                 
                 if (dir == null) {
                     // Relative name prefix only (e.g. "fooXXXXXX"): parent is cwd, not tmpdir.
-                    dir = Paths.get(System.getProperty("user.dir"));
+                    dir = Paths.get(RuntimeEnvironment.currentDirectory());
                 }
             }
 
@@ -301,7 +302,7 @@ public class FileTemp extends PerlModuleBase {
             String namePrefix;
             
             if (prefix.isEmpty()) {
-                parentDir = Paths.get(System.getProperty("user.dir"));
+                parentDir = Paths.get(RuntimeEnvironment.currentDirectory());
                 namePrefix = "";
             } else if (prefix.endsWith("/") || prefix.endsWith("\\")) {
                 // Prefix is a directory path with trailing separator
@@ -315,7 +316,7 @@ public class FileTemp extends PerlModuleBase {
                         templatePath.getFileName().toString() : "";
                 
                 if (parentDir == null) {
-                    parentDir = Paths.get(System.getProperty("user.dir"));
+                    parentDir = Paths.get(RuntimeEnvironment.currentDirectory());
                 }
             }
 

@@ -28,17 +28,15 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 public class IOOperator {
-    // Simple socket option storage: key is "socketHashCode:level:optname", value is the option value
-    private static final Map<String, Integer> globalSocketOptions = new ConcurrentHashMap<>();
-
     // File descriptor to RuntimeIO mapping for duplication support
-    private static final Map<Integer, RuntimeIO> fileDescriptorMap = new ConcurrentHashMap<>();
+    private static Map<Integer, RuntimeIO> fileDescriptorMap() {
+        return PerlRuntime.current().ioRegistryState.operatorFileDescriptors;
+    }
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
@@ -2930,7 +2928,7 @@ public class IOOperator {
             return fromRegistry;
         }
 
-        RuntimeIO handle = fileDescriptorMap.get(fd);
+        RuntimeIO handle = fileDescriptorMap().get(fd);
         if (handle != null && handle.ioHandle != null
                 && !(handle.ioHandle instanceof ClosedIOHandle)) {
             return handle;
@@ -3166,7 +3164,7 @@ public class IOOperator {
      */
     public static void registerFileDescriptor(int fd, RuntimeIO handle) {
         if (handle != null) {
-            fileDescriptorMap.put(fd, handle);
+            fileDescriptorMap().put(fd, handle);
         }
     }
 
@@ -3174,7 +3172,7 @@ public class IOOperator {
      * Unregister a file descriptor when the handle is closed.
      */
     public static void unregisterFileDescriptor(int fd) {
-        fileDescriptorMap.remove(fd);
+        fileDescriptorMap().remove(fd);
     }
 
     /**

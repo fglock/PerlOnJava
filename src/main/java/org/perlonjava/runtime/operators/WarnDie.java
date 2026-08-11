@@ -18,13 +18,8 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runEndBlocks;
  * respectively. These operations can trigger custom signal handlers if defined.
  */
 public class WarnDie {
-    private static final ThreadLocal<java.util.IdentityHashMap<Throwable, Boolean>> unhandledDieHandlerSeen =
-            ThreadLocal.withInitial(java.util.IdentityHashMap::new);
-    private static final ThreadLocal<Boolean> insideUnhandledDieHandler =
-            ThreadLocal.withInitial(() -> Boolean.FALSE);
-
     public static boolean isInsideUnhandledDieHandler() {
-        return insideUnhandledDieHandler.get();
+        return PerlRuntime.current().executionState().insideUnhandledDieHandler;
     }
 
     private record SyntheticDieCallerFrame(String packageName, String filename, int line) {
@@ -136,7 +131,7 @@ public class WarnDie {
             return e;
         }
 
-        var seen = unhandledDieHandlerSeen.get();
+        var seen = PerlRuntime.current().executionState().unhandledDieHandlerSeen;
         if (seen.containsKey(unwrapped)) {
             return e;
         }
@@ -150,8 +145,9 @@ public class WarnDie {
 
         int level = DynamicVariableManager.getLocalLevel();
         DynamicVariableManager.pushLocalVariable(sig);
-        boolean wasInsideUnhandledDieHandler = insideUnhandledDieHandler.get();
-        insideUnhandledDieHandler.set(Boolean.TRUE);
+        ExecutionRuntimeState runtimeState = PerlRuntime.current().executionState();
+        boolean wasInsideUnhandledDieHandler = runtimeState.insideUnhandledDieHandler;
+        runtimeState.insideUnhandledDieHandler = true;
         boolean pushedSyntheticFrame = false;
         try {
             if (syntheticFrame != null) {
@@ -173,7 +169,7 @@ public class WarnDie {
             if (pushedSyntheticFrame) {
                 RuntimeCode.popSyntheticCallerFrame();
             }
-            insideUnhandledDieHandler.set(wasInsideUnhandledDieHandler);
+            runtimeState.insideUnhandledDieHandler = wasInsideUnhandledDieHandler;
             DynamicVariableManager.popToLocalLevel(level);
         }
         return e;

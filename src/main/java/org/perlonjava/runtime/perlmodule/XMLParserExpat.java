@@ -1062,7 +1062,7 @@ public class XMLParserExpat extends PerlModuleBase {
         }
         // Set systemId to the current working directory so SAX resolves relative URIs correctly.
         // This also allows unresolveSysId to strip this prefix and recover relative paths.
-        String cwd = System.getProperty("user.dir");
+        String cwd = RuntimeEnvironment.currentDirectory();
         String baseUri = new java.io.File(cwd, "dummy").toURI().toString();
         baseUri = baseUri.substring(0, baseUri.lastIndexOf('/') + 1);
         inputSource.setSystemId(baseUri);

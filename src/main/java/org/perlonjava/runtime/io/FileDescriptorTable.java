@@ -4,6 +4,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 /**
  * Maps simulated file descriptor numbers to {@link IOHandle} objects.
@@ -51,16 +52,9 @@ import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 public class FileDescriptorTable {
 
     /** Next fd to allocate. Starts at 3 (0=stdin, 1=stdout, 2=stderr are reserved). */
-    private static final AtomicInteger nextFd = new AtomicInteger(3);
-
-    /** Forward map: fd number → IOHandle. Used by select() to find handles from fd bits. */
-    private static final ConcurrentHashMap<Integer, IOHandle> fdToHandle = new ConcurrentHashMap<>();
-
-    /**
-     * Reverse map: IOHandle identity hash → fd number.
-     * Prevents assigning multiple fds to the same IOHandle object (identity, not equality).
-     */
-    private static final ConcurrentHashMap<Integer, Integer> handleToFd = new ConcurrentHashMap<>();
+    private static IORuntimeRegistryState state() {
+        return PerlRuntime.current().ioRegistryState;
+    }
 
     /**
      * Register an IOHandle and return its FD number.
@@ -70,14 +64,15 @@ public class FileDescriptorTable {
      * @return the file descriptor number
      */
     public static int register(IOHandle handle) {
+        IORuntimeRegistryState state = state();
         int identity = System.identityHashCode(handle);
-        Integer existing = handleToFd.get(identity);
+        Integer existing = state.handleToFd.get(identity);
         if (existing != null) {
             return existing;
         }
-        int fd = nextFd.getAndIncrement();
-        fdToHandle.put(fd, handle);
-        handleToFd.put(identity, fd);
+        int fd = state.nextFd.getAndIncrement();
+        state.fdToHandle.put(fd, handle);
+        state.handleToFd.put(identity, fd);
         // Keep RuntimeIO in sync to prevent fd collisions with socket()/socketpair()
         RuntimeIO.advanceFilenoCounterPast(fd);
         return fd;
@@ -92,14 +87,15 @@ public class FileDescriptorTable {
      * @param handle the IOHandle to register
      */
     public static void registerAt(int fd, IOHandle handle) {
+        IORuntimeRegistryState state = state();
         // Remove any previous handle at this fd
-        IOHandle oldHandle = fdToHandle.put(fd, handle);
+        IOHandle oldHandle = state.fdToHandle.put(fd, handle);
         if (oldHandle != null) {
-            handleToFd.remove(System.identityHashCode(oldHandle));
+            state.handleToFd.remove(System.identityHashCode(oldHandle));
         }
-        handleToFd.put(System.identityHashCode(handle), fd);
+        state.handleToFd.put(System.identityHashCode(handle), fd);
         // Ensure nextFd is past this fd
-        nextFd.updateAndGet(current -> Math.max(current, fd + 1));
+        state.nextFd.updateAndGet(current -> Math.max(current, fd + 1));
         RuntimeIO.advanceFilenoCounterPast(fd);
     }
 
@@ -111,7 +107,7 @@ public class FileDescriptorTable {
      * @param fd the fd value to advance past
      */
     public static void advancePast(int fd) {
-        nextFd.updateAndGet(current -> Math.max(current, fd + 1));
+        state().nextFd.updateAndGet(current -> Math.max(current, fd + 1));
     }
 
     /**
@@ -119,7 +115,7 @@ public class FileDescriptorTable {
      * Useful as a fallback when the original fd is unknown.
      */
     public static int nextFdValue() {
-        return nextFd.get();
+        return state().nextFd.get();
     }
 
     /**
@@ -129,7 +125,7 @@ public class FileDescriptorTable {
      * @return the IOHandle, or null if not found
      */
     public static IOHandle getHandle(int fd) {
-        return fdToHandle.get(fd);
+        return state().fdToHandle.get(fd);
     }
 
     /**
@@ -138,9 +134,10 @@ public class FileDescriptorTable {
      * @param fd the file descriptor number to remove
      */
     public static void unregister(int fd) {
-        IOHandle handle = fdToHandle.remove(fd);
+        IORuntimeRegistryState state = state();
+        IOHandle handle = state.fdToHandle.remove(fd);
         if (handle != null) {
-            handleToFd.remove(System.identityHashCode(handle));
+            state.handleToFd.remove(System.identityHashCode(handle));
         }
     }
 

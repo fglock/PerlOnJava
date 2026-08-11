@@ -59,14 +59,12 @@ public class Storable extends PerlModuleBase {
     // Tracks whether the last freeze/store operation used network byte order.
     // Set true by nfreeze()/nstore(); set false by freeze()/store().
     // Exposed via Storable::last_op_in_netorder().
-    private static volatile boolean lastOpInNetorder = false;
-
     /**
      * Returns 1 if the last freeze/store operation used network byte order
      * (i.e. was nfreeze or nstore), 0 otherwise.
      */
     public static RuntimeList last_op_in_netorder(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(lastOpInNetorder ? 1 : 0).getList();
+        return new RuntimeScalar(PerlRuntime.current().storableLastOpInNetorder ? 1 : 0).getList();
     }
 
     /**
@@ -81,7 +79,7 @@ public class Storable extends PerlModuleBase {
     }
 
     private static RuntimeList freezeImpl(RuntimeArray args, boolean netorder) {
-        lastOpInNetorder = netorder;
+        PerlRuntime.current().storableLastOpInNetorder = netorder;
         if (args.isEmpty()) {
             return WarnDie.die(new RuntimeScalar("freeze: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
@@ -162,7 +160,7 @@ public class Storable extends PerlModuleBase {
     }
 
     private static RuntimeList storeImpl(RuntimeArray args, boolean netorder) {
-        lastOpInNetorder = netorder;
+        PerlRuntime.current().storableLastOpInNetorder = netorder;
         if (args.size() < 2) {
             return WarnDie.die(new RuntimeScalar("store: not enough arguments"), new RuntimeScalar("\n")).getList();
         }

@@ -110,7 +110,7 @@ public class MyVarCleanupStack {
         // weaken trigger a one-time backfill via
         // {@link #snapshotStackToLiveCounts()} from WeakRefRegistry,
         // which seeds liveCounts with all already-registered my-vars.
-        if (var != null && WeakRefRegistry.weakRefsExist) {
+        if (var != null && WeakRefRegistry.weakRefsExist()) {
             liveCounts().merge(var, 1, Integer::sum);
             MortalList.invalidateLiveRootSnapshot();
         }

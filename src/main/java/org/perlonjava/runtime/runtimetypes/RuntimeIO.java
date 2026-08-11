@@ -96,8 +96,7 @@ public class RuntimeIO extends RuntimeScalar {
      */
     static final int MAX_OPEN_HANDLES = 100;
 
-    /** Child processes remain process-global until the later registry migration. */
-    private static final Map<Long, Process> childProcesses = new java.util.concurrent.ConcurrentHashMap<>();
+    private static IORuntimeRegistryState registry() { return PerlRuntime.current().ioRegistryState; }
 
     public static RuntimeIO getStdout() { return PerlRuntime.current().ioStdout; }
     public static void setStdout(RuntimeIO io) { PerlRuntime.current().replaceStandardHandle("main::STDOUT", io); }
@@ -133,12 +132,6 @@ public class RuntimeIO extends RuntimeScalar {
      * (see RuntimeScalar.setLarge), so fds are never prematurely freed while
      * other variables still reference the handle.
      */
-    private static final AtomicInteger nextFileno = new AtomicInteger(3);
-    private static final ConcurrentHashMap<Integer, RuntimeIO> filenoToIO = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<RuntimeIO, Integer> ioToFileno = new ConcurrentHashMap<>();
-    /** Pool of released fd numbers available for reuse. Perl reuses fds (lowest available),
-     *  so we must do the same to pass tests like io/perlio_leaks.t that verify fd recycling. */
-    private static final ConcurrentLinkedQueue<Integer> recycledFds = new ConcurrentLinkedQueue<>();
 
     /**
      * GC-based fd recycling for anonymous lexical filehandles.
@@ -158,8 +151,6 @@ public class RuntimeIO extends RuntimeScalar {
      * If no recycled fds are available, {@code System.gc()} is called as a hint
      * to encourage the JVM to enqueue phantom references sooner.
      */
-    private static final ReferenceQueue<RuntimeGlob> globGCQueue = new ReferenceQueue<>();
-    private static final ConcurrentHashMap<PhantomReference<RuntimeGlob>, RuntimeIO> phantomToIO = new ConcurrentHashMap<>();
 
     /**
      * Registers an anonymous RuntimeGlob for GC-based fd recycling.
@@ -171,8 +162,9 @@ public class RuntimeIO extends RuntimeScalar {
      * @param io   the RuntimeIO whose fd should be freed when the glob is collected
      */
     public static void registerGlobForFdRecycling(RuntimeGlob glob, RuntimeIO io) {
-        PhantomReference<RuntimeGlob> phantom = new PhantomReference<>(glob, globGCQueue);
-        phantomToIO.put(phantom, io);
+        IORuntimeRegistryState registry = registry();
+        PhantomReference<RuntimeGlob> phantom = new PhantomReference<>(glob, registry.globGCQueue);
+        registry.phantomToIO.put(phantom, io);
     }
 
     /**
@@ -181,8 +173,9 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static void processAbandonedGlobs() {
         Reference<? extends RuntimeGlob> ref;
-        while ((ref = globGCQueue.poll()) != null) {
-            RuntimeIO io = phantomToIO.remove(ref);
+        IORuntimeRegistryState registry = registry();
+        while ((ref = registry.globGCQueue.poll()) != null) {
+            RuntimeIO io = registry.phantomToIO.remove(ref);
             if (io != null && !(io.ioHandle instanceof ClosedIOHandle)) {
                 io.close();
             }
@@ -203,7 +196,8 @@ public class RuntimeIO extends RuntimeScalar {
      * @return the assigned fileno (always >= 3)
      */
     public int assignFileno() {
-        Integer existing = ioToFileno.get(this);
+        IORuntimeRegistryState registry = registry();
+        Integer existing = registry.ioToFileno.get(this);
         if (existing != null) {
             return existing;
         }
@@ -212,32 +206,32 @@ public class RuntimeIO extends RuntimeScalar {
         // Try to reuse the lowest freed fd
         int fd = tryRecycleLowestFd();
         if (fd >= 0) {
-            filenoToIO.put(fd, this);
-            ioToFileno.put(this, fd);
+            registry.filenoToIO.put(fd, this);
+            registry.ioToFileno.put(this, fd);
             FileDescriptorTable.advancePast(fd);
             return fd;
         }
         // No recycled fds — if there are tracked anonymous globs that might
         // be collectible, hint the GC and retry a few times with short sleeps
         // to give the ReferenceHandler thread time to process the queue.
-        if (!phantomToIO.isEmpty()) {
+        if (!registry.phantomToIO.isEmpty()) {
             for (int attempt = 0; attempt < 5; attempt++) {
                 System.gc();
                 try { Thread.sleep(1); } catch (InterruptedException e) { break; }
                 processAbandonedGlobs();
                 fd = tryRecycleLowestFd();
                 if (fd >= 0) {
-                    filenoToIO.put(fd, this);
-                    ioToFileno.put(this, fd);
+                    registry.filenoToIO.put(fd, this);
+                    registry.ioToFileno.put(this, fd);
                     FileDescriptorTable.advancePast(fd);
                     return fd;
                 }
             }
         }
         // Allocate a fresh fd
-        fd = nextFileno.getAndIncrement();
-        filenoToIO.put(fd, this);
-        ioToFileno.put(this, fd);
+        fd = registry.nextFileno.getAndIncrement();
+        registry.filenoToIO.put(fd, this);
+        registry.ioToFileno.put(this, fd);
         FileDescriptorTable.advancePast(fd);
         return fd;
     }
@@ -247,13 +241,14 @@ public class RuntimeIO extends RuntimeScalar {
      * Returns -1 if none available.
      */
     private static int tryRecycleLowestFd() {
+        IORuntimeRegistryState registry = registry();
         SortedSet<Integer> candidates = new TreeSet<>();
         Integer recycled;
-        while ((recycled = recycledFds.poll()) != null) {
+        while ((recycled = registry.recycledFds.poll()) != null) {
             // Aliased/borrowed handles can keep a descriptor live after another
             // wrapper releases it. Discard stale recycle entries rather than
             // letting a new socket overwrite the current fd owner.
-            if (recycled >= 3 && !filenoToIO.containsKey(recycled)) {
+            if (recycled >= 3 && !registry.filenoToIO.containsKey(recycled)) {
                 candidates.add(recycled);
             }
         }
@@ -263,7 +258,7 @@ public class RuntimeIO extends RuntimeScalar {
         int fd = candidates.first();
         // Put back the rest
         for (int candidate : candidates.tailSet(fd + 1)) {
-            recycledFds.add(candidate);
+            registry.recycledFds.add(candidate);
         }
         return fd;
     }
@@ -272,7 +267,7 @@ public class RuntimeIO extends RuntimeScalar {
      * Gets the assigned fileno for this RuntimeIO, or -1 if not assigned.
      */
     public int getAssignedFileno() {
-        Integer fd = ioToFileno.get(this);
+        Integer fd = registry().ioToFileno.get(this);
         return fd != null ? fd : -1;
     }
 
@@ -280,7 +275,7 @@ public class RuntimeIO extends RuntimeScalar {
      * Looks up a RuntimeIO by its assigned fileno.
      */
     public static RuntimeIO getByFileno(int fd) {
-        return filenoToIO.get(fd);
+        return registry().filenoToIO.get(fd);
     }
 
     /**
@@ -291,15 +286,16 @@ public class RuntimeIO extends RuntimeScalar {
      * @param fd the file descriptor number to register at
      */
     public void registerExternalFd(int fd) {
-        Integer oldFd = ioToFileno.remove(this);
+        IORuntimeRegistryState registry = registry();
+        Integer oldFd = registry.ioToFileno.remove(this);
         if (oldFd != null && oldFd != fd) {
-            filenoToIO.remove(oldFd);
+            registry.filenoToIO.remove(oldFd);
         }
-        filenoToIO.put(fd, this);
-        ioToFileno.put(this, fd);
-        recycledFds.removeIf(candidate -> candidate == fd);
+        registry.filenoToIO.put(fd, this);
+        registry.ioToFileno.put(this, fd);
+        registry.recycledFds.removeIf(candidate -> candidate == fd);
         // Advance nextFileno past this fd to avoid collisions
-        nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
+        registry.nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
     }
 
     /**
@@ -307,17 +303,18 @@ public class RuntimeIO extends RuntimeScalar {
      * the fd to the recycle pool for reuse by future {@link #assignFileno()} calls.
      */
     public void unregisterFileno() {
-        Integer fd = ioToFileno.remove(this);
+        IORuntimeRegistryState registry = registry();
+        Integer fd = registry.ioToFileno.remove(this);
         if (fd != null) {
             // Only the RuntimeIO that still owns the fd mapping may release it.
             // Borrowed aliases intentionally share a descriptor; closing an
             // older alias must not unregister or recycle the newer live owner.
-            boolean released = filenoToIO.remove(fd, this);
+            boolean released = registry.filenoToIO.remove(fd, this);
             // Return fd to the recycle pool so it can be reused (POSIX: lowest available).
             // Descriptors 0, 1, and 2 are reserved for stdin/stdout/stderr and must
             // never be assigned to lazily-numbered regular filehandles.
             if (released && fd >= 3) {
-                recycledFds.add(fd);
+                registry.recycledFds.add(fd);
             }
         }
     }
@@ -330,7 +327,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @param fd the fd value to advance past
      */
     public static void advanceFilenoCounterPast(int fd) {
-        nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
+        registry().nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
     }
 
     static {
@@ -408,10 +405,11 @@ public class RuntimeIO extends RuntimeScalar {
             return;
         }
 
-        Integer fd = ioToFileno.remove(other);
+        IORuntimeRegistryState registry = registry();
+        Integer fd = registry.ioToFileno.remove(other);
         if (fd != null) {
-            ioToFileno.put(this, fd);
-            filenoToIO.put(fd, this);
+            registry.ioToFileno.put(this, fd);
+            registry.filenoToIO.put(fd, this);
         }
 
         this.currentLineNumber = other.currentLineNumber;
@@ -440,15 +438,15 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     public static void registerChildProcess(Process p) {
-        if (p != null) childProcesses.put(p.pid(), p);
+        if (p != null) registry().childProcesses.put(p.pid(), p);
     }
 
     public static Process getChildProcess(long pid) {
-        return childProcesses.get(pid);
+        return registry().childProcesses.get(pid);
     }
 
     public static Process removeChildProcess(long pid) {
-        return childProcesses.remove(pid);
+        return registry().childProcesses.remove(pid);
     }
 
     /**
@@ -993,7 +991,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         // For relative paths, resolve against current directory
-        return Paths.get(System.getProperty("user.dir")).resolve(sanitized).toAbsolutePath();
+        return Paths.get(RuntimeEnvironment.currentDirectory()).resolve(sanitized).toAbsolutePath();
     }
 
     /**

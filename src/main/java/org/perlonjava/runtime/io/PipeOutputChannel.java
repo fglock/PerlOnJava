@@ -154,7 +154,7 @@ public class PipeOutputChannel implements IOHandle {
      */
     private void setupProcess(ProcessBuilder processBuilder) throws IOException {
         // Set working directory to current directory
-        String userDir = System.getProperty("user.dir");
+        String userDir = org.perlonjava.runtime.runtimetypes.RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
 
         // Copy %ENV to the subprocess environment

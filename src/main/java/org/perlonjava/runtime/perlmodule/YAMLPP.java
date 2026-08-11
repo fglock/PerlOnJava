@@ -28,7 +28,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class YAMLPP extends PerlModuleBase {
 
-    static RuntimeScalar perlClassName = new RuntimeScalar("YAML::PP");
+    static final RuntimeScalar perlClassName = new RuntimeScalarReadOnly("YAML::PP");
 
     /**
      * Constructor for YAMLPP module.

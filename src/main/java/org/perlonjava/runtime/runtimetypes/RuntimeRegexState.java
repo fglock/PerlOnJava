@@ -39,6 +39,7 @@ public final class RuntimeRegexState {
 
     /** Per-runtime callsite state for {@code /o} and {@code m?PAT?}. */
     public final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
+    public final Map<String, String> userUnicodePropertyCache = new LinkedHashMap<>();
 
     /**
      * Per-runtime compiled templates. Some templates support deferred runtime

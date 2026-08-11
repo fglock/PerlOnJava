@@ -685,7 +685,7 @@ public class EmitOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
         // Generate unique IDs for this glob instance
-        int globId = ScalarGlobOperator.currentId++;
+        int globId = ScalarGlobOperator.allocateId();
 
         int globIdSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         mv.visitLdcInsn(globId);

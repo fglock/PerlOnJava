@@ -3796,7 +3796,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // test 18).
                 if (calledFromDB) {
                     RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
-                    if (DebugState.debugMode) {
+                    if (DebugState.isDebugMode()) {
                         RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
                         if (frameArgs != null) {
                             dbArgs.setFromListAliased(frameArgs.getList());
@@ -4355,16 +4355,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int effectiveContext = effectiveCallContext(code, callContext);
             // Look up warning bits for the code's class and push to context stack
             // This enables FATAL warnings to work even at top-level (no caller frame)
-            String warningBits = getWarningBitsForCode(code);
+            org.perlonjava.runtime.CompilationRuntimeState compilationState =
+                    PerlRuntime.current().compilationState;
+            String warningBits = getWarningBitsForCode(code, compilationState);
             if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
+                WarningBitsRegistry.pushCurrent(warningBits, compilationState);
             }
             // Save caller's call-site warning bits so caller()[9] can retrieve them
-            WarningBitsRegistry.pushCallerBits();
+            WarningBitsRegistry.pushCallerBits(compilationState);
             // Save caller's $^H so caller()[8] can retrieve them
-            WarningBitsRegistry.pushCallerHints();
+            WarningBitsRegistry.pushCallerHints(compilationState);
             // Save caller's call-site hint hash so caller()[10] can retrieve them
-            HintHashRegistry.pushCallerHintHash();
+            HintHashRegistry.pushCallerHintHash(compilationState);
             int cleanupMark = MyVarCleanupStack.pushMark();
             // Establish a function-scoped mortal boundary so that
             // statement-boundary flushAboveMark() inside this function
@@ -4444,11 +4446,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // After unwindTo, entries are already removed; popMark is a no-op.
                 // On normal return, popMark discards registrations without cleanup.
                 MyVarCleanupStack.popMark(cleanupMark);
-                HintHashRegistry.popCallerHintHash();
-                WarningBitsRegistry.popCallerHints();
-                WarningBitsRegistry.popCallerBits();
+                HintHashRegistry.popCallerHintHash(compilationState);
+                WarningBitsRegistry.popCallerHints(compilationState);
+                WarningBitsRegistry.popCallerBits(compilationState);
                 if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
+                    WarningBitsRegistry.popCurrent(compilationState);
                 }
                 // eval BLOCK is compiled as an immediately-invoked anonymous sub
                 // (sub { ... }->()) that captures outer lexicals, incrementing their
@@ -4584,6 +4586,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The warning bits string, or null if not available
      */
     public static String getWarningBitsForCode(RuntimeCode code) {
+        return getWarningBitsForCode(code, PerlRuntime.current().compilationState);
+    }
+
+    private static String getWarningBitsForCode(
+            RuntimeCode code,
+            org.perlonjava.runtime.CompilationRuntimeState compilationState) {
         // For InterpretedCode, use the stored field directly
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpCode) {
             return interpCode.warningBitsString;
@@ -4597,7 +4605,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // The type contains the declaring class as the first parameter type for instance methods
                 // For our generated apply methods, we use the class that was loaded
                 String className = code.methodHandle.type().parameterType(0).getName();
-                return WarningBitsRegistry.get(className);
+                return compilationState.warningBitsByClass.get(className);
             } catch (Exception e) {
                 // If we can't get the class name, fall back to null
                 return null;
@@ -4687,23 +4695,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 requireLvalueCallable(code, callContext, subroutineName);
                 int effectiveContext = effectiveCallContext(code, callContext);
                 // Look up warning bits for the code's class and push to context stack
-                String warningBits = getWarningBitsForCode(code);
+                org.perlonjava.runtime.CompilationRuntimeState compilationState =
+                        PerlRuntime.current().compilationState;
+                String warningBits = getWarningBitsForCode(code, compilationState);
                 if (warningBits != null) {
-                    WarningBitsRegistry.pushCurrent(warningBits);
+                    WarningBitsRegistry.pushCurrent(warningBits, compilationState);
                 }
                 // Interpreter statement boundaries expose their lexical warning
                 // bits through runtimeWarningBits. A call into JVM-compiled Perl
                 // must replace that value with the callee's definition-time bits
                 // (or null when it has none), otherwise caller warnings leak into
                 // helpers such as test.pl::skip despite `local $^W = 0`.
-                String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
-                WarningBitsRegistry.setRuntimeWarningBits(warningBits);
+                String savedRuntimeWarningBits = compilationState.runtimeWarningBits;
+                compilationState.runtimeWarningBits = warningBits;
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
-                WarningBitsRegistry.pushCallerBits();
+                WarningBitsRegistry.pushCallerBits(compilationState);
                 // Save caller's $^H so caller()[8] can retrieve them
-                WarningBitsRegistry.pushCallerHints();
+                WarningBitsRegistry.pushCallerHints(compilationState);
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
-                HintHashRegistry.pushCallerHintHash();
+                HintHashRegistry.pushCallerHintHash(compilationState);
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 MortalList.pushMark();
                 try {
@@ -4738,12 +4748,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
-                    HintHashRegistry.popCallerHintHash();
-                    WarningBitsRegistry.popCallerHints();
-                    WarningBitsRegistry.popCallerBits();
-                    WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+                    HintHashRegistry.popCallerHintHash(compilationState);
+                    WarningBitsRegistry.popCallerHints(compilationState);
+                    WarningBitsRegistry.popCallerBits(compilationState);
+                    compilationState.runtimeWarningBits = savedRuntimeWarningBits;
                     if (warningBits != null) {
-                        WarningBitsRegistry.popCurrent();
+                        WarningBitsRegistry.popCurrent(compilationState);
                     }
                 }
             }
@@ -4952,16 +4962,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 requireLvalueCallable(code, callContext, subroutineName);
                 int effectiveContext = effectiveCallContext(code, callContext);
                 // Look up warning bits for the code's class and push to context stack
-                String warningBits = getWarningBitsForCode(code);
+                org.perlonjava.runtime.CompilationRuntimeState compilationState =
+                        PerlRuntime.current().compilationState;
+                String warningBits = getWarningBitsForCode(code, compilationState);
                 if (warningBits != null) {
-                    WarningBitsRegistry.pushCurrent(warningBits);
+                    WarningBitsRegistry.pushCurrent(warningBits, compilationState);
                 }
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
-                WarningBitsRegistry.pushCallerBits();
+                WarningBitsRegistry.pushCallerBits(compilationState);
                 // Save caller's $^H so caller()[8] can retrieve them
-                WarningBitsRegistry.pushCallerHints();
+                WarningBitsRegistry.pushCallerHints(compilationState);
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
-                HintHashRegistry.pushCallerHintHash();
+                HintHashRegistry.pushCallerHintHash(compilationState);
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 MortalList.pushMark();
                 try {
@@ -4996,11 +5008,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
-                    HintHashRegistry.popCallerHintHash();
-                    WarningBitsRegistry.popCallerHints();
-                    WarningBitsRegistry.popCallerBits();
+                    HintHashRegistry.popCallerHintHash(compilationState);
+                    WarningBitsRegistry.popCallerHints(compilationState);
+                    WarningBitsRegistry.popCallerBits(compilationState);
                     if (warningBits != null) {
-                        WarningBitsRegistry.popCurrent();
+                        WarningBitsRegistry.popCurrent(compilationState);
                     }
                 }
             }
@@ -5418,7 +5430,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int effectiveContext = effectiveCallContext(this, callContext);
 
             // Debug mode: push args and track subroutine entry
-            if (DebugState.debugMode) {
+            if (DebugState.isDebugMode()) {
                 String debugSubName = (this.subName != null)
                         ? NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main")
                         : "";
@@ -5470,7 +5482,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 exitCall();
                 popActiveCode(this);
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
-                if (DebugState.debugMode) {
+                if (DebugState.isDebugMode()) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
                 }
@@ -5553,7 +5565,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int effectiveContext = effectiveCallContext(this, callContext);
 
             // Debug mode: push args and track subroutine entry
-            if (DebugState.debugMode) {
+            if (DebugState.isDebugMode()) {
                 String debugSubName;
                 if (this.subName != null) {
                     debugSubName = NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main");
@@ -5609,7 +5621,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 exitCall();
                 popActiveCode(this);
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
-                if (DebugState.debugMode) {
+                if (DebugState.isDebugMode()) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
                 }

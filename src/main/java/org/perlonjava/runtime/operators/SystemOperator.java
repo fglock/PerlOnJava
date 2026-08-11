@@ -372,7 +372,7 @@ public class SystemOperator {
             return commandArgs;
         }
 
-        String userDir = System.getProperty("user.dir");
+        String userDir = RuntimeEnvironment.currentDirectory();
         String pathSeparator = SystemUtils.osIsWindows() ? ";" : ":";
         for (String dir : path.split(Pattern.quote(pathSeparator), -1)) {
             File pathDir = dir.isEmpty() ? new File(userDir) : new File(dir);
@@ -422,7 +422,7 @@ public class SystemOperator {
 
         File script = new File(command);
         if (!script.isAbsolute()) {
-            script = new File(System.getProperty("user.dir"), command);
+            script = new File(RuntimeEnvironment.currentDirectory(), command);
         }
 
         StringBuilder commandLine = new StringBuilder("call ").append(quoteForCmd(script.getAbsolutePath()));
@@ -449,7 +449,7 @@ public class SystemOperator {
 
         File script = new File(commandArgs.getFirst());
         if (!script.isAbsolute()) {
-            script = new File(System.getProperty("user.dir"), commandArgs.getFirst());
+            script = new File(RuntimeEnvironment.currentDirectory(), commandArgs.getFirst());
         }
         if (!script.isFile()) {
             return commandArgs;
@@ -613,7 +613,7 @@ public class SystemOperator {
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -716,7 +716,7 @@ public class SystemOperator {
             flushAllHandles();
 
             ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -768,7 +768,7 @@ public class SystemOperator {
             flushAllHandles();
 
             ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -1114,7 +1114,7 @@ public class SystemOperator {
 
             // Run command and capture output
             ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(command));
-            processBuilder.directory(new File(System.getProperty("user.dir")));
+            processBuilder.directory(new File(RuntimeEnvironment.currentDirectory()));
             copyPerlEnvToProcessBuilder(processBuilder);
             processBuilder.redirectErrorStream(false);  // Keep stderr separate
 
@@ -1191,7 +1191,7 @@ public class SystemOperator {
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
-        String userDir = System.getProperty("user.dir");
+        String userDir = RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
         
         // Copy %ENV to the subprocess environment
@@ -1214,7 +1214,7 @@ public class SystemOperator {
      */
     private static int execCommandDirect(List<String> commandArgs) throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
-        String userDir = System.getProperty("user.dir");
+        String userDir = RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
         
         // Copy %ENV to the subprocess environment

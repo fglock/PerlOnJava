@@ -20,6 +20,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -248,9 +249,9 @@ public class NetSSLeay extends PerlModuleBase {
     // Shared SecureRandom instance for RAND_* functions
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    // Thread-local error queue for ERR_put_error / ERR_get_error
-    private static final ThreadLocal<Deque<Long>> ERROR_QUEUE =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static Deque<Long> errorQueue() {
+        return PerlRuntime.current().netSslErrorQueue;
+    }
 
     // Counter for generating unique opaque handle IDs
     private static final AtomicLong HANDLE_COUNTER = new AtomicLong(1);
@@ -258,49 +259,105 @@ public class NetSSLeay extends PerlModuleBase {
     // ex_data indices — OpenSSL reserves index 0, and AnyEvent::TLS does
     // `until $REF_IDX;` around get_ex_new_index, so start at 1.
     private static final AtomicLong EX_INDEX_COUNTER = new AtomicLong(1);
+    public static final class State {
+        final Map<Long, Map<Integer, RuntimeScalar>> exData = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, MemoryBIO> bios = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, EvpMdCtx> evpMdContexts = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, HmacCtx> hmacContexts = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, KeyPair> rsaKeys = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, Long> asn1Times = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, SslCtxState> sslContexts = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, SslState> sslStates = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, java.security.Key> evpKeys = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, X509Certificate> x509Certificates = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, X509NameInfo> x509Names = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, X509NameEntry> x509NameEntries = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, String> asn1Objects = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, Asn1StringValue> asn1Strings = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, BigInteger> asn1Integers = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, X509ExtInfo> x509Extensions = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, X509StoreState> x509Stores = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, X509StoreCtxState> x509StoreContexts = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, List<Long>> x509Stacks = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, VerifyParamState> verifyParams = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, List<X509InfoEntry>> x509InfoStacks = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, MutableX509State> mutableX509 = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, MutableX509ReqState> x509Requests = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, BigInteger> bigNumbers = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, String> evpCiphers = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, KeyPair> ecKeys = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, MutableCRLState> crls = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, X509CRL> x509Crls = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<String, Long> crlTimeCache = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<String, Long> providerNames = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, String> providerHandles = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, String> loadedProviders = Collections.synchronizedMap(new LinkedHashMap<>());
+        long libctxHandle;
+    }
+
+    private static State state() {
+        return PerlRuntime.current().netSslState;
+    }
+
+    private static final class CurrentRuntimeMap<K, V> extends AbstractMap<K, V> {
+        private final Function<State, Map<K, V>> selector;
+
+        CurrentRuntimeMap(Function<State, Map<K, V>> selector) {
+            this.selector = selector;
+        }
+
+        private Map<K, V> delegate() {
+            return selector.apply(state());
+        }
+
+        @Override public V get(Object key) { return delegate().get(key); }
+        @Override public boolean containsKey(Object key) { return delegate().containsKey(key); }
+        @Override public V put(K key, V value) { return delegate().put(key, value); }
+        @Override public V remove(Object key) { return delegate().remove(key); }
+        @Override public void clear() { delegate().clear(); }
+        @Override public int size() { return delegate().size(); }
+        @Override public Set<Entry<K, V>> entrySet() { return delegate().entrySet(); }
+    }
+
     private static final Map<Long, Map<Integer, RuntimeScalar>> EX_DATA =
-            new java.util.concurrent.ConcurrentHashMap<>();
+            new CurrentRuntimeMap<>(s -> s.exData);
 
     // Maps for opaque handles: handle_id → Java object
-    private static final Map<Long, MemoryBIO> BIO_HANDLES = new HashMap<>();
-    private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new HashMap<>();
-    private static final Map<Long, HmacCtx> HMAC_CTX_HANDLES = new HashMap<>();
-    private static final Map<Long, KeyPair> RSA_HANDLES = new HashMap<>();
-    private static final Map<Long, Long> ASN1_TIME_HANDLES = new HashMap<>();  // handle → epoch seconds
-    private static final Map<Long, SslCtxState> CTX_HANDLES = new HashMap<>();
-    private static final Map<Long, SslState> SSL_HANDLES = new HashMap<>();
-    private static final Map<Long, java.security.Key> EVP_PKEY_HANDLES = new HashMap<>();
+    private static final Map<Long, MemoryBIO> BIO_HANDLES = new CurrentRuntimeMap<>(s -> s.bios);
+    private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.evpMdContexts);
+    private static final Map<Long, HmacCtx> HMAC_CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.hmacContexts);
+    private static final Map<Long, KeyPair> RSA_HANDLES = new CurrentRuntimeMap<>(s -> s.rsaKeys);
+    private static final Map<Long, Long> ASN1_TIME_HANDLES = new CurrentRuntimeMap<>(s -> s.asn1Times);
+    private static final Map<Long, SslCtxState> CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.sslContexts);
+    private static final Map<Long, SslState> SSL_HANDLES = new CurrentRuntimeMap<>(s -> s.sslStates);
+    private static final Map<Long, java.security.Key> EVP_PKEY_HANDLES = new CurrentRuntimeMap<>(s -> s.evpKeys);
 
     // X509 handle maps
-    private static final Map<Long, X509Certificate> X509_HANDLES = new HashMap<>();
-    private static final Map<Long, X509NameInfo> X509_NAME_HANDLES = new HashMap<>();
-    private static final Map<Long, X509NameEntry> X509_NAME_ENTRY_HANDLES = new HashMap<>();
-    private static final Map<Long, String> ASN1_OBJECT_HANDLES = new HashMap<>(); // handle → OID string
-    private static final Map<Long, Asn1StringValue> ASN1_STRING_HANDLES = new HashMap<>();
-    private static final Map<Long, BigInteger> ASN1_INTEGER_HANDLES = new HashMap<>();
-    private static final Map<Long, X509ExtInfo> X509_EXT_HANDLES = new HashMap<>();
-    private static final Map<Long, X509StoreState> X509_STORE_HANDLES = new HashMap<>();
-    private static final Map<Long, X509StoreCtxState> X509_STORE_CTX_HANDLES = new HashMap<>();
-    private static final Map<Long, List<Long>> SK_X509_HANDLES = new HashMap<>();
-    private static final Map<Long, VerifyParamState> VERIFY_PARAM_HANDLES = new HashMap<>();
-    private static final Map<Long, List<X509InfoEntry>> X509_INFO_SK_HANDLES = new HashMap<>();
-    private static final Map<Long, MutableX509State> MUTABLE_X509_HANDLES = new HashMap<>();
-    private static final Map<Long, MutableX509ReqState> X509_REQ_HANDLES = new HashMap<>();
-    private static final Map<Long, BigInteger> BIGNUM_HANDLES = new HashMap<>();
-    private static final Map<Long, String> EVP_CIPHER_HANDLES = new HashMap<>(); // handle → cipher name
-    private static final Map<Long, KeyPair> EC_KEY_HANDLES = new HashMap<>(); // EC key pairs
-    private static final Map<Long, MutableCRLState> CRL_HANDLES = new HashMap<>();
-    private static final Map<Long, X509CRL> X509_CRL_HANDLES = new HashMap<>(); // read-only parsed CRLs
-    private static final Map<String, Long> CRL_TIME_CACHE = new HashMap<>(); // cache for read-only CRL time handles
+    private static final Map<Long, X509Certificate> X509_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Certificates);
+    private static final Map<Long, X509NameInfo> X509_NAME_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Names);
+    private static final Map<Long, X509NameEntry> X509_NAME_ENTRY_HANDLES = new CurrentRuntimeMap<>(s -> s.x509NameEntries);
+    private static final Map<Long, String> ASN1_OBJECT_HANDLES = new CurrentRuntimeMap<>(s -> s.asn1Objects);
+    private static final Map<Long, Asn1StringValue> ASN1_STRING_HANDLES = new CurrentRuntimeMap<>(s -> s.asn1Strings);
+    private static final Map<Long, BigInteger> ASN1_INTEGER_HANDLES = new CurrentRuntimeMap<>(s -> s.asn1Integers);
+    private static final Map<Long, X509ExtInfo> X509_EXT_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Extensions);
+    private static final Map<Long, X509StoreState> X509_STORE_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Stores);
+    private static final Map<Long, X509StoreCtxState> X509_STORE_CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.x509StoreContexts);
+    private static final Map<Long, List<Long>> SK_X509_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Stacks);
+    private static final Map<Long, VerifyParamState> VERIFY_PARAM_HANDLES = new CurrentRuntimeMap<>(s -> s.verifyParams);
+    private static final Map<Long, List<X509InfoEntry>> X509_INFO_SK_HANDLES = new CurrentRuntimeMap<>(s -> s.x509InfoStacks);
+    private static final Map<Long, MutableX509State> MUTABLE_X509_HANDLES = new CurrentRuntimeMap<>(s -> s.mutableX509);
+    private static final Map<Long, MutableX509ReqState> X509_REQ_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Requests);
+    private static final Map<Long, BigInteger> BIGNUM_HANDLES = new CurrentRuntimeMap<>(s -> s.bigNumbers);
+    private static final Map<Long, String> EVP_CIPHER_HANDLES = new CurrentRuntimeMap<>(s -> s.evpCiphers);
+    private static final Map<Long, KeyPair> EC_KEY_HANDLES = new CurrentRuntimeMap<>(s -> s.ecKeys);
+    private static final Map<Long, MutableCRLState> CRL_HANDLES = new CurrentRuntimeMap<>(s -> s.crls);
+    private static final Map<Long, X509CRL> X509_CRL_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Crls);
+    private static final Map<String, Long> CRL_TIME_CACHE = new CurrentRuntimeMap<>(s -> s.crlTimeCache);
 
     // OSSL_PROVIDER simulation
-    private static final Map<String, Long> PROVIDER_NAME_TO_HANDLE = new HashMap<>();
-    private static final Map<Long, String> PROVIDER_HANDLE_TO_NAME = new HashMap<>();
-    private static long LIBCTX_HANDLE = 0; // lazily assigned
-    // Track whether fallback providers (default) should auto-load
-    private static boolean retainFallbacks = true;
-    // Track explicitly loaded providers for do_all iteration
-    private static final LinkedHashMap<Long, String> LOADED_PROVIDERS = new LinkedHashMap<>();
+    private static final Map<String, Long> PROVIDER_NAME_TO_HANDLE = new CurrentRuntimeMap<>(s -> s.providerNames);
+    private static final Map<Long, String> PROVIDER_HANDLE_TO_NAME = new CurrentRuntimeMap<>(s -> s.providerHandles);
+    private static final Map<Long, String> LOADED_PROVIDERS = new CurrentRuntimeMap<>(s -> s.loadedProviders);
 
     /**
      * Resets all mutable static state so that tests running in the same JVM
@@ -308,7 +365,7 @@ public class NetSSLeay extends PerlModuleBase {
      * Called from GlobalVariable.resetAllGlobals().
      */
     public static void resetState() {
-        HANDLE_COUNTER.set(1);
+        EX_DATA.clear();
         BIO_HANDLES.clear();
         EVP_MD_CTX_HANDLES.clear();
         HMAC_CTX_HANDLES.clear();
@@ -339,10 +396,9 @@ public class NetSSLeay extends PerlModuleBase {
         CRL_TIME_CACHE.clear();
         PROVIDER_NAME_TO_HANDLE.clear();
         PROVIDER_HANDLE_TO_NAME.clear();
-        LIBCTX_HANDLE = 0;
-        retainFallbacks = true;
+        state().libctxHandle = 0;
         LOADED_PROVIDERS.clear();
-        ERROR_QUEUE.remove();
+        errorQueue().clear();
     }
 
     // SSL method type sentinels
@@ -3231,12 +3287,12 @@ public class NetSSLeay extends PerlModuleBase {
     // ---- Error functions (thread-local error queue) ----
 
     public static RuntimeList ERR_clear_error(RuntimeArray args, int ctx) {
-        ERROR_QUEUE.get().clear();
+        errorQueue().clear();
         return new RuntimeScalar(0).getList();
     }
 
     public static RuntimeList ERR_get_error(RuntimeArray args, int ctx) {
-        Deque<Long> queue = ERROR_QUEUE.get();
+        Deque<Long> queue = errorQueue();
         if (queue.isEmpty()) {
             return new RuntimeScalar(0).getList();
         }
@@ -3244,7 +3300,7 @@ public class NetSSLeay extends PerlModuleBase {
     }
 
     public static RuntimeList ERR_peek_error(RuntimeArray args, int ctx) {
-        Deque<Long> queue = ERROR_QUEUE.get();
+        Deque<Long> queue = errorQueue();
         if (queue.isEmpty()) {
             return new RuntimeScalar(0).getList();
         }
@@ -3272,7 +3328,7 @@ public class NetSSLeay extends PerlModuleBase {
         int reason = args.size() > 2 ? (int) args.get(2).getLong() : 0;
         // OpenSSL 3.0.0 packing: lib << 23 | reason
         long errorCode = ((long) lib << 23) | (reason & 0x7FFFFF);
-        ERROR_QUEUE.get().addLast(errorCode);
+        errorQueue().addLast(errorCode);
         return new RuntimeScalar(0).getList();
     }
 
@@ -3307,7 +3363,7 @@ public class NetSSLeay extends PerlModuleBase {
         if (cb == null || cb.type != RuntimeScalarType.CODE) {
             return new RuntimeScalar(0).getList();
         }
-        Deque<Long> queue = ERROR_QUEUE.get();
+        Deque<Long> queue = errorQueue();
         while (!queue.isEmpty()) {
             long code = queue.pollFirst();
             int lib = (int) ((code >> 23) & 0x1FF);
@@ -3362,7 +3418,7 @@ public class NetSSLeay extends PerlModuleBase {
 
     public static RuntimeList print_errs(RuntimeArray args, int ctx) {
         String prefix = args.size() > 0 ? args.get(0).toString() : "";
-        Deque<Long> queue = ERROR_QUEUE.get();
+        Deque<Long> queue = errorQueue();
         if (queue.isEmpty()) {
             return new RuntimeScalar("").getList();
         }
@@ -7594,10 +7650,11 @@ public class NetSSLeay extends PerlModuleBase {
 
     // OSSL_LIB_CTX_get0_global_default() - return a dummy libctx handle
     public static RuntimeList OSSL_LIB_CTX_get0_global_default(RuntimeArray args, int ctx) {
-        if (LIBCTX_HANDLE == 0) {
-            LIBCTX_HANDLE = HANDLE_COUNTER.getAndIncrement();
+        State state = state();
+        if (state.libctxHandle == 0) {
+            state.libctxHandle = HANDLE_COUNTER.getAndIncrement();
         }
-        return new RuntimeScalar(LIBCTX_HANDLE).getList();
+        return new RuntimeScalar(state.libctxHandle).getList();
     }
 
     // ---- Phase 2b: Mutable X509 creation and signing ----
