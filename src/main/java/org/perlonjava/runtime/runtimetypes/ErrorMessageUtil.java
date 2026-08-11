@@ -88,6 +88,30 @@ public class ErrorMessageUtil {
     }
 
     /**
+     * Convert a Java throwable to the value exposed by Perl's catch parameter.
+     * A reference passed to {@code die} must remain the same blessed Perl value;
+     * stringifying it breaks exception-class checks such as {@code $e->isa(...)}.
+     */
+    public static RuntimeScalar exceptionValue(Throwable t) {
+        Throwable current = t;
+        while (current != null) {
+            if (current instanceof PerlDieException pde && pde.getPayload() != null) {
+                RuntimeScalar first = pde.getPayload().getFirst();
+                if (first != null) {
+                    return first;
+                }
+                break;
+            }
+            Throwable cause = current.getCause();
+            if (cause == null || cause == current) {
+                break;
+            }
+            current = cause;
+        }
+        return new RuntimeScalar(stringifyException(t));
+    }
+
+    /**
      * Regex matching a leading Java exception class name followed by ": ", e.g.
      * "java.lang.NullPointerException: foo" or "org.perlonjava.runtime.RuntimeException: bar".
      * Matches fully-qualified class names composed of dot-separated identifier segments,

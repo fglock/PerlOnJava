@@ -510,6 +510,20 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Store a scalar produced by a deep-clone operation and acquire the
+     * destination hash slot's reference-count ownership. Unlike normal put(),
+     * this retains tied-scalar magic and does not apply Perl assignment/FETCH
+     * semantics to the already-cloned value.
+     */
+    public void putClonedElement(String key, RuntimeScalar value) {
+        elements.put(key, value == null ? new RuntimeScalar() : value);
+        if (value != null) {
+            value.markContainerOwner(this);
+            RuntimeScalar.incrementRefCountForContainerStore(value);
+        }
+    }
+
+    /**
      * Callback owners commonly release their captures with
      * {@code $self->{callbacks} = []}. Preserve that element's scalar slot so
      * the displaced aggregate is released through RuntimeScalar.set(), without

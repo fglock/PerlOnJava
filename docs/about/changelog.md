@@ -4,6 +4,12 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- CPAN/compiler tooling: unblock `Template::Lace`, `Sledge::Plugin::JSONRPC`,
+  and `Catmandu::Exporter::MAB2` without distribution preferences. Add
+  Java-backed `Data::Util` scalar inspection, a `YAML::Syck` compatibility
+  layer, XML reader/BOM support, POSIX math defaults, and fixes for try/catch
+  control flow, exception values, named-character regexes, bareword `isa`,
+  cloned weak references, and temporary reference ownership.
 - CPAN: add Java-backed `Tie::Array::Packed`, BouncyCastle-backed
   `Crypt::Blowfish`, and ProcessHandle-backed `Proc::ProcessTable` XS
   replacements. Fix MakeMaker test-helper staging, H/h pack semantics, and raw

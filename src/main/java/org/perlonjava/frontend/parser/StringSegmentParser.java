@@ -1444,6 +1444,14 @@ public abstract class StringSegmentParser {
         if ("}".equals(chr)) {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
+            if (isRegex) {
+                // Keep named-character escapes intact until regex preprocessing.
+                // Resolving \N{NUMBER SIGN} to '#' here is observably wrong under
+                // /x: the resolved character is then mistaken for a comment and
+                // any following capture groups disappear from the pattern.
+                appendToCurrentSegment("\\N{" + name + "}");
+                return;
+            }
             try {
                 // Use centralized Unicode name resolution from UnicodeResolver
                 // This handles U+XXXX format, official Unicode names, and Perl charnames aliases

@@ -39,6 +39,7 @@ public class XMLLibXML extends PerlModuleBase {
     private static final String NODE_KEY = "_node";
     private static final String OPTS_KEY = "_parser_opts";
     private static final String XPC_KEY  = "_xpc_state";
+    private static final String READER_KEY = "_reader_state";
 
     /** Pseudo-namespace for functions registered without namespace ("{}name"). */
     private static final String NONS_NS     = "http://perlonjava.org/xpc-nons";
@@ -71,6 +72,30 @@ public class XMLLibXML extends PerlModuleBase {
         RuntimeScalar                     varLookupData     = null;  // data passed to var-lookup func
         int contextPosition = -1;
         int contextSize     = -1;
+    }
+
+    /** DOM-backed state for XML::LibXML::Reader's forward element cursor. */
+    static class ReaderState {
+        final Document document;
+        final List<Element> elements = new ArrayList<>();
+        int position = -1;
+
+        ReaderState(Document document) {
+            this.document = document;
+            collectElements(document);
+        }
+
+        private void collectElements(Node node) {
+            if (node instanceof Element element) elements.add(element);
+            NodeList children = node.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                collectElements(children.item(i));
+            }
+        }
+
+        Element current() {
+            return position >= 0 && position < elements.size() ? elements.get(position) : null;
+        }
     }
 
     static class SimpleNamespaceContext implements NamespaceContext {
@@ -142,6 +167,24 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethod("_parse_sax_xml_chunk", "nopMethod",     null);
             module.registerMethod("lib_init_callbacks",   "nopMethod", null);
             module.registerMethod("lib_cleanup_callbacks","nopMethod", null);
+
+            // XML::LibXML::Reader is an optional part of the XS distribution.
+            // Provide its core constructors/cursor operations over the same JDK
+            // DOM representation as the rest of this module.
+            String readerPkg = "XML::LibXML::Reader";
+            String[][] readerMethods = {
+                {"_newForFile",   "readerNewForFile"},
+                {"_newForString", "readerNewForString"},
+                {"_newForIO",     "readerNewForIO"},
+                {"nextElement",   "readerNextElement"},
+                {"copyCurrentNode","readerCopyCurrentNode"},
+                {"name",          "readerName"},
+                {"_close",        "readerClose"},
+                {"_DESTROY",      "readerDestroy"},
+            };
+            for (String[] m : readerMethods) {
+                module.registerMethodInPackage(readerPkg, m[0], m[1]);
+            }
 
             // InputCallback methods (nop stubs — no native callback support)
             for (String m : new String[]{"lib_init_callbacks","lib_cleanup_callbacks"}) {
@@ -424,6 +467,22 @@ public class XMLLibXML extends PerlModuleBase {
         String perlClass = nodeTypeToPerlClass(node);
         RuntimeScalar ref = hash.createReferenceWithTrackedElements();
         return ReferenceOperators.bless(ref, new RuntimeScalar(perlClass));
+    }
+
+    private static RuntimeScalar wrapReader(Document document) {
+        RuntimeHash hash = new RuntimeHash();
+        hash.put(READER_KEY, new RuntimeScalar(new ReaderState(document)));
+        RuntimeScalar ref = hash.createReferenceWithTrackedElements();
+        return ReferenceOperators.bless(ref, new RuntimeScalar("XML::LibXML::Reader"));
+    }
+
+    private static ReaderState getReader(RuntimeScalar self) {
+        RuntimeScalar state = self.hashDerefRaw().get(READER_KEY);
+        if (state != null && state.type == RuntimeScalarType.JAVAOBJECT
+                && state.value instanceof ReaderState reader) {
+            return reader;
+        }
+        throw new RuntimeException("Not a valid XML::LibXML::Reader object");
     }
 
     static Node getNode(RuntimeScalar self) {
@@ -934,13 +993,7 @@ public class XMLLibXML extends PerlModuleBase {
             Document doc;
             // Detect binary XML (UTF-16/UTF-32 BOM) and parse as byte stream
             // so the parser can auto-detect the encoding from the BOM/declaration
-            byte[] xmlBytes = xmlStr.getBytes(StandardCharsets.ISO_8859_1);
-            if (hasBinaryXmlBom(xmlBytes)) {
-                InputSource is = new InputSource(new ByteArrayInputStream(xmlBytes));
-                doc = db.parse(is);
-            } else {
-                doc = db.parse(new InputSource(new StringReader(xmlStr)));
-            }
+            doc = db.parse(xmlInputSource(xmlStr));
             if (!opts.keepBlanks) stripBlankTextNodes(doc);
             // Store detected encoding in user data for getEncoding() calls
             String declEnc = doc.getXmlEncoding();
@@ -961,6 +1014,10 @@ public class XMLLibXML extends PerlModuleBase {
 
     private static boolean hasBinaryXmlBom(byte[] b) {
         if (b.length < 2) return false;
+        // UTF-8 BOM: parse byte strings as bytes so the XML parser consumes
+        // the marker instead of seeing the Latin-1 mojibake characters ï»¿.
+        if (b.length >= 3 && (b[0] & 0xFF) == 0xEF
+                && (b[1] & 0xFF) == 0xBB && (b[2] & 0xFF) == 0xBF) return true;
         // UTF-16 BE BOM: FE FF
         if ((b[0] & 0xFF) == 0xFE && (b[1] & 0xFF) == 0xFF) return true;
         // UTF-16 LE BOM: FF FE
@@ -974,6 +1031,19 @@ public class XMLLibXML extends PerlModuleBase {
         // UTF-32 LE without BOM: '<' = 0x3C 0x00 0x00 0x00
         if (b.length >= 4 && b[0] == 0x3C && b[1] == 0x00 && b[2] == 0x00 && b[3] == 0x00) return true;
         return false;
+    }
+
+    private static InputSource xmlInputSource(String xml) {
+        // A Perl byte string may already have been decoded by the scalar bridge,
+        // turning EF BB BF into the Unicode BOM character.  A BOM is encoding
+        // metadata, not XML content, so consume that representation explicitly.
+        if (!xml.isEmpty() && xml.charAt(0) == '\uFEFF') {
+            return new InputSource(new StringReader(xml.substring(1)));
+        }
+        byte[] bytes = xml.getBytes(StandardCharsets.ISO_8859_1);
+        return hasBinaryXmlBom(bytes)
+                ? new InputSource(new ByteArrayInputStream(bytes))
+                : new InputSource(new StringReader(xml));
     }
 
     /**
@@ -1074,6 +1144,100 @@ public class XMLLibXML extends PerlModuleBase {
             return WarnDie.die(new RuntimeScalar("XML::LibXML::parse_fh: " + e.getMessage() + "\n"),
                 new RuntimeScalar("\n")).getList();
         }
+    }
+
+    // ================================================================
+    // XML::LibXML::Reader core methods
+    // ================================================================
+
+    private static Document parseReaderDocument(InputSource source) throws Exception {
+        return newBuilder(new ParserOptions()).parse(source);
+    }
+
+    public static RuntimeList readerNewForFile(RuntimeArray args, int ctx) {
+        String filename = args.get(1).toString();
+        try {
+            File file = new File(filename);
+            Document document = parseReaderDocument(new InputSource(file.toURI().toString()));
+            document.setDocumentURI(file.toURI().toString());
+            return wrapReader(document).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::Reader: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
+    public static RuntimeList readerNewForString(RuntimeArray args, int ctx) {
+        String xml = args.get(1).toString();
+        String uri = args.size() > 2 && args.get(2).type != RuntimeScalarType.UNDEF
+            ? args.get(2).toString() : null;
+        try {
+            InputSource source = xmlInputSource(xml);
+            source.setSystemId(uri);
+            return wrapReader(parseReaderDocument(source)).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::Reader: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
+    public static RuntimeList readerNewForIO(RuntimeArray args, int ctx) {
+        RuntimeScalar fh = args.get(1);
+        StringBuilder xml = new StringBuilder();
+        try {
+            RuntimeBase content = org.perlonjava.runtime.operators.Readline.readline(
+                fh, RuntimeContextType.LIST);
+            if (content instanceof RuntimeList list) {
+                for (RuntimeBase element : list.elements) xml.append(element.toString());
+            } else if (content instanceof RuntimeScalar scalar
+                    && scalar.type != RuntimeScalarType.UNDEF) {
+                xml.append(scalar.toString());
+            }
+            InputSource source = xmlInputSource(xml.toString());
+            if (args.size() > 2 && args.get(2).type != RuntimeScalarType.UNDEF) {
+                source.setSystemId(args.get(2).toString());
+            }
+            return wrapReader(parseReaderDocument(source)).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::Reader: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
+    public static RuntimeList readerNextElement(RuntimeArray args, int ctx) {
+        ReaderState reader = getReader(args.get(0));
+        String wanted = args.size() > 1 && args.get(1).type != RuntimeScalarType.UNDEF
+            ? args.get(1).toString() : null;
+        while (++reader.position < reader.elements.size()) {
+            Element element = reader.elements.get(reader.position);
+            String localName = element.getLocalName();
+            if (wanted == null || wanted.equals(element.getNodeName())
+                    || wanted.equals(localName)) {
+                return scalarTrue.getList();
+            }
+        }
+        return scalarFalse.getList();
+    }
+
+    public static RuntimeList readerCopyCurrentNode(RuntimeArray args, int ctx) {
+        Element current = getReader(args.get(0)).current();
+        if (current == null) return scalarUndef.getList();
+        boolean deep = args.size() < 2 || args.get(1).getBoolean();
+        return wrapNode(current.cloneNode(deep)).getList();
+    }
+
+    public static RuntimeList readerName(RuntimeArray args, int ctx) {
+        Element current = getReader(args.get(0)).current();
+        return current == null ? scalarUndef.getList()
+            : new RuntimeScalar(current.getNodeName()).getList();
+    }
+
+    public static RuntimeList readerClose(RuntimeArray args, int ctx) {
+        return scalarFalse.getList(); // libxml2's _close returns 0 on success
+    }
+
+    public static RuntimeList readerDestroy(RuntimeArray args, int ctx) {
+        return scalarUndef.getList();
     }
 
     public static RuntimeList _parse_html_string(RuntimeArray args, int ctx) {
@@ -4729,4 +4893,3 @@ public class XMLLibXML extends PerlModuleBase {
         return scalarUndef.getList();
     }
 }
-

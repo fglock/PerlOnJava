@@ -434,9 +434,12 @@ public class StatementParser {
 
             TryNode tryNode = new TryNode(
                     tryBlock, catchParameter, catchBlock, finallyBlock, index);
-            // Async bodies must keep try inline so an await suspends the owning
-            // async frame rather than an ordinary internal wrapper subroutine.
-            if (parser.parsingFutureAsyncAwaitSub) {
+            // A return inside core try/catch returns from the containing
+            // subroutine. Keep try/catch without finally inline; lowering it
+            // through an anonymous wrapper traps that return in the wrapper
+            // and lets execution incorrectly continue after the try statement.
+            // Async bodies also stay inline so await suspends the owning frame.
+            if (finallyBlock == null || parser.parsingFutureAsyncAwaitSub) {
                 return tryNode;
             }
 

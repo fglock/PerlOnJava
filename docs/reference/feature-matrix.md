@@ -770,6 +770,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   storage, mutation, splicing, rotation, and binary search.
 - 🟡 **B::Flags**: portable OP/SV flag names over the bundled partial `B`
   model; host-Perl allocation flags are intentionally unavailable.
+- ✅  **Data::Util**: Java-backed `is_value` and `is_string` preserve the
+  native module's non-vivifying scalar inspection; the rest of the upstream
+  API is supplied by its pure-Perl fallback.
 - ✅  **Scalar::Type** module backed by PerlOnJava scalar metadata (replaces native XS).
 - 🟡 **PadWalker**: `peek_sub`, `closed_over`, and `set_closed_over` use
   runtime-maintained lexical metadata on both backends; caller-pad APIs are
@@ -786,6 +789,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **XML::Parser** module backed by JDK SAX (replaces native libexpat XS).
 - ✅  **YAML::PP** module.
 - ✅  **YAML** module.
+- ✅  **YAML::Syck** compatibility module backed by bundled `YAML::PP`.
 - ✅  **IO::Socket::SSL** module backed by Java `javax.net.ssl` SSLEngine.
 - ✅  **Net::SSLeay** module backed by Java security APIs (2327 CPAN tests pass).
 - ✅  **Plack::Handler::Netty** PSGI web server with HTTP/HTTPS, streaming, 32k+ req/sec. See [Web Server Guide](../../examples/http_server_plack/README.md).

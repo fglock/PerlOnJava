@@ -875,11 +875,11 @@ public class EmitStatement {
         mv.visitLabel(catchBlock);
 
         // --------- Store the exception in the catch parameter ---------
-        // Convert the exception to a string
+        // Preserve a reference passed to die; non-Perl exceptions become strings.
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/ErrorMessageUtil",
-                "stringifyException",
-                "(Ljava/lang/Throwable;)Ljava/lang/String;", false);
+                "exceptionValue",
+                "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         // Transform catch parameter to 'my'
         OperatorNode catchParameter = new OperatorNode("my", node.catchParameter, node.tokenIndex);
         // Create the lexical variable for the catch parameter, push it to the stack
@@ -889,7 +889,7 @@ public class EmitStatement {
                 Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                 "set",
-                "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
         mv.visitInsn(Opcodes.POP);
         // --------- end of store the catch parameter ---------

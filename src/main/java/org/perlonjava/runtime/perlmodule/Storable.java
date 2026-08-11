@@ -256,8 +256,21 @@ public class Storable extends PerlModuleBase {
 
         try {
             RuntimeScalar data = args.get(0);
-            IdentityHashMap<Object, RuntimeScalar> cloned = new IdentityHashMap<>();
-            RuntimeScalar result = deepClone(data, cloned);
+            CloneContext cloneContext = new CloneContext();
+            RuntimeScalar result = deepClone(data, cloneContext);
+            // The returned scalar is a live strong owner while dclone is
+            // finishing, just as a Perl temporary SV is. Acquire that owner
+            // before restoring weak child-to-root edges; otherwise a graph
+            // whose root is referenced only weakly from within itself reaches
+            // refCount zero before the caller can receive it.
+            RuntimeScalar.incrementRefCountForContainerStore(result);
+            // Restore weak edges only after every strong container edge has
+            // acquired ownership. Weakening during recursion can take a
+            // newly-created referent to refCount zero when the weak edge
+            // precedes its strong edge in traversal order.
+            for (RuntimeScalar weakRef : cloneContext.pendingWeakRefs) {
+                WeakRefRegistry.weaken(weakRef);
+            }
             return result.getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("dclone failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
@@ -351,12 +364,20 @@ public class Storable extends PerlModuleBase {
      * Recursively deep-clones a RuntimeScalar, handling circular references and
      * STORABLE_freeze/STORABLE_thaw hooks on blessed objects.
      */
-    private static RuntimeScalar deepClone(RuntimeScalar scalar, IdentityHashMap<Object, RuntimeScalar> cloned) {
+    private static final class CloneContext {
+        private final IdentityHashMap<Object, RuntimeScalar> cloned = new IdentityHashMap<>();
+        private final java.util.ArrayList<RuntimeScalar> pendingWeakRefs = new java.util.ArrayList<>();
+    }
+
+    private static RuntimeScalar deepClone(RuntimeScalar scalar, CloneContext context) {
         if (scalar == null) return new RuntimeScalar();
+        boolean sourceWasWeak = WeakRefRegistry.isweak(scalar);
 
         // Check for already-cloned references (circular reference handling)
-        if (scalar.value != null && cloned.containsKey(scalar.value)) {
-            return new RuntimeScalar(cloned.get(scalar.value));
+        if (scalar.value != null && context.cloned.containsKey(scalar.value)) {
+            RuntimeScalar copy = new RuntimeScalar(context.cloned.get(scalar.value));
+            if (sourceWasWeak) context.pendingWeakRefs.add(copy);
+            return copy;
         }
 
         // Check for blessed objects with STORABLE_freeze hook
@@ -398,7 +419,7 @@ public class Storable extends PerlModuleBase {
                         newObj = new RuntimeHash().createAnonymousReference();
                     }
                     ReferenceOperators.bless(newObj, new RuntimeScalar(className));
-                    cloned.put(scalar.value, newObj);
+                    context.cloned.put(scalar.value, newObj);
 
                     // Call STORABLE_thaw($new_obj, $cloning=1, $serialized, @extra_refs)
                     RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
@@ -412,7 +433,7 @@ public class Storable extends PerlModuleBase {
                         // Remaining elements are extra refs — deep-clone them
                         // so the thawed object gets independent copies
                         for (int i = 1; i < freezeArray.size(); i++) {
-                            RuntimeArray.push(thawArgs, deepClone(freezeArray.get(i), cloned));
+                            RuntimeArray.push(thawArgs, deepClone(freezeArray.get(i), context));
                         }
                         RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
                         // Phase G: release arg-push refCount bumps (see
@@ -427,7 +448,7 @@ public class Storable extends PerlModuleBase {
         }
 
         // Regular deep copy based on type
-        return switch (scalar.type) {
+        RuntimeScalar result = switch (scalar.type) {
             case RuntimeScalarType.HASHREFERENCE -> {
                 RuntimeHash origHash = (RuntimeHash) scalar.value;
                 RuntimeHash newHash = new RuntimeHash();
@@ -436,7 +457,7 @@ public class Storable extends PerlModuleBase {
                 // would set localBindingExists=true and suppress DESTROY/weak-ref
                 // clearing (DBIC t/52leaks.t test 18).
                 RuntimeScalar newRef = newHash.createAnonymousReference();
-                cloned.put(scalar.value, newRef);
+                context.cloned.put(scalar.value, newRef);
 
                 // Preserve blessing
                 if (blessId != 0) {
@@ -447,7 +468,7 @@ public class Storable extends PerlModuleBase {
                 // Check for tied hash — preserve tie magic
                 if (origHash.type == RuntimeHash.TIED_HASH && origHash.elements instanceof TieHash tieHash) {
                     // Deep-clone the tie handler object
-                    RuntimeScalar clonedSelf = deepClone(tieHash.getSelf(), cloned);
+                    RuntimeScalar clonedSelf = deepClone(tieHash.getSelf(), context);
                     // Deep-clone the underlying data via FETCH iteration
                     RuntimeHash previousValue = new RuntimeHash();
                     // Create new TieHash with cloned handler
@@ -459,13 +480,13 @@ public class Storable extends PerlModuleBase {
                     RuntimeScalar firstKey = TieHash.tiedFirstKey(origHash);
                     while (firstKey.type != RuntimeScalarType.UNDEF) {
                         RuntimeScalar val = TieHash.tiedFetch(origHash, firstKey);
-                        previousValue.put(firstKey.toString(), deepClone(val, cloned));
+                        previousValue.putClonedElement(firstKey.toString(), deepClone(val, context));
                         firstKey = TieHash.tiedNextKey(origHash, firstKey);
                     }
                 } else {
                     // Regular (untied) hash: deep-clone each value
                     origHash.elements.forEach((key, value) ->
-                            newHash.put(key, deepClone(value, cloned)));
+                            newHash.putClonedElement(key, deepClone(value, context)));
                 }
                 yield newRef;
             }
@@ -474,7 +495,7 @@ public class Storable extends PerlModuleBase {
                 RuntimeArray newArray = new RuntimeArray();
                 // Anonymous ref — see note on HASHREFERENCE case above.
                 RuntimeScalar newRef = newArray.createAnonymousReference();
-                cloned.put(scalar.value, newRef);
+                context.cloned.put(scalar.value, newRef);
 
                 // Preserve blessing
                 if (blessId != 0) {
@@ -485,7 +506,7 @@ public class Storable extends PerlModuleBase {
                 // Check for tied array — preserve tie magic
                 if (origArray.type == RuntimeArray.TIED_ARRAY && origArray.elements instanceof TieArray tieArray) {
                     // Deep-clone the tie handler object
-                    RuntimeScalar clonedSelf = deepClone(tieArray.getSelf(), cloned);
+                    RuntimeScalar clonedSelf = deepClone(tieArray.getSelf(), context);
                     // Create new TieArray with cloned handler
                     RuntimeArray previousValue = new RuntimeArray();
                     newArray.type = RuntimeArray.TIED_ARRAY;
@@ -496,12 +517,12 @@ public class Storable extends PerlModuleBase {
                     int size = TieArray.tiedFetchSize(origArray).getInt();
                     for (int i = 0; i < size; i++) {
                         RuntimeScalar val = TieArray.tiedFetch(origArray, new RuntimeScalar(i));
-                        previousValue.add(deepClone(val, cloned));
+                        previousValue.add(deepClone(val, context));
                     }
                 } else {
                     // Regular (untied) array: deep-clone each element
                     for (RuntimeScalar element : origArray.elements) {
-                        newArray.addClonedElement(deepClone(element, cloned));
+                        newArray.addClonedElement(deepClone(element, context));
                     }
                 }
                 yield newRef;
@@ -511,8 +532,8 @@ public class Storable extends PerlModuleBase {
                 RuntimeScalar origValue = (RuntimeScalar) scalar.value;
                 RuntimeScalar newValue = new RuntimeScalar();
                 RuntimeScalar newRef = newValue.createReference();
-                cloned.put(scalar.value, newRef);
-                RuntimeScalar clonedValue = deepClone(origValue, cloned);
+                context.cloned.put(scalar.value, newRef);
+                RuntimeScalar clonedValue = deepClone(origValue, context);
                 copyScalarPayload(newValue, clonedValue);
 
                 // Preserve blessing
@@ -526,11 +547,11 @@ public class Storable extends PerlModuleBase {
                 // CODE refs are shared, not cloned
                 yield scalar;
             }
-            case RuntimeScalarType.READONLY_SCALAR -> deepClone((RuntimeScalar) scalar.value, cloned);
+            case RuntimeScalarType.READONLY_SCALAR -> deepClone((RuntimeScalar) scalar.value, context);
             case RuntimeScalarType.TIED_SCALAR -> {
                 // Tied scalar: deep-clone the handler and re-tie
                 if (scalar.value instanceof TieScalar tieScalar) {
-                    RuntimeScalar clonedSelf = deepClone(tieScalar.getSelf(), cloned);
+                    RuntimeScalar clonedSelf = deepClone(tieScalar.getSelf(), context);
                     // Fetch the current value through the tie to initialize the previous value
                     RuntimeScalar prevValue = new RuntimeScalar();
                     prevValue.set(tieScalar.tiedFetch());
@@ -553,6 +574,11 @@ public class Storable extends PerlModuleBase {
                 yield copy;
             }
         };
+        // Native Storable promotes a weak reference to strong when it is the
+        // first edge that introduces a referent into the cloned graph. Only
+        // weak aliases to an already-cloned referent remain weak (handled at
+        // the early return above).
+        return result;
     }
 
     private static void copyScalarPayload(RuntimeScalar target, RuntimeScalar source) {

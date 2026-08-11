@@ -25,6 +25,8 @@ Recent CPAN compatibility additions include:
 | `Tie::Array::Packed` | Perl + Java XS bridge | Packed scalar storage for the upstream tied-array API and pack formats |
 | `Digest::JHash` | Java XS bridge | Jenkins 32-bit hash used by CHI and TimeZone::TimeZoneDB |
 | `B::Flags` | Pure Perl over portable `B` objects | Named OP/SV flags without access to Perl C structures |
+| `Data::Util` | Java XS bridge plus upstream pure-Perl fallback | Scalar classification preserves XS non-vivifying behavior; the remaining API uses `Data::Util::PurePerl` |
+| `YAML::Syck` | Pure Perl over bundled `YAML::PP` | Compatibility loader/dumper for distributions that use the legacy Syck API |
 
 ---
 

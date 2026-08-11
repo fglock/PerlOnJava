@@ -61,8 +61,8 @@ sub strtod {
 }
 
 # Export tags for different groups of functions/constants
-# Native Perl's POSIX exports many constants by default
-# Only export constants that are actually implemented in this module
+# Native Perl's POSIX exports its commonly used constants and math helpers by
+# default.  Only export names that are actually implemented in this module.
 our @EXPORT = qw(
     O_RDONLY O_WRONLY O_RDWR O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND O_NONBLOCK
     WEXITSTATUS WIFEXITED WIFSIGNALED WIFSTOPPED WSTOPSIG WTERMSIG WCOREDUMP

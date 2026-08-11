@@ -705,7 +705,14 @@ public class CompileBinaryOperator {
         } else {
             rightCtx = outerCtx;
         }
-        bytecodeCompiler.compileNode(node.right, -1, rightCtx);
+        Node rightNode = node.right;
+        if (node.operator.equals("isa") && rightNode instanceof IdentifierNode identifier) {
+            // The RHS package name of the feature 'isa' operator is a
+            // class-name bareword even under strict subs. Match the JVM
+            // backend by compiling it as a string constant.
+            rightNode = new StringNode(identifier.name, identifier.getIndex());
+        }
+        bytecodeCompiler.compileNode(rightNode, -1, rightCtx);
         int rs2 = bytecodeCompiler.lastResultReg;
 
         // Emit opcode based on operator (delegated to helper method)
