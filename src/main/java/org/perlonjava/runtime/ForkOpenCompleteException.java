@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 
 /**
  * Exception thrown when a fork-open emulation completes successfully.
@@ -34,6 +35,9 @@ public class ForkOpenCompleteException extends RuntimeException {
      * The filehandle that was set up with the pipe.
      */
     public final RuntimeScalar fileHandle;
+
+    /** The Perl code frame that opened the emulated pipe. */
+    public final RuntimeCode boundaryCode;
     
     /**
      * Creates a new ForkOpenCompleteException.
@@ -43,9 +47,15 @@ public class ForkOpenCompleteException extends RuntimeException {
      * @param fileHandle The configured filehandle
      */
     public ForkOpenCompleteException(long pid, String capturedOutput, RuntimeScalar fileHandle) {
+        this(pid, capturedOutput, fileHandle, null);
+    }
+
+    public ForkOpenCompleteException(long pid, String capturedOutput, RuntimeScalar fileHandle,
+                                     RuntimeCode boundaryCode) {
         super("Fork-open completed successfully");
         this.pid = pid;
         this.capturedOutput = capturedOutput;
         this.fileHandle = fileHandle;
+        this.boundaryCode = boundaryCode;
     }
 }
