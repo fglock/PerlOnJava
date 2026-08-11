@@ -5,7 +5,6 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,10 +31,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
     // Namespace for the stash, if any
     private String namespace = null;
-    private static long stashEntryCacheVersion = -1;
-    private static final Map<String, List<StashEntryName>> stashEntryCache = new HashMap<>();
-
-    private static final class StashEntryName {
+    static final class StashEntryName {
         final String entryKey;
         final String globName;
 
@@ -186,10 +182,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     }
 
     private static List<StashEntryName> cachedStashEntries(String namespace) {
+        GlobalRuntimeState state = PerlRuntime.current().globalState();
         long version = GlobalVariable.stashEnumerationVersion();
-        if (stashEntryCacheVersion != version) {
+        Map<String, List<StashEntryName>> stashEntryCache = state.stashEntryCache();
+        if (state.cachedStashEnumerationVersion() != version) {
             stashEntryCache.clear();
-            stashEntryCacheVersion = version;
+            state.cachedStashEnumerationVersion(version);
         }
         List<StashEntryName> cached = stashEntryCache.get(namespace);
         if (cached != null) {

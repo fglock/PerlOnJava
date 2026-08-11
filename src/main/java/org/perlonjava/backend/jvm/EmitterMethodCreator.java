@@ -1454,7 +1454,7 @@ public class EmitterMethodCreator implements Opcodes {
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');
                     final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.getGlobalClassLoader()) {
                         @Override
                         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
                             if (name.equals(thisClassNameDot)) {
@@ -1496,7 +1496,7 @@ public class EmitterMethodCreator implements Opcodes {
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');
                     final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.getGlobalClassLoader()) {
                         @Override
                         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
                             if (name.equals(thisClassNameDot)) {
@@ -1546,7 +1546,7 @@ public class EmitterMethodCreator implements Opcodes {
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');
                     final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.getGlobalClassLoader()) {
                         @Override
                         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
                             if (name.equals(thisClassNameDot)) {
@@ -1704,8 +1704,8 @@ public class EmitterMethodCreator implements Opcodes {
      * @return The loaded Class object
      */
     public static Class<?> loadBytecode(EmitterContext ctx, byte[] classData) {
-        // Use the global class loader to ensure all generated classes are in the same namespace
-        CustomClassLoader loader = GlobalVariable.globalClassLoader;
+        // Use the runtime's class loader so its generated classes share one namespace.
+        CustomClassLoader loader = GlobalVariable.getGlobalClassLoader();
 
         // Create a "Java" class name with dots instead of slashes
         String javaClassNameDot = ctx.javaClassInfo.javaClassName.replace('/', '.');

@@ -1485,9 +1485,9 @@ public class SubroutineParser {
                     int beginId;
                     if ("state".equals(entry.decl()) && ast != null && ast.id != 0) {
                         beginId = ast.id;
-                        RuntimeCode.evalBeginIds.putIfAbsent(ast, beginId);
+                        RuntimeCode.evalBeginIds().putIfAbsent(ast, beginId);
                     } else {
-                        beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
+                        beginId = RuntimeCode.evalBeginIds().computeIfAbsent(
                                 ast,
                                 k -> EmitterMethodCreator.classCounter.getAndIncrement());
                     }

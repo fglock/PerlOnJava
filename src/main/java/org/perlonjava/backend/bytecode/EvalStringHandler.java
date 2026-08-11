@@ -439,7 +439,7 @@ public class EvalStringHandler {
 
             evalTrace("EvalStringHandler compiled bytecodeLen=" + (evalCode != null ? evalCode.bytecode.length : -1) +
                     " src=" + (evalCode != null ? evalCode.sourceName : "null"));
-            if (RuntimeCode.DISASSEMBLE) {
+            if (RuntimeCode.isDisassemble()) {
                 System.out.println(Disassemble.disassemble(evalCode));
             }
 
@@ -615,7 +615,7 @@ public class EvalStringHandler {
                     errorUtil
             );
             InterpretedCode evalCode = compiler.compile(ast, ctx);  // Pass ctx for context propagation
-            if (RuntimeCode.DISASSEMBLE) {
+            if (RuntimeCode.isDisassemble()) {
                 System.out.println(Disassemble.disassemble(evalCode));
             }
 

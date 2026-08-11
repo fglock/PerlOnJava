@@ -26,6 +26,7 @@ public final class PerlRuntime {
     public final RuntimeRegexState regexState = new RuntimeRegexState();
     public final MroRuntimeState mroState = new MroRuntimeState();
     public final GlobalRuntimeState globalState = new GlobalRuntimeState();
+    public final RuntimeCodeRuntimeState runtimeCodeState = new RuntimeCodeRuntimeState();
 
     RuntimeIO ioStdout;
     RuntimeIO ioStderr;
@@ -122,6 +123,10 @@ public final class PerlRuntime {
 
     public GlobalRuntimeState globalState() {
         return globalState;
+    }
+
+    public RuntimeCodeRuntimeState runtimeCodeState() {
+        return runtimeCodeState;
     }
 
     RuntimeGlob standardIOGlob(String name) {

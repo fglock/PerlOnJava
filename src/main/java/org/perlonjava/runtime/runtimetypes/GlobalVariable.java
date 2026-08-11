@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.AbstractMap;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -36,7 +35,8 @@ public class GlobalVariable {
     public static final Map<String, RuntimeHash> globalHashes =
             new CurrentRuntimeMap<>(state -> state.hashValues());
     // Cache for package existence checks
-    public static final Map<String, Boolean> packageExistsCache = new HashMap<>();
+    public static final Map<String, Boolean> packageExistsCache =
+            new CurrentRuntimePlainMap<>(state -> state.packageExistsCache());
     // isSubs: Tracks subroutines declared via 'use subs' pragma (e.g., use subs 'hex')
     // Maps fully-qualified names (package::subname) to indicate they should be called
     // as user-defined subroutines instead of built-in operators
@@ -55,32 +55,22 @@ public class GlobalVariable {
     // behave like Src:: for method lookup and stash operations.
     // We keep this separate from globalCodeRefs/globalVariables so existing references
     // to Dst:: symbols can still point to their original objects.
-    static final Map<String, String> stashAliases = new HashMap<>();
+    static final Map<String, String> stashAliases =
+            new CurrentRuntimePlainMap<>(state -> state.stashAliases());
 
     // Glob aliasing: `*a = *b` makes a and b share the same glob.
     // Maps glob names to their canonical (target) name.
     // When looking up or assigning to glob slots, we resolve through this map.
-    static final Map<String, String> globAliases = new HashMap<>();
+    static final Map<String, String> globAliases =
+            new CurrentRuntimePlainMap<>(state -> state.globAliases());
 
     // Flags used by operator override
     // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
     // Used to detect when built-in operators have been globally overridden
     static final Map<String, Boolean> globalGlobs =
             new CurrentRuntimePlainMap<>(state -> state.operatorOverrideGlobs());
-    // Global class loader for all generated classes - not final so we can replace it
-    public static CustomClassLoader globalClassLoader =
-            new CustomClassLoader(GlobalVariable.class.getClassLoader());
-
     // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
-
-    // Track explicitly declared global variables (via use vars, our, Exporter glob assignment).
-    // Separate from globalVariables/globalArrays/globalHashes to distinguish intentional
-    // declarations from auto-vivification under 'no strict'. Used by strict vars check
-    // for single-letter variable names like $A-$Z (excluding $a/$b).
-    private static final Set<String> declaredGlobalVariables = new HashSet<>();
-    private static final Set<String> declaredGlobalArrays = new HashSet<>();
-    private static final Set<String> declaredGlobalHashes = new HashSet<>();
     static long stashEnumerationVersion() {
         return globalState().stashEnumerationVersion();
     }
@@ -91,6 +81,16 @@ public class GlobalVariable {
 
     private static GlobalRuntimeState globalState() {
         return PerlRuntime.current().globalState;
+    }
+
+    /** Return the generated-class loader owned by the bound runtime. */
+    public static CustomClassLoader getGlobalClassLoader() {
+        return globalState().generatedClassLoader();
+    }
+
+    /** Replace the generated-class loader owned by the bound runtime. */
+    public static void setGlobalClassLoader(CustomClassLoader loader) {
+        globalState().generatedClassLoader(loader);
     }
 
     private static Map<String, RuntimeScalar> foreachGlobalAliases() {
@@ -569,28 +569,28 @@ public class GlobalVariable {
      * Marks a global variable as explicitly declared (e.g., via use vars, Exporter import).
      */
     public static void declareGlobalVariable(String key) {
-        declaredGlobalVariables.add(key);
+        globalState().declaredGlobalVariables().add(key);
     }
 
     /**
      * Marks a global array as explicitly declared.
      */
     public static void declareGlobalArray(String key) {
-        declaredGlobalArrays.add(key);
+        globalState().declaredGlobalArrays().add(key);
     }
 
     /**
      * Marks a global hash as explicitly declared.
      */
     public static void declareGlobalHash(String key) {
-        declaredGlobalHashes.add(key);
+        globalState().declaredGlobalHashes().add(key);
     }
 
     /**
      * Checks if a global variable was explicitly declared (not just auto-vivified).
      */
     public static boolean isDeclaredGlobalVariable(String key) {
-        return declaredGlobalVariables.contains(key)
+        return globalState().declaredGlobalVariables().contains(key)
                 || key.endsWith("::a") || key.endsWith("::b");
     }
 
@@ -598,14 +598,14 @@ public class GlobalVariable {
      * Checks if a global array was explicitly declared.
      */
     public static boolean isDeclaredGlobalArray(String key) {
-        return declaredGlobalArrays.contains(key);
+        return globalState().declaredGlobalArrays().contains(key);
     }
 
     /**
      * Checks if a global hash was explicitly declared.
      */
     public static boolean isDeclaredGlobalHash(String key) {
-        return declaredGlobalHashes.contains(key);
+        return globalState().declaredGlobalHashes().contains(key);
     }
 
     /**
@@ -630,13 +630,8 @@ public class GlobalVariable {
         globalState().clearIoAndFormatValues();
         globalGlobs.clear();
         isSubs.clear();
-        stashAliases.clear();
-        resolvedStashAliasCache.clear();
-        globAliases.clear();
-        declaredGlobalVariables.clear();
-        declaredGlobalArrays.clear();
-        declaredGlobalHashes.clear();
-        clearPackageCache();
+        globalState().clearGlobAndStashValues();
+        globalState().clearDeclarationsAndPackageServices();
 
         org.perlonjava.runtime.WarningBitsRegistry.clear();
         WarningFlags.resetRuntimeState();
@@ -666,9 +661,6 @@ public class GlobalVariable {
         // Reset lib module static state (ORIG_INC)
         org.perlonjava.runtime.perlmodule.Lib.resetState();
 
-        // Destroy the old classloader and create a new one
-        // This allows the old generated classes to be garbage collected
-        globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
         MortalList.invalidateAllRootSnapshots();
     }
 
@@ -719,7 +711,8 @@ public class GlobalVariable {
      * non-alias hit without allocating. Cleared whenever {@link #stashAliases}
      * is mutated.
      */
-    private static final Map<String, String> resolvedStashAliasCache = new HashMap<>();
+    private static final Map<String, String> resolvedStashAliasCache =
+            new CurrentRuntimePlainMap<>(state -> state.resolvedStashAliases());
 
     /** Hop cap for cycle detection in {@link #resolvePackageAliasCached}. */
     private static final int STASH_ALIAS_HOP_CAP = 16;

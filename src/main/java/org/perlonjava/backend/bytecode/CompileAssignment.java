@@ -17,7 +17,7 @@ public class CompileAssignment {
 
     private static boolean compileForwardCodeGlobAlias(
             BytecodeCompiler bc, Node lhs, Node rhs) {
-        if (!RuntimeCode.USE_INTERPRETER
+        if (!RuntimeCode.isUseInterpreter()
                 || !(lhs instanceof OperatorNode globOp) || !globOp.operator.equals("*")
                 || !(rhs instanceof OperatorNode refOp) || !refOp.operator.equals("\\")
                 || !(refOp.operand instanceof OperatorNode codeOp) || !codeOp.operator.equals("&")
@@ -456,7 +456,7 @@ public class CompileAssignment {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                            Integer beginIdObj = RuntimeCode.evalBeginIds.get(sigilOp);
+                            Integer beginIdObj = RuntimeCode.evalBeginIds().get(sigilOp);
                             if (beginIdObj != null) {
                                 int beginId = beginIdObj;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
@@ -558,7 +558,7 @@ public class CompileAssignment {
                             // Handle my @array = ...
                             String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
 
-                            Integer beginIdArr = RuntimeCode.evalBeginIds.get(sigilOp);
+                            Integer beginIdArr = RuntimeCode.evalBeginIds().get(sigilOp);
                             if (beginIdArr != null) {
                                 int beginId = beginIdArr;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
@@ -633,7 +633,7 @@ public class CompileAssignment {
                             // Handle my %hash = ...
                             String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
 
-                            Integer beginIdHash = RuntimeCode.evalBeginIds.get(sigilOp);
+                            Integer beginIdHash = RuntimeCode.evalBeginIds().get(sigilOp);
                             if (beginIdHash != null) {
                                 int beginId = beginIdHash;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
@@ -763,7 +763,7 @@ public class CompileAssignment {
                                     String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
                                     int varReg;
 
-                                    Integer beginIdList = RuntimeCode.evalBeginIds.get(sigilOp);
+                                    Integer beginIdList = RuntimeCode.evalBeginIds().get(sigilOp);
                                     if (beginIdList != null) {
                                         int beginId = beginIdList;
                                         int nameIdx = bytecodeCompiler.addToStringPool(varName);

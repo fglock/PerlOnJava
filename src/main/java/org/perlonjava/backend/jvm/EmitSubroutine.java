@@ -265,7 +265,8 @@ public class EmitSubroutine {
             String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
-            RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
+            RuntimeCode.registerAnonymousSub(
+                    subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
 
             String cvStartFile = "-e";
             int cvStartLine = 0;
@@ -310,7 +311,7 @@ public class EmitSubroutine {
             // Transfer pad constants (cached string literals referenced via \) from compile time
             // to a registry so makeCodeObject() can attach them to the RuntimeCode at runtime.
             if (subCtx.javaClassInfo.padConstants != null && !subCtx.javaClassInfo.padConstants.isEmpty()) {
-                RuntimeCode.padConstantsByClassName.put(subCtx.javaClassInfo.javaClassName,
+                RuntimeCode.registerPadConstants(subCtx.javaClassInfo.javaClassName,
                         subCtx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]));
             }
 
@@ -382,19 +383,15 @@ public class EmitSubroutine {
             
             // Store the InterpretedCode in the interpretedSubs map with a unique key
             String fallbackKey = "interpreted_" + System.identityHashCode(fallback.interpretedCode);
-            RuntimeCode.interpretedSubs.put(fallbackKey, fallback.interpretedCode);
+            RuntimeCode.putInterpretedSub(fallbackKey, fallback.interpretedCode);
             
             // Generate bytecode to retrieve and configure the InterpretedCode
             // 1. Load the InterpretedCode from the map
-            mv.visitFieldInsn(Opcodes.GETSTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "interpretedSubs",
-                    "Ljava/util/HashMap;");
             mv.visitLdcInsn(fallbackKey);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "java/util/HashMap",
-                    "get",
-                    "(Ljava/lang/Object;)Ljava/lang/Object;",
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "getInterpretedSub",
+                    "(Ljava/lang/String;)Ljava/lang/Object;",
                     false);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/backend/bytecode/InterpretedCode");
             
@@ -546,18 +543,14 @@ public class EmitSubroutine {
         if (compileTimeAttributeCodeRef != null) {
             String key = "compile_time_attr_"
                     + System.identityHashCode(compileTimeAttributeCodeRef);
-            RuntimeCode.interpretedSubs.put(key, compileTimeAttributeCodeRef);
+            RuntimeCode.putInterpretedSub(key, compileTimeAttributeCodeRef);
 
             // Stack: [compiledRef]
-            mv.visitFieldInsn(Opcodes.GETSTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "interpretedSubs",
-                    "Ljava/util/HashMap;");
             mv.visitLdcInsn(key);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "java/util/HashMap",
-                    "get",
-                    "(Ljava/lang/Object;)Ljava/lang/Object;",
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "getInterpretedSub",
+                    "(Ljava/lang/String;)Ljava/lang/Object;",
                     false);
             mv.visitTypeInsn(Opcodes.CHECKCAST,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalar");

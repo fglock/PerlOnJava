@@ -636,8 +636,8 @@ public class ModuleOperators {
         parsedArgs.fileName = actualFileName;
         parsedArgs.incHook = incHookRef;
         parsedArgs.applySourceFilters = shouldApplyFilters;  // Enable source filter preprocessing if needed
-        parsedArgs.disassembleEnabled = RuntimeCode.DISASSEMBLE;
-        parsedArgs.useInterpreter = RuntimeCode.USE_INTERPRETER;
+        parsedArgs.disassembleEnabled = RuntimeCode.isDisassemble();
+        parsedArgs.useInterpreter = RuntimeCode.isUseInterpreter();
         if (jarPrefetchedBytes != null) {
             code = FileUtils.decodePerlSourceBytes(jarPrefetchedBytes, parsedArgs);
         }

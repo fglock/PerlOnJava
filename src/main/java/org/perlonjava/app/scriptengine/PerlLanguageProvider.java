@@ -144,7 +144,7 @@ public class PerlLanguageProvider {
 
         // The compiler options are also the source of truth for nested loads.
         // ModuleOperators creates fresh CompilerOptions instances for require/use
-        // and reads RuntimeCode.USE_INTERPRETER when choosing their backend.  If
+        // and reads the bound runtime's interpreter option when choosing their backend. If
         // an embedding caller sets useInterpreter directly (rather than using the
         // CLI, which updates that runtime flag), the top-level program would run
         // in the interpreter while its modules were still compiled as JVM code.

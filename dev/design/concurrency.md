@@ -16,7 +16,8 @@ Each numbered phase below normally forms an independent pull request. A phase
 may be split further when its audit shows that it cannot be reviewed or reverted
 safely. Phases 3 and 4 were combined at the maintainer's request, as were
 Phases 5 through 7 and Phases 8a through 8c; each combined changeset preserves
-the same green-boundary requirements. At every merge boundary:
+the same green-boundary requirements. Phases 8d, 8e, and 9 form one further
+maintainer-requested combined PR. At every merge boundary:
 
 - the compiler and both execution backends remain functional;
 - `make` passes;
@@ -308,12 +309,12 @@ Move glob tables, stash/package objects, and alias maps.
 Move declared-global sets, package-existence caches, class-loader ownership, and
 remaining symbol-table runtime state.
 
-Each remaining Phase 8 subphase normally forms its own PR; 8a through 8c are a
-maintainer-requested combined exception. Acceptance for each: conflicting
-in-scope global state in two runtimes remains isolated on JVM and interpreter
-backends; global, lexical, and eval benchmarks meet the budget. No phase claims
-alias/stash isolation before 8d or declaration/package-service isolation before
-8e.
+Each remaining Phase 8 subphase normally forms its own PR; 8a through 8c and
+the 8d-through-9 group are maintainer-requested combined exceptions. Acceptance
+for each: conflicting in-scope global state in two runtimes remains isolated on
+JVM and interpreter backends; global, lexical, and eval benchmarks meet the
+budget. No phase claims alias/stash isolation before 8d or declaration/package-
+service isolation before 8e.
 
 ### Phase 9 — RuntimeCode and eval caches
 
@@ -465,172 +466,34 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 8a through 8c complete; combined PR ready for review
+### Current Status: Phases 8d through 9 complete; combined PR ready for review
 
-### Completed Phases
+Runtime-owned state now includes glob/stash aliases and enumeration caches;
+declarations, package/class/field/version services, and generated classloaders;
+and RuntimeCode eval registries, caches, callsites, inline caches, and backend
+selection flags. `Config` thread flags remain disabled. The paired six-benchmark
+matrix is within budget after batching hot-path runtime lookups. Exact-tree
+`make` passes; the comprehensive gate is core 83.0% and bundled modules 80.8%.
+Scalar::Util 1.70, Moo 2.005005, and focused stash/glob/strict/eval tests pass
+on both backends, apart from one interpreter eval/goto miss reproduced exactly
+on merged master. Three-run CPU medians versus the same base improved by about
+9% global, 14% lexical, 14% method, 3% closure, 2% regex, and 4% eval-string.
 
-- [x] Phase 1: Import health and compiler identity safety (2026-08-10)
-  - Made the 208-entry Perl 5 import replay idempotent.
-  - Preserved CPAN provider/prerequisite/heap adaptations as importer patches.
-  - Repaired malformed Data::Dumper and stale manifest-test patches.
-  - Made compiler-generated identifiers atomic and control-flow analysis local.
-  - Added concurrent generated-class-name coverage.
-  - Validation: `make` passed; `make test-all` completed with the recorded
-    compatibility baseline (core 82.9%, bundled modules 80.8%).
-  - Merged as PR #915 on 2026-08-11.
-- [x] Phase 2: Serialized compilation (2026-08-11)
-  - Added one reentrant compilation lock with an idempotent, one-hold guard.
-  - Serialized initial source/AST compilation, both interpreter eval roots,
-    JVM eval compilation, lazy named-sub materialization, reset, and verifier
-    fallback compilation.
-  - Kept ordinary program/eval execution outside each entry point's own hold;
-    compile-time `BEGIN` wrapper execution remains inside the enclosing hold.
-  - Restored compiler scope, eval aliases, and hint state under the lock and
-    made lexer/parser failures release their exact acquisition.
-  - Added deterministic queueing, reentrancy, failure-cleanup, mixed-backend
-    concurrency, nested `BEGIN`/eval, and unlocked-execution tests.
-  - Files: `PerlLanguageProvider.java`, `EvalStringHandler.java`,
-    `RuntimeCode.java`, `SubroutineParser.java`, and `CompilationLockTest.java`.
-  - Validation: `make` passed; focused eval regressions passed under system
-    Perl and both PerlOnJava backends; Scalar::Util 1.70 and Moo 2.005005 loaded
-    successfully on both backends; `make test-all` completed at core 83.0% and
-    bundled modules 80.8%.
-  - Audit delta: no runtime state moved and no production worker was added; the
-    new lock is the only mutable static and covers the newly identified lazy-sub
-    and verifier-fallback compiler escape paths.
-  - Merged as PR #918 on 2026-08-11.
-- [x] Phase 3: `PerlRuntime` shell and scoped binding (2026-08-11)
-  - Added an empty runtime identity object backed by an ordinary, non-inherited
-    `ThreadLocal` binding-frame stack; no mutable interpreter state moved.
-  - Scoped bindings restore exact nested state, remove absent bindings, and
-    reject cross-thread or out-of-order closure.
-  - Bound CLI lifetime, provider ownership roots, JSR-223 engines and compiled
-    scripts, require/do, and both eval compilation/execution families.
-  - Public provider calls temporarily create a shell only when invoked by an
-    unbound embedding caller; nested require/eval paths require the existing
-    runtime so missing worker propagation fails clearly.
-  - Added absence, nesting, exception, ownership, non-inheritance, executor
-    reuse, two-thread isolation, provider, nested require/eval, and JSR-223
-    lifecycle tests.
-  - Deliberately deferred regex timeout and alarm worker binding until the same
-    PR that migrates the state each worker uses. I/O router, process, and Netty
-    callback bindings land with Phase 4 in this combined PR.
-  - `globalInitialized` and all other runtime state remain static by design in
-    this shell-only phase; `Config` thread flags remain disabled.
-- [x] Phase 4: I/O state isolation (2026-08-11)
-  - Moved standard input/output/error handles, the selected/last-used handle
-    bookkeeping, and the open-handle cache into `PerlRuntime` behind stable
-    `RuntimeIO` accessors.
-  - Routed uppercase and lowercase standard-handle globs through the bound
-    runtime, including glob localization/restoration and generated JVM readline
-    bookkeeping.
-  - Captured and scoped the originating runtime in pipe routers, system-process
-    routers, IPC::Open3 copying, PerlOnJava::Process output, and Netty request
-    and streaming callbacks.
-  - Added independent-default, nested-state, simultaneous low-level write,
-    reset isolation, generated-readline bookkeeping, deterministic router
-    propagation, standard-glob lifecycle, and JSR-223 engine ownership tests.
-    Concurrent full Perl execution remains intentionally deferred because
-    Phase 5 stack state is still process-global.
-  - Kept fileno, child-process, phantom-handle, terminal-service, regex, and
-    alarm state explicitly deferred to their inventory phases.
-  - Validation: `make` passed; the final exact-tree `make test-all` completed
-    at core 83.2% and bundled modules 80.8%. Twenty-four focused I/O runs
-    passed across JVM and interpreter backends, as did IPC::Open3 and the
-    Scalar::Util 1.70/Moo 2.005005 smoke tests on both backends.
-  - The interpreter-only TAP miss in `nonblocking_pipe_syswrite.t` assertion 8
-    was reproduced on the exact PR #918 base and is therefore pre-existing;
-    the JVM backend and the remaining focused assertions pass.
-- [x] Phase 5: Execution stacks and special blocks (2026-08-11)
-  - Added per-runtime execution state for caller/dynamic scope, interpreter and
-    eval frames, argument/context/lexical stacks, recursion tracking, control
-    flow, lexical cleanup registrations, and every current localization stack.
-  - Moved live output separators and `CHECK`/`INIT`/`END` queues with their
-    reset and `Internals::B::end_av` consumers, preserving current ordering.
-  - Captured the owning runtime for asynchronous Future callbacks before they
-    resume Perl execution on an arbitrary Java thread.
-  - Kept package-global values shared until Phase 8 and kept the coupled
-    mortal/weak/`DESTROY` sweep machinery together for Phase 11.
-- [x] Phase 6: Regex state and timeout binding (2026-08-11)
-  - Moved all match/capture metadata, offsets, `/g` positions, compiled-regex
-    caches, `/o`, and match-once state into the bound runtime.
-  - Made regex snapshots restore the complete state and reject cross-runtime
-    restoration.
-  - Captured and scoped the runtime in timeout workers, made those workers
-    daemon and cancellation-aware, and serialized the remaining compile-only
-    regex-preprocessor scratch behind the compilation boundary.
-  - Deferred process-wide alarm/signal ownership to Phase 11 while covering
-    the sequential alarm-mediated regex path that regressed PR #480.
-- [x] Phase 7: Inheritance and method caches (2026-08-11)
-  - Moved MRO policy, method/overload/ISA caches, package generations,
-    reverse-ISA data, and AUTOLOAD policy into each runtime.
-  - Added temporary process-wide symbol and ISA mutation epochs so a runtime
-    cannot retain stale derived entries while symbol tables remain shared.
-  - Kept conflicting package/method declarations explicitly deferred to the
-    Phase 8 symbol-table migrations.
-  - Added deterministic low-level isolation tests for all three phases and
-    retained existing Storable assertions while giving affected fixtures an
-    explicit runtime binding.
-  - Validation: the exact-tree `make` completed successfully; 38 focused Perl
-    runs passed across JVM and interpreter backends except one interpreter
-    caller-context failure reproduced identically on PR #920's merge base.
-    Scalar::Util 1.70 and Moo 2.005005 loaded on both backends. Method and
-    closure benchmarks improved; regex matching is approximately 10% slower
-    from the required runtime lookup and is recorded for Phase 13 recovery.
-    The comprehensive gate completed at core 82.9% and bundled modules 81.0%.
-- [x] Phases 8a-8c: Runtime-owned globals, CODE, IO, and formats (2026-08-11)
-  - Added `GlobalRuntimeState` and moved scalar, array, hash, foreach-alias,
-    CODE, pseudo-constant, pin, compiled-CV, named IO, hidden-IO, and format
-    storage behind the existing `GlobalVariable` facades.
-  - Made core-global initialization and stash-enumeration invalidation
-    runtime-owned. `CompilerOptions` now builds a detached argument array and
-    installs that exact object as the bound runtime's `@ARGV` during global
-    initialization.
-  - Preserved CODE identity and Perl's declared-but-undefined semantics across
-    `undef &name`, including package/subroutine metadata and pin behavior.
-  - Added nested-binding, simultaneous-runtime, reset, JSR-223, JVM, and
-    interpreter coverage for conflicting global values, named subs/prototypes,
-    named filehandles, and formats. New Perl semantic tests pass first under
-    system Perl and then under both PerlOnJava backends.
-  - Repaired the `re/pat.t` regression discovered after PR #921: regex-worker
-    cancellation now unwinds silently instead of reporting the internal
-    ten-second deadline, and the alarm scheduler binds its captured runtime
-    before reading `%SIG` and queuing `ALRM`. The exact pre-PR result is restored
-    at 1098/1302, including test 1149 on both compiler backends' reproducer.
-  - Validation: exact-tree `make` passed; Scalar::Util 1.70 and Moo 2.005005
-    loaded on both backends; the comprehensive gate completed at core 83.0%
-    and bundled modules 80.8%.
-  - Same-base three-run medians: lexical improved about 1%; global access is
-    about 34% slower and eval-string about 15% slower from the required bound-
-    runtime lookup. These exceed the normal 5% budget and are explicitly
-    presented for review as a temporary exception, with generated-code runtime
-    caching deferred to the dedicated performance-recovery phase. Thread
-    compatibility flags remain disabled.
+### Implementation History
 
-### Phase 1 Work Completed (2026-08-10)
-
-- [x] Audited the four files changed by `dev/import-perl5/sync.pl`.
-- [x] Identified lost PerlOnJava adaptations and a malformed Data::Dumper patch.
-- [x] Added replayable CPAN script/module/queue patches and repaired Data::Dumper.
-- [x] Repaired the stale manifest-test patch against the current Perl 5 source.
-- [x] Verified affected filtered sync operations are idempotent.
-- [x] Converted current compiler-generated ID allocation to atomic operations.
-- [x] Removed shared mutable control-flow visitor state.
-- [x] Added a concurrent generated-class-name uniqueness test.
-- [x] Ran full import replay twice with zero diff.
-- [x] Ran targeted system-Perl/JVM/interpreter tests.
-- [x] Ran full `make` and the available comprehensive gate.
-- [x] Prepared the final Phase 1 commit for review.
+Completed phase history is intentionally kept out of this living design
+document. The implementation record, validation details, regressions, and
+review decisions can be recovered from the phase commit messages and pull-
+request history.
 
 ### Next Steps
 
-1. Review and merge the combined Phase 8a-8c runtime-global PR while `Config`
-   thread flags remain disabled, including the documented temporary benchmark
-   exception.
-2. Start Phase 8d from updated `master`: migrate glob tables, aliases, and
-   stashes as one atomic symbol-identity change.
-3. Keep Phase 8e declarations, package services, and class-loader ownership in
-   its own independently green PR.
+1. Finish validation and review the combined Phase 8d-through-9 PR while
+   `Config` thread flags remain disabled.
+2. Start Phase 10 from updated `master`: classify compile-only versus runtime
+   hints, warnings, filters, and source maps before migrating runtime state.
+3. Re-audit and split Phase 11's lifecycle/miscellaneous inventory into atomic,
+   independently green ownership domains before implementation.
 
 ### Open Questions
 
