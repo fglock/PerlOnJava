@@ -478,7 +478,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 10 through 12 implemented and validated
+### Current Status: Phase 13 implemented and validated
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -510,7 +510,8 @@ current/base rates were global 37030/35671 (+3.8%), lexical 127349/118820
 (+7.2%), method 91.45/94.40 (-3.1%), closure 34.68/32.37 (+7.1%), regex
 21657.60/22048.45 (-1.8%), and eval-string 15070.22/14910.07 (+1.1%). The
 runtime lookup batching and idle lifecycle fast paths used to recover these
-results preserve the runtime-owned state boundaries.
+results preserve the runtime-owned state boundaries. This satisfies Phase 13;
+no speculative optimization from the historical branches is required.
 
 ### Implementation History
 
@@ -521,12 +522,12 @@ request history.
 
 ### Next Steps
 
-1. Land the combined Phase 10-through-12 pull request while `Config` thread
-   flags remain disabled.
-2. Start Phase 13 performance recovery only from new measured profiles; retain
-   the global compilation lock and do not optimize already-green paths speculatively.
-3. Re-run the mutable-static and worker audit before beginning Phase 14's graph
-   cloner so newly introduced state cannot escape runtime ownership.
+1. Implement Phase 14's identity-preserving graph cloner with a single identity
+   map across every root, explicit tie/resource policies, and no source mutation.
+2. Add explicit JVM and interpreter capture metadata in Phase 15; do not infer
+   generated constructor order through reflection.
+3. Compose the cloner into a Phase 16 runtime snapshot, preflight `CLONE_SKIP`,
+   and invoke `CLONE` only after the child graph is installed.
 
 ### Open Questions
 
