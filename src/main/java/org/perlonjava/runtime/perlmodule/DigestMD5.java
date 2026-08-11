@@ -210,14 +210,15 @@ public class DigestMD5 extends PerlModuleBase {
             MessageDigest mdClone = (MessageDigest) md.clone();
             byte[] digestBytes = mdClone.digest();
 
-            // Convert bytes to string (ISO-8859-1 to preserve byte values)
-            String digestStr = new String(digestBytes, StandardCharsets.ISO_8859_1);
-
             // Reset for next use
             md.reset();
             self.put(BLOCK_COUNT_KEY, scalarZero);
 
-            return new RuntimeScalar(digestStr).getList();
+            // The raw digest is an octet string (SvUTF8 off), even when it
+            // contains bytes above 0x7f.  Constructing from a Java String
+            // incorrectly marked it UTF-8 and made `use bytes; length` exceed
+            // 16, breaking Crypt::CBC key/IV derivation.
+            return new RuntimeScalar(digestBytes).getList();
 
         } catch (Exception e) {
             throw new RuntimeException("Digest::MD5 digest failed: " + e.getMessage(), e);

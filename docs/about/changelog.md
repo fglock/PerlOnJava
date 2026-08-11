@@ -4,6 +4,11 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- CPAN: add Java-backed `Tie::Array::Packed`, BouncyCastle-backed
+  `Crypt::Blowfish`, and ProcessHandle-backed `Proc::ProcessTable` XS
+  replacements. Fix MakeMaker test-helper staging, H/h pack semantics, and raw
+  MD5 byte flags so `Tie::Array::Packed` and `Git::Crypt` pass without new
+  distribution preferences.
 - CPAN: add a Java-backed `Digest::JHash` XS replacement for CHI and
   `TimeZone::TimeZoneDB` dependency chains, and make CPAN's generated
   Makefile fallback work when a distribution ships a read-only Makefile.PL.
