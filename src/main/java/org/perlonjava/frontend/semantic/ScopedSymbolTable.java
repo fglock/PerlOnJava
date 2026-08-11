@@ -3,6 +3,7 @@ package org.perlonjava.frontend.semantic;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.runtime.runtimetypes.FeatureFlags;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import java.util.*;
@@ -17,8 +18,9 @@ public class ScopedSymbolTable {
     // Mapping of warning and feature names to bit positions
     private static final Map<String, Integer> warningBitPositions = new HashMap<>();
     private static final Map<String, Integer> featureBitPositions = new HashMap<>();
-    // Global package version storage (static so it persists across all symbol table instances)
-    private static final Map<String, String> packageVersions = new HashMap<>();
+    private static Map<String, String> packageVersions() {
+        return PerlRuntime.current().globalState().packageVersions();
+    }
 
     static {
         // Initialize warning bit positions
@@ -161,7 +163,7 @@ public class ScopedSymbolTable {
      * Clears all package versions. Called during global initialization.
      */
     public static void clearPackageVersions() {
-        packageVersions.clear();
+        packageVersions().clear();
     }
 
     /**
@@ -663,7 +665,7 @@ public class ScopedSymbolTable {
      */
     public void setPackageVersion(String packageName, String version) {
         // Store in global map so version persists across scopes
-        packageVersions.put(packageName, version);
+        packageVersions().put(packageName, version);
 
         // Also update the current package on the stack if it matches
         if (!packageStack.isEmpty()) {
@@ -683,7 +685,7 @@ public class ScopedSymbolTable {
      */
     public String getPackageVersion(String packageName) {
         // First check the global map
-        return packageVersions.get(packageName);
+        return packageVersions().get(packageName);
     }
 
     /**

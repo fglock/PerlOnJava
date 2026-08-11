@@ -1,17 +1,20 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.backend.jvm.CustomClassLoader;
+
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Runtime-owned Perl global state.
  *
- * <p>Phases 8a through 8c own scalar/array/hash values, CODE-slot state, and
- * named IO/format slots. Globs, stashes, aliases, declarations, and package
- * services move in later Phase 8 changes.</p>
+ * <p>Phases 8a through 8e own scalar/array/hash values, CODE-slot state,
+ * named IO/format slots, glob/stash identity, declarations, and package
+ * services.</p>
  */
 public final class GlobalRuntimeState {
     private final Map<String, RuntimeScalar> scalarValues = new HashMap<>();
@@ -31,8 +34,24 @@ public final class GlobalRuntimeState {
     private final Map<String, RuntimeGlob> ioSlots = new HashMap<>();
     private final Map<String, RuntimeFormat> formatSlots = new HashMap<>();
     private final Set<String> hiddenIoSlotsAfterStashDelete = new HashSet<>();
+    private final Map<String, String> stashAliases = new HashMap<>();
+    private final Map<String, String> resolvedStashAliases = new HashMap<>();
+    private final Map<String, String> globAliases = new HashMap<>();
+    private final Map<String, List<HashSpecialVariable.StashEntryName>> stashEntryCache =
+            new HashMap<>();
+    private final Map<String, Boolean> packageExistsCache = new HashMap<>();
+    private final Set<String> declaredGlobalVariables = new HashSet<>();
+    private final Set<String> declaredGlobalArrays = new HashSet<>();
+    private final Set<String> declaredGlobalHashes = new HashSet<>();
+    private final Set<String> classNames = new HashSet<>();
+    private final Map<String, Set<String>> classFields = new HashMap<>();
+    private final Map<String, String> classParents = new HashMap<>();
+    private final Map<String, String> packageVersions = new HashMap<>();
+    private CustomClassLoader generatedClassLoader =
+            new CustomClassLoader(GlobalVariable.class.getClassLoader());
     private int nextCompiledCodeRefId = 1;
     private long stashEnumerationVersion;
+    private long cachedStashEnumerationVersion = -1;
     private boolean coreGlobalsInitialized;
 
     /** Core package scalar slots owned by this runtime. */
@@ -102,6 +121,74 @@ public final class GlobalRuntimeState {
         return hiddenIoSlotsAfterStashDelete;
     }
 
+    Map<String, String> stashAliases() {
+        return stashAliases;
+    }
+
+    Map<String, String> resolvedStashAliases() {
+        return resolvedStashAliases;
+    }
+
+    Map<String, String> globAliases() {
+        return globAliases;
+    }
+
+    Map<String, List<HashSpecialVariable.StashEntryName>> stashEntryCache() {
+        return stashEntryCache;
+    }
+
+    Map<String, Boolean> packageExistsCache() {
+        return packageExistsCache;
+    }
+
+    Set<String> declaredGlobalVariables() {
+        return declaredGlobalVariables;
+    }
+
+    Set<String> declaredGlobalArrays() {
+        return declaredGlobalArrays;
+    }
+
+    Set<String> declaredGlobalHashes() {
+        return declaredGlobalHashes;
+    }
+
+    /** Perl 5.38+ class declarations owned by this runtime. */
+    public Set<String> classNames() {
+        return classNames;
+    }
+
+    /** Field declarations keyed by their owning Perl class. */
+    public Map<String, Set<String>> classFields() {
+        return classFields;
+    }
+
+    /** Parent declarations used by the class-field parser. */
+    public Map<String, String> classParents() {
+        return classParents;
+    }
+
+    /** Package versions visible to later compilation units in this runtime. */
+    public Map<String, String> packageVersions() {
+        return packageVersions;
+    }
+
+    CustomClassLoader generatedClassLoader() {
+        return generatedClassLoader;
+    }
+
+    void generatedClassLoader(CustomClassLoader loader) {
+        generatedClassLoader = loader;
+    }
+
+    long cachedStashEnumerationVersion() {
+        return cachedStashEnumerationVersion;
+    }
+
+    void cachedStashEnumerationVersion(long version) {
+        cachedStashEnumerationVersion = version;
+    }
+
     synchronized int registerCompiledCodeRef(RuntimeScalar ref) {
         int id = nextCompiledCodeRefId++;
         compiledCodeRefs.put(id, ref);
@@ -159,5 +246,26 @@ public final class GlobalRuntimeState {
         formatSlots.clear();
         hiddenIoSlotsAfterStashDelete.clear();
         invalidateStashEnumeration();
+    }
+
+    void clearGlobAndStashValues() {
+        stashAliases.clear();
+        resolvedStashAliases.clear();
+        globAliases.clear();
+        stashEntryCache.clear();
+        cachedStashEnumerationVersion = -1;
+        invalidateStashEnumeration();
+    }
+
+    void clearDeclarationsAndPackageServices() {
+        packageExistsCache.clear();
+        declaredGlobalVariables.clear();
+        declaredGlobalArrays.clear();
+        declaredGlobalHashes.clear();
+        classNames.clear();
+        classFields.clear();
+        classParents.clear();
+        packageVersions.clear();
+        generatedClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
     }
 }
