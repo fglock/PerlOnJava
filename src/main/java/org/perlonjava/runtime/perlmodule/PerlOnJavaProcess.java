@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.SystemOperator;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -67,7 +68,12 @@ public class PerlOnJavaProcess extends PerlModuleBase {
             process.getOutputStream().close();
 
             Process activeProcess = process;
-            reader = new Thread(() -> copyOutput(activeProcess.getInputStream(), output, tee),
+            PerlRuntime runtime = PerlRuntime.current();
+            reader = new Thread(() -> {
+                try (PerlRuntime.Binding ignored = runtime.bind()) {
+                    copyOutput(activeProcess.getInputStream(), output, tee);
+                }
+            },
                 "perlonjava-process-output");
             reader.setDaemon(true);
             reader.start();

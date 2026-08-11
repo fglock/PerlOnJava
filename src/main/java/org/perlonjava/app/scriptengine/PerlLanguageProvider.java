@@ -96,14 +96,15 @@ public class PerlLanguageProvider {
     private static boolean globalInitialized = false;
 
     public static void resetAll() {
-        try (CompilationLockGuard ignored = acquireCompilationLock()) {
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.bindCurrentOrNew();
+             CompilationLockGuard ignored = acquireCompilationLock()) {
             globalInitialized = false;
             GlobalContext.setThreadTaintMode(false);
             resetAllGlobals();
             // A prior script may have closed its Perl-level STDIN glob. Script
             // engine resets run multiple top-level programs in one JVM, so give
             // the next program a fresh wrapper around the process standard input.
-            RuntimeIO.stdin = new RuntimeIO(new StandardIO(System.in));
+            RuntimeIO.setStdin(new RuntimeIO(new StandardIO(System.in)));
             DataSection.reset();
         }
     }
@@ -133,6 +134,7 @@ public class PerlLanguageProvider {
                                               boolean isTopLevelScript,
                                               int callerContext) throws Exception {
 
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.bindCurrentOrNew()) {
         CompilationLockGuard compilationLock = acquireCompilationLock();
         ScopedSymbolTable savedCurrentScope = null;
         RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext = null;
@@ -337,6 +339,7 @@ public class PerlLanguageProvider {
                 compilationLock.close();
             }
         }
+        }
     }
 
     /**
@@ -368,7 +371,8 @@ public class PerlLanguageProvider {
                                              CompilerOptions compilerOptions,
                                              int contextType) throws Exception {
 
-        try (CompilationLockGuard ignored = acquireCompilationLock()) {
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.bindCurrentOrNew();
+             CompilationLockGuard ignored = acquireCompilationLock()) {
 
         // Keep AST execution consistent with source execution.  ASTs are used
         // by BEGIN-block wrappers, and those wrappers can themselves execute
@@ -803,7 +807,8 @@ public class PerlLanguageProvider {
      * @throws Exception if compilation fails
      */
     public static Object compilePerlCode(CompilerOptions compilerOptions) throws Exception {
-        try (CompilationLockGuard ignored = acquireCompilationLock()) {
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.bindCurrentOrNew();
+             CompilationLockGuard ignored = acquireCompilationLock()) {
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         try {
         ArgumentParser.applyPerlShebangSwitches(compilerOptions.code, compilerOptions);

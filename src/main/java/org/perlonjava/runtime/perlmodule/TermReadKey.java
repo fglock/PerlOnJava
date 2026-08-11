@@ -110,7 +110,7 @@ public class TermReadKey extends PerlModuleBase {
         }
 
         // Get filehandle (defaults to STDIN)
-        RuntimeIO fh = RuntimeIO.stdin;
+        RuntimeIO fh = RuntimeIO.getStdin();
         if (args.size() > 1) {
             RuntimeScalar fileHandle = args.get(1);
             fh = RuntimeIO.getRuntimeIO(fileHandle);
@@ -126,7 +126,7 @@ public class TermReadKey extends PerlModuleBase {
      */
     public static RuntimeList readKey(RuntimeArray args, int ctx) {
         double timeout = 0; // Default is blocking
-        RuntimeIO fh = RuntimeIO.stdin;
+        RuntimeIO fh = RuntimeIO.getStdin();
 
         if (!args.isEmpty() && args.get(0).getDefinedBoolean()) {
             timeout = args.get(0).getDouble();
@@ -157,7 +157,7 @@ public class TermReadKey extends PerlModuleBase {
      */
     public static RuntimeList readLine(RuntimeArray args, int ctx) {
         double timeout = 0; // Default is blocking
-        RuntimeIO fh = RuntimeIO.stdin;
+        RuntimeIO fh = RuntimeIO.getStdin();
 
         if (!args.isEmpty() && args.get(0).getDefinedBoolean()) {
             timeout = args.get(0).getDouble();
@@ -188,7 +188,7 @@ public class TermReadKey extends PerlModuleBase {
      * Returns (width, height, xpixels, ypixels)
      */
     public static RuntimeList getTerminalSize(RuntimeArray args, int ctx) {
-        RuntimeIO fh = RuntimeIO.stdout;
+        RuntimeIO fh = RuntimeIO.getStdout();
         if (!args.isEmpty()) {
             RuntimeScalar fileHandle = args.get(0);
             fh = RuntimeIO.getRuntimeIO(fileHandle);
@@ -222,7 +222,7 @@ public class TermReadKey extends PerlModuleBase {
         int xpixels = args.get(2).getInt();
         int ypixels = args.get(3).getInt();
 
-        RuntimeIO fh = RuntimeIO.stdout;
+        RuntimeIO fh = RuntimeIO.getStdout();
         if (args.size() > 4) {
             RuntimeScalar fileHandle = args.get(4);
             fh = RuntimeIO.getRuntimeIO(fileHandle);
@@ -238,7 +238,7 @@ public class TermReadKey extends PerlModuleBase {
      * Returns (input_speed, output_speed)
      */
     public static RuntimeList getSpeed(RuntimeArray args, int ctx) {
-        RuntimeIO fh = RuntimeIO.stdin;
+        RuntimeIO fh = RuntimeIO.getStdin();
         if (!args.isEmpty()) {
             RuntimeScalar fileHandle = args.get(0);
             fh = RuntimeIO.getRuntimeIO(fileHandle);
@@ -262,7 +262,7 @@ public class TermReadKey extends PerlModuleBase {
      * Returns an array containing key/value pairs suitable for a hash
      */
     public static RuntimeList getControlChars(RuntimeArray args, int ctx) {
-        RuntimeIO fh = RuntimeIO.stdin;
+        RuntimeIO fh = RuntimeIO.getStdin();
         if (!args.isEmpty()) {
             RuntimeScalar fileHandle = args.get(0);
             fh = RuntimeIO.getRuntimeIO(fileHandle);
@@ -289,7 +289,7 @@ public class TermReadKey extends PerlModuleBase {
             throw new PerlCompilerException("Usage: Term::ReadKey::SetControlChars(%charpairs,file=STDIN)");
         }
 
-        RuntimeIO fh = RuntimeIO.stdin;
+        RuntimeIO fh = RuntimeIO.getStdin();
         RuntimeArray controlArgs = new RuntimeArray();
 
         RuntimeScalar first = args.get(0);

@@ -175,6 +175,12 @@ public class OperatorParser {
                                 name = name.substring(colonIdx + 2);
                             }
                             readlineNode.setAnnotation("handleName", name);
+                        } else {
+                            // Standard and other pre-resolved bareword handles may be
+                            // represented by a glob expression rather than an
+                            // IdentifierNode. Preserve the source handle name so the
+                            // generated readline path updates runtime-local diagnostics.
+                            readlineNode.setAnnotation("handleName", tokenText);
                         }
                         return readlineNode;
                     }

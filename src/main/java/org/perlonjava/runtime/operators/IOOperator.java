@@ -47,7 +47,7 @@ public class IOOperator {
             // We return the RuntimeIO wrapped as a GLOB scalar, which stringifies
             // to the glob name. This preserves the round-trip: select(select())
             // correctly restores the previous handle for tied handles too.
-            return new RuntimeScalar(RuntimeIO.selectedHandle);
+            return new RuntimeScalar(RuntimeIO.getSelectedHandle());
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
@@ -86,7 +86,7 @@ public class IOOperator {
             }
         }
         // select FILEHANDLE (returns/sets current filehandle)
-        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
+        RuntimeScalar fh = new RuntimeScalar(RuntimeIO.getSelectedHandle());
         RuntimeScalar fileHandleArg = runtimeList.getFirst();
         RuntimeIO newIO = fileHandleArg.getRuntimeIO();
         // Auto-vivify: when called with an undefined scalar, Perl creates a new anonymous
@@ -100,8 +100,8 @@ public class IOOperator {
             fileHandleArg.set(newGlobRef);
             newIO = anonIO;
         }
-        RuntimeIO.selectedHandle = newIO;
-        RuntimeIO.lastAccesseddHandle = newIO;
+        RuntimeIO.setSelectedHandle(newIO);
+        RuntimeIO.setLastAccessedHandle(newIO);
         return fh;
     }
 
@@ -469,7 +469,7 @@ public class IOOperator {
                     whence = runtimeList.elements.get(1).scalar().getInt();
                 }
 
-                RuntimeIO.lastAccesseddHandle = runtimeIO;
+                RuntimeIO.setLastAccessedHandle(runtimeIO);
                 return runtimeIO.ioHandle.seek(position, whence);
             } else {
                 return RuntimeIO.handleIOError("No file handle available for seek");
@@ -527,7 +527,7 @@ public class IOOperator {
         // fall back to the last accessed handle like Perl does.
         if (fh == null) {
             if (argless) {
-                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                RuntimeIO last = RuntimeIO.getLastAccessedHandle();
                 if (last != null) {
                     return last.tell();
                 }
@@ -539,7 +539,7 @@ public class IOOperator {
         }
 
         // Update the last accessed filehandle
-        RuntimeIO.lastAccesseddHandle = fh;
+        RuntimeIO.setLastAccessedHandle(fh);
 
         if (fh instanceof TieHandle tieHandle) {
             return TieHandle.tiedTell(tieHandle);
@@ -1103,7 +1103,7 @@ public class IOOperator {
         // Handle undefined or invalid filehandle
         if (fh == null) {
             if (argless) {
-                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                RuntimeIO last = RuntimeIO.getLastAccessedHandle();
                 if (last != null) {
                     return last.eof();
                 }
@@ -1136,7 +1136,7 @@ public class IOOperator {
         // Handle undefined or invalid filehandle
         if (fh == null) {
             if (argless) {
-                RuntimeIO last = RuntimeIO.lastAccesseddHandle;
+                RuntimeIO last = RuntimeIO.getLastAccessedHandle();
                 if (last != null) {
                     return last.eof();
                 }
@@ -1689,7 +1689,7 @@ public class IOOperator {
      */
     public static RuntimeScalar write(int ctx, RuntimeBase... args) {
         String formatName;
-        RuntimeIO fh = RuntimeIO.stdout; // Default output handle
+        RuntimeIO fh = RuntimeIO.getStdout(); // Default output handle
 
         if (args.length == 0) {
             // No arguments: write() - use STDOUT format to STDOUT handle
@@ -1707,11 +1707,11 @@ public class IOOperator {
                 if (argFh != null) {
                     // Argument is a filehandle - determine format name from handle
                     fh = argFh;
-                    if (fh == RuntimeIO.stdout) {
+                    if (fh == RuntimeIO.getStdout()) {
                         formatName = "STDOUT";
-                    } else if (fh == RuntimeIO.stderr) {
+                    } else if (fh == RuntimeIO.getStderr()) {
                         formatName = "STDERR";
-                    } else if (fh == RuntimeIO.stdin) {
+                    } else if (fh == RuntimeIO.getStdin()) {
                         formatName = "STDIN";
                     } else {
                         formatName = "STDOUT"; // Default fallback
@@ -2934,11 +2934,11 @@ public class IOOperator {
         // Handle standard file descriptors if no current registry owner exists.
         switch (fd) {
             case 0: // STDIN
-                return RuntimeIO.stdin;
+                return RuntimeIO.getStdin();
             case 1: // STDOUT
-                return RuntimeIO.stdout;
+                return RuntimeIO.getStdout();
             case 2: // STDERR
-                return RuntimeIO.stderr;
+                return RuntimeIO.getStderr();
             default:
                 return null; // Unknown file descriptor
         }
@@ -2971,7 +2971,7 @@ public class IOOperator {
             }
         } else {
             // Handle named filehandles — always use glob table to get the CURRENT handle,
-            // not the static RuntimeIO.stdout/stdin/stderr fields which may be stale
+            // not a cached standard-handle reference which may be stale
             // after redirections like open(STDOUT, ">file") + open(STDOUT, ">&SAVED").
             String normalizedName;
             if (fileName.equalsIgnoreCase("STDIN") || fileName.equalsIgnoreCase("STDOUT") || fileName.equalsIgnoreCase("STDERR")) {
@@ -3010,9 +3010,9 @@ public class IOOperator {
                 if (sourceHandle == null || sourceHandle.ioHandle == null) {
                     // Last resort: try static fields for standard handles
                     switch (fileName.toUpperCase()) {
-                        case "STDIN": sourceHandle = RuntimeIO.stdin; break;
-                        case "STDOUT": sourceHandle = RuntimeIO.stdout; break;
-                        case "STDERR": sourceHandle = RuntimeIO.stderr; break;
+                        case "STDIN": sourceHandle = RuntimeIO.getStdin(); break;
+                        case "STDOUT": sourceHandle = RuntimeIO.getStdout(); break;
+                        case "STDERR": sourceHandle = RuntimeIO.getStderr(); break;
                         default:
                             RuntimeIO.handleIOError(9); // EBADF
                             return null;

@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -171,8 +172,10 @@ public class PipeOutputChannel implements IOHandle {
 
         // Start threads to consume stdout and stderr and route through Perl handles
         // This ensures Perl-level redirections are honored
+        PerlRuntime runtime = PerlRuntime.current();
         Thread outputThread = new Thread(() -> {
-            try (BufferedReader out = outputReader) {
+            try (PerlRuntime.Binding ignored = runtime.bind();
+                 BufferedReader out = outputReader) {
                 String line;
                 while ((line = out.readLine()) != null) {
                     try {
@@ -194,7 +197,8 @@ public class PipeOutputChannel implements IOHandle {
         outputThread.start();
 
         Thread errorThread = new Thread(() -> {
-            try (BufferedReader err = errorReader) {
+            try (PerlRuntime.Binding ignored = runtime.bind();
+                 BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {
                     try {

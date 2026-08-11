@@ -1844,7 +1844,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
 
-        try (PerlLanguageProvider.CompilationLockGuard ignored =
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind();
+             PerlLanguageProvider.CompilationLockGuard ignored =
                      PerlLanguageProvider.acquireCompilationLock()) {
 
         rejectTaintedEval(code);
@@ -2366,6 +2367,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray args,
             int callContext) throws Throwable {
 
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
         try {
@@ -2853,6 +2855,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         } finally {
             compilationLock.close();
+        }
         }
     }
 

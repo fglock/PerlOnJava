@@ -203,6 +203,7 @@ public class EvalStringHandler {
                                              int siteStrictOptions,
                                              int siteFeatureFlags,
                                              boolean isEvalbytes) {
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
         List<EvalSeedAlias> seedAliases = new ArrayList<>();
@@ -509,6 +510,7 @@ public class EvalStringHandler {
                 compilationLock.close();
             }
         }
+        }
     }
 
     private static void configureEvalSourceOptions(CompilerOptions opts,
@@ -553,6 +555,7 @@ public class EvalStringHandler {
                                            RuntimeBase[] capturedVars,
                                            String sourceName,
                                            int sourceLine) {
+        try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
@@ -663,6 +666,7 @@ public class EvalStringHandler {
                 PerlLanguageProvider.COMPILE_LOCK.unlock();
                 compilationLock.close();
             }
+        }
         }
     }
 
