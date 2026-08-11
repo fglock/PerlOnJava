@@ -10,6 +10,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   layer, XML reader/BOM support, POSIX math defaults, and fixes for try/catch
   control flow, exception values, named-character regexes, bareword `isa`,
   cloned weak references, and temporary reference ownership.
+- Bugfix: overloaded mutators skip copy constructors for unshared hash/array
+  objects, preserving subclass-only fields in `Math::BigInt`, `Math::BigFloat`,
+  and `Math::BigRat` subclasses.
 - CPAN: add Java-backed `Tie::Array::Packed`, BouncyCastle-backed
   `Crypt::Blowfish`, and ProcessHandle-backed `Proc::ProcessTable` XS
   replacements. Fix MakeMaker test-helper staging, H/h pack semantics, and raw

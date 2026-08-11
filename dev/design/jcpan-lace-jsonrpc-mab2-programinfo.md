@@ -71,11 +71,21 @@ BouncyCastle-backed module ports.
   - `Catmandu::Exporter::MAB2`: 10 files, 92 tests passed.
   - Full build: 360 unit scripts passed with two expected skips.
   - Focused bundled `Data::Util` module test passed.
-  - The complete 384-file bundled-module run has three pre-existing
+  - The initial complete 384-file bundled-module run had three pre-existing
     `Math::BigInt` subclass failures; the exact test fails identically in an
     isolated `master` worktree.
   - `Log::ProgramInfo`: excluded after its sole test file failed identically
     under system Perl on the uname-derived nested log key.
+- [x] Phase 5: Math::BigInt bundled-test follow-up (2026-08-11)
+  - Made overloaded-mutator copy-on-write conditional on aggregate sharing,
+    matching Perl's optimization that skips the copy constructor for an
+    unshared object.
+  - Preserved the existing copy-constructor behavior for aliased objects and
+    conservatively retained it for reference kinds without reliable ownership
+    counts.
+  - `sub_mbf.t`, `sub_mbi.t`, `sub_mbr.t`, and `sub_mif.t` all pass.
+  - The complete bundled-module rerun passes all 384 files with no skips or
+    failures.
 
 ### Next Steps
 

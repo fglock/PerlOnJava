@@ -178,6 +178,17 @@ public class OverloadContext {
      * referring to the original object.
      */
     private void copyForMutator(RuntimeScalar lvalue) {
+        // Perl skips the copy constructor when the aggregate has no other
+        // reference. An anonymous hash/array referent has at most one counted
+        // owner when unshared and gains another count when aliased. Avoiding an
+        // unnecessary copy matters for subclasses whose explicit constructor
+        // copies only the parent fields (Math::BigInt::Subclass's _custom is a
+        // concrete example). Keep the established conservative behavior for
+        // other reference kinds, whose alias counts are not tracked reliably.
+        if ((lvalue.value instanceof RuntimeHash || lvalue.value instanceof RuntimeArray)
+                && ((RuntimeBase) lvalue.value).refCount <= 1) {
+            return;
+        }
         RuntimeScalar copy = tryOverload("(=", new RuntimeArray(
                 lvalue, scalarUndef, new RuntimeScalar("")));
         if (copy != null) {
