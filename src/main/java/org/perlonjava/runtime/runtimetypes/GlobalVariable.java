@@ -370,6 +370,10 @@ public class GlobalVariable {
         nextCompiledCodeRefId = 1;
         globalIORefs.clear();
         hiddenIORefsAfterStashDelete.clear();
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            runtime.resetStandardIOGlobVisibility();
+        }
         globalFormatRefs.clear();
         globalGlobs.clear();
         isSubs.clear();
@@ -565,6 +569,12 @@ public class GlobalVariable {
     }
 
     static void hideIORefAfterStashDelete(String key) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.standardIOGlob(key) != null) {
+            runtime.hideStandardIOGlob(key);
+            invalidateStashEnumerationCache();
+            return;
+        }
         if (key != null && globalIORefs.containsKey(key)) {
             if (hiddenIORefsAfterStashDelete.add(key)) {
                 invalidateStashEnumerationCache();
@@ -574,6 +584,11 @@ public class GlobalVariable {
 
     static void markStashEntryVisible(String key) {
         if (key != null) {
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            if (runtime != null && runtime.standardIOGlob(key) != null) {
+                runtime.showStandardIOGlob(key);
+                invalidateStashEnumerationCache();
+            }
             if (hiddenIORefsAfterStashDelete.remove(key)) {
                 invalidateStashEnumerationCache();
             }
@@ -581,22 +596,56 @@ public class GlobalVariable {
     }
 
     static boolean isIORefHiddenAfterStashDelete(String key) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.standardIOGlob(key) != null) {
+            return !runtime.isStandardIOGlobVisible(key);
+        }
         return key != null && hiddenIORefsAfterStashDelete.contains(key);
     }
 
     static boolean isVisibleGlobalIORef(String key) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.standardIOGlob(key) != null) {
+            return runtime.isStandardIOGlobVisible(key);
+        }
         return key != null
                 && globalIORefs.containsKey(key)
                 && !hiddenIORefsAfterStashDelete.contains(key);
     }
 
     static boolean containsVisibleGlobalIORefWithPrefix(String prefix) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            for (String key : runtime.standardIOGlobNames()) {
+                if (key.startsWith(prefix) && runtime.isStandardIOGlobVisible(key)) {
+                    return true;
+                }
+            }
+        }
         for (String key : globalIORefs.keySet()) {
             if (key.startsWith(prefix) && !hiddenIORefsAfterStashDelete.contains(key)) {
                 return true;
             }
         }
         return false;
+    }
+
+    static Iterable<String> visibleGlobalIOKeys() {
+        ArrayList<String> keys = new ArrayList<>();
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            for (String key : runtime.standardIOGlobNames()) {
+                if (runtime.isStandardIOGlobVisible(key)) {
+                    keys.add(key);
+                }
+            }
+        }
+        for (String key : globalIORefs.keySet()) {
+            if (!hiddenIORefsAfterStashDelete.contains(key)) {
+                keys.add(key);
+            }
+        }
+        return keys;
     }
 
     static void clearHiddenIORefsForNamespace(String prefix) {
@@ -1617,6 +1666,10 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global IO reference.
      */
     public static RuntimeGlob getGlobalIO(String key) {
+        RuntimeGlob standardGlob = currentRuntimeStandardIOGlob(key);
+        if (standardGlob != null) {
+            return standardGlob;
+        }
         // A stash glob is itself the lvalue that owns an alias. Resolving it
         // through the currently aliased hash would make a second assignment
         // (`*Alias:: = *Other::`) replace the old source stash instead.
@@ -1654,6 +1707,10 @@ public class GlobalVariable {
      * nameOverride without creating an empty glob as a side effect.
      */
     public static RuntimeGlob peekGlobalIO(String key) {
+        RuntimeGlob standardGlob = currentRuntimeStandardIOGlob(key);
+        if (standardGlob != null) {
+            return standardGlob;
+        }
         String resolvedKey = resolveStashHashRedirect(key);
         return globalIORefs.get(resolvedKey);
     }
@@ -1683,6 +1740,8 @@ public class GlobalVariable {
      * @return True if the global IO reference exists, false otherwise.
      */
     public static boolean existsGlobalIO(String key) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.isStandardIOGlobVisible(key)) return true;
         if (isVisibleGlobalIORef(key)) return true;
         // Follow stash hash redirects so a bareword-handle existence probe in
         // an aliased package sees IO placeholders that got redirected at
@@ -1703,7 +1762,10 @@ public class GlobalVariable {
      * @return True if the IO reference exists and has a real IO handle, false otherwise.
      */
     public static boolean isGlobalIODefined(String key) {
-        RuntimeGlob glob = globalIORefs.get(key);
+        RuntimeGlob glob = currentRuntimeStandardIOGlob(key);
+        if (glob == null) {
+            glob = globalIORefs.get(key);
+        }
         if (glob != null && glob.type == RuntimeScalarType.GLOB) {
             // Check the IO slot, not glob.value - IO is stored in glob.IO
             return glob.IO != null && glob.IO.getDefinedBoolean();
@@ -1720,7 +1782,33 @@ public class GlobalVariable {
      * @return The RuntimeGlob if it exists in the stash, null otherwise.
      */
     public static RuntimeGlob getExistingGlobalIO(String key) {
-        return globalIORefs.get(key);
+        RuntimeGlob standardGlob = currentRuntimeStandardIOGlob(key);
+        return standardGlob != null ? standardGlob : globalIORefs.get(key);
+    }
+
+    /** Replace an IO glob without leaking standard-handle localization across runtimes. */
+    static void replaceGlobalIO(String key, RuntimeGlob glob) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null && runtime.standardIOGlob(key) != null) {
+            runtime.replaceStandardIOGlob(key, glob);
+            runtime.showStandardIOGlob(key);
+        } else {
+            globalIORefs.put(key, glob);
+        }
+    }
+
+    private static RuntimeGlob currentRuntimeStandardIOGlob(String key) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return runtime != null ? runtime.standardIOGlob(key) : null;
+    }
+
+    static void removeGlobalIORefsForNamespace(String prefix) {
+        globalIORefs.keySet().removeIf(key -> key.startsWith(prefix));
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            runtime.hideStandardIOGlobsWithPrefix(prefix);
+        }
+        invalidateStashEnumerationCache();
     }
 
     /**

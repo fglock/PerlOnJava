@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalIO;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 
 /**
@@ -441,16 +442,17 @@ public class IPCOpen3 extends PerlModuleBase {
         // Get the named handle
         RuntimeIO targetIO = null;
         if (handleName.equals("STDERR")) {
-            targetIO = getGlobalVariable("main::STDERR").getRuntimeIO();
+            targetIO = getGlobalIO("main::STDERR").getRuntimeIO();
         } else if (handleName.equals("STDOUT")) {
-            targetIO = getGlobalVariable("main::STDOUT").getRuntimeIO();
+            targetIO = getGlobalIO("main::STDOUT").getRuntimeIO();
         }
 
         if (targetIO != null && targetIO.ioHandle != null) {
             final RuntimeIO finalTargetIO = targetIO;
+            PerlRuntime runtime = PerlRuntime.current();
             // Start a thread to copy data from process to target handle
             Thread copier = new Thread(() -> {
-                try {
+                try (PerlRuntime.Binding ignored = runtime.bind()) {
                     byte[] buffer = new byte[4096];
                     int bytesRead;
                     while ((bytesRead = in.read(buffer)) != -1) {

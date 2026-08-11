@@ -176,7 +176,7 @@ public class TieHandle extends RuntimeIO {
 
     @Override
     public RuntimeScalar write(String data) {
-        RuntimeIO.lastWrittenHandle = this;
+        RuntimeIO.setLastWrittenHandle(this);
         RuntimeList args = new RuntimeList(new RuntimeScalar(data));
         return tiedPrint(this, args);
     }

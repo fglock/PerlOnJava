@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -110,8 +111,10 @@ public class PipeInputChannel implements IOHandle {
 
         // Start a thread to consume stderr and route through Perl STDERR handle
         // This ensures Perl-level redirections are honored (e.g., open STDERR, ">", $file)
+        PerlRuntime runtime = PerlRuntime.current();
         Thread errorThread = new Thread(() -> {
-            try (BufferedReader err = errorReader) {
+            try (PerlRuntime.Binding ignored = runtime.bind();
+                 BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {
                     try {

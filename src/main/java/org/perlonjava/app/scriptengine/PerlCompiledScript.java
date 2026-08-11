@@ -52,7 +52,7 @@ public class PerlCompiledScript extends CompiledScript {
      */
     @Override
     public Object eval(ScriptContext context) throws ScriptException {
-        try {
+        try (var ignored = engine.bindRuntime()) {
             // Execute the compiled code with empty arguments via MethodHandle
             RuntimeArray args = new RuntimeArray();
             RuntimeList result = (RuntimeList) invoker.invoke(compiledInstance, args, RuntimeContextType.SCALAR);

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.PerlRuntimeTestBase;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
@@ -21,25 +22,28 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("unit")
-class CompilationLockTest {
+class CompilationLockTest extends PerlRuntimeTestBase {
     private RuntimeIO savedStdout;
 
     @BeforeEach
     void setUp() {
         PerlLanguageProvider.resetAll();
-        savedStdout = RuntimeIO.stdout;
+        savedStdout = RuntimeIO.getStdout();
     }
 
     @AfterEach
     void tearDown() {
-        RuntimeIO.stdout = savedStdout;
+        RuntimeIO.setStdout(savedStdout);
         GlobalVariable.getGlobalIO("main::STDOUT").setIO(savedStdout);
     }
 
     @Test
     void compileEntryPointQueuesBehindTheGlobalLock() throws Exception {
-        FutureTask<Object> compilation = new FutureTask<>(() ->
-                PerlLanguageProvider.compilePerlCode(options("40 + 2", false)));
+        FutureTask<Object> compilation = new FutureTask<>(() -> {
+            try (var ignored = perlRuntime().bind()) {
+                return PerlLanguageProvider.compilePerlCode(options("40 + 2", false));
+            }
+        });
         Thread worker = Thread.ofPlatform().name("queued-perl-compiler").unstarted(compilation);
 
         PerlLanguageProvider.COMPILE_LOCK.lock();
@@ -80,24 +84,40 @@ class CompilationLockTest {
         CountDownLatch ready = new CountDownLatch(workerCount);
         CountDownLatch start = new CountDownLatch(1);
         List<FutureTask<Object>> tasks = new ArrayList<>();
+        List<Thread> workers = new ArrayList<>();
 
         for (int i = 0; i < workerCount; i++) {
             int id = i;
             FutureTask<Object> task = new FutureTask<>(() -> {
-                ready.countDown();
-                assertTrue(start.await(10, TimeUnit.SECONDS));
-                return PerlLanguageProvider.compilePerlCode(options(
-                        "package Phase2::P" + id + "; sub f" + id + " { qr/x/o; " + id + " } f" + id + "()",
-                        (id & 1) != 0));
+                try (var ignored = perlRuntime().bind()) {
+                    ready.countDown();
+                    assertTrue(start.await(10, TimeUnit.SECONDS));
+                    return PerlLanguageProvider.compilePerlCode(options(
+                            "package Phase2::P" + id + "; sub f" + id + " { qr/x/o; " + id + " } f" + id + "()",
+                            (id & 1) != 0));
+                }
             });
             tasks.add(task);
-            Thread.ofPlatform().name("concurrent-perl-compiler-" + id).start(task);
+            workers.add(Thread.ofPlatform().name("concurrent-perl-compiler-" + id).start(task));
         }
 
-        assertTrue(ready.await(10, TimeUnit.SECONDS));
-        start.countDown();
-        for (FutureTask<Object> task : tasks) {
-            assertNotNull(task.get(60, TimeUnit.SECONDS));
+        try {
+            try {
+                assertTrue(ready.await(10, TimeUnit.SECONDS));
+            } finally {
+                start.countDown();
+            }
+            for (FutureTask<Object> task : tasks) {
+                assertNotNull(task.get(60, TimeUnit.SECONDS));
+            }
+        } finally {
+            start.countDown();
+            for (Thread worker : workers) {
+                worker.join(TimeUnit.SECONDS.toMillis(10));
+            }
+            for (Thread worker : workers) {
+                assertFalse(worker.isAlive(), "compiler worker did not terminate");
+            }
         }
     }
 
@@ -114,11 +134,14 @@ class CompilationLockTest {
     @Test
     void ordinaryExecutionDoesNotRetainItsCompilationHold() throws Exception {
         BlockingOutputStream output = new BlockingOutputStream();
-        RuntimeIO.stdout = new RuntimeIO(new StandardIO(output, true));
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
+        RuntimeIO.setStdout(new RuntimeIO(new StandardIO(output, true)));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
 
-        FutureTask<RuntimeList> execution = new FutureTask<>(() ->
-                PerlLanguageProvider.executePerlCode(options("print 'x'; 42", false), false));
+        FutureTask<RuntimeList> execution = new FutureTask<>(() -> {
+            try (var ignored = perlRuntime().bind()) {
+                return PerlLanguageProvider.executePerlCode(options("print 'x'; 42", false), false);
+            }
+        });
         Thread worker = Thread.ofPlatform().name("blocked-perl-execution").start(execution);
         try {
             assertTrue(output.entered.await(30, TimeUnit.SECONDS), "program did not reach output flush");

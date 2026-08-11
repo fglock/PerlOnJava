@@ -1,6 +1,7 @@
 package org.perlonjava.app.scriptengine;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 
 import javax.script.*;
@@ -28,6 +29,7 @@ import java.io.StringWriter;
 public class PerlScriptEngine extends AbstractScriptEngine implements Compilable {
 
     private final ScriptEngineFactory factory;
+    private final PerlRuntime runtime = new PerlRuntime();
 
     public PerlScriptEngine(ScriptEngineFactory factory) {
         this.factory = factory;
@@ -35,7 +37,7 @@ public class PerlScriptEngine extends AbstractScriptEngine implements Compilable
 
     @Override
     public Object eval(String script, ScriptContext context) throws ScriptException {
-        try {
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
             CompilerOptions options = new CompilerOptions();
             options.fileName = "<STDIN>";
             options.code = script;
@@ -76,7 +78,7 @@ public class PerlScriptEngine extends AbstractScriptEngine implements Compilable
      */
     @Override
     public CompiledScript compile(String script) throws ScriptException {
-        try {
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
             CompilerOptions options = new CompilerOptions();
             options.fileName = "<compiled>";
             options.code = script;
@@ -125,5 +127,9 @@ public class PerlScriptEngine extends AbstractScriptEngine implements Compilable
     @Override
     public ScriptEngineFactory getFactory() {
         return factory;
+    }
+
+    PerlRuntime.Binding bindRuntime() {
+        return runtime.bind();
     }
 }

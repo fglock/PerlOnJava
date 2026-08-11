@@ -357,7 +357,12 @@ public class ConstantFoldingVisitor implements Visitor {
 
         // If we can't fold, create a new node with folded operands
         if (foldedLeft != node.left || foldedRight != node.right) {
-            result = new BinaryOperatorNode(node.operator, foldedLeft, foldedRight, node.tokenIndex);
+            BinaryOperatorNode foldedNode =
+                    new BinaryOperatorNode(node.operator, foldedLeft, foldedRight, node.tokenIndex);
+            if (node.annotations != null) {
+                foldedNode.annotations = new java.util.HashMap<>(node.annotations);
+            }
+            result = foldedNode;
         } else {
             result = node;
         }

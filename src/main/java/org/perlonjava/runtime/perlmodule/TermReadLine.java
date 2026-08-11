@@ -176,8 +176,8 @@ public class TermReadLine extends PerlModuleBase {
 
             // Print prompt to STDOUT using RuntimeIO
             if (!displayPrompt.isEmpty()) {
-                RuntimeIO.stdout.write(displayPrompt);
-                RuntimeIO.stdout.flush();
+                RuntimeIO.getStdout().write(displayPrompt);
+                RuntimeIO.getStdout().flush();
             }
 
             // Flush all file handles to ensure prompt is visible
@@ -222,7 +222,7 @@ public class TermReadLine extends PerlModuleBase {
      */
     public static RuntimeList getInputHandle(RuntimeArray args, int ctx) {
         // Return a Perl glob for STDIN
-        return new RuntimeList(new RuntimeScalar(RuntimeIO.stdin));
+        return new RuntimeList(new RuntimeScalar(RuntimeIO.getStdin()));
     }
 
     /**
@@ -230,7 +230,7 @@ public class TermReadLine extends PerlModuleBase {
      */
     public static RuntimeList getOutputHandle(RuntimeArray args, int ctx) {
         // Return a Perl glob for STDOUT
-        return new RuntimeList(new RuntimeScalar(RuntimeIO.stdout));
+        return new RuntimeList(new RuntimeScalar(RuntimeIO.getStdout()));
     }
 
     /**

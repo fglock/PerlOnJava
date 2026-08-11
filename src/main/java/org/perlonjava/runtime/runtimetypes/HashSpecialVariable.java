@@ -207,11 +207,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalArrays.keySet(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalHashes.keySet(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalCodeRefs.keySet(), uniqueKeys, entries);
-        for (String key : GlobalVariable.globalIORefs.keySet()) {
-            if (!GlobalVariable.isIORefHiddenAfterStashDelete(key)) {
-                addCachedStashEntryFromGlobalKey(namespace, key, uniqueKeys, entries);
-            }
-        }
+        addCachedStashEntriesFromGlobalKeys(
+                namespace, GlobalVariable.visibleGlobalIOKeys(), uniqueKeys, entries);
         addCachedStashEntriesFromGlobalKeys(namespace, GlobalVariable.globalFormatRefs.keySet(), uniqueKeys, entries);
         return entries;
     }
@@ -247,7 +244,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         return GlobalVariable.globalArrays.containsKey(fullName)
                 || GlobalVariable.globalHashes.containsKey(fullName)
                 || GlobalVariable.globalCodeRefs.containsKey(fullName)
-                || GlobalVariable.globalIORefs.containsKey(fullName)
+                || GlobalVariable.isVisibleGlobalIORef(fullName)
                 || GlobalVariable.globalFormatRefs.containsKey(fullName);
     }
 
@@ -343,7 +340,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
             RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
             RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);
-            RuntimeGlob io = GlobalVariable.globalIORefs.get(fullKey);
+            RuntimeGlob io = GlobalVariable.getExistingGlobalIO(fullKey);
             if (io != null) {
                 GlobalVariable.hideIORefAfterStashDelete(fullKey);
             }
@@ -371,7 +368,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
-            GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.removeGlobalIORefsForNamespace(prefix);
             GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.invalidateStashEnumerationCache();
             GlobalVariable.clearHiddenIORefsForNamespace(prefix);

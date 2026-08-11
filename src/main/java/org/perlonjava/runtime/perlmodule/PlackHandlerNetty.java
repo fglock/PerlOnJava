@@ -345,6 +345,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
                                         boolean sslEnabled, String sslCert, String sslKey,
                                         String sslCa, String[] sslProtocols, String sslCiphers)
                                         throws InterruptedException {
+        PerlRuntime runtime = PerlRuntime.current();
 
         // Build SSL context if enabled
         io.netty.handler.ssl.SslContext sslContext = null;
@@ -399,7 +400,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
                      pipeline.addLast(new HttpObjectAggregator(maxRequestSize));
 
                      // PSGI request handler
-                     pipeline.addLast(new PSGIRequestHandler(psgiApp, host, port, keepAlive));
+                     pipeline.addLast(new PSGIRequestHandler(psgiApp, host, port, keepAlive, runtime));
                  }
              })
              .option(ChannelOption.SO_BACKLOG, backlog)
@@ -442,62 +443,65 @@ public class PlackHandlerNetty extends PerlModuleBase {
         private final String serverName;
         private final int serverPort;
         private final boolean keepAlive;
+        private final PerlRuntime runtime;
 
         public PSGIRequestHandler(RuntimeScalar psgiApp, String serverName,
-                                  int serverPort, boolean keepAlive) {
+                                  int serverPort, boolean keepAlive, PerlRuntime runtime) {
             this.psgiApp = psgiApp;
             this.serverName = serverName;
             this.serverPort = serverPort;
             this.keepAlive = keepAlive;
+            this.runtime = runtime;
         }
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) {
-            RuntimeHash env = null;
-            try {
-                // Detect if connection is SSL/TLS by checking for SslHandler in pipeline
-                boolean isHttps = ctx.pipeline().get(io.netty.handler.ssl.SslHandler.class) != null;
+            try (PerlRuntime.Binding ignored = runtime.bind()) {
+                try {
+                    // Detect if connection is SSL/TLS by checking for SslHandler in pipeline
+                    boolean isHttps = ctx.pipeline().get(io.netty.handler.ssl.SslHandler.class) != null;
 
-                // Build PSGI environment hash
-                env = buildPSGIEnvironment(req, isHttps);
+                    // Build PSGI environment hash
+                    RuntimeHash env = buildPSGIEnvironment(req, isHttps);
 
-                // Call PSGI app: $response = $app->($env)
-                RuntimeArray args = new RuntimeArray();
-                RuntimeArray.push(args, RuntimeHash.createHashRef(env));
+                    // Call PSGI app: $response = $app->($env)
+                    RuntimeArray args = new RuntimeArray();
+                    RuntimeArray.push(args, RuntimeHash.createHashRef(env));
 
-                RuntimeList resultList = RuntimeCode.apply(psgiApp, args, RuntimeContextType.SCALAR);
-                RuntimeScalar result = resultList.scalar();
+                    RuntimeList resultList = RuntimeCode.apply(psgiApp, args, RuntimeContextType.SCALAR);
+                    RuntimeScalar result = resultList.scalar();
 
-                // Handle streaming responses (coderef) and synchronous responses (arrayref)
-                if (result.type == RuntimeScalarType.CODE) {
-                    // Streaming response - create responder callback
-                    handleStreamingResponse(ctx, req, result, keepAlive);
-                } else if (result.type == RuntimeScalarType.ARRAYREFERENCE) {
-                    // Synchronous array response
-                    handleArrayResponse(ctx, req, result, keepAlive);
-                } else {
+                    // Handle streaming responses (coderef) and synchronous responses (arrayref)
+                    if (result.type == RuntimeScalarType.CODE) {
+                        // Streaming response - create responder callback
+                        handleStreamingResponse(ctx, req, result, keepAlive);
+                    } else if (result.type == RuntimeScalarType.ARRAYREFERENCE) {
+                        // Synchronous array response
+                        handleArrayResponse(ctx, req, result, keepAlive);
+                    } else {
+                        sendErrorResponse(ctx, req,
+                            HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                            "PSGI app must return arrayref [status, headers, body] or coderef for streaming");
+                    }
+
+                } catch (Exception e) {
+                    // Catch all exceptions from PSGI app and return 500
+                    // Log the full stack trace for debugging
+                    System.err.println("PSGI application error:");
+                    System.err.println("  Request: " + req.method() + " " + req.uri());
+                    System.err.println("  Exception: " + e.getClass().getName() + ": " + e.getMessage());
+                    e.printStackTrace(System.err);
+
+                    // Send user-friendly error response
+                    String errorMessage = "Internal Server Error";
+                    if (e.getMessage() != null && !e.getMessage().isEmpty()) {
+                        errorMessage += ": " + e.getMessage();
+                    }
+
                     sendErrorResponse(ctx, req,
                         HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI app must return arrayref [status, headers, body] or coderef for streaming");
+                        errorMessage);
                 }
-
-            } catch (Exception e) {
-                // Catch all exceptions from PSGI app and return 500
-                // Log the full stack trace for debugging
-                System.err.println("PSGI application error:");
-                System.err.println("  Request: " + req.method() + " " + req.uri());
-                System.err.println("  Exception: " + e.getClass().getName() + ": " + e.getMessage());
-                e.printStackTrace(System.err);
-
-                // Send user-friendly error response
-                String errorMessage = "Internal Server Error";
-                if (e.getMessage() != null && !e.getMessage().isEmpty()) {
-                    errorMessage += ": " + e.getMessage();
-                }
-
-                sendErrorResponse(ctx, req,
-                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                    errorMessage);
             }
         }
 
@@ -513,7 +517,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
                                             RuntimeScalar streamingCoderef, boolean keepAlive) {
             try {
                 // Create a Java-side callback that Perl can invoke to send HTTP response
-                CallableHttpResponse responseCallback = new CallableHttpResponse(ctx, req, keepAlive);
+                CallableHttpResponse responseCallback = new CallableHttpResponse(ctx, req, keepAlive, runtime);
 
                 // Call Perl helper: Plack::Handler::Netty::_handle_streaming_response($coderef, $callback)
                 RuntimeArray args = new RuntimeArray();
@@ -681,7 +685,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
 
             // psgi.errors - stderr for error logging
             // Wrap in a new RuntimeScalar to ensure it's stored correctly
-            env.put("psgi.errors", new RuntimeScalar(RuntimeIO.stderr));
+            env.put("psgi.errors", new RuntimeScalar(RuntimeIO.getStderr()));
 
             // psgi.multithread - \0 (PerlOnJava doesn't support threads)
             env.put("psgi.multithread", new RuntimeScalar(0));
@@ -822,6 +826,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
         private final ChannelHandlerContext ctx;
         private final FullHttpRequest req;
         private final boolean keepAlive;
+        private final PerlRuntime runtime;
 
         /**
          * Create a responder callback for the given HTTP context.
@@ -830,7 +835,8 @@ public class PlackHandlerNetty extends PerlModuleBase {
          * @param req      Original HTTP request (for keep-alive detection)
          * @param keepAlive Whether to keep connection alive
          */
-        public CallableHttpResponse(ChannelHandlerContext ctx, FullHttpRequest req, boolean keepAlive) {
+        public CallableHttpResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                    boolean keepAlive, PerlRuntime runtime) {
             // Pass 'this' as the PerlSubroutine implementation
             super((PerlSubroutine) null, null);
             // Set the subroutine after construction
@@ -838,6 +844,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
             this.ctx = ctx;
             this.req = req;
             this.keepAlive = keepAlive;
+            this.runtime = runtime;
         }
 
         /**
@@ -846,7 +853,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
          */
         @Override
         public RuntimeList apply(RuntimeArray args, int context) {
-            try {
+            try (PerlRuntime.Binding ignored = runtime.bind()) {
                 if (args.size() < 1) {
                     throw new IllegalArgumentException("Responder requires at least 1 argument");
                 }

@@ -66,7 +66,9 @@ public class ModuleOperators {
      * @return Result of execution (undef on error)
      */
     public static RuntimeBase doFile(RuntimeScalar runtimeScalar, int ctx) {
-        return doFile(runtimeScalar, true, false, ctx); // do FILE always sets %INC and keeps it
+        try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
+            return doFile(runtimeScalar, true, false, ctx); // do FILE always sets %INC and keeps it
+        }
     }
 
     /**
@@ -75,6 +77,7 @@ public class ModuleOperators {
      * so the loaded file inherits the caller's namespace (Perl 5 semantics).
      */
     public static RuntimeBase doFileInPackage(RuntimeScalar runtimeScalar, int ctx, String callerPackage) {
+        try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
         String savedPackage = InterpreterState.currentPackage.get().toString();
         try {
             if (callerPackage != null && !callerPackage.isEmpty()) {
@@ -84,6 +87,7 @@ public class ModuleOperators {
         } finally {
             InterpreterState.currentPackage.get().set(savedPackage);
         }
+        }
     }
 
     /**
@@ -91,6 +95,7 @@ public class ModuleOperators {
      * current package (see doFileInPackage above).
      */
     public static RuntimeScalar requireInPackage(RuntimeScalar runtimeScalar, String callerPackage) {
+        try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
         String savedPackage = InterpreterState.currentPackage.get().toString();
         try {
             if (callerPackage != null && !callerPackage.isEmpty()) {
@@ -99,6 +104,7 @@ public class ModuleOperators {
             return require(runtimeScalar);
         } finally {
             InterpreterState.currentPackage.get().set(savedPackage);
+        }
         }
     }
 
@@ -820,6 +826,7 @@ public class ModuleOperators {
      * @see <a href="https://perldoc.perl.org/functions/require">perldoc require</a>
      */
     public static RuntimeScalar require(RuntimeScalar runtimeScalar) {
+        try (PerlRuntime.Binding ignored = PerlRuntime.current().bind()) {
         // https://perldoc.perl.org/functions/require
 
         // ===== CASE 1: Version checking =====
@@ -935,6 +942,7 @@ public class ModuleOperators {
         // If module_true was enabled, result will be 1
         // If module_true was disabled, result will be the module's actual return value
         return result;
+        }
     }
 
     /**

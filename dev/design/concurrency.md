@@ -12,9 +12,11 @@ Implement Perl 5 interpreter threads (ithreads) on the JVM. Each Perl thread
 owns an isolated, cloned interpreter. Perl values are copied at thread creation
 unless their storage was explicitly marked shared.
 
-Every numbered phase below is an independent pull request. A phase may be split
-further when its audit shows that it cannot be reviewed or reverted safely, but
-two numbered phases must not be combined. At every merge boundary:
+Each numbered phase below normally forms an independent pull request. A phase
+may be split further when its audit shows that it cannot be reviewed or reverted
+safely. Phases 3 and 4 are the sole current exception: the maintainer explicitly
+requested that the empty binding shell and the first state migration remain in
+one PR. At every merge boundary:
 
 - the compiler and both execution backends remain functional;
 - `make` passes;
@@ -444,7 +446,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 2 complete; awaiting review
+### Current Status: Phases 3 and 4 complete; combined PR ready for review
 
 ### Completed Phases
 
@@ -477,6 +479,49 @@ measured benefit over platform threads/full clone.
   - Audit delta: no runtime state moved and no production worker was added; the
     new lock is the only mutable static and covers the newly identified lazy-sub
     and verifier-fallback compiler escape paths.
+  - Merged as PR #918 on 2026-08-11.
+- [x] Phase 3: `PerlRuntime` shell and scoped binding (2026-08-11)
+  - Added an empty runtime identity object backed by an ordinary, non-inherited
+    `ThreadLocal` binding-frame stack; no mutable interpreter state moved.
+  - Scoped bindings restore exact nested state, remove absent bindings, and
+    reject cross-thread or out-of-order closure.
+  - Bound CLI lifetime, provider ownership roots, JSR-223 engines and compiled
+    scripts, require/do, and both eval compilation/execution families.
+  - Public provider calls temporarily create a shell only when invoked by an
+    unbound embedding caller; nested require/eval paths require the existing
+    runtime so missing worker propagation fails clearly.
+  - Added absence, nesting, exception, ownership, non-inheritance, executor
+    reuse, two-thread isolation, provider, nested require/eval, and JSR-223
+    lifecycle tests.
+  - Deliberately deferred regex timeout and alarm worker binding until the same
+    PR that migrates the state each worker uses. I/O router, process, and Netty
+    callback bindings land with Phase 4 in this combined PR.
+  - `globalInitialized` and all other runtime state remain static by design in
+    this shell-only phase; `Config` thread flags remain disabled.
+- [x] Phase 4: I/O state isolation (2026-08-11)
+  - Moved standard input/output/error handles, the selected/last-used handle
+    bookkeeping, and the open-handle cache into `PerlRuntime` behind stable
+    `RuntimeIO` accessors.
+  - Routed uppercase and lowercase standard-handle globs through the bound
+    runtime, including glob localization/restoration and generated JVM readline
+    bookkeeping.
+  - Captured and scoped the originating runtime in pipe routers, system-process
+    routers, IPC::Open3 copying, PerlOnJava::Process output, and Netty request
+    and streaming callbacks.
+  - Added independent-default, nested-state, simultaneous low-level write,
+    reset isolation, generated-readline bookkeeping, deterministic router
+    propagation, standard-glob lifecycle, and JSR-223 engine ownership tests.
+    Concurrent full Perl execution remains intentionally deferred because
+    Phase 5 stack state is still process-global.
+  - Kept fileno, child-process, phantom-handle, terminal-service, regex, and
+    alarm state explicitly deferred to their inventory phases.
+  - Validation: `make` passed; the final exact-tree `make test-all` completed
+    at core 83.2% and bundled modules 80.8%. Twenty-four focused I/O runs
+    passed across JVM and interpreter backends, as did IPC::Open3 and the
+    Scalar::Util 1.70/Moo 2.005005 smoke tests on both backends.
+  - The interpreter-only TAP miss in `nonblocking_pipe_syswrite.t` assertion 8
+    was reproduced on the exact PR #918 base and is therefore pre-existing;
+    the JVM backend and the remaining focused assertions pass.
 
 ### Phase 1 Work Completed (2026-08-10)
 
@@ -495,10 +540,10 @@ measured benefit over platform threads/full clone.
 
 ### Next Steps
 
-1. Open and merge the independent Phase 2 PR.
-2. Start Phase 3 from updated `master` only after Phase 2 merges.
-3. Introduce the `PerlRuntime` shell and scoped explicit binding without moving
-   mutable runtime state yet.
+1. Review and merge the combined binding and I/O-isolation PR while `Config` thread
+   flags remain disabled.
+2. Start Phase 5 from updated `master`: migrate execution/local/special-block
+   stacks without combining it with later runtime-state phases.
 
 ### Open Questions
 

@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
-public class CommandLineWarningOverrideTest {
+public class CommandLineWarningOverrideTest extends PerlRuntimeTestBase {
     private RuntimeIO originalStdout;
     private RuntimeIO originalStderr;
     private ByteArrayOutputStream stdout;
@@ -28,23 +28,23 @@ public class CommandLineWarningOverrideTest {
     void setUp() {
         PerlLanguageProvider.resetAll();
 
-        originalStdout = RuntimeIO.stdout;
-        originalStderr = RuntimeIO.stderr;
+        originalStdout = RuntimeIO.getStdout();
+        originalStderr = RuntimeIO.getStderr();
         stdout = new ByteArrayOutputStream();
         stderr = new ByteArrayOutputStream();
 
-        RuntimeIO.stdout = new RuntimeIO(new StandardIO(stdout, true));
-        RuntimeIO.stderr = new RuntimeIO(new StandardIO(stderr, false));
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
+        RuntimeIO.setStdout(new RuntimeIO(new StandardIO(stdout, true)));
+        RuntimeIO.setStderr(new RuntimeIO(new StandardIO(stderr, false)));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
     }
 
     @AfterEach
     void tearDown() {
-        RuntimeIO.stdout = originalStdout;
-        RuntimeIO.stderr = originalStderr;
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
+        RuntimeIO.setStdout(originalStdout);
+        RuntimeIO.setStderr(originalStderr);
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
         PerlLanguageProvider.resetAll();
     }
 
@@ -70,8 +70,8 @@ public class CommandLineWarningOverrideTest {
         CompilerOptions options = ArgumentParser.parseArguments(args);
 
         PerlLanguageProvider.executePerlCode(options, true);
-        RuntimeIO.stdout.flush();
-        RuntimeIO.stderr.flush();
+        RuntimeIO.getStdout().flush();
+        RuntimeIO.getStderr().flush();
 
         return new String(stdout.toByteArray(), StandardCharsets.ISO_8859_1)
                 + new String(stderr.toByteArray(), StandardCharsets.ISO_8859_1);

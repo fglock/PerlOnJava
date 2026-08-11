@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Unlike unit tests (which are self-contained), module tests may
  * reference external data files and assume a specific working directory.
  */
-public class ModuleTestExecutionTest {
+public class ModuleTestExecutionTest extends PerlRuntimeTestBase {
 
     static {
         Locale.setDefault(Locale.US);
@@ -153,18 +153,18 @@ public class ModuleTestExecutionTest {
         originalUserDir = System.getProperty("user.dir");
 
         StandardIO newStdout = new StandardIO(outputStream, true);
-        RuntimeIO.stdout = new RuntimeIO(newStdout);
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
+        RuntimeIO.setStdout(new RuntimeIO(newStdout));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
         System.setOut(new PrintStream(outputStream));
     }
 
     @AfterEach
     void tearDown() {
         // Restore original stdout
-        RuntimeIO.stdout = new RuntimeIO(new StandardIO(originalOut, true));
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
+        RuntimeIO.setStdout(new RuntimeIO(new StandardIO(originalOut, true)));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
         System.setOut(originalOut);
 
         // Restore original working directory

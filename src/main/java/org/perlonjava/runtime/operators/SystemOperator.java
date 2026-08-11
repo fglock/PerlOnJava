@@ -936,9 +936,10 @@ public class SystemOperator {
      * exact output including or excluding trailing newlines.
      * This is used for routing child process stderr/stdout through Perl handles.
      */
-    private static Thread createStreamRouterThread(InputStream stream, boolean isStderr) {
+    static Thread createStreamRouterThread(InputStream stream, boolean isStderr) {
+        PerlRuntime runtime = PerlRuntime.current();
         Thread t = new Thread(() -> {
-            try {
+            try (PerlRuntime.Binding ignored = runtime.bind()) {
                 byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = stream.read(buffer)) != -1) {

@@ -181,7 +181,7 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeScalar savedScalar = GlobalVariable.globalVariables.get(fullKey);
         RuntimeArray savedArray = GlobalVariable.globalArrays.get(fullKey);
         RuntimeHash savedHash = GlobalVariable.globalHashes.get(fullKey);
-        RuntimeGlob savedIO = GlobalVariable.globalIORefs.get(fullKey);
+        RuntimeGlob savedIO = GlobalVariable.getExistingGlobalIO(fullKey);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
 
         // Delete all slots from GlobalVariable. The CODE slot helper removes
@@ -254,7 +254,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
-        GlobalVariable.globalIORefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.removeGlobalIORefsForNamespace(childPrefix);
         GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(childPrefix);
@@ -428,7 +428,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
-        GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.removeGlobalIORefsForNamespace(prefix);
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.invalidateStashEnumerationCache();
         GlobalVariable.clearHiddenIORefsForNamespace(prefix);
