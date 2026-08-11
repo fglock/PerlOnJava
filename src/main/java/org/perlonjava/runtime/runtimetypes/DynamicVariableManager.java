@@ -15,7 +15,9 @@ public class DynamicVariableManager {
     public record SuspendedState(DynamicState state, Object token) {}
     // A stack to hold the dynamic states of variables.
     // Using ArrayDeque instead of Stack for better performance (no synchronization overhead).
-    private static final Deque<DynamicState> variableStack = new ArrayDeque<>();
+    private static Deque<DynamicState> variableStack() {
+        return PerlRuntime.current().executionState().dynamicVariableStack;
+    }
 
     /**
      * Returns the current local level, which is the size of the variable stack.
@@ -24,12 +26,12 @@ public class DynamicVariableManager {
      * @return the number of dynamic states in the stack.
      */
     public static int getLocalLevel() {
-        return variableStack.size();
+        return variableStack().size();
     }
 
     /** Return whether a package scalar currently has an active local() frame. */
     public static boolean isGlobalScalarLocalized(String fullName) {
-        for (DynamicState state : variableStack) {
+        for (DynamicState state : variableStack()) {
             if (state instanceof GlobalRuntimeScalar scalar
                     && scalar.localizes(fullName)) {
                 return true;
@@ -47,14 +49,14 @@ public class DynamicVariableManager {
     public static RuntimeBase pushLocalVariable(RuntimeBase variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
-        variableStack.addLast(variable);
+        variableStack().addLast(variable);
         return variable;
     }
 
     public static RuntimeScalar pushLocalVariable(RuntimeScalar variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
-        variableStack.addLast(variable);
+        variableStack().addLast(variable);
         return variable;
     }
 
@@ -62,7 +64,7 @@ public class DynamicVariableManager {
         // Save the current state of the variable and push it onto the stack.
         // dynamicSaveState() creates a NEW glob in globalIORefs for the local scope.
         variable.dynamicSaveState();
-        variableStack.addLast(variable);
+        variableStack().addLast(variable);
         // Return the NEW glob from globalIORefs (installed by dynamicSaveState),
         // not the old one. This ensures `local *FH` returns the fresh local glob,
         // so that \do { local *FH } captures a unique glob per call (Perl 5 parity).
@@ -71,7 +73,7 @@ public class DynamicVariableManager {
 
     public static void pushLocalVariable(DynamicState variable) {
         variable.dynamicSaveState();
-        variableStack.addLast(variable);
+        variableStack().addLast(variable);
     }
 
     /**
@@ -87,6 +89,7 @@ public class DynamicVariableManager {
      */
     public static void popToLocalLevel(int targetLocalLevel) {
         // Ensure the target level is non-negative and does not exceed the current stack size
+        Deque<DynamicState> variableStack = variableStack();
         if (targetLocalLevel < 0 || targetLocalLevel > variableStack.size()) {
             throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
         }
@@ -124,6 +127,7 @@ public class DynamicVariableManager {
      * bottom-to-top order so they can be reinstated on a later callback.
      */
     public static List<SuspendedState> suspendAbove(int targetLocalLevel) {
+        Deque<DynamicState> variableStack = variableStack();
         if (targetLocalLevel < 0 || targetLocalLevel > variableStack.size()) {
             throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
         }
@@ -138,6 +142,7 @@ public class DynamicVariableManager {
     /** Reinstall detached states in their original stack order. */
     public static void resumeSuspended(List<SuspendedState> states) {
         if (states == null) return;
+        Deque<DynamicState> variableStack = variableStack();
         for (SuspendedState suspended : states) {
             suspended.state().dynamicResumeState(suspended.token());
             variableStack.addLast(suspended.state());

@@ -12,8 +12,9 @@ public class C3 {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeC3(String className) {
+        MroRuntimeState state = InheritanceResolver.currentState();
         String cacheKey = className + "::C3";
-        List<String> result = InheritanceResolver.linearizedClassesCache.get(cacheKey);
+        List<String> result = state.linearizedClassesCache().get(cacheKey);
         if (result == null) {
             Map<String, List<String>> isaMap = new HashMap<>();
             InheritanceResolver.populateIsaMap(className, isaMap);
@@ -34,7 +35,7 @@ public class C3 {
                 }
             }
 
-            InheritanceResolver.linearizedClassesCache.put(cacheKey, result);
+            state.linearizedClassesCache().put(cacheKey, result);
         }
         return result;
     }

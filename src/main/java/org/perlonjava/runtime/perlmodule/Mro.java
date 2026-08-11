@@ -15,13 +15,6 @@ import java.util.*;
  */
 public class Mro extends PerlModuleBase {
 
-    // Package generation counters
-    private static final Map<String, Integer> packageGenerations = new HashMap<>();
-
-    // Reverse ISA cache (which classes inherit from a given class)
-    private static final Map<String, Set<String>> isaRevCache = new HashMap<>();
-    private static long isaRevGeneration = -1;
-
     /**
      * Constructor for Mro.
      * Initializes the module with the name "mro".
@@ -151,7 +144,7 @@ public class Mro extends PerlModuleBase {
             linearized = Collections.singletonList(className);
         } else {
             // Invalidate cache to ensure we see any ISA changes
-            InheritanceResolver.invalidateCache();
+            InheritanceResolver.invalidateCurrentRuntimeCaches();
 
             // Get linearized MRO based on type
             if (mroType == null) {
@@ -212,9 +205,8 @@ public class Mro extends PerlModuleBase {
             throw new PerlCompilerException("Invalid mro name: '" + mroType + "'");
         }
 
-        // Increment package generation and invalidate cache
+        // setPackageMRO already invalidates this runtime's derived cache.
         incrementPackageGeneration(className);
-        InheritanceResolver.invalidateCache();
 
         return new RuntimeList();
     }
@@ -242,6 +234,7 @@ public class Mro extends PerlModuleBase {
      * Builds the reverse ISA cache by dynamically scanning all packages with @ISA arrays.
      */
     private static void buildIsaRevCache() {
+        Map<String, Set<String>> isaRevCache = PerlRuntime.current().mroState().isaRevCache();
         isaRevCache.clear();
 
         // Dynamically scan all @ISA arrays from global variables
@@ -249,14 +242,14 @@ public class Mro extends PerlModuleBase {
         for (String key : allIsaArrays.keySet()) {
             // Key format: "ClassName::ISA" → extract class name
             String className = key.substring(0, key.length() - 5); // remove "::ISA"
-            buildIsaRevForClass(className);
+            buildIsaRevForClass(className, isaRevCache);
         }
     }
 
     /**
      * Build reverse ISA relationships for a specific class.
      */
-    private static void buildIsaRevForClass(String className) {
+    private static void buildIsaRevForClass(String className, Map<String, Set<String>> isaRevCache) {
         if (GlobalVariable.existsGlobalArray(className + "::ISA")) {
             RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
             for (RuntimeBase parent : isaArray.elements) {
@@ -281,18 +274,19 @@ public class Mro extends PerlModuleBase {
         }
 
         String className = args.get(0).toString();
+        var state = PerlRuntime.current().mroState();
 
         long currentGeneration = InheritanceResolver.getIsaGeneration();
-        if (isaRevGeneration != currentGeneration) {
+        if (state.isaRevGeneration() != currentGeneration) {
             buildIsaRevCache();
-            isaRevGeneration = currentGeneration;
+            state.setIsaRevGeneration(currentGeneration);
         }
 
         RuntimeArray result = new RuntimeArray();
 
         // Add all classes that inherit from this one, including indirectly
         Set<String> allInheritors = new HashSet<>();
-        collectAllInheritors(className, allInheritors, new HashSet<>());
+        collectAllInheritors(className, allInheritors, new HashSet<>(), state.isaRevCache());
 
         for (String inheritor : allInheritors) {
             result.push(new RuntimeScalar(inheritor));
@@ -304,7 +298,8 @@ public class Mro extends PerlModuleBase {
     /**
      * Recursively collect all classes that inherit from the given class.
      */
-    private static void collectAllInheritors(String className, Set<String> result, Set<String> visited) {
+    private static void collectAllInheritors(String className, Set<String> result, Set<String> visited,
+                                             Map<String, Set<String>> isaRevCache) {
         if (visited.contains(className)) {
             return; // Avoid cycles
         }
@@ -313,7 +308,7 @@ public class Mro extends PerlModuleBase {
         Set<String> directInheritors = isaRevCache.getOrDefault(className, new HashSet<>());
         for (String inheritor : directInheritors) {
             result.add(inheritor);
-            collectAllInheritors(inheritor, result, visited);
+            collectAllInheritors(inheritor, result, visited, isaRevCache);
         }
     }
 
@@ -356,12 +351,12 @@ public class Mro extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList invalidate_all_method_caches(RuntimeArray args, int ctx) {
+        var state = PerlRuntime.current().mroState();
         InheritanceResolver.invalidateCache();
-        isaRevCache.clear();
-        isaRevGeneration = -1;
+        state.clearReverseIsaCache();
 
         // Increment all package generations
-        for (String pkg : new HashSet<>(packageGenerations.keySet())) {
+        for (String pkg : state.packagesWithGenerations()) {
             incrementPackageGeneration(pkg);
         }
 
@@ -381,16 +376,18 @@ public class Mro extends PerlModuleBase {
         }
 
         String className = args.get(0).toString();
+        var state = PerlRuntime.current().mroState();
 
         // Invalidate the method cache
         InheritanceResolver.invalidateCache();
 
         // Build isarev if needed and invalidate dependent classes
-        if (isaRevCache.isEmpty()) {
+        if (state.isaRevCache().isEmpty()) {
             buildIsaRevCache();
         }
 
-        Set<String> dependents = isaRevCache.getOrDefault(className, new HashSet<>());
+        Set<String> dependents = new HashSet<>(
+                state.isaRevCache().getOrDefault(className, Collections.emptySet()));
         dependents.add(className); // Include the class itself
 
         // Increment package generation for all dependent classes
@@ -400,9 +397,6 @@ public class Mro extends PerlModuleBase {
 
         return new RuntimeList();
     }
-
-    // Cached @ISA state per package — used to detect @ISA changes in get_pkg_gen
-    private static final Map<String, List<String>> pkgGenIsaState = new HashMap<>();
 
     /**
      * Returns the package generation number.
@@ -417,6 +411,8 @@ public class Mro extends PerlModuleBase {
         }
 
         String className = args.get(0).toString();
+        var state = PerlRuntime.current().mroState();
+        InheritanceResolver.getIsaGeneration();
 
         // Lazily detect @ISA changes and auto-increment pkg_gen
         if (GlobalVariable.existsGlobalArray(className + "::ISA")) {
@@ -428,15 +424,15 @@ public class Mro extends PerlModuleBase {
                     currentIsa.add(parentName);
                 }
             }
-            List<String> cachedIsa = pkgGenIsaState.get(className);
+            List<String> cachedIsa = state.packageGenerationIsaState().get(className);
             if (cachedIsa != null && !currentIsa.equals(cachedIsa)) {
                 incrementPackageGeneration(className);
             }
-            pkgGenIsaState.put(className, currentIsa);
+            state.packageGenerationIsaState().put(className, currentIsa);
         }
 
         // Return current generation, starting from 1
-        Integer gen = packageGenerations.getOrDefault(className, 1);
+        Integer gen = state.packageGenerations().getOrDefault(className, 1);
         return new RuntimeScalar(gen).getList();
     }
 
@@ -447,6 +443,8 @@ public class Mro extends PerlModuleBase {
      * @param packageName The name of the package.
      */
     public static void incrementPackageGeneration(String packageName) {
+        Map<String, Integer> packageGenerations =
+                PerlRuntime.current().mroState().packageGenerations();
         Integer current = packageGenerations.getOrDefault(packageName, 1);
         packageGenerations.put(packageName, current + 1);
     }

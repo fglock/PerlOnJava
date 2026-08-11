@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.perlonjava.PerlRuntimeTestBase;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -12,7 +13,7 @@ import java.lang.reflect.Method;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 @Tag("unit")
-public class BytecodeCompilerEvalContextTest {
+public class BytecodeCompilerEvalContextTest extends PerlRuntimeTestBase {
 
     @Test
     void evalRuntimeContextLookupUsesPackedRuntimeValueIndex() throws Exception {

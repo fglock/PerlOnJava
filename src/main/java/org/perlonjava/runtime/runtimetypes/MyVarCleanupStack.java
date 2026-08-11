@@ -28,13 +28,17 @@ import java.util.IdentityHashMap;
  */
 public class MyVarCleanupStack {
 
-    private static final ArrayList<Object> stack = new ArrayList<>();
+    private static ArrayList<Object> stack() {
+        return PerlRuntime.current().executionState().myVarCleanupStack;
+    }
 
     // Phase I: parallel identity-counted set for O(1) `isLive(var)` check
     // from the reachability walker. Maps var -> registration count
     // (a single var can be registered multiple times if declared in
     // nested scopes with the same slot reuse).
-    private static final IdentityHashMap<Object, Integer> liveCounts = new IdentityHashMap<>();
+    private static IdentityHashMap<Object, Integer> liveCounts() {
+        return PerlRuntime.current().executionState().liveMyVarCounts;
+    }
 
     /**
      * Phase I: O(1) check whether the given object is currently registered
@@ -46,17 +50,17 @@ public class MyVarCleanupStack {
      */
     public static boolean isLive(Object var) {
         if (var == null) return false;
-        return liveCounts.containsKey(var);
+        return liveCounts().containsKey(var);
     }
 
     /**
      * True when {@code var} is currently registered as a lexical, regardless
-     * of whether weak-ref tracking has populated {@link #liveCounts}. Used by
+     * of whether weak-ref tracking has populated the live-count map. Used by
      * first-bless paths that can run before the first {@code weaken()} call.
      */
     public static boolean isRegistered(Object var) {
         if (var == null) return false;
-        for (Object entry : stack) {
+        for (Object entry : stack()) {
             if (entry == var) return true;
         }
         return false;
@@ -72,7 +76,7 @@ public class MyVarCleanupStack {
      * RuntimeScalar / RuntimeArray / RuntimeHash instances.
      */
     public static java.util.List<Object> snapshotLiveVars() {
-        return new java.util.ArrayList<>(liveCounts.keySet());
+        return new java.util.ArrayList<>(liveCounts().keySet());
     }
 
     /**
@@ -83,7 +87,7 @@ public class MyVarCleanupStack {
      * @return mark position (always >= 0)
      */
     public static int pushMark() {
-        return stack.size();
+        return stack().size();
     }
 
     /**
@@ -98,7 +102,7 @@ public class MyVarCleanupStack {
      * @param var the RuntimeScalar, RuntimeHash, or RuntimeArray object
      */
     public static void register(Object var) {
-        stack.add(var);
+        stack().add(var);
         // liveCounts is consulted by ReachabilityWalker.sweepWeakRefs and
         // .isReachableFromRoots. We populate it lazily — only after the
         // first weaken() call (which sets WeakRefRegistry.weakRefsExist).
@@ -107,21 +111,22 @@ public class MyVarCleanupStack {
         // {@link #snapshotStackToLiveCounts()} from WeakRefRegistry,
         // which seeds liveCounts with all already-registered my-vars.
         if (var != null && WeakRefRegistry.weakRefsExist) {
-            liveCounts.merge(var, 1, Integer::sum);
+            liveCounts().merge(var, 1, Integer::sum);
             MortalList.invalidateLiveRootSnapshot();
         }
     }
 
     /**
-     * Phase D-W2b (perf): one-time backfill of {@link #liveCounts} with
-     * all my-vars currently on {@link #stack}. Called by
+     * Phase D-W2b (perf): one-time backfill of the live-count map with
+     * all currently registered my-vars. Called by
      * {@link WeakRefRegistry#registerWeakRef} the first time
      * {@code weakRefsExist} flips to true. Without this, my-vars
      * declared before the first {@code weaken()} would never be
      * inserted into {@code liveCounts} and the walker would miss them.
      */
     public static synchronized void snapshotStackToLiveCounts() {
-        for (Object var : stack) {
+        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
+        for (Object var : stack()) {
             if (var != null) {
                 liveCounts.merge(var, 1, Integer::sum);
             }
@@ -149,6 +154,7 @@ public class MyVarCleanupStack {
         if (var == null) return;
         // Block-scoped my-vars pop in reverse declaration order, so
         // scan from the top of the stack for a fast amortized match.
+        ArrayList<Object> stack = stack();
         for (int i = stack.size() - 1; i >= 0; i--) {
             if (stack.get(i) == var) {
                 stack.remove(i);
@@ -167,6 +173,8 @@ public class MyVarCleanupStack {
      */
     public static void replace(Object oldVar, Object newVar) {
         if (oldVar == null || newVar == null || oldVar == newVar) return;
+        ArrayList<Object> stack = stack();
+        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
         for (int i = stack.size() - 1; i >= 0; i--) {
             if (stack.get(i) == oldVar) {
                 stack.set(i, newVar);
@@ -183,6 +191,7 @@ public class MyVarCleanupStack {
     }
 
     private static void decLiveCount(Object var) {
+        IdentityHashMap<Object, Integer> liveCounts = liveCounts();
         Integer c = liveCounts.get(var);
         if (c == null) return;
         if (c <= 1) liveCounts.remove(var);
@@ -214,6 +223,7 @@ public class MyVarCleanupStack {
      * @param mark the mark position from {@link #pushMark()}
      */
     public static void unwindTo(int mark) {
+        ArrayList<Object> stack = stack();
         for (int i = stack.size() - 1; i >= mark; i--) {
             Object var = stack.removeLast();
             if (var != null) {
@@ -232,6 +242,7 @@ public class MyVarCleanupStack {
      * @param mark the mark position from {@link #pushMark()}
      */
     public static void popMark(int mark) {
+        ArrayList<Object> stack = stack();
         while (stack.size() > mark) {
             Object var = stack.removeLast();
             if (var != null) {

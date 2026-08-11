@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.PerlRuntimeTestBase;
 import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Tag;
@@ -41,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * package, which is the integration-test layer.
  */
 @Tag("unit")
-public class TiedStorableTest {
+public class TiedStorableTest extends PerlRuntimeTestBase {
 
     /** Build a blessed empty hash ref to act as the "tying object". The
      *  test never invokes its tie methods; it only round-trips its

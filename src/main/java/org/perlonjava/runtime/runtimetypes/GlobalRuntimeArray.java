@@ -16,7 +16,11 @@ import java.util.Stack;
  * and {@link GlobalRuntimeScalar} for scalars.
  */
 public class GlobalRuntimeArray implements DynamicState {
-    private static final Stack<SavedGlobalArrayState> localizedStack = new Stack<>();
+    @SuppressWarnings("unchecked")
+    private static Stack<SavedGlobalArrayState> localizedStack() {
+        return (Stack<SavedGlobalArrayState>) (Stack<?>)
+                PerlRuntime.current().executionState().globalArrayStates;
+    }
     private final String fullName;
 
     public GlobalRuntimeArray(String fullName) {
@@ -41,7 +45,7 @@ public class GlobalRuntimeArray implements DynamicState {
     public void dynamicSaveState() {
         // Save the current array reference from the global map
         RuntimeArray original = GlobalVariable.globalArrays.get(fullName);
-        localizedStack.push(new SavedGlobalArrayState(fullName, original));
+        localizedStack().push(new SavedGlobalArrayState(fullName, original));
 
         // Install a fresh empty array in the global map
         RuntimeArray newLocal = new RuntimeArray();
@@ -64,6 +68,7 @@ public class GlobalRuntimeArray implements DynamicState {
 
     @Override
     public void dynamicRestoreState() {
+        Stack<SavedGlobalArrayState> localizedStack = localizedStack();
         if (!localizedStack.isEmpty()) {
             SavedGlobalArrayState saved = localizedStack.peek();
             if (saved.fullName.equals(this.fullName)) {

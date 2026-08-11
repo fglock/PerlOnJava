@@ -9,7 +9,9 @@ import java.util.*;
  */
 public class RuntimeStash extends RuntimeHash {
     // Static stack to store saved "local" states of RuntimeStash instances
-    private static final Stack<RuntimeStash> dynamicStateStack = new Stack<>();
+    private static Stack<RuntimeStash> dynamicStateStack() {
+        return PerlRuntime.current().executionState().stashDynamicStates;
+    }
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     public String namespace;
@@ -489,7 +491,7 @@ public class RuntimeStash extends RuntimeHash {
         currentState.elements = new HashMap<>(this.elements);
         ((RuntimeHash) currentState).elements = currentState.elements;
         currentState.blessId = this.blessId;
-        dynamicStateStack.push(currentState);
+        dynamicStateStack().push(currentState);
         // Clear the hash
         this.elements.clear();
         super.elements = this.elements;
@@ -502,6 +504,7 @@ public class RuntimeStash extends RuntimeHash {
      */
     @Override
     public void dynamicRestoreState() {
+        Stack<RuntimeStash> dynamicStateStack = dynamicStateStack();
         if (!dynamicStateStack.isEmpty()) {
             // Restore the elements map and blessId from the most recent saved state
             RuntimeStash previousState = dynamicStateStack.pop();

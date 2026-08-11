@@ -24,7 +24,8 @@ public class RegexTimeoutCharSequence implements CharSequence {
 
     @Override
     public char charAt(int index) {
-        if (++checkCount % CHECK_INTERVAL == 0 && System.nanoTime() > deadlineNanos) {
+        if (++checkCount % CHECK_INTERVAL == 0
+                && (Thread.currentThread().isInterrupted() || System.nanoTime() > deadlineNanos)) {
             throw new RegexTimeoutException(
                     "Regex matching timed out after " + DEFAULT_TIMEOUT_MS + "ms (catastrophic backtracking detected)");
         }

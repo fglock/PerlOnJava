@@ -1,20 +1,14 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.regex.RegexMatcher;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.List;
 import java.util.Map;
 
-/**
- * Snapshot of regex-related global state (Perl's $1, $&amp;, $`, $', etc.).
- *
- * <p>Implements {@link DynamicState} so it integrates with {@link DynamicVariableManager}.
- * A snapshot is pushed onto the DynamicVariableManager stack at subroutine entry via
- * {@link #save()}.  {@code popToLocalLevel()} restores it automatically on scope exit.
- */
+/** Snapshot of Perl-visible regex state for dynamic-scope restoration. */
 public class RegexState implements DynamicState {
-
+    private final PerlRuntime owner;
     private final RegexMatcher globalMatcher;
     private final String globalMatchString;
     private final String lastMatchedString;
@@ -26,29 +20,35 @@ public class RegexState implements DynamicState {
     private final String lastSuccessfulMatchString;
     private final RuntimeRegex lastSuccessfulPattern;
     private final boolean lastMatchUsedPFlag;
+    private final boolean lastMatchUsedBackslashK;
     private final String[] lastCaptureGroups;
     private final Map<String, List<String>> lastNamedCaptureGroups;
     private final boolean lastMatchWasByteString;
+    private final boolean lastMatchResultsTainted;
     private final int[] manualCaptureStarts;
     private final int[] manualCaptureEnds;
 
     public RegexState() {
-        this.globalMatcher = RuntimeRegex.globalMatcher;
-        this.globalMatchString = RuntimeRegex.globalMatchString;
-        this.lastMatchedString = RuntimeRegex.lastMatchedString;
-        this.lastMatchStart = RuntimeRegex.lastMatchStart;
-        this.lastMatchEnd = RuntimeRegex.lastMatchEnd;
-        this.lastSuccessfulMatchedString = RuntimeRegex.lastSuccessfulMatchedString;
-        this.lastSuccessfulMatchStart = RuntimeRegex.lastSuccessfulMatchStart;
-        this.lastSuccessfulMatchEnd = RuntimeRegex.lastSuccessfulMatchEnd;
-        this.lastSuccessfulMatchString = RuntimeRegex.lastSuccessfulMatchString;
-        this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
-        this.lastMatchUsedPFlag = RuntimeRegex.lastMatchUsedPFlag;
-        this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
-        this.lastNamedCaptureGroups = RuntimeRegex.lastNamedCaptureGroups;
-        this.lastMatchWasByteString = RuntimeRegex.lastMatchWasByteString;
-        this.manualCaptureStarts = RuntimeRegex.manualCaptureStarts;
-        this.manualCaptureEnds = RuntimeRegex.manualCaptureEnds;
+        owner = PerlRuntime.current();
+        RuntimeRegexState state = owner.regexState;
+        globalMatcher = state.globalMatcher;
+        globalMatchString = state.globalMatchString;
+        lastMatchedString = state.lastMatchedString;
+        lastMatchStart = state.lastMatchStart;
+        lastMatchEnd = state.lastMatchEnd;
+        lastSuccessfulMatchedString = state.lastSuccessfulMatchedString;
+        lastSuccessfulMatchStart = state.lastSuccessfulMatchStart;
+        lastSuccessfulMatchEnd = state.lastSuccessfulMatchEnd;
+        lastSuccessfulMatchString = state.lastSuccessfulMatchString;
+        lastSuccessfulPattern = state.lastSuccessfulPattern;
+        lastMatchUsedPFlag = state.lastMatchUsedPFlag;
+        lastMatchUsedBackslashK = state.lastMatchUsedBackslashK;
+        lastCaptureGroups = state.lastCaptureGroups;
+        lastNamedCaptureGroups = state.lastNamedCaptureGroups;
+        lastMatchWasByteString = state.lastMatchWasByteString;
+        lastMatchResultsTainted = state.lastMatchResultsTainted;
+        manualCaptureStarts = state.manualCaptureStarts;
+        manualCaptureEnds = state.manualCaptureEnds;
     }
 
     public static void save() {
@@ -65,21 +65,27 @@ public class RegexState implements DynamicState {
 
     @Override
     public void dynamicRestoreState() {
-        RuntimeRegex.globalMatcher = this.globalMatcher;
-        RuntimeRegex.globalMatchString = this.globalMatchString;
-        RuntimeRegex.lastMatchedString = this.lastMatchedString;
-        RuntimeRegex.lastMatchStart = this.lastMatchStart;
-        RuntimeRegex.lastMatchEnd = this.lastMatchEnd;
-        RuntimeRegex.lastSuccessfulMatchedString = this.lastSuccessfulMatchedString;
-        RuntimeRegex.lastSuccessfulMatchStart = this.lastSuccessfulMatchStart;
-        RuntimeRegex.lastSuccessfulMatchEnd = this.lastSuccessfulMatchEnd;
-        RuntimeRegex.lastSuccessfulMatchString = this.lastSuccessfulMatchString;
-        RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
-        RuntimeRegex.lastMatchUsedPFlag = this.lastMatchUsedPFlag;
-        RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
-        RuntimeRegex.lastNamedCaptureGroups = this.lastNamedCaptureGroups;
-        RuntimeRegex.lastMatchWasByteString = this.lastMatchWasByteString;
-        RuntimeRegex.manualCaptureStarts = this.manualCaptureStarts;
-        RuntimeRegex.manualCaptureEnds = this.manualCaptureEnds;
+        if (PerlRuntime.current() != owner) {
+            throw new IllegalStateException("Regex state must be restored in its owning PerlRuntime");
+        }
+        RuntimeRegexState state = owner.regexState;
+        state.globalMatcher = globalMatcher;
+        state.globalMatchString = globalMatchString;
+        state.lastMatchedString = lastMatchedString;
+        state.lastMatchStart = lastMatchStart;
+        state.lastMatchEnd = lastMatchEnd;
+        state.lastSuccessfulMatchedString = lastSuccessfulMatchedString;
+        state.lastSuccessfulMatchStart = lastSuccessfulMatchStart;
+        state.lastSuccessfulMatchEnd = lastSuccessfulMatchEnd;
+        state.lastSuccessfulMatchString = lastSuccessfulMatchString;
+        state.lastSuccessfulPattern = lastSuccessfulPattern;
+        state.lastMatchUsedPFlag = lastMatchUsedPFlag;
+        state.lastMatchUsedBackslashK = lastMatchUsedBackslashK;
+        state.lastCaptureGroups = lastCaptureGroups;
+        state.lastNamedCaptureGroups = lastNamedCaptureGroups;
+        state.lastMatchWasByteString = lastMatchWasByteString;
+        state.lastMatchResultsTainted = lastMatchResultsTainted;
+        state.manualCaptureStarts = manualCaptureStarts;
+        state.manualCaptureEnds = manualCaptureEnds;
     }
 }

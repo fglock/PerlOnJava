@@ -23,7 +23,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.PROXY;
  */
 public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
-    private static final Stack<InputLineState> inputLineStateStack = new Stack<>();
+    @SuppressWarnings("unchecked")
+    private static Stack<InputLineState> inputLineStateStack() {
+        return (Stack<InputLineState>) (Stack<?>)
+                PerlRuntime.current().executionState().inputLineStates;
+    }
     // The type of special variable, represented by an enum.
     final Id variableId;
     // The position of the capture group, used only for CAPTURE type variables.
@@ -115,7 +119,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             if (symbolTable != null) {
                 String bits = value.toString();
                 WarningFlags.setWarningBitsFromString(symbolTable, bits);
-                if (RuntimeCode.evalDepth > 0) {
+                if (RuntimeCode.getEvalDepth() > 0) {
                     org.perlonjava.runtime.WarningBitsRegistry.setRuntimeWarningBits(bits);
                 }
             }
@@ -164,17 +168,17 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield postmatch != null ? makeRegexResultScalar(postmatch) : scalarUndef;
                 }
                 case P_PREMATCH -> {
-                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    if (!PerlRuntime.current().regexState.lastMatchUsedPFlag) yield scalarUndef;
                     String prematch = RuntimeRegex.preMatchString();
                     yield prematch != null ? makeRegexResultScalar(prematch) : scalarUndef;
                 }
                 case P_MATCH -> {
-                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    if (!PerlRuntime.current().regexState.lastMatchUsedPFlag) yield scalarUndef;
                     String match = RuntimeRegex.matchString();
                     yield match != null ? makeRegexResultScalar(match) : scalarUndef;
                 }
                 case P_POSTMATCH -> {
-                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    if (!PerlRuntime.current().regexState.lastMatchUsedPFlag) yield scalarUndef;
                     String postmatch = RuntimeRegex.postMatchString();
                     yield postmatch != null ? makeRegexResultScalar(postmatch) : scalarUndef;
                 }
@@ -223,13 +227,13 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     String lastCapture = RuntimeRegex.lastCaptureString();
                     yield lastCapture != null ? makeRegexResultScalar(lastCapture) : scalarUndef;
                 }
-                case LAST_SUCCESSFUL_PATTERN -> RuntimeRegex.lastSuccessfulPattern != null
-                        ? new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern) : scalarUndef;
+                case LAST_SUCCESSFUL_PATTERN -> PerlRuntime.current().regexState.lastSuccessfulPattern != null
+                        ? new RuntimeScalar(PerlRuntime.current().regexState.lastSuccessfulPattern) : scalarUndef;
                 case LAST_REGEXP_CODE_RESULT -> {
                     // $^R - Result of last (?{...}) code block
                     // Get the last matched regex and retrieve its code block result
-                    if (RuntimeRegex.lastSuccessfulPattern != null) {
-                        RuntimeScalar codeBlockResult = RuntimeRegex.lastSuccessfulPattern.getLastCodeBlockResult();
+                    if (PerlRuntime.current().regexState.lastSuccessfulPattern != null) {
+                        RuntimeScalar codeBlockResult = PerlRuntime.current().regexState.lastSuccessfulPattern.getLastCodeBlockResult();
                         yield codeBlockResult != null ? codeBlockResult : scalarUndef;
                     }
                     yield scalarUndef;
@@ -279,7 +283,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         // During BEGIN/UNITCHECK blocks = compilation phase
                         yield scalarUndef;
                     }
-                    yield getScalarInt(RuntimeCode.evalDepth > 0 ? 1 : 0);
+                    yield getScalarInt(RuntimeCode.getEvalDepth() > 0 ? 1 : 0);
                 }
             };
             return result;
@@ -433,7 +437,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             RuntimeIO handle = RuntimeIO.getLastAccessedHandle();
             int lineNumber = handle != null ? handle.currentLineNumber : (lvalue != null ? lvalue.getInt() : 0);
             RuntimeScalar localValue = lvalue != null ? new RuntimeScalar(lvalue) : null;
-            inputLineStateStack.push(new InputLineState(handle, lineNumber, localValue));
+            inputLineStateStack().push(new InputLineState(handle, lineNumber, localValue));
             return;
         }
         super.dynamicSaveState();
@@ -448,6 +452,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     @Override
     public void dynamicRestoreState() {
         if (variableId == Id.INPUT_LINE_NUMBER) {
+            Stack<InputLineState> inputLineStateStack = inputLineStateStack();
             if (!inputLineStateStack.isEmpty()) {
                 InputLineState previous = inputLineStateStack.pop();
                 RuntimeIO.setLastAccessedHandle(previous.lastHandle);
@@ -497,10 +502,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     private static RuntimeScalar makeRegexResultScalar(String value) {
         RuntimeScalar scalar = new RuntimeScalar(value);
-        if (RuntimeRegex.lastMatchWasByteString) {
+        if (PerlRuntime.current().regexState.lastMatchWasByteString) {
             scalar.type = RuntimeScalarType.BYTE_STRING;
         }
-        scalar.tainted = RuntimeRegex.lastMatchResultsTainted;
+        scalar.tainted = PerlRuntime.current().regexState.lastMatchResultsTainted;
         return scalar;
     }
 

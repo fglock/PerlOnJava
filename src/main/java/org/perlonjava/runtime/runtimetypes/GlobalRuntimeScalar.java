@@ -9,7 +9,11 @@ import java.util.Stack;
  */
 public class GlobalRuntimeScalar extends RuntimeScalar {
     // Stack to store the previous values when localized
-    private static final Stack<SavedGlobalState> localizedStack = new Stack<>();
+    @SuppressWarnings("unchecked")
+    private static Stack<SavedGlobalState> localizedStack() {
+        return (Stack<SavedGlobalState>) (Stack<?>)
+                PerlRuntime.current().executionState().globalScalarStates;
+    }
     private final String fullName;
 
     public GlobalRuntimeScalar(String fullName) {
@@ -47,6 +51,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
 
     @Override
     public void dynamicSaveState() {
+        Stack<SavedGlobalState> localizedStack = localizedStack();
         // Save the current global reference
         var originalVariable = GlobalVariable.globalVariables.get(fullName);
 
@@ -110,6 +115,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
 
     @Override
     public void dynamicRestoreState() {
+        Stack<SavedGlobalState> localizedStack = localizedStack();
         if (!localizedStack.isEmpty()) {
             SavedGlobalState saved = localizedStack.peek();
             if (saved.fullName.equals(this.fullName)) {

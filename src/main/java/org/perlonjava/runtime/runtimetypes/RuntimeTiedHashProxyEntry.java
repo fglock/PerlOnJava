@@ -7,7 +7,11 @@ import java.util.Stack;
  * It delegates all operations to the tied object's FETCH and STORE methods.
  */
 public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
-    private static final Stack<SavedState> dynamicStateStack = new Stack<>();
+    @SuppressWarnings("unchecked")
+    private static Stack<SavedState> dynamicStateStack() {
+        return (Stack<SavedState>) (Stack<?>)
+                PerlRuntime.current().executionState().tiedHashProxyStates;
+    }
 
     // Reference to the parent RuntimeHash (which is tied)
     private final RuntimeHash parent;
@@ -68,11 +72,12 @@ public class RuntimeTiedHashProxyEntry extends TiedVariableBase {
     public void dynamicSaveState() {
         boolean existed = TieHash.tiedExists(parent, key).getBoolean();
         RuntimeScalar saved = existed ? new RuntimeScalar(TieHash.tiedFetch(parent, key)) : null;
-        dynamicStateStack.push(new SavedState(existed, saved));
+        dynamicStateStack().push(new SavedState(existed, saved));
     }
 
     @Override
     public void dynamicRestoreState() {
+        Stack<SavedState> dynamicStateStack = dynamicStateStack();
         if (dynamicStateStack.isEmpty()) {
             return;
         }

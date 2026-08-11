@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule.storable;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.perlonjava.PerlRuntimeTestBase;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -28,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code retrieve_regexp} in upstream {@code Storable.xs}.
  */
 @Tag("unit")
-public class RegexpStorableTest {
+public class RegexpStorableTest extends PerlRuntimeTestBase {
 
     private static final Path FIXTURES =
             Paths.get("src/test/resources/storable_fixtures").toAbsolutePath();

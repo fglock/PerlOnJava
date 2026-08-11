@@ -44,8 +44,14 @@ public class InterpreterState {
      * <p>Scoped package blocks ({@code package Foo { }}) are automatically restored
      * when the scope exits via POP_LOCAL_LEVEL (DynamicVariableManager.popToLocalLevel).</p>
      */
-    public static final ThreadLocal<RuntimeScalar> currentPackage =
-            ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
+    public static final CurrentPackageFacade currentPackage = new CurrentPackageFacade();
+
+    public static final class CurrentPackageFacade {
+        public RuntimeScalar get() {
+            return org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
+                    .executionState().currentPackage;
+        }
+    }
 
     /**
      * Update the runtime current-package tracker. Exposed as a static helper
@@ -74,11 +80,15 @@ public class InterpreterState {
         org.perlonjava.runtime.runtimetypes.DynamicVariableManager.pushLocalVariable(pkg);
         pkg.set(name);
     }
-    private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
-    // Use ArrayList of mutable int holders for O(1) PC updates (no pop/push overhead)
-    private static final ThreadLocal<ArrayList<int[]>> pcStack =
-            ThreadLocal.withInitial(ArrayList::new);
+    private static Deque<InterpreterFrame> frameStack() {
+        return org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
+                .executionState().interpreterFrames;
+    }
+
+    private static ArrayList<int[]> pcStack() {
+        return org.perlonjava.runtime.runtimetypes.PerlRuntime.current()
+                .executionState().interpreterPcs;
+    }
 
     /**
      * Push a new interpreter frame onto the stack.
@@ -103,9 +113,9 @@ public class InterpreterState {
      * @return The PC holder array for direct updates
      */
     public static int[] pushFrame(InterpreterFrame frame) {
-        frameStack.get().push(frame);
+        frameStack().push(frame);
         int[] pcHolder = new int[]{0};  // Mutable holder for PC
-        pcStack.get().add(pcHolder);
+        pcStack().add(pcHolder);
         return pcHolder;
     }
 
@@ -126,9 +136,9 @@ public class InterpreterState {
             packageName = current.packageName();
         }
 
-        frameStack.get().push(new InterpreterFrame(current.code(), packageName, "(eval)", true));
+        frameStack().push(new InterpreterFrame(current.code(), packageName, "(eval)", true));
 
-        ArrayList<int[]> pcs = pcStack.get();
+        ArrayList<int[]> pcs = pcStack();
         int currentPc = pcs.isEmpty() ? 0 : pcs.getLast()[0];
         pcs.add(new int[]{currentPc});
         return true;
@@ -139,19 +149,19 @@ public class InterpreterState {
      * Called at exit from BytecodeInterpreter.execute() (in finally block).
      */
     public static void pop() {
-        Deque<InterpreterFrame> stack = frameStack.get();
+        Deque<InterpreterFrame> stack = frameStack();
         if (!stack.isEmpty()) {
             stack.pop();
         }
 
-        ArrayList<int[]> pcs = pcStack.get();
+        ArrayList<int[]> pcs = pcStack();
         if (!pcs.isEmpty()) {
             pcs.removeLast();
         }
     }
 
     public static void setCurrentPc(int pc) {
-        ArrayList<int[]> pcs = pcStack.get();
+        ArrayList<int[]> pcs = pcStack();
         if (!pcs.isEmpty()) {
             pcs.getLast()[0] = pc;  // Direct mutation, no allocation
         }
@@ -165,7 +175,7 @@ public class InterpreterState {
      */
     public static int[] pushAndGetPcHolder() {
         int[] holder = new int[]{0};
-        pcStack.get().add(holder);
+        pcStack().add(holder);
         return holder;
     }
 
@@ -173,7 +183,7 @@ public class InterpreterState {
      * Pop the PC holder. Called when execution completes.
      */
     public static void popPcHolder() {
-        ArrayList<int[]> pcs = pcStack.get();
+        ArrayList<int[]> pcs = pcStack();
         if (!pcs.isEmpty()) {
             pcs.removeLast();
         }
@@ -186,7 +196,7 @@ public class InterpreterState {
      * @return The current frame, or null if not executing interpreted code
      */
     public static InterpreterFrame current() {
-        Deque<InterpreterFrame> stack = frameStack.get();
+        Deque<InterpreterFrame> stack = frameStack();
         return stack.isEmpty() ? null : stack.peek();
     }
 
@@ -197,11 +207,11 @@ public class InterpreterState {
      * @return A list of frames from most recent (index 0) to oldest
      */
     public static List<InterpreterFrame> getStack() {
-        return new ArrayList<>(frameStack.get());
+        return new ArrayList<>(frameStack());
     }
 
     public static List<Integer> getPcStack() {
-        ArrayList<int[]> pcs = pcStack.get();
+        ArrayList<int[]> pcs = pcStack();
         ArrayList<Integer> result = new ArrayList<>(pcs.size());
         // Reverse order to match frameStack (Deque iterates most-recent-first,
         // but pcStack ArrayList stores oldest-first via add())

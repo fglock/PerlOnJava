@@ -3,6 +3,7 @@ package org.perlonjava.runtime.mro;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The InheritanceResolver class provides methods for resolving method inheritance
@@ -10,23 +11,35 @@ import java.util.*;
  * for method resolution and linearized class hierarchies to improve performance.
  */
 public class InheritanceResolver {
-    // Cache for linearized class hierarchies
-    static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
     private static final boolean TRACE_METHOD_RESOLUTION = false;  // Set to true for debugging
-    // Per-package MRO settings
-    private static final Map<String, MROAlgorithm> packageMRO = new HashMap<>();
-    // Method resolution cache
-    private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
-    // Cache for OverloadContext instances by blessing ID
-    private static final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
-    // Track ISA array states for change detection
-    private static final Map<String, List<String>> isaStateCache = new HashMap<>();
-    // Monotonic generation for reverse-inheritance consumers such as
-    // mro::get_isarev().  @ISA arrays notify us at their mutation point.
-    private static long isaGeneration;
-    public static boolean autoloadEnabled = true;
-    // Default MRO algorithm
-    private static MROAlgorithm currentMRO = MROAlgorithm.DFS;
+    // Temporary bridge while package symbol tables remain shared until Phase 8.
+    private static final AtomicLong SHARED_SYMBOL_MUTATION_EPOCH = new AtomicLong();
+    private static final AtomicLong SHARED_ISA_MUTATION_EPOCH = new AtomicLong();
+
+    static MroRuntimeState currentState() {
+        MroRuntimeState state = PerlRuntime.current().mroState();
+        if (state.observeSharedMutationEpochs(
+                SHARED_SYMBOL_MUTATION_EPOCH.get(), SHARED_ISA_MUTATION_EPOCH.get())) {
+            invalidateDependentRuntimeCaches();
+        }
+        return state;
+    }
+
+    /** Observe mutations to the temporarily shared Phase 8 symbol tables. */
+    public static void synchronizeCurrentRuntime() {
+        currentState();
+    }
+
+    private static void invalidateDependentRuntimeCaches() {
+        NameNormalizer.invalidateBlessIdCache();
+        RuntimeCode.clearInlineMethodCache();
+        DestroyDispatch.invalidateCache();
+    }
+
+    private static void clearCurrentRuntimeCaches() {
+        currentState().clearDerivedCaches();
+        invalidateDependentRuntimeCaches();
+    }
 
     /**
      * Sets the default MRO algorithm.
@@ -34,8 +47,8 @@ public class InheritanceResolver {
      * @param algorithm The MRO algorithm to use as default.
      */
     public static void setDefaultMRO(MROAlgorithm algorithm) {
-        currentMRO = algorithm;
-        invalidateCache();
+        currentState().setDefaultMro(algorithm);
+        clearCurrentRuntimeCaches();
     }
 
     /**
@@ -45,8 +58,8 @@ public class InheritanceResolver {
      * @param algorithm   The MRO algorithm to use for this package.
      */
     public static void setPackageMRO(String packageName, MROAlgorithm algorithm) {
-        packageMRO.put(packageName, algorithm);
-        invalidateCache();
+        currentState().packageMro().put(packageName, algorithm);
+        clearCurrentRuntimeCaches();
     }
 
     /**
@@ -56,7 +69,16 @@ public class InheritanceResolver {
      * @return The MRO algorithm for the package, or the default if not set.
      */
     public static MROAlgorithm getPackageMRO(String packageName) {
-        return packageMRO.getOrDefault(packageName, currentMRO);
+        MroRuntimeState state = currentState();
+        return state.packageMro().getOrDefault(packageName, state.defaultMro());
+    }
+
+    public static boolean isAutoloadEnabled() {
+        return currentState().autoloadEnabled();
+    }
+
+    public static void setAutoloadEnabled(boolean enabled) {
+        currentState().setAutoloadEnabled(enabled);
     }
 
     /**
@@ -68,14 +90,15 @@ public class InheritanceResolver {
      * @return A list of class names in C3 order.
      */
     public static List<String> linearizeC3Always(String className) {
+        MroRuntimeState state = currentState();
         // Check if ISA has changed and invalidate cache if needed
-        if (hasIsaChanged(className)) {
-            invalidateCacheForClass(className);
+        if (hasIsaChanged(className, state)) {
+            invalidateCacheForClass(className, state);
         }
 
         // Use a separate cache key for C3-always linearization
         String cacheKey = className + "::__C3__";
-        List<String> cached = linearizedClassesCache.get(cacheKey);
+        List<String> cached = state.linearizedClassesCache().get(cacheKey);
         if (cached != null) {
             return new ArrayList<>(cached);
         }
@@ -83,7 +106,7 @@ public class InheritanceResolver {
         List<String> result = C3.linearizeC3(className);
 
         // Cache the result
-        linearizedClassesCache.put(cacheKey, new ArrayList<>(result));
+        state.linearizedClassesCache().put(cacheKey, new ArrayList<>(result));
         return result;
     }
 
@@ -94,19 +117,20 @@ public class InheritanceResolver {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeHierarchy(String className) {
+        MroRuntimeState state = currentState();
         // Check if ISA has changed and invalidate cache if needed
-        if (hasIsaChanged(className)) {
-            invalidateCacheForClass(className);
+        if (hasIsaChanged(className, state)) {
+            invalidateCacheForClass(className, state);
         }
 
         // Check cache first
-        List<String> cached = linearizedClassesCache.get(className);
+        List<String> cached = state.linearizedClassesCache().get(className);
         if (cached != null) {
             // Return a copy of the cached list to prevent modification of the cached version
             return new ArrayList<>(cached);
         }
 
-        MROAlgorithm mro = getPackageMRO(className);
+        MROAlgorithm mro = state.packageMro().getOrDefault(className, state.defaultMro());
 
         List<String> result;
         switch (mro) {
@@ -121,14 +145,14 @@ public class InheritanceResolver {
         }
 
         // Cache the result (store a copy to prevent external modifications)
-        linearizedClassesCache.put(className, new ArrayList<>(result));
+        state.linearizedClassesCache().put(className, new ArrayList<>(result));
         return result;
     }
 
     /**
      * Checks if the @ISA array for a class has changed since last cached.
      */
-    private static boolean hasIsaChanged(String className) {
+    private static boolean hasIsaChanged(String className, MroRuntimeState state) {
         RuntimeArray isaArray = getIsaArrayForClass(className);
         
         // Build current ISA list
@@ -140,11 +164,11 @@ public class InheritanceResolver {
             }
         }
 
-        List<String> cachedIsa = isaStateCache.get(className);
+        List<String> cachedIsa = state.isaStateCache().get(className);
 
         // If ISA changed, update cache and return true
         if (!currentIsa.equals(cachedIsa)) {
-            isaStateCache.put(className, currentIsa);
+            state.isaStateCache().put(className, currentIsa);
             return true;
         }
         
@@ -154,7 +178,9 @@ public class InheritanceResolver {
     /**
      * Invalidate cache for a specific class and its dependents.
      */
-    private static void invalidateCacheForClass(String className) {
+    private static void invalidateCacheForClass(String className, MroRuntimeState state) {
+        Map<String, List<String>> linearizedClassesCache = state.linearizedClassesCache();
+        Map<String, RuntimeScalar> methodCache = state.methodCache();
         // Remove exact class and subclasses from linearization cache
         linearizedClassesCache.remove(className);
         linearizedClassesCache.entrySet().removeIf(entry -> entry.getKey().startsWith(className + "::"));
@@ -165,10 +191,8 @@ public class InheritanceResolver {
 
         // @ISA changes can make an existing package inherit overloads after it
         // was first blessed; force the next bless/overload check to reclassify.
-        overloadContextCache.clear();
-        NameNormalizer.invalidateBlessIdCache();
-        RuntimeCode.clearInlineMethodCache();
-        DestroyDispatch.invalidateCache();
+        state.overloadContextCache().clear();
+        invalidateDependentRuntimeCaches();
     }
 
     /**
@@ -176,15 +200,16 @@ public class InheritanceResolver {
      * This should be called whenever the class hierarchy or method definitions change.
      */
     public static void invalidateCache() {
-        methodCache.clear();
-        linearizedClassesCache.clear();
-        overloadContextCache.clear();
-        isaStateCache.clear();
-        NameNormalizer.invalidateBlessIdCache();
-        // Also clear the inline method cache in RuntimeCode
-        RuntimeCode.clearInlineMethodCache();
-        // Clear DESTROY-related caches (destroyClasses BitSet and destroyMethodCache)
-        DestroyDispatch.invalidateCache();
+        SHARED_SYMBOL_MUTATION_EPOCH.incrementAndGet();
+        clearCurrentRuntimeCaches();
+    }
+
+    /**
+     * Drop derived entries only for the bound runtime.
+     * Used for runtime-local policy changes and uncached introspection reads.
+     */
+    public static void invalidateCurrentRuntimeCaches() {
+        clearCurrentRuntimeCaches();
     }
 
     /**
@@ -195,12 +220,13 @@ public class InheritanceResolver {
      * calls this hook for every structural mutation.
      */
     public static void noteIsaMutation() {
-        isaGeneration++;
-        invalidateCache();
+        SHARED_ISA_MUTATION_EPOCH.incrementAndGet();
+        SHARED_SYMBOL_MUTATION_EPOCH.incrementAndGet();
+        clearCurrentRuntimeCaches();
     }
 
     public static long getIsaGeneration() {
-        return isaGeneration;
+        return currentState().isaGeneration();
     }
 
     /**
@@ -220,7 +246,9 @@ public class InheritanceResolver {
         }
         String suffix = "::" + leaf;
         String suffixNoAutoload = suffix + "\0noautoload";
-        methodCache.entrySet().removeIf(e -> {
+        SHARED_SYMBOL_MUTATION_EPOCH.incrementAndGet();
+        MroRuntimeState state = currentState();
+        state.methodCache().entrySet().removeIf(e -> {
             String k = e.getKey();
             return k.endsWith(suffixNoAutoload)
                     || k.endsWith(suffix)
@@ -239,7 +267,7 @@ public class InheritanceResolver {
      * @return The cached OverloadContext, or null if not found.
      */
     public static OverloadContext getCachedOverloadContext(int blessId) {
-        return overloadContextCache.get(blessId);
+        return currentState().overloadContextCache().get(blessId);
     }
 
     /**
@@ -249,7 +277,7 @@ public class InheritanceResolver {
      * @param context The OverloadContext to cache (can be null to indicate no overloading).
      */
     public static void cacheOverloadContext(int blessId, OverloadContext context) {
-        overloadContextCache.put(blessId, context);
+        currentState().overloadContextCache().put(blessId, context);
     }
 
     /**
@@ -259,7 +287,7 @@ public class InheritanceResolver {
      * @return The cached RuntimeScalar representing the method, or null if not found.
      */
     public static RuntimeScalar getCachedMethod(String normalizedMethodName) {
-        return methodCache.get(normalizedMethodName);
+        return currentState().methodCache().get(normalizedMethodName);
     }
 
     /**
@@ -269,7 +297,7 @@ public class InheritanceResolver {
      * @param method               The RuntimeScalar representing the method to cache.
      */
     public static void cacheMethod(String normalizedMethodName, RuntimeScalar method) {
-        methodCache.put(normalizedMethodName, method);
+        currentState().methodCache().put(normalizedMethodName, method);
     }
 
     /**
@@ -386,6 +414,8 @@ public class InheritanceResolver {
      * @return RuntimeScalar representing the found method, or null if not found
      */
     public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, String cacheKey, int startFromIndex, boolean checkAutoload) {
+        MroRuntimeState state = currentState();
+        Map<String, RuntimeScalar> methodCache = state.methodCache();
         if (TRACE_METHOD_RESOLUTION) {
             System.err.println("TRACE InheritanceResolver.findMethodInHierarchy:");
             System.err.println("  methodName: '" + methodName + "'");
@@ -410,8 +440,8 @@ public class InheritanceResolver {
         }
 
         // Check if ISA changed for this class - if so, invalidate relevant caches
-        if (hasIsaChanged(perlClassName)) {
-            invalidateCacheForClass(perlClassName);
+        if (hasIsaChanged(perlClassName, state)) {
+            invalidateCacheForClass(perlClassName, state);
         }
 
         // Check the method cache - handles both found and not-found cases
@@ -460,7 +490,7 @@ public class InheritanceResolver {
                     if (!RuntimeCode.isCodeDefined(codeRef) && !isDeclaredForward) {
                         continue;
                     }
-                    cacheMethod(cacheKey, codeRef);
+                    methodCache.put(cacheKey, codeRef);
                     if (TRACE_METHOD_RESOLUTION) {
                         System.err.println("  FOUND method!");
                         System.err.flush();
@@ -473,7 +503,7 @@ public class InheritanceResolver {
         // Second pass — method not found anywhere, check AUTOLOAD in class hierarchy.
         // This matches Perl semantics: AUTOLOAD is only tried after the full MRO
         // search (including UNIVERSAL) fails to find the method.
-        if (autoloadEnabled && checkAutoload && !methodName.startsWith("(")) {
+        if (state.autoloadEnabled() && checkAutoload && !methodName.startsWith("(")) {
             for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
                 String className = linearizedClasses.get(i);
                 for (String lookupClassName : packageLookupAliases(className)) {
@@ -493,7 +523,7 @@ public class InheritanceResolver {
                             } else {
                                 autoloadCode.autoloadVariableName = autoloadName;
                             }
-                            cacheMethod(cacheKey, autoload);
+                            methodCache.put(cacheKey, autoload);
                             return autoload;
                         }
                     }

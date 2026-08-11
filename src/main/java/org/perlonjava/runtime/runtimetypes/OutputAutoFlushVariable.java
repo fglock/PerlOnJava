@@ -7,7 +7,11 @@ import java.util.Stack;
  */
 public class OutputAutoFlushVariable extends RuntimeScalar {
 
-    private static final Stack<State> stateStack = new Stack<>();
+    @SuppressWarnings("unchecked")
+    private static Stack<State> stateStack() {
+        return (Stack<State>) (Stack<?>)
+                PerlRuntime.current().executionState().autoFlushStates;
+    }
 
     private static RuntimeIO currentHandle() {
         RuntimeIO handle = RuntimeIO.getSelectedHandle();
@@ -81,12 +85,13 @@ public class OutputAutoFlushVariable extends RuntimeScalar {
     @Override
     public void dynamicSaveState() {
         RuntimeIO handle = currentHandle();
-        stateStack.push(new State(handle, handle.isAutoFlush()));
+        stateStack().push(new State(handle, handle.isAutoFlush()));
         handle.setAutoFlush(false);
     }
 
     @Override
     public void dynamicRestoreState() {
+        Stack<State> stateStack = stateStack();
         if (!stateStack.isEmpty()) {
             State previous = stateStack.pop();
             if (previous.handle != null) {

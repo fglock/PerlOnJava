@@ -975,11 +975,12 @@ public class StatementParser {
                     RuntimeArray.push(canArgs, new RuntimeScalar(importMethod));
 
                     RuntimeList codeList = null;
-                    InheritanceResolver.autoloadEnabled = false;
+                    boolean previousAutoloadEnabled = InheritanceResolver.isAutoloadEnabled();
+                    InheritanceResolver.setAutoloadEnabled(false);
                     try {
                         codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
                     } finally {
-                        InheritanceResolver.autoloadEnabled = true;
+                        InheritanceResolver.setAutoloadEnabled(previousAutoloadEnabled);
                     }
 
                     if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use can(" + packageName + ", " + importMethod + "): " + codeList);

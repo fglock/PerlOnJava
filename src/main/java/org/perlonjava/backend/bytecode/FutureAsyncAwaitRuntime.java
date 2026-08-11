@@ -110,10 +110,11 @@ public final class FutureAsyncAwaitRuntime {
         call(outer, "AWAIT_CHAIN_CANCEL",
                 new RuntimeArray(suspension.awaited), RuntimeContextType.VOID);
 
+        PerlRuntime runtime = PerlRuntime.current();
         RuntimeCode callback = new RuntimeCode((callbackArgs, callbackContext) -> {
             enqueue(() -> resume(suspension, state));
             return new RuntimeList();
-        }, null);
+        }, null).bindCallbackTo(runtime);
         call(suspension.awaited, "AWAIT_ON_READY",
                 new RuntimeArray(new RuntimeScalar(callback)), RuntimeContextType.VOID);
     }

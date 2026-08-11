@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.PerlRuntimeTestBase;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -37,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * type and the type/blessing of its referent).
  */
 @Tag("unit")
-public class RefOfRefTest {
+public class RefOfRefTest extends PerlRuntimeTestBase {
 
     /** Build a {@code "pst0"} file-style header for major=2, minor=11,
      *  netorder. Mirrors the helper in {@link RefsTest}. */

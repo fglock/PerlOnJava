@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.PerlRuntimeTestBase;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * may not yet be implemented in parallel branches.
  */
 @Tag("unit")
-public class BlessedTest {
+public class BlessedTest extends PerlRuntimeTestBase {
 
     /**
      * Helper: append a 4-byte big-endian unsigned 32-bit integer to

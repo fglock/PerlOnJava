@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.PerlRuntimeTestBase;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * "throws not-implemented" to "round-trips successfully".
  */
 @Tag("unit")
-public class StorableReaderTest {
+public class StorableReaderTest extends PerlRuntimeTestBase {
 
     private static final Path FIXTURES =
             Paths.get("src/test/resources/storable_fixtures").toAbsolutePath();

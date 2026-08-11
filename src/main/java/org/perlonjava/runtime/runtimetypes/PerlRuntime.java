@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.StandardIO;
+import org.perlonjava.runtime.mro.MroRuntimeState;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -20,6 +21,10 @@ import java.util.Set;
  */
 public final class PerlRuntime {
     private static final ThreadLocal<BindingFrame> CURRENT = new ThreadLocal<>();
+
+    public final ExecutionRuntimeState executionState = new ExecutionRuntimeState();
+    public final RuntimeRegexState regexState = new RuntimeRegexState();
+    public final MroRuntimeState mroState = new MroRuntimeState();
 
     RuntimeIO ioStdout;
     RuntimeIO ioStderr;
@@ -100,6 +105,18 @@ public final class PerlRuntime {
     public static Binding bindCurrentOrNew() {
         PerlRuntime runtime = currentOrNull();
         return (runtime != null ? runtime : new PerlRuntime()).bind();
+    }
+
+    public ExecutionRuntimeState executionState() {
+        return executionState;
+    }
+
+    public RuntimeRegexState regexState() {
+        return regexState;
+    }
+
+    public MroRuntimeState mroState() {
+        return mroState;
     }
 
     RuntimeGlob standardIOGlob(String name) {

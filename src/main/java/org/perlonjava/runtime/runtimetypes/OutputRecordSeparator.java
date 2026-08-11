@@ -24,12 +24,9 @@ public class OutputRecordSeparator extends RuntimeScalar {
      * The internal ORS value that print reads.
      * Only updated by OutputRecordSeparator.set() calls.
      */
-    private static String internalORS = "";
-
-    /**
-     * Stack for save/restore during local $\ and for $\ (list).
-     */
-    private static final Stack<String> orsStack = new Stack<>();
+    private static ExecutionRuntimeState state() {
+        return PerlRuntime.current().executionState();
+    }
 
     public OutputRecordSeparator() {
         super();
@@ -39,7 +36,7 @@ public class OutputRecordSeparator extends RuntimeScalar {
      * Returns the internal ORS value for use by print.
      */
     public static String getInternalORS() {
-        return internalORS;
+        return state().outputRecordSeparator;
     }
 
     /**
@@ -47,7 +44,8 @@ public class OutputRecordSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicSaveState() when localizing $\.
      */
     public static void saveInternalORS() {
-        orsStack.push(internalORS);
+        ExecutionRuntimeState state = state();
+        state.outputRecordSeparatorStates.push(state.outputRecordSeparator);
     }
 
     /**
@@ -55,50 +53,51 @@ public class OutputRecordSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicRestoreState() when restoring $\.
      */
     public static void restoreInternalORS() {
-        if (!orsStack.isEmpty()) {
-            internalORS = orsStack.pop();
+        ExecutionRuntimeState state = state();
+        if (!state.outputRecordSeparatorStates.isEmpty()) {
+            state.outputRecordSeparator = state.outputRecordSeparatorStates.pop();
         }
     }
 
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         super.set(value);
-        internalORS = this.toString();
+        state().outputRecordSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(String value) {
         super.set(value);
-        internalORS = this.toString();
+        state().outputRecordSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(int value) {
         super.set(value);
-        internalORS = this.toString();
+        state().outputRecordSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(long value) {
         super.set(value);
-        internalORS = this.toString();
+        state().outputRecordSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(boolean value) {
         super.set(value);
-        internalORS = this.toString();
+        state().outputRecordSeparator = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(Object value) {
         super.set(value);
-        internalORS = this.toString();
+        state().outputRecordSeparator = this.toString();
         return this;
     }
 }

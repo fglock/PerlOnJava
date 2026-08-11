@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.PerlRuntimeTestBase;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -24,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link VStringEncoder}.
  */
 @Tag("unit")
-public class VStringStorableTest {
+public class VStringStorableTest extends PerlRuntimeTestBase {
 
     /** Convert encoded char-string back to a real byte array. */
     private static byte[] toBytes(String encoded) {

@@ -11,7 +11,9 @@ import java.util.List;
  */
 public class CallerStack {
     // Store either CallerInfo (resolved) or LazyCallerInfo (deferred)
-    private static final List<Object> callerStack = new ArrayList<>();
+    private static List<Object> callerStack() {
+        return PerlRuntime.current().executionState().callerStack;
+    }
 
     /**
      * Pushes a new CallerInfo object onto the stack, representing a new entry in the calling sequence.
@@ -21,7 +23,7 @@ public class CallerStack {
      * @param line        The line number in the file where the call originated.
      */
     public static void push(String packageName, String filename, int line) {
-        callerStack.add(new CallerInfo(packageName, filename, line));
+        callerStack().add(new CallerInfo(packageName, filename, line));
     }
 
     /**
@@ -33,7 +35,7 @@ public class CallerStack {
      * @param resolver    A function to compute the CallerInfo when needed.
      */
     public static void pushLazy(String packageName, CallerInfoResolver resolver) {
-        callerStack.add(new LazyCallerInfo(packageName, resolver));
+        callerStack().add(new LazyCallerInfo(packageName, resolver));
     }
 
     /**
@@ -44,6 +46,7 @@ public class CallerStack {
      * @return The most recent CallerInfo object, or null if the stack is empty.
      */
     public static CallerInfo peek(int callFrame) {
+        List<Object> callerStack = callerStack();
         if (callerStack.isEmpty()) {
             return null;
         }
@@ -70,6 +73,7 @@ public class CallerStack {
      * @return The most recent CallerInfo object, or null if the stack is empty.
      */
     public static CallerInfo pop() {
+        List<Object> callerStack = callerStack();
         if (callerStack.isEmpty()) {
             return null;
         }
@@ -89,6 +93,7 @@ public class CallerStack {
      * @return A list containing all CallerInfo objects in the stack.
      */
     public static List<CallerInfo> getStack() {
+        List<Object> callerStack = callerStack();
         List<CallerInfo> result = new ArrayList<>();
         for (int i = 0; i < callerStack.size(); i++) {
             Object entry = callerStack.get(i);
@@ -113,6 +118,7 @@ public class CallerStack {
      * @return The number of consecutive lazy entries from startCallFrame
      */
     public static int countLazyFromTop(int startCallFrame) {
+        List<Object> callerStack = callerStack();
         int count = 0;
         int index = callerStack.size() - 1 - startCallFrame;
         while (index >= 0 && callerStack.get(index) instanceof LazyCallerInfo) {
