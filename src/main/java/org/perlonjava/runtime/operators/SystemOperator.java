@@ -5,6 +5,7 @@ import org.perlonjava.runtime.ForkOpenCompleteException;
 import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.io.ProcessInputHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -13,6 +14,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -171,7 +173,6 @@ public class SystemOperator {
         checkTaintEnvironment();
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
-        
         if (flattenedArgs.isEmpty()) {
             throw new PerlCompilerException("system: no command specified");
         }
@@ -1008,7 +1009,7 @@ public class SystemOperator {
         checkTaintEnvironment();
         // Flatten the arguments - arrays and lists should be expanded to individual elements
         List<String> flattenedArgs = flattenToStringList(args.elements);
-        
+
         if (flattenedArgs.isEmpty()) {
             // Perl returns false and sets errno (typically ENOENT) — does not die.
             getGlobalVariable("main::!").set(2);
@@ -1082,7 +1083,7 @@ public class SystemOperator {
         
         try {
             flushAllHandles();
-            
+
             // Build the command - mirror the logic from exec() for consistency
             List<String> command;
             if (hasHandle && flattenedArgs.size() >= 2) {
@@ -1110,13 +1111,13 @@ public class SystemOperator {
             } else {
                 command = flattenedArgs;
             }
-            
+
             // Run command and capture output
             ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(command));
             processBuilder.directory(new File(System.getProperty("user.dir")));
             copyPerlEnvToProcessBuilder(processBuilder);
             processBuilder.redirectErrorStream(false);  // Keep stderr separate
-            
+
             Process process = processBuilder.start();
             
             // Read all output as raw bytes to preserve exact output
@@ -1136,11 +1137,27 @@ public class SystemOperator {
             // Set $? to the exit status
             setGlobalVariable("main::?", String.valueOf(exitCode << 8));
             
-            // Throw exception to return control to caller with captured output
+            // The child-side exec can be wrapped in helper subroutines (Git.pm
+            // is one example).  Install the captured output into the original
+            // filehandle before unwinding to the subroutine that opened it.
+            RuntimeIO input = new RuntimeIO(new ProcessInputHandle(
+                    new ByteArrayInputStream(capturedOutput.getBytes(StandardCharsets.ISO_8859_1))));
+            RuntimeIO existing = pending.fileHandle.getRuntimeIO();
+            if (existing != null) {
+                existing.replaceStateFrom(input);
+            } else if (pending.fileHandle.value instanceof RuntimeGlob glob) {
+                glob.setIO(input);
+            } else {
+                pending.fileHandle.set(input);
+            }
+
+            // Throw exception to unwind helper subs and resume at the
+            // subroutine that initiated the fork-open.
             throw new ForkOpenCompleteException(
                     process.pid(),
                     capturedOutput,
-                    pending.fileHandle
+                    pending.fileHandle,
+                    pending.boundaryCode
             );
             
         } catch (ForkOpenCompleteException e) {
@@ -1150,7 +1167,7 @@ public class SystemOperator {
             // Command failed to run
             setGlobalVariable("main::!", e.getMessage());
             // Throw with empty output on failure
-            throw new ForkOpenCompleteException(0, "", pending.fileHandle);
+            throw new ForkOpenCompleteException(0, "", pending.fileHandle, pending.boundaryCode);
         }
     }
 

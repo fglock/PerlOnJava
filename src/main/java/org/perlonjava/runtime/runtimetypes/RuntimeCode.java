@@ -5472,7 +5472,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)
             if (targetException instanceof ForkOpenCompleteException forkEx) {
-                return forkOpenOutputToList(forkEx.capturedOutput, callContext);
+                if (forkEx.boundaryCode != null && forkEx.boundaryCode != this) {
+                    throw forkEx;
+                }
+                return forkOpenResult(forkEx, callContext);
             }
             if (targetException instanceof RuntimeException re) {
                 throw re;
@@ -5480,7 +5483,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new RuntimeException(targetException);
         } catch (ForkOpenCompleteException e) {
             // Handle fork-open completion (from exec in fork-open emulation)
-            return forkOpenOutputToList(e.capturedOutput, callContext);
+            if (e.boundaryCode != null && e.boundaryCode != this) {
+                throw e;
+            }
+            return forkOpenResult(e, callContext);
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable e) {
@@ -5605,7 +5611,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)
             if (targetException instanceof ForkOpenCompleteException forkEx) {
-                return forkOpenOutputToList(forkEx.capturedOutput, callContext);
+                if (forkEx.boundaryCode != null && forkEx.boundaryCode != this) {
+                    throw forkEx;
+                }
+                return forkOpenResult(forkEx, callContext);
             }
             if (targetException instanceof RuntimeException re) {
                 throw re;
@@ -5613,7 +5622,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new RuntimeException(targetException);
         } catch (ForkOpenCompleteException e) {
             // Handle fork-open completion (from exec in fork-open emulation)
-            return forkOpenOutputToList(e.capturedOutput, callContext);
+            if (e.boundaryCode != null && e.boundaryCode != this) {
+                throw e;
+            }
+            return forkOpenResult(e, callContext);
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable e) {
@@ -5646,6 +5658,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return new RuntimeList(arr);
         }
         return new RuntimeList(new RuntimeScalar(capturedOutput));
+    }
+
+    private static RuntimeList forkOpenResult(ForkOpenCompleteException exception, int callContext) {
+        if (exception.boundaryCode == null) {
+            return forkOpenOutputToList(exception.capturedOutput, callContext);
+        }
+        RuntimeList result = new RuntimeList();
+        result.add(exception.fileHandle);
+        return result;
     }
 
     /**

@@ -86,8 +86,13 @@ if (!$loaded) {
 
         # Merge our local blib additions with whatever PERL5LIB CPAN already set
         my @added = $self->_added_to_INC;
+        # Module::Build's generated helper scripts run in a fresh jperl
+        # process.  Dependency paths that Build.PL added directly to @INC
+        # are otherwise lost when that child receives only PERL5LIB.
+        push @added, grep { defined $_ && length $_ && $_ !~ /^jar:/ && -d $_ } @INC;
         my $sep   = $self->config('path_sep');
-        my @parts = @added;
+        my %seen;
+        my @parts = grep { !$seen{$_}++ } @added;
         push @parts, $ENV{PERL5LIB}
             if defined $ENV{PERL5LIB} && length $ENV{PERL5LIB};
         local $ENV{PERL5LIB} = join $sep, @parts;

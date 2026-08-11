@@ -321,19 +321,14 @@ public class SprintfNumericFormatter {
                     requestedPrecision, precision, conversion);
         }
 
-        // Java Formatter rounds large integral doubles through a short decimal
-        // representation (2^64 becomes 18446744073709552000). Perl formats the
-        // exact binary value, which matters once nvsize exposes the 64-bit
-        // sprintf matrix.
-        if ((conversion == 'f' || conversion == 'F') && precision == 0
-                && Double.isFinite(value) && Math.abs(value) >= 0x1.0p53
-                && value == Math.rint(value)) {
-            String result = new BigDecimal(value).setScale(0, RoundingMode.HALF_UP).toPlainString();
-            if (value >= 0) {
-                if (cleanFlags.contains("+")) result = "+" + result;
-                else if (cleanFlags.contains(" ")) result = " " + result;
-            }
-            return SprintfPaddingHelper.applyWidth(result, width, cleanFlags);
+        // Perl delegates decimal floating-point formatting to printf, whose
+        // default IEEE-754 rounding mode is ties-to-even. Java Formatter uses
+        // half-up for decimal conversions instead (for example, %.0f formats
+        // 2.5 as 3), which changes real calculations at exact half-way values.
+        // Format %f/%F from the exact binary double so both ordinary rounding
+        // and exact ties agree with Perl.
+        if (conversion == 'f' || conversion == 'F') {
+            return formatFixedPoint(value, cleanFlags, width, precision);
         }
 
         // Build format string for String.format
@@ -359,6 +354,26 @@ public class SprintfNumericFormatter {
         // Perl uses 'Inf' instead of Java's 'Infinity'
         result = result.replace("Infinity", "Inf");
         return result;
+    }
+
+    private String formatFixedPoint(double value, String flags, int width, int precision) {
+        boolean negative = Double.doubleToRawLongBits(value) < 0;
+        BigDecimal magnitude = new BigDecimal(Math.abs(value));
+        String result = magnitude.setScale(precision, RoundingMode.HALF_EVEN).toPlainString();
+
+        if (precision == 0 && flags.contains("#")) {
+            result += ".";
+        }
+
+        if (negative) {
+            result = "-" + result;
+        } else if (flags.contains("+")) {
+            result = "+" + result;
+        } else if (flags.contains(" ")) {
+            result = " " + result;
+        }
+
+        return SprintfPaddingHelper.applyWidth(result, width, flags);
     }
 
     private String formatHexFloatingPoint(double value, String flags, int width,

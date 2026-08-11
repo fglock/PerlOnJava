@@ -1459,6 +1459,18 @@ public class ArgumentParser {
             }
         }
 
+        // The Perl test harness may protect a value containing spaces with
+        // an outer pair of quotes.  The shell removes those quotes for a
+        // native Perl invocation; jperl receives them literally when the
+        // launcher has already tokenized the argument.
+        if (varValue.length() >= 2) {
+            char first = varValue.charAt(0);
+            char last = varValue.charAt(varValue.length() - 1);
+            if ((first == '\'' && last == '\'') || (first == '"' && last == '"')) {
+                varValue = varValue.substring(1, varValue.length() - 1);
+            }
+        }
+
         // Add the variable assignment to be prepended to the code
         if (parsedArgs.rudimentarySwitchAssignments == null) {
             parsedArgs.rudimentarySwitchAssignments = new StringBuilder();

@@ -1,6 +1,7 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 
 /**
  * Thread-local state for fork-open emulation.
@@ -60,11 +61,16 @@ public class ForkOpenState {
         
         /** I/O layers to apply (e.g., ":utf8") */
         public final String ioLayers;
+
+        /** The Perl subroutine that initiated the fork-open operation. */
+        public final RuntimeCode boundaryCode;
         
-        public PendingForkOpen(RuntimeScalar fileHandle, int tokenIndex, String ioLayers) {
+        public PendingForkOpen(RuntimeScalar fileHandle, int tokenIndex, String ioLayers,
+                               RuntimeCode boundaryCode) {
             this.fileHandle = fileHandle;
             this.tokenIndex = tokenIndex;
             this.ioLayers = ioLayers != null ? ioLayers : "";
+            this.boundaryCode = boundaryCode;
         }
     }
     
@@ -79,7 +85,8 @@ public class ForkOpenState {
      * @param ioLayers Optional I/O layers (e.g., ":utf8")
      */
     public static void setPending(RuntimeScalar fileHandle, int tokenIndex, String ioLayers) {
-        pendingState.set(new PendingForkOpen(fileHandle, tokenIndex, ioLayers));
+        pendingState.set(new PendingForkOpen(fileHandle, tokenIndex, ioLayers,
+                RuntimeCode.getActiveCodeAt(0)));
     }
     
     /**

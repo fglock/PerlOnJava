@@ -687,8 +687,13 @@ public class IOOperator {
         String mode = args[1].toString();
         RuntimeList runtimeList = new RuntimeList(Arrays.copyOfRange(args, 1, args.length));
 
-        // Clear any stale pending fork-open state before new open operation
-        ForkOpenState.clear();
+        // Preserve a pending fork-open while the child redirects STDOUT/ERR
+        // before exec.  The emulated child runs on this same JVM thread, so
+        // those setup opens must not erase the state that the subsequent exec
+        // consumes.  exec() and close() clear it when the operation completes.
+        if (!ForkOpenState.hasPending()) {
+            ForkOpenState.clear();
+        }
 
         RuntimeIO fh;
 

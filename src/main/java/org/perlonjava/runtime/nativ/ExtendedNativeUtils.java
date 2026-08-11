@@ -276,18 +276,15 @@ public class ExtendedNativeUtils extends NativeUtils {
 
     // ================== Network Information Functions ==================
 
-    public static RuntimeArray gethostbyname(int ctx, RuntimeBase... args) {
-        if (args.length < 1) return new RuntimeArray();
+    public static RuntimeBase gethostbyname(int ctx, RuntimeBase... args) {
+        if (args.length < 1) return ctx == SCALAR ? RuntimeScalarCache.scalarUndef : new RuntimeArray();
         String hostname = args[0].toString();
 
         String cacheKey = "host:" + hostname;
         if (hostInfoCache.containsKey(cacheKey)) {
             RuntimeArray cached = hostInfoCache.get(cacheKey);
             if (ctx == SCALAR && cached.size() >= 5) {
-                RuntimeBase packedAddress = cached.get(4);
-                RuntimeArray scalarResult = new RuntimeArray();
-                RuntimeArray.push(scalarResult, packedAddress);
-                return scalarResult;
+                return cached.get(4);
             }
             return cached;
         }
@@ -309,9 +306,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             hostInfoCache.put(cacheKey, result);
 
             if (ctx == SCALAR) {
-                RuntimeArray scalarResult = new RuntimeArray();
-                RuntimeArray.push(scalarResult, packedAddress);
-                return scalarResult;
+                return packedAddress;
             }
         } catch (Exception e) {
         }
@@ -828,7 +823,7 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         if (iterator.hasNext()) {
             String hostname = iterator.next();
-            return gethostbyname(ctx, new RuntimeScalar(hostname));
+            return (RuntimeArray) gethostbyname(RuntimeContextType.LIST, new RuntimeScalar(hostname));
         }
 
         return new RuntimeArray();
