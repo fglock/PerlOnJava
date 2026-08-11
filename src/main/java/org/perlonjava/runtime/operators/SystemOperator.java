@@ -301,14 +301,15 @@ public class SystemOperator {
     }
 
     private static void checkPathDirectories(String pathValue) {
-        if (SystemUtils.osIsWindows()) {
-            return;
-        }
-
-        for (String directory : pathValue.split(":", -1)) {
+        boolean windows = SystemUtils.osIsWindows();
+        String separator = windows ? ";" : ":";
+        for (String directory : pathValue.split(Pattern.quote(separator), -1)) {
             try {
                 Path path = Path.of(directory);
-                if (directory.isEmpty() || !path.isAbsolute() || isWorldWritableDirectory(path)) {
+                boolean absolute = path.isAbsolute()
+                        || (windows && (directory.startsWith("/") || directory.startsWith("\\")));
+                if (directory.isEmpty() || !absolute
+                        || (!windows && isWorldWritableDirectory(path))) {
                     throw insecurePathException();
                 }
             } catch (InvalidPathException e) {

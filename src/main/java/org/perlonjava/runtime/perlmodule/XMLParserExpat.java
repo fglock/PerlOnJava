@@ -2174,6 +2174,7 @@ public class XMLParserExpat extends PerlModuleBase {
             state.rawSystemIds = new HashMap<>();
         }
         state.rawSystemIds.put(rawSystemId, rawSystemId);
+        rememberWindowsRawSystemIdAliases(rawSystemId, state);
         try {
             java.net.URI rawUri = new java.net.URI(rawSystemId);
             if (rawUri.isAbsolute()) {
@@ -2184,6 +2185,29 @@ public class XMLParserExpat extends PerlModuleBase {
                 state.rawSystemIds.put(new java.net.URI(state.parseBaseUri).resolve(rawUri).toString(), rawSystemId);
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Xerces normalizes lexical Windows paths before reporting them to SAX.
+     * Keep aliases for those normalized spellings so Expat callbacks still see
+     * the exact SYSTEM identifier that appeared in the document.
+     */
+    private static void rememberWindowsRawSystemIdAliases(String rawSystemId, ParserState state) {
+        String normalized = rawSystemId.replace('\\', '/');
+        if (normalized.length() >= 10
+                && normalized.regionMatches(true, 0, "file://", 0, 7)
+                && Character.isLetter(normalized.charAt(7))
+                && normalized.charAt(8) == ':'
+                && normalized.charAt(9) == '/') {
+            state.rawSystemIds.put(normalized, rawSystemId);
+            state.rawSystemIds.put(normalized.substring(0, 8) + normalized.substring(9), rawSystemId);
+        } else if (normalized.length() >= 3
+                && Character.isLetter(normalized.charAt(0))
+                && normalized.charAt(1) == ':'
+                && normalized.charAt(2) == '/') {
+            state.rawSystemIds.put("file:/" + normalized, rawSystemId);
+            state.rawSystemIds.put("file:///" + normalized, rawSystemId);
         }
     }
 

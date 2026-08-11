@@ -2,8 +2,11 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.perlonjava.runtime.operators.Random;
 import org.perlonjava.runtime.perlmodule.NetSSLeay;
+
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -11,9 +14,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class MiscRuntimeIsolationTest {
 
     @Test
-    void randomSignalsStateVariablesEnvironmentAndRegistriesAreIndependent() {
+    void randomSignalsStateVariablesEnvironmentAndRegistriesAreIndependent(@TempDir Path tempDir) {
         PerlRuntime first = new PerlRuntime();
         PerlRuntime second = new PerlRuntime();
+        String firstDirectory = tempDir.resolve("phase11-first").toString();
+        String secondDirectory = tempDir.resolve("phase11-second").toString();
         double firstRandom;
         double firstSecondRandom;
         long firstLibContext;
@@ -25,7 +30,7 @@ class MiscRuntimeIsolationTest {
             firstSecondRandom = Random.rand(new RuntimeScalar(1)).getDouble();
             PerlSignalQueue.enqueue("USR1", new RuntimeScalar("first-handler"));
             StateVariable.markInitializedStateVariable(topLevel, "$phase11", 17);
-            RuntimeEnvironment.setCurrentDirectory("/tmp/phase11-first");
+            RuntimeEnvironment.setCurrentDirectory(firstDirectory);
             first.ioRegistryState.nextFileno.set(41);
             first.lifecycleState.weakRefsExist = true;
             first.diamondIOState.accumulatedLineNumber = 12;
@@ -38,7 +43,7 @@ class MiscRuntimeIsolationTest {
             assertFalse(PerlSignalQueue.hasPendingSignals());
             assertFalse(StateVariable.isInitializedStateVariable(topLevel, "$phase11", 17)
                     .getBoolean());
-            assertNotEquals("/tmp/phase11-first", RuntimeEnvironment.currentDirectory());
+            assertNotEquals(firstDirectory, RuntimeEnvironment.currentDirectory());
             assertEquals(3, second.ioRegistryState.nextFileno.get());
             assertFalse(second.lifecycleState.weakRefsExist);
             assertEquals(0, second.diamondIOState.accumulatedLineNumber);
@@ -51,14 +56,14 @@ class MiscRuntimeIsolationTest {
             Random.srand(new RuntimeScalar(12345));
             assertEquals(firstRandom, Random.rand(new RuntimeScalar(1)).getDouble());
             assertEquals(firstSecondRandom, Random.rand(new RuntimeScalar(1)).getDouble());
-            RuntimeEnvironment.setCurrentDirectory("/tmp/phase11-second");
+            RuntimeEnvironment.setCurrentDirectory(secondDirectory);
         }
 
         try (PerlRuntime.Binding ignored = first.bind()) {
             assertTrue(PerlSignalQueue.hasPendingSignals());
             assertTrue(StateVariable.isInitializedStateVariable(topLevel, "$phase11", 17)
                     .getBoolean());
-            assertEquals("/tmp/phase11-first", RuntimeEnvironment.currentDirectory());
+            assertEquals(firstDirectory, RuntimeEnvironment.currentDirectory());
             assertEquals(41, first.ioRegistryState.nextFileno.get());
             assertTrue(first.lifecycleState.weakRefsExist);
             assertEquals(12, first.diamondIOState.accumulatedLineNumber);
@@ -70,7 +75,7 @@ class MiscRuntimeIsolationTest {
         }
 
         try (PerlRuntime.Binding ignored = second.bind()) {
-            assertEquals("/tmp/phase11-second", RuntimeEnvironment.currentDirectory());
+            assertEquals(secondDirectory, RuntimeEnvironment.currentDirectory());
         }
     }
 }
