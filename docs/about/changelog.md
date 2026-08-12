@@ -4,6 +4,18 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Add Perl interpreter multiplicity and the supported ithread tranche across
+  the JVM and interpreter backends. Mutable execution state is owned by
+  independent `PerlRuntime` instances; child threads receive identity-aware
+  snapshots, while `threads::shared` preserves explicitly shared
+  scalar/array/hash storage. Implement create/join/detach and lifecycle/error
+  inspection, nested threads, child-only exit, `CLONE`/`CLONE_SKIP`, recursive
+  locks, condition variables, and compatible imports/stringification.
+  `Config` now reports `useithreads`, `usethreads`, and `usemultiplicity` as
+  `define`. Platform threads remain the default and virtual threads are an
+  experimental opt-in. Thread signals, effective stack sizing, blessed/tied
+  shared values, and some upstream core/native-callback suites remain limited;
+  see the [feature matrix](../reference/feature-matrix.md#concurrency-and-perl-threads).
 - CPAN/compiler tooling: unblock `Template::Lace`, `Sledge::Plugin::JSONRPC`,
   and `Catmandu::Exporter::MAB2` without distribution preferences. Add
   Java-backed `Data::Util` scalar inspection, a `YAML::Syck` compatibility
@@ -186,7 +198,6 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   - locale pragma
   - utf8 pragma
   - bytes pragma
-  - threads pragma
   - vmsish pragma
   - Constant folding - in ConstantFoldingVisitor.java
   - Overload operators: `++`, `--`.

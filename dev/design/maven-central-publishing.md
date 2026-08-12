@@ -55,7 +55,7 @@ a polished automated release including review and first-Portal validation.
 | Group ID | `org.perlonjava` in Gradle and Maven |
 | Artifact ID | `perlonjava` |
 | Version | `5.44.0` |
-| Runtime Java version | Java 22+ |
+| Runtime Java version | Java 24+ |
 | Standalone artifact | Shaded executable JAR; currently replaces the unclassified main JAR |
 | POM project metadata | Incomplete; URL is still the Maven example URL |
 | Sources JAR | Missing |
@@ -275,7 +275,7 @@ Create a dedicated GitHub Actions workflow with these properties:
 
 1. Trigger manually or from a published GitHub release, not on ordinary pushes.
 2. Require a release tag and verify it against every project version source.
-3. Build and test with Java 22 through the existing `make` gate.
+3. Build and test with Java 24 through the existing `make` gate.
 4. Require the normal Ubuntu and Windows CI jobs to pass before publishing.
 5. Publish exactly once from Ubuntu.
 6. Use GitHub environment protection for the production publishing job.
@@ -286,7 +286,8 @@ Create a dedicated GitHub Actions workflow with these properties:
 9. Enable automatic publication only after at least one successful release and
    rollback/recovery documentation exists.
 
-Do not use Java 21 in the release workflow; PerlOnJava requires Java 22+.
+Do not use an older Java release in the release workflow; PerlOnJava requires
+Java 24+.
 
 **Exit gate:** a dry-run workflow proves tag validation, artifact provenance,
 secret isolation, and single-uploader behavior.

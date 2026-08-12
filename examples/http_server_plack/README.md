@@ -8,7 +8,8 @@ A complete working example demonstrating how to run PSGI applications on PerlOnJ
 
 - **General PSGI support** - Any PSGI-compatible app can be adapted
 - **High-performance async I/O** - Netty handles 10k+ concurrent connections on a single thread
-- **Single-threaded model** - Compatible with PerlOnJava's no-threads/no-fork constraints
+- **Single-runtime PSGI model** - The handler deliberately confines one app
+  runtime even though PerlOnJava applications can create explicit ithreads
 - **Standard PSGI 1.1** - Full compliance with streaming and delayed response support
 
 ## Architecture
@@ -185,17 +186,22 @@ Framework-specific experiments are kept in `dev/sandbox/http_server/` until they
 
 ## Concurrency Model
 
-**Single-threaded async I/O** - Uses Netty's event loop (`NioEventLoopGroup(1)`) to handle concurrent connections without threads/fork:
+**Single-runtime async I/O** - Uses a Netty event loop to handle concurrent
+connections without concurrent callbacks into the captured PSGI application:
 
 ✅ **Good for:** I/O-bound apps (databases, APIs, file serving)  
 ✅ **Handles:** Thousands of concurrent connections efficiently  
 ⚠️ **Limitation:** CPU-bound request handlers may block other requests
 
-This design avoids PerlOnJava's thread-safety constraints while still providing excellent performance for typical web applications.
+PerlOnJava supports isolated Perl ithreads, but that capability does not make a
+single captured PSGI runtime concurrently callable. The handler therefore
+advertises `psgi.multithread => \0`. Applications may explicitly create
+ithreads for isolated work, subject to the documented thread limitations.
 
 ## Limitations
 
-- **Single-threaded** - CPU-intensive handlers block other requests
+- **Single application runtime** - CPU-intensive handlers block other requests;
+  the handler does not provide a pool of concurrently callable app runtimes
 
 ## Performance
 

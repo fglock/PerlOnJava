@@ -316,7 +316,7 @@ INVOKEDYNAMIC add(
 
 **Disadvantages**:
 - More complex to implement
-- Requires Java 7+ (PerlOnJava already requires Java 21)
+- Requires Java 7+ (PerlOnJava already requires Java 24)
 - Harder to debug
 
 ## Validation

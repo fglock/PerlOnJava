@@ -155,9 +155,10 @@ suite:
 The remaining ~80 failing test files cluster around features that are
 deliberately out of scope or genuinely unimplemented:
 
-- **`threads` / `fork`** — PerlOnJava has neither.  The handful of
-  tests that exercise `share`, `lock`, or fork-based DEMOLISH timing
-  cannot pass and are expected to fail.
+- **Thread/fork-specific Moose tests** — PerlOnJava now supports the documented
+  ithread and `threads::shared` tranche, including `share` and `lock`, but the
+  upstream Moose thread files have not all been promoted to the compatibility
+  gate. True `fork` and fork-based DEMOLISH timing remain unsupported.
 - **Numeric warning messages** (`Argument "x" isn't numeric in addition`)
   — PerlOnJava does not emit these specific warning categories yet.
 - **Stack-trace shape** — frames inside generated method modifiers
@@ -384,7 +385,7 @@ These are loaded automatically or via `use`:
 | `PadWalker` | Perl + Java | `peek_sub`, `closed_over`, `set_closed_over`; no `peek_my`, `peek_our`, or `var_name` yet |
 | `Class::XSAccessor` / `Class::XSAccessor::Array` | Perl | Pure-Perl replacement for the CPAN XS accessors; no entersub optimizer |
 | `Class::MOP` | Perl | Upstream 2.4000 source |
-| `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass (no threads). See note below. |
+| `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass. PerlOnJava ithreads are available, but Moose's thread-specific suite remains only partially classified. See note below. |
 | `B` | Perl | `svref_2object`, `B::CV`/`GV`/`STASH`, `CVf_ANON`, etc. — enough for `Class::MOP::get_code_info` and `B::Deparse`. |
 | `B::Flags` | Perl | Portable `flagspv`/`privatepv` names for the subset of OP/SV state exposed by `B`. |
 

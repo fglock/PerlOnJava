@@ -24,7 +24,7 @@
 10. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
-- JDK 22 or later
+- JDK 24 or later
 - Maven, or the included Gradle wrapper (recommended)
 - Optional: JDBC drivers for database connectivity
 
@@ -149,7 +149,7 @@ See [Database Access Guide](../guides/database-access.md) for detailed connectio
 ## Build Notes
 - Maven builds use `maven-shade-plugin` for creating the shaded JAR
 - Gradle builds use the Shadow plugin
-- Both configurations target Java 22
+- Both configurations target Java 24
 
 ## Java Library Upgrades
 
@@ -245,7 +245,7 @@ On Windows, use `gradlew.bat --version`. The wrapper version is defined in
 
 ### Java Version Compatibility
 
-PerlOnJava compiles for Java 22 and requires JDK 22 or later. Use the included
+PerlOnJava compiles for Java 24 and requires JDK 24 or later. Use the included
 wrapper so the Gradle version stays aligned with the project. For compatibility
 details beyond the checked-in wrapper, consult Gradle's
 [Java compatibility matrix](https://docs.gradle.org/current/userguide/compatibility.html).

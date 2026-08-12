@@ -15,6 +15,24 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 Run the script directly from the repository root. Its shebang selects the system
 Perl, and its required Perl modules are listed at the top of the script.
 
+## Runtime thread configuration
+
+`Configure.pl` does not toggle Perl thread support. The bundled Perl `Config`
+module reports the shipped runtime capabilities directly:
+
+| Key | Value | Meaning |
+|---|---|---|
+| `useithreads` | `define` | Snapshot-based Perl interpreter threads are available. |
+| `usethreads` | `define` | The supported Perl thread API is enabled. |
+| `usemultiplicity` | `define` | Independent `PerlRuntime` instances are supported in one JVM. |
+
+Platform Java threads are the stable default. The experimental virtual-thread
+executor is selected process-wide with `JPERL_THREAD_MODE=virtual` or the JVM
+property `-Djperl.thread.mode=virtual`; `platform` selects the default
+explicitly. Unknown values are rejected. See
+[CLI Options](cli-options.md#thread-execution-mode) and the
+[feature matrix](feature-matrix.md#concurrency-and-perl-threads).
+
 ## Options
 
 ### Help and Information

@@ -44,6 +44,12 @@ These capabilities are implemented and available in the current release:
 - **Overload Pragma** — Arithmetic, comparison, string, dereference, and regex overloading. Method name resolution for `overload::nil` pattern. See [Feature Matrix — overload](../reference/feature-matrix.md#pragmas).
 - **DBI with JDBC** — Full DBI API backed by JDBC drivers. See [Feature Matrix — DBI](../reference/feature-matrix.md#dbi-module).
 - **I/O Subsystem** — Sockets, I/O layers (`:raw`, `:utf8`, `:crlf`, `:encoding()`), in-memory files, pipes, file descriptor duplication, `flock`, tied handles.
+- **Multiplicity and Perl ithreads** — Mutable interpreter state is owned by
+  `PerlRuntime`; `Config` advertises `useithreads`, `usethreads`, and
+  `usemultiplicity`. The supported `threads` and `threads::shared` tranche
+  includes isolated create/join, shared scalar/array/hash storage, recursive
+  locks, and condition variables on both backends. See the
+  [feature matrix](../reference/feature-matrix.md#concurrency-and-perl-threads).
 - **Pack/Unpack** — Full template support for binary data manipulation. See `dev/design/pack_unpack_architecture.md`.
 - **Subroutine Prototypes and Signatures** — All prototype characters supported; formal parameter signatures implemented.
 - **`format`/`write`** — Report generation with `formline` and `$^A` accumulator.
@@ -52,7 +58,7 @@ These capabilities are implemented and available in the current release:
 - **CI/CD Pipeline** — GitHub Actions testing on Ubuntu and Windows.
 - **Startup Performance** — Lazy initialization of expensive JNA calls ($( and $) variables). See `dev/design/pr328-startup-performance.md`.
 - **FFM Migration** — Replaced JNR-POSIX with Java's Foreign Function & Memory API (JEP 454), eliminating `sun.misc.Unsafe` warnings on Java 24+. Migrated `chmod`, `kill`, `stat`, `lstat`, `link`, `fcntl`, `isatty`, `getpwnam`, `umask`, `waitpid`, and other POSIX calls. See `dev/design/ffm_migration.md` and PR #380.
-- **Docker Image** — Multi-stage `Dockerfile` with Eclipse Temurin JDK 22. Includes `jperl`, `jcpan`, `jperldoc`, `jprove` in `/usr/local/bin`.
+- **Docker Image** — Multi-stage `Dockerfile` with Eclipse Temurin JDK 24. Includes `jperl`, `jcpan`, `jperldoc`, `jprove` in `/usr/local/bin`.
 - **Debian Package** — `.deb` packaging via Gradle `ospackage` plugin (`make deb`). Installs to `/opt/perlonjava` with symlinks in `/usr/local/bin` and bundled SBOM.
 
 ---
@@ -139,9 +145,9 @@ See `dev/design/jsr223-perlonjava-web.md`.
 
 ### JDK Compatibility Matrix
 
-PerlOnJava requires Java 22+ (FFM API). Remaining work:
+PerlOnJava requires Java 24+. Remaining work:
 
-- Test and document compatibility with JDK 22, 23, 24, and future LTS releases.
+- Test and document compatibility with JDK 24 and future releases.
 - Ensure CI runs against multiple JDK versions.
 - Track JDK deprecations that affect PerlOnJava (e.g., `sun.misc.Unsafe` removal timeline).
 
@@ -259,16 +265,11 @@ See `dev/design/concurrency.md` for the comprehensive design covering multiplici
 
 ### Multiplicity
 
-Enable multiple independent Perl runtimes within a single JVM process.
-
-**Why it matters:**
-- Enables fork emulation, ithreads, and concurrent web request handling.
-- Required for true JSR-223 thread safety.
-- Unblocks production web server deployments.
-
-**Approach (hybrid):**
-1. Classloader-based isolation for quick prototyping (1-2 months).
-2. Gradual de-static-ification of runtime state into `PerlRuntime` instances (4-6 months).
+Multiple independent `PerlRuntime` instances and snapshot cloning are now
+implemented. Remaining work is compatibility hardening: close the applicable
+core/CPAN thread-suite gaps, prove native callback isolation, and define a
+reset contract before considering runtime pooling. Multiplicity alone does not
+make one JSR-223 engine or one captured PSGI app concurrently callable.
 
 ### Fork Emulation
 
@@ -280,12 +281,18 @@ Implement `fork()` via runtime cloning + thread. Currently returns `undef`.
 
 ### Threads (ithreads)
 
-Implement Perl's `threads` module using JVM threads with per-thread runtime cloning.
+The supported ithread tranche is shipped: snapshot-based variable isolation,
+create/join/detach and lifecycle inspection, nested threads and child exit,
+`threads::shared` storage, recursive locks, and condition variables. Platform
+threads are the default; virtual threads are experimental.
 
-- Variable isolation per thread (copy on creation).
-- `:shared` attribute for synchronized cross-thread variables.
-- Thread-local special variables, caches, and I/O handles.
-- `exit` semantics: exit current thread only.
+Remaining work:
+
+- Complete the currently partial applicable core suites and Storable thread test.
+- Implement thread signals and the remaining `object`/`wantarray` surface.
+- Decide whether effective per-thread stack sizing can be exposed safely.
+- Validate native callback/resource behavior and virtual-thread diagnostics on
+  the supported Java 24 baseline.
 
 ---
 
@@ -337,4 +344,3 @@ These features are unlikely to be implemented due to fundamental JVM constraints
 - **DBM file support** — `dbmclose`/`dbmopen` not implemented; use DBI instead.
 - **Source filters** — `Filter::Util::Call` style source manipulation is not planned.
 - **`Opcode.pm`** — Requires Perl opcode tree internals that don't exist in PerlOnJava's compilation model.
-

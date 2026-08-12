@@ -189,6 +189,23 @@ the user-facing summary, the relationship to the GC literature
 (Bacon 2004, Blackburn & McKinley 2003, *The Garbage Collection Handbook*),
 and a comparison with Perl 5 / JVM finalization.
 
+#### Runtime ownership and ithread snapshots
+
+Mutable interpreter state is owned by a `PerlRuntime`, including package
+globals, dynamic scope, warnings and hints, regex state, caller stacks,
+lifecycle queues, signal/alarm state, I/O registries, and runtime caches.
+Managed execution binds the appropriate runtime to the current Java thread and
+prevents accidental cross-runtime access.
+
+Creating a Perl ithread takes an identity-aware snapshot. Ordinary scalars,
+arrays, hashes, closures, aliases, cycles, and weak edges are cloned into the
+child and subsequently evolve independently. `CLONE_SKIP` is evaluated in the
+parent and `CLONE` runs after the child graph is installed. Java I/O/native
+resources are conservatively not duplicated. Storage marked through
+`threads::shared` is the exception: its backing identity is retained across the
+snapshot and guarded by shared locks and condition variables. See the
+[concurrency feature matrix](feature-matrix.md#concurrency-and-perl-threads).
+
 ## Interpreter Backend Details
 
 The interpreter provides an alternative execution path:
