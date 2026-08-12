@@ -1433,6 +1433,7 @@ public class SubroutineParser {
         // This prevents hitting JVM's 255 constructor argument limit for named subs
         // in modules like Perl::Tidy that have 200+ lexicals in scope.
         Set<String> usedVars = null;
+        Set<String> explicitlyUsedVars;
         {
             Set<String> usedVarSet = new HashSet<>();
             Set<String> declaredVarSet = new LinkedHashSet<>();
@@ -1440,6 +1441,7 @@ public class SubroutineParser {
                     new VariableCollectorVisitor(usedVarSet, declaredVarSet);
             block.accept(collector);
             placeholder.lexicalVariableNames = declaredVarSet;
+            explicitlyUsedVars = usedVarSet;
             if (!collector.hasEvalString()) {
                 usedVars = usedVarSet;
             }
@@ -1520,7 +1522,13 @@ public class SubroutineParser {
                     default -> throw new IllegalStateException("Unexpected value: " + sigil);
                 };
                 paramList.add(capturedVar);
-                capturedNames.add(entry.decl().equals("our") ? null : entry.name());
+                // Eval STRING requires conservatively retaining every visible
+                // runtime value, but that implementation capture is not a
+                // semantic closure edge. Record only names explicitly used by
+                // the sub AST for lifecycle/reachability decisions.
+                capturedNames.add(!entry.decl().equals("our")
+                        && explicitlyUsedVars.contains(entry.name())
+                        ? entry.name() : null);
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
             }
         }

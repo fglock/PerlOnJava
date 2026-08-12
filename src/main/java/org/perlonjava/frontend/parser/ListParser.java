@@ -222,6 +222,20 @@ public class ListParser {
                     expr.elements.add(parser.parseExpression(parser.getPrecedence(",")));
                     token = TokenUtils.peek(parser);
                     if (isComma(token)) {
+                        // Perl accepts a fat comma immediately before a postfix
+                        // dereference as a separator terminating an indirect
+                        // call's argument list:
+                        //
+                        //     create threads sub { ... } =>->join->()()
+                        //
+                        // Consume only that separator here.  The surrounding
+                        // expression parser must see the arrow so it binds to
+                        // the completed call, rather than treating `->` as the
+                        // start of another list argument.
+                        if (token.text.equals("=>") && isFollowedByArrow(parser)) {
+                            TokenUtils.consume(parser);
+                            break;
+                        }
                         token = consumeCommas(parser);
                     } else {
                         break;
@@ -243,6 +257,16 @@ public class ListParser {
 
     static boolean isComma(LexerToken token) {
         return token.text.equals(",") || token.text.equals("=>");
+    }
+
+    private static boolean isFollowedByArrow(Parser parser) {
+        int index = parser.tokenIndex + 1;
+        while (index < parser.tokens.size()
+                && parser.tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        return index < parser.tokens.size()
+                && parser.tokens.get(index).text.equals("->");
     }
 
     static LexerToken consumeCommas(Parser parser) {

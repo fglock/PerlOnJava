@@ -1228,7 +1228,7 @@ public class CompileAssignment {
 
                     bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("substr")) {
-                    bytecodeCompiler.compileNode(node.left, -1, rhsContext);
+                    bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.LVALUE);
                     int lvalueReg = bytecodeCompiler.lastResultReg;
 
                     bytecodeCompiler.emit(Opcodes.SET_SCALAR);

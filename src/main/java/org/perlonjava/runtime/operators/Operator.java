@@ -388,7 +388,7 @@ public class Operator {
             if (replacement != null) {
                 throw new PerlCompilerException("substr outside of string");
             }
-            if (warnEnabled) {
+            if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
                 WarnDie.warn(new RuntimeScalar("substr outside of string"),
                         RuntimeScalarCache.scalarEmptyString);
             }
@@ -427,7 +427,7 @@ public class Operator {
                 int adjustedLength = length + offset;
                 if (adjustedLength < 0) {
                     // Adjusted length is negative - warn and return undef
-                    if (warnEnabled) {
+                    if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
                         WarnDie.warn(new RuntimeScalar("substr outside of string"),
                                 RuntimeScalarCache.scalarEmptyString);
                     }
@@ -455,7 +455,7 @@ public class Operator {
 
         // Only warn/error for positive offsets that exceed string length
         if (offset > strLength) {
-            if (warnEnabled) {
+            if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
                 WarnDie.warn(new RuntimeScalar("substr outside of string"),
                         RuntimeScalarCache.scalarEmptyString);
             }

@@ -1,8 +1,8 @@
 # Perl Threads Implementation Plan
 
 **Status:** Active implementation plan
-**Version:** 2.0
-**Date:** 2026-08-11
+**Version:** 2.1
+**Date:** 2026-08-12
 **Supersedes:** the previous `concurrency.md` proposal and
 `dev/prompts/multiplicity-v2-plan.md`
 
@@ -456,13 +456,125 @@ single-threaded PSGI environment.
 Acceptance: the supported compatibility matrix is green and the compiler is
 fully functional with ithreads advertised.
 
-### Phase 23 — Optional virtual threads and runtime pooling
+### Phase 23 — Optional virtual threads
 
 After correctness and diagnostics are stable, benchmark an opt-in virtual-thread
-executor and reusable runtime pools. Neither is required for Perl compatibility.
+executor. Virtual threads are not required for Perl compatibility and remain an
+experimental process-wide choice until the complete platform-thread compatibility
+matrix also passes in virtual mode.
 
-Acceptance: no semantic change, no pinning surprise in supported workloads, and
-measured benefit over platform threads/full clone.
+Acceptance: no semantic change or native/FFM surprise in supported workloads.
+Promotion beyond experimental additionally requires a measured benefit over
+platform threads; runtime-clone cost must not be mistaken for scheduler cost.
+
+### Phase 24 — Final core syntax compatibility
+
+Finish the remaining `op/threads.t` postfix create/join expression without a
+thread-specific parser shortcut that changes ordinary anonymous-sub precedence.
+
+Acceptance: `op/threads.t` reaches 30/30 on JVM and interpreter backends while
+`class/threads.t` remains 4/4 and `threads-dirh.t` continues to exit cleanly.
+
+### Phase 25 — Snapshot graph integrity under large suites
+
+Remove null-payload and CODE-root cloning failures exposed by the large regex
+thread wrappers. Preserve graph identity, weak edges, and source immutability;
+do not repair these failures by sharing ordinary child values with the parent.
+
+Acceptance: `pat_psycho_thr.t`, `pat_rt_report_thr.t`, `pat_thr.t`,
+`regexp_unicode_prop_thr.t`, and `speed_thr.t` reach their direct, unthreaded
+suite baselines without clone exceptions on either backend.
+
+### Phase 26 — Scalar lvalue and magic parity
+
+Fix the ordinary `index`/`substr` lvalue, warning, overload, reference-
+stringification, and lexical-magic behavior exposed by their thread wrappers.
+Treat failures present in the direct suite as language/operator gaps rather than
+thread-cloning failures.
+
+Acceptance: direct and threaded forms both reach `index_thr.t` 415/415 and
+`substr_thr.t` 400/400 on JVM and interpreter backends.
+
+### Phase 27 — Regex runtime concurrency and debug state
+
+Complete runtime ownership and synchronization for user-defined Unicode
+properties and clone the lexical `re 'debug'` configuration and diagnostic
+routing required by threaded regex compilation.
+
+Acceptance: `user_prop_race_thr.t` reaches 3/3 within its bounded deadlines and
+`stclass_threads.t` reaches 6/6 with parent/child trace equivalence.
+
+### Phase 28 — General regex parity exposed by thread wrappers
+
+Implement the remaining parser/runtime features in `pat_re_eval`, `reg_email`,
+`regexp_qr_embed`, Unicode-property, conditional, control-verb, and lookbehind
+coverage. These are shared regex-language gaps, not permission to special-case
+the `_thr.t` harness.
+
+Acceptance: every applicable regex `_thr.t` wrapper has zero assertion delta
+from its direct companion suite and neither path terminates early.
+
+### Phase 29 — Complete and truthful `threads` API
+
+Implement current-thread/class-form `detach`, thread signals, `object`,
+`wantarray`, exit/context options, exit status, and the stack-size API where the
+JVM can honor it. Unsupported platform guarantees must fail clearly; capability
+methods must never advertise a silent no-op such as the current `kill` stub.
+
+Acceptance: system-Perl-validated API tests cover object and class forms,
+success/error/exit lifecycle, watchdog cancellation, import options, and
+capability reporting on both backends.
+
+### Phase 30 — Resource inheritance and Test2 stress
+
+Define inherited pipe, descriptor, and filehandle behavior for thread snapshots.
+Preserve the already-green default Test2 thread/IPC suites, then enable the
+applicable timeout and opt-in thread stress paths without changing Test2.
+
+Acceptance: `ipc_wait_timeout.t` observes Perl-compatible inherited-pipe
+behavior; default Test2 remains green; `AUTHOR_TESTING` and
+`T2_DO_THREAD_TESTS` thread suites form a separately reported stress gate.
+
+### Phase 31 — Native callbacks and handle ownership
+
+Define clone, child-owned creation, or explicit rejection for every native
+handle class. Bind callbacks to their captured runtime and make provider/handle
+registries safe under concurrent child creation and deterministic cleanup.
+
+Acceptance: Net::SSLeay `61_threads-cb-crash.t` and
+`62_threads-ctx_new-deadlock.t` pass without watchdog, deadlock, cross-runtime
+handle leakage, or callback misbinding; applicable thread-emulated server paths
+in the wider Net::SSLeay suite retain their non-thread baseline.
+
+### Phase 32 — Advanced shared values
+
+Extend `threads::shared` only where identity, magic, tie callbacks, locking, and
+clone behavior are defined. Blessed, tied, or magical graphs remain explicit
+errors until their complete semantics are proven.
+
+Acceptance: each newly supported value category has standard-Perl-validated
+identity, mutation, lock/condition, clone, destruction, and stress coverage.
+
+### Phase 33 — Compatibility completion, documentation, and examples
+
+Run the complete applicable core, Test2, Storable, and native thread matrix;
+update the feature matrix from raw results; and add a realistic dynamic
+map/reduce example that shares only its scheduler while returning worker-local
+aggregates through `join`.
+
+Acceptance: platform threads pass all supported tests on JVM and interpreter
+backends; every remaining skip is an explicit platform or unsupported-feature
+decision; virtual mode has no semantic delta; example output is deterministic
+across system Perl and all supported modes.
+
+### Phase 34 — Optional runtime pooling
+
+Consider reusable runtimes only after the fresh-runtime equivalence contract is
+implemented in full. Pooling is neither a Perl threads requirement nor a reason
+to weaken close/snapshot isolation.
+
+Acceptance: every item in `runtime-pooling-reset-contract.md` passes and reuse
+has a measured benefit over a fresh snapshot.
 
 ## 6. Known Reference Material and Warnings
 
@@ -478,7 +590,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 21–23 implemented; activation hardening continues
+### Current Status: Phase 23 implemented; compatibility hardening begins next
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -565,7 +677,7 @@ passes on system Perl and both PerlOnJava backends.
 The supported `threads` import/stringification surface is documented, while
 signals, effective stack sizing, `object`, and `wantarray` remain explicit
 limitations. Activation coverage passes on both backends. The first broader
-compatibility inventory currently reaches 28/30 in core `op/threads.t`, 368/400
+compatibility inventory currently reaches 29/30 in core `op/threads.t`, 368/400
 in `op/substr_thr.t`, and 2/6 in `re/stclass_threads.t`; `class/threads.t`,
 Storable's thread test, and `threads-dirh.t` complete. These are measured
 follow-up targets, not a claim that every upstream thread suite is green.
@@ -598,10 +710,21 @@ per live root; condition waiters remain strongly held only while a waiter is
 published. Focused contention and collection tests cover both properties.
 
 Java 24 virtual-thread diagnostics cover shared conditions, regex timeouts,
-thread lifecycle, and representative native FFM identity calls without a
-pinning trace or semantic delta. A platform/virtual inherited-descriptor probe
-failed identically in the current host environment, so broader native I/O and
-callback coverage remains required before virtual mode can be promoted.
+thread lifecycle, representative native FFM identity calls, child-created file
+I/O, and Test2 IPC without a pinning trace or semantic delta. A platform/virtual
+inherited-descriptor probe failed identically in the current host environment,
+so broader native callback coverage remains required before virtual mode can be
+promoted.
+
+Test2's general thread suites now pass, including the six-assertion IPC
+acceptance test on platform and virtual threads. This required preserving genuine
+closure captures through END dispatch and synchronizing the compiled-CV registry
+used by concurrent lazy materialization; no Test2-specific patch was added.
+
+Runtime pooling remains disabled. `PerlRuntime.close()` is a terminal operation,
+not a reset, and representative package, regex, and execution state deliberately
+remains observable on the closed object. The complete fresh-runtime equivalence
+contract and state inventory live in `runtime-pooling-reset-contract.md`.
 
 ### Implementation History
 
@@ -612,27 +735,24 @@ request history.
 
 ### Next Steps
 
-1. Finish the remaining activated core-thread gaps instead of treating partial
-   TAP counts as success. Raise `op/threads.t` from 28/30,
-   `op/substr_thr.t` from 368/400, and `re/stclass_threads.t` from 2/6 while
-   keeping `class/threads.t`, Storable's thread test, and `threads-dirh.t`
-   complete. The regex result now executes the child and exposes missing
-   thread-local `re 'debug'` trace compatibility; it is not a crash regression.
-   Classify every remaining skip as an explicit documented limitation, run each
-   file with the standard-Perl oracle first, and keep the exact counts in the
-   differential gate until they are complete. Only then expand to Test2 and
-   native-callback thread suites.
-2. Expand compatibility coverage to Test2 and native callback/resource suites,
-   defining an explicit clone or rejection policy for each native handle class.
-3. Extend the Java 24 virtual-thread diagnostic matrix to real native I/O and
-   callback workloads on supported CI hosts. Keep the mode experimental unless
-   those traces are clean and repeated benchmarks show a material benefit.
-   On Java 24, the initial creation/join smoke measured 30 cloned ithreads in
-   0.544 seconds on platform threads and 0.543 seconds on virtual threads with
-   identical checksums. That is semantic parity, not a demonstrated benefit,
-   and cannot substitute for native-I/O diagnostics on Java 24.
-4. Define and prove a complete reset contract before considering runtime pooling;
-   a pooled interpreter must be observably equivalent to a fresh snapshot.
+1. After PR 939 merges, implement Phases 24–28 as independent, always-green PRs:
+   final core syntax, snapshot graph integrity, scalar operator parity, regex
+   concurrency/debug state, and then general regex parity. For every `_thr.t`
+   result, record the direct companion suite in the same run and require zero
+   thread-induced delta rather than comparing aggregate TAP counts alone.
+2. Implement Phases 29–32 independently: truthful API behavior, resource
+   inheritance and Test2 stress, native callback/handle ownership, and only then
+   additional shared value categories. Preserve the green anchors after every
+   PR: `class/threads.t`, `threads-dirh.t`, Storable threads, and default Test2
+   thread/IPC coverage.
+3. Complete Phase 33 with the full platform-thread matrix on both backends,
+   followed by virtual-mode parity. Add `examples/threads/dynamic_map_reduce.pl`
+   to demonstrate a small shared scheduler, isolated worker-local hashes, and
+   deterministic join aggregation; do not claim a performance benefit from the
+   example.
+4. Keep virtual threads experimental until native callback diagnostics and
+   repeated benchmarks justify promotion. Keep runtime pooling disabled until
+   the separate Phase 34 reset contract proves fresh-runtime equivalence.
 
 ### Open Questions
 
@@ -649,4 +769,5 @@ request history.
 - `dev/prompts/multiplicity-v2-plan.md` — historical incremental plan
 - `dev/design/clone.md` — historical clone exploration, not the ithread cloner
 - `dev/design/attributes.md` — current attribute behavior
+- `dev/design/runtime-pooling-reset-contract.md` — required proof before pooling
 - `dev/design/fork_open_emulation.md` — process/fork-related alternatives
