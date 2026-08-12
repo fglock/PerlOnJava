@@ -18,4 +18,3 @@ is($PackageStashGetOrAdd::value, 'set through returned slot',
    'returned scalar is the package slot');
 is_deeply(\@PackageStashGetOrAdd::items, ['item'],
           'returned array is the package slot');
-

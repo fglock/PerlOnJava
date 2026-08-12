@@ -11,6 +11,11 @@ plan skip_all => 'tests PerlOnJava CPAN environment setup'
 
 require CPAN;
 
+{
+    package Local::CPANFrontend;
+    sub optprint { }
+}
+
 my $root = tempdir(CLEANUP => 1);
 my $older = "$root/Older-Dist";
 my $newer = "$root/Newer-Dist";
@@ -26,6 +31,7 @@ my $meta = bless {
 
 local $ENV{PERL5LIB} = '/existing/perl/lib';
 local $ENV{PATH} = '/existing/bin';
+local $CPAN::Frontend = bless {}, 'Local::CPANFrontend';
 
 $meta->set_perl5lib('dependency script test');
 
