@@ -84,22 +84,32 @@ public final class PerlThreadControlBlock {
 
     private void run() {
         try {
-            result = childRuntime.execute(() -> {
+            Outcome outcome = childRuntime.execute(() -> {
+                RuntimeBase value = null;
+                Throwable failure = null;
                 try {
-                    return entryPoint.run(childRuntime);
-                } catch (RuntimeException | Error failure) {
-                    throw failure;
-                } catch (Throwable failure) {
-                    throw new ThreadEntryException(failure);
+                    value = entryPoint.run(childRuntime);
+                } catch (Throwable thrown) {
+                    PerlThreadExitException exit = findThreadExit(thrown);
+                    if (exit != null) value = exit.values();
+                    else failure = thrown;
                 }
+                try {
+                    SpecialBlock.runEndBlocks(false);
+                } catch (Throwable endFailure) {
+                    if (failure == null) failure = endFailure;
+                }
+                return new Outcome(value, failure);
             });
-            finish(State.COMPLETED, null);
+            result = outcome.value();
+            finish(outcome.error() == null ? State.COMPLETED : State.FAILED, outcome.error());
         } catch (Throwable failure) {
-            if (failure instanceof ThreadEntryException wrapped) failure = wrapped.getCause();
             finish(State.FAILED, failure);
         } finally {
             finished.countDown();
-            if (detached) registry.remove(this);
+            if (detached) {
+                registry.remove(this);
+            }
         }
     }
 
@@ -148,8 +158,17 @@ public final class PerlThreadControlBlock {
     public boolean isDetached() { return detached; }
     public PerlRuntime childRuntime() { return childRuntime; }
     public Thread platformThread() { return platformThread; }
+    public Throwable error() { return error; }
 
-    private static final class ThreadEntryException extends RuntimeException {
-        ThreadEntryException(Throwable cause) { super(cause); }
+    private record Outcome(RuntimeBase value, Throwable error) {}
+
+    private static PerlThreadExitException findThreadExit(Throwable thrown) {
+        Throwable current = thrown;
+        while (current != null) {
+            if (current instanceof PerlThreadExitException exit) return exit;
+            if (current.getCause() == current) break;
+            current = current.getCause();
+        }
+        return null;
     }
 }

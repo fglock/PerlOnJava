@@ -25,6 +25,7 @@ public final class Threads extends PerlModuleBase {
             module.registerMethod("_is_joinable", null);
             module.registerMethod("_is_detached", null);
             module.registerMethod("_error", null);
+            module.registerMethod("_exit", null);
         } catch (NoSuchMethodException e) {
             throw new IllegalStateException("Missing threads backend method", e);
         }
@@ -111,9 +112,17 @@ public final class Threads extends PerlModuleBase {
         RuntimeScalar saved = object.get("error");
         PerlThreadControlBlock thread = findThread(object);
         if (thread != null && thread.state() == PerlThreadControlBlock.State.FAILED) {
-            return new RuntimeScalar("Thread failed").getList();
+            return new RuntimeScalar(errorText(thread.error())).getList();
         }
         return saved == null ? RuntimeScalarCache.scalarUndef.getList() : saved.getList();
+    }
+
+    public static RuntimeList _exit(RuntimeArray args, int ctx) {
+        if (PerlRuntime.current().perlThreadId() == 0) {
+            throw new IllegalStateException("threads->exit may only be called from a child thread");
+        }
+        RuntimeArray values = new RuntimeArray(RuntimeScalarCache.scalarUndef);
+        throw new PerlThreadExitException(values);
     }
 
     private static PerlThreadControlBlock findThread(RuntimeHash object) {

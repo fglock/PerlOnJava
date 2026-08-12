@@ -24,6 +24,8 @@ sub is_running { return _is_running($_[0]) }
 sub is_joinable { return _is_joinable($_[0]) }
 sub is_detached { return _is_detached($_[0]) }
 sub error { return _error($_[0]) }
+sub exit { shift if @_ && !ref($_[0]) && $_[0] eq __PACKAGE__; return _exit(@_) }
+sub kill { return }
 sub yield { select undef, undef, undef, 0; return }
 sub equal { return defined($_[0]) && defined($_[1]) && $_[0]->tid == $_[1]->tid }
 sub _stringify { return 'threads=' . $_[0]->tid }
