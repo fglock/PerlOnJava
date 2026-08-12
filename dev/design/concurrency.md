@@ -467,10 +467,16 @@ Acceptance: no semantic change or native/FFM surprise in supported workloads.
 Promotion beyond experimental additionally requires a measured benefit over
 platform threads; runtime-clone cost must not be mistaken for scheduler cost.
 
-### Phase 24 — Final core syntax compatibility
+### Phase 24 — Final core syntax compatibility (completed 2026-08-12)
 
 Finish the remaining `op/threads.t` postfix create/join expression without a
 thread-specific parser shortcut that changes ordinary anonymous-sub precedence.
+
+Implemented by keeping an unknown print-filehandle candidate as an expression
+when it is followed by a known indirect-object package. This fixes the general
+`print method Package LIST` ambiguity rather than recognizing `threads` or the
+specific postfix chain. A system-Perl-validated regression test covers the
+generic form.
 
 Acceptance: `op/threads.t` reaches 30/30 on JVM and interpreter backends while
 `class/threads.t` remains 4/4 and `threads-dirh.t` continues to exit cleanly.
@@ -590,7 +596,7 @@ has a measured benefit over a fresh snapshot.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 23 implemented; compatibility hardening begins next
+### Current Status: Phase 24 complete; Phase 25 is next
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -735,11 +741,11 @@ request history.
 
 ### Next Steps
 
-1. After PR 939 merges, implement Phases 24–28 as independent, always-green PRs:
-   final core syntax, snapshot graph integrity, scalar operator parity, regex
-   concurrency/debug state, and then general regex parity. For every `_thr.t`
-   result, record the direct companion suite in the same run and require zero
-   thread-induced delta rather than comparing aggregate TAP counts alone.
+1. Implement Phases 25–28 as independent, always-green PRs: snapshot graph
+   integrity, scalar operator parity, regex concurrency/debug state, and then
+   general regex parity. For every `_thr.t` result, record the direct companion
+   suite in the same run and require zero thread-induced delta rather than
+   comparing aggregate TAP counts alone.
 2. Implement Phases 29–32 independently: truthful API behavior, resource
    inheritance and Test2 stress, native callback/handle ownership, and only then
    additional shared value categories. Preserve the green anchors after every
