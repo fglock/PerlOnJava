@@ -478,7 +478,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 14 implemented and validated
+### Current Status: Phase 15 implemented and validated
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -521,6 +521,14 @@ are rebuilt without invoking FETCH/STORE. Nonportable Java I/O resources follow
 the documented conservative policy and become `undef` in the clone. Focused
 tests prove source immutability and cross-root alias preservation.
 
+Generated JVM closures now implement `CloneablePerlSubroutine`, exposing their
+captures in constructor order and rebuilding themselves from an explicit capture
+array. The graph cloner uses that contract without reflecting over field order.
+Interpreter closures rebuild immutable bytecode metadata while cloning constants,
+captures, state values, and recursive self references through the same identity
+map. Cross-backend tests prove scalar, array, and hash captures evolve independently
+after cloning.
+
 ### Implementation History
 
 Completed phase history is intentionally kept out of this living design
@@ -530,9 +538,7 @@ request history.
 
 ### Next Steps
 
-1. Add explicit JVM and interpreter capture metadata in Phase 15; do not infer
-   generated constructor order through reflection.
-2. Compose the cloner into a Phase 16 runtime snapshot, preflight `CLONE_SKIP`,
+1. Compose the cloner into a Phase 16 runtime snapshot, preflight `CLONE_SKIP`,
    and invoke `CLONE` only after the child graph is installed.
 
 ### Open Questions
