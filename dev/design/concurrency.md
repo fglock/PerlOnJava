@@ -1,8 +1,8 @@
 # Perl Threads Implementation Plan
 
 **Status:** Active implementation plan
-**Version:** 2.0
-**Date:** 2026-08-11
+**Version:** 2.1
+**Date:** 2026-08-12
 **Supersedes:** the previous `concurrency.md` proposal and
 `dev/prompts/multiplicity-v2-plan.md`
 
@@ -565,7 +565,7 @@ passes on system Perl and both PerlOnJava backends.
 The supported `threads` import/stringification surface is documented, while
 signals, effective stack sizing, `object`, and `wantarray` remain explicit
 limitations. Activation coverage passes on both backends. The first broader
-compatibility inventory currently reaches 28/30 in core `op/threads.t`, 368/400
+compatibility inventory currently reaches 29/30 in core `op/threads.t`, 368/400
 in `op/substr_thr.t`, and 2/6 in `re/stclass_threads.t`; `class/threads.t`,
 Storable's thread test, and `threads-dirh.t` complete. These are measured
 follow-up targets, not a claim that every upstream thread suite is green.
@@ -598,10 +598,21 @@ per live root; condition waiters remain strongly held only while a waiter is
 published. Focused contention and collection tests cover both properties.
 
 Java 24 virtual-thread diagnostics cover shared conditions, regex timeouts,
-thread lifecycle, and representative native FFM identity calls without a
-pinning trace or semantic delta. A platform/virtual inherited-descriptor probe
-failed identically in the current host environment, so broader native I/O and
-callback coverage remains required before virtual mode can be promoted.
+thread lifecycle, representative native FFM identity calls, child-created file
+I/O, and Test2 IPC without a pinning trace or semantic delta. A platform/virtual
+inherited-descriptor probe failed identically in the current host environment,
+so broader native callback coverage remains required before virtual mode can be
+promoted.
+
+Test2's general thread suites now pass, including the six-assertion IPC
+acceptance test on platform and virtual threads. This required preserving genuine
+closure captures through END dispatch and synchronizing the compiled-CV registry
+used by concurrent lazy materialization; no Test2-specific patch was added.
+
+Runtime pooling remains disabled. `PerlRuntime.close()` is a terminal operation,
+not a reset, and representative package, regex, and execution state deliberately
+remains observable on the closed object. The complete fresh-runtime equivalence
+contract and state inventory live in `runtime-pooling-reset-contract.md`.
 
 ### Implementation History
 
@@ -613,17 +624,17 @@ request history.
 ### Next Steps
 
 1. Finish the remaining activated core-thread gaps instead of treating partial
-   TAP counts as success. Raise `op/threads.t` from 28/30,
-   `op/substr_thr.t` from 368/400, and `re/stclass_threads.t` from 2/6 while
+   TAP counts as success. Raise the final parser case in `op/threads.t` and the
+   remaining partial results in `op/substr_thr.t` and `re/stclass_threads.t` while
    keeping `class/threads.t`, Storable's thread test, and `threads-dirh.t`
    complete. The regex result now executes the child and exposes missing
    thread-local `re 'debug'` trace compatibility; it is not a crash regression.
    Classify every remaining skip as an explicit documented limitation, run each
    file with the standard-Perl oracle first, and keep the exact counts in the
-   differential gate until they are complete. Only then expand to Test2 and
-   native-callback thread suites.
-2. Expand compatibility coverage to Test2 and native callback/resource suites,
-   defining an explicit clone or rejection policy for each native handle class.
+   differential gate until they are complete.
+2. Expand native callback/resource coverage beyond the passing POSIX identity,
+   child-file I/O, regex, and Test2 IPC diagnostics, defining an explicit clone
+   or rejection policy for each native handle class.
 3. Extend the Java 24 virtual-thread diagnostic matrix to real native I/O and
    callback workloads on supported CI hosts. Keep the mode experimental unless
    those traces are clean and repeated benchmarks show a material benefit.
@@ -631,8 +642,9 @@ request history.
    0.544 seconds on platform threads and 0.543 seconds on virtual threads with
    identical checksums. That is semantic parity, not a demonstrated benefit,
    and cannot substitute for native-I/O diagnostics on Java 24.
-4. Define and prove a complete reset contract before considering runtime pooling;
-   a pooled interpreter must be observably equivalent to a fresh snapshot.
+4. Implement every item in `runtime-pooling-reset-contract.md` before considering
+   runtime pooling; a pooled interpreter must be observably equivalent to a
+   fresh snapshot.
 
 ### Open Questions
 
@@ -649,4 +661,5 @@ request history.
 - `dev/prompts/multiplicity-v2-plan.md` — historical incremental plan
 - `dev/design/clone.md` — historical clone exploration, not the ithread cloner
 - `dev/design/attributes.md` — current attribute behavior
+- `dev/design/runtime-pooling-reset-contract.md` — required proof before pooling
 - `dev/design/fork_open_emulation.md` — process/fork-related alternatives

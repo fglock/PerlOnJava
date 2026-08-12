@@ -109,10 +109,6 @@ public class GlobalVariable {
         return globalState().deletedCodeRefPins();
     }
 
-    private static Map<Integer, RuntimeScalar> compiledCodeRefs() {
-        return globalState().compiledCodeRefs();
-    }
-
     private static Map<String, Integer> localizedCodeRefDepth() {
         return globalState().localizedCodeRefDepth();
     }
@@ -1597,7 +1593,7 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar getCompiledCodeRef(int id) {
-        RuntimeScalar ref = compiledCodeRefs().get(id);
+        RuntimeScalar ref = globalState().getCompiledCodeRef(id);
         return ref != null ? ref : new RuntimeScalar();
     }
 

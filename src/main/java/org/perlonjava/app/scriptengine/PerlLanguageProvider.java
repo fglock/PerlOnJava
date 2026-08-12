@@ -593,20 +593,16 @@ public class PerlLanguageProvider {
                     // file-scoped lexicals are destroyed before END block dispatch.
                     MortalList.flush();
 
-                    // Process captured variables whose scope has exited but whose
-                    // refCount was deferred because captureCount > 0. The interpreter
-                    // captures ALL visible lexicals for eval STRING support, inflating
-                    // captureCount on variables that closures don't actually use.
-                    // Now that all scopes have exited, it's safe to decrement.
-                    // This must happen before END blocks so that DBIC's LeakTracer
-                    // (which runs in an END block) sees objects properly DESTROY'd.
-                    MortalList.flushDeferredCaptures();
-
+                    // Genuine captures remain live while an END block can reach their
+                    // closure. Ready captures were already processed at scope exit.
                     CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                     try {
                         runEndBlocks();
                     } finally {
                         CallerStack.pop();
+                        // END may itself fail; captured cleanup still belongs after
+                        // the attempted END dispatch and before runtime teardown.
+                        MortalList.flushDeferredCaptures();
                     }
                     // Global destruction: walk stashes for tracked blessed objects
                     GlobalDestruction.runGlobalDestruction();
@@ -629,12 +625,12 @@ public class PerlLanguageProvider {
         } catch (Throwable t) {
             if (isMainProgram) {
                 MortalList.flush();  // Flush file-scoped lexical cleanup before END
-                MortalList.flushDeferredCaptures();  // Process captured vars (see above)
                 CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                 try {
                     runEndBlocks(false);  // Don't reset $? on exception path
                 } finally {
                     CallerStack.pop();
+                    MortalList.flushDeferredCaptures();  // Live captures outlast END
                 }
                 RuntimeIO.closeAllHandles();
             }

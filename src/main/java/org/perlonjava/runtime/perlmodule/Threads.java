@@ -51,14 +51,14 @@ public final class Threads extends PerlModuleBase {
             }
             code = GlobalVariable.getGlobalCodeRef(name);
         }
-        if (code.type != RuntimeScalarType.CODE) {
-            throw new IllegalArgumentException("threads->create requires a CODE reference");
-        }
+        // Perl accepts a reference-valued entry here and creates the ithread;
+        // the child then fails with "Not a CODE reference". Keeping creation
+        // asynchronous preserves join/error lifecycle and core diagnostics.
         // BEGIN-time code holds the global compilation lock. A new ithread may
         // need that lock for require/eval before it can signal readiness, so
         // core's test.pl watchdog would deadlock the compiler while polling it.
-        // Config still deliberately does not advertise ithreads; preserve the
-        // old detached watchdog-stub behavior at this interim boundary.
+        // Preserve the detached watchdog behavior at this compile-time boundary;
+        // starting a real child here could deadlock on the enclosing compile lock.
         if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
             RuntimeHash stub = new RuntimeHash();
             stub.put("tid", new RuntimeScalar(-1));
@@ -94,7 +94,12 @@ public final class Threads extends PerlModuleBase {
         try {
             PerlThreadControlBlock.Completion completion = thread.join();
             object.put("state", new RuntimeScalar("joined"));
-            object.put("error", new RuntimeScalar(errorText(completion.error())));
+            String error = errorText(completion.error());
+            object.put("error", new RuntimeScalar(error));
+            if (!error.isEmpty()) {
+                RuntimeIO.getStderr().write(
+                        "Thread " + thread.id() + " terminated abnormally: " + error + "\n");
+            }
             if (!(completion.value() instanceof RuntimeArray values)) return new RuntimeList();
             List<RuntimeBase> cloned = new RuntimeGraphCloner(
                     thread.childRuntime(), PerlRuntime.current()).cloneRoots(values.elements);

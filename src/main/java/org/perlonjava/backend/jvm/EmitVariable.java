@@ -950,7 +950,7 @@ public class EmitVariable {
                     // Fall through for unsupported ref aliasing targets (global vars, etc.)
                 }
 
-                int lhsContext = isCallableLvalueTarget(node.left)
+                int lhsContext = isScalarLvalueTarget(node.left)
                         ? RuntimeContextType.LVALUE
                         : RuntimeContextType.SCALAR;
                 node.left.accept(emitterVisitor.with(lhsContext));   // emit the variable
@@ -1064,7 +1064,12 @@ public class EmitVariable {
         return false;
     }
 
-    private static boolean isCallableLvalueTarget(Node node) {
+    private static boolean isScalarLvalueTarget(Node node) {
+        if (node instanceof OperatorNode operator) {
+            return operator.operator.equals("substr")
+                    || operator.operator.equals("pos")
+                    || operator.operator.equals("vec");
+        }
         if (!(node instanceof BinaryOperatorNode binop)) {
             return false;
         }

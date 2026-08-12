@@ -244,16 +244,14 @@ public class MortalList {
      * For each scalar, schedule a refCount decrement via
      * {@link #deferDecrementIfTracked}, then flush the pending list.
      * <p>
-     * Called from PerlLanguageProvider after the main script's
-     * {@code MortalList.flush()} and before END blocks, so that
-     * blessed objects whose refCount was kept elevated by interpreter
-     * closure captures (which capture ALL visible lexicals, not just
-     * referenced ones) have DESTROY fire before END block leak checks.
+     * Called from PerlLanguageProvider after END blocks, so that blessed
+     * objects retained by genuine live closures remain available to END.
+     * Interpreter closure over-capture can keep unrelated values alive until
+     * this boundary, but cannot justify destroying real captures before END.
      * <p>
-     * This is safe because at this point ALL lexical scopes have exited
-     * (the main script has returned). Closures installed in stashes still
-     * hold JVM references to the RuntimeScalar, but the selective
-     * refCount should reflect that the declaring scope is gone.
+     * At this point all lexical scopes and END blocks have exited. Closures can
+     * still hold JVM references to the RuntimeScalar, but selective refCount
+     * cleanup may now proceed into global destruction.
      */
     public static void flushDeferredCaptures() {
         LifecycleRuntimeState state = state();
@@ -269,8 +267,7 @@ public class MortalList {
         // After flushing deferred captures, clear weak refs for objects that
         // were rescued by DESTROY (e.g., Schema::DESTROY self-save pattern).
         // This must happen AFTER the flush above so that all pending refCount
-        // decrements have been processed, and BEFORE END blocks run so that
-        // DBIC's assert_empty_weakregistry sees the weak refs as undef.
+        // decrements have been processed and before global destruction.
         DestroyDispatch.clearRescuedWeakRefs();
 
         // Final sweep: clear weak refs for ALL remaining blessed objects.
@@ -282,7 +279,7 @@ public class MortalList {
         // leaks. Clearing weak refs here is safe because:
         // 1. Only weak refs are cleared — the Java objects remain alive
         // 2. CODE refs are excluded (they may still be called from stashes)
-        // 3. END blocks (where leak checks run) execute AFTER this point
+        // 3. END blocks have completed, so real closure captures are no longer needed
         WeakRefRegistry.clearAllBlessedWeakRefs();
     }
 

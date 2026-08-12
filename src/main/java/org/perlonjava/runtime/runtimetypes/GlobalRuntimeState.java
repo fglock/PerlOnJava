@@ -97,8 +97,8 @@ public final class GlobalRuntimeState {
         return deletedCodeRefPins;
     }
 
-    Map<Integer, RuntimeScalar> compiledCodeRefs() {
-        return compiledCodeRefs;
+    synchronized RuntimeScalar getCompiledCodeRef(int id) {
+        return compiledCodeRefs.get(id);
     }
 
     Map<String, Integer> localizedCodeRefDepth() {
@@ -270,7 +270,7 @@ public final class GlobalRuntimeState {
     }
 
     /** Copy package-owned interpreter state through one ithread graph cloner. */
-    void snapshotInto(GlobalRuntimeState target, RuntimeGraphCloner cloner) {
+    synchronized void snapshotInto(GlobalRuntimeState target, RuntimeGraphCloner cloner) {
         cloneMap(scalarValues, target.scalarValues, cloner, RuntimeScalar.class);
         cloneMap(arrayValues, target.arrayValues, cloner, RuntimeArray.class);
         cloneMap(hashValues, target.hashValues, cloner, RuntimeHash.class);
@@ -305,7 +305,8 @@ public final class GlobalRuntimeState {
     }
 
     /** Copy CV ids registered by a named sub that was materialized after snapshot. */
-    void snapshotCompiledCodeRefsInto(GlobalRuntimeState target, RuntimeGraphCloner cloner) {
+    synchronized void snapshotCompiledCodeRefsInto(
+            GlobalRuntimeState target, RuntimeGraphCloner cloner) {
         for (Map.Entry<Integer, RuntimeScalar> entry : compiledCodeRefs.entrySet()) {
             RuntimeScalar cloned = (RuntimeScalar) cloner.cloneValue(entry.getValue());
             RuntimeScalar existing = target.compiledCodeRefs.get(entry.getKey());

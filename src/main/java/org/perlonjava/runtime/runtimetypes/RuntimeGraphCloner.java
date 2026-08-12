@@ -84,6 +84,7 @@ public class RuntimeGraphCloner {
             clones.put(value, value);
             return value;
         }
+        if (value instanceof RuntimeCode code) return cloneCode(code);
         if (value instanceof RuntimeStash stash) return cloneStash(stash);
         if (value instanceof RuntimeGlob glob) return cloneGlob(glob);
         if (value instanceof RuntimeScalar scalar) return cloneScalar(scalar);
