@@ -478,7 +478,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 15 implemented and validated
+### Current Status: Phase 16 implemented and validated
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -529,6 +529,14 @@ captures, state values, and recursive self references through the same identity
 map. Cross-backend tests prove scalar, array, and hash captures evolve independently
 after cloning.
 
+`PerlRuntime.snapshotClone()` now pre-materializes lazy clone hooks, evaluates
+`CLONE_SKIP` in the parent, copies package globals and CODE slots through one
+graph cloner, and invokes `CLONE` in deterministic package order after the child
+graph is installed. The child keeps fresh execution, lifecycle, signal/alarm,
+native, classloader, cache, and I/O state. Snapshot tests cover both backends,
+global alias isolation, skipped blessed objects, parent immutability, hook
+context, and empty child execution stacks. Thread capability flags remain off.
+
 ### Implementation History
 
 Completed phase history is intentionally kept out of this living design
@@ -538,8 +546,10 @@ request history.
 
 ### Next Steps
 
-1. Compose the cloner into a Phase 16 runtime snapshot, preflight `CLONE_SKIP`,
-   and invoke `CLONE` only after the child graph is installed.
+1. Implement Phase 17's internal platform-thread control block with explicit
+   ownership, completion/error state, join/detach transitions, and cleanup.
+2. Keep the public Perl `threads` stub and `Config` capability flags unchanged
+   until the Phase 18 compatibility tranche is green.
 
 ### Open Questions
 

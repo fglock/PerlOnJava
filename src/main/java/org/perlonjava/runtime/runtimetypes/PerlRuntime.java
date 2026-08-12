@@ -28,6 +28,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.TreeSet;
 
 /**
  * Identity and scoped thread binding for one Perl interpreter instance.
@@ -200,7 +201,16 @@ public final class PerlRuntime implements AutoCloseable {
         Objects.requireNonNull(operation, "operation");
         executionLock.lock();
         try {
-            if (!initialized) initialize();
+            if (!initialized) {
+                // Public provider/JSR entry points may have initialized this
+                // runtime before it was adopted by the managed lifecycle API.
+                // Never reset that live package graph just to mark ownership.
+                if (globalState.coreGlobalsInitialized()) {
+                    initialized = true;
+                } else {
+                    initialize();
+                }
+            }
             try (Binding ignored = bind()) {
                 return operation.call();
             }
@@ -230,6 +240,83 @@ public final class PerlRuntime implements AutoCloseable {
 
     public boolean isClosed() {
         return closed;
+    }
+
+    /**
+     * Clone this interpreter's package graph for a new ithread. Execution,
+     * lifecycle, alarm, signal, native and I/O state starts fresh in the child.
+     */
+    public PerlRuntime snapshotClone() {
+        executionLock.lock();
+        try {
+            if (closed) throw new IllegalStateException("PerlRuntime is closed");
+            if (!initialized) {
+                if (globalState.coreGlobalsInitialized()) {
+                    initialized = true;
+                } else {
+                    initialize();
+                }
+            }
+
+            Set<String> skipped;
+            try (Binding ignored = bind()) {
+                materializeCloneHookDefinitions();
+                skipped = preflightCloneSkip();
+            }
+
+            PerlRuntime child = new PerlRuntime();
+            RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
+            try (Binding ignored = bind()) {
+                globalState.snapshotInto(child.globalState, cloner);
+            }
+            child.currentDirectory = currentDirectory;
+            child.initialized = true;
+            try (Binding ignored = child.bind()) {
+                child.runCloneHooks();
+            }
+            return child;
+        } finally {
+            executionLock.unlock();
+        }
+    }
+
+    private Set<String> preflightCloneSkip() {
+        Set<String> skipped = new HashSet<>();
+        for (String fqn : new TreeSet<>(globalState.codeRefs().keySet())) {
+            if (!fqn.endsWith("::CLONE_SKIP")) continue;
+            RuntimeScalar hook = globalState.codeRefs().get(fqn);
+            if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
+            String packageName = fqn.substring(0, fqn.length() - "::CLONE_SKIP".length());
+            RuntimeArray args = new RuntimeArray(new RuntimeScalar(packageName));
+            if (RuntimeCode.apply(hook, args, RuntimeContextType.SCALAR).scalar().getBoolean()) {
+                skipped.add(packageName);
+            }
+        }
+        return skipped;
+    }
+
+    private void materializeCloneHookDefinitions() {
+        for (Map.Entry<String, RuntimeScalar> entry
+                : new java.util.ArrayList<>(globalState.codeRefs().entrySet())) {
+            String fqn = entry.getKey();
+            if (!fqn.endsWith("::CLONE") && !fqn.endsWith("::CLONE_SKIP")) continue;
+            RuntimeScalar hook = entry.getValue();
+            if (hook != null && hook.value instanceof RuntimeCode code
+                    && code.compilerSupplier != null) {
+                code.compilerSupplier.get();
+            }
+        }
+    }
+
+    private void runCloneHooks() {
+        for (String fqn : new TreeSet<>(globalState.codeRefs().keySet())) {
+            if (!fqn.endsWith("::CLONE") || fqn.endsWith("::CLONE_SKIP")) continue;
+            RuntimeScalar hook = globalState.codeRefs().get(fqn);
+            if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
+            String packageName = fqn.substring(0, fqn.length() - "::CLONE".length());
+            RuntimeCode.apply(hook, new RuntimeArray(new RuntimeScalar(packageName)),
+                    RuntimeContextType.VOID);
+        }
     }
 
     /** Release runtime-owned I/O, alarms, signals, and lifecycle registries. */

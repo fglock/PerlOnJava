@@ -8,6 +8,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.GLOB;
@@ -26,11 +27,18 @@ public class RuntimeGraphCloner {
     private final PerlRuntime targetRuntime;
     private final IdentityHashMap<Object, Object> clones = new IdentityHashMap<>();
     private final List<RuntimeScalar> weakReferences = new ArrayList<>();
+    private final Set<String> skippedClasses;
     private int publicDepth;
 
     public RuntimeGraphCloner(PerlRuntime sourceRuntime, PerlRuntime targetRuntime) {
+        this(sourceRuntime, targetRuntime, Set.of());
+    }
+
+    public RuntimeGraphCloner(
+            PerlRuntime sourceRuntime, PerlRuntime targetRuntime, Set<String> skippedClasses) {
         this.sourceRuntime = java.util.Objects.requireNonNull(sourceRuntime, "sourceRuntime");
         this.targetRuntime = java.util.Objects.requireNonNull(targetRuntime, "targetRuntime");
+        this.skippedClasses = Set.copyOf(skippedClasses);
     }
 
     public PerlRuntime sourceRuntime() {
@@ -167,6 +175,8 @@ public class RuntimeGraphCloner {
         target.isDeclared = source.isDeclared;
         target.isSymbolicReference = source.isSymbolicReference;
         target.isClosurePrototype = source.isClosurePrototype;
+        target.definitionPending = source.definitionPending;
+        target.compilerSupplier = source.compilerSupplier;
         target.isMapGrepBlock = source.isMapGrepBlock;
         target.isEvalBlock = source.isEvalBlock;
         target.isTryExpressionWrapper = source.isTryExpressionWrapper;
@@ -249,7 +259,12 @@ public class RuntimeGraphCloner {
             target.type = UNDEF;
             target.value = null;
         } else if (source.value instanceof RuntimeBase base) {
-            target.value = cloneValue(base);
+            if (shouldSkip(base)) {
+                target.type = UNDEF;
+                target.value = null;
+            } else {
+                target.value = cloneValue(base);
+            }
         } else if (source.value instanceof byte[] bytes) {
             target.value = bytes.clone();
         } else {
@@ -382,6 +397,13 @@ public class RuntimeGraphCloner {
         if (className == null || className.isEmpty()) return 0;
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
             return NameNormalizer.getBlessId(className);
+        }
+    }
+
+    private boolean shouldSkip(RuntimeBase base) {
+        if (base.blessId == 0 || skippedClasses.isEmpty()) return false;
+        try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+            return skippedClasses.contains(NameNormalizer.getBlessStr(base.blessId));
         }
     }
 
