@@ -3482,6 +3482,20 @@ sub _perlonjava_prereq_reqtype {
     return "b";
 }
 
+sub _perlonjava_available_file_satisfies_prereq {
+    my ($self, $prereq_pm, $need_module) = @_;
+    return 1 unless exists $prereq_pm->{requires}{$need_module};
+
+    # A dependency reached from `cpan -t` is deliberately built and exposed
+    # through PERL5LIB rather than installed.  Its runtime prerequisites must
+    # therefore be allowed to come from other successfully tested blib trees.
+    # Requiring an installed file here sends large graphs back around the
+    # queue indefinitely (Dist::Zilla -> Config::MVP::Reader::INI was the
+    # reproducible case).  Normal install commands retain CPAN's original
+    # installed-runtime-prerequisite rule.
+    return $self->_perlonjava_skip_dependency_tests ? 1 : 0;
+}
+
 sub unsat_prereq {
     my($self,$slot) = @_;
     my($merged_hash,$prereq_pm) = $self->prereqs_for_slot($slot);
@@ -3540,7 +3554,9 @@ sub unsat_prereq {
             # sufficient and available_file is sufficient on
             # both build_requires and configure_requires
             my $sufficient = $inst_file ||
-                ( exists $prereq_pm->{requires}{$need_module} ? 0 : $available_file );
+                ($available_file &&
+                 $self->_perlonjava_available_file_satisfies_prereq(
+                     $prereq_pm, $need_module));
             if ( $sufficient
                 and ( # a few quick short circuits
                      not defined $need_version
@@ -4250,6 +4266,17 @@ sub test {
         return $self->success("Skipping dependency tests; use --strict-dependency-tests to enable them");
     }
 
+    # Test prerequisites are resolved in this process, before the test command
+    # is spawned.  Make the already-tested dependency blibs visible during
+    # that resolution as well as during test execution.  Previously this was
+    # done only after satisfy_test_requires(), so Test::DZil and other modules
+    # supplied by a tested-but-uninstalled distribution were repeatedly
+    # considered missing.
+    local $ENV{PERL5LIB} = defined($ENV{PERL5LIB})
+                           ? $ENV{PERL5LIB}
+                           : ($ENV{PERLLIB} || "");
+    $CPAN::META->set_perl5lib;
+
     my $test_prereqs_satisfied = eval { $self->satisfy_test_requires };
     if ($@) {
         $self->post_test();
@@ -4268,15 +4295,10 @@ sub test {
     # warn "XDEBUG: checking for notest: $self->{notest} $self";
     my $make = $self->{modulebuild} ? "Build" : "make";
 
-    local $ENV{PERL5LIB} = defined($ENV{PERL5LIB})
-                           ? $ENV{PERL5LIB}
-                           : ($ENV{PERLLIB} || "");
-
     local $ENV{PERL5OPT} = defined $ENV{PERL5OPT} ? $ENV{PERL5OPT} : "";
     local $ENV{PERL_USE_UNSAFE_INC} =
         exists $ENV{PERL_USE_UNSAFE_INC} && defined $ENV{PERL_USE_UNSAFE_INC}
         ? $ENV{PERL_USE_UNSAFE_INC} : 1; # test
-    $CPAN::META->set_perl5lib;
     local $ENV{MAKEFLAGS}; # protect us from outer make calls
     local $ENV{PERL_MM_USE_DEFAULT} = 1 if $CPAN::Config->{use_prompt_default};
     local $ENV{NONINTERACTIVE_TESTING} = 1 if $CPAN::Config->{use_prompt_default};

@@ -239,14 +239,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return stack.isEmpty() ? null : stack.peek();
     }
 
-    /** Resolve the active @_ after a localized *_ replaced its ARRAY slot. */
+    /**
+     * Return the current call frame's argument array for {@code goto &sub}.
+     *
+     * <p>A {@code local *_} performed by this call frame replaces its argument
+     * array for a tail call. An underscore glob localized by an outer frame
+     * (as File::Find does) must not replace a nested call's arguments.</p>
+     */
     public static RuntimeArray getGotoArgs(RuntimeArray lexicalArgs, String packageName) {
-        String globName = packageName + "::_";
-        if (RuntimeGlob.isLocalizedGlob(globName)) {
-            RuntimeArray localized = GlobalVariable.globalArrays.get(globName);
-            if (localized != null) return localized;
-        }
-        RuntimeArray localized = RuntimeGlob.localizedUnderscoreArray();
+        RuntimeArray localized = RuntimeGlob.localizedUnderscoreArrayForCurrentCall();
         if (localized != null) return localized;
         return lexicalArgs;
     }

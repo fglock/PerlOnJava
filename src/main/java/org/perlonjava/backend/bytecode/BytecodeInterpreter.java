@@ -1770,7 +1770,7 @@ public class BytecodeInterpreter {
                                 }
 
                                 RuntimeArray callArgs = registers[argsReg].getTailCallArrayOfAlias();
-                                RuntimeArray localizedArgs = RuntimeGlob.localizedUnderscoreArray();
+                                RuntimeArray localizedArgs = RuntimeGlob.localizedUnderscoreArrayForCurrentCall();
                                 if (localizedArgs != null) {
                                     callArgs = localizedArgs;
                                 }

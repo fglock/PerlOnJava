@@ -672,6 +672,32 @@ public class ReachabilityWalker {
      */
     public static boolean isScalarReachable(RuntimeScalar target) {
         if (target == null) return false;
+
+        // Most calls come from reference assignment's weak-owner guard. Avoid
+        // rebuilding and traversing the complete package-root graph when the
+        // owning scalar has a directly verifiable root.
+        if (!target.scopeExited && MyVarCleanupStack.isRegistered(target)) {
+            return true;
+        }
+        if (target.isStoredInRegisteredContainerOwner()) {
+            return true;
+        }
+        RuntimeBase container = target.containerOwner;
+        if (container instanceof RuntimeHash hash
+                && hash.isPackageRootedHash()
+                && hash.elements.containsValue(target)) {
+            return true;
+        }
+        if (container instanceof RuntimeArray array
+                && array.isPackageGlobalRoot
+                && array.elements.contains(target)) {
+            return true;
+        }
+        if (target.isPackageGlobalRoot
+                && (GlobalVariable.globalVariables.containsValue(target)
+                    || GlobalVariable.globalCodeRefs.containsValue(target))) {
+            return true;
+        }
         final int MAX_VISITS = 50_000;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -725,7 +751,14 @@ public class ReachabilityWalker {
         while (!todo.isEmpty() && visits < MAX_VISITS) {
             RuntimeBase cur = todo.removeFirst();
             visits++;
-            if (cur instanceof RuntimeHash hash) {
+            // A RuntimeStash is a synthetic view across the global slot maps,
+            // all of which were seeded above. Walking its values both creates
+            // transient glob proxies and rescans every global symbol for each
+            // refcount transition.
+            if (cur instanceof RuntimeStash) {
+                continue;
+            } else if (cur instanceof RuntimeHash hash) {
+                if (hash.elements instanceof HashSpecialVariable) continue;
                 for (RuntimeScalar val : hash.elements.values()) {
                     if (val == null) continue;
                     // Skip weak refs — they don't keep their referent alive.

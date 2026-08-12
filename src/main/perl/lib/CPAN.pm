@@ -1488,12 +1488,40 @@ sub set_perl5lib {
     #my @dirs = map {("$_/blib/arch", "$_/blib/lib")} keys %{$self->{is_tested}};
     #$CPAN::Frontend->myprint("Prepending @dirs to PERL5LIB.\n");
 
-    my @dirs = map {("$_/blib/arch", "$_/blib/lib")} $self->_list_sorted_descending_is_tested;
+    my @tested_build_dirs = $self->_list_sorted_descending_is_tested;
+    my @dirs = map {("$_/blib/arch", "$_/blib/lib")} @tested_build_dirs;
     return if !@dirs;
+
+    # set_perl5lib is called at every distribution phase.  Feeding the
+    # PERL5LIB produced by the previous call back into the next one used to
+    # duplicate the complete dependency graph repeatedly.  Large graphs such
+    # as Dist::Zilla's eventually consumed gigabytes while CPAN rescanned the
+    # same paths.  Preserve first-seen order while making phase setup
+    # idempotent.
+    my %seen_perllib;
+    my @combined_dirs = grep { !$seen_perllib{$_}++ } @dirs, @env;
+
+    # A tested-but-not-yet-installed prerequisite can provide command-line
+    # tools as well as Perl libraries.  CPAN already exposes its blib/lib and
+    # blib/arch through PERL5LIB; expose blib/script through PATH for the same
+    # lifetime.  This lets downstream build rules invoke declared tools such
+    # as Template Toolkit's `tpage` without prematurely installing the
+    # prerequisite.  Repeated phase setup must remain idempotent because the
+    # same dependency graph is visited during configure, make, and test.
+    my @script_dirs = grep { -d $_ }
+                      map { "$_/blib/script" } @tested_build_dirs;
+    if (@script_dirs) {
+        my @path = defined($ENV{PATH}) && length($ENV{PATH})
+                 ? split(/\Q$Config::Config{path_sep}\E/, $ENV{PATH})
+                 : ();
+        my %seen;
+        $ENV{PATH} = join $Config::Config{path_sep},
+                          grep { !$seen{$_}++ } @script_dirs, @path;
+    }
 
     if (@dirs < 12) {
         $CPAN::Frontend->optprint('perl5lib', "Prepending @dirs to PERL5LIB for '$for'\n");
-        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @dirs, @env;
+        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @combined_dirs;
     } elsif (@dirs < 24 ) {
         my @d = map {my $cp = $_;
                      $cp =~ s/^\Q$CPAN::Config->{build_dir}\E/%BUILDDIR%/;
@@ -1503,10 +1531,10 @@ sub set_perl5lib {
                                  "%BUILDDIR%=$CPAN::Config->{build_dir} ".
                                  "for '$for'\n"
                                 );
-        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @dirs, @env;
+        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @combined_dirs;
     } else {
         my $cnt = keys %{$self->{is_tested}};
-        my $newenv = join $Config::Config{path_sep}, @dirs, @env;
+        my $newenv = join $Config::Config{path_sep}, @combined_dirs;
         $CPAN::Frontend->optprint('perl5lib', sprintf ("Prepending blib/arch and blib/lib of ".
                                  "%d build dirs to PERL5LIB, reaching size %d; ".
                                  "for '%s'\n", $cnt, length($newenv), $for)

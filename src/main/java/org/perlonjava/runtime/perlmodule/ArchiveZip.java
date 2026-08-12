@@ -77,6 +77,7 @@ public class ArchiveZip extends PerlModuleBase {
         try {
             // Archive methods
             az.registerMethod("new", "newArchive", null);
+            az.registerMethodInPackage("Archive::Zip::Archive", "new", "newArchive");
             az.registerMethod("read", null);
             az.registerMethod("readFromFileHandle", null);
             az.registerMethod("zipfileComment", null);
@@ -186,7 +187,10 @@ public class ArchiveZip extends PerlModuleBase {
         self.put(MEMBERS_KEY, membersArray.createReference());
 
         RuntimeScalar ref = self.createReference();
-        ReferenceOperators.bless(ref, new RuntimeScalar("Archive::Zip"));
+        String targetClass = args.isEmpty() || args.get(0).toString().isEmpty()
+                ? "Archive::Zip"
+                : args.get(0).toString();
+        ReferenceOperators.bless(ref, new RuntimeScalar(targetClass));
 
         // If a filename is provided, read it
         if (args.size() > 1) {
@@ -491,6 +495,10 @@ public class ArchiveZip extends PerlModuleBase {
         RuntimeHash self = args.get(0).hashDeref();
         RuntimeArray members = getMembers(self);
 
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(members.size()).getList();
+        }
+
         RuntimeList result = new RuntimeList();
         for (int i = 0; i < members.size(); i++) {
             result.add(members.get(i));
@@ -509,6 +517,10 @@ public class ArchiveZip extends PerlModuleBase {
 
         RuntimeHash self = args.get(0).hashDeref();
         RuntimeArray members = getMembers(self);
+
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(members.size()).getList();
+        }
 
         RuntimeList result = new RuntimeList();
         for (int i = 0; i < members.size(); i++) {

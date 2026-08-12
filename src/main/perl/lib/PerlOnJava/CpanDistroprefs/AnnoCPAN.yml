@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for AnnoCPAN.
+
+  Four database integration tests use fork() to isolate SQLite writers and
+  depend on state produced by the first forked test. PerlOnJava cannot provide
+  POSIX fork semantics, so skip only that connected test group. Archive,
+  schema, dump, and all remaining tests continue to run.
+match:
+  distribution: "^ITUB/AnnoCPAN-"
+patches:
+  - "AnnoCPAN/SkipForkDatabaseTests.patch"

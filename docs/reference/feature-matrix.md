@@ -768,6 +768,12 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ❌  **Safe** module.
 
 ### Non-core modules
+- ✅  **JSON::DWIW**: relaxed JSON conversion implemented over the bundled
+  pure-Perl `JSON::PP` backend.
+- ✅  **Taint::Runtime**: Java XS replacement for runtime taint toggling and
+  scalar taint inspection.
+- ✅  **String::Similarity**: Java XS replacement for Unicode-aware string
+  similarity scoring.
 - ✅  **Crypt::Blowfish**: Java XS replacement backed by the bundled
   BouncyCastle engine, including the variable key sizes and 8-byte block API
   required by `Crypt::CBC`.

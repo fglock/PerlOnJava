@@ -16,6 +16,13 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   experimental opt-in. Thread signals, effective stack sizing, blessed/tied
   shared values, and some upstream core/native-callback suites remain limited;
   see the [feature matrix](../reference/feature-matrix.md#concurrency-and-perl-threads).
+- CPAN/tooling: expose tested dependency scripts through `PATH`, deduplicate
+  repeated `PERL5LIB` setup, and resolve test prerequisites against tested
+  `blib` trees before launching tests. Add `JSON::DWIW`, `Taint::Runtime`, and
+  `String::Similarity` compatibility ports; preserve open-file identity across
+  rename and Archive::Zip scalar/subclass behavior. Preserve the active `@_`
+  across `goto &sub` when an outer scope localized `*_`, and avoid synthetic
+  stash traversal in reachability checks used by large Moose/Dist::Zilla loads.
 - CPAN/compiler tooling: unblock `Template::Lace`, `Sledge::Plugin::JSONRPC`,
   and `Catmandu::Exporter::MAB2` without distribution preferences. Add
   Java-backed `Data::Util` scalar inspection, a `YAML::Syck` compatibility
