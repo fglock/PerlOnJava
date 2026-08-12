@@ -442,17 +442,21 @@ public class MortalList {
         // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
         // data), we must still cascade decrements so their weak-ref entries
         // can be cleared when the referent's refCount reaches 0.
-        if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()) return;
+        if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
+                && !RuntimeScalar.watcherCleanupNeeded()) return;
         // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
         // do NOT clean up elements — the hash is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (hash.refCount > 0 || temporaryRootDirectlyReferences(hash)) return;
+        if (RuntimeScalar.watcherCleanupNeeded()) {
+            RuntimeScalar.notifyDestroyedWatchersRecursively(hash);
+        }
         if (hash.type == RuntimeHash.TIED_HASH && hash.elements instanceof TieHash tieHash) {
             tieHash.releaseTiedObject();
         }
         // Quick scan: skip if no value could transitively contain blessed/tracked refs.
-        boolean needsWalk = false;
+        boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
         for (RuntimeScalar val : hash.elements.values()) {
             if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && val.value instanceof RuntimeBase rb) {
@@ -511,12 +515,16 @@ public class MortalList {
         }
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM (see scopeExitCleanupHash for details).
-        if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()) return;
+        if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
+                && !RuntimeScalar.watcherCleanupNeeded()) return;
         // If the array has outstanding references (e.g., from \@array stored elsewhere),
         // do NOT clean up elements — the array is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)) return;
+        if (RuntimeScalar.watcherCleanupNeeded()) {
+            RuntimeScalar.notifyDestroyedWatchersRecursively(arr);
+        }
         if (arr.type == RuntimeArray.TIED_ARRAY && arr.elements instanceof TieArray tieArray) {
             tieArray.releaseTiedObject();
         }
@@ -538,7 +546,7 @@ public class MortalList {
         //   3. Is a container (array/hash ref) that might hold nested blessed refs
         // For case 3, we peek one level deep to avoid false positives for arrays
         // of plain-data arrayrefs (like the life_bitpacked @grid).
-        boolean needsWalk = false;
+        boolean needsWalk = RuntimeScalar.watcherCleanupNeeded();
         for (RuntimeScalar elem : arr.elements) {
             if (elem == null || (elem.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
             // Fast check: refCountOwned means this ref was properly tracked via setLarge

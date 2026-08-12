@@ -192,6 +192,11 @@ public class XSLoader extends PerlModuleBase {
             
             return scalarTrue.getList();
         } catch (Exception e) {
+            if (System.getenv("JPERL_REQUIRE_DEBUG") != null) {
+                System.err.println("XSLoader Java backend initialization failed for "
+                        + moduleName + ": " + e);
+                e.printStackTrace(System.err);
+            }
             // No Java XS class found. If the module's @ISA already has a
             // functional pure-Perl parent (set by the .pm file before calling
             // XSLoader::load), the module can function through inheritance.
