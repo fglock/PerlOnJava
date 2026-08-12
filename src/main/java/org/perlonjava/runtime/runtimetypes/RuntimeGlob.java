@@ -32,6 +32,23 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return false;
     }
 
+    /** Resolve a localized underscore ARRAY slot owned by the current call frame. */
+    public static RuntimeArray localizedUnderscoreArrayForCurrentCall() {
+        Stack<GlobSlotSnapshot> globSlotStack = globSlotStack();
+        int currentArgsDepth = RuntimeCode.argsStackDepth();
+        for (int i = globSlotStack.size() - 1; i >= 0; i--) {
+            GlobSlotSnapshot snapshot = globSlotStack.get(i);
+            String name = snapshot.globName();
+            if (snapshot.argsStackDepth() == currentArgsDepth
+                    && name != null
+                    && name.endsWith("::_")) {
+                RuntimeArray array = GlobalVariable.globalArrays.get(name);
+                if (array != null) return array;
+            }
+        }
+        return null;
+    }
+
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
@@ -1403,7 +1420,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         globSlotStack().push(new GlobSlotSnapshot(this.globName,
                 savedScalar, savedArray, savedHash,
-                savedCode, savedIO, savedSelectedHandle, savedIOVisible));
+                savedCode, savedIO, savedSelectedHandle, savedIOVisible,
+                RuntimeCode.argsStackDepth()));
 
         // Replace global table entries with NEW empty objects instead of mutating the
         // existing ones in-place. This is critical because the existing objects may be
@@ -1594,6 +1612,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeScalar code,
             RuntimeScalar io,
             RuntimeIO savedSelectedHandle,
-            boolean ioWasVisible) {
+            boolean ioWasVisible,
+            int argsStackDepth) {
     }
 }

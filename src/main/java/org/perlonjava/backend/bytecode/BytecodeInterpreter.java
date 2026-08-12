@@ -1770,6 +1770,10 @@ public class BytecodeInterpreter {
                                 }
 
                                 RuntimeArray callArgs = registers[argsReg].getTailCallArrayOfAlias();
+                                RuntimeArray localizedArgs = RuntimeGlob.localizedUnderscoreArrayForCurrentCall();
+                                if (localizedArgs != null) {
+                                    callArgs = localizedArgs;
+                                }
 
                                 // Create TAILCALL marker with eval scope for runtime check
                                 String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;

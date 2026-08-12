@@ -242,14 +242,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Return the current call frame's argument array for {@code goto &sub}.
      *
-     * <p>{@code @_} is represented by {@code lexicalArgs} in compiled
-     * subroutines.  An outer scope may localize its underscore typeglob (as
-     * File::Find does with {@code local *_ = \my $scalar}), but that localized
-     * package ARRAY slot is not the argument array of a nested call.  Looking
-     * through the dynamic glob stack here therefore stole the outer empty
-     * ARRAY slot and discarded the nested subroutine's arguments.</p>
+     * <p>A {@code local *_} performed by this call frame replaces its argument
+     * array for a tail call. An underscore glob localized by an outer frame
+     * (as File::Find does) must not replace a nested call's arguments.</p>
      */
     public static RuntimeArray getGotoArgs(RuntimeArray lexicalArgs, String packageName) {
+        RuntimeArray localized = RuntimeGlob.localizedUnderscoreArrayForCurrentCall();
+        if (localized != null) return localized;
         return lexicalArgs;
     }
 
