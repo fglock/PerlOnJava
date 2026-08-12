@@ -44,7 +44,7 @@ attributes::->import(Canine => \$spot, "Watchful");
 | CODE | `method` | Marks sub as method (suppresses ambiguity warnings) |
 | CODE | `prototype(...)` | Sets prototype |
 | CODE | `const` | Experimental: calls anon sub immediately, captures return as constant |
-| SCALAR/ARRAY/HASH | `shared` | Thread-sharing (no-op in PerlOnJava) |
+| SCALAR/ARRAY/HASH | `shared` | Marks supported storage for identity-preserving ithread cloning |
 
 ### `import()` Flow
 
@@ -273,7 +273,7 @@ The only remaining attrs.t failure is TODO test 155 (expected failure).
 
 1. **Variable attribute storage**: Should variables store their attributes? Currently `RuntimeCode` has an `attributes` field, but `RuntimeScalar`/`RuntimeArray`/`RuntimeHash` do not. Most test cases only need the `MODIFY_*_ATTRIBUTES` callback (side effects like `tie`), not persistent storage. The `FETCH_*_ATTRIBUTES` tests are only for CODE refs. **Decision: Don't add storage to variables yet — not needed for any current test.**
 
-2. **`_modify_attrs` implementation level**: The system Perl implements this as XS that directly manipulates SV flags. In PerlOnJava, we access `RuntimeCode.attributes` from Java. For CODE refs this is straightforward. For variable refs, we only need to validate built-in attrs (`shared`) and return unrecognized ones — no actual flag-setting needed since `shared` is a no-op.
+2. **`_modify_attrs` implementation level**: The system Perl implements this as XS that directly manipulates SV flags. In PerlOnJava, CODE attributes use `RuntimeCode.attributes`; variable `shared` marks the scalar/array/hash storage so ithread graph cloning preserves its identity. Blessed and tied storage is rejected until its sharing policy is defined.
 
 3. **Attribute::Handlers**: The module exists at `src/main/perl/lib/Attribute/Handlers.pm` and the core dependencies (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) are now implemented. All core attrhand.t tests pass (4/4). Remaining edge cases are in multi.t (DESTROY, END handler warning) and linerep.t (eval context file/line).
 

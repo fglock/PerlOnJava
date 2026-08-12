@@ -11,6 +11,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.net.JarURLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -573,7 +574,7 @@ public class ModuleOperators {
                                     : first.toLowerCase() + fileName.substring(1);
                             resource = RuntimeScalar.class.getResource("/lib/" + alt);
                         }
-                        if (resource != null) {
+                        if (resource != null && !isDirectoryResource(resource)) {
                             // Use "jar:PERL5LIB/DBI.pm" format for %INC - matches catfile output
                             actualFileName = GlobalContext.JAR_PERLLIB + "/" + fileName;
                             fullName = Paths.get(resourcePath);  // Just for compatibility
@@ -784,6 +785,21 @@ public class ModuleOperators {
         } else {
             return scalarResult;
         }
+    }
+
+    /** ClassLoader resources can represent directories; Perl require must skip them. */
+    private static boolean isDirectoryResource(URL resource) {
+        try {
+            if (resource.openConnection() instanceof JarURLConnection jarConnection) {
+                return jarConnection.getJarEntry() != null && jarConnection.getJarEntry().isDirectory();
+            }
+            if ("file".equals(resource.getProtocol())) {
+                return Files.isDirectory(Paths.get(resource.toURI()));
+            }
+        } catch (Exception ignored) {
+            // A resource that cannot be classified will be handled by the normal read path.
+        }
+        return false;
     }
 
     /**

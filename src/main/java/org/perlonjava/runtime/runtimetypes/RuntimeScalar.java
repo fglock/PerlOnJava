@@ -179,8 +179,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Fields to store the type and value of the scalar variable
-    public int type;
-    public Object value;
+    public volatile int type;
+    public volatile Object value;
 
     /**
      * Original decimal text for high-precision numeric literals. Java stores

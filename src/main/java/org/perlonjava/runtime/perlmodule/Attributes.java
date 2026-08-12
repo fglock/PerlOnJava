@@ -104,7 +104,7 @@ public class Attributes extends PerlModuleBase {
         if ("CODE".equals(svtype)) {
             return applyCodeAttribute(svref, attrName, negate);
         } else if ("SCALAR".equals(svtype) || "ARRAY".equals(svtype) || "HASH".equals(svtype)) {
-            return applyVariableAttribute(attrName, negate) ? ATTR_APPLIED : ATTR_UNRECOGNIZED;
+            return applyVariableAttribute(svref, attrName, negate) ? ATTR_APPLIED : ATTR_UNRECOGNIZED;
         }
         return ATTR_UNRECOGNIZED;
     }
@@ -230,11 +230,12 @@ public class Attributes extends PerlModuleBase {
      * {@code shared} is recognized (no-op in PerlOnJava).
      * {@code -shared} triggers a "may not be unshared" error.
      */
-    private static boolean applyVariableAttribute(String attrName, boolean negate) {
+    private static boolean applyVariableAttribute(RuntimeScalar svref, String attrName, boolean negate) {
         if ("shared".equals(attrName)) {
             if (negate) {
                 throw new RuntimeException("A variable may not be unshared");
             }
+            SharedPerlStorage.share(svref);
             return true;
         }
         return false;
