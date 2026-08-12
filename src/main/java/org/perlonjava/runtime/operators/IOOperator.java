@@ -675,8 +675,8 @@ public class IOOperator {
                 RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(oneFh);
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, oneFh);
-                fileHandle.set(newGlob);
-                fileHandle.ioOwner = true;
+                RuntimeScalar assignedHandle = fileHandle.set(newGlob);
+                assignedHandle.ioOwner = true;
             }
             long pid = oneFh.getPid();
             if (pid > 0) return new RuntimeScalar(pid);
@@ -896,12 +896,8 @@ public class IOOperator {
             // Register for GC-based fd recycling (mimics Perl's DESTROY on scope exit)
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             // Use set() to modify the lvalue in place
-            fileHandle.set(newGlob);
-            // Mark this scalar as the IO owner so scopeExitCleanup will close
-            // the handle when the variable goes out of scope. Copies of this
-            // reference (via set()) won't have ioOwner=true, preventing
-            // premature close of shared handles (e.g., Test2's dup'd STDOUT).
-            fileHandle.ioOwner = true;
+            RuntimeScalar assignedHandle = fileHandle.set(newGlob);
+            assignedHandle.ioOwner = true;
         }
         long pid = fh.getPid();
         if (pid > 0) return new RuntimeScalar(pid);
@@ -1953,13 +1949,8 @@ public class IOOperator {
                 RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(socketIO);
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, socketIO);
-                socketHandle.set(newGlob);
-                // Mark this scalar as the IO owner so scopeExitCleanup will
-                // unregister the fd when the variable goes out of scope.
-                // Copies (via set()) won't have ioOwner=true, preventing
-                // premature fd unregistration when copies go out of scope
-                // (e.g., method argument copies in IO::Handle::fileno).
-                socketHandle.ioOwner = true;
+                RuntimeScalar assignedHandle = socketHandle.set(newGlob);
+                assignedHandle.ioOwner = true;
             }
             return scalarTrue;
 
@@ -2166,7 +2157,7 @@ public class IOOperator {
     /**
      * accept(NEWSOCKET, GENERICSOCKET)
      * Accepts a connection on a listening socket.
-     * Returns the packed sockaddr of the remote peer on success, false on failure.
+     * Returns the packed sockaddr of the remote peer on success, undef on failure.
      */
     public static RuntimeScalar accept(int ctx, RuntimeBase... args) {
         if (args.length < 2) {
@@ -2189,7 +2180,8 @@ public class IOOperator {
             // Accept the connection - returns a new SocketIO for the client
             SocketIO clientSocketIO = listenSocketIO.acceptConnection();
             if (clientSocketIO == null) {
-                return scalarFalse;
+                getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                return scalarUndef;
             }
 
             // Wrap in RuntimeIO and associate with the NEWSOCKET glob
@@ -2422,6 +2414,17 @@ public class IOOperator {
             if (fh == null || fh.ioHandle == null) {
                 getGlobalVariable("main::!").set(9); // EBADF - Bad file descriptor
                 return scalarUndef;
+            }
+
+            IOHandle managedHandle = selectableHandle(fh.ioHandle);
+            if (managedHandle instanceof SocketIO socketIO) {
+                if (function == 3) { // F_GETFL
+                    return new RuntimeScalar(socketIO.isBlocking() ? 0 : 2048);
+                }
+                if (function == 4) { // F_SETFL
+                    socketIO.setBlocking((arg & 2048) == 0);
+                    return scalarTrue;
+                }
             }
 
             // Get the file descriptor number

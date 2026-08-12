@@ -460,7 +460,7 @@ public class XMLLibXML extends PerlModuleBase {
     // Node wrapping helpers
     // ================================================================
 
-    static RuntimeScalar wrapNode(Node node) {
+    public static RuntimeScalar wrapNode(Node node) {
         if (node == null) return scalarUndef;
         RuntimeHash hash = new RuntimeHash();
         hash.put(NODE_KEY, new RuntimeScalar(node));
@@ -485,7 +485,7 @@ public class XMLLibXML extends PerlModuleBase {
         throw new RuntimeException("Not a valid XML::LibXML::Reader object");
     }
 
-    static Node getNode(RuntimeScalar self) {
+    public static Node getNode(RuntimeScalar self) {
         if (self == null || self.type == RuntimeScalarType.UNDEF) return null;
         RuntimeHash hash;
         try { hash = self.hashDerefRaw(); }

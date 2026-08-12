@@ -3496,6 +3496,28 @@ sub _perlonjava_available_file_satisfies_prereq {
     return $self->_perlonjava_skip_dependency_tests ? 1 : 0;
 }
 
+sub _perlonjava_expand_provider_requirements {
+    my ($merged, $prereq_pm) = @_;
+    require PerlOnJava::ProviderManifest;
+
+    my %expanded;
+    my @queue = $merged->required_modules;
+    while (my $module = shift @queue) {
+        next if $expanded{$module}++;
+        my $provider = PerlOnJava::ProviderManifest->provider_for($module)
+            or next;
+        my $requires = $provider->{requires} || {};
+        for my $required_module (sort keys %$requires) {
+            my $version = $requires->{$required_module};
+            $merged->add_minimum($required_module, $version);
+            $prereq_pm->{requires}{$required_module} = $version
+                unless exists $prereq_pm->{requires}{$required_module};
+            push @queue, $required_module;
+        }
+    }
+    return;
+}
+
 sub unsat_prereq {
     my($self,$slot) = @_;
     my($merged_hash,$prereq_pm) = $self->prereqs_for_slot($slot);
@@ -3505,6 +3527,7 @@ sub unsat_prereq {
         return;
     }
     my $merged = CPAN::Meta::Requirements->from_string_hash($merged_hash);
+    _perlonjava_expand_provider_requirements($merged, $prereq_pm);
     my @merged = sort $merged->required_modules;
     CPAN->debug("all merged_prereqs[@merged]") if $CPAN::DEBUG;
   NEED: for my $need_module ( @merged ) {

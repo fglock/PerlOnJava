@@ -4,6 +4,10 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- CPAN/compiler tooling: add transitive prerequisites to the bundled-provider
+  manifest, provide a JAXP-backed `XML::LibXSLT`, and preserve descriptors for
+  anonymous handles stored in container lvalues. This unblocks
+  `Catmandu::CrossRef` and `AnyEvent::SMTP` without distribution preferences.
 - Add Perl interpreter multiplicity and the supported ithread tranche across
   the JVM and interpreter backends. Mutable execution state is owned by
   independent `PerlRuntime` instances; child threads receive identity-aware

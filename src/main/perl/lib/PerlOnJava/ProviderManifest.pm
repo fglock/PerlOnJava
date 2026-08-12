@@ -51,6 +51,17 @@ sub manifest {
             unless $valid_provider{$entry->{provider}};
         die "Invalid shadow policy $entry->{shadow_policy}\n"
             unless $valid_shadow{$entry->{shadow_policy}};
+        if (exists $entry->{requires}) {
+            die "Invalid provider requirements for $entry->{module}\n"
+                unless ref($entry->{requires}) eq 'HASH';
+            for my $module (keys %{ $entry->{requires} }) {
+                die "Invalid provider requirement module for $entry->{module}\n"
+                    unless defined($module) && length($module);
+                my $version = $entry->{requires}{$module};
+                die "Invalid provider requirement version for $entry->{module}\n"
+                    if ref($version) || !defined($version);
+            }
+        }
     }
     return $manifest;
 }

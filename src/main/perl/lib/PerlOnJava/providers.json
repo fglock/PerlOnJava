@@ -47,7 +47,21 @@
       "distribution": "XML-LibXML",
       "provider": "java-xs",
       "shadow_policy": "forbidden",
-      "test_strategy": "bundled-provider"
+      "test_strategy": "bundled-provider",
+      "requires": {
+        "XML::NamespaceSupport": "0"
+      }
+    },
+    {
+      "module": "XML::LibXSLT",
+      "version": "2.003000",
+      "distribution": "XML-LibXSLT",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider",
+      "requires": {
+        "XML::LibXML": "1.70"
+      }
     },
     {
       "module": "Set::Object",
