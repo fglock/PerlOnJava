@@ -413,21 +413,27 @@ public class OperatorParser {
                 }
                 
                 ctx.symbolTable.addVariable(var, operator, node);
-
-                // An `our` declaration creates its typeglob during compilation,
-                // before the declaration's runtime initializer executes.  BEGIN
-                // blocks and modules loaded later in the same compilation can
-                // therefore observe entries such as VERSION and ISA in the
-                // package stash.  Materialize the matching PerlOnJava global at
-                // parse time to preserve that ordering.
+                // Perl materializes the corresponding typeglob as soon as an
+                // `our` declaration is compiled.  BEGIN blocks later in the
+                // same compilation unit can therefore observe (for example)
+                // `our $VERSION` through the package stash before its runtime
+                // assignment executes.
                 if (operator.equals("our")) {
-                    String globalName = NameNormalizer.normalizeVariableName(
+                    String fullName = NameNormalizer.normalizeVariableName(
                             name, ctx.symbolTable.getCurrentPackage());
                     switch (sigil) {
-                        case "$" -> GlobalVariable.getGlobalVariable(globalName);
-                        case "@" -> GlobalVariable.getGlobalArray(globalName);
-                        case "%" -> GlobalVariable.getGlobalHash(globalName);
-                        default -> { }
+                        case "$" -> {
+                            GlobalVariable.declareGlobalVariable(fullName);
+                            GlobalVariable.getGlobalVariable(fullName);
+                        }
+                        case "@" -> {
+                            GlobalVariable.declareGlobalArray(fullName);
+                            GlobalVariable.getGlobalArray(fullName);
+                        }
+                        case "%" -> {
+                            GlobalVariable.declareGlobalHash(fullName);
+                            GlobalVariable.getGlobalHash(fullName);
+                        }
                     }
                 }
                 // Note: the isDeclaredReference flag is stored in node.annotations

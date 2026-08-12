@@ -863,13 +863,19 @@ public class GlobalVariable {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime != null) {
             for (String key : runtime.standardIOGlobNames()) {
-                if (key.startsWith(prefix) && runtime.isStandardIOGlobVisible(key)) {
+                boolean matches = prefix.endsWith("::")
+                        ? key.startsWith(prefix)
+                        : key.equals(prefix);
+                if (matches && runtime.isStandardIOGlobVisible(key)) {
                     return true;
                 }
             }
         }
         for (String key : globalIORefs.keySet()) {
-            if (key.startsWith(prefix) && !hiddenIORefsAfterStashDelete().contains(key)) {
+            boolean matches = prefix.endsWith("::")
+                    ? key.startsWith(prefix)
+                    : key.equals(prefix);
+            if (matches && !hiddenIORefsAfterStashDelete().contains(key)) {
                 return true;
             }
         }

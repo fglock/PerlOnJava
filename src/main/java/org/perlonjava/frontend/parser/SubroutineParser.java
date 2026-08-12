@@ -14,6 +14,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.perlmodule.Universal;
@@ -966,8 +967,25 @@ public class SubroutineParser {
         int definitionStrictOptions = parser.ctx.symbolTable.strictOptionsStack.peek();
 
         try {
-            // Parse the block of the subroutine, which contains the actual code.
-            BlockNode block = ParseBlock.parseBlock(parser);
+            // A subroutine body is a lexical pragma scope. ParseBlock manages
+            // the symbol-table scope, while %^H needs its own matching scope so
+            // pragmas such as bigfloat do not affect literals after the sub.
+            HintHashRegistry.enterScope();
+            BlockNode block;
+            try {
+                // Parse the block of the subroutine, which contains the actual code.
+                block = ParseBlock.parseBlock(parser);
+
+                // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
+                // Check if we reached EOF instead of finding the closing brace
+                if (parser.tokenIndex >= parser.tokens.size() ||
+                        parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
+                    parser.throwMissingRightCurlyOrSquareBracketError();
+                }
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            } finally {
+                HintHashRegistry.exitScope();
+            }
             if (futureAsyncAwaitSub) {
                 block.setAnnotation("futureAsyncAwaitSub", true);
                 FutureAsyncAwaitParser.markFutureClass(block);
@@ -978,13 +996,6 @@ public class SubroutineParser {
             block.setAnnotation("definitionFeatureFlags", definitionFeatureFlags);
             block.setAnnotation("definitionStrictOptions", definitionStrictOptions);
 
-            // After the block, we expect a closing curly brace '}' to denote the end of the subroutine.
-            // Check if we reached EOF instead of finding the closing brace
-            if (parser.tokenIndex >= parser.tokens.size() ||
-                    parser.tokens.get(parser.tokenIndex).type == LexerTokenType.EOF) {
-                parser.throwMissingRightCurlyOrSquareBracketError();
-            }
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             if (attributes != null && !attributes.isEmpty()) {
                 block.setAnnotation("subroutineSourceEndTokenIndex", parser.tokenIndex);
             }

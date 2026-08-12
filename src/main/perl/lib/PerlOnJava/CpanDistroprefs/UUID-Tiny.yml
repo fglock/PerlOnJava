@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for UUID::Tiny.
+
+  The pure-Perl implementation and its non-process tests run normally. Its
+  t/03-UUID-fork.t test requires Perl fork support, which PerlOnJava does not
+  implement. Run the upstream suite through the normal harness with only that
+  unsupported process test excluded.
+match:
+  distribution: "^CAUGUSTIN/UUID-Tiny-"
+test:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::UUIDTiny -e "PerlOnJava::Distroprefs::UUIDTiny::test_phase()"'

@@ -440,6 +440,7 @@ These are loaded automatically or via `use`:
 | `Filter::Util::Call` | Java | |
 | `Tie::Hash` / `Tie::Array` / `Tie::Scalar` | Perl | |
 | `Tie::RefHash` | Perl | |
+| `Tie::Hash::Indexed` | Java XS bridge | Ordered tied-hash and object APIs, iterators, arithmetic helpers, and Storable hooks; no native C compiler required |
 
 ---
 

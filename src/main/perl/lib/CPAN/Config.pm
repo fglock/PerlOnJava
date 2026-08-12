@@ -80,6 +80,9 @@ sub _bootstrap_prefs {
         'Sort-External.yml'            => 'PerlOnJava/CpanDistroprefs/Sort-External.yml',
         'Char-Latin7.yml'               => 'PerlOnJava/CpanDistroprefs/Char-Latin7.yml',
         'Text-Markdown.yml'             => 'PerlOnJava/CpanDistroprefs/Text-Markdown.yml',
+        'UUID-Tiny.yml'                 => 'PerlOnJava/CpanDistroprefs/UUID-Tiny.yml',
+        'MooX-ClassAttribute.yml'       => 'PerlOnJava/CpanDistroprefs/MooX-ClassAttribute.yml',
+        'Locale-CLDR.yml'                => 'PerlOnJava/CpanDistroprefs/Locale-CLDR.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'

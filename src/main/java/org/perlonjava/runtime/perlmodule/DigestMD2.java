@@ -156,7 +156,7 @@ public class DigestMD2 extends PerlModuleBase {
         if (args.isEmpty()) {
             return scalarUndef.getList();
         }
-        return new RuntimeScalar(bytesToLatin1(finishAndReset(args.get(0)))).getList();
+        return new RuntimeScalar(finishAndReset(args.get(0))).getList();
     }
 
     public static RuntimeList hexdigest(RuntimeArray args, int ctx) {
@@ -174,7 +174,7 @@ public class DigestMD2 extends PerlModuleBase {
     }
 
     public static RuntimeList md2(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(bytesToLatin1(digestArgs(args))).getList();
+        return new RuntimeScalar(digestArgs(args)).getList();
     }
 
     public static RuntimeList md2_hex(RuntimeArray args, int ctx) {

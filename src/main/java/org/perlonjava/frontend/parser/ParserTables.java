@@ -36,7 +36,7 @@ public class ParserTables {
             "kill",
             "localtime", "log",
             "oct", "open",
-            "readline", "readpipe", "rename", "require",
+            "rand", "readline", "readpipe", "rename", "require",
             "send",
             "sleep", "sqrt",
             "stat", "system",

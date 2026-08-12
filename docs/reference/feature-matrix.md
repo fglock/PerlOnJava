@@ -722,7 +722,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Perl::OSType** module.
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
 - ✅  **SelectSaver**: module.
-- ✅  **Storable**: module. Reads and writes the native Perl Storable binary format (`pst0` magic), interoperable with system perl in both directions: jperl-written files are readable by system perl and vice versa. `$Storable::canonical`, `SX_REGEXP`/`SX_VSTRING` encoding, and full `STORABLE_freeze` hook emission are not yet implemented (see `dev/modules/storable_binary_format.md`).
+- ✅  **Storable**: module. Reads and writes the native Perl Storable binary format (`pst0` magic), interoperable with system perl in both directions. `STORABLE_freeze`/`STORABLE_thaw` hooks support extra references, and nested tied arrays, hashes, and scalars retain the correct reference depth. `$Storable::canonical` is not yet implemented (see `dev/modules/storable_binary_format.md`).
 - ✅  **Sys::Hostname** module.
 - ✅  **Symbol**: `gensym`, `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Term::ANSIColor** module.
@@ -732,6 +732,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Tie::Array** module.
 - ✅  **Tie::Handle** module.
 - ✅  **Tie::Hash** module.
+- ✅  **Tie::Hash::Indexed** module, with a Java replacement for its XS backend.
 - ✅  **Tie::Scalar** module.
 - ✅  **Time::HiRes** module.
 - ✅  **Time::Local** module.

@@ -4,7 +4,7 @@
  use warnings;
  use lib qw( . ./t ../inc ./inc );
  use Test::More;
-+plan skip_all => 'PerlOnJava does not implement non-constant (?{...}) regex callbacks';
++BEGIN { plan skip_all => 'PerlOnJava does not implement non-constant (?{...}) regex callbacks' }
 +
  use Test::Requires '5.020';
  
@@ -15,8 +15,18 @@
  use warnings;
  use lib qw( . ./t ../inc ./inc );
  use Test::More;
-+plan skip_all => 'PerlOnJava does not implement non-constant (?{...}) regex callbacks';
++BEGIN { plan skip_all => 'PerlOnJava does not implement non-constant (?{...}) regex callbacks' }
 +
  
  BEGIN {
  	plan skip_all => "cperl's `shadow` warnings catgeory breaks this test; skipping"
+--- t/21-types/StrMatch-more.t.orig
++++ t/21-types/StrMatch-more.t
+@@ -17,6 +17,8 @@ use strict;
+ use warnings;
+ use Test::More;
++BEGIN { plan skip_all => 'PerlOnJava does not implement non-constant (?{...}) regex callbacks' }
++
+ use Test::Requires '5.020';
+ use Test::Fatal;
+ use Test::TypeTiny;

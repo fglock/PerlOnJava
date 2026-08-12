@@ -112,14 +112,21 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      * high values (463, 466, 467) that are unlikely to appear as register
      * indices, false positives are extremely rare.
      */
-    private static BitSet scanMyVarRegisters(int[] bytecode) {
+    private static BitSet scanMyVarRegisters(int[] bytecode, int maxRegisters) {
         BitSet result = new BitSet();
         for (int i = 0; i < bytecode.length - 1; i++) {
             int opcode = bytecode[i];
             if (opcode == Opcodes.SCOPE_EXIT_CLEANUP
                     || opcode == Opcodes.SCOPE_EXIT_CLEANUP_HASH
                     || opcode == Opcodes.SCOPE_EXIT_CLEANUP_ARRAY) {
-                result.set(bytecode[i + 1]);
+                int register = bytecode[i + 1];
+                // This lightweight scan also sees opcode-shaped values in
+                // instruction operands. Never let a following sentinel (for
+                // example -1 in an eval-generated Moo constructor) become a
+                // BitSet index, and ignore operands outside the frame.
+                if (register >= 0 && register < maxRegisters) {
+                    result.set(register);
+                }
                 i++; // skip the operand
             }
         }
@@ -216,7 +223,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // These are the actual "my" variable registers that need cleanup during
         // exception propagation. Temporaries (hash element aliases, method return
         // values) are NOT in this set and should NOT get scopeExitCleanup.
-        this.myVarRegisters = scanMyVarRegisters(bytecode);
+        this.myVarRegisters = scanMyVarRegisters(bytecode, maxRegisters);
         // Register with WarningBitsRegistry for caller()[9] support
         if (warningBitsString != null) {
             String registryKey = "interpreter:" + System.identityHashCode(this);

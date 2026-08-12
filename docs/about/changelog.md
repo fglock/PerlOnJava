@@ -19,6 +19,12 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   references in large object trees, substantially reducing PPI teardown cost.
 - Runtime: honor explicit custom-warning mask bits and prevent stale recycled
   descriptors from replacing live borrowed-handle mappings.
+- CPAN: add a Java XS replacement for `Tie::Hash::Indexed`, including its
+  ordered tied-hash/object APIs, iterators, and Storable integration; nested
+  tied containers now thaw without acquiring an extra scalar-reference layer.
+- CPAN/tooling: bootstrap bundled distroprefs and patches for every `jcpan`
+  entry path, preserve substitution `pos` inside replacement code, honor
+  `CORE::GLOBAL::rand`, and fix scalar-context coderef assignment returns.
 - Add Perl taint mode with `-T` on both JVM and interpreter backends, including
   external-input provenance, scalar and regex propagation, capture-based
   untainting, and security checks for process execution, code loading, file

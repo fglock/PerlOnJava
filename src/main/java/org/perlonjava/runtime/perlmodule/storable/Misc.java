@@ -178,6 +178,10 @@ public final class Misc {
         c.recordSeen(placeholder);
         RuntimeScalar tying = r.dispatch(c);
         installTiedArray(av, tying);
+        // Like SX_ARRAY, SX_TIED_ARRAY represents the bare container body;
+        // the surrounding SX_REF supplies the single Perl reference level.
+        c.takeBareContainerFlag();
+        c.markBareContainer();
         return placeholder;
     }
 
@@ -187,6 +191,10 @@ public final class Misc {
         c.recordSeen(placeholder);
         RuntimeScalar tying = r.dispatch(c);
         installTiedHash(hv, tying);
+        // Do not let the surrounding SX_REF wrap this already ref-shaped
+        // RuntimeHash a second time (which would thaw \%hash as REF-to-HASH).
+        c.takeBareContainerFlag();
+        c.markBareContainer();
         return placeholder;
     }
 
@@ -200,6 +208,8 @@ public final class Misc {
         c.recordSeen(placeholder);
         RuntimeScalar tying = r.dispatch(c);
         installTiedScalar(inner, tying);
+        c.takeBareContainerFlag();
+        c.markBareContainer();
         return placeholder;
     }
 

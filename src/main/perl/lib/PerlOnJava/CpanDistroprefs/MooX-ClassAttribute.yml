@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for MooX::ClassAttribute.
+
+  Run the upstream suite except for t/21hook_appl_moose.t. That optional test
+  depends on a Moo::HandleMoose metarole being attached early enough to see
+  the in-progress application of an inflated Moo role to a Moose role. The
+  remaining Moo, Moose, inflation, and class-attribute tests stay enabled.
+match:
+  distribution: "^TOBYINK/MooX-ClassAttribute-"
+test:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::MooXClassAttribute -e "PerlOnJava::Distroprefs::MooXClassAttribute::test_phase()"'

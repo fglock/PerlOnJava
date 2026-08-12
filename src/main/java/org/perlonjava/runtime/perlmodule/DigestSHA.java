@@ -225,13 +225,10 @@ public class DigestSHA extends PerlModuleBase {
             MessageDigest md = getMessageDigest(self);
             byte[] digestBytes = md.digest();
 
-            // Convert bytes to string (this mimics Perl's behavior)
-            String digestStr = new String(digestBytes, StandardCharsets.ISO_8859_1);
-
             // Reset the digest for potential reuse
             md.reset();
 
-            return new RuntimeScalar(digestStr).getList();
+            return new RuntimeScalar(digestBytes).getList();
 
         } catch (Exception e) {
             throw new RuntimeException("Digest::SHA digest failed: " + e.getMessage(), e);
