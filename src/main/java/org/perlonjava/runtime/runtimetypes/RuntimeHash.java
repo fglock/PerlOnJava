@@ -900,15 +900,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return result;
     }
 
-    /** Install an already-cloned scalar slot without Perl assignment/FETCH semantics. */
-    public void putClonedElement(String key, RuntimeScalar value) {
-        elements.put(key, value);
-        if (value != null) {
-            value.markContainerOwner(this);
-            RuntimeScalar.incrementRefCountForContainerStore(value);
-        }
-    }
-
     @Override
     public RuntimeScalar createReferenceWithTrackedElements() {
         // Birth-track anonymous hashes: set refCount=0 so setLarge() can
