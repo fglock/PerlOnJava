@@ -86,6 +86,14 @@ BouncyCastle-backed module ports.
   - `sub_mbf.t`, `sub_mbi.t`, `sub_mbr.t`, and `sub_mif.t` all pass.
   - The complete bundled-module rerun passes all 384 files with no skips or
     failures.
+- [x] Phase 6: Regex regression follow-up (2026-08-12)
+  - Rebased onto the latest `master` and reproduced all five reported regex
+    count regressions after a clean full build.
+  - Fixed named Unicode escapes inside character classes so preprocessing
+    emits one Java `\x{...}` escape instead of a doubled escape whose syntax
+    characters became unintended class members.
+  - Added system-Perl-validated coverage for named punctuation, whitespace,
+    and joiner characters in character classes.
 
 ### Next Steps
 

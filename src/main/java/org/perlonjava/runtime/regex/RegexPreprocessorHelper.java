@@ -796,10 +796,13 @@ public class RegexPreprocessorHelper {
                                     // Can't use quantifiers inside character class
                                     RegexPreprocessor.regexError(s, offset - 2, "Quantifier \\N{" + content + "} not allowed inside character class");
                                 } else {
-                                    // Keep the resolved character escaped so class
-                                    // punctuation cannot change the class syntax.
+                                    // The class scanner has already copied the
+                                    // leading backslash. Append only the escape
+                                    // body so the result is \x{...}, not
+                                    // \\x{...} (a class containing literal
+                                    // backslash/x/braces characters).
                                     int codePoint = UnicodeResolver.getCodePointFromName(content);
-                                    sb.append("\\x{").append(Integer.toHexString(codePoint)).append('}');
+                                    sb.append("x{").append(Integer.toHexString(codePoint)).append('}');
                                     offset = endBrace;
                                 }
                             } else {
