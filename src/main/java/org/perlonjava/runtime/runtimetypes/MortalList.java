@@ -96,7 +96,7 @@ public class MortalList {
     }
 
     private static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
-        for (RuntimeBase root : temporaryRoots.get()) {
+        for (RuntimeBase root : state().temporaryRoots) {
             if (root == target) return true;
             if (root instanceof RuntimeList list) {
                 for (RuntimeBase value : list.elements) {
