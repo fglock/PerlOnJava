@@ -85,7 +85,7 @@ public class ConstantFoldingVisitor implements Visitor {
         // Handle literal numbers (e.g., if (0), if (1))
         if (condition instanceof NumberNode numNode) {
             try {
-                double value = Double.parseDouble(numNode.value);
+                double value = Double.parseDouble(numNode.value.replace("_", ""));
                 return value != 0;
             } catch (NumberFormatException e) {
                 return null;
@@ -176,7 +176,9 @@ public class ConstantFoldingVisitor implements Visitor {
      */
     public static RuntimeScalar getConstantValue(Node node) {
         if (node instanceof NumberNode) {
-            String value = ((NumberNode) node).value;
+            // Match both code-generation backends: underscores are source-level
+            // digit separators and must not survive into numeric conversion.
+            String value = ((NumberNode) node).value.replace("_", "");
             // Parse NumberNode values as proper numeric types so arithmetic
             // operations use the correct paths (e.g., double modulus for 13e21 % 4e21).
             // Mirrors BytecodeCompiler.visit(NumberNode) logic for consistency.
