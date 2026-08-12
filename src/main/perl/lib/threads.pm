@@ -9,7 +9,15 @@ sub running ()  { 1 }
 sub joinable () { 2 }
 
 sub create {
+    my $caller = caller;
     shift;
+    my $code_index = ref($_[0]) eq 'HASH' ? 1 : 0;
+    if (defined($_[$code_index]) && !ref($_[$code_index])
+            && $_[$code_index] !~ /::/) {
+        my @args = @_;
+        $args[$code_index] = "${caller}::$args[$code_index]";
+        return _create(@args);
+    }
     return _create(@_);
 }
 

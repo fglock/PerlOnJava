@@ -33,7 +33,25 @@ public final class Threads extends PerlModuleBase {
     }
 
     public static RuntimeList _create(RuntimeArray args, int ctx) {
-        if (args.isEmpty() || args.get(0).type != RuntimeScalarType.CODE) {
+        int codeIndex = 0;
+        if (!args.isEmpty() && args.get(0).type == RuntimeScalarType.HASHREFERENCE) {
+            // Perl's creation options (notably stack_size) are advisory here:
+            // JVM thread stack sizing is owned by PerlThreadExecutionPolicy.
+            codeIndex = 1;
+        }
+        if (args.size() <= codeIndex) {
+            throw new IllegalArgumentException("threads->create requires a CODE reference");
+        }
+        RuntimeScalar code = args.get(codeIndex);
+        if (code.type != RuntimeScalarType.CODE && !RuntimeScalarType.isReference(code)) {
+            String name = code.toString();
+            if (!name.contains("::")) {
+                name = org.perlonjava.backend.bytecode.InterpreterState.currentPackage.get()
+                        + "::" + name;
+            }
+            code = GlobalVariable.getGlobalCodeRef(name);
+        }
+        if (code.type != RuntimeScalarType.CODE) {
             throw new IllegalArgumentException("threads->create requires a CODE reference");
         }
         // BEGIN-time code holds the global compilation lock. A new ithread may
@@ -48,9 +66,9 @@ public final class Threads extends PerlModuleBase {
             return ReferenceOperators.bless(stub.createReference(), new RuntimeScalar(CLASS)).getList();
         }
         RuntimeArray threadArgs = new RuntimeArray();
-        for (int i = 1; i < args.size(); i++) threadArgs.push(args.get(i));
+        for (int i = codeIndex + 1; i < args.size(); i++) threadArgs.push(args.get(i));
         PerlThreadControlBlock thread = PerlThreadControlBlock.create(
-                PerlRuntime.current(), args.get(0), threadArgs, ctx).start();
+                PerlRuntime.current(), code, threadArgs, ctx).start();
         return threadObject(thread.id(), null).getList();
     }
 

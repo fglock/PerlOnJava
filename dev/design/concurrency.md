@@ -52,8 +52,9 @@ runtime:
 
 This plan does not implement POSIX `fork()`. Process creation remains the
 supported replacement for fork-and-exec patterns. Virtual threads are a later,
-optional optimization: Java 22 still has pinning and diagnostic limitations,
-while cloning an ithread interpreter already dominates thread creation cost.
+optional optimization: Java 24 removes monitor pinning, but native/FFM blocking
+and workload diagnostics still require validation, while cloning an ithread
+interpreter already dominates thread creation cost.
 
 ## 3. Architecture
 
@@ -563,10 +564,10 @@ passes on system Perl and both PerlOnJava backends.
 The supported `threads` import/stringification surface is documented, while
 signals, effective stack sizing, `object`, and `wantarray` remain explicit
 limitations. Activation coverage passes on both backends. The first broader
-compatibility inventory currently reaches 24/30 in core `op/threads.t`, 2/4 in
-`class/threads.t`, 5/6 in `re/stclass_threads.t`, 1/2 in Storable's thread test,
-and completes `threads-dirh.t`; these are measured follow-up targets, not a
-claim that every upstream thread suite is green.
+compatibility inventory currently reaches 28/30 in core `op/threads.t`, 368/400
+in `op/substr_thr.t`, and 2/6 in `re/stclass_threads.t`; `class/threads.t`,
+Storable's thread test, and `threads-dirh.t` complete. These are measured
+follow-up targets, not a claim that every upstream thread suite is green.
 
 The post-activation comprehensive gate records the changed test surface rather
 than comparing unlike totals: Perl core is 260709/319705 (81.5%) and bundled
@@ -579,8 +580,9 @@ virtual threads with `-Djperl.thread.mode=virtual` or
 `JPERL_THREAD_MODE=virtual`; unknown modes are rejected and diagnostics expose
 the actual Java thread kind. Runtime pooling is deferred because no reset
 contract yet proves that a reused interpreter is equivalent to a fresh snapshot.
-The supported Java baseline is 22, but this development host runs Java 24, so
-Java 22 pinning diagnostics remain a release gate for promoting virtual mode.
+The supported Java baseline is 24. Monitor pinning is removed on that baseline,
+but native/FFM blocking diagnostics remain a release gate for promoting virtual
+mode.
 
 ### Implementation History
 
@@ -591,11 +593,12 @@ request history.
 
 ### Next Steps
 
-1. Finish the newly activated core-thread compatibility tranche instead of
-   treating partial TAP counts as success. Raise `op/threads.t` from 24/30,
-   `op/substr_thr.t` from 12/400, `re/stclass_threads.t` from 5/6, and
-   `class/threads.t` from 2/4 to their full applicable pass counts on both
-   backends, close Storable's 1/2 result, and keep `threads-dirh.t` complete.
+1. Finish the remaining activated core-thread gaps instead of treating partial
+   TAP counts as success. Raise `op/threads.t` from 28/30,
+   `op/substr_thr.t` from 368/400, and `re/stclass_threads.t` from 2/6 while
+   keeping `class/threads.t`, Storable's thread test, and `threads-dirh.t`
+   complete. The regex result now executes the child and exposes missing
+   thread-local `re 'debug'` trace compatibility; it is not a crash regression.
    Classify every remaining skip as an explicit documented limitation, run each
    file with the standard-Perl oracle first, and keep the exact counts in the
    differential gate until they are complete. Only then expand to Test2 and
@@ -631,21 +634,22 @@ request history.
 6. Add dedicated shared-storage lifetime cleanup and contention benchmarks;
    replace the strong identity lock registry if long-running churn proves
    retention after the last shared owner disappears.
-7. Run the virtual-thread pinning suite on Java 22, covering shared conditions,
-   native I/O, regex timeouts, and child lifecycle. Keep the mode experimental
-   unless the trace is clean and repeated benchmarks show a material benefit.
+7. Run the virtual-thread diagnostic suite on Java 24, covering shared
+   conditions, native I/O, regex timeouts, and child lifecycle. Keep the mode
+   experimental unless native/FFM traces are clean and repeated benchmarks show
+   a material benefit.
    On Java 24, the initial creation/join smoke measured 30 cloned ithreads in
    0.544 seconds on platform threads and 0.543 seconds on virtual threads with
    identical checksums. That is semantic parity, not a demonstrated benefit,
-   and cannot substitute for the Java 22 pinning gate.
+   and cannot substitute for native-I/O diagnostics on Java 24.
 
 ### Open Questions
 
 - Exact Perl-compatible cloning policy for each filehandle/native resource type.
 - Which tied and magical value classes can be safely shared in the first
   `threads::shared` compatibility tranche.
-- Whether Java 22 virtual-thread pinning in native and synchronized workloads is
-  acceptable enough to promote virtual mode beyond experimental opt-in.
+- Whether Java 24 virtual-thread behavior in native/FFM workloads is acceptable
+  enough to promote virtual mode beyond experimental opt-in.
 - What complete reset proof would be required before runtime pooling can preserve
   fresh-snapshot semantics.
 
