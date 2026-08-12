@@ -21,6 +21,17 @@ public class EmitOperatorLocal {
         boolean isDeclaredReference = node.annotations != null &&
                 Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
+        // Perl accepts the legacy spelling `local undef $/`, but parses it as
+        // local(undef($/)): the target is simply undefined and is not restored
+        // when the scope exits.  There is no lvalue for local() itself to save.
+        // Falling through to the generic localization path used to consume the
+        // undef result in VOID context and then invoke pushLocalVariable() with
+        // an empty operand stack, producing invalid JVM bytecode.
+        if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("undef")) {
+            node.operand.accept(emitterVisitor);
+            return;
+        }
+
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {
             // Check if the variable is global or 'our' variable
             if (opNode.operand instanceof IdentifierNode idNode) {

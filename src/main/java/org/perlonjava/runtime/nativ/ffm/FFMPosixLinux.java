@@ -38,6 +38,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle getegidHandle;
     private static MethodHandle getppidHandle;
     private static MethodHandle isattyHandle;
+    private static MethodHandle pollHandle;
     private static MethodHandle umaskHandle;
     
     // Method handles that need errno capture
@@ -187,6 +188,14 @@ public class FFMPosixLinux implements FFMPosixInterface {
             isattyHandle = linker.downcallHandle(
                 stdlib.find("isatty").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+
+            // int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+            pollHandle = linker.downcallHandle(
+                stdlib.find("poll").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
+                    IS_MACOS ? ValueLayout.JAVA_INT : ValueLayout.JAVA_LONG,
+                    ValueLayout.JAVA_INT)
             );
             
             umaskHandle = linker.downcallHandle(
@@ -853,6 +862,30 @@ public class FFMPosixLinux implements FFMPosixInterface {
             return (int) isattyHandle.invokeExact(fd);
         } catch (Throwable e) {
             return 0;
+        }
+    }
+
+    @Override
+    public boolean pollReadReady(int fd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            // pollfd is { int fd; short events; short revents } on Linux and macOS.
+            MemorySegment pollfd = arena.allocate(8, 4);
+            pollfd.set(ValueLayout.JAVA_INT, 0, fd);
+            pollfd.set(ValueLayout.JAVA_SHORT, 4, (short) 0x0001); // POLLIN
+            pollfd.set(ValueLayout.JAVA_SHORT, 6, (short) 0);
+            int result = IS_MACOS
+                    ? (int) pollHandle.invokeExact(pollfd, 1, 0)
+                    : (int) pollHandle.invokeExact(pollfd, 1L, 0);
+            if (result <= 0) {
+                return false;
+            }
+            short revents = pollfd.get(ValueLayout.JAVA_SHORT, 6);
+            // POLLIN, POLLERR, POLLHUP, and POLLNVAL all mean a read will not
+            // wait for future input (it will return data, EOF, or an error).
+            return (revents & (0x0001 | 0x0008 | 0x0010 | 0x0020)) != 0;
+        } catch (Throwable e) {
+            return false;
         }
     }
     

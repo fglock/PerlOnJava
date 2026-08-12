@@ -148,6 +148,19 @@ public interface FFMPosixInterface {
      * @return 1 if terminal, 0 if not
      */
     int isatty(int fd);
+
+    /**
+     * Poll a native descriptor without blocking for readable data, EOF, or an
+     * error condition.  POSIX reports EOF as readable, which Java's
+     * {@code InputStream.available()} cannot distinguish from a temporarily
+     * empty pipe.
+     *
+     * @param fd native file descriptor
+     * @return true when a read would not block
+     */
+    default boolean pollReadReady(int fd) {
+        return false;
+    }
     
     // ==================== PTY/Terminal Functions ====================
     

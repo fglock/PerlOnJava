@@ -3,6 +3,7 @@ package org.perlonjava.runtime.io;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -174,6 +175,24 @@ public class StandardIO implements IOHandle {
     }
 
     @Override
+    public boolean isReadReady() {
+        if (isEOF) {
+            return true;
+        }
+        if (inputStream == null) {
+            return false;
+        }
+        if (!FFMPosix.isWindows() && FFMPosix.get().pollReadReady(fileno)) {
+            return true;
+        }
+        try {
+            return inputStream.available() > 0;
+        } catch (IOException e) {
+            return true;
+        }
+    }
+
+    @Override
     public RuntimeScalar fileno() {
         return new RuntimeScalar(fileno);
     }
@@ -203,6 +222,7 @@ public class StandardIO implements IOHandle {
 
                 if (bytesRead == -1) {
                     // EOF
+                    isEOF = true;
                     return new RuntimeScalar("");
                 }
 
