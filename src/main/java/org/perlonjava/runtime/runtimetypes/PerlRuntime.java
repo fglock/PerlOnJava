@@ -45,6 +45,8 @@ public final class PerlRuntime implements AutoCloseable {
     private final ReentrantLock executionLock = new ReentrantLock();
     private volatile boolean initialized;
     private volatile boolean closed;
+    private final PerlThreadRegistry threadRegistry;
+    private final long perlThreadId;
 
     public final ExecutionRuntimeState executionState = new ExecutionRuntimeState();
     public final RuntimeRegexState regexState = new RuntimeRegexState();
@@ -101,6 +103,12 @@ public final class PerlRuntime implements AutoCloseable {
     final NameNormalizer.State nameNormalizerState = new NameNormalizer.State();
 
     public PerlRuntime() {
+        this(new PerlThreadRegistry(), 0);
+    }
+
+    private PerlRuntime(PerlThreadRegistry threadRegistry, long perlThreadId) {
+        this.threadRegistry = Objects.requireNonNull(threadRegistry, "threadRegistry");
+        this.perlThreadId = perlThreadId;
         ioStdout = new RuntimeIO(new StandardIO(System.out, true));
         ioStderr = new RuntimeIO(new StandardIO(System.err, false));
         ioStderr.autoFlush = true;
@@ -180,6 +188,14 @@ public final class PerlRuntime implements AutoCloseable {
         return runtimeCodeState;
     }
 
+    public PerlThreadRegistry threadRegistry() {
+        return threadRegistry;
+    }
+
+    public long perlThreadId() {
+        return perlThreadId;
+    }
+
     /** Initialize this independent interpreter's globals and runtime services. */
     public PerlRuntime initialize() {
         executionLock.lock();
@@ -247,6 +263,16 @@ public final class PerlRuntime implements AutoCloseable {
      * lifecycle, alarm, signal, native and I/O state starts fresh in the child.
      */
     public PerlRuntime snapshotClone() {
+        return snapshotCloneInternal(new PerlThreadRegistry(), 0).runtime();
+    }
+
+    record ThreadSnapshot(PerlRuntime runtime, RuntimeGraphCloner cloner) {}
+
+    ThreadSnapshot snapshotCloneForThread(PerlThreadRegistry registry, long threadId) {
+        return snapshotCloneInternal(registry, threadId);
+    }
+
+    private ThreadSnapshot snapshotCloneInternal(PerlThreadRegistry registry, long threadId) {
         executionLock.lock();
         try {
             if (closed) throw new IllegalStateException("PerlRuntime is closed");
@@ -264,7 +290,7 @@ public final class PerlRuntime implements AutoCloseable {
                 skipped = preflightCloneSkip();
             }
 
-            PerlRuntime child = new PerlRuntime();
+            PerlRuntime child = new PerlRuntime(registry, threadId);
             RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
             try (Binding ignored = bind()) {
                 globalState.snapshotInto(child.globalState, cloner);
@@ -274,7 +300,7 @@ public final class PerlRuntime implements AutoCloseable {
             try (Binding ignored = child.bind()) {
                 child.runCloneHooks();
             }
-            return child;
+            return new ThreadSnapshot(child, cloner);
         } finally {
             executionLock.unlock();
         }
