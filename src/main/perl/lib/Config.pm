@@ -261,9 +261,11 @@ my $startperl = $is_windows
     d_flock => 'define',
     d_fcntl_can_lock => 'define',
 
-    ## # Threading
-    ## useithreads => 'define',
-    ## usethreads => 'define',
+    # Interpreter threading and multiplicity are provided by isolated
+    # PerlRuntime instances backed by JVM threads.
+    useithreads => 'define',
+    usethreads => 'define',
+    usemultiplicity => 'define',
 
     # Sizes (Java platform - 64-bit integer model)
     shortsize => '2',

@@ -31,15 +31,65 @@ sub equal { return defined($_[0]) && defined($_[1]) && $_[0]->tid == $_[1]->tid 
 sub _stringify { return 'threads=' . $_[0]->tid }
 
 sub import {
+    shift;
     my $caller = caller;
+    my @exports = ('async');
+
+    while (my $option = shift) {
+        if ($option eq 'yield' || $option eq ':all') {
+            push @exports, 'yield';
+        }
+        elsif ($option =~ /^str/i) {
+            overload->import('""' => \&tid);
+        }
+        elsif ($option =~ /^(?:stack|exit)/i) {
+            my $value = shift;
+            require Carp;
+            Carp::croak("threads: Missing argument for option: $option")
+                unless defined $value;
+            # PerlOnJava owns JVM stack sizing and threads->exit is always
+            # thread-only. Accept the standard import spellings so portable
+            # programs can declare their intent without changing semantics.
+        }
+        else {
+            require Carp;
+            Carp::croak("threads: Unknown import option: $option");
+        }
+    }
+
     no strict 'refs';
-    *{"${caller}::async"} = \&async;
+    *{"${caller}::$_"} = \&{$_} for @exports;
 }
 
 use overload
     '==' => 'equal',
-    'eq' => 'equal',
+    '!=' => sub { !equal(@_) },
     '""' => '_stringify',
     fallback => 1;
 
 1;
+
+__END__
+
+=head1 NAME
+
+threads - PerlOnJava interpreter threads
+
+=head1 IMPORT OPTIONS
+
+C<async> is exported by default. C<yield> and C<:all> also export C<yield>.
+C<stringify> changes string conversion of a thread object from the stable
+C<threads=ID> form to its numeric thread ID.
+
+The standard C<stack_size> and C<exit> declarations are accepted for source
+compatibility. JVM stack sizing is runtime-managed, and C<threads-E<gt>exit>
+always exits only the calling child ithread. Missing values and unknown import
+options are errors.
+
+=head1 COMPATIBILITY
+
+The supported lifecycle is C<create>/C<async>, C<self>, C<tid>, C<list>,
+C<join>, and C<detach>, together with state and error inspection. Thread
+signals (C<kill>), per-thread stack sizing, C<object>, and C<wantarray> are not
+yet implemented. Shared storage, locks, and condition variables are provided
+by L<threads::shared> for its documented scalar, array, and hash tranche.

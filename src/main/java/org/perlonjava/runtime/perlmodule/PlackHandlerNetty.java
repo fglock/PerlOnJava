@@ -687,7 +687,9 @@ public class PlackHandlerNetty extends PerlModuleBase {
             // Wrap in a new RuntimeScalar to ensure it's stored correctly
             env.put("psgi.errors", new RuntimeScalar(RuntimeIO.getStderr()));
 
-            // psgi.multithread - \0 (PerlOnJava doesn't support threads)
+            // psgi.multithread - \0: this handler owns one captured PerlRuntime.
+            // Explicit Perl ithreads are supported, but availability of ithreads
+            // does not make concurrent callbacks into one PSGI app safe.
             env.put("psgi.multithread", new RuntimeScalar(0));
 
             // psgi.multiprocess - \0 (PerlOnJava doesn't support fork)

@@ -139,20 +139,22 @@ Netty is the optimal backend for a JVM-based Perl web server:
 |---------|-------------|
 | **Battle-tested** | Used by Twitter, Apple, Facebook; powers Elasticsearch, Cassandra |
 | **Async I/O** | Non-blocking event loop handles 10k+ concurrent connections |
-| **Single-threaded compatible** | **CRITICAL**: PerlOnJava doesn't support threads/fork yet; Netty's single event loop model is perfect |
+| **Single-runtime handler** | Explicit Perl ithreads are available, while one PSGI app remains confined to its captured runtime |
 | **HTTP/2 support** | Modern protocol support for free |
 | **WebSocket native** | First-class support for real-time apps |
 | **Zero dependencies** | Single JAR (netty-all), no native libs required |
 | **Active development** | Regular releases, strong Java ecosystem |
 
 The existing `examples/http_server/` prototype already demonstrates Netty + PerlOnJava
-integration with a custom request handler, using a **single-threaded event loop** to
-avoid race conditions in PerlOnJava's global state. Plack::Handler::Netty **standardizes**
-this by implementing the PSGI interface.
+integration with a custom request handler. Plack::Handler::Netty **standardizes**
+this by implementing the PSGI interface. Explicit Perl ithreads are supported,
+but the handler does not treat availability of ithreads as permission for
+concurrent callbacks into its single captured application runtime.
 
-**Concurrency Model**: Uses Netty's async I/O to handle multiple concurrent connections
-on a single thread. CPU-bound handlers can block other requests, but I/O-bound apps
-(most web apps) work efficiently.
+**Concurrency Model**: Uses Netty's asynchronous I/O for concurrent connections,
+but advertises `psgi.multithread => \0` because the PSGI app is single-runtime.
+Applications can create explicit ithreads for isolated work; CPU-bound request
+handlers can still reduce throughput.
 
 ### Why PSGI/Plack?
 
@@ -236,7 +238,7 @@ must construct this hash from Netty's `io.netty.handler.codec.http.HttpRequest` 
 | psgi.url_scheme | `http` or `https` | `"http"` |
 | psgi.input | Body stream | `IO::Handle` wrapping body bytes |
 | psgi.errors | Error log handle | `*STDERR` |
-| psgi.multithread | Boolean | `\0` (PerlOnJava doesn't support threads) |
+| psgi.multithread | Boolean | `\0` (one captured PSGI runtime; explicit ithreads remain available) |
 | psgi.multiprocess | Boolean | `\0` (PerlOnJava doesn't support fork) |
 | psgi.run_once | Boolean | `\0` (persistent server) |
 | psgi.nonblocking | Boolean | `\1` (Netty is async) |
@@ -360,7 +362,7 @@ public class NettyPSGIServer {
 - Accept PSGI `$app` coderef as constructor argument
 - Implement full PSGI env hash construction
 - Handle PSGI array response format
-- **Use single-threaded event loop** (NioEventLoopGroup(1)) to avoid thread-safety issues
+- Keep callbacks into the captured PSGI application runtime serialized
 
 **Estimated effort**: 2 days
 
@@ -694,7 +696,7 @@ Add to `Plack::Handler::Netty->new(%args)`:
 - `backlog` - TCP backlog queue size
 - `keepalive` - HTTP keep-alive timeout
 - `max_request_size` - Request body size limit
-- ~~`workers`~~ - **Not supported**: PerlOnJava doesn't support threads/fork yet; always single-threaded
+- ~~`workers`~~ - **Not supported**: the handler does not expose process workers or concurrent app runtimes
 
 **Estimated effort**: 1 day
 
@@ -725,7 +727,7 @@ Add:
 - SYNOPSIS with examples
 - CONFIGURATION section
 - PERFORMANCE notes
-- CAVEATS (single-threaded, no fork support)
+- CAVEATS (single PSGI application runtime, explicit ithreads available, no fork support)
 - SEE ALSO links
 
 **Estimated effort**: 1 day
@@ -1325,7 +1327,7 @@ dev/sandbox/http_server/
 | Dancer2 Type::Tiny bug still present | High | High | Fix Type::Tiny scoping bug first (dancer2_support.md Issue 3) |
 | Performance worse than Starman | Medium | Medium | Profile with JFR, optimize hot paths |
 | Streaming responses break event loop | Medium | High | Test with large responses, use Netty's streaming APIs correctly |
-| CPU-bound handlers block all requests | High | Medium | **Known limitation**: Document that PerlOnJava is single-threaded |
+| CPU-bound handlers block other requests | High | Medium | Use explicit ithreads for isolated work and keep handlers nonblocking |
 
 ## Success Metrics
 
