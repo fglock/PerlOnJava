@@ -162,13 +162,8 @@ public class FileDescriptorTable {
         if (handle instanceof ProcessInputHandle pih) {
             return pih.isReadReady();
         }
-        if (handle instanceof StandardIO) {
-            // stdin: check System.in.available()
-            try {
-                return System.in.available() > 0;
-            } catch (Exception e) {
-                return false;
-            }
+        if (handle instanceof StandardIO standardIO) {
+            return standardIO.isReadReady();
         }
         // For unknown handle types, report as ready to avoid blocking
         return true;

@@ -3979,6 +3979,15 @@ public class BytecodeCompiler implements Visitor {
             }
             throwCompilerException("Unsupported our operand: " + node.operand.getClass().getSimpleName());
         } else if (op.equals("local")) {
+            // `local undef $var` is parsed by Perl as local(undef($var)).
+            // It performs the undef operation without registering restoration
+            // state for local(), so compile the operand as an ordinary expression.
+            if (node.operand instanceof OperatorNode operandOp
+                    && operandOp.operator.equals("undef")) {
+                compileNode(node.operand, -1, currentCallContext);
+                return;
+            }
+
             // local $x - temporarily localize a global variable
             // The operand will be OperatorNode("$", IdentifierNode("x"))
             if (node.operand instanceof OperatorNode sigilOp) {

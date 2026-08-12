@@ -275,7 +275,16 @@ public class RuntimeIO extends RuntimeScalar {
      * Looks up a RuntimeIO by its assigned fileno.
      */
     public static RuntimeIO getByFileno(int fd) {
-        return registry().filenoToIO.get(fd);
+        RuntimeIO io = registry().filenoToIO.get(fd);
+        if (io != null) {
+            return io;
+        }
+        return switch (fd) {
+            case StandardIO.STDIN_FILENO -> getStdin();
+            case StandardIO.STDOUT_FILENO -> getStdout();
+            case StandardIO.STDERR_FILENO -> getStderr();
+            default -> null;
+        };
     }
 
     /**
