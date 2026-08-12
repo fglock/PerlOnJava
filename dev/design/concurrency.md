@@ -478,7 +478,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 13 implemented and validated
+### Current Status: Phase 14 implemented and validated
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -513,6 +513,14 @@ runtime lookup batching and idle lifecycle fast paths used to recover these
 results preserve the runtime-owned state boundaries. This satisfies Phase 13;
 no speculative optimization from the historical branches is required.
 
+`RuntimeGraphCloner` now clones non-code Perl graphs through one identity map.
+Container shells are registered before their contents, so aliases and cycles
+survive; blessings are translated by class name, weak edges are installed only
+after the strong graph exists, and readonly constants stay shared. Tie wrappers
+are rebuilt without invoking FETCH/STORE. Nonportable Java I/O resources follow
+the documented conservative policy and become `undef` in the clone. Focused
+tests prove source immutability and cross-root alias preservation.
+
 ### Implementation History
 
 Completed phase history is intentionally kept out of this living design
@@ -522,11 +530,9 @@ request history.
 
 ### Next Steps
 
-1. Implement Phase 14's identity-preserving graph cloner with a single identity
-   map across every root, explicit tie/resource policies, and no source mutation.
-2. Add explicit JVM and interpreter capture metadata in Phase 15; do not infer
+1. Add explicit JVM and interpreter capture metadata in Phase 15; do not infer
    generated constructor order through reflection.
-3. Compose the cloner into a Phase 16 runtime snapshot, preflight `CLONE_SKIP`,
+2. Compose the cloner into a Phase 16 runtime snapshot, preflight `CLONE_SKIP`,
    and invoke `CLONE` only after the child graph is installed.
 
 ### Open Questions
