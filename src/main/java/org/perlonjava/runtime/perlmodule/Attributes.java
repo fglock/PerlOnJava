@@ -227,7 +227,7 @@ public class Attributes extends PerlModuleBase {
 
     /**
      * Apply a built-in variable attribute.
-     * {@code shared} is recognized (no-op in PerlOnJava).
+     * {@code shared} marks supported storage for identity-preserving ithread sharing.
      * {@code -shared} triggers a "may not be unshared" error.
      */
     private static boolean applyVariableAttribute(RuntimeScalar svref, String attrName, boolean negate) {
@@ -558,7 +558,10 @@ public class Attributes extends PerlModuleBase {
         // Filter built-in attributes
         List<String> nonBuiltinAttrs = new ArrayList<>();
         for (String attr : attributes) {
-            if ("shared".equals(attr)) continue;
+            if ("shared".equals(attr)) {
+                SharedPerlStorage.shareValue(variable);
+                continue;
+            }
             nonBuiltinAttrs.add(attr);
         }
         if (nonBuiltinAttrs.isEmpty()) return;

@@ -294,6 +294,7 @@ public final class PerlRuntime implements AutoCloseable {
             RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
             try (Binding ignored = bind()) {
                 globalState.snapshotInto(child.globalState, cloner);
+                runtimeCodeState.snapshotCompiledMetadataInto(child.runtimeCodeState);
             }
             child.currentDirectory = currentDirectory;
             child.initialized = true;

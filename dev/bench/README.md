@@ -25,6 +25,7 @@ under PerlOnJava (and optionally system Perl for comparison). Use them to:
 | `benchmark_regex.pl` | Regex compilation and matching |
 | `benchmark_refcount_store.pl` | Tracked reference stores after `weaken()` activates lifecycle bookkeeping |
 | `benchmark_string.pl` | String operations (concat, substr, etc.) |
+| `benchmark_threads.pl` | Ithread snapshot, creation, scheduling, and join overhead |
 
 ## Running
 

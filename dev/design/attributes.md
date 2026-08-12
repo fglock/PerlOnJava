@@ -44,7 +44,14 @@ attributes::->import(Canine => \$spot, "Watchful");
 | CODE | `method` | Marks sub as method (suppresses ambiguity warnings) |
 | CODE | `prototype(...)` | Sets prototype |
 | CODE | `const` | Experimental: calls anon sub immediately, captures return as constant |
-| SCALAR/ARRAY/HASH | `shared` | Marks supported storage for identity-preserving ithread cloning |
+| SCALAR/ARRAY/HASH | `shared` | Marks storage for identity-preserving ithread cloning and `threads::shared` synchronization |
+
+The `shared` attribute is active when `threads::shared` is loaded. Shared
+scalars, arrays, and hashes retain identity across ithread cloning and support
+the locking and condition-variable operations described in
+`dev/design/concurrency.md`. It is not a general deep-sharing marker for tied
+or otherwise unsupported magic objects; callers should use
+`threads::shared::shared_clone` for supported aggregate graphs.
 
 ### `import()` Flow
 

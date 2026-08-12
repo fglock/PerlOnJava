@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Internal ownership and completion record for one Perl platform thread. */
+/** Internal ownership and completion record for one Perl ithread. */
 public final class PerlThreadControlBlock {
     public enum State { NEW, RUNNING, COMPLETED, FAILED, JOINED, DETACHED }
 
@@ -77,7 +77,7 @@ public final class PerlThreadControlBlock {
     public synchronized PerlThreadControlBlock start() {
         if (state != State.NEW) throw new IllegalStateException("Thread already started");
         state = State.RUNNING;
-        platformThread = Thread.ofPlatform().name("perl-ithread-" + id).unstarted(this::run);
+        platformThread = PerlThreadExecutionPolicy.configured().unstarted(id, this::run);
         platformThread.start();
         return this;
     }
@@ -158,6 +158,8 @@ public final class PerlThreadControlBlock {
     public boolean isDetached() { return detached; }
     public PerlRuntime childRuntime() { return childRuntime; }
     public Thread platformThread() { return platformThread; }
+    public String javaThreadName() { return platformThread == null ? null : platformThread.getName(); }
+    public boolean isVirtualThread() { return platformThread != null && platformThread.isVirtual(); }
     public Throwable error() { return error; }
 
     private record Outcome(RuntimeBase value, Throwable error) {}

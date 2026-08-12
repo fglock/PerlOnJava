@@ -477,7 +477,7 @@ measured benefit over platform threads/full clone.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 20 implemented and validated
+### Current Status: Phases 21–23 implemented; activation hardening continues
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -550,8 +550,37 @@ its identity. Shared aggregate backing collections are synchronized and scalar
 payload fields provide cross-thread visibility. `share`, `is_shared`,
 `shared_clone`, and `:shared` are implemented for the supported unblessed,
 untied tranche; blessed and tied values are rejected explicitly. Lock and
-condition-variable semantics remain Phase 21. `Config` continues to advertise
-threads as disabled until Phase 22.
+condition-variable semantics are implemented in Phase 21, and Phase 22 now
+advertises the supported ithread surface through `Config`.
+
+Shared storage now has recursive, lexical `lock` ownership and condition
+variables with atomic waiter publication, full recursive release/reacquisition,
+absolute timed waits, FIFO signal, and broadcast. JVM and interpreter backends
+both emit the lock cleanup boundary. The focused lock/condition stress suite
+passes on system Perl and both PerlOnJava backends.
+
+`Config` now advertises `useithreads`, `usethreads`, and `usemultiplicity`.
+The supported `threads` import/stringification surface is documented, while
+signals, effective stack sizing, `object`, and `wantarray` remain explicit
+limitations. Activation coverage passes on both backends. The first broader
+compatibility inventory currently reaches 24/30 in core `op/threads.t`, 2/4 in
+`class/threads.t`, 5/6 in `re/stclass_threads.t`, 1/2 in Storable's thread test,
+and completes `threads-dirh.t`; these are measured follow-up targets, not a
+claim that every upstream thread suite is green.
+
+The post-activation comprehensive gate records the changed test surface rather
+than comparing unlike totals: Perl core is 260709/319705 (81.5%) and bundled
+modules are 9758/12192 (80.0%). Scalar::Util 1.70 loads on both backends and the
+JVM Moo constructor smoke passes; the interpreter retains its previously
+documented Moo attribute-syntax parser limitation.
+
+Platform threads remain the default. An experimental process-wide opt-in selects
+virtual threads with `-Djperl.thread.mode=virtual` or
+`JPERL_THREAD_MODE=virtual`; unknown modes are rejected and diagnostics expose
+the actual Java thread kind. Runtime pooling is deferred because no reset
+contract yet proves that a reused interpreter is equivalent to a fresh snapshot.
+The supported Java baseline is 22, but this development host runs Java 24, so
+Java 22 pinning diagnostics remain a release gate for promoting virtual mode.
 
 ### Implementation History
 
@@ -562,17 +591,63 @@ request history.
 
 ### Next Steps
 
-1. Implement Phase 21 lexical/recursive locking and condition variables on
-   shared storage.
-2. Define and run Phase 22's broader core/CPAN compatibility activation matrix
-   before changing `Config` capability flags.
+1. Finish the newly activated core-thread compatibility tranche instead of
+   treating partial TAP counts as success. Raise `op/threads.t` from 24/30,
+   `op/substr_thr.t` from 12/400, `re/stclass_threads.t` from 5/6, and
+   `class/threads.t` from 2/4 to their full applicable pass counts on both
+   backends, close Storable's 1/2 result, and keep `threads-dirh.t` complete.
+   Classify every remaining skip as an explicit documented limitation, run each
+   file with the standard-Perl oracle first, and keep the exact counts in the
+   differential gate until they are complete. Only then expand to Test2 and
+   native-callback thread suites.
+2. Make `docs/reference/feature-matrix.md` the canonical user-facing
+   compatibility table for multiplicity, `threads`, and `threads::shared`.
+   Replace its obsolete "Threading not supported" claim with the measured
+   supported API, `Config` flags, clone-versus-shared identity rules, and an
+   explicit limitations table covering signals, effective stack sizing,
+   blessed/tied shared values, native callbacks/resources, and experimental
+   virtual threads. Link the detailed concurrency reference from its table of
+   contents and module sections.
+3. Add a `docs/about/changelog.md` work-in-progress entry for Phases 1-23 and
+   reconcile the concurrency roadmap with the shipped multiplicity/ithread
+   tranche. Update the relevant reference pages: describe per-runtime ownership
+   and snapshot cloning in `docs/reference/architecture.md`, document the
+   `useithreads`/`usethreads`/`usemultiplicity` values and virtual-thread opt-in
+   in the configuration/CLI reference, and correct
+   `docs/reference/memory-management.md`, which still says Perl threads and the
+   reference-count overlay are single-threaded.
+4. Add runnable examples under `examples/` for isolated create/join and shared
+   lock/condition workflows, link them from `examples/README.md`, and validate
+   each with system Perl plus both PerlOnJava backends. Update
+   `examples/http_server_plack/README.md` and `PERFORMANCE.md` to distinguish
+   that example's deliberately single-event-loop architecture from the now
+   available Perl ithread capability; do not imply that one captured PSGI
+   runtime is concurrently callable.
+5. Add documentation acceptance checks to the compatibility tranche: run link
+   validation, compile every new example with system Perl and `jperl -c`, execute
+   it on the JVM and interpreter backends with bounded timeouts, and retain a
+   focused API/limitation matrix test so documentation cannot advertise an
+   unsupported thread method or sharing class.
+6. Add dedicated shared-storage lifetime cleanup and contention benchmarks;
+   replace the strong identity lock registry if long-running churn proves
+   retention after the last shared owner disappears.
+7. Run the virtual-thread pinning suite on Java 22, covering shared conditions,
+   native I/O, regex timeouts, and child lifecycle. Keep the mode experimental
+   unless the trace is clean and repeated benchmarks show a material benefit.
+   On Java 24, the initial creation/join smoke measured 30 cloned ithreads in
+   0.544 seconds on platform threads and 0.543 seconds on virtual threads with
+   identical checksums. That is semantic parity, not a demonstrated benefit,
+   and cannot substitute for the Java 22 pinning gate.
 
 ### Open Questions
 
 - Exact Perl-compatible cloning policy for each filehandle/native resource type.
 - Which tied and magical value classes can be safely shared in the first
   `threads::shared` compatibility tranche.
-- Which core/CPAN thread suites define the Phase 22 minimum activation matrix.
+- Whether Java 22 virtual-thread pinning in native and synchronized workloads is
+  acceptable enough to promote virtual mode beyond experimental opt-in.
+- What complete reset proof would be required before runtime pooling can preserve
+  fresh-snapshot semantics.
 
 ## Related Documents
 

@@ -29,6 +29,7 @@ public class DiamondIO {
         String inPlaceExtension;
         boolean inPlaceEdit;
         Path tempFilePath;
+        RuntimeIO selectedHandleBeforeInPlace;
 
         void clear() {
             currentReader = null;
@@ -40,6 +41,7 @@ public class DiamondIO {
             inPlaceExtension = null;
             inPlaceEdit = false;
             tempFilePath = null;
+            selectedHandleBeforeInPlace = null;
         }
     }
 
@@ -110,6 +112,7 @@ public class DiamondIO {
                 // If there's no current reader, try to open the next file
                 if (state.currentReader == null) {
                     if (!openNextFile()) {
+                        finishInPlaceEditing();
                         state.eofReached = true;
                         return scalarUndef;
                     }
@@ -241,6 +244,9 @@ public class DiamondIO {
 
             // CRITICAL: Update selectedHandle so print statements without explicit filehandle
             // write to the original file during in-place editing
+            if (state.selectedHandleBeforeInPlace == null) {
+                state.selectedHandleBeforeInPlace = RuntimeIO.getSelectedHandle();
+            }
             RuntimeIO.setSelectedHandle(state.currentWriter);
         }
 
@@ -250,5 +256,14 @@ public class DiamondIO {
         getGlobalIO("main::ARGV").set(state.currentReader);
 
         return state.currentReader != null;
+    }
+
+    /** Restore the handle selected before diamond in-place editing began. */
+    private static void finishInPlaceEditing() {
+        State state = state();
+        if (state.selectedHandleBeforeInPlace != null) {
+            RuntimeIO.setSelectedHandle(state.selectedHandleBeforeInPlace);
+            state.selectedHandleBeforeInPlace = null;
+        }
     }
 }

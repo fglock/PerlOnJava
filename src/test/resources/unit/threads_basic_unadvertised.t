@@ -12,8 +12,8 @@ sub check {
 }
 
 my $advertised = $Config{useithreads} || '';
-check($Config{archname} =~ /^java-/ ? !$advertised : $advertised,
-    'thread capability flag matches the active implementation');
+check($advertised eq 'define',
+    'thread capability flag advertises the active implementation');
 check(threads->self->tid == 0, 'main thread has tid zero');
 
 my $parent = 10;
@@ -41,4 +41,4 @@ my $detached = async { 7 };
 $detached->detach;
 check($detached->is_detached, 'async and detach work');
 check(threads->self == threads->self, 'overloaded equality uses tid');
-check("" . threads->self =~ /^threads=/, 'thread stringification is stable');
+check("" . threads->self =~ /^threads=/, 'default thread stringification is stable');

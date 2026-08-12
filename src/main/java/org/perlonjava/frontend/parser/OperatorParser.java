@@ -1531,7 +1531,7 @@ public class OperatorParser {
             List<String> nonBuiltinAttrs = new ArrayList<>();
             for (String attr : attributes) {
                 if ("shared".equals(attr)) {
-                    // 'shared' is a no-op (no threads in PerlOnJava)
+                    // 'shared' is handled by threads::shared after declaration.
                     continue;
                 }
                 nonBuiltinAttrs.add(attr);

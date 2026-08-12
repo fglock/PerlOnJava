@@ -304,6 +304,21 @@ public final class GlobalRuntimeState {
         // Class loaders, caches, named IO and formats are child-owned/fresh.
     }
 
+    /** Copy CV ids registered by a named sub that was materialized after snapshot. */
+    void snapshotCompiledCodeRefsInto(GlobalRuntimeState target, RuntimeGraphCloner cloner) {
+        for (Map.Entry<Integer, RuntimeScalar> entry : compiledCodeRefs.entrySet()) {
+            RuntimeScalar cloned = (RuntimeScalar) cloner.cloneValue(entry.getValue());
+            RuntimeScalar existing = target.compiledCodeRefs.get(entry.getKey());
+            if (existing != null && existing != cloned) {
+                throw new IllegalStateException("Compiled CODE reference id collision during lazy thread clone: "
+                        + entry.getKey());
+            }
+            target.compiledCodeRefs.put(entry.getKey(), cloned);
+        }
+        target.nextCompiledCodeRefId = Math.max(target.nextCompiledCodeRefId,
+                nextCompiledCodeRefId);
+    }
+
     private static <T extends RuntimeBase> void cloneMap(
             Map<String, T> source, Map<String, T> target,
             RuntimeGraphCloner cloner, Class<T> type) {

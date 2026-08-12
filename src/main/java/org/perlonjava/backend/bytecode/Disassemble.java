@@ -2375,6 +2375,14 @@ public class Disassemble {
                                 .append(", ctx=").append(tiedCtx).append(")\n");
                         break;
                     }
+                    case Opcodes.LOCK: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int valueReg = interpretedCode.bytecode[pc++];
+                        int lockCtx = interpretedCode.bytecode[pc++];
+                        sb.append("LOCK r").append(rd).append(" = lock(r").append(valueReg)
+                                .append(", ctx=").append(lockCtx).append(")\n");
+                        break;
+                    }
                     case Opcodes.QX: {
                         // Format: QX rd argsReg ctx (MiscOpcodeHandler pattern)
                         rd = interpretedCode.bytecode[pc++];
