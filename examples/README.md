@@ -7,6 +7,9 @@ Featured example:
 
 - [`pagi/`](pagi/) — an asynchronous HTTP application running on
   `PAGI::Server` with PerlOnJava's native `async`/`await` support.
+- [`threads/`](threads/) — isolated ithread create/join and shared
+  lock/condition workflows, with self-checking scripts that also run on
+  standard threaded Perl.
 
 Note:
 
@@ -25,4 +28,3 @@ Note:
 - Ensure that any new Perl scripts added to the src/test/resources directory follow the project's testing conventions.
 
 - If you add new example scripts to this directory, consider documenting their purpose and usage to help other developers.
-

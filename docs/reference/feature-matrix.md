@@ -28,8 +28,9 @@
     - [Core modules](#core-modules)
     - [Non-core modules](#non-core-modules)
     - [DBI module](#dbi-module)
-14. [Features Incompatible with JVM](#features-incompatible-with-jvm)
-15. [Optimizations](#optimizations)
+14. [Concurrency and Perl Threads](#concurrency-and-perl-threads)
+15. [Features Incompatible with JVM](#features-incompatible-with-jvm)
+16. [Optimizations](#optimizations)
 
 ---
 
@@ -57,7 +58,10 @@ PerlOnJava implements most core Perl features with some key differences:
 
 ❌ Not Supported:
 - XS modules and C integration
-- Threading
+- `fork`
+
+🟡 Supported with limitations:
+- Perl ithreads and `threads::shared` (see [Concurrency and Perl Threads](#concurrency-and-perl-threads))
 
 ---
 
@@ -602,7 +606,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Stash manipulation**: Alternative ways to create constants like: `$constant::{_CAN_PCS} = \$const`.
 - ✅  **`reset("A-Z")`** resetting global variables is implemented.
 - ✅  **Single-quote as package separator**: Legacy `$a'b` style package separator is supported.
-- ❌  **Thread-safe `@_`, `$_`, and regex variables**: Thread safety for global special variables is missing.
+- ✅  **Runtime-owned `@_`, `$_`, and regex state**: Each ithread receives an isolated runtime snapshot.
 - ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
   - ❌  **Extended call stack information**: extra debug information like `(caller($level))[9]` is not implemented.<br>
@@ -685,6 +689,11 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Benchmark** use the same version as Perl.
 - ✅  **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
 - ✅  **Config** module.
+- 🟡  **threads** module: isolated create/join, identity, listing, detach,
+  state inspection, child exit, errors, `async`, `yield`, and supported import
+  options. See [Concurrency and Perl Threads](#concurrency-and-perl-threads).
+- 🟡  **threads::shared** module: shared scalar/array/hash storage, recursive
+  lexical locks, condition variables, and supported graph cloning.
 - ✅  **Cwd** module
 - ✅  **Data::Dumper**: use the same version as Perl.
 - ✅  **DirHandle** module.
@@ -818,6 +827,44 @@ The DBI module provides seamless integration with JDBC drivers:
 
 #### Statement Handle Attributes
 - `NAME`, `NAME_lc`, `NAME_uc`, `NUM_OF_FIELDS`, `NUM_OF_PARAMS`, `Database`
+
+---
+
+## Concurrency and Perl Threads
+
+PerlOnJava implements interpreter multiplicity and a measured subset of Perl
+ithreads on both the JVM compiler and bytecode interpreter backends.
+
+| Capability | Status | Notes |
+|---|---|---|
+| `Config` flags | ✅ | `useithreads`, `usethreads`, and `usemultiplicity` are `define`. |
+| Runtime isolation | ✅ | Mutable globals, dynamic state, hints, warnings, regex state, lifecycle queues, signals, alarms, and I/O registries are runtime-owned. |
+| `threads->create`, `async`, `join`, `detach` | ✅ | A child receives a snapshot; ordinary parent and child values then evolve independently. Join results are cloned back to the caller. |
+| Identity and state | ✅ | `self`, `tid`, `list`, equality, running/joinable/detached checks, errors, nested threads, and child-only `threads->exit` are supported. |
+| `threads::shared` | 🟡 | `share`, `is_shared`, `shared_clone`, and `:shared` support unblessed, untied scalar/array/hash graphs. Shared identity crosses the snapshot boundary. |
+| Locks and conditions | ✅ | Recursive lexical `lock`, `cond_wait`, absolute `cond_timedwait`, `cond_signal`, and `cond_broadcast` are supported. |
+| Platform threads | ✅ | Stable default. |
+| Virtual threads | 🟡 | Experimental process-wide opt-in; semantic parity is measured, but no performance benefit or complete native-I/O diagnostic clearance on Java 24 is claimed. |
+
+The clone-versus-share rule is important: ordinary references are cloned with
+aliasing and cycles preserved inside the child graph, but they are not the same
+storage as their parent counterparts. Values explicitly shared through
+`threads::shared` retain common backing storage.
+
+### Current limitations
+
+| Limitation | Effect |
+|---|---|
+| Thread signals | `threads->kill` is not implemented. |
+| Effective stack sizing | Standard `stack_size` import syntax is accepted for source compatibility, but JVM stack sizing remains runtime-managed. |
+| Additional introspection | `threads->object` and `wantarray` are not implemented. |
+| Shared object classes | Blessed and tied values are rejected by the supported `share`/`shared_clone` tranche. |
+| Native resources and callbacks | Java I/O/native handles are not portably duplicated into child snapshots; native callback thread isolation remains suite-specific. |
+| Upstream suite coverage | Core compatibility remains partial: measured results include `op/threads.t` 28/30, `op/substr_thr.t` 368/400, and `re/stclass_threads.t` 2/6; `class/threads.t`, Storable's thread test, and `threads-dirh.t` complete. The regex suite now executes its child and exposes unsupported thread-local `re 'debug'` trace parity. |
+| PSGI | Availability of ithreads does not make one captured PSGI application runtime concurrently callable. `Plack::Handler::Netty` advertises `psgi.multithread => \0`. |
+
+The complete design and measured validation record is in
+[Concurrency and runtime isolation](../../dev/design/concurrency.md).
 
 ---
 

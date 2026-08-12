@@ -46,19 +46,21 @@ Tests streaming response path with responder callbacks.
 1. **Zero Failed Requests**: 100% success rate across all tests (26,000 total requests)
 2. **High Throughput**: 30k+ req/sec for simple responses
 3. **Low Latency**: Sub-5ms average latency even at high concurrency
-4. **Scales Well**: Performance improves with concurrency (single-threaded event loop benefits)
+4. **Scales Well for I/O**: The single-runtime event-loop design handled the measured request concurrency
 5. **Streaming Support**: Minimal performance impact (~50% of sync, still excellent)
 
 ### Performance Characteristics
 
-- **Single-threaded**: Uses one Netty event loop thread (PerlOnJava limitation)
+- **Single application runtime**: This handler deliberately avoids concurrent
+  callbacks into one captured PSGI app. PerlOnJava itself supports explicit,
+  isolated ithreads.
 - **Async I/O**: Handles high concurrency efficiently via Netty's NIO
 - **Memory Efficient**: No buffering of responses, constant memory usage
 - **CPU Bound**: Performance limited by single-thread CPU usage, not I/O
 
 ### Bottlenecks Identified
 
-1. **Single Thread Limit**: Cannot utilize multiple CPU cores
+1. **Single PSGI Runtime Limit**: One handler instance does not run the same app concurrently across cores
    - Mitigation: Run multiple instances behind load balancer (standard approach)
    
 2. **Streaming Overhead**: ~50% performance vs synchronous responses
@@ -77,7 +79,9 @@ Tests streaming response path with responder callbacks.
    - Database queries, API calls, file I/O all benefit from async model
    
 2. **CPU-Bound Apps**: Consider implications
-   - Heavy computation blocks other requests (single-threaded)
+   - Heavy computation blocks other requests in this single-runtime handler
+   - Applications may use explicit ithreads for isolated work, but the handler
+     still advertises `psgi.multithread => \0`
    - Solution: Offload to background workers
    
 3. **High-Traffic Sites**: Run multiple instances
@@ -97,5 +101,6 @@ Tests streaming response path with responder callbacks.
 ✅ **Scalable**: Handles high concurrency efficiently  
 ✅ **Memory efficient**: Constant memory usage, no leaks  
 
-The single-threaded limitation is by design (PerlOnJava thread-safety) and can be
-addressed with standard horizontal scaling approaches.
+The single-runtime limitation belongs to this handler design, not to the
+availability of Perl ithreads. Horizontal scaling remains the recommended way
+to run multiple PSGI application runtimes concurrently.

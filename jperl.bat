@@ -28,10 +28,20 @@ rem Override via `JPERL_OPTS=-Xmx<size>` in the environment if needed.
 
 rem Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
 rem warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
+set JAVA_VERSION=
 for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do (
     for /f "tokens=1 delims=." %%m in ("%%~v") do (
+        set JAVA_VERSION=%%m
         if %%m GEQ 23 set JVM_OPTS=%JVM_OPTS% --sun-misc-unsafe-memory-access=allow
     )
+)
+if not defined JAVA_VERSION (
+    echo ERROR: PerlOnJava requires Java 24 or later; java was not found in PATH. 1>&2
+    exit /b 1
+)
+if %JAVA_VERSION% LSS 24 (
+    echo ERROR: PerlOnJava requires Java 24 or later ^(found: %JAVA_VERSION%^). 1>&2
+    exit /b 1
 )
 
 rem During Maven tests the packaged JAR does not exist yet. Use compiled

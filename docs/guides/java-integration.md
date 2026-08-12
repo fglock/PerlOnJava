@@ -269,7 +269,7 @@ See also:
 If `getEngineByName("perl")` returns null:
 1. Ensure `perlonjava-*.jar` is in classpath
 2. Check `META-INF/services/javax.script.ScriptEngineFactory` exists in JAR
-3. Verify Java 22 or later is being used
+3. Verify Java 24 or later is being used
 
 ### ClassNotFoundException
 

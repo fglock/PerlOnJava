@@ -85,7 +85,7 @@ Modify the `Dockerfile` to include additional dependencies:
 
 ```dockerfile
 # Add JDBC driver
-FROM eclipse-temurin:22-jdk
+FROM eclipse-temurin:24-jdk
 COPY --from=build /app/target/perlonjava-5.44.0.jar /app/perlonjava.jar
 COPY path/to/driver.jar /app/drivers/
 ENV CLASSPATH=/app/drivers/driver.jar
@@ -96,5 +96,4 @@ ENTRYPOINT ["java", "-jar", "/app/perlonjava.jar"]
 
 - [Installation Guide](installation.md) - Build without Docker
 - [Database Access](../guides/database-access.md) - Using JDBC drivers
-
 

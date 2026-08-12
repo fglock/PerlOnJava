@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
 [![License](https://img.shields.io/badge/license-Artistic_1.0_|_GPL_1+-blue.svg)](LICENSE.md)
 
-PerlOnJava compiles Perl to JVM bytecode — run existing Perl scripts on any platform with a JVM, with access to Java libraries. One jar file runs on Linux, macOS, and Windows — just add Java 22+. PerlOnJava is an independent project, not part of the Perl core distribution.
+PerlOnJava compiles Perl to JVM bytecode — run existing Perl scripts on any platform with a JVM, with access to Java libraries. One jar file runs on Linux, macOS, and Windows — just add Java 24+. PerlOnJava is an independent project, not part of the Perl core distribution.
 
 ## Features
 

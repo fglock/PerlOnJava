@@ -372,12 +372,11 @@ public class RuntimeGraphCloner {
         clones.put(source, target);
         copyBase(source, target);
         target.type = source.type;
-        for (Map.Entry<String, RuntimeScalar> entry : source.elements.entrySet()) {
-            RuntimeScalar cloned = (RuntimeScalar) cloneValue(entry.getValue());
-            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-                target.elements.put(entry.getKey(), cloned);
-            }
-        }
+        // A stash is a live view over the runtime's canonical global slot maps,
+        // not an independently-owned hash. GlobalRuntimeState snapshots those
+        // maps separately. Replaying the source view through HashSpecialVariable
+        // would perform semantic typeglob assignments in the child and can clear
+        // slots that were already cloned (notably a package's @ISA array).
         return target;
     }
 

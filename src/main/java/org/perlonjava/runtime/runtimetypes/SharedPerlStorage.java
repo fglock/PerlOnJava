@@ -1,8 +1,11 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import java.util.Collections;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,8 +16,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /** Marker and first-tranche synchronization policy for threads::shared. */
 public final class SharedPerlStorage {
-    private static final Map<RuntimeBase, LockState> LOCKS =
-            Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final WeakIdentityRegistry<RuntimeBase, LockState> LOCKS =
+            new WeakIdentityRegistry<>();
     private static final Map<RuntimeBase, ArrayDeque<Waiter>> WAITERS =
             Collections.synchronizedMap(new IdentityHashMap<>());
 
@@ -22,6 +25,58 @@ public final class SharedPerlStorage {
 
     private static final class LockState {
         final ReentrantLock lock = new ReentrantLock();
+    }
+
+    /** Weak keys with explicit identity equality, independent of referent equals/hashCode. */
+    private static final class WeakIdentityRegistry<K, V> {
+        private final ReferenceQueue<K> staleKeys = new ReferenceQueue<>();
+        private final Map<IdentityWeakReference<K>, V> entries = new HashMap<>();
+
+        synchronized V computeIfAbsent(K key, java.util.function.Function<K, V> factory) {
+            expungeStaleEntries();
+            IdentityWeakReference<K> lookup = new IdentityWeakReference<>(key);
+            V value = entries.get(lookup);
+            if (value != null) return value;
+            value = factory.apply(key);
+            entries.put(new IdentityWeakReference<>(key, staleKeys), value);
+            return value;
+        }
+
+        synchronized int expungeStaleEntries() {
+            int removed = 0;
+            IdentityWeakReference<?> stale;
+            while ((stale = (IdentityWeakReference<?>) staleKeys.poll()) != null) {
+                if (entries.remove(stale) != null) removed++;
+            }
+            return removed;
+        }
+    }
+
+    private static final class IdentityWeakReference<T> extends WeakReference<T> {
+        private final int identityHash;
+
+        IdentityWeakReference(T referent) {
+            super(referent);
+            identityHash = System.identityHashCode(referent);
+        }
+
+        IdentityWeakReference(T referent, ReferenceQueue<T> queue) {
+            super(referent, queue);
+            identityHash = System.identityHashCode(referent);
+        }
+
+        @Override
+        public int hashCode() {
+            return identityHash;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof IdentityWeakReference<?> reference)) return false;
+            Object referent = get();
+            return referent != null && referent == reference.get();
+        }
     }
 
     private record Waiter(CountDownLatch latch) {}
@@ -170,9 +225,15 @@ public final class SharedPerlStorage {
     }
 
     private static LockState lockState(RuntimeBase root) {
-        synchronized (LOCKS) {
-            return LOCKS.computeIfAbsent(root, ignored -> new LockState());
-        }
+        return LOCKS.computeIfAbsent(root, ignored -> new LockState());
+    }
+
+    static int expungeStaleLocksForTesting() {
+        return LOCKS.expungeStaleEntries();
+    }
+
+    static ReentrantLock lockForTesting(RuntimeBase root) {
+        return lockState(root).lock;
     }
 
     private static RuntimeBase requireShared(RuntimeScalar reference, String operation) {

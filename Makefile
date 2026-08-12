@@ -16,6 +16,14 @@ endif
 # Note: We modify gradle-wrapper.properties directly because older gradle can't run on Java 25+
 check-java-gradle:
 	@JAVA_MAJOR=$$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'); \
+	case "$$JAVA_MAJOR" in ''|*[!0-9]*) \
+		echo "ERROR: PerlOnJava requires Java 24 or later (found: $${JAVA_MAJOR:-unavailable})."; \
+		exit 1; \
+	esac; \
+	if [ "$$JAVA_MAJOR" -lt 24 ]; then \
+		echo "ERROR: PerlOnJava requires Java 24 or later (found: $${JAVA_MAJOR:-unavailable})."; \
+		exit 1; \
+	fi; \
 	if [ "$$JAVA_MAJOR" -ge 25 ] 2>/dev/null; then \
 		echo "Java $$JAVA_MAJOR detected - ensuring Gradle 9.1+ compatibility..."; \
 		rm -rf ~/.gradle/wrapper/dists/gradle-8.* ~/.gradle/wrapper/dists/gradle-9.0* 2>/dev/null || true; \

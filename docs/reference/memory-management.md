@@ -116,8 +116,10 @@ ones are:
 - `Internals::SvREFCNT($ref)` returns an approximate count rather than
   the raw value Perl 5 would report — useful for `weaken`/`DESTROY`
   invariants, not for byte-for-byte refcount fidelity.
-- `fork` and Perl-level `threads` are not supported by the JVM backend;
-  the refcount overlay is single-threaded.
+- `fork` is not implemented. Perl ithreads are supported through isolated
+  runtime snapshots, and lifecycle/refcount registries are runtime-owned.
+  Explicitly shared scalar/array/hash storage uses synchronized visibility and
+  locking; blessed and tied values remain outside the supported shared tranche.
 - `local($@, $!, $?)` around `DESTROY`: only `$@` is currently saved and
   restored.
 

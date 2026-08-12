@@ -180,7 +180,7 @@ Some things just can't work on the JVM:
 
 ## Cross-Platform, Single Artifact
 
-PerlOnJava runs on Linux, macOS, and Windows. Same JAR everywhere — the JVM's "write once, run anywhere" actually delivers here. Your deployment is Java 22+, the JAR, and the wrapper scripts.
+PerlOnJava runs on Linux, macOS, and Windows. Same JAR everywhere — the JVM's "write once, run anywhere" actually delivers here. Your deployment is Java 24+, the JAR, and the wrapper scripts.
 
 The project includes a **Dockerfile** for containerized deployments and a **Debian package recipe** (`make deb`) for system installation.
 

@@ -1,6 +1,6 @@
 # PerlOnJava - CPAN client for the JVM
 
-[PerlOnJava](https://github.com/fglock/PerlOnJava) now includes `jcpan`, a CPAN client that installs pure Perl modules without needing `make` or a C compiler. It runs on Linux, macOS, and Windows - just add Java 22+.
+[PerlOnJava](https://github.com/fglock/PerlOnJava) now includes `jcpan`, a CPAN client that installs pure Perl modules without needing `make` or a C compiler. It runs on Linux, macOS, and Windows - just add Java 24+.
 
 ## Installing modules
 
