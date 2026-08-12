@@ -26,6 +26,21 @@ our @EXPORT_OK = qw(
 );
 
 our %EXPORT_TAGS = (
+    'bsd_glob' => [ qw(
+        bsd_glob
+        GLOB_ERROR
+        GLOB_CSH
+        GLOB_NOMAGIC
+        GLOB_QUOTE
+        GLOB_TILDE
+        GLOB_BRACE
+        GLOB_NOCHECK
+        GLOB_NOSORT
+        GLOB_NOSPACE
+        GLOB_ABEND
+        GLOB_ALPHASORT
+        GLOB_ALTDIRFUNC
+    ) ],
     'glob' => [ qw(
         glob
         bsd_glob

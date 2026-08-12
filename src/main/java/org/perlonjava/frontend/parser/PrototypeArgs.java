@@ -295,6 +295,19 @@ public class PrototypeArgs {
             return args;
         }
 
+        // A binary/ternary operator immediately after a bare subroutine name
+        // belongs to the enclosing expression, not to the call's argument
+        // list.  This applies to unprototyped calls too: `predicate ? a : b`
+        // is `(predicate()) ? a : b`.  Named-unary prototypes already take
+        // this path above, but the generic list parser cannot begin an
+        // argument with `?` and used to report a syntax error instead.
+        if (!hasParentheses && isArgumentTerminator(parser)) {
+            if (!allowsZeroArguments(prototype)) {
+                throwNotEnoughArgumentsError(parser);
+            }
+            return args;
+        }
+
         // Comma is forbidden here, unless the prototype allows zero arguments
         if (prototype != null && !prototype.isEmpty() && isComma(TokenUtils.peek(parser)) && !allowsZeroArguments(prototype)) {
             parser.throwError("syntax error");

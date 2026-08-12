@@ -473,6 +473,20 @@ public class EmitSubroutine {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "isMapGrepBlock",
                     "Z");
+
+            // map/grep blocks are callbacks within the current Perl sub, not
+            // anonymous Perl subs of their own. Preserve the enclosing __SUB__.
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    ctx.javaClassInfo.javaClassName,
+                    "__SUB__",
+                    "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "inheritSelfReference",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
         }
 
         // Set isEvalBlock on the RuntimeCode so RuntimeCode.apply() propagates

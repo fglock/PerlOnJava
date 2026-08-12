@@ -675,17 +675,12 @@ public class CompileBinaryOperator {
             return;
         }
 
-        // Compile left and right operands (for non-short-circuit operators).
-        // For arithmetic/bitwise operators, force SCALAR context to prevent
-        // parenthesized expressions from producing RuntimeList in LIST context.
-        boolean forceScalar = switch (node.operator) {
-            case "+", "-", "*", "/", "%", "**",
-                 "&", "|", "^", "<<", ">>",
-                 "binary&", "binary|", "binary^",
-                 "&.", "|.", "^.",
-                 ".." -> true;
-            default -> false;
-        };
+        // Compile operands of ordinary binary operators in scalar context.
+        // The JVM backend does the same: comparison, concatenation, repeat,
+        // range, arithmetic, and bitwise operators all scalarize each operand,
+        // regardless of the context in which the result is consumed. This is
+        // especially important for calls parsed before an eval STRING import
+        // has made their prototypes visible.
         // For grep/map/sort/all/any, the right operand (list) must always be in LIST context
         // and the left operand (closure) in SCALAR context, matching the JVM backend.
         boolean isListOp = switch (node.operator) {
@@ -693,17 +688,18 @@ public class CompileBinaryOperator {
             default -> false;
         };
         int outerCtx = bytecodeCompiler.currentCallContext;
-        int leftCtx = (forceScalar || isListOp) ? RuntimeContextType.SCALAR : outerCtx;
+        // The repeat operator preserves list context on its left operand:
+        // `(($expr) x 4)` repeats values, while scalar-context x repeats the
+        // resulting string. All other ordinary binary operands are scalar.
+        int leftCtx = node.operator.equals("x") ? outerCtx : RuntimeContextType.SCALAR;
         bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
 
         int rightCtx;
         if (isListOp) {
             rightCtx = RuntimeContextType.LIST;
-        } else if (forceScalar || node.operator.equals("=~") || node.operator.equals("!~")) {
-            rightCtx = RuntimeContextType.SCALAR;
         } else {
-            rightCtx = outerCtx;
+            rightCtx = RuntimeContextType.SCALAR;
         }
         Node rightNode = node.right;
         if (node.operator.equals("isa") && rightNode instanceof IdentifierNode identifier) {

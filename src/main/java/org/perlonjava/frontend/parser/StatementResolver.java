@@ -487,22 +487,11 @@ public class StatementResolver {
                                         parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
                                     }
 
-                                    // Create assignment: $hiddenVarName = sub {...}
-                                    // We need to create a reference to the already-declared variable
-                                    // Use a fully qualified name to ensure it resolves correctly regardless of package context
-                                    String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
-                                    String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
-
-                                    OperatorNode varRef = new OperatorNode("$", new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex), parser.tokenIndex);
-                                    // For state variables, copy the ID so runtime can track the state
-                                    if (declaration.equals("state")) {
-                                        varRef.id = innerVarNode.id;
-                                    }
-                                    BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
-
                                     // Check if we're inside a subroutine
-                                    String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
-                                    boolean insideSubroutine = currentSub != null && !currentSub.isEmpty();
+                                    // Anonymous subroutines deliberately use an empty display
+                                    // name, so getCurrentSubroutine() cannot distinguish them
+                                    // from file scope. The explicit body flag can.
+                                    boolean insideSubroutine = parser.ctx.symbolTable.isInSubroutineBody();
 
                                     if (declaration.equals("state") || !insideSubroutine) {
                                         // For state sub: Execute assignment immediately during parsing (like a BEGIN block)
@@ -511,16 +500,32 @@ public class StatementResolver {
                                         //
                                         // For my sub at FILE SCOPE: Also execute at compile time so that
                                         // use statements (like use overload) can access the sub reference
-                                        BlockNode beginBlock = new BlockNode(new ArrayList<>(List.of(assignment)), parser.tokenIndex);
+                                        String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
+                                        String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                                        OperatorNode varRef = new OperatorNode("$",
+                                                new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex),
+                                                parser.tokenIndex);
+                                        varRef.setAnnotation("hiddenVarName", hiddenVarName);
+                                        if (declaration.equals("state")) {
+                                            varRef.id = innerVarNode.id;
+                                        }
+                                        BinaryOperatorNode compileTimeAssignment =
+                                                new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
+                                        BlockNode beginBlock = new BlockNode(
+                                                new ArrayList<>(List.of(compileTimeAssignment)), parser.tokenIndex);
                                         SpecialBlockParser.runSpecialBlock(parser, "BEGIN", beginBlock);
 
                                         // Return empty list since the assignment already executed
                                         yield new ListNode(parser.tokenIndex);
                                     } else {
-                                        // For my sub INSIDE ANOTHER SUB: Return the assignment to be executed at runtime
-                                        // This creates a fresh closure each time the enclosing scope is entered,
-                                        // correctly capturing the current values of closure variables
-                                        yield assignment;
+                                        // For my sub INSIDE ANOTHER SUB, emit the hidden
+                                        // lexical declaration as part of the runtime AST.
+                                        // A plain assignment leaves a fresh backend compiler
+                                        // unaware that the generated name is lexical.
+                                        varDecl.setAnnotation("runtimeLexicalSub", true);
+                                        BinaryOperatorNode lexicalAssignment =
+                                                new BinaryOperatorNode("=", varDecl, anonSub, parser.tokenIndex);
+                                        yield lexicalAssignment;
                                     }
                                 } else {
                                     // Forward declaration: my sub name; or my sub name ($);
@@ -537,9 +542,6 @@ public class StatementResolver {
 
                                         // Create a stub RuntimeCode with the prototype set
                                         // This is needed so that prototype(\&sub) works for forward declarations
-                                        String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
-                                        String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
-
                                         // Create a subroutine stub with the prototype that returns undef
                                         // The body needs at least a return statement to avoid bytecode issues
                                         List<Node> stubBody = new ArrayList<>();
@@ -553,10 +555,13 @@ public class StatementResolver {
                                                 parser.tokenIndex
                                         );
 
+                                        String declaringPackage = parser.ctx.symbolTable.getCurrentPackage();
+                                        String qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
                                         // Create assignment: $hiddenVarName = sub { }
                                         OperatorNode varRef = new OperatorNode("$",
                                                 new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex),
                                                 parser.tokenIndex);
+                                        varRef.setAnnotation("hiddenVarName", hiddenVarName);
                                         BinaryOperatorNode stubAssignment = new BinaryOperatorNode("=", varRef, stubSub, parser.tokenIndex);
 
                                         // Execute the stub assignment in a BEGIN block

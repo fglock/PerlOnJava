@@ -849,6 +849,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean deferredConstAttribute = false;
     // Flag to indicate this code is a map/grep block - non-local return should propagate through it
     public boolean isMapGrepBlock = false;
+    // Implementation callbacks such as map/grep do not introduce a Perl
+    // subroutine scope, so their __SUB__ comes from the enclosing RuntimeCode.
+    public boolean inheritsSelfReference = false;
     // Flag to indicate this code is an eval BLOCK - non-local return should propagate through it
     public boolean isEvalBlock = false;
     // Flag to indicate this CV has been explicitly renamed via Sub::Name::subname
@@ -974,6 +977,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public Supplier<Void> compilerSupplier;
     // Self-reference for __SUB__ (set after construction for InterpretedCode)
     public RuntimeScalar __SUB__;
+
+    /** Assign the enclosing Perl subroutine as an implementation callback's __SUB__. */
+    public static void inheritSelfReference(RuntimeScalar callbackRef, RuntimeScalar enclosingRef) {
+        if (callbackRef == null || !(callbackRef.value instanceof RuntimeCode code)) {
+            return;
+        }
+        code.__SUB__ = enclosingRef;
+        Object implementation = code.codeObject != null ? code.codeObject : code.subroutine;
+        if (implementation != null) {
+            try {
+                Field field = implementation.getClass().getDeclaredField("__SUB__");
+                field.set(implementation, enclosingRef);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("Unable to inherit __SUB__ for callback", e);
+            }
+        }
+    }
 
     /**
      * Captured RuntimeScalar variables from the enclosing scope.
@@ -1775,6 +1795,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
         this.deferredConstAttribute = codeFrom.deferredConstAttribute;
         this.isMapGrepBlock = codeFrom.isMapGrepBlock;
+        this.inheritsSelfReference = codeFrom.inheritsSelfReference;
         this.isEvalBlock = codeFrom.isEvalBlock;
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
         this.cvStartFile = codeFrom.cvStartFile;

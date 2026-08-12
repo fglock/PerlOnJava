@@ -105,22 +105,19 @@ public class SubroutineParser {
                     // Get the hidden variable name for the lexical sub
                     String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                     if (hiddenVarName != null) {
-                        // Get the package where this lexical sub was declared
+                        boolean runtimeLexicalSub = varNode.getBooleanAnnotation("runtimeLexicalSub");
                         String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
-
-                        // Make the hidden variable name fully qualified with the declaring package
-                        String qualifiedHiddenVarName = hiddenVarName;
-                        if (declaringPackage != null && !hiddenVarName.contains("::")) {
-                            qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
+                        String storageName = hiddenVarName;
+                        if (!runtimeLexicalSub && declaringPackage != null && !hiddenVarName.contains("::")) {
+                            storageName = declaringPackage + "::" + hiddenVarName;
                         }
-
                         // Get the hidden variable entry from the symbol table for the ID
                         String hiddenVarKey = "$" + hiddenVarName;
                         SymbolTable.SymbolEntry hiddenEntry = parser.ctx.symbolTable.getSymbolEntry(hiddenVarKey);
 
                         // Always create a fresh variable reference to avoid AST reuse issues
                         OperatorNode dollarOp = new OperatorNode("$",
-                                new IdentifierNode(qualifiedHiddenVarName, currentIndex), currentIndex);
+                                new IdentifierNode(storageName, currentIndex), currentIndex);
                         // Propagate hiddenVarName annotation so that emitters can detect lexical subs
                         dollarOp.setAnnotation("hiddenVarName", hiddenVarName);
 
@@ -1220,6 +1217,11 @@ public class SubroutineParser {
                 // The body should be filled in by creating a runtime code object
                 String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                 if (hiddenVarName != null) {
+                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                    String storageName = hiddenVarName;
+                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                        storageName = declaringPackage + "::" + hiddenVarName;
+                    }
                     // Create an anonymous sub that will be used to fill the lexical sub
                     // We need to compile this into a RuntimeCode object that can be executed
                     SubroutineNode anonSub = new SubroutineNode(
@@ -1231,17 +1233,12 @@ public class SubroutineParser {
                             parser.tokenIndex
                     );
 
-                    // Create assignment that will execute at runtime
-                    // Use the declaring package to create a fully qualified variable name
-                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
-                    String qualifiedHiddenVarName = hiddenVarName;
-                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
-                        qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
-                    }
-
+                    // Fill the compile-time storage created by the lexical
+                    // forward declaration.
                     OperatorNode varRef = new OperatorNode("$",
-                            new IdentifierNode(qualifiedHiddenVarName, parser.tokenIndex),
+                            new IdentifierNode(storageName, parser.tokenIndex),
                             parser.tokenIndex);
+                    varRef.setAnnotation("hiddenVarName", hiddenVarName);
 
                     BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
 

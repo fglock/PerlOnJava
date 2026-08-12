@@ -771,22 +771,19 @@ public class Variable {
                 // Check if this is a "my sub" or "state sub" - use hidden variable
                 String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                 if (hiddenVarName != null) {
+                    boolean runtimeLexicalSub = varNode.getBooleanAnnotation("runtimeLexicalSub");
+                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
+                    String storageName = hiddenVarName;
+                    if (!runtimeLexicalSub && declaringPackage != null && !hiddenVarName.contains("::")) {
+                        storageName = declaringPackage + "::" + hiddenVarName;
+                    }
                     // Consume the identifier token
                     TokenUtils.consume(parser);
-
-                    // Get the package where this lexical sub was declared
-                    String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
-
-                    // Make the hidden variable name fully qualified with the declaring package
-                    String qualifiedHiddenVarName = hiddenVarName;
-                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
-                        qualifiedHiddenVarName = declaringPackage + "::" + hiddenVarName;
-                    }
 
                     // Create reference to hidden variable: &$hiddenVar
                     // IMPORTANT: For state variables, we need to preserve the ID from the declaration!
                     OperatorNode dollarOp = new OperatorNode("$",
-                            new IdentifierNode(qualifiedHiddenVarName, index), index);
+                            new IdentifierNode(storageName, index), index);
                     // Propagate hiddenVarName annotation so that emitters can detect lexical subs
                     // (e.g., for `undef &x` and `defined(&x)` special handling)
                     dollarOp.setAnnotation("hiddenVarName", hiddenVarName);

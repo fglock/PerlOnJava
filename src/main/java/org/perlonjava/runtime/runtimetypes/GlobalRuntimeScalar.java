@@ -69,7 +69,11 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             // the tie handler sees the transition. Modules like
             // File::chdir explicitly short-circuit on undef
             // (`return unless defined $_[1];`).
-            originalVariable.tiedStore(RuntimeScalarCache.scalarUndef);
+            // This undef is exposed to STORE as $_[1].  It must be a mutable
+            // argument, because real Perl lets the handler vivify it (for
+            // example Tie::Select's `select $_[1]`).  The shared cached undef
+            // is intentionally read-only and therefore is not suitable here.
+            originalVariable.tiedStore(new RuntimeScalar());
             localizedStack.push(
                     new SavedGlobalState(fullName, originalVariable, savedValue, null));
             // Do NOT replace the slot — the tied scalar stays in place so

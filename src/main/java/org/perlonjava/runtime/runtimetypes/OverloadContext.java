@@ -296,13 +296,34 @@ public class OverloadContext {
     }
 
     public static RuntimeScalar tryOneArgumentOverload(RuntimeScalar runtimeScalar, int blessId, String operator, String methodName, Function<RuntimeScalar, RuntimeScalar> fallbackFunction) {
+        return tryOneArgumentOverload(runtimeScalar, blessId, operator, methodName,
+                fallbackFunction, (String[]) null);
+    }
+
+    public static RuntimeScalar tryOneArgumentOverload(RuntimeScalar runtimeScalar, int blessId,
+            String operator, String methodName,
+            Function<RuntimeScalar, RuntimeScalar> fallbackFunction,
+            String... autogenOperators) {
         // Prepare overload context and check if object is eligible for overloading
         OverloadContext ctx = OverloadContext.prepare(blessId);
         if (ctx == null) return null;
-        // Try primary overload method
         RuntimeArray unaryArgs = new RuntimeArray(runtimeScalar, scalarUndef, new RuntimeScalar(""));
+        // Try primary overload method
         RuntimeScalar result = ctx.tryOverload(operator, unaryArgs);
         if (result != null) return result;
+        // Perl autogenerates unary negation from binary subtraction when a
+        // class supplies '-' but not the distinct 'neg' overload key. It
+        // invokes the binary routine as `0 - $object`: the object remains the
+        // first argument, while the other operand is zero and the swapped flag
+        // is true.
+        if (autogenOperators != null) {
+            RuntimeArray autogenArgs = new RuntimeArray(
+                    runtimeScalar, new RuntimeScalar(0), new RuntimeScalar(1));
+            for (String autogenOperator : autogenOperators) {
+                result = ctx.tryOverload(autogenOperator, autogenArgs);
+                if (result != null) return result;
+            }
+        }
         // Try fallback
         result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(\"\"", "(bool");
         if (result != null) {

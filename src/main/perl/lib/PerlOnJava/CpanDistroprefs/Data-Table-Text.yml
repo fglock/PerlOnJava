@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Data::Table::Text.
+
+  The distribution's monolithic test.pl eventually exercises its call()
+  helper, whose purpose is to fork a child and copy package variables back to
+  the parent. PerlOnJava deliberately does not implement fork. The preceding
+  tests still run and cover the library paths needed by Data::NFA/Data::DFA;
+  ignore the eventual fork-only failure so those pure-Perl dependencies can be
+  installed.
+match:
+  distribution: "^PRBRENAN/Data-Table-Text-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
