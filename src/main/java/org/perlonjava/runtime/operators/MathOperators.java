@@ -112,7 +112,7 @@ public class MathOperators {
         int blessId = blessedId(arg);
         if (blessId < 0) {
             RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
-                    arg, blessId, "(neg", "neg", MathOperators::integerUnaryMinus);
+                    arg, blessId, "(neg", "neg", MathOperators::integerUnaryMinus, "(-");
             if (result != null) return result;
         }
         RuntimeScalar stringResult = unaryMinusStringResult(arg);
@@ -1428,7 +1428,8 @@ public class MathOperators {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
-            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(neg", "neg", MathOperators::unaryMinus);
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId,
+                    "(neg", "neg", MathOperators::unaryMinus, "(-");
             if (result != null) return result;
         }
 
@@ -1449,7 +1450,8 @@ public class MathOperators {
         // Check if object is eligible for overloading
         int blessId = blessedId(runtimeScalar);
         if (blessId < 0) {
-            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId, "(neg", "neg", MathOperators::unaryMinusWarn);
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(runtimeScalar, blessId,
+                    "(neg", "neg", MathOperators::unaryMinusWarn, "(-");
             if (result != null) return result;
         }
 

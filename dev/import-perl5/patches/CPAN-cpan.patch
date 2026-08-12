@@ -13,3 +13,12 @@
 +    $ENV{PERLONJAVA_TEST_JPERL_OPTS} =
 +        join ' ', grep { length } $test_opts, '-Xmx768m';
 +}
+@@ -6,0 +19,8 @@
++# Always refresh PerlOnJava's bundled CPAN tooling before App::Cpan. The JVM
++# launcher can already have CPAN::Config in %INC, so `use CPAN::Config` alone
++# is not enough to rerun the bootstrap for the selected PERLONJAVA_HOME.
++BEGIN {
++    require CPAN::Config;
++    CPAN::Config::_bootstrap_prefs();
++    CPAN::Config::_bootstrap_patches();
++}

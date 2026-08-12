@@ -795,6 +795,7 @@ public class OpcodeHandlerExtended {
      */
     public static int executePreAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
+        registers[rd] = scalarIncrementOperand(registers[rd]);
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
@@ -809,6 +810,7 @@ public class OpcodeHandlerExtended {
     public static int executePostAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        registers[rs] = scalarIncrementOperand(registers[rs]);
         if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
             registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
         }
@@ -817,11 +819,29 @@ public class OpcodeHandlerExtended {
     }
 
     /**
+     * Scalarize an lvalue slice for ++/-- while preserving Perl's lvalue side
+     * effect: every selected entry is vivified, but only the final entry is
+     * incremented. Ordinary scalar operands pass through unchanged.
+     */
+    private static RuntimeScalar scalarIncrementOperand(RuntimeBase operand) {
+        if (operand instanceof RuntimeArray array) {
+            RuntimeScalar last = new RuntimeScalar();
+            for (RuntimeScalar element : array) {
+                element.vivifyLvalue();
+                last = element;
+            }
+            return last;
+        }
+        return (RuntimeScalar) operand;
+    }
+
+    /**
      * Execute pre-decrement operation.
      * Format: PRE_AUTODECREMENT rd
      */
     public static int executePreAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
+        registers[rd] = scalarIncrementOperand(registers[rd]);
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
@@ -836,6 +856,7 @@ public class OpcodeHandlerExtended {
     public static int executePostAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
+        registers[rs] = scalarIncrementOperand(registers[rs]);
         if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
             registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
         }
@@ -981,7 +1002,7 @@ public class OpcodeHandlerExtended {
 
         // Wrap in RuntimeScalar and set __SUB__ for self-reference
         RuntimeScalar codeRef = new RuntimeScalar(closureCode);
-        closureCode.__SUB__ = codeRef;
+        closureCode.__SUB__ = template.inheritsSelfReference ? code.__SUB__ : codeRef;
         registers[rd] = codeRef;
 
         // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes

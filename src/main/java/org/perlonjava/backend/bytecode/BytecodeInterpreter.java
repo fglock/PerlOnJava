@@ -649,6 +649,12 @@ public class BytecodeInterpreter {
                                 // Label not found locally - create GOTO marker and propagate
                                 RuntimeControlFlowList marker = new RuntimeControlFlowList(
                                         ControlFlowType.GOTO, labelName, code.sourceName, code.sourceLine);
+                                // A missing label is a runtime error caught by the innermost
+                                // eval BLOCK. Returning the marker here bypasses this frame's
+                                // eval handler when the frame itself was entered by eval STRING.
+                                if (!evalCatchStack.isEmpty()) {
+                                    throw new PerlCompilerException(marker.marker.buildErrorMessage());
+                                }
                                 return marker;
                             }
 

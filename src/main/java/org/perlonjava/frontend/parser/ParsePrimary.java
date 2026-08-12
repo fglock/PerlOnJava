@@ -48,8 +48,12 @@ public class ParsePrimary {
      * @throws PerlCompilerException if an unexpected token is encountered
      */
     public static Node parsePrimary(Parser parser) {
-        int startIndex = parser.tokenIndex;
         LexerToken token = TokenUtils.consume(parser); // Consume the next token from the input
+        // consume() may cross a newline and, while doing so, skip an entire
+        // pending heredoc body. Quote-like parsers backtrack to startIndex, so
+        // it must identify the token actually consumed rather than the stale
+        // position before whitespace/heredoc processing.
+        int startIndex = parser.tokenIndex - 1;
         String operator = token.text;
         Node operand;
 

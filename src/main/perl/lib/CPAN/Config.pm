@@ -52,6 +52,7 @@ sub _bootstrap_prefs {
         'Test-Block.yml'             => 'PerlOnJava/CpanDistroprefs/Test-Block.yml',
         'Test-Deep-JSON.yml'         => 'PerlOnJava/CpanDistroprefs/Test-Deep-JSON.yml',
         'Test-SharedFork.yml'        => 'PerlOnJava/CpanDistroprefs/Test-SharedFork.yml',
+        'Data-Table-Text.yml'        => 'PerlOnJava/CpanDistroprefs/Data-Table-Text.yml',
         'Test-TCP.yml'               => 'PerlOnJava/CpanDistroprefs/Test-TCP.yml',
         'Test-Trap.yml'              => 'PerlOnJava/CpanDistroprefs/Test-Trap.yml',
         'Filesys-Notify-Simple.yml'  => 'PerlOnJava/CpanDistroprefs/Filesys-Notify-Simple.yml',

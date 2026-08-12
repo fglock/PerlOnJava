@@ -1870,6 +1870,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (oldBase.blessId != 0
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && !blessedClassHasDestroy(oldBase)
+                        && RuntimeCode.argsStackDepth() > 1
+                        && !oldBase.clearedOwnedAggregateElement) {
+                    // Match MortalList's nested-call protection for ordinary
+                    // blessed objects.  Method arguments and expression
+                    // temporaries are real strong references even though the
+                    // selective counter cannot see every copy.  Running the
+                    // global reachability walker here made weak interning
+                    // caches (Math::Algebra::Symbols is a representative case)
+                    // quadratic: every temporary overwrite walked every global
+                    // cache entry.  Preserve the protective count and let the
+                    // statement-boundary weak sweep make the final decision.
+                    oldBase.refCount = 1;
+                } else if (oldBase.blessId != 0
                         && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && ReachabilityWalker.isReachableFromRoots(oldBase)) {
@@ -1919,6 +1934,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
                 && !thisWasWeak
                 && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                && (RuntimeCode.argsStackDepth() <= 1
+                    || oldBase.clearedOwnedAggregateElement)
                 && oldBase.reachableOwnerCount() == 0
                 && !ReachabilityWalker.isReachableFromExternalRoot(oldBase)
                 && !ReachabilityWalker.isReachableFromLiveCodeCaptures(oldBase)) {

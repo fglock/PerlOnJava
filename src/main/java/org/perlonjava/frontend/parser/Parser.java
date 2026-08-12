@@ -239,17 +239,18 @@ public class Parser {
             // This handles cases where 'x' is followed directly by a number without space
             if (token.text.startsWith("x") && token.text.length() > 1) {
                 String remainder = token.text.substring(1);
-                // Check if the remainder is a valid integer
-                try {
-                    Integer.parseInt(remainder);
+                // Perl permits the repetition operator to touch a numeric
+                // literal (`"z"x1e3`). The lexer necessarily reads that as
+                // one identifier token, so split both integer and decimal
+                // scientific forms here. This check runs only in infix
+                // position, leaving an ordinary bareword such as x1e3 alone.
+                if (remainder.matches("[0-9][0-9_]*(?:[eE][+]?[0-9_]+)?")) {
                     // Split the token into 'x' operator and the number
                     token.text = "x";
                     token.type = LexerTokenType.OPERATOR;
                     // Insert a new token for the number after the current position
                     LexerToken numberToken = new LexerToken(LexerTokenType.NUMBER, remainder);
                     tokens.add(tokenIndex + 1, numberToken);
-                } catch (NumberFormatException e) {
-                    // Not a valid integer, leave the token as is
                 }
             }
 

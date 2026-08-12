@@ -2886,57 +2886,13 @@ public class BytecodeCompiler implements Visitor {
         // Left operand is the array (@array or @$arrayref)
         // Right operand is the list of values to push/unshift
 
-        // Get the array
-        int arrayReg;
-        if (node.left instanceof OperatorNode leftOp) {
-
-            if (leftOp.operator.equals("@") && leftOp.operand instanceof IdentifierNode) {
-                // Direct array: @array
-                String varName = ((IdentifierNode) leftOp.operand).name;
-                String arrayVarName = "@" + varName;
-
-                // Get array register - check lexical first, then global
-                if (hasVariable(arrayVarName)) {
-                    arrayReg = getVariableRegister(arrayVarName);
-                } else {
-                    // Global array - load it
-                    arrayReg = allocateRegister();
-                    String globalArrayName = NameNormalizer.normalizeVariableName(
-                            varName,
-                            getCurrentPackage()
-                    );
-                    int nameIdx = addToStringPool(globalArrayName);
-                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                    emitReg(arrayReg);
-                    emit(nameIdx);
-                }
-            } else if (leftOp.operator.equals("@") && !(leftOp.operand instanceof IdentifierNode)) {
-                // Array dereference: @$arrayref or @{expr}
-                // Evaluate the operand expression to get the reference, then deref
-                compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
-                int refReg = lastResultReg;
-
-                // Dereference to get the array
-                arrayReg = allocateRegister();
-                if (isStrictRefsEnabled()) {
-                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
-                    emitReg(arrayReg);
-                    emitReg(refReg);
-                } else {
-                    int pkgIdx = addToStringPool(getCurrentPackage());
-                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
-                    emitReg(arrayReg);
-                    emitReg(refReg);
-                    emit(pkgIdx);
-                }
-            } else {
-                throwCompilerException("push/unshift requires array or array reference");
-                return;
-            }
-        } else {
-            throwCompilerException("push/unshift requires array operand");
-            return;
-        }
+        // Compile the complete lvalue in list context, as the JVM backend does.
+        // Besides ordinary @array and @{$ref}, Perl permits a declaration as
+        // the first operand (`push my @items, $value`).  Structural matching
+        // on an immediate @ operator rejected that valid form in interpreted
+        // subs even though compiling the lvalue already yields RuntimeArray.
+        compileNode(node.left, -1, RuntimeContextType.LIST);
+        int arrayReg = lastResultReg;
 
         // Compile the values to push/unshift (right operand) in list context
         compileNode(node.right, -1, RuntimeContextType.LIST);
@@ -4764,7 +4720,26 @@ public class BytecodeCompiler implements Visitor {
                 emit(nameIdx);
                 setArrayResultForContext(rd);
             } else {
-                throwCompilerException("Unsupported @ operand: " + node.operand.getClass().getSimpleName());
+                // General postfix dereference: an arbitrary expression may
+                // produce the array reference (`method()->@*`, `(expr)->@*`).
+                // The JVM backend evaluates that expression in scalar context
+                // and calls arrayDeref; mirror it instead of limiting the
+                // interpreter to simple variables and blocks.
+                compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int refReg = lastResultReg;
+                int rd = allocateOutputRegister();
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                    emitReg(rd);
+                    emitReg(refReg);
+                    emit(pkgIdx);
+                }
+                setArrayResultForContext(rd);
             }
         } else if (op.equals("%")) {
             // Hash variable dereference: %x
@@ -4864,7 +4839,31 @@ public class BytecodeCompiler implements Visitor {
                 emit(nameIdx);
                 lastResultReg = hashReg;
             } else {
-                throwCompilerException("Unsupported % operand: " + node.operand.getClass().getSimpleName());
+                // General postfix hash dereference from an arbitrary
+                // expression, matching the JVM backend's scalar evaluation.
+                compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int scalarReg = lastResultReg;
+                int hashReg = allocateRegister();
+                if (isStrictRefsEnabled()) {
+                    emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                } else {
+                    int pkgIdx = addToStringPool(getCurrentPackage());
+                    emitWithToken(Opcodes.DEREF_HASH_NONSTRICT, node.getIndex());
+                    emitReg(hashReg);
+                    emitReg(scalarReg);
+                    emit(pkgIdx);
+                }
+                if (currentCallContext == RuntimeContextType.SCALAR) {
+                    int rd = allocateOutputRegister();
+                    emit(Opcodes.ARRAY_SIZE);
+                    emitReg(rd);
+                    emitReg(hashReg);
+                    lastResultReg = rd;
+                } else {
+                    lastResultReg = hashReg;
+                }
             }
         } else if (op.equals("*")) {
             // Glob variable dereference: *x
@@ -5858,6 +5857,7 @@ public class BytecodeCompiler implements Visitor {
         // ListOperators.map/grep and RuntimeCode.apply() can detect non-local returns
         if (subCompiler.isInMapGrepBlock) {
             subCode.isMapGrepBlock = true;
+            subCode.inheritsSelfReference = true;
         }
 
         if (RuntimeCode.isDisassemble()) {
@@ -5867,7 +5867,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 5: Create closure or simple code ref
         int codeReg = allocateRegister();
 
-        if (closureVarIndices.isEmpty()) {
+        if (closureVarIndices.isEmpty() && !subCode.inheritsSelfReference) {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference

@@ -617,6 +617,13 @@ public class RegexPreprocessorHelper {
                 case '^':
                     if (first) {
                         afterCaret = true;
+                    } else {
+                        // A second caret is the first ordinary member of a
+                        // negated class, as in [^^].  Only ']' immediately
+                        // after the leading negation caret is literal; leaving
+                        // afterCaret set made the real closing bracket literal
+                        // and consumed the rest of the pattern as class text.
+                        afterCaret = false;
                     }
                     sb.append(Character.toChars(c));
                     first = false;
