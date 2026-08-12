@@ -1523,6 +1523,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return result;
     }
 
+    /** Compiler hook for experimental scalar refaliasing into an lvalue proxy. */
+    public RuntimeScalar aliasLvalueReference(RuntimeScalar reference) {
+        if (this instanceof RuntimeHashProxyEntry hashEntry) {
+            return hashEntry.aliasToReference(reference);
+        }
+        throw new PerlCompilerException("Assignment to unsupported ref aliasing target");
+    }
+
     RuntimeScalar setFromSubstrLvalue(RuntimeScalar value) {
         if (this != value) {
             RuntimeScalar result = setLarge(value);

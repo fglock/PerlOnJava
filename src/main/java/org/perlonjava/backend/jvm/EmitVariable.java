@@ -901,6 +901,22 @@ public class EmitVariable {
                         }
                     }
 
+                    // A hash element is a loose scalar lvalue: replace its
+                    // slot with the RHS referent rather than copying the SV.
+                    if (nodeLeft.operand instanceof BinaryOperatorNode element
+                            && element.operator.equals("{")) {
+                        element.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "aliasLvalueReference",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        if (ctx.contextType == RuntimeContextType.VOID) mv.visitInsn(Opcodes.POP);
+                        if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
+                        return;
+                    }
+
                     // Handle ref aliasing: \$y = $ref, \@y = $ref, \%y = $ref
                     if (nodeLeft.operand instanceof OperatorNode varNode
                             && (varNode.operator.equals("$") || varNode.operator.equals("@") || varNode.operator.equals("%"))) {
@@ -1041,7 +1057,7 @@ public class EmitVariable {
                 // Check if this is a chop/chomp that can't be an lvalue
                 if (node.left instanceof OperatorNode operatorNode) {
                     String op = operatorNode.operator;
-                    if (op.equals("chop") || op.equals("chomp")) {
+                    if (op.equals("chop") || op.equals("chomp") || op.equals("substr")) {
                         throw new PerlCompilerException(node.tokenIndex, "Can't modify " + op + " in scalar assignment", ctx.errorUtil);
                     }
                 }

@@ -760,7 +760,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
                     // when the caller captures the return value.
                     MortalList.deferDecrementIfTracked(value);
-                    yield new RuntimeScalar(value);
+                    // The deleted SV is a loose lvalue. This is observable when
+                    // the slot aliases another scalar and is passed as the
+                    // first argument of four-argument substr.
+                    yield value;
                 }
                 yield new RuntimeScalar();
             }
@@ -782,7 +785,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (value != null) {
                     // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
                     MortalList.deferDecrementIfTracked(value);
-                    yield new RuntimeScalar(value);
+                    yield value;
                 }
                 yield new RuntimeScalar();
             }

@@ -27,6 +27,10 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
         this.mode = mode;
     }
 
+    ArraySpecialVariable snapshotView() {
+        return new ArraySpecialVariable(mode);
+    }
+
     /**
      * Returns the position of the capturing group at the specified index.
      * The position returned depends on the mode: end position for Id.LAST_MATCH_END,

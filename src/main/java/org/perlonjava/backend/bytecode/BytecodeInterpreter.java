@@ -712,6 +712,13 @@ public class BytecodeInterpreter {
                                 registers[dest] = isImmutableProxy(srcVal) ? ensureMutableScalar(srcVal) : srcVal;
                             }
 
+                            case Opcodes.ALIAS_LVALUE_REFERENCE -> {
+                                int target = bytecode[pc++];
+                                int reference = bytecode[pc++];
+                                registers[target] = registers[target].getFirst()
+                                        .aliasLvalueReference(registers[reference].getFirst());
+                            }
+
                             case Opcodes.LOAD_CONST -> {
                                 // Load from constant pool: rd = constants[index]
                                 int rd = bytecode[pc++];

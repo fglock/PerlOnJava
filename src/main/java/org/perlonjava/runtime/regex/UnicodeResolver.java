@@ -3,6 +3,7 @@ package org.perlonjava.runtime.regex;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.HashSet;
@@ -455,29 +456,60 @@ public class UnicodeResolver {
             return userPropertyCache().get(subName);
         }
 
+        // A property sub is arbitrary Perl and may block. Regex parsing occurs
+        // under the process compile lock, so invoking it here would prevent an
+        // unrelated ithread from compiling a different property. Leave the
+        // existing placeholder marker for ensureCompiledForRuntime() to resolve
+        // after ordinary execution has released the compiler lock.
+        if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
+            return null;
+        }
+
         // Look up the subroutine without autovivifying an empty CODE slot.
         if (!GlobalVariable.isGlobalCodeRefDefined(subName)) {
             return null;
         }
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
 
+        final String resolvedSubName = subName;
+        try {
+            String parsed = PerlRuntime.current().threadRegistry()
+                    .resolveUserUnicodeProperty(resolvedSubName,
+                            () -> resolveUserDefinedProperty(
+                                    codeRef, resolvedSubName, newRecursionSet));
+            userPropertyCache().put(subName, parsed);
+            return parsed;
+        } catch (PerlCompilerException e) {
+            // Re-throw Perl exceptions (like die in IsDeath)
+            String msg = e.getMessage();
+            if (msg != null && !msg.contains("in expansion of")) {
+                throw new IllegalArgumentException("Died" + (msg.isEmpty() ? "" : ": " + msg) + " in expansion of " + subName, e);
+            }
+            throw e;
+        } catch (IllegalArgumentException e) {
+            // Re-throw validation errors from parseUserDefinedProperty
+            throw e;
+        } catch (Exception e) {
+            // Wrap other errors
+            throw new IllegalArgumentException("Error in user-defined property " + subName + ": " + e.getMessage(), e);
+        }
+    }
+
+    private static String resolveUserDefinedProperty(RuntimeScalar codeRef, String subName,
+                                                     Set<String> recursionSet) {
         try {
             // Call the subroutine with an empty argument list
             RuntimeArray args = new RuntimeArray();
             RuntimeList result = RuntimeCode.apply(codeRef, args, RuntimeContextType.SCALAR);
 
             if (result.elements.isEmpty()) {
-                String parsed = "";
-                userPropertyCache().put(subName, parsed);
-                return parsed;
+                return "";
             }
 
             String definition = result.elements.getFirst().toString();
 
             // Parse and cache the property definition
-            String parsed = parseUserDefinedProperty(definition, newRecursionSet, subName);
-            userPropertyCache().put(subName, parsed);
-            return parsed;
+            return parseUserDefinedProperty(definition, recursionSet, subName);
 
         } catch (PerlCompilerException e) {
             // Re-throw Perl exceptions (like die in IsDeath)
@@ -492,6 +524,36 @@ public class UnicodeResolver {
         } catch (Exception e) {
             // Wrap other errors
             throw new IllegalArgumentException("Error in user-defined property " + subName + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Resolve deferred top-level user properties before entering the synchronized
+     * regex compiler. Property subs are arbitrary Perl and may block; keeping
+     * them outside that compiler monitor lets unrelated property names proceed.
+     */
+    static void preloadUserDefinedProperties(String pattern) {
+        if (pattern == null || pattern.isEmpty()) return;
+
+        for (int slash = pattern.indexOf('\\'); slash >= 0;
+             slash = pattern.indexOf('\\', slash + 1)) {
+            int precedingSlashes = 0;
+            for (int cursor = slash - 1; cursor >= 0 && pattern.charAt(cursor) == '\\'; cursor--) {
+                precedingSlashes++;
+            }
+            if ((precedingSlashes & 1) != 0 || slash + 3 >= pattern.length()) continue;
+
+            char marker = pattern.charAt(slash + 1);
+            if ((marker != 'p' && marker != 'P') || pattern.charAt(slash + 2) != '{') continue;
+            int end = pattern.indexOf('}', slash + 3);
+            if (end < 0) return;
+
+            String property = pattern.substring(slash + 3, end).trim();
+            if (property.startsWith("^")) property = property.substring(1).trim();
+            if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
+                translateUnicodeProperty(property, marker == 'P');
+            }
+            slash = end;
         }
     }
 

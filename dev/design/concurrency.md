@@ -481,38 +481,57 @@ generic form.
 Acceptance: `op/threads.t` reaches 30/30 on JVM and interpreter backends while
 `class/threads.t` remains 4/4 and `threads-dirh.t` continues to exit cleanly.
 
-### Phase 25 — Snapshot graph integrity under large suites
+### Phase 25 — Snapshot graph integrity under large suites (implemented 2026-08-12)
 
 Remove null-payload and CODE-root cloning failures exposed by the large regex
 thread wrappers. Preserve graph identity, weak edges, and source immutability;
 do not repair these failures by sharing ordinary child values with the parent.
 
+Implemented null-safe cleared weak-reference handling, type-preserving cloning
+for magic regex capture scalars, CODE-root cloning, constant-result graph cloning,
+and identity-map reuse when a lazy named CV materializes after snapshot.
+
 Acceptance: `pat_psycho_thr.t`, `pat_rt_report_thr.t`, `pat_thr.t`,
 `regexp_unicode_prop_thr.t`, and `speed_thr.t` reach their direct, unthreaded
 suite baselines without clone exceptions on either backend.
 
-### Phase 26 — Scalar lvalue and magic parity
+### Phase 26 — Scalar lvalue and magic parity (in progress)
 
 Fix the ordinary `index`/`substr` lvalue, warning, overload, reference-
 stringification, and lexical-magic behavior exposed by their thread wrappers.
 Treat failures present in the direct suite as language/operator gaps rather than
 thread-cloning failures.
 
-Acceptance: direct and threaded forms both reach `index_thr.t` 415/415 and
+Implemented substantial shared JVM/interpreter lvalue context, negative offset/length
+clipping, warning/die behavior, live substring extent modes, one-time overload
+stringification, and loose refalias lvalue handling.
+
+The `index` gate is complete on the JVM backend; interpreter lazy-capture
+identity and the remaining direct `substr` assertions are still under
+validation. Acceptance: direct and threaded forms both reach `index_thr.t` 415/415 and
 `substr_thr.t` 400/400 on JVM and interpreter backends.
 
-### Phase 27 — Regex runtime concurrency and debug state
+### Phase 27 — Regex runtime concurrency (implemented 2026-08-12) and debug state
 
-Complete runtime ownership and synchronization for user-defined Unicode
-properties and clone the lexical `re 'debug'` configuration and diagnostic
-routing required by threaded regex compilation.
+Runtime-local user-defined Unicode-property results are inherited at snapshot,
+and simultaneous sibling resolution is coordinated per property name without
+serializing unrelated names or executing Perl callbacks under the compile lock.
+
+Lexical `re 'debug'` remains a direct regex feature blocker: the pragma is
+currently ignored and the existing implementation trace is a process-wide
+environment flag written to `System.err`. Correct support requires lexical
+parser/CV metadata, both backends, and a runtime diagnostic sink before thread
+trace equivalence can be claimed.
 
 Acceptance: `user_prop_race_thr.t` reaches 3/3 within its bounded deadlines and
 `stclass_threads.t` reaches 6/6 with parent/child trace equivalence.
 
-### Phase 28 — General regex parity exposed by thread wrappers
+### Phase 28 — General regex parity exposed by thread wrappers (in progress)
 
-Implement the remaining parser/runtime features in `pat_re_eval`, `reg_email`,
+The recursive regex backend now supports `(?(DEFINE)...)`, named subroutine
+calls in that container, and extended bracket classes within definitions.
+
+Implement the remaining parser/runtime features in `pat_re_eval`,
 `regexp_qr_embed`, Unicode-property, conditional, control-verb, and lookbehind
 coverage. These are shared regex-language gaps, not permission to special-case
 the `_thr.t` harness.
@@ -520,9 +539,15 @@ the `_thr.t` harness.
 Acceptance: every applicable regex `_thr.t` wrapper has zero assertion delta
 from its direct companion suite and neither path terminates early.
 
-### Phase 29 — Complete and truthful `threads` API
+### Phase 29 — Complete and truthful `threads` API (implemented tranche 2026-08-12)
 
-Implement current-thread/class-form `detach`, thread signals, `object`,
+Implemented current-thread/class-form `detach`, targeted thread signals,
+`object`, persisted creation context and `wantarray`, exit/context options,
+main-thread state, terminal alias records, and truthful platform/virtual
+stack-size behavior. Shutdown warnings and process retention for detached
+platform threads remain explicit follow-up work.
+
+Complete remaining compatibility details for
 `wantarray`, exit/context options, exit status, and the stack-size API where the
 JVM can honor it. Unsupported platform guarantees must fail clearly; capability
 methods must never advertise a silent no-op such as the current `kill` stub.
@@ -531,9 +556,14 @@ Acceptance: system-Perl-validated API tests cover object and class forms,
 success/error/exit lifecycle, watchdog cancellation, import options, and
 capability reporting on both backends.
 
-### Phase 30 — Resource inheritance and Test2 stress
+### Phase 30 — Resource inheritance and Test2 stress (implemented tranche 2026-08-12)
 
-Define inherited pipe, descriptor, and filehandle behavior for thread snapshots.
+Internal pipe endpoints now have explicit inherited copies with shared endpoint
+leases, independent wrapper close, child handle registration, and deterministic
+last-owner cleanup. Other files, sockets, and native handles retain the
+conservative undef/rejection policy.
+
+Continue to define descriptor and filehandle behavior for thread snapshots.
 Preserve the already-green default Test2 thread/IPC suites, then enable the
 applicable timeout and opt-in thread stress paths without changing Test2.
 
@@ -596,7 +626,7 @@ has a measured benefit over a fresh snapshot.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 24 complete; Phase 25 is next
+### Current Status: Phases 25–30 implemented; integrated validation in progress
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -741,22 +771,25 @@ request history.
 
 ### Next Steps
 
-1. Implement Phases 25–28 as independent, always-green PRs: snapshot graph
-   integrity, scalar operator parity, regex concurrency/debug state, and then
-   general regex parity. For every `_thr.t` result, record the direct companion
-   suite in the same run and require zero thread-induced delta rather than
-   comparing aggregate TAP counts alone.
-2. Implement Phases 29–32 independently: truthful API behavior, resource
-   inheritance and Test2 stress, native callback/handle ownership, and only then
-   additional shared value categories. Preserve the green anchors after every
-   PR: `class/threads.t`, `threads-dirh.t`, Storable threads, and default Test2
-   thread/IPC coverage.
-3. Complete Phase 33 with the full platform-thread matrix on both backends,
-   followed by virtual-mode parity. Add `examples/threads/dynamic_map_reduce.pl`
-   to demonstrate a small shared scheduler, isolated worker-local hashes, and
-   deterministic join aggregation; do not claim a performance benefit from the
-   example.
-4. Keep virtual threads experimental until native callback diagnostics and
+1. Finish the remaining Phase 26 interpreter lazy-lexical identity case and the
+   thirteen direct `substr.t` assertions. Keep direct and `_thr.t` companions in
+   the same run; a wrapper may not be called fixed merely because it no longer
+   terminates early.
+2. Complete lexical `re 'debug'` as a direct regex feature with parser/CV
+   metadata, JVM and interpreter propagation, and runtime-owned diagnostic
+   routing. Then finish the remaining Phase 28 `pat_re_eval` and
+   `regexp_qr_embed` direct-language gaps before asserting thread equivalence.
+3. Finish Phase 29 shutdown warnings and detached platform-thread process
+   lifecycle. Continue Phase 30 resource classification beyond explicitly
+   inherited internal pipes, then implement Phase 31 native callback/handle
+   ownership and Phase 32 shared value categories. Preserve the green anchors:
+   `class/threads.t`, `threads-dirh.t`, Storable threads, and default Test2 IPC.
+4. Complete Phase 33 with the full platform-thread matrix on both backends,
+   followed by virtual-mode parity. The new
+   `examples/threads/dynamic_map_reduce.pl` demonstrates a small shared
+   scheduler, isolated worker-local hashes, and deterministic join aggregation;
+   it deliberately makes no performance claim.
+5. Keep virtual threads experimental until native callback diagnostics and
    repeated benchmarks justify promotion. Keep runtime pooling disabled until
    the separate Phase 34 reset contract proves fresh-runtime equivalence.
 

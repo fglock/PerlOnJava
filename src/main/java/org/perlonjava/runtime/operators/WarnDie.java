@@ -663,6 +663,10 @@ public class WarnDie {
      */
     public static RuntimeScalar exit(RuntimeScalar runtimeScalar) {
         int exitCode = runtimeScalar.getInt();
+        PerlRuntime runtime = PerlRuntime.current();
+        if (runtime.perlThreadId() != 0 && runtime.perlThreadExitOnly()) {
+            throw new PerlThreadExitException(new RuntimeArray(RuntimeScalarCache.scalarUndef));
+        }
         // Set $? to the exit code before running END blocks (Perl 5 semantics).
         // From perlvar: "Inside an END subroutine $? contains the value that
         // is going to be given to exit(). You can modify $? in an END

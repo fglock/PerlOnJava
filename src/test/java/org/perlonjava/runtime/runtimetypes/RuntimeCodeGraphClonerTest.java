@@ -29,6 +29,22 @@ class RuntimeCodeGraphClonerTest {
         }
     }
 
+    @Test
+    void acceptsRuntimeCodeAsTheGraphRootOnBothBackends() throws Exception {
+        for (boolean interpreter : new boolean[]{false, true}) {
+            PerlRuntime sourceRuntime = new PerlRuntime();
+            PerlRuntime targetRuntime = new PerlRuntime();
+            RuntimeCode sourceCode = (RuntimeCode) compileClosure(
+                    sourceRuntime, interpreter).value;
+            RuntimeCode clonedCode = (RuntimeCode) new RuntimeGraphCloner(
+                    sourceRuntime, targetRuntime).cloneGraph(sourceCode);
+
+            assertNotSame(sourceCode, clonedCode);
+            assertEquals("41:2:2", invoke(targetRuntime, clonedCode.scalar()));
+            assertEquals("41:2:2", invoke(sourceRuntime, sourceCode.scalar()));
+        }
+    }
+
     private static RuntimeScalar compileClosure(PerlRuntime runtime, boolean interpreter)
             throws Exception {
         try (PerlRuntime.Binding ignored = runtime.bind()) {

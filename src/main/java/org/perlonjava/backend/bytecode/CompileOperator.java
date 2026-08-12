@@ -963,13 +963,19 @@ public class CompileOperator {
             // Main operators
             case "scalar" -> {
                 if (node.operand != null) {
-                    bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                    int operandContext = bytecodeCompiler.currentCallContext == RuntimeContextType.LVALUE
+                            ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
+                    bytecodeCompiler.compileNode(node.operand, -1, operandContext);
                     int operandReg = bytecodeCompiler.lastResultReg;
-                    int rd = bytecodeCompiler.allocateOutputRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                    bytecodeCompiler.emitReg(rd);
-                    bytecodeCompiler.emitReg(operandReg);
-                    bytecodeCompiler.lastResultReg = rd;
+                    if (operandContext == RuntimeContextType.LVALUE) {
+                        bytecodeCompiler.lastResultReg = operandReg;
+                    } else {
+                        int rd = bytecodeCompiler.allocateOutputRegister();
+                        bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                        bytecodeCompiler.emitReg(rd);
+                        bytecodeCompiler.emitReg(operandReg);
+                        bytecodeCompiler.lastResultReg = rd;
+                    }
                 } else {
                     bytecodeCompiler.throwCompilerException("scalar operator requires an operand");
                 }

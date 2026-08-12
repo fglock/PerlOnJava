@@ -47,6 +47,11 @@ public final class PerlRuntime implements AutoCloseable {
     private volatile boolean closed;
     private final PerlThreadRegistry threadRegistry;
     private final long perlThreadId;
+    private volatile int perlThreadContext = RuntimeContextType.SCALAR;
+    private volatile long perlThreadStackSize;
+    private volatile long defaultPerlThreadStackSize;
+    private volatile boolean perlThreadExitOnly;
+    private volatile boolean defaultPerlThreadExitOnly;
 
     public final ExecutionRuntimeState executionState = new ExecutionRuntimeState();
     public final RuntimeRegexState regexState = new RuntimeRegexState();
@@ -196,6 +201,17 @@ public final class PerlRuntime implements AutoCloseable {
         return perlThreadId;
     }
 
+    public int perlThreadContext() { return perlThreadContext; }
+    public void setPerlThreadContext(int context) { perlThreadContext = context; }
+    public long perlThreadStackSize() { return perlThreadStackSize; }
+    public void setPerlThreadStackSize(long size) { perlThreadStackSize = size; }
+    public long defaultPerlThreadStackSize() { return defaultPerlThreadStackSize; }
+    public void setDefaultPerlThreadStackSize(long size) { defaultPerlThreadStackSize = size; }
+    public boolean perlThreadExitOnly() { return perlThreadExitOnly; }
+    public void setPerlThreadExitOnly(boolean value) { perlThreadExitOnly = value; }
+    public boolean defaultPerlThreadExitOnly() { return defaultPerlThreadExitOnly; }
+    public void setDefaultPerlThreadExitOnly(boolean value) { defaultPerlThreadExitOnly = value; }
+
     /** Initialize this independent interpreter's globals and runtime services. */
     public PerlRuntime initialize() {
         executionLock.lock();
@@ -291,10 +307,13 @@ public final class PerlRuntime implements AutoCloseable {
             }
 
             PerlRuntime child = new PerlRuntime(registry, threadId);
+            child.defaultPerlThreadStackSize = defaultPerlThreadStackSize;
+            child.defaultPerlThreadExitOnly = defaultPerlThreadExitOnly;
             RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
             try (Binding ignored = bind()) {
                 globalState.snapshotInto(child.globalState, cloner);
                 runtimeCodeState.snapshotCompiledMetadataInto(child.runtimeCodeState);
+                regexState.snapshotInto(child.regexState);
             }
             child.currentDirectory = currentDirectory;
             child.initialized = true;
@@ -327,10 +346,16 @@ public final class PerlRuntime implements AutoCloseable {
                 : new java.util.ArrayList<>(globalState.codeRefs().entrySet())) {
             String fqn = entry.getKey();
             boolean cloneHook = fqn.endsWith("::CLONE") || fqn.endsWith("::CLONE_SKIP");
-            if (!cloneHook && !fqn.startsWith("threads::")) continue;
             RuntimeScalar hook = entry.getValue();
-            if (hook != null && hook.value instanceof RuntimeCode code
-                    && code.compilerSupplier != null) {
+            if (hook == null || !(hook.value instanceof RuntimeCode code)) continue;
+            // A lazy named sub that closes over lexicals must be materialized
+            // while the parent capture cells are authoritative. Non-capturing
+            // subs stay lazy, avoiding the large test.pl eager-compilation
+            // regression that originally motivated this narrow preflight.
+            boolean capturesLexicals = code.closedOverVariables != null
+                    && !code.closedOverVariables.isEmpty();
+            if (!cloneHook && !fqn.startsWith("threads::") && !capturesLexicals) continue;
+            if (code.compilerSupplier != null) {
                 code.compilerSupplier.get();
             }
         }

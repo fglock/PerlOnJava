@@ -667,6 +667,7 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+
     /**
      * Create array reference from list: rd = new RuntimeArray(rs_list).createReference()
      * Array literals always return references in Perl.

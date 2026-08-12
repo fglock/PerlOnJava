@@ -2455,6 +2455,9 @@ public class Opcodes {
     /** lock($shared): rd = TieOperators.lock(ctx, valueReg). */
     public static final short LOCK = 516;
 
+    /** Refalias an lvalue proxy to a scalar reference. Format: ALIAS_LVALUE_REFERENCE targetReg refReg. */
+    public static final short ALIAS_LVALUE_REFERENCE = 517;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

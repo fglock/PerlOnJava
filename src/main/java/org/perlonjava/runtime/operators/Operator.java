@@ -374,10 +374,23 @@ public class Operator {
         BigInteger offsetValue = ((RuntimeScalar) args[1]).getSignedBigint();
         // If length is not provided, use the rest of the string
         boolean hasExplicitLength = size > 2;
+        boolean hasReplacement = size > 3;
+        RuntimeScalar target = (RuntimeScalar) args[0];
+        if ((hasReplacement || ctx == RuntimeContextType.LVALUE)
+                && RuntimeScalarType.isReference(target)) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Attempt to use reference as lvalue in substr"),
+                    RuntimeScalarCache.scalarEmptyString, "substr");
+        }
+        if (hasExplicitLength && ((RuntimeScalar) args[2]).type == RuntimeScalarType.UNDEF) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in substr"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+        }
         BigInteger lengthValue = hasExplicitLength
                 ? ((RuntimeScalar) args[2]).getSignedBigint() : null;
-        String replacement = (size > 3) ? args[3].toString() : null;
-        RuntimeScalar replacementScalar = (size > 3) ? (RuntimeScalar) args[3] : null;
+        String replacement = hasReplacement ? args[3].toString() : null;
+        RuntimeScalar replacementScalar = hasReplacement ? (RuntimeScalar) args[3] : null;
 
         // Preserve the full IV/UV before narrowing to Java string indexes.
         // A huge read offset warns and yields undef; four-argument substr
@@ -385,7 +398,7 @@ public class Operator {
         // consume the remainder of the string.
         if (offsetValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
                 || offsetValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
-            if (replacement != null) {
+            if (hasReplacement) {
                 throw new PerlCompilerException("substr outside of string");
             }
             if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
@@ -402,7 +415,7 @@ public class Operator {
         int offset = offsetValue.intValue();
         int length;
         if (!hasExplicitLength) {
-            length = strLength - offset;
+            length = offset < 0 ? strLength : strLength - offset;
         } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
             length = Integer.MAX_VALUE;
         } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
@@ -424,15 +437,16 @@ public class Operator {
             // Example: substr("a", -2, 2) -> offset=-1, adjustedLen=1, returns "a" (no warning)
             if (offset < 0) {
                 // Adjust length by the overshoot (negative offset value)
-                int adjustedLength = length + offset;
+                int adjustedLength = hasExplicitLength && length < 0
+                        ? strLength + length : length + offset;
                 if (adjustedLength < 0) {
                     // Adjusted length is negative - warn and return undef
                     if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
                         WarnDie.warn(new RuntimeScalar("substr outside of string"),
                                 RuntimeScalarCache.scalarEmptyString);
                     }
-                    if (replacement != null) {
-                        return new RuntimeScalar();
+                    if (hasReplacement) {
+                        throw new PerlCompilerException("substr outside of string");
                     }
                     var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
                     lvalue.setOutOfBounds();
@@ -442,13 +456,15 @@ public class Operator {
                 }
                 if (adjustedLength == 0) {
                     // Adjusted length is exactly zero - return empty string (defined), no warning
-                    if (replacement != null) {
+                    if (hasReplacement) {
+                        var lvalue = new RuntimeSubstrLvalue(target, "", 0, 0, false);
+                        lvalue.setUsingParentSnapshot(replacementScalar, str);
                         return new RuntimeScalar("");
                     }
                     return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
                 }
                 // Reduce length by the overshoot, no warning
-                length = adjustedLength;
+                if (length >= 0) length = adjustedLength;
                 offset = 0;
             }
         }
@@ -459,8 +475,8 @@ public class Operator {
                 WarnDie.warn(new RuntimeScalar("substr outside of string"),
                         RuntimeScalarCache.scalarEmptyString);
             }
-            if (replacement != null) {
-                return new RuntimeScalar();
+            if (hasReplacement) {
+                throw new PerlCompilerException("substr outside of string");
             }
             var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, length);
             lvalue.setOutOfBounds();
@@ -482,10 +498,10 @@ public class Operator {
 
         // If length is zero or negative after all adjustments, return empty string
         if (length <= 0) {
-            if (replacement != null) {
+            if (hasReplacement) {
                 // With replacement, still need to handle the replacement at position 0
                 var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
-                lvalue.set(replacementScalar);
+                lvalue.setUsingParentSnapshot(replacementScalar, str);
                 RuntimeScalar retVal = new RuntimeScalar("");
                 if (((RuntimeScalar) args[0]).type == RuntimeScalarType.BYTE_STRING) {
                     retVal.type = RuntimeScalarType.BYTE_STRING;
@@ -507,12 +523,12 @@ public class Operator {
         // alias remains live: a negative offset is re-evaluated if the parent
         // scalar is replaced while the alias is still in scope.
         var lvalue = new RuntimeSubstrLvalue(
-                (RuntimeScalar) args[0], result, lvalueOffset, lvalueLength);
+                target, result, lvalueOffset, lvalueLength, !hasExplicitLength);
 
-        if (replacement != null) {
+        if (hasReplacement) {
             // When replacement is provided, save the extracted substring before modifying
             String extractedSubstring = result;
-            lvalue.set(replacementScalar);
+            lvalue.setUsingParentSnapshot(replacementScalar, str);
             // Return the extracted substring, not the lvalue (which now contains the replacement)
             RuntimeScalar retVal = new RuntimeScalar(extractedSubstring);
             // Preserve BYTE_STRING type from parent

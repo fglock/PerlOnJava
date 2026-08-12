@@ -30,6 +30,12 @@ public class PerlSignalQueue {
         state.hasPendingSignal = true;  // Set flag for fast checking
     }
 
+    /** Queue a signal for another runtime; its handler is resolved when delivered. */
+    public static void enqueue(State state, String signal) {
+        state.signalQueue.offer(new SignalEvent(signal, null));
+        state.hasPendingSignal = true;
+    }
+
     /**
      * Lightweight signal check - called frequently at safe execution points.
      * If no signals are pending, this is just a volatile boolean read (~2 CPU cycles).
@@ -61,9 +67,19 @@ public class PerlSignalQueue {
         SignalEvent event;
         while ((event = state.signalQueue.poll()) != null) {
             state.hasPendingSignal = !state.signalQueue.isEmpty();
+            RuntimeScalar handler = event.handler;
+            if (handler == null) {
+                handler = GlobalVariable.getGlobalHash("main::SIG").get(event.signal);
+            }
+            String disposition = handler == null ? "" : handler.toString();
+            if ("IGNORE".equals(disposition)) continue;
+            if (handler == null || !handler.getDefinedBoolean()
+                    || disposition.isEmpty() || "DEFAULT".equals(disposition)) {
+                continue;
+            }
             RuntimeArray args = new RuntimeArray();
             args.push(new RuntimeScalar(event.signal));
-            RuntimeCode.apply(event.handler, args, RuntimeContextType.VOID);
+            RuntimeCode.apply(handler, args, RuntimeContextType.VOID);
         }
         state.hasPendingSignal = false;
     }

@@ -85,4 +85,9 @@ public final class RuntimeRegexState {
         manualCaptureStarts = null;
         manualCaptureEnds = null;
     }
+
+    /** Copy immutable regex metadata that Perl ithreads inherit at creation. */
+    void snapshotInto(RuntimeRegexState target) {
+        target.userUnicodePropertyCache.putAll(userUnicodePropertyCache);
+    }
 }

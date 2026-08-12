@@ -10,6 +10,7 @@ import java.io.PipedOutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
@@ -37,14 +38,17 @@ public class InternalPipeHandle implements IOHandle {
     // this extra signal to distinguish the two cases.
     private final AtomicBoolean writerClosed;
     private final AtomicBoolean readerClosed;
+    private final AtomicInteger endpointReferences;
 
     private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream,
-                               boolean isReader, AtomicBoolean writerClosed, AtomicBoolean readerClosed, int pipeSize) {
+                               boolean isReader, AtomicBoolean writerClosed, AtomicBoolean readerClosed,
+                               AtomicInteger endpointReferences, int pipeSize) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.isReader = isReader;
         this.writerClosed = writerClosed;
         this.readerClosed = readerClosed;
+        this.endpointReferences = endpointReferences;
         this.pipeSize = pipeSize;
     }
 
@@ -55,9 +59,13 @@ public class InternalPipeHandle implements IOHandle {
     public static InternalPipeHandle[] createPair(PipedInputStream inputStream, PipedOutputStream outputStream) {
         AtomicBoolean writerClosed = new AtomicBoolean(false);
         AtomicBoolean readerClosed = new AtomicBoolean(false);
+        AtomicInteger readerReferences = new AtomicInteger(1);
+        AtomicInteger writerReferences = new AtomicInteger(1);
         return new InternalPipeHandle[]{
-                new InternalPipeHandle(inputStream, null, true, writerClosed, readerClosed, PIPE_SIZE),
-                new InternalPipeHandle(inputStream, outputStream, false, writerClosed, readerClosed, PIPE_SIZE),
+                new InternalPipeHandle(inputStream, null, true, writerClosed, readerClosed,
+                        readerReferences, PIPE_SIZE),
+                new InternalPipeHandle(inputStream, outputStream, false, writerClosed, readerClosed,
+                        writerReferences, PIPE_SIZE),
         };
     }
 
@@ -65,14 +73,23 @@ public class InternalPipeHandle implements IOHandle {
      * Creates a reader end of an internal pipe (legacy, without shared flag).
      */
     public static InternalPipeHandle createReader(PipedInputStream inputStream) {
-        return new InternalPipeHandle(inputStream, null, true, new AtomicBoolean(false), new AtomicBoolean(false), PIPE_SIZE);
+        return new InternalPipeHandle(inputStream, null, true, new AtomicBoolean(false),
+                new AtomicBoolean(false), new AtomicInteger(1), PIPE_SIZE);
     }
 
     /**
      * Creates a writer end of an internal pipe (legacy, without shared flag).
      */
     public static InternalPipeHandle createWriter(PipedOutputStream outputStream) {
-        return new InternalPipeHandle(null, outputStream, false, new AtomicBoolean(false), new AtomicBoolean(false), PIPE_SIZE);
+        return new InternalPipeHandle(null, outputStream, false, new AtomicBoolean(false),
+                new AtomicBoolean(false), new AtomicInteger(1), PIPE_SIZE);
+    }
+
+    /** Create an independently closable ithread endpoint over the same pipe transport. */
+    public InternalPipeHandle inheritedCopy() {
+        endpointReferences.incrementAndGet();
+        return new InternalPipeHandle(inputStream, outputStream, isReader, writerClosed,
+                readerClosed, endpointReferences, pipeSize);
     }
 
     /**
@@ -203,12 +220,14 @@ public class InternalPipeHandle implements IOHandle {
         }
 
         try {
-            if (isReader && inputStream != null) {
-                inputStream.close();
-                readerClosed.set(true);
-            } else if (!isReader && outputStream != null) {
-                outputStream.close();
-                writerClosed.set(true);  // Signal EOF to the reader end
+            if (endpointReferences.decrementAndGet() == 0) {
+                if (isReader && inputStream != null) {
+                    inputStream.close();
+                    readerClosed.set(true);
+                } else if (!isReader && outputStream != null) {
+                    outputStream.close();
+                    writerClosed.set(true);  // Signal EOF to the reader end
+                }
             }
             isClosed = true;
             isEOF = true;

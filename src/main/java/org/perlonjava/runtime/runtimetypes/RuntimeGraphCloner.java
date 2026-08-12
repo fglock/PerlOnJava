@@ -203,8 +203,15 @@ public class RuntimeGraphCloner {
                         targetRuntime.globalState(), this);
                 RuntimeCode completed;
                 try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-                    completed = (RuntimeCode) new RuntimeGraphCloner(
-                            sourceRuntime, targetRuntime, skippedClasses).cloneCode(source);
+                    // Reuse this snapshot's identity map. A fresh cloner would
+                    // duplicate lexicals that were already copied as runtime
+                    // roots before this lazy CV was materialized.
+                    clones.remove(source);
+                    try {
+                        completed = (RuntimeCode) cloneCode(source);
+                    } finally {
+                        clones.put(source, target);
+                    }
                 }
                 target.adoptDefinitionFrom(completed);
                 target.compilerSupplier = null;
@@ -226,7 +233,14 @@ public class RuntimeGraphCloner {
         target.stateVariable = cloneScalarMap(source.stateVariable);
         target.stateArray = cloneArrayMap(source.stateArray);
         target.stateHash = cloneHashMap(source.stateHash);
-        target.constantValue = source.constantValue;
+        if (source.constantValue == null) {
+            target.constantValue = null;
+        } else {
+            target.constantValue = new RuntimeList();
+            for (RuntimeBase value : source.constantValue.elements) {
+                target.constantValue.elements.add(cloneValue(value));
+            }
+        }
 
         if (source.closedOverVariables != null) {
             target.closedOverVariables = new LinkedHashMap<>();
@@ -267,6 +281,17 @@ public class RuntimeGraphCloner {
     }
 
     private RuntimeScalar cloneScalar(RuntimeScalar source) {
+        if (source instanceof ScalarSpecialVariable special) {
+            ScalarSpecialVariable target = new ScalarSpecialVariable(
+                    special.variableId, special.position);
+            clones.put(source, target);
+            copyBase(source, target);
+            copyScalarMetadata(source, target);
+            if (special.lvalue != null) {
+                target.lvalue = (RuntimeScalar) cloneValue(special.lvalue);
+            }
+            return target;
+        }
         if (source instanceof TieScalar tied) {
             RuntimeScalar placeholder = new RuntimeScalar();
             clones.put(source, placeholder);
@@ -283,15 +308,28 @@ public class RuntimeGraphCloner {
         copyBase(source, target);
         copyScalarMetadata(source, target);
 
-        if (source.type == CODE && source.value instanceof RuntimeCode code) {
+        if (RuntimeScalarType.isReference(source) && source.value == null) {
+            // A cleared weak reference can temporarily retain its reference
+            // type while its payload has already disappeared.  It is Perl
+            // undef at a thread snapshot boundary; copying the stale type
+            // produces an impossible child SV that later crashes overload
+            // stringification/numification on a null referent.
+            target.type = UNDEF;
+            target.value = null;
+        } else if (source.type == CODE && source.value instanceof RuntimeCode code) {
             target.value = cloneCode(code);
         } else if (source.value instanceof RuntimeRegex regex) {
             target.value = regex.cloneTracked();
-        } else if (source.value instanceof RuntimeIO) {
-            // Java channels/descriptors have no portable ithread duplication
-            // semantics. Non-standard resource scalars become undef.
-            target.type = UNDEF;
-            target.value = null;
+        } else if (source.value instanceof RuntimeIO io) {
+            RuntimeIO inherited = cloneInheritedPipe(io);
+            if (inherited != null) {
+                target.value = inherited;
+            } else {
+                // Files, sockets and native descriptors have no portable
+                // ithread duplication semantics and remain unsupported.
+                target.type = UNDEF;
+                target.value = null;
+            }
         } else if (source.value instanceof RuntimeBase base) {
             if (shouldSkip(base)) {
                 target.type = UNDEF;
@@ -318,7 +356,8 @@ public class RuntimeGraphCloner {
     }
 
     private RuntimeArray cloneArray(RuntimeArray source) {
-        RuntimeArray target = new RuntimeArray(source.elements.size());
+        RuntimeArray target = new RuntimeArray(
+                source.elements instanceof ArraySpecialVariable ? 0 : source.elements.size());
         clones.put(source, target);
         copyBase(source, target);
         target.type = source.type;
@@ -327,7 +366,11 @@ public class RuntimeGraphCloner {
         target.elementsOwned = source.elementsOwned;
         target.elementsAliased = source.elementsAliased;
 
-        if (source.type == RuntimeArray.TIED_ARRAY && source.elements instanceof TieArray tie) {
+        if (source.elements instanceof ArraySpecialVariable special) {
+            // Regex capture arrays are dynamic views over the bound runtime's
+            // match state. Copy the view mode, never its current elements.
+            target.elements = special.snapshotView();
+        } else if (source.type == RuntimeArray.TIED_ARRAY && source.elements instanceof TieArray tie) {
             target.elements = new TieArray(tie.getTiedPackage(),
                     (RuntimeArray) cloneValue(tie.getPreviousValue()),
                     (RuntimeScalar) cloneValue(tie.getSelf()), target);
@@ -394,9 +437,25 @@ public class RuntimeGraphCloner {
         if (source.codeSlot != null) {
             target.codeSlot = (RuntimeScalar) cloneValue(source.codeSlot);
         }
-        // Filehandles are runtime resources. Standard handles are installed by
-        // PerlRuntime; detached/non-standard handles become an empty IO slot.
-        target.IO = new RuntimeScalar();
+        // Standard handles are installed by PerlRuntime. Internal pipe
+        // endpoints have an explicit inherited lease; other handles remain empty.
+        if (source.IO != null && source.IO.value instanceof RuntimeIO io
+                && io.ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle) {
+            target.IO = (RuntimeScalar) cloneValue(source.IO);
+        } else {
+            target.IO = new RuntimeScalar();
+        }
+        return target;
+    }
+
+    private RuntimeIO cloneInheritedPipe(RuntimeIO source) {
+        Object existing = clones.get(source);
+        if (existing != null) return (RuntimeIO) existing;
+        RuntimeIO target;
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            target = source.inheritedPipeCopy();
+        }
+        if (target != null) clones.put(source, target);
         return target;
     }
 
