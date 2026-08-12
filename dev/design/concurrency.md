@@ -591,22 +591,53 @@ request history.
 
 ### Next Steps
 
-1. Close the measured Phase 22 compatibility gaps in core `op/threads.t`,
-   `class/threads.t`, `re/stclass_threads.t`, and Storable before expanding to
-   Test2 and native-callback thread suites.
-2. Add dedicated shared-storage lifetime cleanup and contention benchmarks;
+1. Finish the newly activated core-thread compatibility tranche instead of
+   treating partial TAP counts as success. Raise `op/threads.t` from 24/30,
+   `op/substr_thr.t` from 12/400, `re/stclass_threads.t` from 5/6, and
+   `class/threads.t` from 2/4 to their full applicable pass counts on both
+   backends, close Storable's 1/2 result, and keep `threads-dirh.t` complete.
+   Classify every remaining skip as an explicit documented limitation, run each
+   file with the standard-Perl oracle first, and keep the exact counts in the
+   differential gate until they are complete. Only then expand to Test2 and
+   native-callback thread suites.
+2. Make `docs/reference/feature-matrix.md` the canonical user-facing
+   compatibility table for multiplicity, `threads`, and `threads::shared`.
+   Replace its obsolete "Threading not supported" claim with the measured
+   supported API, `Config` flags, clone-versus-shared identity rules, and an
+   explicit limitations table covering signals, effective stack sizing,
+   blessed/tied shared values, native callbacks/resources, and experimental
+   virtual threads. Link the detailed concurrency reference from its table of
+   contents and module sections.
+3. Add a `docs/about/changelog.md` work-in-progress entry for Phases 1-23 and
+   reconcile the concurrency roadmap with the shipped multiplicity/ithread
+   tranche. Update the relevant reference pages: describe per-runtime ownership
+   and snapshot cloning in `docs/reference/architecture.md`, document the
+   `useithreads`/`usethreads`/`usemultiplicity` values and virtual-thread opt-in
+   in the configuration/CLI reference, and correct
+   `docs/reference/memory-management.md`, which still says Perl threads and the
+   reference-count overlay are single-threaded.
+4. Add runnable examples under `examples/` for isolated create/join and shared
+   lock/condition workflows, link them from `examples/README.md`, and validate
+   each with system Perl plus both PerlOnJava backends. Update
+   `examples/http_server_plack/README.md` and `PERFORMANCE.md` to distinguish
+   that example's deliberately single-event-loop architecture from the now
+   available Perl ithread capability; do not imply that one captured PSGI
+   runtime is concurrently callable.
+5. Add documentation acceptance checks to the compatibility tranche: run link
+   validation, compile every new example with system Perl and `jperl -c`, execute
+   it on the JVM and interpreter backends with bounded timeouts, and retain a
+   focused API/limitation matrix test so documentation cannot advertise an
+   unsupported thread method or sharing class.
+6. Add dedicated shared-storage lifetime cleanup and contention benchmarks;
    replace the strong identity lock registry if long-running churn proves
    retention after the last shared owner disappears.
-3. Run the virtual-thread pinning suite on Java 22, covering shared conditions,
+7. Run the virtual-thread pinning suite on Java 22, covering shared conditions,
    native I/O, regex timeouts, and child lifecycle. Keep the mode experimental
-unless the trace is clean and repeated benchmarks show a material benefit.
-On Java 24, the initial creation/join smoke measured 30 cloned ithreads in
-0.544 seconds on platform threads and 0.543 seconds on virtual threads with
-identical checksums. That is semantic parity, not a demonstrated benefit, and
-cannot substitute for the Java 22 pinning gate.
-4. Update user-facing thread documentation after the compatibility tranche is
-   stable: supported API table, resource-cloning policy, native callback limits,
-   and migration examples for `threads::shared`.
+   unless the trace is clean and repeated benchmarks show a material benefit.
+   On Java 24, the initial creation/join smoke measured 30 cloned ithreads in
+   0.544 seconds on platform threads and 0.543 seconds on virtual threads with
+   identical checksums. That is semantic parity, not a demonstrated benefit,
+   and cannot substitute for the Java 22 pinning gate.
 
 ### Open Questions
 

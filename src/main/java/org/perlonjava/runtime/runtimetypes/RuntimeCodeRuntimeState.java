@@ -53,6 +53,15 @@ public final class RuntimeCodeRuntimeState {
         return "(eval " + nextRuntimeEvalId++ + ")";
     }
 
+    /**
+     * Copy immutable compile-time descriptors referenced by cloned CODE objects.
+     * Runtime eval results, generated-class caches, inline caches, and allocation
+     * counters deliberately remain private to the fresh child runtime.
+     */
+    void snapshotCompiledMetadataInto(RuntimeCodeRuntimeState child) {
+        child.evalContexts.putAll(evalContexts);
+    }
+
     RuntimeCode cachedInlineMethod(int callsiteId, int blessId, int methodHash) {
         int index = callsiteId & (METHOD_CALL_CACHE_SIZE - 1);
         return inlineCacheBlessId[index] == blessId

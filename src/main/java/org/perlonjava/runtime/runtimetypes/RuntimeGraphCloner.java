@@ -193,6 +193,13 @@ public class RuntimeGraphCloner {
                         }
                     }
                 }
+                // Lazy compilation may have registered eval STRING descriptors
+                // after the thread's initial runtime snapshot.  Copy only that
+                // compiled metadata before installing the completed child CODE.
+                sourceRuntime.runtimeCodeState().snapshotCompiledMetadataInto(
+                        targetRuntime.runtimeCodeState());
+                sourceRuntime.globalState().snapshotCompiledCodeRefsInto(
+                        targetRuntime.globalState(), this);
                 RuntimeCode completed;
                 try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                     completed = (RuntimeCode) new RuntimeGraphCloner(

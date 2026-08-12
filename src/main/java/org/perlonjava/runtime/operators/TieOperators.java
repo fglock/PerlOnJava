@@ -328,7 +328,12 @@ public class TieOperators {
             return scalarUndef;
         }
         RuntimeScalar variable = scalars[0].getFirst();
-        SharedPerlStorage.lock(variable);
+        // A threaded perl still accepts lock() as a compatibility no-op until
+        // threads::shared is loaded.  Core's op/lock.t relies on this behavior
+        // for ordinary scalar, aggregate, and code slots.
+        if (GlobalVariable.getGlobalHash("main::INC").elements.containsKey("threads/shared.pm")) {
+            SharedPerlStorage.lock(variable);
+        }
         // For scalar references, dereference to get the value
         // For other reference types (arrays, hashes), return the reference itself
         return switch (variable.type) {
