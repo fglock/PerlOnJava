@@ -11,6 +11,9 @@ Recent CPAN compatibility additions include:
 
 | Module | Implementation | Notes |
 |--------|----------------|-------|
+| `JSON::DWIW` | Pure Perl over bundled `JSON::PP` | Relaxed legacy JSON API, file conversion, booleans, and compatibility helpers |
+| `Taint::Runtime` | Perl + Java XS bridge | Runtime taint toggling and scalar taint inspection |
+| `String::Similarity` | Java XS bridge | Unicode-aware `fstrcmp`/`similarity` implementation |
 | `Socket6` | Pure Perl over Java-backed `Socket` | Legacy Socket6 flat-result API and IPv6 sockaddr helpers |
 | `Email::Address::XS` | Pure Perl compatibility subset | Address parsing/object API used by `Email::Sender` |
 | `Want` | Pure Perl compatibility subset | Non-lvalue predicates used by `JSONP`; full op-tree introspection is not yet available |

@@ -3,6 +3,8 @@ package org.perlonjava.runtime.io;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -183,6 +185,14 @@ public class CustomFileChannel implements IOHandle {
 
     private final Path filePath;
 
+    /**
+     * Identity and metadata captured from the file that was actually opened.
+     * A pathname can later be renamed and replaced while this channel still
+     * addresses the original file.  Perl's stat(FILEHANDLE) is fstat-like and
+     * must keep reporting that original inode rather than re-stat the path.
+     */
+    private final FFMPosixInterface.StatResult openedStat;
+
     private boolean isEOF;
 
     // When true, writes should always occur at end-of-file (Perl's append semantics).
@@ -208,6 +218,7 @@ public class CustomFileChannel implements IOHandle {
     public CustomFileChannel(Path path, Set<StandardOpenOption> options) throws IOException {
         this.filePath = path;
         this.fileChannel = FileChannel.open(path, options);
+        this.openedStat = captureOpenedStat(path);
         this.isEOF = false;
         this.appendMode = false;
         // Canonical path for the shared-lock registry. Fall back to absolute path
@@ -234,6 +245,7 @@ public class CustomFileChannel implements IOHandle {
      */
     public CustomFileChannel(FileDescriptor fd, Set<StandardOpenOption> options) throws IOException {
         this.filePath = null;
+        this.openedStat = null;
         this.lockKey = null;
         if (options.contains(StandardOpenOption.READ)) {
             this.fileChannel = new FileInputStream(fd).getChannel();
@@ -248,6 +260,18 @@ public class CustomFileChannel implements IOHandle {
 
     public Path getFilePath() {
         return filePath;
+    }
+
+    public FFMPosixInterface.StatResult getOpenedStat() {
+        return openedStat;
+    }
+
+    private static FFMPosixInterface.StatResult captureOpenedStat(Path path) {
+        try {
+            return FFMPosix.get().stat(path.toString());
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     /**

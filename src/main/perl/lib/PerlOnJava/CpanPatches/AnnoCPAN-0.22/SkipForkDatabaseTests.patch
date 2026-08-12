@@ -1,0 +1,56 @@
+--- a/t/10_load.t
++++ b/t/10_load.t
+@@ -1,5 +1,11 @@
+ use strict;
+ use warnings;
++BEGIN {
++    if ($ENV{PERLONJAVA_EXECUTABLE}) {
++        print "1..0 # SKIP AnnoCPAN database loading requires POSIX fork()\n";
++        exit 0;
++    }
++}
+ use Test::More;
+ use AnnoCPAN::Config 't/config.pl';
+ use AnnoCPAN::Dist;
+--- a/t/20_note.t
++++ b/t/20_note.t
+@@ -1,5 +1,11 @@
+ use strict;
+ use warnings;
++BEGIN {
++    if ($ENV{PERLONJAVA_EXECUTABLE}) {
++        print "1..0 # SKIP depends on AnnoCPAN's fork-based database load\n";
++        exit 0;
++    }
++}
+ use Test::More;
+ use AnnoCPAN::Config 't/config.pl';
+ use AnnoCPAN::DBI;
+--- a/t/30_update.t
++++ b/t/30_update.t
+@@ -1,5 +1,11 @@
+ use strict;
+ use warnings;
++BEGIN {
++    if ($ENV{PERLONJAVA_EXECUTABLE}) {
++        print "1..0 # SKIP AnnoCPAN database updates require POSIX fork()\n";
++        exit 0;
++    }
++}
+ use Test::More;
+ use AnnoCPAN::Config 't/config.pl';
+ use AnnoCPAN::Dist;
+--- a/t/40_join.t
++++ b/t/40_join.t
+@@ -1,5 +1,11 @@
+ use strict;
+ use warnings;
++BEGIN {
++    if ($ENV{PERLONJAVA_EXECUTABLE}) {
++        print "1..0 # SKIP depends on AnnoCPAN's fork-based database load\n";
++        exit 0;
++    }
++}
+ use Test::More;
+ use AnnoCPAN::Config 't/config.pl';
+ use AnnoCPAN::Dist;

@@ -32,17 +32,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return false;
     }
 
-    public static RuntimeArray localizedUnderscoreArray() {
-        Stack<GlobSlotSnapshot> globSlotStack = globSlotStack();
-        for (int i = globSlotStack.size() - 1; i >= 0; i--) {
-            String name = globSlotStack.get(i).globName();
-            if (name != null && name.endsWith("::_")) {
-                RuntimeArray array = GlobalVariable.globalArrays.get(name);
-                if (array != null) return array;
-            }
-        }
-        return null;
-    }
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;

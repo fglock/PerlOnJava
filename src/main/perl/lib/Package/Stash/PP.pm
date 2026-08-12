@@ -221,7 +221,11 @@ sub _undef_ref_for_type {
         return {};
     }
     elsif ($type eq 'SCALAR') {
-        return \undef;
+        # A reference to the literal undef is read-only on PerlOnJava (and is
+        # not a useful writable package slot in any case).  Return a fresh,
+        # mutable scalar containing undef.
+        my $undef;
+        return \$undef;
     }
     elsif ($type eq 'IO') {
         return Symbol::geniosym;
@@ -332,8 +336,18 @@ sub get_symbol {
 }
 
 sub get_or_add_symbol {
-    my $self = shift;
-    $self->get_symbol(@_, vivify => 1);
+    my ($self, $variable) = @_;
+    my ($name, $sigil, $type) = _deconstruct_variable_name($variable);
+
+    # PerlOnJava's typeglob proxy does not always materialize an empty slot
+    # merely by reading it through the stash.  Make the operation promised by
+    # this API explicit: if the requested slot is still absent, add it and
+    # then fetch the real package slot.  Moose uses this for lazy attributes
+    # such as Dist::Zilla::Plugin::GatherDir's root accessor.
+    if (!$self->has_symbol($variable)) {
+        $self->add_symbol($variable);
+    }
+    return $self->get_symbol($variable);
 }
 
 sub remove_symbol {

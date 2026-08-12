@@ -183,6 +183,25 @@ public class Stat {
                 }
             }
             if (innerHandle instanceof CustomFileChannel cfc) {
+                FFMPosixInterface.StatResult opened = cfc.getOpenedStat();
+                if (opened != null) {
+                    try {
+                        NativeStatFields nf = new NativeStatFields(
+                                opened.dev(), opened.ino(), opened.mode(), opened.nlink(),
+                                opened.uid(), opened.gid(), opened.rdev(), cfc.size(),
+                                opened.atime(), opened.mtime(), opened.ctime(),
+                                opened.blksize(), opened.blocks());
+                        statInternalNative(res, nf);
+                        getGlobalVariable("main::!").set(0);
+                        updateLastStat(arg, true, 0, false);
+                        state().lastNativeStatFields = nf;
+                        return res;
+                    } catch (IOException e) {
+                        getGlobalVariable("main::!").set(5);
+                        updateLastStat(arg, false, 5, false);
+                        return res;
+                    }
+                }
                 Path path = cfc.getFilePath();
                 if (path != null) {
                     return stat(new RuntimeScalar(path.toString()));
@@ -359,7 +378,7 @@ public class Stat {
         res.add(scalarUndef);
     }
 
-    record NativeStatFields(
+    public record NativeStatFields(
             long dev, long ino, long mode, long nlink,
             long uid, long gid, long rdev, long size,
             long atime, long mtime, long ctime,

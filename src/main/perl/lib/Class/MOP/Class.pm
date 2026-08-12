@@ -1330,6 +1330,17 @@ sub _rebless_as_immutable {
 sub _immutable_metaclass {
     my ( $self, %args ) = @_;
 
+    # PerlOnJava's pure-Perl Moose backend applies Immutable::Trait through
+    # an around modifier.  During the Class::MOP bootstrap that modifier can
+    # be consulted before its meta-method cache is complete, causing the base
+    # implementation to recursively create
+    # Class::MOP::Class::Immutable::Class::MOP::Class::Immutable::... .
+    # The trait's implementation returns the existing immutable class; make
+    # that bootstrap invariant explicit here as well.
+    if (ref($self) =~ /^Class::MOP::Class::Immutable::/) {
+        return ref($self);
+    }
+
     if ( my $class = $args{immutable_metaclass} ) {
         return $class;
     }
@@ -1367,6 +1378,15 @@ sub _immutable_metaclass {
         $class_name,
         superclasses => [ ref $self ],
     );
+
+    # Keep the generated package's actual @ISA authoritative.  The
+    # interpreter can resolve a method on this class while Class::MOP is still
+    # bootstrapping, before the metaobject's method cache has observed the
+    # superclass update above.
+    {
+        no strict 'refs';
+        @{ $class_name . '::ISA' } = (ref $self);
+    }
 
     Class::MOP::MiniTrait::apply( $immutable_meta, $trait );
 

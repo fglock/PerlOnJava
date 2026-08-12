@@ -46,6 +46,12 @@ sub setErrorHandler {
 package Archive::Zip::Member;
 our @ISA = ('Archive::Zip');
 
+# The upstream distribution keeps constructor compatibility in the historical
+# Archive::Zip::Archive package.  Older consumers (including AnnoCPAN) inherit
+# from it and call Archive::Zip::Archive::new explicitly.
+package Archive::Zip::Archive;
+our @ISA = ('Archive::Zip');
+
 1;
 
 __END__

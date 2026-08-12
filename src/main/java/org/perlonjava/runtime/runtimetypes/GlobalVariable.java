@@ -512,6 +512,16 @@ public class GlobalVariable {
         root.isPackageGlobalRoot = true;
         if (root instanceof RuntimeHash hash) {
             hash.isGlobalPackageHash = true;
+            // RuntimeStash.elements is a synthetic symbol-table view. Iterating
+            // it materializes every visible glob by scanning all global slot
+            // maps. Package declarations call this method repeatedly while
+            // compiling dependency-heavy applications, turning module loading
+            // into quadratic work. The real scalar/array/hash/code slots are
+            // independently registered and rooted, so a stash view has no
+            // owned element values that need marking here.
+            if (hash instanceof RuntimeStash) {
+                return root;
+            }
             for (RuntimeScalar value : hash.elements.values()) {
                 hash.markPackageRootedValue(value);
             }
