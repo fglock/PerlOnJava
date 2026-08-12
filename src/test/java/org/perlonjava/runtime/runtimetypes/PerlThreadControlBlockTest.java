@@ -18,6 +18,8 @@ class PerlThreadControlBlockTest {
                     child -> new RuntimeScalar(child.perlThreadId())).start();
             PerlThreadControlBlock second = PerlThreadControlBlock.create(parent,
                     child -> new RuntimeScalar(child.perlThreadId())).start();
+            assertEquals("perl-ithread-" + first.id(), first.javaThreadName());
+            assertEquals(first.platformThread().isVirtual(), first.isVirtualThread());
             assertNotEquals(first.id(), second.id());
             assertEquals(0, first.parentId());
             assertEquals(first.id(), ((RuntimeScalar) first.join().value()).getLong());
