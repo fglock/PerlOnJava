@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 /**
  * Maps bytecode positions to their corresponding Perl source code locations.
@@ -13,32 +14,32 @@ import java.util.TreeMap;
  * resolution for stack traces at runtime.
  */
 public class ByteCodeSourceMapper {
-    // Maps source files to their debug information
-    private static final Map<Integer, SourceFileInfo> sourceFiles = new HashMap<>();
+    public static final class State {
+        final Map<Integer, SourceFileInfo> sourceFiles = new HashMap<>();
+        final ArrayList<String> packageNamePool = new ArrayList<>();
+        final Map<String, Integer> packageNameToId = new HashMap<>();
+        final ArrayList<String> fileNamePool = new ArrayList<>();
+        final Map<String, Integer> fileNameToId = new HashMap<>();
+        final ArrayList<String> subroutineNamePool = new ArrayList<>();
+        final Map<String, Integer> subroutineNameToId = new HashMap<>();
 
-    // Pool of package names to optimize memory usage
-    private static final ArrayList<String> packageNamePool = new ArrayList<>();
-    private static final Map<String, Integer> packageNameToId = new HashMap<>();
+        void clear() {
+            sourceFiles.clear();
+            packageNamePool.clear();
+            packageNameToId.clear();
+            fileNamePool.clear();
+            fileNameToId.clear();
+            subroutineNamePool.clear();
+            subroutineNameToId.clear();
+        }
+    }
 
-    // Pool of file names to optimize memory usage
-    private static final ArrayList<String> fileNamePool = new ArrayList<>();
-    private static final Map<String, Integer> fileNameToId = new HashMap<>();
-
-    // Pool of subroutine names to optimize memory usage
-    private static final ArrayList<String> subroutineNamePool = new ArrayList<>();
-    private static final Map<String, Integer> subroutineNameToId = new HashMap<>();
+    private static State state() {
+        return PerlRuntime.current().sourceMapperState;
+    }
 
     public static void resetAll() {
-        sourceFiles.clear();
-
-        packageNamePool.clear();
-        packageNameToId.clear();
-
-        fileNamePool.clear();
-        fileNameToId.clear();
-
-        subroutineNamePool.clear();
-        subroutineNameToId.clear();
+        state().clear();
     }
 
     /**
@@ -48,9 +49,10 @@ public class ByteCodeSourceMapper {
      * @return The unique identifier for the package
      */
     private static int getOrCreatePackageId(String packageName) {
-        return packageNameToId.computeIfAbsent(packageName, name -> {
-            packageNamePool.add(name);
-            return packageNamePool.size() - 1;
+        State state = state();
+        return state.packageNameToId.computeIfAbsent(packageName, name -> {
+            state.packageNamePool.add(name);
+            return state.packageNamePool.size() - 1;
         });
     }
 
@@ -61,9 +63,10 @@ public class ByteCodeSourceMapper {
      * @return The unique identifier for the file
      */
     private static int getOrCreateFileId(String fileName) {
-        return fileNameToId.computeIfAbsent(fileName, name -> {
-            fileNamePool.add(name);
-            return fileNamePool.size() - 1;
+        State state = state();
+        return state.fileNameToId.computeIfAbsent(fileName, name -> {
+            state.fileNamePool.add(name);
+            return state.fileNamePool.size() - 1;
         });
     }
 
@@ -74,9 +77,10 @@ public class ByteCodeSourceMapper {
      * @return The unique identifier for the subroutine name
      */
     private static int getOrCreateSubroutineId(String subroutineName) {
-        return subroutineNameToId.computeIfAbsent(subroutineName, name -> {
-            subroutineNamePool.add(name);
-            return subroutineNamePool.size() - 1;
+        State state = state();
+        return state.subroutineNameToId.computeIfAbsent(subroutineName, name -> {
+            state.subroutineNamePool.add(name);
+            return state.subroutineNamePool.size() - 1;
         });
     }
 
@@ -87,7 +91,7 @@ public class ByteCodeSourceMapper {
      */
     static void setDebugInfoFileName(EmitterContext ctx) {
         int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
-        sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+        state().sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
         ctx.cw.visitSource(ctx.compilerOptions.fileName, null);
     }
 
@@ -126,13 +130,14 @@ public class ByteCodeSourceMapper {
      * @param tokenIndex The index of the token in the source code
      */
     public static void saveSourceLocation(EmitterContext ctx, int tokenIndex) {
+        State state = state();
         // Use the ORIGINAL filename (compile-time) for the key, not the #line-adjusted one.
         // This is because JVM stack traces report the original filename from visitSource().
         // The #line-adjusted filename is stored separately in LineInfo for caller() reporting.
         int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
 
         // Get or create the SourceFileInfo object for the file
-        SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+        SourceFileInfo info = state.sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
 
         // Get current subroutine name (empty string for main code)
         String subroutineName = ctx.symbolTable.getCurrentSubroutine();
@@ -174,7 +179,7 @@ public class ByteCodeSourceMapper {
             // Look for nearby entry (within 50 tokens) that has #line-adjusted filename
             var nearbyEntry = info.tokenToLineInfo.floorEntry(tokenIndex);
             if (nearbyEntry != null && (tokenIndex - nearbyEntry.getKey()) < 50) {
-                String nearbySourceFile = fileNamePool.get(nearbyEntry.getValue().sourceFileNameId());
+                String nearbySourceFile = state.fileNamePool.get(nearbyEntry.getValue().sourceFileNameId());
                 if (!nearbySourceFile.equals(ctx.compilerOptions.fileName)) {
                     // Nearby entry has #line-adjusted filename - inherit it
                     sourceFileName = nearbySourceFile;
@@ -208,12 +213,13 @@ public class ByteCodeSourceMapper {
      * @return The package name at that location, or null if not found
      */
     public static String getPackageAtLocation(String fileName, int tokenIndex) {
-        int fileId = fileNameToId.getOrDefault(fileName, -1);
+        State state = state();
+        int fileId = state.fileNameToId.getOrDefault(fileName, -1);
         if (fileId == -1) {
             return null;
         }
 
-        SourceFileInfo info = sourceFiles.get(fileId);
+        SourceFileInfo info = state.sourceFiles.get(fileId);
         if (info == null) {
             return null;
         }
@@ -223,7 +229,7 @@ public class ByteCodeSourceMapper {
             return null;
         }
 
-        String pkg = packageNamePool.get(entry.getValue().packageNameId());
+        String pkg = state.packageNamePool.get(entry.getValue().packageNameId());
         return pkg;
     }
 
@@ -234,10 +240,11 @@ public class ByteCodeSourceMapper {
      * @return The corresponding source code location
      */
     public static SourceLocation parseStackTraceElement(StackTraceElement element, HashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName) {
-        int fileId = fileNameToId.getOrDefault(element.getFileName(), -1);
+        State state = state();
+        int fileId = state.fileNameToId.getOrDefault(element.getFileName(), -1);
         int tokenIndex = element.getLineNumber();
 
-        SourceFileInfo info = sourceFiles.get(fileId);
+        SourceFileInfo info = state.sourceFiles.get(fileId);
         if (info == null) {
             return new SourceLocation(element.getFileName(), "", tokenIndex, null);
         }
@@ -251,9 +258,9 @@ public class ByteCodeSourceMapper {
         LineInfo lineInfo = entry.getValue();
         
         // Get the #line directive-adjusted source filename for caller() reporting
-        String sourceFileName = fileNamePool.get(lineInfo.sourceFileNameId());
+        String sourceFileName = state.fileNamePool.get(lineInfo.sourceFileNameId());
         int lineNumber = lineInfo.lineNumber();
-        String packageName = packageNamePool.get(lineInfo.packageNameId());
+        String packageName = state.packageNamePool.get(lineInfo.packageNameId());
         
         // FIX: If the found entry's sourceFile equals the original file (no #line applied),
         // check for nearby entries that have a #line-adjusted filename.
@@ -266,7 +273,7 @@ public class ByteCodeSourceMapper {
             boolean foundLineDirective = false;
             
             while (lowerEntry != null && (entry.getKey() - lowerEntry.getKey()) < 300) {
-                String lowerSourceFile = fileNamePool.get(lowerEntry.getValue().sourceFileNameId());
+                String lowerSourceFile = state.fileNamePool.get(lowerEntry.getValue().sourceFileNameId());
                 if (!lowerSourceFile.equals(element.getFileName())) {
                     // Found an entry with #line-adjusted filename
                     // Calculate the offset: the difference between the original line and the #line-adjusted line
@@ -293,7 +300,7 @@ public class ByteCodeSourceMapper {
                     int estimatedExtraLines = tokenDistFromLineDirective / 6;
                     lineNumber = lowerEntry.getValue().lineNumber() + estimatedExtraLines;
                     
-                    packageName = packageNamePool.get(lowerEntry.getValue().packageNameId());
+                    packageName = state.packageNamePool.get(lowerEntry.getValue().packageNameId());
                     break;
                 }
                 // This lower entry still has the original file, keep looking
@@ -305,14 +312,14 @@ public class ByteCodeSourceMapper {
                 int currentKey = entry.getKey();
                 var higherEntry = info.tokenToLineInfo.higherEntry(currentKey);
                 while (higherEntry != null && (higherEntry.getKey() - entry.getKey()) < 50) {
-                    String higherSourceFile = fileNamePool.get(higherEntry.getValue().sourceFileNameId());
+                    String higherSourceFile = state.fileNamePool.get(higherEntry.getValue().sourceFileNameId());
                     if (!higherSourceFile.equals(element.getFileName())) {
                         // Higher entry has #line-adjusted filename - use it
                         sourceFileName = higherSourceFile;
                         lineNumber = higherEntry.getValue().lineNumber() - 
                             (higherEntry.getKey() - entry.getKey());  // Approximate adjustment
                         if (lineNumber < 1) lineNumber = 1;
-                        packageName = packageNamePool.get(higherEntry.getValue().packageNameId());
+                        packageName = state.packageNamePool.get(higherEntry.getValue().packageNameId());
                         break;
                     }
                     // This higher entry still has the original file, keep looking
@@ -324,7 +331,7 @@ public class ByteCodeSourceMapper {
         
 
         // Retrieve subroutine name
-        String subroutineName = subroutineNamePool.get(lineInfo.subroutineNameId());
+        String subroutineName = state.subroutineNamePool.get(lineInfo.subroutineNameId());
         // If subroutine name is empty string (main code), convert to null
         if (subroutineName != null && subroutineName.isEmpty()) {
             subroutineName = null;

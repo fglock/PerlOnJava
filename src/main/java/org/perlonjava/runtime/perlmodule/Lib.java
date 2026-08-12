@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -15,14 +16,12 @@ import java.util.Set;
  */
 public class Lib extends PerlModuleBase {
 
-    private static RuntimeArray ORIG_INC = null;
-
     /**
      * Resets static state for test isolation.
      * Called from GlobalVariable.resetAllGlobals().
      */
     public static void resetState() {
-        ORIG_INC = null;
+        PerlRuntime.current().libOriginalInc = null;
     }
 
     /**
@@ -89,10 +88,11 @@ public class Lib extends PerlModuleBase {
     }
 
     private static void initOrigInc(RuntimeArray INC) {
-        if (ORIG_INC == null) {
-            ORIG_INC = GlobalVariable.getGlobalArray("lib::ORIG_INC");
+        PerlRuntime runtime = PerlRuntime.current();
+        if (runtime.libOriginalInc == null) {
+            runtime.libOriginalInc = GlobalVariable.getGlobalArray("lib::ORIG_INC");
             for (RuntimeScalar elem : INC.elements) {
-                RuntimeArray.push(ORIG_INC, elem);
+                RuntimeArray.push(runtime.libOriginalInc, elem);
             }
         }
     }

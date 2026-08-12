@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributes;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 /**
  * Windows implementation of FFM POSIX interface.
@@ -29,9 +30,6 @@ import java.nio.file.attribute.DosFileAttributes;
  * implementations will be added in Phase 4.</p>
  */
 public class FFMPosixWindows implements FFMPosixInterface {
-    
-    // Thread-local errno storage
-    private static final ThreadLocal<Integer> threadErrno = ThreadLocal.withInitial(() -> 0);
     
     // Default UID/GID values for Windows (simulated)
     private static final int DEFAULT_UID = 1000;
@@ -598,12 +596,12 @@ public class FFMPosixWindows implements FFMPosixInterface {
     
     @Override
     public int errno() {
-        return threadErrno.get();
+        return PerlRuntime.current().nativeState.errno;
     }
     
     @Override
     public void setErrno(int errno) {
-        threadErrno.set(errno);
+        PerlRuntime.current().nativeState.errno = errno;
     }
     
     @Override

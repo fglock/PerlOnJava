@@ -503,7 +503,7 @@ public class POSIX extends PerlModuleBase {
     }
 
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(System.getProperty("user.dir")).getList();
+        return new RuntimeScalar(RuntimeEnvironment.currentDirectory()).getList();
     }
 
     public static RuntimeList strerror(RuntimeArray args, int ctx) {

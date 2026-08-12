@@ -52,6 +52,15 @@ public final class ExecutionRuntimeState {
     public final Deque<Integer> callContextStack = new ArrayDeque<>();
     public int evalDepth;
     public int tailCallTrampolineDepth;
+    public final ArrayDeque<Runnable> futureResumeQueue = new ArrayDeque<>();
+    public boolean futureResumeDraining;
+    public int overloadStringifyDepth;
+    public boolean taintMode;
+    public boolean joinTaint;
+    public int moduleInitDepth;
+    public final IdentityHashMap<Throwable, Boolean> unhandledDieHandlerSeen =
+            new IdentityHashMap<>();
+    public boolean insideUnhandledDieHandler;
     ControlFlowMarker controlFlowMarker;
 
     final ArrayList<Object> myVarCleanupStack = new ArrayList<>();

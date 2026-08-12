@@ -31,7 +31,6 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.runSpecialBlock;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.StringParser.parseVstring;
 import static org.perlonjava.runtime.operators.VersionHelper.normalizeVersion;
-import static org.perlonjava.runtime.perlmodule.Feature.featureManager;
 import static org.perlonjava.runtime.perlmodule.Strict.useStrict;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.getLastScopeId;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.clearLastScopeId;
@@ -795,7 +794,7 @@ public class StatementParser {
                         String closestVersion = minorVersion < 10
                                 ? ":default"
                                 : ":" + majorVersion + "." + minorVersion;
-                        featureManager.enableFeatureBundle(closestVersion);
+                        org.perlonjava.runtime.perlmodule.Feature.getFeatureManager().enableFeatureBundle(closestVersion);
 
                         if (minorVersion >= 12) {
                             // If the specified Perl version is 5.12 or higher,

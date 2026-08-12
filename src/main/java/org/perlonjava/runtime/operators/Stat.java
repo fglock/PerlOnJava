@@ -23,8 +23,6 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 public class Stat {
 
-    static NativeStatFields lastNativeStatFields;
-
     // FFM POSIX implementation
     private static final FFMPosixInterface posix = FFMPosix.get();
 
@@ -78,15 +76,16 @@ public class Stat {
     }
 
     public static RuntimeList statLastHandle() {
-        if (!lastStatOk) {
+        FileTestOperator.State state = state();
+        if (!state.lastStatOk) {
             getGlobalVariable("main::!").set(9);
             return new RuntimeList();
         }
         RuntimeList res = new RuntimeList();
-        if (lastNativeStatFields != null) {
-            statInternalNative(res, lastNativeStatFields);
+        if (state.lastNativeStatFields != null) {
+            statInternalNative(res, state.lastNativeStatFields);
         } else {
-            statInternal(res, lastBasicAttr, lastPosixAttr);
+            statInternal(res, state.lastBasicAttr, state.lastPosixAttr);
         }
         getGlobalVariable("main::!").set(0);
         return res;
@@ -94,7 +93,7 @@ public class Stat {
 
     public static RuntimeBase statLastHandle(int ctx) {
         if (ctx == RuntimeContextType.SCALAR) {
-            if (!lastStatOk) {
+            if (!state().lastStatOk) {
                 getGlobalVariable("main::!").set(9);
                 return new RuntimeScalar("");
             }
@@ -105,29 +104,30 @@ public class Stat {
     }
 
     public static RuntimeList lstatLastHandle() {
-        if (!lastStatWasLstat) {
+        FileTestOperator.State state = state();
+        if (!state.lastStatWasLstat) {
             throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
         }
-        if (!lastStatOk) {
+        if (!state.lastStatOk) {
             getGlobalVariable("main::!").set(9);
             return new RuntimeList();
         }
         RuntimeList res = new RuntimeList();
-        if (lastNativeStatFields != null) {
-            statInternalNative(res, lastNativeStatFields);
+        if (state.lastNativeStatFields != null) {
+            statInternalNative(res, state.lastNativeStatFields);
         } else {
-            statInternal(res, lastBasicAttr, lastPosixAttr);
+            statInternal(res, state.lastBasicAttr, state.lastPosixAttr);
         }
         getGlobalVariable("main::!").set(0);
         return res;
     }
 
     public static RuntimeBase lstatLastHandle(int ctx) {
-        if (!lastStatWasLstat) {
+        if (!state().lastStatWasLstat) {
             throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
         }
         if (ctx == RuntimeContextType.SCALAR) {
-            if (!lastStatOk) {
+            if (!state().lastStatOk) {
                 getGlobalVariable("main::!").set(9);
                 return new RuntimeScalar("");
             }
@@ -154,7 +154,7 @@ public class Stat {
     }
 
     public static RuntimeList stat(RuntimeScalar arg) {
-        lastFileHandle.set(arg);
+        state().lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
 
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
@@ -230,9 +230,10 @@ public class Stat {
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, false);
             // Set attributes after updateLastStat (which resets them to null)
-            lastBasicAttr = basicAttr;
-            lastPosixAttr = posixAttr;
-            lastNativeStatFields = nf;
+            FileTestOperator.State state = state();
+            state.lastBasicAttr = basicAttr;
+            state.lastPosixAttr = posixAttr;
+            state.lastNativeStatFields = nf;
         } catch (NoSuchFileException e) {
             getGlobalVariable("main::!").set(2);
             updateLastStat(arg, false, 2, false);
@@ -244,14 +245,14 @@ public class Stat {
     }
 
     public static RuntimeList lstat(RuntimeScalar arg) {
-        lastFileHandle.set(arg);
+        state().lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
 
         if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
             // Check if this is the special underscore glob (*_ or \*_)
             if (isUnderscoreGlob(arg)) {
                 // lstat on *_ or \*_ after stat should croak
-                if (!lastStatWasLstat) {
+                if (!state().lastStatWasLstat) {
                     throw new PerlCompilerException("The stat preceding lstat() wasn't an lstat");
                 }
                 return lstatLastHandle();
@@ -292,9 +293,10 @@ public class Stat {
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, true);
             // Set attributes after updateLastStat (which resets them to null)
-            lastBasicAttr = basicAttr;
-            lastPosixAttr = posixAttr;
-            lastNativeStatFields = nf;
+            FileTestOperator.State state = state();
+            state.lastBasicAttr = basicAttr;
+            state.lastPosixAttr = posixAttr;
+            state.lastNativeStatFields = nf;
         } catch (NoSuchFileException e) {
             getGlobalVariable("main::!").set(2);
             updateLastStat(arg, false, 2, true);

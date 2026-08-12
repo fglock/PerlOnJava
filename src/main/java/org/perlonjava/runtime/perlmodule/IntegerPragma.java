@@ -13,12 +13,6 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 public class IntegerPragma extends PerlModuleBase {
 
     /**
-     * Runtime flag to track if integer mode is enabled.
-     * This is used by math operators to determine whether to use integer arithmetic.
-     */
-    public static boolean useIntegerMode = false;
-
-    /**
      * Constructor for IntegerPragma.
      * Initializes the module with the name "integer".
      */

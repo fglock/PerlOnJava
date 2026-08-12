@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 /**
  * Thread-local state for fork-open emulation.
@@ -47,8 +48,6 @@ public class ForkOpenState {
     /**
      * Thread-local storage for pending fork-open state.
      */
-    private static final ThreadLocal<PendingForkOpen> pendingState = new ThreadLocal<>();
-    
     /**
      * Represents a pending fork-open operation waiting for exec to complete it.
      */
@@ -85,8 +84,8 @@ public class ForkOpenState {
      * @param ioLayers Optional I/O layers (e.g., ":utf8")
      */
     public static void setPending(RuntimeScalar fileHandle, int tokenIndex, String ioLayers) {
-        pendingState.set(new PendingForkOpen(fileHandle, tokenIndex, ioLayers,
-                RuntimeCode.getActiveCodeAt(0)));
+        PerlRuntime.current().pendingForkOpen = new PendingForkOpen(fileHandle, tokenIndex, ioLayers,
+                RuntimeCode.getActiveCodeAt(0));
     }
     
     /**
@@ -95,7 +94,7 @@ public class ForkOpenState {
      * @return The pending state, or null if none
      */
     public static PendingForkOpen getPending() {
-        return pendingState.get();
+        return PerlRuntime.current().pendingForkOpen;
     }
     
     /**
@@ -110,7 +109,7 @@ public class ForkOpenState {
      * </ul>
      */
     public static void clear() {
-        pendingState.remove();
+        PerlRuntime.current().pendingForkOpen = null;
     }
     
     /**
@@ -119,6 +118,6 @@ public class ForkOpenState {
      * @return true if a fork-open is pending
      */
     public static boolean hasPending() {
-        return pendingState.get() != null;
+        return PerlRuntime.current().pendingForkOpen != null;
     }
 }

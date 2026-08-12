@@ -25,7 +25,9 @@ class TimeAlarmRuntimeBindingTest {
             GlobalVariable.getGlobalHash("main::SIG").put("ALRM", handler);
         }
 
-        PerlSignalQueue.clearSignals();
+        try (PerlRuntime.Binding ignored = owner.bind()) {
+            PerlSignalQueue.clearSignals();
+        }
         Thread target = new Thread(() -> { });
         FutureTask<PerlRuntime> callback = new FutureTask<>(() -> {
             Time.dispatchAlarm(owner, target);
@@ -37,10 +39,14 @@ class TimeAlarmRuntimeBindingTest {
             assertNull(callback.get(10, TimeUnit.SECONDS));
             worker.join(TimeUnit.SECONDS.toMillis(10));
             assertFalse(worker.isAlive());
-            assertTrue(PerlSignalQueue.hasPendingSignals());
+            try (PerlRuntime.Binding ignored = owner.bind()) {
+                assertTrue(PerlSignalQueue.hasPendingSignals());
+            }
             assertTrue(target.isInterrupted());
         } finally {
-            PerlSignalQueue.clearSignals();
+            try (PerlRuntime.Binding ignored = owner.bind()) {
+                PerlSignalQueue.clearSignals();
+            }
         }
     }
 }

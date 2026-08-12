@@ -268,4 +268,47 @@ public final class GlobalRuntimeState {
         packageVersions.clear();
         generatedClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
     }
+
+    /** Copy package-owned interpreter state through one ithread graph cloner. */
+    void snapshotInto(GlobalRuntimeState target, RuntimeGraphCloner cloner) {
+        cloneMap(scalarValues, target.scalarValues, cloner, RuntimeScalar.class);
+        cloneMap(arrayValues, target.arrayValues, cloner, RuntimeArray.class);
+        cloneMap(hashValues, target.hashValues, cloner, RuntimeHash.class);
+        cloneMap(foreachScalarAliases, target.foreachScalarAliases, cloner, RuntimeScalar.class);
+        cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
+        cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
+        cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);
+        for (Map.Entry<Integer, RuntimeScalar> entry : compiledCodeRefs.entrySet()) {
+            target.compiledCodeRefs.put(entry.getKey(),
+                    (RuntimeScalar) cloner.cloneValue(entry.getValue()));
+        }
+
+        target.importedSubs.putAll(importedSubs);
+        target.operatorOverrideGlobs.putAll(operatorOverrideGlobs);
+        target.deletedCodeRefPins.addAll(deletedCodeRefPins);
+        target.localizedCodeRefDepth.putAll(localizedCodeRefDepth);
+        target.stashAliases.putAll(stashAliases);
+        target.resolvedStashAliases.putAll(resolvedStashAliases);
+        target.globAliases.putAll(globAliases);
+        target.packageExistsCache.putAll(packageExistsCache);
+        target.declaredGlobalVariables.addAll(declaredGlobalVariables);
+        target.declaredGlobalArrays.addAll(declaredGlobalArrays);
+        target.declaredGlobalHashes.addAll(declaredGlobalHashes);
+        target.classNames.addAll(classNames);
+        classFields.forEach((name, fields) -> target.classFields.put(name, new HashSet<>(fields)));
+        target.classParents.putAll(classParents);
+        target.packageVersions.putAll(packageVersions);
+        target.nextCompiledCodeRefId = nextCompiledCodeRefId;
+        target.stashEnumerationVersion = stashEnumerationVersion;
+        target.coreGlobalsInitialized = coreGlobalsInitialized;
+        // Class loaders, caches, named IO and formats are child-owned/fresh.
+    }
+
+    private static <T extends RuntimeBase> void cloneMap(
+            Map<String, T> source, Map<String, T> target,
+            RuntimeGraphCloner cloner, Class<T> type) {
+        for (Map.Entry<String, T> entry : source.entrySet()) {
+            target.put(entry.getKey(), type.cast(cloner.cloneValue(entry.getValue())));
+        }
+    }
 }

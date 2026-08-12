@@ -1,10 +1,9 @@
 package org.perlonjava.runtime.operators.pack;
 
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Handler for pointer formats 'p' and 'P'.
@@ -17,7 +16,9 @@ public class PointerPackHandler implements PackFormatHandler {
      * Temporary storage for pointer simulation used by 'p' and 'P' formats.
      * Maps hash codes to their corresponding string values for later retrieval by unpack.
      */
-    private static final Map<Integer, String> pointerMap = new HashMap<>();
+    private static java.util.Map<Integer, String> pointerMap() {
+        return PerlRuntime.current().pointerPackState;
+    }
 
     /**
      * The format character ('p' or 'P')
@@ -42,7 +43,7 @@ public class PointerPackHandler implements PackFormatHandler {
      * @return The string associated with the hash code, or null if not found
      */
     public static String getPointerString(int hashCode) {
-        return pointerMap.get(hashCode);
+        return pointerMap().get(hashCode);
     }
 
     @Override
@@ -82,7 +83,7 @@ public class PointerPackHandler implements PackFormatHandler {
                 String str = value.toString();
                 // Use hashCode as a unique identifier, but as a long for 64-bit pointer
                 ptr = Integer.toUnsignedLong(str.hashCode());
-                pointerMap.put((int) ptr, str);  // Still use int key for the map
+                pointerMap().put((int) ptr, str);  // Still use int key for the map
             }
 
             // Write as 8 bytes (64-bit pointer) 

@@ -1398,7 +1398,7 @@ public class ReachabilityWalker {
      * @return number of weak-ref entries cleared
      */
     public static int sweepWeakRefs(boolean quiet, boolean forceJvmGc) {
-        if (!WeakRefRegistry.weakRefsExist) return 0;
+        if (!WeakRefRegistry.weakRefsExist()) return 0;
         if (forceJvmGc) {
             ScalarRefRegistry.forceGcAndSnapshot();
         }

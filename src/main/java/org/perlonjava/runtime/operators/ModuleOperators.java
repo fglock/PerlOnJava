@@ -5,6 +5,7 @@ import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
+import org.perlonjava.runtime.perlmodule.Feature;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.IOException;
@@ -14,7 +15,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import static org.perlonjava.runtime.perlmodule.Feature.featureManager;
 import static org.perlonjava.runtime.runtimetypes.ExceptionFormatter.findInnermostCause;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -680,7 +680,7 @@ public class ModuleOperators {
         }
 
         RuntimeList result;
-        FeatureFlags outerFeature = featureManager;
+        FeatureFlags outerFeature = Feature.getFeatureManager();
         String savedPackage = InterpreterState.currentPackage.get().toString();
 
         // Tell the inner compilation to start in the caller's package, rather
@@ -713,14 +713,14 @@ public class ModuleOperators {
                         .saveAndResetFilterState();
 
         try {
-            featureManager = new FeatureFlags();
+            Feature.setFeatureManager(new FeatureFlags());
             
             // Clear the hints hash for a fresh compilation context
             hintHash.elements.clear();
 
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false, ctx);
 
-            boolean moduleTrue = featureManager.isFeatureEnabled("module_true");
+            boolean moduleTrue = Feature.getFeatureManager().isFeatureEnabled("module_true");
             if (moduleTrue) {
                 result = scalarTrue.getList();
             }
@@ -749,7 +749,7 @@ public class ModuleOperators {
             // This must happen BEFORE restoring outer context
             BHooksEndOfScope.endFileLoad(parsedArgs.fileName);
             
-            featureManager = outerFeature;
+            Feature.setFeatureManager(outerFeature);
             InterpreterState.currentPackage.get().set(savedPackage);
             
             // Restore the caller's hints hash

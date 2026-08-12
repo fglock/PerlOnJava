@@ -21,28 +21,24 @@ package org.perlonjava.runtime.runtimetypes;
  */
 public class ModuleInitGuard {
 
-    // Use int[1] to avoid autoboxing on every enter/exit.
-    private static final ThreadLocal<int[]> depth =
-            ThreadLocal.withInitial(() -> new int[]{0});
-
     /** Enter module-initialization state (increments depth). */
     public static void enter() {
-        depth.get()[0]++;
+        PerlRuntime.current().executionState().moduleInitDepth++;
     }
 
     /** Exit module-initialization state (decrements depth). */
     public static void exit() {
-        int[] d = depth.get();
-        if (d[0] > 0) d[0]--;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.moduleInitDepth > 0) state.moduleInitDepth--;
     }
 
     /** True if currently inside require/use/BEGIN/eval-STRING execution. */
     public static boolean inModuleInit() {
-        return depth.get()[0] > 0;
+        return PerlRuntime.current().executionState().moduleInitDepth > 0;
     }
 
     /** Diagnostic: current depth. */
     public static int currentDepth() {
-        return depth.get()[0];
+        return PerlRuntime.current().executionState().moduleInitDepth;
     }
 }

@@ -4,6 +4,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 /**
  * Implements a scalar flip-flop operator, similar to Perl's flip-flop operator.
@@ -13,8 +15,15 @@ import java.util.Map;
 public class ScalarFlipFlopOperator {
 
     // Map to store the state (flip-flop) and sequence count for each operator instance
-    public static final Map<Integer, ScalarFlipFlopOperator> flipFlops = new HashMap<>();
-    public static Integer currentId = 0;
+    private static final AtomicInteger NEXT_ID = new AtomicInteger();
+
+    public static int allocateId() {
+        return NEXT_ID.getAndIncrement();
+    }
+
+    public static Map<Integer, ScalarFlipFlopOperator> flipFlops() {
+        return PerlRuntime.current().flipFlopState;
+    }
 
     private final boolean isThreeDot; // true for three dots, false for two dots
     private boolean currentState;
@@ -40,7 +49,7 @@ public class ScalarFlipFlopOperator {
      * @return A RuntimeScalar representing the current sequence count or an empty string.
      */
     public static RuntimeScalar evaluate(int id, RuntimeScalar left, RuntimeScalar right) {
-        ScalarFlipFlopOperator ff = flipFlops.get(id);
+        ScalarFlipFlopOperator ff = flipFlops().get(id);
         boolean leftOperand = left.getBoolean();
         boolean rightOperand = right.getBoolean();
         if (!ff.currentState) {

@@ -205,13 +205,13 @@ public class SysSyslog extends PerlModuleBase {
         return new RuntimeScalar(logUpto(priority)).getList();
     }
 
-    public static RuntimeList openlog_xs(RuntimeArray args, int ctx) {
+    public static synchronized RuntimeList openlog_xs(RuntimeArray args, int ctx) {
         ident = args.size() > 0 ? args.get(0).toString() : "";
         logOptions = args.size() > 1 ? args.get(1).getInt() : 0;
         return new RuntimeList();
     }
 
-    public static RuntimeList syslog_xs(RuntimeArray args, int ctx) {
+    public static synchronized RuntimeList syslog_xs(RuntimeArray args, int ctx) {
         if ((logOptions & LOG_PERROR) != 0) {
             String message = args.size() > 1 ? args.get(1).toString() : "";
             String prefix = ident == null || ident.isEmpty() ? "syslog" : ident;
@@ -226,7 +226,7 @@ public class SysSyslog extends PerlModuleBase {
         return new RuntimeList();
     }
 
-    public static RuntimeList setlogmask_xs(RuntimeArray args, int ctx) {
+    public static synchronized RuntimeList setlogmask_xs(RuntimeArray args, int ctx) {
         int oldMask = currentMask;
         if (args.size() > 0) {
             currentMask = args.get(0).getInt();
@@ -234,7 +234,7 @@ public class SysSyslog extends PerlModuleBase {
         return new RuntimeScalar(oldMask).getList();
     }
 
-    public static RuntimeList closelog_xs(RuntimeArray args, int ctx) {
+    public static synchronized RuntimeList closelog_xs(RuntimeArray args, int ctx) {
         ident = "";
         logOptions = 0;
         return new RuntimeList();

@@ -301,14 +301,15 @@ public class SystemOperator {
     }
 
     private static void checkPathDirectories(String pathValue) {
-        if (SystemUtils.osIsWindows()) {
-            return;
-        }
-
-        for (String directory : pathValue.split(":", -1)) {
+        boolean windows = SystemUtils.osIsWindows();
+        String separator = windows ? ";" : ":";
+        for (String directory : pathValue.split(Pattern.quote(separator), -1)) {
             try {
                 Path path = Path.of(directory);
-                if (directory.isEmpty() || !path.isAbsolute() || isWorldWritableDirectory(path)) {
+                boolean absolute = path.isAbsolute()
+                        || (windows && (directory.startsWith("/") || directory.startsWith("\\")));
+                if (directory.isEmpty() || !absolute
+                        || (!windows && isWorldWritableDirectory(path))) {
                     throw insecurePathException();
                 }
             } catch (InvalidPathException e) {
@@ -339,15 +340,61 @@ public class SystemOperator {
             return null;
         }
 
+        if (SystemUtils.osIsWindows()) {
+            return splitWindowsDirectCommandWords(trimmed);
+        }
+
         if (DIRECT_COMMAND_SHELL_METACHARACTERS.matcher(trimmed).find()) {
             return null;
         }
 
-        if (!SystemUtils.osIsWindows() && trimmed.contains("\\")) {
+        if (trimmed.contains("\\")) {
             return null;
         }
 
         return Arrays.asList(trimmed.split("\\s+"));
+    }
+
+    /**
+     * Split a Windows one-string command when it only needs argv quoting, not
+     * cmd.exe expansion. Shell metacharacters inside a quoted argument are
+     * ordinary argument data (notably Perl source passed through {@code -e}).
+     */
+    static List<String> splitWindowsDirectCommandWords(String command) {
+        List<String> words = new ArrayList<>();
+        StringBuilder word = new StringBuilder();
+        boolean quoted = false;
+        boolean started = false;
+
+        for (int i = 0; i < command.length(); i++) {
+            char ch = command.charAt(i);
+            if (ch == '"') {
+                quoted = !quoted;
+                started = true;
+                continue;
+            }
+            if (!quoted && Character.isWhitespace(ch)) {
+                if (started) {
+                    words.add(word.toString());
+                    word.setLength(0);
+                    started = false;
+                }
+                continue;
+            }
+            if (!quoted && "*?[]{}()<>|&;`'$%".indexOf(ch) >= 0) {
+                return null;
+            }
+            word.append(ch);
+            started = true;
+        }
+
+        if (quoted) {
+            return null;
+        }
+        if (started) {
+            words.add(word.toString());
+        }
+        return words.isEmpty() ? null : words;
     }
 
     /**
@@ -372,7 +419,7 @@ public class SystemOperator {
             return commandArgs;
         }
 
-        String userDir = System.getProperty("user.dir");
+        String userDir = RuntimeEnvironment.currentDirectory();
         String pathSeparator = SystemUtils.osIsWindows() ? ";" : ":";
         for (String dir : path.split(Pattern.quote(pathSeparator), -1)) {
             File pathDir = dir.isEmpty() ? new File(userDir) : new File(dir);
@@ -422,7 +469,7 @@ public class SystemOperator {
 
         File script = new File(command);
         if (!script.isAbsolute()) {
-            script = new File(System.getProperty("user.dir"), command);
+            script = new File(RuntimeEnvironment.currentDirectory(), command);
         }
 
         StringBuilder commandLine = new StringBuilder("call ").append(quoteForCmd(script.getAbsolutePath()));
@@ -449,7 +496,7 @@ public class SystemOperator {
 
         File script = new File(commandArgs.getFirst());
         if (!script.isAbsolute()) {
-            script = new File(System.getProperty("user.dir"), commandArgs.getFirst());
+            script = new File(RuntimeEnvironment.currentDirectory(), commandArgs.getFirst());
         }
         if (!script.isFile()) {
             return commandArgs;
@@ -606,14 +653,14 @@ public class SystemOperator {
             String[] shellCommand;
             if (SystemUtils.osIsWindows()) {
                 // Windows
-                shellCommand = new String[]{"cmd.exe", "/c", command};
+                shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c", command};
             } else {
                 // Unix-like (Linux, macOS)
                 shellCommand = new String[]{"/bin/sh", "-c", command};
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -716,7 +763,7 @@ public class SystemOperator {
             flushAllHandles();
 
             ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -768,7 +815,7 @@ public class SystemOperator {
             flushAllHandles();
 
             ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
-            String userDir = System.getProperty("user.dir");
+            String userDir = RuntimeEnvironment.currentDirectory();
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -1103,7 +1150,7 @@ public class SystemOperator {
                     command = directCommand;
                 } else {
                     if (SystemUtils.osIsWindows()) {
-                        command = Arrays.asList("cmd.exe", "/c", cmdStr);
+                        command = Arrays.asList("cmd.exe", "/d", "/s", "/c", cmdStr);
                     } else {
                         command = Arrays.asList("/bin/sh", "-c", cmdStr);
                     }
@@ -1114,7 +1161,7 @@ public class SystemOperator {
 
             // Run command and capture output
             ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(command));
-            processBuilder.directory(new File(System.getProperty("user.dir")));
+            processBuilder.directory(new File(RuntimeEnvironment.currentDirectory()));
             copyPerlEnvToProcessBuilder(processBuilder);
             processBuilder.redirectErrorStream(false);  // Keep stderr separate
 
@@ -1184,14 +1231,14 @@ public class SystemOperator {
         String[] shellCommand;
         if (SystemUtils.osIsWindows()) {
             // Windows
-            shellCommand = new String[]{"cmd.exe", "/c", command};
+            shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c", command};
         } else {
             // Unix-like (Linux, macOS)
             shellCommand = new String[]{"/bin/sh", "-c", command};
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
-        String userDir = System.getProperty("user.dir");
+        String userDir = RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
         
         // Copy %ENV to the subprocess environment
@@ -1214,7 +1261,7 @@ public class SystemOperator {
      */
     private static int execCommandDirect(List<String> commandArgs) throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
-        String userDir = System.getProperty("user.dir");
+        String userDir = RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
         
         // Copy %ENV to the subprocess environment

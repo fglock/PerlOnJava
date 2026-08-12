@@ -32,19 +32,9 @@ public class DebugHooks {
 
     private static final BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
     
-    // Command counter for prompt (1-indexed like Perl)
-    private static int commandCounter = 1;
-    
-    // Current execution context for expression evaluation
-    private static InterpretedCode currentCode;
-    private static RuntimeBase[] currentRegisters;
-    private static int currentSiteIndex = -1;
-    
-    // Flag to track if PERL5DB was set (user wants custom debugger)
-    private static boolean hasCustomDebugger = false;
-    
-    // Flag to track if we've already tried to execute PERL5DB
-    private static boolean perl5dbExecuted = false;
+    private static DebugRuntimeState state() {
+        return DebugState.current();
+    }
 
     /**
      * Main debug hook called by DEBUG opcode.
@@ -58,15 +48,16 @@ public class DebugHooks {
      */
     public static void debug(String filename, int line, InterpretedCode code, RuntimeBase[] registers, int siteIndex) {
         // Execute PERL5DB on first call (defines user's DB::DB if set)
-        if (!perl5dbExecuted) {
-            perl5dbExecuted = true;
+        DebugRuntimeState state = state();
+        if (!state.perl5dbExecuted) {
+            state.perl5dbExecuted = true;
             executePERL5DB();
         }
         
         // Store context for expression evaluation
-        currentCode = code;
-        currentRegisters = registers;
-        currentSiteIndex = siteIndex;
+        state.currentCode = code;
+        state.currentRegisters = registers;
+        state.currentSiteIndex = siteIndex;
         
         // Sync from Perl $DB::single variable to DebugState
         syncFromPerlVariables();
@@ -75,8 +66,8 @@ public class DebugHooks {
         syncDbSub();
         
         // Update current location
-        DebugState.currentFile = filename;
-        DebugState.currentLine = line;
+        state.currentFile = filename;
+        state.currentLine = line;
         
         // Update Perl debug variables
         GlobalVariable.getGlobalVariable("DB::filename").set(filename);
@@ -88,7 +79,7 @@ public class DebugHooks {
         }
 
         // Check for quit flag
-        if (DebugState.quit) {
+        if (state.quit) {
             System.exit(0);
         }
 
@@ -102,7 +93,7 @@ public class DebugHooks {
         }
 
         // If user has defined custom DB::DB, call it instead of our interactive debugger
-        if (hasCustomDebugger) {
+        if (state().hasCustomDebugger) {
             callUserDbDb();
             return;
         }
@@ -151,22 +142,22 @@ public class DebugHooks {
             return;
         }
         
-        hasCustomDebugger = true;
+        state().hasCustomDebugger = true;
         
         // Execute PERL5DB code in DB package context
         try {
             // Temporarily disable debug mode to avoid infinite recursion
-            boolean savedDebugMode = DebugState.debugMode;
-            DebugState.debugMode = false;
+            boolean savedDebugMode = state().debugMode;
+            state().debugMode = false;
             
             // Wrap in package DB to ensure subs are defined there
             String wrappedCode = "package DB; " + perl5db;
             EvalStringHandler.evalString(wrappedCode, new RuntimeBase[0], "<DB>", 1);
             
-            DebugState.debugMode = savedDebugMode;
+            state().debugMode = savedDebugMode;
         } catch (Exception e) {
             // If PERL5DB execution fails, fall back to interactive debugger
-            hasCustomDebugger = false;
+            state().hasCustomDebugger = false;
             System.err.println("Warning: Error executing PERL5DB: " + e.getMessage());
         }
     }
@@ -191,7 +182,7 @@ public class DebugHooks {
      */
     private static void commandLoop() {
         while (true) {
-            System.out.printf("  DB<%d> ", commandCounter);
+            System.out.printf("  DB<%d> ", state().commandCounter);
             System.out.flush();
 
             String input;
@@ -199,13 +190,13 @@ public class DebugHooks {
                 input = reader.readLine();
             } catch (IOException e) {
                 // EOF or error - quit
-                DebugState.quit = true;
+                state().quit = true;
                 return;
             }
 
             if (input == null) {
                 // EOF - quit
-                DebugState.quit = true;
+                state().quit = true;
                 return;
             }
 
@@ -218,7 +209,7 @@ public class DebugHooks {
 
             // Parse and execute command
             if (executeCommand(input)) {
-                commandCounter++;  // Increment after command that resumes execution
+                state().commandCounter++;  // Increment after command that resumes execution
                 return;  // Command indicates we should resume execution
             }
         }
@@ -303,9 +294,9 @@ public class DebugHooks {
     private static boolean handleNext(String args) {
         // Set step-over depth to current depth
         // DEBUG hook will skip while callDepth > stepOverDepth
-        DebugState.stepOverDepth = DebugState.callDepth;
-        DebugState.stepOutDepth = -1;
-        DebugState.single = true;
+        state().stepOverDepth = state().callDepth;
+        state().stepOutDepth = -1;
+        state().single = true;
         syncToPerlVariables();
         return true;
     }
@@ -315,9 +306,9 @@ public class DebugHooks {
      */
     private static boolean handleStep(String args) {
         // Disable step-over/step-out, enable single-step
-        DebugState.stepOverDepth = -1;
-        DebugState.stepOutDepth = -1;
-        DebugState.single = true;
+        state().stepOverDepth = -1;
+        state().stepOutDepth = -1;
+        state().single = true;
         syncToPerlVariables();
         return true;
     }
@@ -328,9 +319,9 @@ public class DebugHooks {
     private static boolean handleReturn(String args) {
         // Set step-out depth to current depth
         // DEBUG hook will skip until callDepth < stepOutDepth
-        DebugState.stepOutDepth = DebugState.callDepth;
-        DebugState.stepOverDepth = -1;
-        DebugState.single = true;
+        state().stepOutDepth = state().callDepth;
+        state().stepOverDepth = -1;
+        state().single = true;
         syncToPerlVariables();
         return true;
     }
@@ -340,17 +331,17 @@ public class DebugHooks {
      */
     private static boolean handleContinue(String args) {
         // Disable single-step, step-over, step-out
-        DebugState.single = false;
-        DebugState.stepOverDepth = -1;
-        DebugState.stepOutDepth = -1;
+        state().single = false;
+        state().stepOverDepth = -1;
+        state().stepOutDepth = -1;
 
         // If argument provided, it's a line number for one-time breakpoint
         if (!args.isEmpty()) {
             try {
                 int targetLine = Integer.parseInt(args);
-                String key = DebugState.currentFile + ":" + targetLine;
+                String key = state().currentFile + ":" + targetLine;
                 // Use one-time breakpoint so it's removed after being hit
-                DebugState.oneTimeBreakpoints.add(key);
+                state().oneTimeBreakpoints.add(key);
             } catch (NumberFormatException e) {
                 System.out.println("Invalid line number: " + args);
                 return false;
@@ -374,8 +365,8 @@ public class DebugHooks {
      * Handle 'l' (list) command - show source code.
      */
     private static void handleList(String args) {
-        String file = DebugState.currentFile;
-        int centerLine = DebugState.currentLine;
+        String file = state().currentFile;
+        int centerLine = state().currentLine;
         int range = 5;  // Show 5 lines before and after
 
         // Parse args for line range
@@ -405,7 +396,7 @@ public class DebugHooks {
      * Show source lines from file.
      */
     private static void showLines(String file, int start, int end) {
-        String[] lines = DebugState.sourceLines.get(file);
+        String[] lines = state().sourceLines.get(file);
         if (lines == null) {
             System.out.println("No source available for: " + file);
             return;
@@ -413,8 +404,8 @@ public class DebugHooks {
 
         end = Math.min(end, lines.length - 1);
         for (int i = start; i <= end; i++) {
-            String marker = (i == DebugState.currentLine) ? "==>" : "   ";
-            String bpMarker = DebugState.breakpoints.contains(file + ":" + i) ? "b" : " ";
+            String marker = (i == state().currentLine) ? "==>" : "   ";
+            String bpMarker = state().breakpoints.contains(file + ":" + i) ? "b" : " ";
             String line = (i < lines.length && lines[i] != null) ? lines[i] : "";
             System.out.printf("%s%s%4d:\t%s%n", marker, bpMarker, i, line);
         }
@@ -424,10 +415,10 @@ public class DebugHooks {
      * Handle '.' command - show current line.
      */
     private static void handleShowCurrent() {
-        String sourceLine = DebugState.getSourceLine(DebugState.currentFile, DebugState.currentLine);
+        String sourceLine = DebugState.getSourceLine(state().currentFile, state().currentLine);
         System.out.printf("%s:%d:\t%s%n",
-                DebugState.currentFile,
-                DebugState.currentLine,
+                state().currentFile,
+                state().currentLine,
                 sourceLine);
     }
 
@@ -436,11 +427,11 @@ public class DebugHooks {
      */
     private static void handleBreakpoint(String args) {
         int line;
-        String file = DebugState.currentFile;
+        String file = state().currentFile;
 
         if (args.isEmpty()) {
             // Breakpoint at current line
-            line = DebugState.currentLine;
+            line = state().currentLine;
         } else if (args.contains(":")) {
             // file:line format
             String[] parts = args.split(":", 2);
@@ -462,7 +453,7 @@ public class DebugHooks {
         }
 
         String key = file + ":" + line;
-        DebugState.breakpoints.add(key);
+        state().breakpoints.add(key);
         System.out.println("Breakpoint set at " + key);
     }
 
@@ -472,16 +463,16 @@ public class DebugHooks {
     private static void handleDeleteBreakpoint(String args) {
         if (args.equals("*")) {
             // Delete all breakpoints
-            DebugState.breakpoints.clear();
+            state().breakpoints.clear();
             System.out.println("All breakpoints deleted");
             return;
         }
 
         int line;
-        String file = DebugState.currentFile;
+        String file = state().currentFile;
 
         if (args.isEmpty()) {
-            line = DebugState.currentLine;
+            line = state().currentLine;
         } else if (args.contains(":")) {
             String[] parts = args.split(":", 2);
             file = parts[0];
@@ -501,7 +492,7 @@ public class DebugHooks {
         }
 
         String key = file + ":" + line;
-        if (DebugState.breakpoints.remove(key)) {
+        if (state().breakpoints.remove(key)) {
             System.out.println("Breakpoint deleted at " + key);
         } else {
             System.out.println("No breakpoint at " + key);
@@ -512,13 +503,13 @@ public class DebugHooks {
      * Handle 'L' (list breakpoints) command.
      */
     private static void handleListBreakpoints() {
-        if (DebugState.breakpoints.isEmpty()) {
+        if (state().breakpoints.isEmpty()) {
             System.out.println("No breakpoints set");
             return;
         }
 
         System.out.println("Breakpoints:");
-        for (String bp : DebugState.breakpoints) {
+        for (String bp : state().breakpoints) {
             System.out.println("  " + bp);
         }
     }
@@ -586,24 +577,25 @@ public class DebugHooks {
         }
 
         // Temporarily disable debug mode during expression evaluation
-        boolean savedDebugMode = DebugState.debugMode;
-        DebugState.debugMode = false;
+        boolean savedDebugMode = state().debugMode;
+        state().debugMode = false;
         
         try {
             // Look up the site-specific variable registry for lexical variable access
             java.util.Map<String, Integer> siteRegistry = null;
-            if (currentSiteIndex >= 0 && currentCode.evalSiteRegistries != null
-                    && currentSiteIndex < currentCode.evalSiteRegistries.size()) {
-                siteRegistry = currentCode.evalSiteRegistries.get(currentSiteIndex);
+            DebugRuntimeState state = state();
+            if (state.currentSiteIndex >= 0 && state.currentCode.evalSiteRegistries != null
+                    && state.currentSiteIndex < state.currentCode.evalSiteRegistries.size()) {
+                siteRegistry = state.currentCode.evalSiteRegistries.get(state.currentSiteIndex);
             }
             
             // Evaluate the expression using eval in scalar context
             RuntimeScalar result = EvalStringHandler.evalString(
                     expr,
-                    currentCode,
-                    currentRegisters,
-                    DebugState.currentFile,
-                    DebugState.currentLine,
+                    state.currentCode,
+                    state.currentRegisters,
+                    state().currentFile,
+                    state().currentLine,
                     RuntimeContextType.SCALAR,
                     siteRegistry
             );
@@ -620,7 +612,7 @@ public class DebugHooks {
             System.out.println("Error evaluating expression: " + e.getMessage());
         } finally {
             // Restore debug mode
-            DebugState.debugMode = savedDebugMode;
+            state().debugMode = savedDebugMode;
         }
     }
 
@@ -634,15 +626,16 @@ public class DebugHooks {
         }
 
         // Temporarily disable debug mode during expression evaluation
-        boolean savedDebugMode = DebugState.debugMode;
-        DebugState.debugMode = false;
+        boolean savedDebugMode = state().debugMode;
+        state().debugMode = false;
         
         try {
             // Look up the site-specific variable registry for lexical variable access
             java.util.Map<String, Integer> siteRegistry = null;
-            if (currentSiteIndex >= 0 && currentCode.evalSiteRegistries != null
-                    && currentSiteIndex < currentCode.evalSiteRegistries.size()) {
-                siteRegistry = currentCode.evalSiteRegistries.get(currentSiteIndex);
+            DebugRuntimeState state = state();
+            if (state.currentSiteIndex >= 0 && state.currentCode.evalSiteRegistries != null
+                    && state.currentSiteIndex < state.currentCode.evalSiteRegistries.size()) {
+                siteRegistry = state.currentCode.evalSiteRegistries.get(state.currentSiteIndex);
             }
             
             // Wrap expression to use Data::Dumper-style output
@@ -651,10 +644,10 @@ public class DebugHooks {
             
             RuntimeScalar result = EvalStringHandler.evalString(
                     dumpExpr,
-                    currentCode,
-                    currentRegisters,
-                    DebugState.currentFile,
-                    DebugState.currentLine,
+                    state.currentCode,
+                    state.currentRegisters,
+                    state().currentFile,
+                    state().currentLine,
                     RuntimeContextType.SCALAR,
                     siteRegistry
             );
@@ -665,10 +658,10 @@ public class DebugHooks {
                 // Data::Dumper not available, fall back to simple output
                 result = EvalStringHandler.evalString(
                         expr,
-                        currentCode,
-                        currentRegisters,
-                        DebugState.currentFile,
-                        DebugState.currentLine,
+                        state.currentCode,
+                        state.currentRegisters,
+                        state().currentFile,
+                        state().currentLine,
                         RuntimeContextType.SCALAR,
                         siteRegistry
                 );
@@ -680,7 +673,7 @@ public class DebugHooks {
             System.out.println("Error evaluating expression: " + e.getMessage());
         } finally {
             // Restore debug mode
-            DebugState.debugMode = savedDebugMode;
+            state().debugMode = savedDebugMode;
         }
     }
 
@@ -690,7 +683,7 @@ public class DebugHooks {
      * @param subName The fully-qualified subroutine name (package::subname)
      */
     public static void enterSubroutine(String subName) {
-        DebugState.callDepth++;
+        state().callDepth++;
         DebugState.pushSubName(subName);
     }
 
@@ -699,9 +692,9 @@ public class DebugHooks {
      * Caller must check debugMode before calling.
      */
     public static void exitSubroutine() {
-        DebugState.callDepth--;
-        if (DebugState.callDepth < 0) {
-            DebugState.callDepth = 0;
+        state().callDepth--;
+        if (state().callDepth < 0) {
+            state().callDepth = 0;
         }
         DebugState.popSubName();
     }
@@ -715,9 +708,9 @@ public class DebugHooks {
         RuntimeScalar trace = GlobalVariable.getGlobalVariable("DB::trace");
         RuntimeScalar signal = GlobalVariable.getGlobalVariable("DB::signal");
         
-        DebugState.single = single.getBoolean();
-        DebugState.trace = trace.getBoolean();
-        DebugState.signal = signal.getBoolean();
+        state().single = single.getBoolean();
+        state().trace = trace.getBoolean();
+        state().signal = signal.getBoolean();
     }
     
     /**
@@ -725,9 +718,9 @@ public class DebugHooks {
      * Called after debugger commands that change stepping state.
      */
     private static void syncToPerlVariables() {
-        GlobalVariable.getGlobalVariable("DB::single").set(DebugState.single ? 1 : 0);
-        GlobalVariable.getGlobalVariable("DB::trace").set(DebugState.trace ? 1 : 0);
-        GlobalVariable.getGlobalVariable("DB::signal").set(DebugState.signal ? 1 : 0);
+        GlobalVariable.getGlobalVariable("DB::single").set(state().single ? 1 : 0);
+        GlobalVariable.getGlobalVariable("DB::trace").set(state().trace ? 1 : 0);
+        GlobalVariable.getGlobalVariable("DB::signal").set(state().signal ? 1 : 0);
     }
     
     /**
@@ -748,11 +741,11 @@ public class DebugHooks {
      * Called periodically to ensure Perl code can access subroutine locations.
      */
     public static void syncDbSub() {
-        if (!DebugState.debugMode) {
+        if (!state().debugMode) {
             return;
         }
         RuntimeHash dbSub = GlobalVariable.getGlobalHash("DB::sub");
-        for (var entry : DebugState.subLocations.entrySet()) {
+        for (var entry : state().subLocations.entrySet()) {
             dbSub.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
         }
     }

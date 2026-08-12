@@ -1664,7 +1664,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !thisWasWeak
                 && value.type == UNDEF
                 && oldBase.blessId != 0
-                && WeakRefRegistry.weakRefsExist
+                && WeakRefRegistry.weakRefsExist()
                 && blessedClassHasDestroy(oldBase);
         if (oldBase != null && this.captureRefCountOwned > 0) {
             releaseAllClosureCaptureReferents(oldBase);
@@ -1716,8 +1716,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // But avoids false positives from:
         //   my $self = shift  (new local variable, oldBase is null)
         if (thisWasWeak
-                && DestroyDispatch.currentDestroyTarget != null
-                && oldBase == DestroyDispatch.currentDestroyTarget
+                && DestroyDispatch.currentDestroyTarget() != null
+                && oldBase == DestroyDispatch.currentDestroyTarget()
                 // Package weak maps (PPI's global parent indexes are the
                 // common case) may briefly replace/reuse an entry while its
                 // target is being destroyed.  That is handled by the normal
@@ -1728,8 +1728,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && !(containerOwner instanceof RuntimeHash owner
                     && owner.isPackageRootedHash())
                 && this.value instanceof RuntimeBase base
-                && base == DestroyDispatch.currentDestroyTarget) {
-            DestroyDispatch.destroyTargetRescued = true;
+                && base == DestroyDispatch.currentDestroyTarget()) {
+            DestroyDispatch.markDestroyTargetRescued();
             // Transition from destroyed (MIN_VALUE) to tracked so that when the
             // rescuing reference is eventually released (e.g., source goes out of
             // scope at the end of DESTROY), cascading cleanup brings the refCount
@@ -1815,7 +1815,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             } else if (oldBase.refCount > 0 && value.type == UNDEF
                     && oldBase.blessId != 0
                     && DestroyDispatch.isInsideDestroy()
-                    && WeakRefRegistry.weakRefsExist) {
+                    && WeakRefRegistry.weakRefsExist()) {
                 // Phase D: inside a DESTROY body, an explicit undef
                 // assignment released our strong ref to another
                 // blessed-with-DESTROY object but selective refCount
@@ -1826,7 +1826,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // and one BitSet lookup.
                 String cn = NameNormalizer.getBlessStr(oldBase.blessId);
                 if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
-                    DestroyDispatch.sweepPendingAfterOuterDestroy = true;
+                    DestroyDispatch.requestSweepAfterOuterDestroy();
                 }
             }
         }
@@ -3090,7 +3090,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.formatPictureTainted = false;
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
-            if (releasedCode && WeakRefRegistry.weakRefsExist && !ModuleInitGuard.inModuleInit()) {
+            if (releasedCode && WeakRefRegistry.weakRefsExist() && !ModuleInitGuard.inModuleInit()) {
                 ReachabilityWalker.sweepWeakRefs(true);
             }
             return this;
@@ -3146,7 +3146,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         // to the rescued object (e.g. HandleError closure's weak
                         // $schema) must be cleared so callbacks that fire AFTER
                         // this point can detect "schema is gone".
-                        if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist) {
+                        if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist()) {
                             String cn = NameNormalizer.getBlessStr(oldBase.blessId);
                             if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
                                 undefOnBlessedWithDestroy = true;
@@ -3154,7 +3154,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         }
                     }
                 } else if (oldBase.blessId != 0 && oldBase.refCount > 0
-                        && WeakRefRegistry.weakRefsExist) {
+                        && WeakRefRegistry.weakRefsExist()) {
                     // Phase D: selective refCount suggests this object still has
                     // strong references, but those may all be internal cycles
                     // (e.g. DBIC's Schema <-> source_registrations). Defer to the
@@ -3166,7 +3166,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         undefOnBlessedWithDestroy = true;
                     }
                 }
-            } else if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist) {
+            } else if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist()) {
                 // Phase D: no owned-count decrement (refCountOwned was false, or
                 // refCount was already 0 from prior selective drift). The
                 // object is blessed — if its class has DESTROY, let the walker

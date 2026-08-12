@@ -94,7 +94,7 @@ public class PipeInputChannel implements IOHandle {
      */
     private void setupProcess(ProcessBuilder processBuilder) throws IOException {
         // Set working directory to current directory
-        String userDir = System.getProperty("user.dir");
+        String userDir = org.perlonjava.runtime.runtimetypes.RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
 
         // Copy %ENV to the subprocess environment
@@ -216,11 +216,15 @@ public class PipeInputChannel implements IOHandle {
      */
     private void startProcess(String command) throws IOException {
         // Determine if we need shell interpretation
-        if (SHELL_METACHARACTERS.matcher(command).find()) {
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
+        if (isWindows || SHELL_METACHARACTERS.matcher(command).find()) {
             // Use shell
             String[] shellCommand;
-            if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-                shellCommand = new String[]{"cmd.exe", "/c", command};
+            if (isWindows) {
+                // String-form pipe commands have shell semantics. This is also
+                // required for cmd built-ins such as `type`, which have no
+                // executable that ProcessBuilder can launch directly.
+                shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c", command};
             } else {
                 shellCommand = new String[]{"/bin/sh", "-c", command};
             }

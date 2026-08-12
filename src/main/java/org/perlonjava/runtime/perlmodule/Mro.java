@@ -82,7 +82,7 @@ public class Mro extends PerlModuleBase {
     public static RuntimeList useMro(RuntimeArray args, int ctx) {
         if (args.size() == 1) {
             // use mro; - enables next::method globally
-            Feature.featureManager.enableFeatureBundle("perlonjava::internal::next_method");
+            Feature.getFeatureManager().enableFeatureBundle("perlonjava::internal::next_method");
             return new RuntimeList();
         }
 
@@ -98,7 +98,7 @@ public class Mro extends PerlModuleBase {
             } else if (mroType.equals("c3")) {
                 InheritanceResolver.setPackageMRO(callerPackage, MROAlgorithm.C3);
                 // Enable the c3 feature
-                Feature.featureManager.enableFeatureBundle("perlonjava::internal::mro_c3");
+                Feature.getFeatureManager().enableFeatureBundle("perlonjava::internal::mro_c3");
             } else {
                 // Change error message to match Perl's format
                 throw new PerlCompilerException("Invalid mro name: '" + mroType + "'");
@@ -117,7 +117,7 @@ public class Mro extends PerlModuleBase {
      */
     public static RuntimeList noMro(RuntimeArray args, int ctx) {
         // Disable next::method feature
-        Feature.featureManager.disableFeatureBundle("perlonjava::internal::next_method");
+        Feature.getFeatureManager().disableFeatureBundle("perlonjava::internal::next_method");
         return new RuntimeList();
     }
 

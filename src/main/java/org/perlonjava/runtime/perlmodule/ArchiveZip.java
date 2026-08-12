@@ -45,13 +45,13 @@ public class ArchiveZip extends PerlModuleBase {
     private static Path resolvePath(String name) {
         Path p = Paths.get(name);
         if (p.isAbsolute()) return p;
-        return Paths.get(System.getProperty("user.dir")).resolve(p);
+        return Paths.get(RuntimeEnvironment.currentDirectory()).resolve(p);
     }
 
     private static Path resolvePath(String first, String... more) {
         Path p = Paths.get(first, more);
         if (p.isAbsolute()) return p;
-        return Paths.get(System.getProperty("user.dir")).resolve(p);
+        return Paths.get(RuntimeEnvironment.currentDirectory()).resolve(p);
     }
 
     // Constants (matching Archive::Zip)

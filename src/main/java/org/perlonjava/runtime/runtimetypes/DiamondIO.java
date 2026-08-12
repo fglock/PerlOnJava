@@ -19,38 +19,40 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * editing with backup creation, akin to Perl's -i switch.
  */
 public class DiamondIO {
+    public static final class State {
+        RuntimeIO currentReader;
+        RuntimeIO currentWriter;
+        boolean eofReached;
+        boolean readingStarted;
+        boolean argvWasInitiallyEmpty;
+        int accumulatedLineNumber;
+        String inPlaceExtension;
+        boolean inPlaceEdit;
+        Path tempFilePath;
 
-    // Static variable to hold the current file reader
-    static RuntimeIO currentReader;
+        void clear() {
+            currentReader = null;
+            currentWriter = null;
+            eofReached = false;
+            readingStarted = false;
+            argvWasInitiallyEmpty = false;
+            accumulatedLineNumber = 0;
+            inPlaceExtension = null;
+            inPlaceEdit = false;
+            tempFilePath = null;
+        }
+    }
 
-    // Static variable to hold the current file writer (for in-place editing)
-    static RuntimeIO currentWriter;
-
-    // Flag to indicate if the end of all files has been reached
-    static boolean eofReached = false;
-
-    // Flag to indicate if the reading process has started
-    static boolean readingStarted = false;
-
-    // Flag to track if @ARGV was initially empty (determines STDIN fallback behavior)
-    static boolean argvWasInitiallyEmpty = false;
-
-    // Accumulated line number across ARGV files (Perl's $. continues across <> files)
-    static int accumulatedLineNumber = 0;
-
-    // Static field to store the in-place extension for the -i switch
-    static String inPlaceExtension = null;
-    static boolean inPlaceEdit = false;
-
-    // Path to the temporary file to be deleted on exit
-    static Path tempFilePath = null;
+    private static State state() {
+        return PerlRuntime.current().diamondIOState;
+    }
 
     public static void initialize(CompilerOptions compilerOptions) {
         // Reset all static variables to ensure clean state between compiler runs
         reset();
 
-        inPlaceExtension = compilerOptions.inPlaceExtension;
-        inPlaceEdit = compilerOptions.inPlaceEdit;
+        state().inPlaceExtension = compilerOptions.inPlaceExtension;
+        state().inPlaceEdit = compilerOptions.inPlaceEdit;
     }
 
     /**
@@ -58,15 +60,7 @@ public class DiamondIO {
      * This ensures clean state between compiler runs and prevents state leakage.
      */
     public static void reset() {
-        currentReader = null;
-        currentWriter = null;
-        eofReached = false;
-        readingStarted = false;
-        argvWasInitiallyEmpty = false;
-        accumulatedLineNumber = 0;
-        inPlaceExtension = null;
-        inPlaceEdit = false;
-        tempFilePath = null;
+        state().clear();
     }
 
     /**
@@ -80,6 +74,7 @@ public class DiamondIO {
      * undefined scalar if EOF is reached for all files.
      */
     public static RuntimeBase readline(RuntimeScalar arg, int ctx) {
+        State state = state();
         if (ctx == RuntimeContextType.LIST) {
             // Handle LIST context
             RuntimeList lines = new RuntimeList();
@@ -91,19 +86,19 @@ public class DiamondIO {
         } else {
             // Handle SCALAR context
             // Initialize the reading process if it hasn't started yet
-            if (!readingStarted) {
-                readingStarted = true;
+            if (!state.readingStarted) {
+                state.readingStarted = true;
                 // Check if @ARGV was initially empty to determine STDIN fallback behavior
-                argvWasInitiallyEmpty = getGlobalArray("main::ARGV").isEmpty();
+                state.argvWasInitiallyEmpty = getGlobalArray("main::ARGV").isEmpty();
 
                 RuntimeIO argv = getGlobalIO("main::ARGV").getRuntimeIO();
                 // Only use ARGV filehandle directly if @ARGV is empty (handles aliased filehandles like *ARGV = *DATA)
                 if (argv != null && !(argv.ioHandle instanceof ClosedIOHandle) && getGlobalArray("main::ARGV").isEmpty()) {
-                    currentReader = argv;
-                } else if (argvWasInitiallyEmpty) {
+                    state.currentReader = argv;
+                } else if (state.argvWasInitiallyEmpty) {
                     RuntimeIO stdin = getGlobalIO("main::STDIN").getRuntimeIO();
                     if (stdin == null || stdin.ioHandle instanceof ClosedIOHandle) {
-                        eofReached = true;
+                        state.eofReached = true;
                         return scalarUndef;
                     }
                     // Only use STDIN if @ARGV was initially empty, not if it became empty after processing files
@@ -113,25 +108,25 @@ public class DiamondIO {
 
             while (true) {
                 // If there's no current reader, try to open the next file
-                if (currentReader == null) {
+                if (state.currentReader == null) {
                     if (!openNextFile()) {
-                        eofReached = true;
+                        state.eofReached = true;
                         return scalarUndef;
                     }
                     // Carry over accumulated line number (Perl's $. continues across <> files)
-                    currentReader.currentLineNumber = accumulatedLineNumber;
+                    state.currentReader.currentLineNumber = state.accumulatedLineNumber;
                 }
 
                 // Attempt to read a line from the current file
-                RuntimeScalar line = Readline.readline(currentReader);
+                RuntimeScalar line = Readline.readline(state.currentReader);
                 if (line.type != RuntimeScalarType.UNDEF) {
-                    accumulatedLineNumber = currentReader.currentLineNumber;
+                    state.accumulatedLineNumber = state.currentReader.currentLineNumber;
                     return line;
                 }
 
                 // EOF for current file — save accumulated line count before discarding reader
-                accumulatedLineNumber = currentReader.currentLineNumber;
-                currentReader = null;
+                state.accumulatedLineNumber = state.currentReader.currentLineNumber;
+                state.currentReader = null;
             }
         }
     }
@@ -145,14 +140,15 @@ public class DiamondIO {
      * @return true if a new file was successfully opened, false if no more files are available.
      */
     private static boolean openNextFile() {
+        State state = state();
         // Close the current reader and writer if they exist
-        if (currentReader != null) {
-            currentReader.close();
-            currentReader = null;
+        if (state.currentReader != null) {
+            state.currentReader.close();
+            state.currentReader = null;
         }
-        if (currentWriter != null) {
-            currentWriter.close();
-            currentWriter = null;
+        if (state.currentWriter != null) {
+            state.currentWriter.close();
+            state.currentWriter = null;
         }
 
         // Get the next file name from the global ARGV array
@@ -167,8 +163,8 @@ public class DiamondIO {
         String backupFileName = null;
 
         // Check if in-place editing is enabled (either via -i switch or $^I variable)
-        boolean isInPlaceEnabled = inPlaceEdit;
-        String extension = inPlaceExtension;
+        boolean isInPlaceEnabled = state.inPlaceEdit;
+        String extension = state.inPlaceExtension;
 
         // Also check $^I variable for runtime in-place editing
         if (!isInPlaceEnabled) {
@@ -190,13 +186,13 @@ public class DiamondIO {
             if (extension == null || extension.isEmpty()) {
                 // Create a temporary file for the original file
                 try {
-                    tempFilePath = Files.createTempFile("temp_", null);
-                    backupFileName = tempFilePath.toString();
+                    state.tempFilePath = Files.createTempFile("temp_", null);
+                    backupFileName = state.tempFilePath.toString();
 
-                    Files.move(originalPath, tempFilePath, StandardCopyOption.REPLACE_EXISTING);
+                    Files.move(originalPath, state.tempFilePath, StandardCopyOption.REPLACE_EXISTING);
 
                     // Schedule the file for deletion on JVM exit
-                    tempFilePath.toFile().deleteOnExit();
+                    state.tempFilePath.toFile().deleteOnExit();
 
                 } catch (IOException e) {
                     System.err.println("Error: Unable to create temporary file for " + originalFileName + ": " + e);
@@ -239,20 +235,20 @@ public class DiamondIO {
 
             // Open the original file for writing (this is the ARGVOUT equivalent)
             // Use the resolved path to ensure we write to the correct location
-            currentWriter = RuntimeIO.open(originalPath.toString(), ">");
-            getGlobalIO("main::ARGVOUT").set(currentWriter);
-            RuntimeIO.setLastAccessedHandle(currentWriter);
+            state.currentWriter = RuntimeIO.open(originalPath.toString(), ">");
+            getGlobalIO("main::ARGVOUT").set(state.currentWriter);
+            RuntimeIO.setLastAccessedHandle(state.currentWriter);
 
             // CRITICAL: Update selectedHandle so print statements without explicit filehandle
             // write to the original file during in-place editing
-            RuntimeIO.setSelectedHandle(currentWriter);
+            RuntimeIO.setSelectedHandle(state.currentWriter);
         }
 
         // Open the renamed file for reading
-        String readerPath = tempFilePath != null ? tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName);
-        currentReader = RuntimeIO.open(readerPath);
-        getGlobalIO("main::ARGV").set(currentReader);
+        String readerPath = state.tempFilePath != null ? state.tempFilePath.toString() : (backupFileName != null ? backupFileName : originalFileName);
+        state.currentReader = RuntimeIO.open(readerPath);
+        getGlobalIO("main::ARGV").set(state.currentReader);
 
-        return currentReader != null;
+        return state.currentReader != null;
     }
 }

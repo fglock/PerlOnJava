@@ -5,6 +5,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.File;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -17,12 +18,18 @@ public class ScalarGlobOperator {
     /**
      * Map storing glob operator instances by their unique ID for state management
      */
-    private static final Map<Integer, ScalarGlobOperator> globOperators = new HashMap<>();
+    private static Map<Integer, ScalarGlobOperator> globOperators() {
+        return PerlRuntime.current().scalarGlobState;
+    }
 
     /**
      * Counter for generating unique operator IDs
      */
-    public static Integer currentId = 0;
+    private static final AtomicInteger NEXT_ID = new AtomicInteger();
+
+    public static int allocateId() {
+        return NEXT_ID.getAndIncrement();
+    }
 
     /**
      * Iterator over the current glob results
@@ -83,6 +90,7 @@ public class ScalarGlobOperator {
      * Evaluates glob in scalar context, returning one result per call.
      */
     private static RuntimeBase evaluateInScalarContext(int id, String pattern) {
+        Map<Integer, ScalarGlobOperator> globOperators = globOperators();
         ScalarGlobOperator globOperator = globOperators.get(id);
 
         if (globOperator == null) {
@@ -227,7 +235,7 @@ public class ScalarGlobOperator {
                 startSegment = 1;
             }
         } else {
-            startDir = new File(System.getProperty("user.dir"));
+            startDir = new File(RuntimeEnvironment.currentDirectory());
             prefix = "";
             startSegment = 0;
         }
@@ -380,7 +388,7 @@ public class ScalarGlobOperator {
             filePattern = normalizedPattern.substring(lastSep + 1);
         } else {
             // No directory separator - use current directory
-            baseDir = new File(System.getProperty("user.dir"));
+            baseDir = new File(RuntimeEnvironment.currentDirectory());
         }
 
         return new PathComponents(baseDir, filePattern, hasDirectory, directoryPart);

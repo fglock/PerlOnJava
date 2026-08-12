@@ -41,7 +41,7 @@ public class DirectoryIO {
         // Resolve and store absolute path
         Path path = Paths.get(directoryPath);
         if (!path.isAbsolute()) {
-            path = Paths.get(System.getProperty("user.dir"), directoryPath);
+            path = Paths.get(org.perlonjava.runtime.runtimetypes.RuntimeEnvironment.currentDirectory(), directoryPath);
         }
         this.absoluteDirectoryPath = path.toAbsolutePath().normalize();
     }

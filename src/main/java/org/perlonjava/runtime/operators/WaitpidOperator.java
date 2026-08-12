@@ -5,6 +5,7 @@ import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Map;
@@ -20,7 +21,9 @@ public class WaitpidOperator {
     public static final int WUNTRACED = 2;
     public static final int WCONTINUED = 8;
 
-    private static final Map<Long, Process> windowsChildProcesses = new ConcurrentHashMap<>();
+    private static Map<Long, Process> windowsChildProcesses() {
+        return PerlRuntime.current().ioRegistryState.windowsChildProcesses;
+    }
 
     private static final boolean IS_WINDOWS = NativeUtils.IS_WINDOWS;
 
@@ -123,7 +126,7 @@ public class WaitpidOperator {
             return new RuntimeScalar(-1);
         }
 
-        Process childProcess = windowsChildProcesses.get((long) pid);
+        Process childProcess = windowsChildProcesses().get((long) pid);
         if (childProcess != null) {
             if (nonBlocking) {
                 if (childProcess.isAlive()) return new RuntimeScalar(0);
@@ -136,7 +139,7 @@ public class WaitpidOperator {
                 }
             }
             int exitCode = childProcess.exitValue();
-            windowsChildProcesses.remove((long) pid);
+            windowsChildProcesses().remove((long) pid);
             setExitStatus(exitCode << 8);
             return new RuntimeScalar(pid);
         }
@@ -154,7 +157,7 @@ public class WaitpidOperator {
     }
 
     public static void registerChildProcess(long pid, Process process) {
-        windowsChildProcesses.put(pid, process);
+        windowsChildProcesses().put(pid, process);
     }
 
     private static void setExitStatus(int status) {

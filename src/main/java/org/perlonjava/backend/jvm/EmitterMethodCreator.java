@@ -462,7 +462,7 @@ public class EmitterMethodCreator implements Opcodes {
             // Define the class with version, access flags, name, signature, superclass, and interfaces
             // Implement PerlSubroutine interface for direct method calls (no MethodHandle conversion needed)
             cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, className, null, "java/lang/Object",
-                    new String[]{"org/perlonjava/runtime/runtimetypes/PerlSubroutine"});
+                    new String[]{"org/perlonjava/runtime/runtimetypes/CloneablePerlSubroutine"});
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Create class: " + className);
 
             // Add instance fields to the class for closure variables
@@ -536,6 +536,8 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitInsn(Opcodes.RETURN); // Return void
             mv.visitMaxs(0, 0); // Automatically computed
             mv.visitEnd();
+
+            emitClosureCloneMetadata(cw, className, env, constructorDescriptor.toString());
 
             // Create the public "apply" method for the generated class
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Create the method");
@@ -1684,6 +1686,73 @@ public class EmitterMethodCreator implements Opcodes {
                     e);
         }
 
+    }
+
+    private static void emitClosureCloneMetadata(
+            ClassWriter cw, String className, String[] env, String constructorDescriptor) {
+        String base = "org/perlonjava/runtime/runtimetypes/RuntimeBase";
+        String scalar = "org/perlonjava/runtime/runtimetypes/RuntimeScalar";
+        String cloneable = "org/perlonjava/runtime/runtimetypes/CloneablePerlSubroutine";
+        int captureCount = Math.max(0, env.length - skipVariables);
+
+        MethodVisitor values = cw.visitMethod(Opcodes.ACC_PUBLIC, "capturedValues",
+                "()[L" + base + ";", null, null);
+        values.visitCode();
+        pushInt(values, captureCount);
+        values.visitTypeInsn(Opcodes.ANEWARRAY, base);
+        for (int i = skipVariables; i < env.length; i++) {
+            values.visitInsn(Opcodes.DUP);
+            pushInt(values, i - skipVariables);
+            if (env[i] == null || env[i].isEmpty()) {
+                values.visitInsn(Opcodes.ACONST_NULL);
+            } else {
+                values.visitVarInsn(Opcodes.ALOAD, 0);
+                values.visitFieldInsn(Opcodes.GETFIELD, className, env[i], getVariableDescriptor(env[i]));
+            }
+            values.visitInsn(Opcodes.AASTORE);
+        }
+        values.visitInsn(Opcodes.ARETURN);
+        values.visitMaxs(0, 0);
+        values.visitEnd();
+
+        MethodVisitor clone = cw.visitMethod(Opcodes.ACC_PUBLIC, "cloneWithCaptures",
+                "([L" + base + ";)L" + cloneable + ";", null, null);
+        clone.visitCode();
+        clone.visitTypeInsn(Opcodes.NEW, className);
+        clone.visitInsn(Opcodes.DUP);
+        for (int i = skipVariables; i < env.length; i++) {
+            clone.visitVarInsn(Opcodes.ALOAD, 1);
+            pushInt(clone, i - skipVariables);
+            clone.visitInsn(Opcodes.AALOAD);
+            String descriptor = getVariableDescriptor(env[i]);
+            clone.visitTypeInsn(Opcodes.CHECKCAST, descriptor.substring(1, descriptor.length() - 1));
+        }
+        clone.visitMethodInsn(Opcodes.INVOKESPECIAL, className, "<init>", constructorDescriptor, false);
+        clone.visitInsn(Opcodes.ARETURN);
+        clone.visitMaxs(0, 0);
+        clone.visitEnd();
+
+        MethodVisitor self = cw.visitMethod(Opcodes.ACC_PUBLIC, "setSelfReference",
+                "(L" + scalar + ";)V", null, null);
+        self.visitCode();
+        self.visitVarInsn(Opcodes.ALOAD, 0);
+        self.visitVarInsn(Opcodes.ALOAD, 1);
+        self.visitFieldInsn(Opcodes.PUTFIELD, className, "__SUB__", "L" + scalar + ";");
+        self.visitInsn(Opcodes.RETURN);
+        self.visitMaxs(0, 0);
+        self.visitEnd();
+    }
+
+    private static void pushInt(MethodVisitor mv, int value) {
+        if (value >= -1 && value <= 5) {
+            mv.visitInsn(Opcodes.ICONST_0 + value);
+        } else if (value <= Byte.MAX_VALUE) {
+            mv.visitIntInsn(Opcodes.BIPUSH, value);
+        } else if (value <= Short.MAX_VALUE) {
+            mv.visitIntInsn(Opcodes.SIPUSH, value);
+        } else {
+            mv.visitLdcInsn(value);
+        }
     }
 
     /**

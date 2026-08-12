@@ -11,7 +11,17 @@ import static org.perlonjava.runtime.runtimetypes.FeatureFlags.getFeatureList;
  */
 public class Feature extends PerlModuleBase {
 
-    public static FeatureFlags featureManager = new FeatureFlags();
+    private static FeatureFlags featureManager() {
+        return PerlRuntime.current().compilationState.featureManager;
+    }
+
+    public static FeatureFlags getFeatureManager() {
+        return featureManager();
+    }
+
+    public static void setFeatureManager(FeatureFlags manager) {
+        PerlRuntime.current().compilationState.featureManager = manager;
+    }
 
     /**
      * Constructor for FeatureFlags.
@@ -48,7 +58,7 @@ public class Feature extends PerlModuleBase {
             System.err.println("Warning: Missing Feature method: " + e.getMessage());
         }
 
-        featureManager = new FeatureFlags();
+        PerlRuntime.current().compilationState.featureManager = new FeatureFlags();
 
         // Populate %feature::feature hash for experimental.pm compatibility
         // This makes the hash accessible from Perl code
@@ -97,7 +107,7 @@ public class Feature extends PerlModuleBase {
 
             // enableFeatureBundle handles both bundles (":5.10") and individual features ("say")
             // It calls enableFeature() which updates both featureManager and symbolTable
-            featureManager.enableFeatureBundle(featureName);
+            featureManager().enableFeatureBundle(featureName);
         }
         return new RuntimeScalar().getList();
     }
@@ -122,7 +132,7 @@ public class Feature extends PerlModuleBase {
 
             // disableFeatureBundle handles both bundles (":5.10") and individual features ("say")
             // It calls disableFeature() which updates both featureManager and symbolTable
-            featureManager.disableFeatureBundle(featureName);
+            featureManager().disableFeatureBundle(featureName);
         }
         return new RuntimeScalar().getList();
     }
@@ -130,7 +140,7 @@ public class Feature extends PerlModuleBase {
     public static RuntimeList useFeaturePragma(RuntimeArray args, int ctx) {
         String featureName = featureNameFromPragma(args);
         if (featureName != null) {
-            featureManager.enableFeatureBundle(featureName);
+            featureManager().enableFeatureBundle(featureName);
         }
         return new RuntimeScalar().getList();
     }
@@ -138,7 +148,7 @@ public class Feature extends PerlModuleBase {
     public static RuntimeList noFeaturePragma(RuntimeArray args, int ctx) {
         String featureName = featureNameFromPragma(args);
         if (featureName != null) {
-            featureManager.disableFeatureBundle(featureName);
+            featureManager().disableFeatureBundle(featureName);
         }
         return new RuntimeScalar().getList();
     }
@@ -167,7 +177,7 @@ public class Feature extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for feature_enabled()");
         }
         String feature = args.get(0).toString();
-        boolean isEnabled = featureManager.isFeatureEnabled(feature);
+        boolean isEnabled = featureManager().isFeatureEnabled(feature);
         return new RuntimeScalar(isEnabled).getList();
     }
 
@@ -181,7 +191,7 @@ public class Feature extends PerlModuleBase {
     public static RuntimeList features_enabled(RuntimeArray args, int ctx) {
         RuntimeList enabledFeatures = new RuntimeList();
         for (String feature : getFeatureList()) {
-            if (featureManager.isFeatureEnabled(feature)) {
+            if (featureManager().isFeatureEnabled(feature)) {
                 enabledFeatures.elements.add(new RuntimeScalar(feature));
             }
         }

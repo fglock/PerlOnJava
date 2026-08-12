@@ -96,7 +96,7 @@ public class Directory {
             try {
                 // Match getcwd(3): collapse . and .., and resolve symlinks like
                 // macOS /var -> /private/var after chdir().
-                System.setProperty("user.dir", absoluteDir.getCanonicalPath());
+                RuntimeEnvironment.setCurrentDirectory(absoluteDir.getCanonicalPath());
             } catch (IOException e) {
                 handleIOException(e, "chdir failed");
                 return scalarFalse;

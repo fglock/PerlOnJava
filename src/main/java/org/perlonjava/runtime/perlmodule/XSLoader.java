@@ -8,7 +8,6 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
@@ -17,8 +16,6 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 public class XSLoader extends PerlModuleBase {
 
     /** Guard against recursive loadJarShimOverrides calls (e.g. Clone.pm evals XSLoader::load). */
-    private static final Set<String> shimLoadingInProgress = new HashSet<>();
-
     /**
      * Non-functional base classes that should be ignored when checking @ISA
      * for pure-Perl fallback parents. These classes provide infrastructure
@@ -337,7 +334,7 @@ public class XSLoader extends PerlModuleBase {
     private static boolean loadJarShimOverrides(String moduleName) {
         // Guard against recursion: the shim code may call XSLoader::load() again
         // for the same module (e.g. Clone.pm's eval { XSLoader::load('Clone') })
-        if (!shimLoadingInProgress.add(moduleName)) {
+        if (!PerlRuntime.current().xsShimLoadingInProgress.add(moduleName)) {
             return false; // Already loading this module's shim — break the cycle
         }
         try {
@@ -366,7 +363,7 @@ public class XSLoader extends PerlModuleBase {
             // Silently ignore - the module works via inheritance anyway
             return false;
         } finally {
-            shimLoadingInProgress.remove(moduleName);
+            PerlRuntime.current().xsShimLoadingInProgress.remove(moduleName);
         }
     }
 }

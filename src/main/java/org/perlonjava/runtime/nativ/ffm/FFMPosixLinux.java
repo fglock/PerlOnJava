@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 /**
  * Linux/macOS implementation of FFM POSIX interface.
@@ -24,9 +25,6 @@ public class FFMPosixLinux implements FFMPosixInterface {
     // Platform detection
     private static final boolean IS_MACOS = System.getProperty("os.name").toLowerCase().contains("mac");
     private static final boolean IS_LINUX = System.getProperty("os.name").toLowerCase().contains("linux");
-    
-    // Thread-local errno storage (used as fallback)
-    private static final ThreadLocal<Integer> threadErrno = ThreadLocal.withInitial(() -> 0);
     
     // Lazy-initialized FFM components
     private static volatile boolean initialized = false;
@@ -1304,12 +1302,12 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public int errno() {
-        return threadErrno.get();
+        return PerlRuntime.current().nativeState.errno;
     }
     
     @Override
     public void setErrno(int errno) {
-        threadErrno.set(errno);
+        PerlRuntime.current().nativeState.errno = errno;
     }
     
     @Override

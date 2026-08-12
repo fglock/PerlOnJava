@@ -19,7 +19,6 @@ import org.perlonjava.runtime.operators.ScalarFlipFlopOperator;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
-import static org.perlonjava.runtime.operators.ScalarFlipFlopOperator.flipFlops;
 
 /**
  * The EmitLogicalOperator class is responsible for handling logical operators
@@ -47,11 +46,11 @@ public class EmitLogicalOperator {
         MethodVisitor mv = ctx.mv;
 
         // Generate unique IDs for this flip-flop instance
-        int flipFlopId = ScalarFlipFlopOperator.currentId++;
+        int flipFlopId = ScalarFlipFlopOperator.allocateId();
 
         // Constructor to initialize the flip-flop operator with a unique identifier
         ScalarFlipFlopOperator op = new ScalarFlipFlopOperator(node.operator.equals("..."));
-        flipFlops.putIfAbsent(flipFlopId, op);   // Initialize to false state
+        ScalarFlipFlopOperator.flipFlops().putIfAbsent(flipFlopId, op);   // Initialize to false state
 
         // Emit bytecode to evaluate the flip-flop operator
         int flipFlopIdSlot = ctx.symbolTable.allocateLocalVariable();

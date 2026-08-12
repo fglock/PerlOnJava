@@ -2,9 +2,9 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The NameNormalizer class provides utility methods for normalizing Perl variable names
@@ -14,21 +14,26 @@ import java.util.Set;
 public class NameNormalizer {
     // Cache to store previously normalized variables for faster lookup
     // Using composite key avoids ~12ns string concatenation per lookup
-    private static final Map<CacheKey, String> nameCache = new HashMap<>();
-    private static final Map<String, Integer> blessIdCache = new HashMap<>();
-    // Changed to HashMap to support non-contiguous IDs (positive: normal, negative: overloaded)
-    private static final Map<Integer, String> blessStrCache = new HashMap<>();
+    private static final Map<CacheKey, String> nameCache = new ConcurrentHashMap<>();
     private static final Set<String> SPECIAL_VARIABLES = Set.of(
             "ARGV", "ARGVOUT", "ENV", "INC", "SIG", "STDOUT", "STDERR", "STDIN"
     );
     // Cache to store blessed class lookups
     // Positive blessIds (1, 2, 3, ...): normal classes without overloads
     // Negative blessIds (-1, -2, -3, ...): classes with overloads (enables fast rejection in OverloadContext.prepare)
-    private static int currentBlessId = 0;
-    private static int currentOverloadedBlessId = -1;
+    public static final class State {
+        final Map<String, Integer> blessIdCache = new java.util.HashMap<>();
+        final Map<Integer, String> blessStrCache = new java.util.HashMap<>();
+        int currentBlessId;
+        int currentOverloadedBlessId = -1;
 
-    static {
-        blessStrCache.put(0, "");  // Reserve 0 for unblessed
+        public State() {
+            blessStrCache.put(0, "");
+        }
+    }
+
+    private static State state() {
+        return PerlRuntime.current().nameNormalizerState;
     }
 
     /**
@@ -40,7 +45,8 @@ public class NameNormalizer {
      * @return The unique ID associated with the class name.
      */
     public static int getBlessId(String str) {
-        Integer id = blessIdCache.get(str);
+        State state = state();
+        Integer id = state.blessIdCache.get(str);
         if (id != null) {
             // If this className was previously anonymized (e.g. by `undef
             // %Pkg::`), the cached id maps to "__ANON__". A NEW `bless` into
@@ -51,7 +57,7 @@ public class NameNormalizer {
             // This is what enables `clean_inc` style patterns (Class::Trait
             // tests, etc.) to wipe and reload a package without leaving new
             // objects stuck reporting "__ANON__".
-            String blessStr = blessStrCache.get(id);
+            String blessStr = state.blessStrCache.get(id);
             if ("__ANON__".equals(blessStr) && !"__ANON__".equals(str)) {
                 id = null;  // fall through to fresh allocation below
             }
@@ -61,21 +67,21 @@ public class NameNormalizer {
             boolean hasOverload = hasOverloadMarker(str);
 
             if (hasOverload) {
-                id = currentOverloadedBlessId;
-                currentOverloadedBlessId--;  // Next overloaded class gets -2, -3, etc.
+                id = state.currentOverloadedBlessId;
+                state.currentOverloadedBlessId--;  // Next overloaded class gets -2, -3, etc.
             } else {
-                currentBlessId++;  // Next normal class gets 2, 3, etc.
-                id = currentBlessId;
+                state.currentBlessId++;  // Next normal class gets 2, 3, etc.
+                id = state.currentBlessId;
             }
 
-            blessIdCache.put(str, id);
-            blessStrCache.put(id, str);
+            state.blessIdCache.put(str, id);
+            state.blessStrCache.put(id, str);
         }
         return id;
     }
 
     public static void invalidateBlessIdCache() {
-        blessIdCache.clear();
+        state().blessIdCache.clear();
     }
 
     /**
@@ -87,12 +93,13 @@ public class NameNormalizer {
     public static int getEffectiveBlessId(int id) {
         if (id == 0) return id;
 
-        String className = blessStrCache.get(id);
+        State state = state();
+        String className = state.blessStrCache.get(id);
         if (className == null || "__ANON__".equals(className)) {
             return id;
         }
 
-        Integer cached = blessIdCache.get(className);
+        Integer cached = state.blessIdCache.get(className);
         if (cached != null && cached < 0) {
             return cached;
         }
@@ -135,13 +142,14 @@ public class NameNormalizer {
      * @return The class name associated with the ID.
      */
     public static String getBlessStr(int id) {
-        return blessStrCache.get(id);
+        return state().blessStrCache.get(id);
     }
 
     public static void anonymizeBlessId(String className) {
-        Integer id = blessIdCache.get(className);
+        State state = state();
+        Integer id = state.blessIdCache.get(className);
         boolean foundExistingId = false;
-        for (Map.Entry<Integer, String> entry : blessStrCache.entrySet()) {
+        for (Map.Entry<Integer, String> entry : state.blessStrCache.entrySet()) {
             if (className.equals(entry.getValue())) {
                 if (id == null) {
                     id = entry.getKey();
@@ -155,9 +163,9 @@ public class NameNormalizer {
             // (until a NEW `bless` rebinds the cache via the
             // anonymized-cache-entry detection in getBlessId above).
             id = getBlessId(className);
-            blessStrCache.put(id, "__ANON__");
+            state.blessStrCache.put(id, "__ANON__");
         }
-        blessIdCache.put(className, id);
+        state.blessIdCache.put(className, id);
         // Note: we deliberately keep the className→id mapping in
         // blessIdCache so that *glob{PACKAGE} on a glob in this stash
         // (and ref() of objects already blessed into this id) continue
@@ -169,7 +177,7 @@ public class NameNormalizer {
     }
 
     public static String getBlessStrForClassName(String className) {
-        Integer id = blessIdCache.get(className);
+        Integer id = state().blessIdCache.get(className);
         if (id == null) {
             return className;
         }

@@ -13,22 +13,43 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
 public class ExtendedNativeUtils extends NativeUtils {
+    public static final class State {
+        final Map<String, RuntimeArray> userInfoCache = new ConcurrentHashMap<>();
+        final Map<String, RuntimeArray> groupInfoCache = new ConcurrentHashMap<>();
+        final Map<String, RuntimeArray> hostInfoCache = new ConcurrentHashMap<>();
+        Iterator<String> userIterator;
+        Iterator<String> groupIterator;
+        Iterator<String> hostIterator;
+        Iterator<String> netIterator;
+        Iterator<String> protoIterator;
+        Iterator<String> servIterator;
+        final Map<Integer, RuntimeArray> messageQueues = new ConcurrentHashMap<>();
+        final Map<Integer, RuntimeArray> semaphores = new ConcurrentHashMap<>();
+        final Map<Integer, RuntimeArray> sharedMemory = new ConcurrentHashMap<>();
+        int nextIpcId = 1000;
+        public int errno;
 
-    private static final Map<String, RuntimeArray> userInfoCache = new ConcurrentHashMap<>();
-    private static final Map<String, RuntimeArray> groupInfoCache = new ConcurrentHashMap<>();
-    private static final Map<String, RuntimeArray> hostInfoCache = new ConcurrentHashMap<>();
+        public void clear() {
+            userInfoCache.clear();
+            groupInfoCache.clear();
+            hostInfoCache.clear();
+            userIterator = null;
+            groupIterator = null;
+            hostIterator = null;
+            netIterator = null;
+            protoIterator = null;
+            servIterator = null;
+            messageQueues.clear();
+            semaphores.clear();
+            sharedMemory.clear();
+            nextIpcId = 1000;
+            errno = 0;
+        }
+    }
 
-    private static final ThreadLocal<Iterator<String>> userIterator = new ThreadLocal<>();
-    private static final ThreadLocal<Iterator<String>> groupIterator = new ThreadLocal<>();
-    private static final ThreadLocal<Iterator<String>> hostIterator = new ThreadLocal<>();
-    private static final ThreadLocal<Iterator<String>> netIterator = new ThreadLocal<>();
-    private static final ThreadLocal<Iterator<String>> protoIterator = new ThreadLocal<>();
-    private static final ThreadLocal<Iterator<String>> servIterator = new ThreadLocal<>();
-
-    private static final Map<Integer, RuntimeArray> messageQueues = new ConcurrentHashMap<>();
-    private static final Map<Integer, RuntimeArray> semaphores = new ConcurrentHashMap<>();
-    private static final Map<Integer, RuntimeArray> sharedMemory = new ConcurrentHashMap<>();
-    private static int nextIpcId = 1000;
+    private static State state() {
+        return PerlRuntime.current().nativeState;
+    }
 
     // ================== User/Group Information Functions ==================
 
@@ -163,8 +184,8 @@ public class ExtendedNativeUtils extends NativeUtils {
         String groupname = args[0].toString();
 
         String cacheKey = "group:" + groupname;
-        if (groupInfoCache.containsKey(cacheKey)) {
-            return groupInfoCache.get(cacheKey);
+        if (state().groupInfoCache.containsKey(cacheKey)) {
+            return state().groupInfoCache.get(cacheKey);
         }
 
         RuntimeArray result = new RuntimeArray();
@@ -190,7 +211,7 @@ public class ExtendedNativeUtils extends NativeUtils {
                 }
             }
 
-            groupInfoCache.put(cacheKey, result);
+            state().groupInfoCache.put(cacheKey, result);
         } catch (Exception e) {
         }
 
@@ -226,11 +247,11 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeArray getgrent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = groupIterator.get();
+        Iterator<String> iterator = state().groupIterator;
         if (iterator == null) {
             List<String> groups = getSystemGroups();
             iterator = groups.iterator();
-            groupIterator.set(iterator);
+            state().groupIterator = iterator;
         }
 
         if (iterator.hasNext()) {
@@ -247,14 +268,14 @@ public class ExtendedNativeUtils extends NativeUtils {
             } catch (Exception e) {
             }
         }
-        userIterator.remove();
-        userInfoCache.clear();
+        state().userIterator = null;
+        state().userInfoCache.clear();
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar setgrent(int ctx, RuntimeBase... args) {
-        groupIterator.remove();
-        groupInfoCache.clear();
+        state().groupIterator = null;
+        state().groupInfoCache.clear();
         return new RuntimeScalar(1);
     }
 
@@ -265,12 +286,12 @@ public class ExtendedNativeUtils extends NativeUtils {
             } catch (Exception e) {
             }
         }
-        userIterator.remove();
+        state().userIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar endgrent(int ctx, RuntimeBase... args) {
-        groupIterator.remove();
+        state().groupIterator = null;
         return new RuntimeScalar(1);
     }
 
@@ -281,8 +302,8 @@ public class ExtendedNativeUtils extends NativeUtils {
         String hostname = args[0].toString();
 
         String cacheKey = "host:" + hostname;
-        if (hostInfoCache.containsKey(cacheKey)) {
-            RuntimeArray cached = hostInfoCache.get(cacheKey);
+        if (state().hostInfoCache.containsKey(cacheKey)) {
+            RuntimeArray cached = state().hostInfoCache.get(cacheKey);
             if (ctx == SCALAR && cached.size() >= 5) {
                 return cached.get(4);
             }
@@ -303,7 +324,7 @@ public class ExtendedNativeUtils extends NativeUtils {
             RuntimeScalar packedAddress = new RuntimeScalar(addr.getAddress());
             RuntimeArray.push(result, packedAddress);
 
-            hostInfoCache.put(cacheKey, result);
+            state().hostInfoCache.put(cacheKey, result);
 
             if (ctx == SCALAR) {
                 return packedAddress;
@@ -562,17 +583,17 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         switch (cmd) {
             case 0: // IPC_STAT
-                if (messageQueues.containsKey(msqid)) {
+                if (state().messageQueues.containsKey(msqid)) {
                     return new RuntimeScalar(0);
                 }
                 break;
             case 1: // IPC_SET
-                if (messageQueues.containsKey(msqid)) {
+                if (state().messageQueues.containsKey(msqid)) {
                     return new RuntimeScalar(0);
                 }
                 break;
             case 2: // IPC_RMID
-                if (messageQueues.remove(msqid) != null) {
+                if (state().messageQueues.remove(msqid) != null) {
                     return new RuntimeScalar(0);
                 }
                 break;
@@ -586,9 +607,9 @@ public class ExtendedNativeUtils extends NativeUtils {
         int key = args[0].scalar().getInt();
         int msgflg = args[1].scalar().getInt();
 
-        int msqid = nextIpcId++;
+        int msqid = state().nextIpcId++;
         RuntimeArray msgQueue = new RuntimeArray();
-        messageQueues.put(msqid, msgQueue);
+        state().messageQueues.put(msqid, msgQueue);
 
         return new RuntimeScalar(msqid);
     }
@@ -602,7 +623,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         int msgtyp = args[3].scalar().getInt();
         int msgflg = args[4].scalar().getInt();
 
-        RuntimeArray msgQueue = messageQueues.get(msqid);
+        RuntimeArray msgQueue = state().messageQueues.get(msqid);
         if (msgQueue == null || msgQueue.size() == 0) {
             return new RuntimeScalar(-1);
         }
@@ -620,7 +641,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         RuntimeBase msgp = args[1];
         int msgsz = args[2].scalar().getInt();
 
-        RuntimeArray msgQueue = messageQueues.get(msqid);
+        RuntimeArray msgQueue = state().messageQueues.get(msqid);
         if (msgQueue == null) {
             return new RuntimeScalar(-1);
         }
@@ -636,7 +657,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         int semnum = args[1].scalar().getInt();
         int cmd = args[2].scalar().getInt();
 
-        RuntimeArray semArray = semaphores.get(semid);
+        RuntimeArray semArray = state().semaphores.get(semid);
         if (semArray == null) {
             return new RuntimeScalar(-1);
         }
@@ -654,7 +675,7 @@ public class ExtendedNativeUtils extends NativeUtils {
                 }
                 break;
             case 2: // IPC_RMID
-                if (semaphores.remove(semid) != null) {
+                if (state().semaphores.remove(semid) != null) {
                     return new RuntimeScalar(0);
                 }
                 break;
@@ -669,12 +690,12 @@ public class ExtendedNativeUtils extends NativeUtils {
         int nsems = args[1].scalar().getInt();
         int semflg = args[2].scalar().getInt();
 
-        int semid = nextIpcId++;
+        int semid = state().nextIpcId++;
         RuntimeArray semArray = new RuntimeArray();
         for (int i = 0; i < nsems; i++) {
             RuntimeArray.push(semArray, new RuntimeScalar(0));
         }
-        semaphores.put(semid, semArray);
+        state().semaphores.put(semid, semArray);
 
         return new RuntimeScalar(semid);
     }
@@ -685,7 +706,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         int semid = args[0].scalar().getInt();
         RuntimeBase sops = args[1];
 
-        RuntimeArray semArray = semaphores.get(semid);
+        RuntimeArray semArray = state().semaphores.get(semid);
         if (semArray == null) {
             return new RuntimeScalar(-1);
         }
@@ -700,7 +721,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         int cmd = args[1].scalar().getInt();
         RuntimeBase buf = args[2];
 
-        RuntimeArray shmSeg = sharedMemory.get(shmid);
+        RuntimeArray shmSeg = state().sharedMemory.get(shmid);
 
         switch (cmd) {
             case 0: // IPC_STAT
@@ -714,7 +735,7 @@ public class ExtendedNativeUtils extends NativeUtils {
                 }
                 break;
             case 2: // IPC_RMID
-                if (sharedMemory.remove(shmid) != null) {
+                if (state().sharedMemory.remove(shmid) != null) {
                     return new RuntimeScalar(0);
                 }
                 break;
@@ -729,12 +750,12 @@ public class ExtendedNativeUtils extends NativeUtils {
         int size = args[1].scalar().getInt();
         int shmflg = args[2].scalar().getInt();
 
-        int shmid = nextIpcId++;
+        int shmid = state().nextIpcId++;
         RuntimeArray shmSeg = new RuntimeArray();
         for (int i = 0; i < size; i++) {
             RuntimeArray.push(shmSeg, new RuntimeScalar(0));
         }
-        sharedMemory.put(shmid, shmSeg);
+        state().sharedMemory.put(shmid, shmSeg);
 
         return new RuntimeScalar(shmid);
     }
@@ -747,7 +768,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         int pos = args[2].scalar().getInt();
         int size = args[3].scalar().getInt();
 
-        RuntimeArray shmSeg = sharedMemory.get(shmid);
+        RuntimeArray shmSeg = state().sharedMemory.get(shmid);
         if (shmSeg == null || pos < 0 || pos >= shmSeg.size()) {
             return new RuntimeScalar(-1);
         }
@@ -772,7 +793,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         int pos = args[2].scalar().getInt();
         int size = args[3].scalar().getInt();
 
-        RuntimeArray shmSeg = sharedMemory.get(shmid);
+        RuntimeArray shmSeg = state().sharedMemory.get(shmid);
         if (shmSeg == null || pos < 0) {
             return new RuntimeScalar(-1);
         }
@@ -794,31 +815,31 @@ public class ExtendedNativeUtils extends NativeUtils {
     // ================== Network Enumeration Functions ==================
 
     public static RuntimeScalar endhostent(int ctx, RuntimeBase... args) {
-        hostIterator.remove();
+        state().hostIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar endnetent(int ctx, RuntimeBase... args) {
-        netIterator.remove();
+        state().netIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar endprotoent(int ctx, RuntimeBase... args) {
-        protoIterator.remove();
+        state().protoIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar endservent(int ctx, RuntimeBase... args) {
-        servIterator.remove();
+        state().servIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeArray gethostent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = hostIterator.get();
+        Iterator<String> iterator = state().hostIterator;
         if (iterator == null) {
             List<String> hosts = getSystemHosts();
             iterator = hosts.iterator();
-            hostIterator.set(iterator);
+            state().hostIterator = iterator;
         }
 
         if (iterator.hasNext()) {
@@ -861,11 +882,11 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeArray getnetent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = netIterator.get();
+        Iterator<String> iterator = state().netIterator;
         if (iterator == null) {
             List<String> networks = Arrays.asList("loopback", "localhost");
             iterator = networks.iterator();
-            netIterator.set(iterator);
+            state().netIterator = iterator;
         }
 
         if (iterator.hasNext()) {
@@ -877,11 +898,11 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeBase getprotoent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = protoIterator.get();
+        Iterator<String> iterator = state().protoIterator;
         if (iterator == null) {
             List<String> protocols = Arrays.asList("tcp", "udp", "icmp", "ip");
             iterator = protocols.iterator();
-            protoIterator.set(iterator);
+            state().protoIterator = iterator;
         }
 
         if (iterator.hasNext()) {
@@ -893,11 +914,11 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeArray getservent(int ctx, RuntimeBase... args) {
-        Iterator<String> iterator = servIterator.get();
+        Iterator<String> iterator = state().servIterator;
         if (iterator == null) {
             List<String> services = Arrays.asList("http", "https", "ftp", "ssh", "telnet", "smtp", "dns", "pop3", "imap", "snmp");
             iterator = services.iterator();
-            servIterator.set(iterator);
+            state().servIterator = iterator;
         }
 
         if (iterator.hasNext()) {
@@ -909,22 +930,22 @@ public class ExtendedNativeUtils extends NativeUtils {
     }
 
     public static RuntimeScalar sethostent(int ctx, RuntimeBase... args) {
-        hostIterator.remove();
+        state().hostIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar setnetent(int ctx, RuntimeBase... args) {
-        netIterator.remove();
+        state().netIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar setprotoent(int ctx, RuntimeBase... args) {
-        protoIterator.remove();
+        state().protoIterator = null;
         return new RuntimeScalar(1);
     }
 
     public static RuntimeScalar setservent(int ctx, RuntimeBase... args) {
-        servIterator.remove();
+        state().servIterator = null;
         return new RuntimeScalar(1);
     }
 

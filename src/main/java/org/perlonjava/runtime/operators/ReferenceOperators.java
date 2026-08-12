@@ -179,7 +179,7 @@ public class ReferenceOperators {
                     MortalList.deferDecrement(referent);
                 }
                 // Activate the mortal mechanism
-                MortalList.active = true;
+                MortalList.setActive(true);
             }
             DestroyDispatch.registerIfDestroyable(referent, newBlessId);
         } else {

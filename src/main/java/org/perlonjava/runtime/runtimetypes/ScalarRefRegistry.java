@@ -27,16 +27,14 @@ public class ScalarRefRegistry {
     // WeakHashMap uses identity-based hashing when keys don't override
     // hashCode/equals — RuntimeScalar uses Object's defaults, so this
     // is effectively IdentityHashMap-with-weak-keys.
-    private static final Map<RuntimeScalar, Boolean> scalarRegistry =
-            new WeakHashMap<>();
-
     // Phase E: optional per-scalar registerRef call-site stacks.
     // Populated only when JPERL_REGISTER_STACKS=1 is set. Uses a
     // WeakHashMap with the same scalar as key, so entries are pruned
     // automatically when the scalar is JVM-GC'd. Lookup via
     // stackFor() is O(1).
-    private static final Map<RuntimeScalar, Throwable> registerStacks =
-            new WeakHashMap<>();
+    private static LifecycleRuntimeState state() {
+        return PerlRuntime.current().lifecycleState;
+    }
 
     // Phase B1 performance toggle: when set, skip all registry
     // maintenance. Useful for benchmarks; does NOT affect correctness
@@ -77,14 +75,14 @@ public class ScalarRefRegistry {
      */
     public static void registerRef(RuntimeScalar scalar) {
         if (OPT_OUT || scalar == null) return;
-        if (!WeakRefRegistry.weakRefsExist && !UNGATED) return;
-        scalarRegistry.put(scalar, Boolean.TRUE);
+        if (!WeakRefRegistry.weakRefsExist() && !UNGATED) return;
+        state().scalarRegistry.put(scalar, Boolean.TRUE);
         if (RECORD_STACKS) {
-            registerStacks.put(scalar, new Throwable("registerRef"));
+            state().scalarRegisterStacks.put(scalar, new Throwable("registerRef"));
         }
         if (DEBUG) {
             System.err.println("DBG registerRef scalar=" + System.identityHashCode(scalar)
-                    + " type=" + scalar.type + " size=" + scalarRegistry.size());
+                    + " type=" + scalar.type + " size=" + state().scalarRegistry.size());
         }
     }
 
@@ -97,7 +95,7 @@ public class ScalarRefRegistry {
      */
     public static Throwable stackFor(RuntimeScalar sc) {
         if (!RECORD_STACKS || sc == null) return null;
-        return registerStacks.get(sc);
+        return state().scalarRegisterStacks.get(sc);
     }
 
     /**
@@ -106,7 +104,7 @@ public class ScalarRefRegistry {
      * unreachable entries first (e.g., freshly-exited lexical scopes).
      */
     public static java.util.List<RuntimeScalar> snapshot() {
-        return new java.util.ArrayList<>(scalarRegistry.keySet());
+        return new java.util.ArrayList<>(state().scalarRegistry.keySet());
     }
 
     /**
@@ -144,12 +142,12 @@ public class ScalarRefRegistry {
      * hold? (Subject to JVM GC between calls.)
      */
     public static int approximateSize() {
-        return scalarRegistry.size();
+        return state().scalarRegistry.size();
     }
 
     /** Drop weak-key bookkeeping belonging to the previous top-level script. */
     public static void resetState() {
-        scalarRegistry.clear();
-        registerStacks.clear();
+        state().scalarRegistry.clear();
+        state().scalarRegisterStacks.clear();
     }
 }

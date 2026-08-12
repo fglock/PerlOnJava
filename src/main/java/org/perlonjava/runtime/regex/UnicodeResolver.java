@@ -5,7 +5,6 @@ import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -17,7 +16,9 @@ public class UnicodeResolver {
      * Key: fully qualified sub name (e.g., "main::IsMyUpper")
      * Value: the parsed character class pattern from parseUserDefinedProperty
      */
-    private static final Map<String, String> userPropertyCache = new HashMap<>();
+    private static Map<String, String> userPropertyCache() {
+        return PerlRuntime.current().regexState().userUnicodePropertyCache;
+    }
 
     /**
      * Retrieves the Unicode code point for a given character name.
@@ -450,8 +451,8 @@ public class UnicodeResolver {
         }
 
         // Check cache first — Perl only calls user-defined property subs once
-        if (userPropertyCache.containsKey(subName)) {
-            return userPropertyCache.get(subName);
+        if (userPropertyCache().containsKey(subName)) {
+            return userPropertyCache().get(subName);
         }
 
         // Look up the subroutine without autovivifying an empty CODE slot.
@@ -467,7 +468,7 @@ public class UnicodeResolver {
 
             if (result.elements.isEmpty()) {
                 String parsed = "";
-                userPropertyCache.put(subName, parsed);
+                userPropertyCache().put(subName, parsed);
                 return parsed;
             }
 
@@ -475,7 +476,7 @@ public class UnicodeResolver {
 
             // Parse and cache the property definition
             String parsed = parseUserDefinedProperty(definition, newRecursionSet, subName);
-            userPropertyCache.put(subName, parsed);
+            userPropertyCache().put(subName, parsed);
             return parsed;
 
         } catch (PerlCompilerException e) {

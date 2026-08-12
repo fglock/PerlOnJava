@@ -1,9 +1,9 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.CompilationRuntimeState;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Java XS implementation for B::Hooks::EndOfScope.
@@ -22,23 +22,9 @@ public class BHooksEndOfScope extends PerlModuleBase {
      * Registry of callbacks keyed by the file that registered them.
      * When a file finishes loading, callbacks registered for that file are fired in LIFO order.
      */
-    private static final Map<String, Deque<RuntimeScalar>> fileCallbacks = new ConcurrentHashMap<>();
-    
-    /**
-     * Stack of currently-loading files. Each doFile/require pushes onto this stack,
-     * and pops when done. This allows us to know which file is being loaded when
-     * on_scope_end is called.
-     */
-    private static final ThreadLocal<Deque<String>> loadingFileStack = ThreadLocal.withInitial(ArrayDeque::new);
-
-    /**
-     * Compile-time lexical scopes currently being parsed.  Perl's
-     * B::Hooks::EndOfScope fires at the end of the lexical scope in which
-     * on_scope_end was called, which can be earlier than the end of the file
-     * (for example, a namespace::clean pragma inside an eval block).
-     */
-    private static final ThreadLocal<Deque<Deque<RuntimeScalar>>> compileScopes =
-            ThreadLocal.withInitial(ArrayDeque::new);
+    private static CompilationRuntimeState state() {
+        return PerlRuntime.current().compilationState;
+    }
 
     public BHooksEndOfScope() {
         super("B::Hooks::EndOfScope", false);
@@ -64,7 +50,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
      */
     public static void beginFileLoad(String fileName) {
         if (fileName != null) {
-            loadingFileStack.get().push(fileName);
+            state().loadingFileStack.push(fileName);
         }
     }
     
@@ -78,7 +64,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
             return;
         }
         
-        Deque<String> stack = loadingFileStack.get();
+        Deque<String> stack = state().loadingFileStack;
         if (!stack.isEmpty() && stack.peek().equals(fileName)) {
             stack.pop();
         }
@@ -94,7 +80,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
         // hooks clobber it - otherwise the outer `require` reports a
         // misleading "Can't locate <outer-file>.pm" instead of the real
         // inner cause. (Reproducible with `jcpan -t Text::WordCounter`.)
-        Deque<RuntimeScalar> callbacks = fileCallbacks.remove(fileName);
+        Deque<RuntimeScalar> callbacks = state().endOfScopeFileCallbacks.remove(fileName);
         if (callbacks != null) {
             String savedErr = GlobalVariable.getGlobalVariable("main::@").toString();
             String savedBang = GlobalVariable.getGlobalVariable("main::!").toString();
@@ -121,13 +107,13 @@ public class BHooksEndOfScope extends PerlModuleBase {
      * Get the current file being loaded (top of stack), or null if not in a file load.
      */
     private static String getCurrentLoadingFile() {
-        Deque<String> stack = loadingFileStack.get();
+        Deque<String> stack = state().loadingFileStack;
         return stack.isEmpty() ? null : stack.peek();
     }
 
     /** Enter a parser-visible lexical scope. */
     public static void beginCompileScope() {
-        compileScopes.get().push(new ArrayDeque<>());
+        state().compileScopes.push(new ArrayDeque<>());
     }
 
     /**
@@ -135,7 +121,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
      * in LIFO order, matching the native hook's ordering.
      */
     public static void endCompileScope() {
-        Deque<Deque<RuntimeScalar>> scopes = compileScopes.get();
+        Deque<Deque<RuntimeScalar>> scopes = state().compileScopes;
         if (scopes.isEmpty()) {
             return;
         }
@@ -180,7 +166,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
         
         // Prefer the innermost parser-visible lexical scope.  This is the
         // behavior required by namespace::clean for nested blocks.
-        Deque<Deque<RuntimeScalar>> scopes = compileScopes.get();
+        Deque<Deque<RuntimeScalar>> scopes = state().compileScopes;
         if (!scopes.isEmpty()) {
             scopes.peek().push(codeRef);
             return new RuntimeList();
@@ -191,7 +177,7 @@ public class BHooksEndOfScope extends PerlModuleBase {
         
         if (currentFile != null) {
             // Register callback for end of file load
-            fileCallbacks.computeIfAbsent(currentFile, k -> new ArrayDeque<>()).push(codeRef);
+            state().endOfScopeFileCallbacks.computeIfAbsent(currentFile, k -> new ArrayDeque<>()).push(codeRef);
         } else {
             // Fallback: if not in a file load context (e.g., main script or eval),
             // use defer mechanism for immediate scope exit

@@ -955,7 +955,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Populate debug source lines if in debug mode
-        if (DebugState.debugMode && errorUtil != null && sourceName != null) {
+        if (DebugState.isDebugMode() && errorUtil != null && sourceName != null) {
             String[] lines = errorUtil.extractSourceLines();
             if (lines.length > 0) {
                 DebugState.storeSourceLines(sourceName, lines);
@@ -1310,7 +1310,7 @@ public class BytecodeCompiler implements Visitor {
 
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
             // Skip debug opcodes for internal/infrastructure nodes (marked with skipDebug)
-            if (DebugState.debugMode && stmtTokenIndex >= 0) {
+            if (DebugState.isDebugMode() && stmtTokenIndex >= 0) {
                 boolean skipDebug = (stmt instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"));
                 if (!skipDebug) {
                     // Use getLineNumberAccurate() because subroutine bodies may be compiled
@@ -5751,7 +5751,7 @@ public class BytecodeCompiler implements Visitor {
         emitReg(codeReg);
 
         // Step 7: Register subroutine location for %DB::sub (only in debug mode)
-        if (DebugState.debugMode && errorUtil != null) {
+        if (DebugState.isDebugMode() && errorUtil != null) {
             int startLine = errorUtil.getLineNumber(node.getIndex());
             // Use start line as end line for now (accurate end would require tracking block end)
             DebugState.registerSubroutine(fullName, sourceName, startLine, startLine);

@@ -1,11 +1,10 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.CompilationRuntimeState;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 
@@ -23,24 +22,9 @@ public class WarningFlags {
     // A hierarchy of warning categories
     private static final Map<String, String[]> warningHierarchy = new HashMap<>();
     
-    // Custom warning categories registered via warnings::register
-    private static final Set<String> customCategories = new HashSet<>();
-    
-    // Global flag to track if "use warnings" has been called (for runtime checks)
-    private static boolean globalWarningsEnabled = false;
-
-    // Command-line override from -W/-X. 1 forces warnings on, -1 forces them off.
-    private static int commandLineWarningOverride = 0;
-    
-    // Scope ID counter for generating unique scope IDs
-    private static final AtomicInteger scopeIdCounter = new AtomicInteger(0);
-    
-    // Map from scope ID to set of disabled warning categories
-    // This is populated at compile time and read at runtime
-    private static final Map<Integer, Set<String>> scopeDisabledWarnings = new HashMap<>();
-    
-    // The scope ID from the last noWarnings() call (read by StatementParser)
-    private static int lastScopeId = 0;
+    private static CompilationRuntimeState state() {
+        return PerlRuntime.current().compilationState;
+    }
 
     static {
         // Initialize the hierarchy of warning categories
@@ -93,14 +77,6 @@ public class WarningFlags {
     /**
      * User-defined category offsets (dynamically assigned starting at 128).
      */
-    private static final ConcurrentHashMap<String, Integer> userCategoryOffsets = 
-        new ConcurrentHashMap<>();
-    
-    /**
-     * Next available offset for user-defined categories.
-     */
-    private static final AtomicInteger nextUserOffset = new AtomicInteger(128);
-    
     /**
      * Size of warning bits string in bytes (Perl 5's WARNsize).
      */
@@ -263,7 +239,7 @@ public class WarningFlags {
             return offset;
         }
         // Check user-defined categories
-        offset = userCategoryOffsets.get(category);
+        offset = state().userWarningCategoryOffsets.get(category);
         return offset != null ? offset : -1;
     }
     
@@ -281,8 +257,9 @@ public class WarningFlags {
             return existing;
         }
         // Check or assign user category offset
-        return userCategoryOffsets.computeIfAbsent(category, 
-            k -> nextUserOffset.getAndIncrement());
+        CompilationRuntimeState state = state();
+        return state.userWarningCategoryOffsets.computeIfAbsent(category,
+            k -> state.nextUserWarningOffset.getAndIncrement());
     }
     
     /**
@@ -298,8 +275,8 @@ public class WarningFlags {
                                               Map<String, Integer> categoryToInternalBit) {
         // Calculate required size
         int maxOffset = WARN_SIZE * 4; // Default Perl 5 size in categories
-        for (String category : userCategoryOffsets.keySet()) {
-            int offset = userCategoryOffsets.get(category);
+        for (String category : state().userWarningCategoryOffsets.keySet()) {
+            int offset = state().userWarningCategoryOffsets.get(category);
             if (offset >= maxOffset) {
                 maxOffset = offset + 1;
             }
@@ -358,16 +335,16 @@ public class WarningFlags {
      * {@code ${^WARNING_BITS}} string.
      *
      * <p>Do not use {@link #warningManager}{@code .isWarningEnabled()} for compile-time
-     * diagnostics: when {@link #globalWarningsEnabled} is true (after a bare {@code use warnings}
+     * diagnostics: when global warnings are enabled (after a bare {@code use warnings}
      * anywhere in the process), that helper incorrectly treats almost every category as on unless
      * explicitly disabled, which breaks modules that set warning state only via
      * {@code ${^WARNING_BITS}} (e.g. AnyEvent's generated {@code AnyEvent::common_sense}).
      */
     public static boolean ckWarnForScope(ScopedSymbolTable scope, String category) {
-        if (commandLineWarningOverride < 0) {
+        if (state().commandLineWarningOverride < 0) {
             return false;
         }
-        if (commandLineWarningOverride > 0) {
+        if (state().commandLineWarningOverride > 0) {
             return true;
         }
         if (scope != null && scope.isWarningCategoryDisabled(category)) {
@@ -398,8 +375,8 @@ public class WarningFlags {
         int offset = getPerl5Offset(category);
         if (offset < 0) {
             // Unknown category - check if it might be a registered user category
-            offset = userCategoryOffsets.get(category) != null ? 
-                     userCategoryOffsets.get(category) : -1;
+            offset = state().userWarningCategoryOffsets.get(category) != null ?
+                     state().userWarningCategoryOffsets.get(category) : -1;
             if (offset < 0) {
                 return false;
             }
@@ -422,7 +399,7 @@ public class WarningFlags {
         // because they were registered (via warnings::register) after the scope's
         // "use warnings" was compiled. In Perl 5, "use warnings" (which enables "all")
         // implicitly enables all custom categories registered later.
-        if (customCategories.contains(category)) {
+        if (state().customWarningCategories.contains(category)) {
             int allOffset = PERL5_OFFSETS.get("all");
             int allBitPos = allOffset * 2;
             int allByteIndex = allBitPos / 8;
@@ -449,8 +426,8 @@ public class WarningFlags {
         
         int offset = getPerl5Offset(category);
         if (offset < 0) {
-            offset = userCategoryOffsets.get(category) != null ? 
-                     userCategoryOffsets.get(category) : -1;
+            offset = state().userWarningCategoryOffsets.get(category) != null ?
+                     state().userWarningCategoryOffsets.get(category) : -1;
             if (offset < 0) {
                 return false;
             }
@@ -466,7 +443,7 @@ public class WarningFlags {
         }
         
         // For custom categories, fall back to checking if "all" is fatal
-        if (customCategories.contains(category)) {
+        if (state().customWarningCategories.contains(category)) {
             int allOffset = PERL5_OFFSETS.get("all");
             int allBitPos = allOffset * 2 + 1; // Fatal bit for "all"
             int allByteIndex = allBitPos / 8;
@@ -541,7 +518,7 @@ public class WarningFlags {
             warningSet.addAll(Arrays.asList(entry.getValue()));
         }
         // Include custom categories registered via warnings::register
-        warningSet.addAll(customCategories);
+        warningSet.addAll(state().customWarningCategories);
         // Sort to ensure stable bit positions across runs and when new categories are added
         List<String> sorted = new ArrayList<>(warningSet);
         Collections.sort(sorted);
@@ -565,7 +542,7 @@ public class WarningFlags {
      * @param category The name of the custom warning category to register.
      */
     public static void registerCategory(String category) {
-        customCategories.add(category);
+        state().customWarningCategories.add(category);
         // Add it to the hierarchy with no subcategories
         if (!warningHierarchy.containsKey(category)) {
             warningHierarchy.put(category, new String[]{});
@@ -605,7 +582,7 @@ public class WarningFlags {
      * @return True if it's a registered custom category.
      */
     public static boolean isCustomCategory(String category) {
-        return customCategories.contains(category);
+        return state().customWarningCategories.contains(category);
     }
     
     /**
@@ -615,15 +592,16 @@ public class WarningFlags {
      * @return True if "use warnings" has been called.
      */
     public static boolean isGlobalWarningsEnabled() {
-        return globalWarningsEnabled;
+        return state().globalWarningsEnabled;
     }
 
     /** Clear warning state that belongs to one top-level compilation. */
     public static void resetRuntimeState() {
-        globalWarningsEnabled = false;
-        scopeDisabledWarnings.clear();
-        scopeIdCounter.set(0);
-        lastScopeId = 0;
+        CompilationRuntimeState state = state();
+        state.globalWarningsEnabled = false;
+        state.scopeDisabledWarnings.clear();
+        state.warningScopeIdCounter.set(0);
+        state.lastWarningScopeId = 0;
     }
     
     // ==================== Scope-based Warning Suppression ====================
@@ -641,17 +619,17 @@ public class WarningFlags {
      * @return The unique scope ID for this block.
      */
     public static int registerScopeWarnings(Set<String> categories) {
-        int scopeId = scopeIdCounter.incrementAndGet();
+        int scopeId = state().warningScopeIdCounter.incrementAndGet();
         
         // Callers pass the current disabled bitset from ScopedSymbolTable, where
         // parent categories have already been propagated to subcategories and
         // later use-warnings pragmas have cleared re-enabled categories.
         Set<String> expanded = new HashSet<>(categories);
 
-        scopeDisabledWarnings.put(scopeId, expanded);
+        state().scopeDisabledWarnings.put(scopeId, expanded);
         
         // Set lastScopeId for StatementParser to read
-        lastScopeId = scopeId;
+        state().lastWarningScopeId = scopeId;
         
         return scopeId;
     }
@@ -676,7 +654,7 @@ public class WarningFlags {
      * @return True if the category is disabled in this scope.
      */
     public static boolean isWarningDisabledInScope(int scopeId, String category) {
-        Set<String> disabled = scopeDisabledWarnings.get(scopeId);
+        Set<String> disabled = state().scopeDisabledWarnings.get(scopeId);
         if (disabled != null) {
             return disabled.contains(category);
         }
@@ -692,10 +670,10 @@ public class WarningFlags {
      * @return True if the category is suppressed in the current runtime scope.
      */
     public static boolean isWarningSuppressedAtRuntime(String category) {
-        if (commandLineWarningOverride > 0) {
+        if (state().commandLineWarningOverride > 0) {
             return false;
         }
-        if (commandLineWarningOverride < 0) {
+        if (state().commandLineWarningOverride < 0) {
             return true;
         }
         RuntimeScalar scopeVar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
@@ -704,15 +682,15 @@ public class WarningFlags {
     }
 
     public static void setCommandLineWarningOverride(int override) {
-        commandLineWarningOverride = override;
+        state().commandLineWarningOverride = override;
     }
 
     public static boolean areWarningsForcedOn() {
-        return commandLineWarningOverride > 0;
+        return state().commandLineWarningOverride > 0;
     }
 
     public static boolean areWarningsForcedOff() {
-        return commandLineWarningOverride < 0;
+        return state().commandLineWarningOverride < 0;
     }
     
     /**
@@ -737,19 +715,19 @@ public class WarningFlags {
      * @return The last scope ID, or 0 if no scope was registered.
      */
     public static int getLastScopeId() {
-        return lastScopeId;
+        return state().lastWarningScopeId;
     }
     
     /**
      * Clears the last scope ID (called after StatementParser reads it).
      */
     public static void clearLastScopeId() {
-        lastScopeId = 0;
+        state().lastWarningScopeId = 0;
     }
 
     public void initializeEnabledWarnings() {
         // Set global flag for runtime checks
-        globalWarningsEnabled = true;
+        state().globalWarningsEnabled = true;
         
         // Enable all warnings by enabling the "all" category
         enableWarning("all");
@@ -788,7 +766,7 @@ public class WarningFlags {
         enableWarning("substr");
         
         // Enable all custom categories that have been registered
-        for (String customCategory : customCategories) {
+        for (String customCategory : state().customWarningCategories) {
             enableWarning(customCategory);
         }
     }
@@ -840,10 +818,10 @@ public class WarningFlags {
      * @return True if the category is enabled, false otherwise.
      */
     public boolean isWarningEnabled(String category) {
-        if (commandLineWarningOverride < 0) {
+        if (state().commandLineWarningOverride < 0) {
             return false;
         }
-        if (commandLineWarningOverride > 0) {
+        if (state().commandLineWarningOverride > 0) {
             return true;
         }
         ScopedSymbolTable scope = getCurrentScope();
@@ -852,7 +830,7 @@ public class WarningFlags {
         }
         // Fall back to global flag for runtime checks
         // If warnings are globally enabled and this isn't a disabled category, return true
-        if (globalWarningsEnabled) {
+        if (state().globalWarningsEnabled) {
             // Check if this specific category was explicitly disabled
             if (scope != null && scope.isWarningCategoryDisabled(category)) {
                 return false;
@@ -871,10 +849,10 @@ public class WarningFlags {
      * @return True if the category was explicitly disabled, false otherwise.
      */
     public boolean isWarningDisabled(String category) {
-        if (commandLineWarningOverride < 0) {
+        if (state().commandLineWarningOverride < 0) {
             return true;
         }
-        if (commandLineWarningOverride > 0) {
+        if (state().commandLineWarningOverride > 0) {
             return false;
         }
         return getCurrentScope().isWarningCategoryDisabled(category);

@@ -42,26 +42,32 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * floating-point number.
  */
 public class FileTestOperator {
+    public static final class State {
+        final RuntimeScalar lastFileHandle = new RuntimeScalar();
+        boolean lastStatOk;
+        int lastStatErrno;
+        final RuntimeScalar lastStatArg = new RuntimeScalar();
+        boolean lastStatWasLstat;
+        BasicFileAttributes lastBasicAttr;
+        PosixFileAttributes lastPosixAttr;
+        Stat.NativeStatFields lastNativeStatFields;
+    }
 
-    static RuntimeScalar lastFileHandle = new RuntimeScalar();
-
-    static boolean lastStatOk = false;
-    static int lastStatErrno = 0;
-    static RuntimeScalar lastStatArg = new RuntimeScalar();
-    static boolean lastStatWasLstat = false;
-    static BasicFileAttributes lastBasicAttr;
-    static PosixFileAttributes lastPosixAttr;
+    static State state() {
+        return PerlRuntime.current().fileTestState;
+    }
 
     static void updateLastStat(RuntimeScalar arg, boolean ok, int errno, boolean wasLstat) {
-        lastStatArg.set(arg);
-        lastStatOk = ok;
-        lastStatErrno = errno;
-        lastStatWasLstat = wasLstat;
-        Stat.lastNativeStatFields = null;
+        State state = state();
+        state.lastStatArg.set(arg);
+        state.lastStatOk = ok;
+        state.lastStatErrno = errno;
+        state.lastStatWasLstat = wasLstat;
+        state.lastNativeStatFields = null;
         // Always reset BasicFileAttributes - they should only be set by statForFileTest
         // for real filesystem paths. JAR resources don't have BasicFileAttributes.
-        lastBasicAttr = null;
-        lastPosixAttr = null;
+        state.lastBasicAttr = null;
+        state.lastPosixAttr = null;
     }
 
     static void updateLastStat(RuntimeScalar arg, boolean ok, int errno) {
@@ -130,9 +136,10 @@ public class FileTestOperator {
             getGlobalVariable("main::!").set(0);
             updateLastStat(arg, true, 0, lstat);
             // Set attributes after updateLastStat (which resets them to null)
-            lastBasicAttr = basicAttr;
-            lastPosixAttr = posixAttr;
-            Stat.lastNativeStatFields = Stat.nativeStat(path.toString(), !lstat);
+            State state = state();
+            state.lastBasicAttr = basicAttr;
+            state.lastPosixAttr = posixAttr;
+            state.lastNativeStatFields = Stat.nativeStat(path.toString(), !lstat);
             return true;
         } catch (NoSuchFileException e) {
             getGlobalVariable("main::!").set(2);
@@ -146,40 +153,41 @@ public class FileTestOperator {
     }
 
     private static RuntimeScalar fileTestFromLastStat(String operator) {
-        if (!lastStatOk) {
+        State state = state();
+        if (!state.lastStatOk) {
             if (operator.equals("-T") || operator.equals("-B")) {
-                getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+                getGlobalVariable("main::!").set(state.lastStatErrno != 0 ? state.lastStatErrno : 2);
                 return scalarUndef;
             }
             getGlobalVariable("main::!").set(9);
             return scalarUndef;
         }
 
-        if (operator.equals("-l") && !lastStatWasLstat) {
+        if (operator.equals("-l") && !state.lastStatWasLstat) {
             throw new PerlCompilerException("The stat preceding -l _ wasn't an lstat");
         }
 
         // If lastBasicAttr is null (e.g., after testing a JAR path), fall back to re-testing
-        if (lastBasicAttr == null) {
-            return fileTest(operator, lastFileHandle);
+        if (state.lastBasicAttr == null) {
+            return fileTest(operator, state.lastFileHandle);
         }
 
         return switch (operator) {
             case "-e" -> scalarTrue;
-            case "-f" -> getScalarBoolean(lastBasicAttr.isRegularFile());
-            case "-d" -> getScalarBoolean(lastBasicAttr.isDirectory());
+            case "-f" -> getScalarBoolean(state.lastBasicAttr.isRegularFile());
+            case "-d" -> getScalarBoolean(state.lastBasicAttr.isDirectory());
             case "-s" -> {
-                long size = lastBasicAttr.size();
+                long size = state.lastBasicAttr.size();
                 yield size > 0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
             }
-            case "-z" -> getScalarBoolean(lastBasicAttr.size() == 0);
-            case "-l" -> getScalarBoolean(lastBasicAttr.isSymbolicLink());
+            case "-z" -> getScalarBoolean(state.lastBasicAttr.size() == 0);
+            case "-l" -> getScalarBoolean(state.lastBasicAttr.isSymbolicLink());
             case "-T", "-B" -> {
                 // Handle -T/-B on _ without re-statting (preserves stat buffer)
                 // We need to resolve the path from the last stat argument and read file content
                 // without calling fileTest() which would overwrite the stat buffer.
                 try {
-                    String filename = lastStatArg.toString();
+                    String filename = state.lastStatArg.toString();
                     Path path = resolvePath(filename);
                     if (path == null || !Files.exists(path)) {
                         getGlobalVariable("main::!").set(2);
@@ -192,7 +200,7 @@ public class FileTestOperator {
                     yield scalarUndef;
                 }
             }
-            default -> fileTest(operator, lastFileHandle);
+            default -> fileTest(operator, state.lastFileHandle);
         };
     }
 
@@ -224,7 +232,7 @@ public class FileTestOperator {
      * @return A RuntimeScalar containing the result of the file test
      */
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
-        lastFileHandle.set(fileHandle);
+        state().lastFileHandle.set(fileHandle);
 
         // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
         if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
@@ -243,8 +251,8 @@ public class FileTestOperator {
             if (fh == null) {
                 // Special case: -T/-B on * _ (or \*_) should preserve last stat errno when the last stat failed,
                 // even if the underscore typeglob doesn't have its IO slot initialized.
-                if ((operator.equals("-T") || operator.equals("-B")) && !lastStatOk && isUnderscoreTypeglob(fileHandle)) {
-                    getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+                if ((operator.equals("-T") || operator.equals("-B")) && !state().lastStatOk && isUnderscoreTypeglob(fileHandle)) {
+                    getGlobalVariable("main::!").set(state().lastStatErrno != 0 ? state().lastStatErrno : 2);
                     return scalarUndef;
                 }
                 // Set $! to EBADF (Bad file descriptor) = 9
@@ -254,16 +262,16 @@ public class FileTestOperator {
             }
 
             // Special case: -T/-B on * _ (or \*_) should preserve last stat errno when the last stat failed.
-            if ((operator.equals("-T") || operator.equals("-B")) && !lastStatOk && isUnderscoreTypeglob(fileHandle)) {
-                getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+            if ((operator.equals("-T") || operator.equals("-B")) && !state().lastStatOk && isUnderscoreTypeglob(fileHandle)) {
+                getGlobalVariable("main::!").set(state().lastStatErrno != 0 ? state().lastStatErrno : 2);
                 return scalarUndef;
             }
 
             // Check for closed handle or no valid IO handles
             if ((fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) &&
                     fh.directoryIO == null) {
-                if ((operator.equals("-T") || operator.equals("-B")) && !lastStatOk && isUnderscoreTypeglob(fileHandle)) {
-                    getGlobalVariable("main::!").set(lastStatErrno != 0 ? lastStatErrno : 2);
+                if ((operator.equals("-T") || operator.equals("-B")) && !state().lastStatOk && isUnderscoreTypeglob(fileHandle)) {
+                    getGlobalVariable("main::!").set(state().lastStatErrno != 0 ? state().lastStatErrno : 2);
                     return scalarUndef;
                 }
                 // Set $! to EBADF (Bad file descriptor) = 9
@@ -543,10 +551,10 @@ public class FileTestOperator {
                 }
                 case "-s" -> {
                     // Return file size if non-zero, otherwise return false
-                    if (!lastStatOk) {
+                    if (!state().lastStatOk) {
                         yield scalarUndef;
                     }
-                    long size = lastBasicAttr.size();
+                    long size = state().lastBasicAttr.size();
                     yield size > 0 ? new RuntimeScalar(size) : RuntimeScalarCache.scalarZero;
                 }
                 case "-f" -> {
@@ -569,10 +577,10 @@ public class FileTestOperator {
                 }
                 case "-l" -> {
                     // Check if path is a symbolic link
-                    if (!lastStatOk) {
+                    if (!state().lastStatOk) {
                         yield scalarUndef;
                     }
-                    yield getScalarBoolean(lastBasicAttr.isSymbolicLink());
+                    yield getScalarBoolean(state().lastBasicAttr.isSymbolicLink());
                 }
                 case "-o" -> {
                     // Check if file is owned by the effective user id (approximate with current user)
@@ -593,8 +601,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0);
-                    if (Stat.lastNativeStatFields != null) {
-                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0010000);
+                    if (state().lastNativeStatFields != null) {
+                        yield getScalarBoolean((state().lastNativeStatFields.mode() & 0170000) == 0010000);
                     }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".fifo"));
                 }
@@ -605,8 +613,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0);
-                    if (Stat.lastNativeStatFields != null) {
-                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0140000);
+                    if (state().lastNativeStatFields != null) {
+                        yield getScalarBoolean((state().lastNativeStatFields.mode() & 0170000) == 0140000);
                     }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.endsWith(".sock"));
                 }
@@ -617,8 +625,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0);
-                    if (Stat.lastNativeStatFields != null) {
-                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0060000);
+                    if (state().lastNativeStatFields != null) {
+                        yield getScalarBoolean((state().lastNativeStatFields.mode() & 0170000) == 0060000);
                     }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
                 }
@@ -629,8 +637,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0);
-                    if (Stat.lastNativeStatFields != null) {
-                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 0170000) == 0020000);
+                    if (state().lastNativeStatFields != null) {
+                        yield getScalarBoolean((state().lastNativeStatFields.mode() & 0170000) == 0020000);
                     }
                     yield getScalarBoolean(Files.isRegularFile(path) && filename.startsWith("/dev/"));
                 }
@@ -641,8 +649,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0);
-                    if (Stat.lastNativeStatFields != null) {
-                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 04000) != 0);
+                    if (state().lastNativeStatFields != null) {
+                        yield getScalarBoolean((state().lastNativeStatFields.mode() & 04000) != 0);
                     }
                     yield getScalarBoolean
                             ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OWNER_EXECUTE)));
@@ -654,8 +662,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0);
-                    if (Stat.lastNativeStatFields != null) {
-                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 02000) != 0);
+                    if (state().lastNativeStatFields != null) {
+                        yield getScalarBoolean((state().lastNativeStatFields.mode() & 02000) != 0);
                     }
                     yield getScalarBoolean
                             ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.GROUP_EXECUTE)));
@@ -667,8 +675,8 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0);
-                    if (Stat.lastNativeStatFields != null) {
-                        yield getScalarBoolean((Stat.lastNativeStatFields.mode() & 01000) != 0);
+                    if (state().lastNativeStatFields != null) {
+                        yield getScalarBoolean((state().lastNativeStatFields.mode() & 01000) != 0);
                     }
                     yield getScalarBoolean
                             ((Files.getPosixFilePermissions(path).contains(PosixFilePermission.OTHERS_EXECUTE)));
@@ -901,8 +909,8 @@ public class FileTestOperator {
                     ((FileTime) Files.getAttribute(path, "lastAccessTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
             case "-C" -> {
                 // Get ctime (inode change time on Unix, creation time fallback)
-                if (Stat.lastNativeStatFields != null) {
-                    yield Stat.lastNativeStatFields.ctime() * 1000L;
+                if (state().lastNativeStatFields != null) {
+                    yield state().lastNativeStatFields.ctime() * 1000L;
                 }
                 yield ((FileTime) Files.getAttribute(path, "creationTime", LinkOption.NOFOLLOW_LINKS)).toMillis();
             }
