@@ -363,6 +363,33 @@ public class FileHandle {
         return idx < parser.tokens.size() && "->".equals(parser.tokens.get(idx).text);
     }
 
+    /**
+     * An unknown bareword followed by a known package can be Perl's indirect
+     * object syntax ({@code method Package LIST}).  In print's ambiguous
+     * filehandle position it must remain an expression; autovivifying the
+     * method name as an IO glob makes the package and arguments look like a
+     * malformed print list.
+     */
+    private static boolean isFollowedByIndirectObjectPackage(Parser parser) {
+        int idx = parser.tokenIndex;
+        while (idx < parser.tokens.size()
+                && parser.tokens.get(idx).type == LexerTokenType.WHITESPACE) {
+            idx++;
+        }
+        if (idx >= parser.tokens.size()
+                || parser.tokens.get(idx).type != LexerTokenType.IDENTIFIER) {
+            return false;
+        }
+
+        String packageName = parser.tokens.get(idx).text;
+        Boolean packageExists = GlobalVariable.packageExistsCache.get(packageName);
+        if (packageExists == null && !packageName.contains("::")) {
+            packageExists = GlobalVariable.packageExistsCache.get(
+                    parser.ctx.symbolTable.getCurrentPackage() + "::" + packageName);
+        }
+        return Boolean.TRUE.equals(packageExists);
+    }
+
     private static boolean shouldAutovivifyBarewordHandle(Parser parser, String name, boolean autovivifyUnknownBareword) {
         // Do not treat compile-time magic like __PACKAGE__ as print filehandles:
         // they match ^[A-Z_][A-Z0-9_]*$ but must fall through to the expression list
@@ -382,6 +409,10 @@ public class FileHandle {
         }
 
         if (isFollowedByMethodDereference(parser)) {
+            return false;
+        }
+
+        if (isFollowedByIndirectObjectPackage(parser)) {
             return false;
         }
 
