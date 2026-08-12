@@ -593,8 +593,9 @@ public class PerlLanguageProvider {
                     // file-scoped lexicals are destroyed before END block dispatch.
                     MortalList.flush();
 
-                    // Genuine captures remain live while an END block can reach their
-                    // closure. Ready captures were already processed at scope exit.
+                    // Destroy unrelated file lexicals before END while retaining
+                    // captures reachable from queued END blocks or package CODE.
+                    MortalList.flushDeferredCapturesBeforeEnd();
                     CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                     try {
                         runEndBlocks();
@@ -625,6 +626,7 @@ public class PerlLanguageProvider {
         } catch (Throwable t) {
             if (isMainProgram) {
                 MortalList.flush();  // Flush file-scoped lexical cleanup before END
+                MortalList.flushDeferredCapturesBeforeEnd();
                 CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                 try {
                     runEndBlocks(false);  // Don't reset $? on exception path

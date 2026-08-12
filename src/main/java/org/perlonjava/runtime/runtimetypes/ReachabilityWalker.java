@@ -186,6 +186,79 @@ public class ReachabilityWalker {
         return reachable;
     }
 
+    /**
+     * Return the graph that must remain live while END blocks execute.
+     *
+     * Package CODE slots and queued END blocks are the only seeds. Captures
+     * are followed from both: they are real Perl ownership paths at this
+     * lifecycle boundary, unlike the conservative lexical seeds used by the
+     * general weak-reference sweep.
+     */
+    static Set<RuntimeBase> walkEndBlockRoots() {
+        ReachabilityWalker walker = new ReachabilityWalker();
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
+            RuntimeScalar codeRef = entry.getValue();
+            if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)) continue;
+
+            // The registry also contains anonymous/eval compilation artifacts.
+            // Those are implementation caches, not Perl package CODE roots;
+            // following them would retain every lexical conservatively captured
+            // for eval STRING. A genuinely callable package sub has a stable
+            // package/sub name and remains a valid path for END to invoke.
+            if (code.subName == null || code.subName.isEmpty()
+                    || code.subName.equals("__ANON__")
+                    || code.packageName == null || code.packageName.isEmpty()
+                    || code.packageName.startsWith("(eval")
+                    || (code.cvStartFile != null && code.cvStartFile.startsWith("(eval"))) {
+                continue;
+            }
+            walker.visitScalar(codeRef, todo);
+        }
+        walker.addReachable(SpecialBlock.getEndBlocks(), todo);
+        walker.bfsEndBlockRoots(todo);
+        return walker.reachable;
+    }
+
+    /**
+     * Traverse only semantic closure edges for END lifetime decisions.
+     * RuntimeCode.capturedScalars and reflective capture arrays also contain
+     * transient eval STRING captures attached while named code executes; those
+     * implementation edges must not extend a file lexical's Perl lifetime.
+     * closedOverVariables is populated from the closure's explicit lexical
+     * environment by both generated and interpreted backends.
+     */
+    private void bfsEndBlockRoots(java.util.ArrayDeque<RuntimeBase> todo) {
+        while (!todo.isEmpty()) {
+            RuntimeBase cur = todo.removeFirst();
+            if (cur instanceof RuntimeHash hash) {
+                if (hash.elements instanceof HashSpecialVariable) continue;
+                for (RuntimeScalar value : hash.elements.values()) {
+                    addReachable(value, todo);
+                    visitScalar(value, todo);
+                }
+            } else if (cur instanceof RuntimeArray array) {
+                for (RuntimeScalar value : array.elements) {
+                    addReachable(value, todo);
+                    visitScalar(value, todo);
+                }
+            } else if (cur instanceof RuntimeCode code) {
+                visitCodePadConstants(code, todo);
+                if (code.closedOverVariables != null) {
+                    for (RuntimeBase captured : code.closedOverVariables.values()) {
+                        addReachable(captured, todo);
+                        if (captured instanceof RuntimeScalar scalar) {
+                            visitScalar(scalar, todo);
+                        }
+                    }
+                }
+            } else if (cur instanceof RuntimeScalar scalar) {
+                visitScalar(scalar, todo);
+            }
+        }
+    }
+
     private void bfs(java.util.ArrayDeque<RuntimeBase> todo, boolean walkCaptures) {
         while (!todo.isEmpty()) {
             RuntimeBase cur = todo.removeFirst();

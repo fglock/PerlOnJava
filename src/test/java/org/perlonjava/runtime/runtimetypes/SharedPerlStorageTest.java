@@ -33,6 +33,8 @@ class SharedPerlStorageTest {
         start.countDown();
         firstTask.get(5, TimeUnit.SECONDS);
         secondTask.get(5, TimeUnit.SECONDS);
+        first.join(5_000);
+        second.join(5_000);
 
         assertFalse(first.isAlive());
         assertFalse(second.isAlive());

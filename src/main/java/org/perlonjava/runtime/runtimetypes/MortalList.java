@@ -175,8 +175,9 @@ public class MortalList {
      * Called from {@link RuntimeScalar#scopeExitCleanup} for non-CODE
      * blessed references that are captured by closures.
      * <p>
-     * These entries are processed by {@link #flushDeferredCaptures()} after
-     * the main script returns, before END blocks run.
+     * After the main script returns, entries unrelated to END are processed by
+     * {@link #flushDeferredCapturesBeforeEnd()}; retained entries are drained
+     * by {@link #flushDeferredCaptures()} after END blocks run.
      */
     public static void addDeferredCapture(RuntimeScalar scalar) {
         LifecycleRuntimeState state = state();
@@ -281,6 +282,35 @@ public class MortalList {
         // 2. CODE refs are excluded (they may still be called from stashes)
         // 3. END blocks have completed, so real closure captures are no longer needed
         WeakRefRegistry.clearAllBlessedWeakRefs();
+    }
+
+    /**
+     * Release scope-exited captures that cannot be reached by an END block or
+     * a package CODE slot, while retaining genuine END-visible captures for
+     * the unconditional post-END drain in {@link #flushDeferredCaptures()}.
+     *
+     * This preserves Perl's ordering: unrelated file lexicals are destroyed
+     * before END, but values captured by code that END can invoke stay alive
+     * until END has completed.
+     */
+    public static void flushDeferredCapturesBeforeEnd() {
+        LifecycleRuntimeState state = state();
+        if (state.deferredCaptures.isEmpty()) return;
+
+        Set<RuntimeBase> endReachable = ReachabilityWalker.walkEndBlockRoots();
+        boolean found = false;
+        for (int i = state.deferredCaptures.size() - 1; i >= 0; i--) {
+            RuntimeScalar scalar = state.deferredCaptures.get(i);
+            boolean retained = endReachable.contains(scalar)
+                    || (scalar.value instanceof RuntimeBase base && endReachable.contains(base));
+            if (retained) continue;
+
+            deferDecrementIfTracked(scalar);
+            state.deferredCaptures.remove(i);
+            removeFromDeferredSet(scalar);
+            found = true;
+        }
+        if (found) flush();
     }
 
     /**
