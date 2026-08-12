@@ -51,6 +51,9 @@ need equivalent primitives.
     lookup.
   - Unix standard-input readiness uses native `poll(2)` through the existing FFM
     layer, including the Linux/macOS `nfds_t` ABI difference.
+  - Windows standard-input readiness uses the existing FFM layer to inspect CRT
+    descriptors and Win32 disk, pipe, console, and EOF state without consuming
+    input.
   - `StandardIO` records EOF from `sysread`, allowing async loops to stop instead
     of polling forever.
   - Files: `FFMPosixInterface.java`, `FFMPosixLinux.java`, `StandardIO.java`,

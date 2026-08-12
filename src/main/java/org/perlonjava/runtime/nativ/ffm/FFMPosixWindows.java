@@ -59,6 +59,12 @@ public class FFMPosixWindows implements FFMPosixInterface {
     private static MethodHandle winReadHandle;
     private static MethodHandle winWriteHandle;
     private static MethodHandle winLseekHandle;
+    private static MethodHandle winGetOsfHandle;
+    private static MethodHandle winGetFileType;
+    private static MethodHandle winPeekNamedPipe;
+    private static MethodHandle winGetLastError;
+    private static MethodHandle winGetConsoleMode;
+    private static MethodHandle winGetNumberOfConsoleInputEvents;
     
     /**
      * Initialize FFM bindings for MSVCRT low-level FD operations on Windows.
@@ -69,6 +75,7 @@ public class FFMPosixWindows implements FFMPosixInterface {
         try {
             Linker linker = Linker.nativeLinker();
             SymbolLookup ucrt = SymbolLookup.libraryLookup("ucrtbase", Arena.global());
+            SymbolLookup kernel32 = SymbolLookup.libraryLookup("kernel32", Arena.global());
             
             // int _pipe(int *pfds, unsigned int psize, int textmode)
             winPipeHandle = linker.downcallHandle(
@@ -110,6 +117,42 @@ public class FFMPosixWindows implements FFMPosixInterface {
             winLseekHandle = linker.downcallHandle(
                 ucrt.find("_lseek").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+
+            // intptr_t _get_osfhandle(int fd)
+            winGetOsfHandle = linker.downcallHandle(
+                ucrt.find("_get_osfhandle").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT)
+            );
+
+            // DWORD GetFileType(HANDLE handle)
+            winGetFileType = linker.downcallHandle(
+                kernel32.find("GetFileType").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS)
+            );
+
+            // BOOL PeekNamedPipe(HANDLE, void *, DWORD, DWORD *, DWORD *, DWORD *)
+            winPeekNamedPipe = linker.downcallHandle(
+                kernel32.find("PeekNamedPipe").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT,
+                    ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
+                    ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+
+            winGetLastError = linker.downcallHandle(
+                kernel32.find("GetLastError").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT)
+            );
+
+            // Console handles need an event-count check; other character
+            // devices such as NUL are immediately readable at EOF.
+            winGetConsoleMode = linker.downcallHandle(
+                kernel32.find("GetConsoleMode").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
+            );
+            winGetNumberOfConsoleInputEvents = linker.downcallHandle(
+                kernel32.find("GetNumberOfConsoleInputEvents").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS)
             );
             
             fdOpsInitialized = true;
@@ -366,6 +409,59 @@ public class FFMPosixWindows implements FFMPosixInterface {
             return (fd >= 0 && fd <= 2) ? 1 : 0;
         }
         return 0;
+    }
+
+    @Override
+    public boolean pollReadReady(int fd) {
+        try (Arena arena = Arena.ofConfined()) {
+            ensureFdOpsInitialized();
+            long rawHandle = (long) winGetOsfHandle.invokeExact(fd);
+            if (rawHandle == -1L) {
+                return false;
+            }
+
+            MemorySegment handle = MemorySegment.ofAddress(rawHandle);
+            int fileType = (int) winGetFileType.invokeExact(handle);
+
+            // Regular files never block: EOF is readable just like on POSIX.
+            if (fileType == 0x0001) { // FILE_TYPE_DISK
+                return true;
+            }
+
+            if (fileType == 0x0003) { // FILE_TYPE_PIPE
+                MemorySegment bytesAvailable = arena.allocate(ValueLayout.JAVA_INT);
+                int ok = (int) winPeekNamedPipe.invokeExact(
+                    handle, MemorySegment.NULL, 0, MemorySegment.NULL,
+                    bytesAvailable, MemorySegment.NULL
+                );
+                if (ok != 0) {
+                    return bytesAvailable.get(ValueLayout.JAVA_INT, 0) > 0;
+                }
+
+                int error = (int) winGetLastError.invokeExact();
+                // A closed or disconnected pipe makes read return EOF/error
+                // immediately, and is therefore readable for select().
+                return error == 109  // ERROR_BROKEN_PIPE
+                    || error == 232  // ERROR_NO_DATA
+                    || error == 233; // ERROR_PIPE_NOT_CONNECTED
+            }
+
+            if (fileType == 0x0002) { // FILE_TYPE_CHAR
+                MemorySegment mode = arena.allocate(ValueLayout.JAVA_INT);
+                int isConsole = (int) winGetConsoleMode.invokeExact(handle, mode);
+                if (isConsole == 0) {
+                    // NUL and other redirected character devices do not wait
+                    // for future console input.
+                    return true;
+                }
+                MemorySegment eventCount = arena.allocate(ValueLayout.JAVA_INT);
+                int ok = (int) winGetNumberOfConsoleInputEvents.invokeExact(handle, eventCount);
+                return ok != 0 && eventCount.get(ValueLayout.JAVA_INT, 0) > 0;
+            }
+        } catch (Throwable e) {
+            return false;
+        }
+        return false;
     }
     
     // ==================== PTY/Terminal Functions ====================

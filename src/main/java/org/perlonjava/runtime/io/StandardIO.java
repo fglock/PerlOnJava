@@ -182,7 +182,7 @@ public class StandardIO implements IOHandle {
         if (inputStream == null) {
             return false;
         }
-        if (!FFMPosix.isWindows() && FFMPosix.get().pollReadReady(fileno)) {
+        if (FFMPosix.get().pollReadReady(fileno)) {
             return true;
         }
         try {
