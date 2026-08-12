@@ -37,6 +37,82 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Live substr lvalues that must be refreshed when this scalar is replaced. */
     private transient List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
 
+    /** Perl magic-style callbacks installed by Scalar::Watcher. */
+    private transient Map<Long, RuntimeScalar> modifiedWatchers;
+    private transient Map<Long, RuntimeScalar> destroyedWatchers;
+    private transient boolean watcherDestroyNotified;
+    private transient int watcherMutationDepth;
+    private static volatile boolean watcherCleanupNeeded;
+
+    public void addModifiedWatcher(long id, RuntimeScalar callback) {
+        watcherCleanupNeeded = true;
+        if (modifiedWatchers == null) modifiedWatchers = new LinkedHashMap<>();
+        modifiedWatchers.put(id, callback);
+    }
+
+    public void addDestroyedWatcher(long id, RuntimeScalar callback) {
+        watcherCleanupNeeded = true;
+        if (destroyedWatchers == null) destroyedWatchers = new LinkedHashMap<>();
+        destroyedWatchers.put(id, callback);
+    }
+
+    public void removeWatcher(long id) {
+        if (modifiedWatchers != null) modifiedWatchers.remove(id);
+        if (destroyedWatchers != null) destroyedWatchers.remove(id);
+    }
+
+    public boolean hasWatchers() {
+        return (modifiedWatchers != null && !modifiedWatchers.isEmpty())
+                || (destroyedWatchers != null && !destroyedWatchers.isEmpty());
+    }
+
+    private void notifyModifiedWatchers() {
+        if (watcherMutationDepth > 0) return;
+        if (modifiedWatchers == null || modifiedWatchers.isEmpty()) return;
+        RuntimeArray args = new RuntimeArray(this);
+        for (RuntimeScalar callback : new ArrayList<>(modifiedWatchers.values())) {
+            RuntimeCode.apply(callback, args, RuntimeContextType.VOID);
+        }
+    }
+
+    private void notifyDestroyedWatchers() {
+        if (watcherDestroyNotified) return;
+        watcherDestroyNotified = true;
+        if (destroyedWatchers != null && !destroyedWatchers.isEmpty()) {
+            RuntimeArray args = new RuntimeArray(this);
+            for (RuntimeScalar callback : new ArrayList<>(destroyedWatchers.values())) {
+                RuntimeCode.apply(callback, args, RuntimeContextType.VOID);
+            }
+        }
+        if (modifiedWatchers != null) modifiedWatchers.clear();
+        if (destroyedWatchers != null) destroyedWatchers.clear();
+    }
+
+    public static boolean watcherCleanupNeeded() {
+        return watcherCleanupNeeded;
+    }
+
+    /** Fire destruction magic for scalar slots owned by a dying aggregate. */
+    public static void notifyDestroyedWatchersRecursively(RuntimeBase value) {
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        notifyDestroyedWatchersRecursively(value, visited);
+    }
+
+    private static void notifyDestroyedWatchersRecursively(RuntimeBase value, Set<RuntimeBase> visited) {
+        if (value == null || !visited.add(value)) return;
+        Collection<RuntimeScalar> elements;
+        if (value instanceof RuntimeArray array) elements = array.elements;
+        else if (value instanceof RuntimeHash hash) elements = hash.elements.values();
+        else return;
+        for (RuntimeScalar scalar : elements) {
+            if (scalar == null) continue;
+            scalar.notifyDestroyedWatchers();
+            if (scalar.value instanceof RuntimeBase nested) {
+                notifyDestroyedWatchersRecursively(nested, visited);
+            }
+        }
+    }
+
     void registerSubstrLvalue(RuntimeSubstrLvalue observer) {
         if (substrLvalueObservers == null) {
             substrLvalueObservers = new ArrayList<>();
@@ -1431,16 +1507,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.formatPictureTainted = value.formatPictureTainted;
             }
             refreshSubstrLvalues();
+            notifyModifiedWatchers();
             return this;
         }
         if (this != value) {
             RuntimeScalar r = setLarge(value);
             RuntimePosLvalue.invalidatePos(this);
             refreshSubstrLvalues();
+            notifyModifiedWatchers();
             return r;
         }
         RuntimeScalar result = setLarge(value);
         refreshSubstrLvalues();
+        notifyModifiedWatchers();
         return result;
     }
 
@@ -1967,6 +2046,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        notifyModifiedWatchers();
         return this;
     }
 
@@ -1983,6 +2063,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        notifyModifiedWatchers();
         return this;
     }
 
@@ -2024,6 +2105,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        notifyModifiedWatchers();
         return this;
     }
 
@@ -2041,6 +2123,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        notifyModifiedWatchers();
         return this;
     }
 
@@ -2063,6 +2146,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        notifyModifiedWatchers();
         return this;
     }
 
@@ -3321,6 +3405,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (scalar.refCount > 0 && scalar.type != RuntimeScalarType.TIED_SCALAR) return;
         }
 
+        // A captured lexical or an SV with an escaped scalar reference is still
+        // alive after its declaring scope exits. Its destruction watcher fires
+        // when the final owner later releases it, not at lexical scope exit.
+        if (scalar.captureCount == 0) {
+            scalar.notifyDestroyedWatchers();
+        }
+
         // Fast path: skip if no special state (most common case for integer/string vars).
         // When all three conditions are true, the entire method body is a no-op:
         // - refCountOwned=false → deferDecrementIfTracked returns immediately
@@ -3498,6 +3589,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar preAutoIncrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = preAutoIncrementWithoutWatcherNotification();
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    private RuntimeScalar preAutoIncrementWithoutWatcherNotification() {
         this.numericLiteralText = null;
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
@@ -3608,6 +3711,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Inlineable fast path for $v++
     public RuntimeScalar postAutoIncrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = postAutoIncrementWithoutWatcherNotification();
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    private RuntimeScalar postAutoIncrementWithoutWatcherNotification() {
         if (this.type == INTEGER && !(this.value instanceof BigInteger)) {
             long integerValue = ((Number) this.value).longValue();
             if (integerValue < Long.MAX_VALUE) {
@@ -3729,6 +3844,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar preAutoDecrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = preAutoDecrementWithoutWatcherNotification();
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    private RuntimeScalar preAutoDecrementWithoutWatcherNotification() {
         this.numericLiteralText = null;
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
@@ -3753,7 +3880,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case STRING, BYTE_STRING -> { // 2
                 // Handle numeric decrement
                 this.set(NumberParser.parseNumber(this));
-                return this.preAutoDecrement();
+                return this.preAutoDecrementWithoutWatcherNotification();
             }
             case UNDEF -> { // 3
                 this.type = RuntimeScalarType.INTEGER;
@@ -3762,7 +3889,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case VSTRING -> { // 4
                 // Handle as numeric
                 this.set(NumberParser.parseNumber(this));
-                return this.preAutoDecrement();
+                return this.preAutoDecrementWithoutWatcherNotification();
             }
             case BOOLEAN -> { // 5
                 int intVal = (boolean) this.value ? 1 : 0;
@@ -3845,6 +3972,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar postAutoDecrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = postAutoDecrementWithoutWatcherNotification();
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    private RuntimeScalar postAutoDecrementWithoutWatcherNotification() {
         RuntimeScalar old = new RuntimeScalar(this);
         this.numericLiteralText = null;
         this.numericContextSeen = false;
