@@ -3,6 +3,8 @@ package org.perlonjava.runtime.runtimetypes;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Internal ownership and completion record for one Perl platform thread. */
 public final class PerlThreadControlBlock {
@@ -38,8 +40,38 @@ public final class PerlThreadControlBlock {
         registry.register(this);
     }
 
+    private PerlThreadControlBlock(PerlRuntime parent, RuntimeScalar code, RuntimeArray args, int context) {
+        Objects.requireNonNull(parent, "parent");
+        this.registry = parent.threadRegistry();
+        this.id = registry.allocateId();
+        this.parentId = parent.perlThreadId();
+        PerlRuntime.ThreadSnapshot snapshot = parent.snapshotCloneForThread(registry, id);
+        this.childRuntime = snapshot.runtime();
+
+        List<RuntimeBase> roots = new ArrayList<>(args.size() + 1);
+        roots.add(Objects.requireNonNull(code, "code"));
+        for (int i = 0; i < args.size(); i++) roots.add(args.get(i));
+        List<RuntimeBase> cloned = snapshot.cloner().cloneRoots(roots);
+        RuntimeScalar childCode = (RuntimeScalar) cloned.getFirst();
+        RuntimeArray childArgs = new RuntimeArray();
+        for (int i = 1; i < cloned.size(); i++) childArgs.push(cloned.get(i).scalar());
+        this.entryPoint = runtime -> {
+            RuntimeList values = RuntimeCode.apply(childCode, childArgs, context);
+            RuntimeArray retained = new RuntimeArray();
+            for (RuntimeBase value : values.elements) retained.push(value.scalar());
+            return retained;
+        };
+        registry.register(this);
+    }
+
     public static PerlThreadControlBlock create(PerlRuntime parent, EntryPoint entryPoint) {
         return new PerlThreadControlBlock(parent, entryPoint);
+    }
+
+    /** Create a Perl thread, cloning its CODE and arguments with the runtime snapshot graph. */
+    public static PerlThreadControlBlock create(
+            PerlRuntime parent, RuntimeScalar code, RuntimeArray args, int context) {
+        return new PerlThreadControlBlock(parent, code, args, context);
     }
 
     public synchronized PerlThreadControlBlock start() {

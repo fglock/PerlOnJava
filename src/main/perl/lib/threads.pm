@@ -1,80 +1,43 @@
 package threads;
 
-#
-# Original threads module is part of the Perl core, maintained by the Perl 5 Porters.
-#
-# PerlOnJava stub implementation by Flavio S. Glock.
-# Threads are not actually supported in PerlOnJava; this provides a minimal API
-# so test harness can detect lack of thread support and fall back to alarm().
-#
+use strict;
+use warnings;
+our $VERSION = '2.27';
 
-# tid() is needed by t/loc_tools.pl
-sub tid {
-    return 0;
-}
+sub all ()      { 0 }
+sub running ()  { 1 }
+sub joinable () { 2 }
 
-sub new {
-    shift->create(@_);
-}
-
-# create() is needed by watchdog in test.pl
-# Returns immediately-detached stub object so watchdog falls through to alarm()
 sub create {
-    my $class = shift;
-    my $code = shift;
-    # Return object marked as detached since we don't actually run threads
-    return bless { code => $code, detached => 1 }, $class;
+    shift;
+    return _create(@_);
 }
 
-sub list {
-    return;
+sub new { shift->create(@_) }
+sub async (&;@) { return __PACKAGE__->create(@_) }
+sub self { return _self() }
+sub tid { return ref($_[0]) ? $_[0]->{tid} : _self()->{tid} }
+sub list { shift if @_ && !ref($_[0]) && $_[0] eq __PACKAGE__; return _list(@_) }
+sub join { return _join($_[0]) }
+sub detach { return _detach($_[0]) }
+sub is_running { return _is_running($_[0]) }
+sub is_joinable { return _is_joinable($_[0]) }
+sub is_detached { return _is_detached($_[0]) }
+sub error { return _error($_[0]) }
+sub yield { select undef, undef, undef, 0; return }
+sub equal { return defined($_[0]) && defined($_[1]) && $_[0]->tid == $_[1]->tid }
+sub _stringify { return 'threads=' . $_[0]->tid }
+
+sub import {
+    my $caller = caller;
+    no strict 'refs';
+    *{"${caller}::async"} = \&async;
 }
 
-sub join {
-    return;
-}
-
-sub error {
-    return;
-}
-
-sub is_joinable {
-    return 0;
-}
-
-# kill() is needed by watchdog in test.pl
-sub kill {
-    my $self = shift;
-    return;  # No-op
-}
-
-# exit() is needed by watchdog in test.pl  
-sub exit {
-    return;  # No-op
-}
-
-# is_running() - return false since threads don't actually run
-sub is_running {
-    my $self = shift;
-    return 0;  # Thread immediately "finished"
-}
-
-# is_detached() - return true since we mark threads as detached on creation
-sub is_detached {
-    my $self = shift;
-    return $self->{detached} || 0;
-}
-
-# detach() - mark thread as detached
-sub detach {
-    my $self = shift;
-    $self->{detached} = 1;
-    return;
-}
-
-# yield() - no-op since threads don't run
-sub yield {
-    return;
-}
+use overload
+    '==' => 'equal',
+    'eq' => 'equal',
+    '""' => '_stringify',
+    fallback => 1;
 
 1;
