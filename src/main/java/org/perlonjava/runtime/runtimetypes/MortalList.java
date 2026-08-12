@@ -95,6 +95,22 @@ public class MortalList {
         return !state().temporaryRoots.isEmpty();
     }
 
+    private static boolean temporaryRootDirectlyReferences(RuntimeBase target) {
+        for (RuntimeBase root : temporaryRoots.get()) {
+            if (root == target) return true;
+            if (root instanceof RuntimeList list) {
+                for (RuntimeBase value : list.elements) {
+                    if (value instanceof RuntimeScalar scalar
+                            && !WeakRefRegistry.isweak(scalar)
+                            && scalar.value == target) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     public static void retainSuspendedRoot(RuntimeBase root) {
         if (root != null) {
             state().suspendedRoots.merge(root, 1, Integer::sum);
@@ -431,7 +447,7 @@ public class MortalList {
         // do NOT clean up elements — the hash is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
-        if (hash.refCount > 0) return;
+        if (hash.refCount > 0 || temporaryRootDirectlyReferences(hash)) return;
         if (hash.type == RuntimeHash.TIED_HASH && hash.elements instanceof TieHash tieHash) {
             tieHash.releaseTiedObject();
         }
@@ -500,7 +516,7 @@ public class MortalList {
         // do NOT clean up elements — the array is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
-        if (arr.refCount > 0) return;
+        if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)) return;
         if (arr.type == RuntimeArray.TIED_ARRAY && arr.elements instanceof TieArray tieArray) {
             tieArray.releaseTiedObject();
         }

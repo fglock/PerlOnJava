@@ -331,7 +331,7 @@ public class XSLoader extends PerlModuleBase {
      * @param moduleName The fully qualified Perl module name (e.g., "Template::Stash::XS")
      * @return true if a jar shim was found and successfully eval'd, false otherwise.
      */
-    private static boolean loadJarShimOverrides(String moduleName) {
+    static boolean loadJarShimOverrides(String moduleName) {
         // Guard against recursion: the shim code may call XSLoader::load() again
         // for the same module (e.g. Clone.pm's eval { XSLoader::load('Clone') })
         if (!PerlRuntime.current().xsShimLoadingInProgress.add(moduleName)) {

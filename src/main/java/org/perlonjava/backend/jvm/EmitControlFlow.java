@@ -23,6 +23,21 @@ public class EmitControlFlow {
     // Set to true to enable debug output for control flow operations
     private static final boolean DEBUG_CONTROL_FLOW = false;
 
+    private static boolean containsAggregateReferenceReturn(Node node) {
+        if (node instanceof ListNode list) {
+            if (list.elements.size() != 1) return false;
+            return containsAggregateReferenceReturn(list.elements.getFirst());
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            return containsAggregateReferenceReturn(ternary.trueExpr)
+                    || containsAggregateReferenceReturn(ternary.falseExpr);
+        }
+        return node instanceof OperatorNode refOp
+                && refOp.operator.equals("\\")
+                && refOp.operand instanceof OperatorNode aggregateOp
+                && (aggregateOp.operator.equals("@") || aggregateOp.operator.equals("%"));
+    }
+
     private static void emitSubroutineExitCleanup(EmitterContext ctx) {
         java.util.List<Integer> scalarIndices =
                 EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(0));
@@ -281,6 +296,7 @@ public class EmitControlFlow {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(return) will visit " + node.operand + " in context " + emitterVisitor.ctx.with(RuntimeContextType.RUNTIME).contextType);
 
         boolean hasOperand = !(node.operand == null || (node.operand instanceof ListNode list && list.elements.isEmpty()));
+        boolean protectsLexicalAggregate = containsAggregateReferenceReturn(node.operand);
 
         if (!hasOperand) {
             ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeList");
@@ -348,6 +364,21 @@ public class EmitControlFlow {
             }
         }
 
+        // Materialize direct references to lexical aggregates before cleanup.
+        // The short-lived root installed below protects `return \@nodes` and
+        // `return \%items` without extending lifetimes for ordinary object
+        // returns, whose DESTROY timing must remain unchanged.
+        if (protectsLexicalAggregate) {
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, 2);
+            ctx.mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine
+                    ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "returnList",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+        }
+
         // Defer refCount decrements for blessed my-scalars in scope.
         // Explicit 'return' jumps to returnLabel, bypassing per-scope
         // emitScopeExitNullStores. Without this, local variables holding blessed
@@ -359,6 +390,14 @@ public class EmitControlFlow {
         if (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty()) {
             JavaClassInfo.SpillRef spillRef = ctx.javaClassInfo.acquireSpillRefOrAllocate(ctx.symbolTable);
             ctx.javaClassInfo.storeSpillRef(ctx.mv, spillRef);
+            if (protectsLexicalAggregate) {
+                ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "pushTemporaryRoot",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+            }
             for (int idx : scalarIndices) {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -383,6 +422,14 @@ public class EmitControlFlow {
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "scopeExitCleanupArray",
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                        false);
+            }
+            if (protectsLexicalAggregate) {
+                ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "popTemporaryRoot",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                         false);
             }
             ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);

@@ -304,11 +304,13 @@ public class RegexPreprocessorHelper {
                         sb.append("[^\\n]{").append(cleanQuantifier).append("}");
                         return endBrace;
                     } else {
-                        // It's a Unicode name; emit literal Unicode character(s)
+                        // Emit an escaped code point rather than the literal
+                        // character. A literal '#' or whitespace would regain
+                        // regex syntax under /x after named-character resolution.
                         int codePoint = UnicodeResolver.getCodePointFromName(content);
                         // Remove the previously appended backslash
                         sb.setLength(sb.length() - 1);
-                        sb.append(Character.toChars(codePoint));
+                        sb.append("\\x{").append(Integer.toHexString(codePoint)).append('}');
                         return endBrace;
                     }
                 } else {
@@ -794,9 +796,13 @@ public class RegexPreprocessorHelper {
                                     // Can't use quantifiers inside character class
                                     RegexPreprocessor.regexError(s, offset - 2, "Quantifier \\N{" + content + "} not allowed inside character class");
                                 } else {
-                                    // It's a Unicode name; emit literal Unicode character(s)
+                                    // The class scanner has already copied the
+                                    // leading backslash. Append only the escape
+                                    // body so the result is \x{...}, not
+                                    // \\x{...} (a class containing literal
+                                    // backslash/x/braces characters).
                                     int codePoint = UnicodeResolver.getCodePointFromName(content);
-                                    sb.append(Character.toChars(codePoint));
+                                    sb.append("x{").append(Integer.toHexString(codePoint)).append('}');
                                     offset = endBrace;
                                 }
                             } else {

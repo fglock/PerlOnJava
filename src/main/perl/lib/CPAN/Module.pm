@@ -697,7 +697,13 @@ sub available_version {
 #-> sub CPAN::Module::parse_version ;
 sub parse_version {
     my($self,$parsefile) = @_;
-    if (ALARM_IMPLEMENTED) {
+    # MM_Unix::parse_version only scans bundled jar resources line by line; it
+    # cannot execute module code or block on filesystem I/O.  A wall-clock
+    # alarm here merely turns temporary CPU starvation into a false "module
+    # not installed" result, which can send CPAN into recursive core-module
+    # dependency resolution.  Keep the safety timeout for ordinary files.
+    my $use_alarm = ALARM_IMPLEMENTED && $parsefile !~ /^jar:/;
+    if ($use_alarm) {
         my $timeout = (exists($CPAN::Config{'version_timeout'}))
                             ? $CPAN::Config{'version_timeout'}
                             : 15;
@@ -710,7 +716,7 @@ sub parse_version {
     if ($@) {
         $CPAN::Frontend->mywarn("Error while parsing version number in file '$parsefile'\n");
     }
-    alarm(0) if ALARM_IMPLEMENTED;
+    alarm(0) if $use_alarm;
     my $leastsanity = eval { defined $have && length $have; };
     $have = "undef" unless $leastsanity;
     $have =~ s/^ //; # since the %vd hack these two lines here are needed
