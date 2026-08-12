@@ -348,6 +348,7 @@ public class GlobalContext {
         Version.initialize();   // Initialize version module for version objects
         Attributes.initialize();  // attributes:: XS-equivalent functions (used by attributes.pm)
         Threads.initialize();  // unadvertised ithread API; Config flags remain disabled
+        ThreadsShared.initialize();  // shared storage core; locking primitives are Phase 21
         // DBI JDBC backend: with the switch to upstream DBI.pm + DBI::PurePerl,
         // our Java-backed methods register under DBD::JDBC::{dr,db,st} so they
         // can be inherited by JDBC-driven DBDs (DBD::SQLite, DBD::Mem, ...).

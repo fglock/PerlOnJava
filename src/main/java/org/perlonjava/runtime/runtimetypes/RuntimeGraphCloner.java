@@ -75,6 +75,7 @@ public class RuntimeGraphCloner {
     /** Package/runtime snapshot entry point that retains the shared graph map. */
     RuntimeBase cloneValue(RuntimeBase value) {
         if (value == null) return null;
+        if (value.threadShared) return value;
         Object existing = clones.get(value);
         if (existing != null) return (RuntimeBase) existing;
 

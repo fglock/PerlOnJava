@@ -156,8 +156,8 @@ the behavior.
 
 ### 3.6 Shared storage
 
-The current `:shared` attribute is accepted as a no-op. Real sharing must mark
-storage identity so the graph cloner preserves it. A subclass that overrides
+The `:shared` attribute now marks storage identity so the graph cloner preserves
+it. A subclass that overrides
 only `set()` and `toString()` is insufficient because current runtime code also
 accesses scalar fields and collection elements directly.
 
@@ -473,12 +473,11 @@ measured benefit over platform threads/full clone.
   `d87fe1885` adds regex worker binding and later `f98ce32be` removes it.
 - `dev/design/clone.md` does not meet the identity/cycle/closure requirements
   above and must not be reused as the ithread cloning algorithm.
-- `dev/design/attributes.md` is correct that `shared` is currently a no-op; it
-  is updated only in Phase 20/22 when that changes.
+- `dev/design/attributes.md` records the supported `shared` attribute tranche.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 16 implemented and validated
+### Current Status: Phase 20 implemented and validated
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -537,6 +536,23 @@ native, classloader, cache, and I/O state. Snapshot tests cover both backends,
 global alias isolation, skipped blessed objects, parent immutability, hook
 context, and empty child execution stacks. Thread capability flags remain off.
 
+The internal thread control block owns platform-thread IDs, parent/child
+relationships, completion and error state, join/detach transitions, and runtime-
+family cleanup. The unadvertised Perl API supports creation, identity, listing,
+context-sensitive join results, nested threads, controlled thread exit, and
+retained uncaught errors. Entry CODE references and arguments share the runtime
+snapshot identity map; join results cross back through a fresh graph clone.
+Child-owned END queues are drained at the thread boundary, and unsafe Java
+thread stopping is not used.
+
+`threads::shared` marks scalar, array, and hash storage so graph cloning retains
+its identity. Shared aggregate backing collections are synchronized and scalar
+payload fields provide cross-thread visibility. `share`, `is_shared`,
+`shared_clone`, and `:shared` are implemented for the supported unblessed,
+untied tranche; blessed and tied values are rejected explicitly. Lock and
+condition-variable semantics remain Phase 21. `Config` continues to advertise
+threads as disabled until Phase 22.
+
 ### Implementation History
 
 Completed phase history is intentionally kept out of this living design
@@ -546,10 +562,10 @@ request history.
 
 ### Next Steps
 
-1. Implement Phase 17's internal platform-thread control block with explicit
-   ownership, completion/error state, join/detach transitions, and cleanup.
-2. Keep the public Perl `threads` stub and `Config` capability flags unchanged
-   until the Phase 18 compatibility tranche is green.
+1. Implement Phase 21 lexical/recursive locking and condition variables on
+   shared storage.
+2. Define and run Phase 22's broader core/CPAN compatibility activation matrix
+   before changing `Config` capability flags.
 
 ### Open Questions
 
