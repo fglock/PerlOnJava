@@ -784,6 +784,16 @@ public class CompileOperator {
             case "binary~" -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_BINARY);
             case "~." -> emitSimpleUnary(bytecodeCompiler, node, Opcodes.BITWISE_NOT_STRING);
             case "defined" -> visitDefined(bytecodeCompiler, node);
+            case "lock" -> {
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int valueReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.LOCK);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(valueReg);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.lastResultReg = rd;
+            }
             case "wantarray" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WANTARRAY); bytecodeCompiler.emitReg(rd); bytecodeCompiler.emitReg(2); bytecodeCompiler.lastResultReg = rd; }
             case "time" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.TIME_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
             case "wait" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WAIT_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }

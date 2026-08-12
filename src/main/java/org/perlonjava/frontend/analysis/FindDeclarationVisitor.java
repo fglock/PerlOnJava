@@ -51,7 +51,7 @@ public class FindDeclarationVisitor implements Visitor {
     }
 
     /**
-     * Static method to check if a block contains either local or defer statements.
+     * Static method to check if a block contains local, defer, or lock statements.
      * This is used to determine if scope cleanup (popToLocalLevel) is needed.
      *
      * @param blockNode The AST node to search within
@@ -101,7 +101,8 @@ public class FindDeclarationVisitor implements Visitor {
      */
     @Override
     public void visit(OperatorNode node) {
-        if (this.operatorName.equals(node.operator) || "delete_local".equals(node.operator)) {
+        if (this.operatorName.equals(node.operator) || "delete_local".equals(node.operator)
+                || "lock".equals(node.operator)) {
             containsLocalOperator = true;
             operatorNode = node;
         }

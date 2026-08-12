@@ -2452,6 +2452,9 @@ public class Opcodes {
     /** Restore lexical hints after leaving a nested block. Format: SET_CALL_SITE_HINTS hints. */
     public static final short SET_CALL_SITE_HINTS = 515;
 
+    /** lock($shared): rd = TieOperators.lock(ctx, valueReg). */
+    public static final short LOCK = 516;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

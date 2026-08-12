@@ -315,7 +315,7 @@ public class TieOperators {
      * Implements Perl's lock() builtin function.
      * 
      * <p>In threaded Perl, lock() places an advisory lock on a shared variable.
-     * In non-threaded Perl (and PerlOnJava), it's a no-op that returns its argument.</p>
+     * The lock is recursive and is released by the dynamic-scope cleanup stack.</p>
      *
      * <p>The prototype for lock is \[$@%&*] so the argument is passed as a reference.</p>
      *
@@ -324,11 +324,11 @@ public class TieOperators {
      * @return for scalar refs, the dereferenced value; for arrays/hashes, the reference
      */
     public static RuntimeScalar lock(int ctx, RuntimeBase... scalars) {
-        // No-op in non-threaded Perl - return the argument appropriately
         if (scalars.length == 0) {
             return scalarUndef;
         }
         RuntimeScalar variable = scalars[0].getFirst();
+        SharedPerlStorage.lock(variable);
         // For scalar references, dereference to get the value
         // For other reference types (arrays, hashes), return the reference itself
         return switch (variable.type) {

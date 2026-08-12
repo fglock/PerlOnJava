@@ -1427,6 +1427,15 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    public static int executeLock(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int valueReg = bytecode[pc++];
+        int ctx = bytecode[pc++];
+        if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
+        registers[rd] = TieOperators.lock(ctx, registers[valueReg]);
+        return pc;
+    }
+
     // =========================================================================
     // MISC COLD OPS
     // =========================================================================

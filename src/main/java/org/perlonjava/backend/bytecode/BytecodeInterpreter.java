@@ -2432,6 +2432,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeTied(bytecode, pc, registers);
                             }
 
+                            case Opcodes.LOCK -> {
+                                pc = InlineOpcodeHandler.executeLock(bytecode, pc, registers);
+                            }
+
                             // Miscellaneous operators with context-sensitive signatures
                             case Opcodes.CHMOD, Opcodes.UNLINK, Opcodes.UTIME, Opcodes.RENAME, Opcodes.LINK,
                                  Opcodes.READLINK, Opcodes.UMASK, Opcodes.GETC, Opcodes.FILENO, Opcodes.QX,
