@@ -324,6 +324,9 @@ public final class PerlRuntime implements AutoCloseable {
     private void materializeLazyCodeDefinitions() {
         for (Map.Entry<String, RuntimeScalar> entry
                 : new java.util.ArrayList<>(globalState.codeRefs().entrySet())) {
+            String fqn = entry.getKey();
+            boolean cloneHook = fqn.endsWith("::CLONE") || fqn.endsWith("::CLONE_SKIP");
+            if (!cloneHook && !fqn.startsWith("threads::")) continue;
             RuntimeScalar hook = entry.getValue();
             if (hook != null && hook.value instanceof RuntimeCode code
                     && code.compilerSupplier != null) {

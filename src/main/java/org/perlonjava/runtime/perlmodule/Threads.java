@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -34,6 +35,17 @@ public final class Threads extends PerlModuleBase {
     public static RuntimeList _create(RuntimeArray args, int ctx) {
         if (args.isEmpty() || args.get(0).type != RuntimeScalarType.CODE) {
             throw new IllegalArgumentException("threads->create requires a CODE reference");
+        }
+        // BEGIN-time code holds the global compilation lock. A new ithread may
+        // need that lock for require/eval before it can signal readiness, so
+        // core's test.pl watchdog would deadlock the compiler while polling it.
+        // Config still deliberately does not advertise ithreads; preserve the
+        // old detached watchdog-stub behavior at this interim boundary.
+        if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
+            RuntimeHash stub = new RuntimeHash();
+            stub.put("tid", new RuntimeScalar(-1));
+            stub.put("state", new RuntimeScalar("detached"));
+            return ReferenceOperators.bless(stub.createReference(), new RuntimeScalar(CLASS)).getList();
         }
         RuntimeArray threadArgs = new RuntimeArray();
         for (int i = 1; i < args.size(); i++) threadArgs.push(args.get(i));

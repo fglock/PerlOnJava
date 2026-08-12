@@ -177,7 +177,32 @@ public class RuntimeGraphCloner {
         target.isSymbolicReference = source.isSymbolicReference;
         target.isClosurePrototype = source.isClosurePrototype;
         target.definitionPending = source.definitionPending;
-        target.compilerSupplier = source.compilerSupplier;
+        if (source.compilerSupplier == null) {
+            target.compilerSupplier = null;
+        } else {
+            // Lazy named-sub suppliers close over the source placeholder and compiler
+            // context.  Running that supplier directly in the child materializes the
+            // parent CV and leaves the cloned CV undefined.  Defer the cost, but run
+            // the source materializer under its owning runtime and then clone the
+            // completed definition into this runtime.
+            target.compilerSupplier = () -> {
+                synchronized (source) {
+                    if (source.compilerSupplier != null) {
+                        try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+                            source.compilerSupplier.get();
+                        }
+                    }
+                }
+                RuntimeCode completed;
+                try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                    completed = (RuntimeCode) new RuntimeGraphCloner(
+                            sourceRuntime, targetRuntime, skippedClasses).cloneCode(source);
+                }
+                target.adoptDefinitionFrom(completed);
+                target.compilerSupplier = null;
+                return null;
+            };
+        }
         target.isMapGrepBlock = source.isMapGrepBlock;
         target.isEvalBlock = source.isEvalBlock;
         target.isTryExpressionWrapper = source.isTryExpressionWrapper;
