@@ -442,7 +442,19 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     public String toStringRef() {
+        registerReferenceAddress();
         return this.toString();
+    }
+
+    protected final String referenceAddressHex() {
+        return Long.toHexString(PerlRuntime.referenceAddress(this));
+    }
+
+    protected final void registerReferenceAddress() {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime != null) {
+            runtime.registerReferenceAddress(this);
+        }
     }
 
     public double getDoubleRef() {

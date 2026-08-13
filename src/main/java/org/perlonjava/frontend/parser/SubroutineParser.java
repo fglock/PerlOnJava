@@ -1854,6 +1854,19 @@ public class SubroutineParser {
 
     private static void installClosureCaptureMetadata(
             RuntimeCode code, List<String> capturedNames, List<Object> capturedValues) {
+        // Named subs created through the parser populate an existing stash
+        // scalar in place rather than going through RuntimeGlob's CODE-slot
+        // assignment path. Account for that persistent stash owner so a
+        // temporary copy of \&name cannot release the named CV's pad.
+        if (code != null && code.stashRefCount == 0) {
+            for (RuntimeScalar installed : GlobalVariable.globalCodeRefs.values()) {
+                if (installed != null && installed.value == code) {
+                    code.hadStashRef = true;
+                    code.stashRefCount = 1;
+                    break;
+                }
+            }
+        }
         if (code == null || capturedValues == null || capturedValues.isEmpty()
                 || code.capturedScalars != null) {
             return;

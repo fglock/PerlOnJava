@@ -123,7 +123,9 @@ public class ScalarUtil extends PerlModuleBase {
             case FORMAT:
             case REGEX:
                 // Return identity of the underlying value object
-                return new RuntimeScalar(System.identityHashCode(scalar.value)).getList();
+                RuntimeBase referenced = (RuntimeBase) scalar.value;
+                PerlRuntime.current().registerReferenceAddress(referenced);
+                return new RuntimeScalar(PerlRuntime.referenceAddress(referenced)).getList();
             case GLOB:
             case GLOBREFERENCE:
                 if (scalar.value instanceof RuntimeGlob glob) {
