@@ -7,11 +7,19 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimeMutationScope;
 
 /**
  * The Strict class provides functionalities similar to the Perl strict module.
  */
 public class Strict extends PerlModuleBase {
+
+    private static void propagatePragmaFlags(ScopedSymbolTable source) {
+        ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
+        if (source != null && mutationScope != null && mutationScope != source) {
+            mutationScope.copyFlagsFrom(source);
+        }
+    }
 
     // Bitmask for use integer, bytes
     public static final int HINT_INTEGER = 0x00000001;
@@ -97,6 +105,7 @@ public class Strict extends PerlModuleBase {
                 }
             }
         }
+        propagatePragmaFlags(symbolTable);
         return new RuntimeScalar().getList();
     }
 
@@ -130,6 +139,7 @@ public class Strict extends PerlModuleBase {
                 }
             }
         }
+        propagatePragmaFlags(symbolTable);
         return new RuntimeScalar().getList();
     }
 

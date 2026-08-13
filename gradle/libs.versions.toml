@@ -3,6 +3,7 @@ asm = "9.10.1"
 bouncycastle = "1.85"
 commons-compress = "1.28.0"
 commons-csv = "1.14.1"
+commonmark = "0.29.0"
 icu4j = "78.3"
 jsoup = "1.23.1"
 junit-jupiter = "6.1.3"
@@ -17,6 +18,11 @@ bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycast
 bcprov = "org.bouncycastle:bcprov-jdk18on:1.85.2"
 commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
 commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
+commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
+commonmark-autolink = { module = "org.commonmark:commonmark-ext-autolink", version.ref = "commonmark" }
+commonmark-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
+commonmark-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
+commonmark-task-list = { module = "org.commonmark:commonmark-ext-task-list-items", version.ref = "commonmark" }
 icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }

@@ -1,6 +1,8 @@
 package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.FeatureFlags;
 
 import java.util.ArrayDeque;
@@ -42,6 +44,11 @@ public final class CompilationRuntimeState {
             new ConcurrentHashMap<>();
     public final Deque<String> loadingFileStack = new ArrayDeque<>();
     public final Deque<Deque<RuntimeScalar>> compileScopes = new ArrayDeque<>();
+    /** UNITCHECK queue belonging to each parser currently compiling a file/eval. */
+    public final ThreadLocal<Deque<RuntimeArray>> unitcheckQueueStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+    /** Call-parser handlers keyed by the exact CV on which an XS shim installed them. */
+    public final Map<RuntimeCode, RuntimeScalar> callParserHandlers = new ConcurrentHashMap<>();
 
     public void clear() {
         hintCompileTimeStack.clear();
@@ -70,5 +77,7 @@ public final class CompilationRuntimeState {
         endOfScopeFileCallbacks.clear();
         loadingFileStack.clear();
         compileScopes.clear();
+        unitcheckQueueStack.remove();
+        callParserHandlers.clear();
     }
 }

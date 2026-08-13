@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimeMutationScope;
 
 /**
  * The Warnings class provides functionalities similar to the Perl warnings module.
@@ -19,6 +20,13 @@ import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 public class Warnings extends PerlModuleBase {
 
     public static final WarningFlags warningManager = new WarningFlags();
+
+    private static void propagatePragmaFlags(ScopedSymbolTable source) {
+        ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
+        if (source != null && mutationScope != null && mutationScope != source) {
+            mutationScope.copyFlagsFrom(source);
+        }
+    }
 
     /**
      * Resolve the package that invoked a native warnings::* routine. Native
@@ -333,6 +341,7 @@ public class Warnings extends PerlModuleBase {
         if (args.size() == 1) {
             warningManager.initializeEnabledWarnings();
             WarningFlags.registerScopeWarnings(symbolTable.getDisabledWarningCategories());
+            propagatePragmaFlags(symbolTable);
             return new RuntimeScalar().getList();
         }
 
@@ -359,7 +368,6 @@ public class Warnings extends PerlModuleBase {
                     throw new PerlCompilerException("Unknown warnings category '" + category + "'");
                 }
                 warningManager.disableWarning(category);
-                currentModifier = null;  // Reset modifier after use
                 continue;
             }
             
@@ -382,10 +390,10 @@ public class Warnings extends PerlModuleBase {
                 warningManager.enableWarning(category);
             }
             
-            currentModifier = null;  // Reset modifier after use
         }
 
         WarningFlags.registerScopeWarnings(symbolTable.getDisabledWarningCategories());
+        propagatePragmaFlags(symbolTable);
         return new RuntimeScalar().getList();
     }
 
@@ -455,6 +463,7 @@ public class Warnings extends PerlModuleBase {
         ScopedSymbolTable symbolTable = getCurrentScope();
         WarningFlags.registerScopeWarnings(
                 symbolTable != null ? symbolTable.getDisabledWarningCategories() : categories);
+        propagatePragmaFlags(symbolTable);
         
         return new RuntimeScalar().getList();
     }

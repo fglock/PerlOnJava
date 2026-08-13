@@ -617,6 +617,24 @@ public class SubroutineParser {
                 arguments = consumeArgsWithPrototype(parser, prototype);
             }
 
+            // BEGIN::Lift attaches a custom parser to an otherwise ordinary
+            // stub CV. Its XS callback parses the argument list into a thunk,
+            // calls the registered handler immediately, and emits no runtime
+            // op. Reproduce that behavior at the AST boundary where the full
+            // argument expression is available but has not entered runtime.
+            RuntimeScalar liftedHandler = org.perlonjava.runtime.perlmodule.BEGINLift.handlerFor(parseTimeCodeRef);
+            if (!isMethod && liftedHandler != null) {
+                RuntimeList compileTimeArgs = SpecialBlockParser.runSpecialBlock(
+                        parser, "BEGIN", arguments, RuntimeContextType.LIST);
+                RuntimeCode thunk = new RuntimeCode((ignored, ignoredCtx) -> compileTimeArgs, null);
+                RuntimeArray handlerArgs = new RuntimeArray();
+                RuntimeArray.push(handlerArgs, new RuntimeScalar(thunk));
+                RuntimeCode.apply(liftedHandler, handlerArgs, RuntimeContextType.VOID);
+                ListNode noop = new ListNode(currentIndex);
+                noop.setAnnotation("compileTimeOnly", true);
+                return noop;
+            }
+
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
             if (parseTimeCodeRef != null) {

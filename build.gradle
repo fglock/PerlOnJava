@@ -217,6 +217,11 @@ dependencies {
     implementation libs.snakeyaml.engine              // YAML processing
     implementation libs.tomlj                         // TOML processing
     implementation libs.commons.csv                   // CSV processing
+    implementation libs.commonmark                    // CommonMark rendering
+    implementation libs.commonmark.autolink           // GFM autolinks
+    implementation libs.commonmark.strikethrough      // GFM strikethrough
+    implementation libs.commonmark.tables             // GFM tables
+    implementation libs.commonmark.task.list          // GFM task lists
     implementation libs.commons.compress               // BZip2/tar/etc. compressors
     implementation libs.sqlite.jdbc                    // SQLite JDBC driver
     implementation libs.bcprov                         // Bouncy Castle crypto (SHA-3, Keccak, etc.)

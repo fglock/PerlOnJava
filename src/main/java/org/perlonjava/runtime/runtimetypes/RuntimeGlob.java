@@ -412,6 +412,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
 
+                // A runtime typeglob assignment replaces the CODE slot just as
+                // `*name = sub { ... }` does in Perl.  Emit the lexical
+                // `redefine` warning before changing the slot; when the warning
+                // is fatal the original subroutine must remain installed.  A
+                // repeated assignment of the identical coderef is harmless and
+                // does not warn on Perl.
+                if (codeContainer.value instanceof RuntimeCode oldCode
+                        && oldCode.defined()
+                        && value.value instanceof RuntimeCode newCode
+                        && oldCode != newCode) {
+                    org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                            new RuntimeScalar("Subroutine " + this.globName + " redefined"),
+                            new RuntimeScalar(),
+                            "redefine");
+                }
+
                 if (value.value instanceof RuntimeCode sourceCode
                         && !sourceCode.defined()
                         && sourceCode.hasForwardGlobAlias

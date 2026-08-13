@@ -12,6 +12,9 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.CompilationRuntimeState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -160,7 +163,19 @@ public class Parser {
             // looks like pod: insert a newline to trigger pod parsing
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
         }
-        Node ast = ParseBlock.parseBlock(this);
+        // XS APIs such as Devel::Hook expose the special-block queue of the
+        // compilation currently in progress. Nested require/eval parsers each
+        // get their own queue, so keep the ownership explicit and stack based.
+        RuntimeArray parserUnitcheckQueue = ctx.unitcheckBlocks != null
+                ? ctx.unitcheckBlocks : new RuntimeArray();
+        CompilationRuntimeState compilationState = PerlRuntime.current().compilationState;
+        compilationState.unitcheckQueueStack.get().push(parserUnitcheckQueue);
+        Node ast;
+        try {
+            ast = ParseBlock.parseBlock(this);
+        } finally {
+            compilationState.unitcheckQueueStack.get().pop();
+        }
         // Mark the AST as a top-level file block for proper bare block return value handling
         // This annotation is checked in EmitBlock to handle RUNTIME context bare blocks
         if (!isTopLevelScript && ast instanceof AbstractNode) {
