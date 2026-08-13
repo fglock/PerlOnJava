@@ -380,11 +380,22 @@ public class WeakRefRegistry {
     }
 
     public static void clearAllBlessedWeakRefs() {
+        clearBlessedWeakRefsExcept(java.util.Collections.emptySet());
+    }
+
+    /**
+     * Clear weak references whose referents cannot be observed by END code.
+     * This is the pre-END counterpart to {@link #clearAllBlessedWeakRefs()}:
+     * genuine END captures remain intact, while stale selective-refcount
+     * owners do not make leak tracers report objects that Perl has released.
+     */
+    public static void clearBlessedWeakRefsExcept(Set<RuntimeBase> retained) {
         // Snapshot the keys to avoid ConcurrentModificationException,
         // since clearWeakRefsTo modifies referentToWeakRefs.
         java.util.List<RuntimeBase> referents =
                 new java.util.ArrayList<>(state().referentToWeakRefs.keySet());
         for (RuntimeBase referent : referents) {
+            if (retained.contains(referent)) continue;
             if (referent instanceof RuntimeCode) continue;
             // Phase H3: skip unblessed containers (ARRAY/HASH) at pre-END
             // time. Sub::Defer's $deferred_info and Sub::Quote's

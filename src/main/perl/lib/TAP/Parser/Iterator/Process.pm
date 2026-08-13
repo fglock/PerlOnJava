@@ -200,9 +200,13 @@ sub _initialize {
     $self->{chunk_size} = $chunk_size;
 
     if ( my $teardown = delete $args->{teardown} ) {
-        $self->{teardown} = sub {
-            $teardown->(@command);
-        };
+        # The Perl source handler uses setup/teardown to expose its -I paths
+        # through PERL5LIB while the child is spawned.  The child has inherited
+        # that environment once open3() returns, so restore the parent now.
+        # Deferring restoration until child exit lets parallel TAP jobs unwind
+        # overlapping environment snapshots out of order and gives later tests
+        # a contaminated library path.
+        $teardown->(@command);
     }
 
     return $self;
@@ -425,4 +429,3 @@ L<TAP::Parser>,
 L<TAP::Parser::Iterator>,
 
 =cut
-

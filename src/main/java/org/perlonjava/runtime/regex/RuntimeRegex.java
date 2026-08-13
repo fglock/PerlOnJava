@@ -334,7 +334,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return A RuntimeRegex object.
      * @throws IllegalStateException if regex compilation fails.
      */
-    public static synchronized RuntimeRegex compile(String patternString, String modifiers) {
+    public static RuntimeRegex compile(String patternString, String modifiers) {
+        // Dynamic/interpolated qr// compilation can begin during ordinary
+        // execution, outside the Perl compiler lock. User-defined Unicode
+        // properties execute arbitrary Perl and may block, so resolve them
+        // before entering the process-wide regex compiler monitor. Calls made
+        // during source compilation remain deferred by UnicodeResolver.
+        RegexFlags preloadFlags = fromModifiers(modifiers, patternString);
+        UnicodeResolver.preloadUserDefinedProperties(
+                patternString, preloadFlags.isCaseInsensitive());
+        return compileSynchronized(patternString, modifiers);
+    }
+
+    private static synchronized RuntimeRegex compileSynchronized(
+            String patternString, String modifiers) {
         // Debug logging
         if (DEBUG_REGEX) {
             System.err.println("RuntimeRegex.compile: pattern=" + patternString + " modifiers=" + modifiers);
@@ -557,7 +570,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // User property subs can execute arbitrary Perl and block. Resolve them
         // before compile() takes its process-wide monitor; only simultaneous
         // definitions of the same property coordinate in PerlThreadRegistry.
-        UnicodeResolver.preloadUserDefinedProperties(regex.patternString);
+        UnicodeResolver.preloadUserDefinedProperties(regex.patternString,
+                regex.regexFlags != null && regex.regexFlags.isCaseInsensitive());
         RuntimeRegex recompiled = compile(regex.patternString, regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
         regex.pattern = recompiled.pattern;
         regex.patternUnicode = recompiled.patternUnicode;

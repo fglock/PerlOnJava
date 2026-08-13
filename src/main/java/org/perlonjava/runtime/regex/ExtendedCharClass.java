@@ -735,7 +735,8 @@ public class ExtendedCharClass {
                                 if (end != -1) {
                                     String property = content.substring(i + 3, end);
                                     boolean negated = (next == 'P');
-                                    String translated = UnicodeResolver.translateUnicodeProperty(property, negated);
+                                    String translated = UnicodeResolver.translateUnicodeProperty(
+                                            property, negated);
 
                                     // Unwrap if necessary
                                     if (translated.startsWith("[") && translated.endsWith("]")) {

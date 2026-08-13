@@ -309,6 +309,7 @@ public final class PerlRuntime implements AutoCloseable {
             PerlRuntime child = new PerlRuntime(registry, threadId);
             child.defaultPerlThreadStackSize = defaultPerlThreadStackSize;
             child.defaultPerlThreadExitOnly = defaultPerlThreadExitOnly;
+            nameNormalizerState.snapshotInto(child.nameNormalizerState);
             RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
             try (Binding ignored = bind()) {
                 globalState.snapshotInto(child.globalState, cloner);

@@ -311,6 +311,12 @@ public class MortalList {
             found = true;
         }
         if (found) flush();
+
+        // Weak-reference leak tracers commonly run from END. Selective
+        // refcounts can remain inflated by JVM temporaries even after all Perl
+        // owners have gone away, so clear only referents outside the semantic
+        // END graph now. Retained captures are cleared by the post-END drain.
+        WeakRefRegistry.clearBlessedWeakRefsExcept(endReachable);
     }
 
     /**

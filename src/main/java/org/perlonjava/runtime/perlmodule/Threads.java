@@ -94,6 +94,10 @@ public final class Threads extends PerlModuleBase {
         int filter = args.isEmpty() ? 0 : args.get(0).getInt();
         RuntimeList result = new RuntimeList();
         for (PerlThreadControlBlock thread : PerlRuntime.current().threadRegistry().snapshot()) {
+            // Detached threads are no longer application-owned and Perl never
+            // returns them from list(), even while their Java carrier is still
+            // winding down.
+            if (thread.isDetached()) continue;
             if (filter == 1 && !thread.isRunning()) continue;
             if (filter == 2 && !thread.isJoinable()) continue;
             result.add(threadObject(thread.id(), thread));

@@ -779,6 +779,8 @@ public class EmitSubroutine {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
 
+            emitTaggedControlFlowHandling(emitterVisitor);
+
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
@@ -1195,6 +1197,72 @@ public class EmitSubroutine {
         // If not inside a loop, don't check registry (result stays on stack)
     }
 
+    /** Emits the ordinary tagged-return dispatcher for a result on the stack. */
+    private static void emitTaggedControlFlowHandling(EmitterVisitor emitterVisitor) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        if (!ENABLE_CONTROL_FLOW_CHECKS
+                || emitterVisitor.ctx.javaClassInfo.returnLabel == null
+                || emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot < 0) {
+            return;
+        }
+
+        String loopStateSignature = emitterVisitor.ctx.javaClassInfo.getLoopStateSignature();
+        Label blockDispatcher =
+                emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.get(loopStateSignature);
+        boolean isFirstUse = blockDispatcher == null;
+        if (isFirstUse) {
+            blockDispatcher = new Label();
+            emitterVisitor.ctx.javaClassInfo.blockDispatcherLabels.put(
+                    loopStateSignature, blockDispatcher);
+        }
+
+        Label notControlFlow = new Label();
+        JavaClassInfo.SpillRef[] baseSpills = new JavaClassInfo.SpillRef[0];
+        mv.visitVarInsn(
+                Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitVarInsn(
+                Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                "isNonLocalGoto",
+                "()Z",
+                false);
+        mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
+
+        mv.visitVarInsn(
+                Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        emitterVisitor.pushCallContext();
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "resolveTailCalls",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                false);
+        mv.visitVarInsn(
+                Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitVarInsn(
+                Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                "isNonLocalGoto",
+                "()Z",
+                false);
+        mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
+        mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
+
+        mv.visitLabel(notControlFlow);
+        mv.visitVarInsn(
+                Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+        if (isFirstUse) {
+            Label skipDispatcher = new Label();
+            mv.visitJumpInsn(Opcodes.GOTO, skipDispatcher);
+            emitBlockDispatcher(mv, emitterVisitor, blockDispatcher, baseSpills);
+            mv.visitLabel(skipDispatcher);
+        }
+    }
+
     /**
      * Emits the block-level dispatcher code that handles control flow for all call sites
      * with the same visible loop state.
@@ -1261,6 +1329,8 @@ public class EmitSubroutine {
             mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
             mv.visitInsn(Opcodes.ICONST_0);
             mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkNext);
+            EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                    emitterVisitor.ctx, loopLabels, true);
             if (loopLabels.lastLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
                 mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
             } else {
@@ -1275,6 +1345,8 @@ public class EmitSubroutine {
             mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
             mv.visitInsn(Opcodes.ICONST_1);
             mv.visitJumpInsn(Opcodes.IF_ICMPNE, checkRedo);
+            EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                    emitterVisitor.ctx, loopLabels, false);
             if (loopLabels.nextLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
                 mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
             } else {
@@ -1286,6 +1358,8 @@ public class EmitSubroutine {
 
             // if (type == REDO (2)) goto redoLabel
             mv.visitLabel(checkRedo);
+            EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                    emitterVisitor.ctx, loopLabels, false);
             if (loopLabels.redoLabel == emitterVisitor.ctx.javaClassInfo.returnLabel) {
                 mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
             } else {

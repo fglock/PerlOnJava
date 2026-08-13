@@ -17,8 +17,12 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   locks, condition variables, and compatible imports/stringification.
   `Config` now reports `useithreads`, `usethreads`, and `usemultiplicity` as
   `define`. Platform threads remain the default and virtual threads are an
-  experimental opt-in. Thread signals, effective stack sizing, blessed/tied
-  shared values, and some upstream core/native-callback suites remain limited;
+  experimental opt-in. Live attached children support targeted signals,
+  `object`/`wantarray`, and platform-thread stack sizing. Native-style callback
+  registrations retain their owning runtime, internal pipes have an explicit
+  inherited-handle policy, and nested plain shared graphs are validated before
+  publication. Blessed/tied shared values and some upstream core/regex suites
+  remain limited;
   see the [feature matrix](../reference/feature-matrix.md#concurrency-and-perl-threads).
 - CPAN/tooling: expose tested dependency scripts through `PATH`, deduplicate
   repeated `PERL5LIB` setup, and resolve test prerequisites against tested

@@ -54,7 +54,10 @@ public final class PerlThreadExecutionPolicy {
             }
             return Thread.ofVirtual().name(name).unstarted(task);
         }
-        Thread.Builder.OfPlatform builder = Thread.ofPlatform().name(name);
+        // Perl terminates detached children when the main interpreter exits.
+        // A Java daemon carrier preserves that process-lifecycle rule; attached
+        // children remain application-owned through the Perl registry/join API.
+        Thread.Builder.OfPlatform builder = Thread.ofPlatform().name(name).daemon(true);
         if (stackSize != 0) builder = builder.stackSize(stackSize);
         return builder.unstarted(task);
     }

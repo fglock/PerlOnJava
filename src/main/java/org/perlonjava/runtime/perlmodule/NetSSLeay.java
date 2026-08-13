@@ -268,6 +268,7 @@ public class NetSSLeay extends PerlModuleBase {
         final Map<Long, Long> asn1Times = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, SslCtxState> sslContexts = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, SslState> sslStates = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, Boolean> sslSessions = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, java.security.Key> evpKeys = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, X509Certificate> x509Certificates = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, X509NameInfo> x509Names = new java.util.concurrent.ConcurrentHashMap<>();
@@ -297,6 +298,15 @@ public class NetSSLeay extends PerlModuleBase {
 
     private static State state() {
         return PerlRuntime.current().netSslState;
+    }
+
+    /** Capture the runtime that owns a callback stored on a native-style handle. */
+    static RuntimeScalar bindNativeCallback(RuntimeScalar callback) {
+        if (callback == null || callback.type != RuntimeScalarType.CODE
+                || !(callback.value instanceof RuntimeCode code)) {
+            return callback;
+        }
+        return new RuntimeScalar(code.bindCallbackTo(PerlRuntime.current()));
     }
 
     private static final class CurrentRuntimeMap<K, V> extends AbstractMap<K, V> {
@@ -330,6 +340,8 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, Long> ASN1_TIME_HANDLES = new CurrentRuntimeMap<>(s -> s.asn1Times);
     private static final Map<Long, SslCtxState> CTX_HANDLES = new CurrentRuntimeMap<>(s -> s.sslContexts);
     private static final Map<Long, SslState> SSL_HANDLES = new CurrentRuntimeMap<>(s -> s.sslStates);
+    private static final Map<Long, Boolean> SSL_SESSION_HANDLES =
+            new CurrentRuntimeMap<>(s -> s.sslSessions);
     private static final Map<Long, java.security.Key> EVP_PKEY_HANDLES = new CurrentRuntimeMap<>(s -> s.evpKeys);
 
     // X509 handle maps
@@ -373,6 +385,7 @@ public class NetSSLeay extends PerlModuleBase {
         ASN1_TIME_HANDLES.clear();
         CTX_HANDLES.clear();
         SSL_HANDLES.clear();
+        SSL_SESSION_HANDLES.clear();
         EVP_PKEY_HANDLES.clear();
         X509_HANDLES.clear();
         X509_NAME_HANDLES.clear();
@@ -1663,7 +1676,7 @@ public class NetSSLeay extends PerlModuleBase {
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st != null) {
                     st.verifyMode = (int) a.get(1).getLong();
-                    if (a.size() >= 3) st.verifyCb = a.get(2).scalar();
+                    if (a.size() >= 3) st.verifyCb = bindNativeCallback(a.get(2).scalar());
                 }
                 return new RuntimeScalar().getList();
             });
@@ -1802,7 +1815,7 @@ public class NetSSLeay extends PerlModuleBase {
                 if (a.size() < 1) return new RuntimeScalar().getList();
                 SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
                 if (st != null && a.size() >= 2) {
-                    st.infoCallback = a.get(1);
+                    st.infoCallback = bindNativeCallback(a.get(1));
                 }
                 return new RuntimeScalar().getList();
             });
@@ -2625,7 +2638,7 @@ public class NetSSLeay extends PerlModuleBase {
                 SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
                 if (st != null) {
                     st.verifyMode = (int) a.get(1).getLong();
-                    if (a.size() >= 3) st.verifyCb = a.get(2).scalar();
+                    if (a.size() >= 3) st.verifyCb = bindNativeCallback(a.get(2).scalar());
                     st.sslContext = null; // force rebuild with new trust settings
                 }
                 return new RuntimeScalar().getList();
@@ -2878,7 +2891,22 @@ public class NetSSLeay extends PerlModuleBase {
                 SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
                 return new RuntimeScalar(st != null ? a.get(0).getLong() : 0).getList();
             });
-            registerLambda("set_session", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("SESSION_new", (a, c) -> {
+                long handle = HANDLE_COUNTER.getAndIncrement();
+                SSL_SESSION_HANDLES.put(handle, Boolean.TRUE);
+                return new RuntimeScalar(handle).getList();
+            });
+            registerLambda("SESSION_free", (a, c) -> {
+                if (!a.isEmpty()) SSL_SESSION_HANDLES.remove(a.get(0).getLong());
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("set_session", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar(
+                        SSL_HANDLES.containsKey(a.get(0).getLong())
+                                && SSL_SESSION_HANDLES.containsKey(a.get(1).getLong()) ? 1 : 0)
+                        .getList();
+            });
             registerLambda("session_reused", (a, c) -> new RuntimeScalar(0).getList());
             registerLambda("set_msg_callback", (a, c) -> new RuntimeScalar(1).getList());
             registerLambda("set_post_handshake_auth", (a, c) -> new RuntimeScalar().getList());
@@ -4913,7 +4941,7 @@ public class NetSSLeay extends PerlModuleBase {
         long ctxHandle = args.get(0).getLong();
         SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
         if (ctxState == null) return new RuntimeScalar().getList();
-        ctxState.passwdCb = args.get(1);
+        ctxState.passwdCb = bindNativeCallback(args.get(1));
         return new RuntimeScalar().getList();
     }
 
@@ -4944,7 +4972,7 @@ public class NetSSLeay extends PerlModuleBase {
         long sslHandle = args.get(0).getLong();
         SslState ssl = SSL_HANDLES.get(sslHandle);
         if (ssl == null) return new RuntimeScalar().getList();
-        ssl.passwdCb = args.get(1);
+        ssl.passwdCb = bindNativeCallback(args.get(1));
         return new RuntimeScalar().getList();
     }
 

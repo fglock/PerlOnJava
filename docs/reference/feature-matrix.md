@@ -862,11 +862,11 @@ storage as their parent counterparts. Values explicitly shared through
 
 | Limitation | Effect |
 |---|---|
-| Thread signals | `threads->kill` is not implemented. |
-| Effective stack sizing | Standard `stack_size` import syntax is accepted for source compatibility, but JVM stack sizing remains runtime-managed. |
-| Additional introspection | `threads->object` and `wantarray` are not implemented. |
+| Thread signals | `threads->kill` targets live attached children and resolves the handler inside the child runtime. Completed and detached targets are not signalable. |
+| Effective stack sizing | Platform-backed children honor supported `stack_size` create/import requests. Virtual threads reject nonzero stack sizes because their stacks are JVM-managed. |
+| Additional introspection | `threads->object` and creation-context `wantarray` are implemented; process-shutdown warning parity remains incomplete. |
 | Shared object classes | Blessed and tied values are rejected by the supported `share`/`shared_clone` tranche. |
-| Native resources and callbacks | Java I/O/native handles are not portably duplicated into child snapshots; native callback thread isolation remains suite-specific. |
+| Native resources and callbacks | Internal pipes have an inherited lease policy. Net::SSLeay handles are runtime-owned and stored callbacks bind their registering runtime. Ordinary files, sockets, and other native handles are still rejected rather than silently shared. |
 | Upstream suite coverage | Core compatibility remains partial: measured results include `op/threads.t` 29/30, `op/substr_thr.t` 368/400, and `re/stclass_threads.t` 2/6; `class/threads.t`, Storable's thread test, `threads-dirh.t`, and Test2's thread IPC acceptance test complete. The regex suite now executes its child and exposes unsupported thread-local `re 'debug'` trace parity. |
 | PSGI | Availability of ithreads does not make one captured PSGI application runtime concurrently callable. `Plack::Handler::Netty` advertises `psgi.multithread => \0`. |
 

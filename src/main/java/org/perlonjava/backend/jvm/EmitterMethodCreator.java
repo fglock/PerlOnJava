@@ -826,10 +826,16 @@ public class EmitterMethodCreator implements Opcodes {
                             "ordinal",
                             "()I",
                             false);
+                    int evalControlFlowTypeSlot = ctx.symbolTable.allocateLocalVariable();
+                    mv.visitVarInsn(Opcodes.ISTORE, evalControlFlowTypeSlot);
+                    mv.visitVarInsn(Opcodes.ILOAD, evalControlFlowTypeSlot);
+                    mv.visitInsn(Opcodes.ICONST_2); // LAST/NEXT/REDO propagate
+                    mv.visitJumpInsn(Opcodes.IF_ICMPLE, normalReturn);
+                    mv.visitVarInsn(Opcodes.ILOAD, evalControlFlowTypeSlot);
                     mv.visitLdcInsn(5);  // RETURN.ordinal() = 5
                     mv.visitJumpInsn(Opcodes.IF_ICMPEQ, normalReturn);  // RETURN → propagate
 
-                    // For non-RETURN markers (LAST/NEXT/REDO/GOTO), treat as eval failure.
+                    // GOTO and TAILCALL cannot cross an eval-block boundary.
                     mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
                     mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
                     int msgSlot = ctx.symbolTable.allocateLocalVariable();
@@ -888,6 +894,13 @@ public class EmitterMethodCreator implements Opcodes {
                     // This path represents an eval failure (bad goto/other marker),
                     // so $@ must be preserved.
                     mv.visitJumpInsn(Opcodes.GOTO, endCatch);
+                } else {
+                    // A LAST/NEXT/REDO/GOTO marker abandons this Perl call
+                    // frame even though it is represented as a return value,
+                    // not a Java exception. Clean every lexical while the
+                    // completed method symbol table and its JVM locals are
+                    // still available, before the caller resumes the target.
+                    EmitStatement.emitLoopControlScopeExit(ctx, 0);
                 }
                 // For non-eval subs: marker just propagates (falls through to return)
 

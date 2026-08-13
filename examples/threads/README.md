@@ -39,6 +39,8 @@ JPERL_OPTS=-Djperl.thread.mode=virtual \
   ./jperl examples/threads/isolated_create_join.pl
 ```
 
-Thread signals, effective per-thread stack sizing, and sharing tied or blessed
-values are outside the currently supported tranche. A captured PSGI runtime is
-also not made concurrently callable merely by enabling ithreads.
+Live attached children support targeted thread signals. Platform-backed
+ithreads accept an effective Java stack-size request; virtual mode rejects a
+nonzero request because virtual-thread stacks are JVM-managed. Sharing tied or
+blessed values remains outside the supported tranche. A captured PSGI runtime
+is also not made concurrently callable merely by enabling ithreads.

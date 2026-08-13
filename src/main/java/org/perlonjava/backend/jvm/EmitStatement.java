@@ -94,10 +94,30 @@ public class EmitStatement {
     }
 
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush, int returnedLvalueSlot) {
+        emitScopeExitNullStores(ctx, scopeIndex, flush, returnedLvalueSlot, false);
+    }
+
+    static void emitLoopControlScopeExit(EmitterContext ctx, int scopeIndex) {
+        // A non-local loop exit ends locally declared cells even when an inner
+        // closure captured them. scopeExitCleanup marks those cells exited and
+        // defers their values until the closure releases them. Constructor
+        // captures from an enclosing class are not declared in this scope.
+        emitScopeExitNullStores(ctx, scopeIndex, true, -1, true);
+    }
+
+    private static void emitScopeExitNullStores(
+            EmitterContext ctx, int scopeIndex, boolean flush,
+            int returnedLvalueSlot, boolean includeCaptured) {
         // Gather variable indices for this scope first, to determine if cleanup is needed.
-        java.util.List<Integer> scalarIndices = withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex));
-        java.util.List<Integer> hashIndices = withoutCaptured(ctx, ctx.symbolTable.getMyHashIndicesInScope(scopeIndex));
-        java.util.List<Integer> arrayIndices = withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex));
+        java.util.List<Integer> scalarIndices = includeCaptured
+                ? ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex)
+                : withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex));
+        java.util.List<Integer> hashIndices = includeCaptured
+                ? ctx.symbolTable.getMyHashIndicesInScope(scopeIndex)
+                : withoutCaptured(ctx, ctx.symbolTable.getMyHashIndicesInScope(scopeIndex));
+        java.util.List<Integer> arrayIndices = includeCaptured
+                ? ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex)
+                : withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex));
 
         // Record my-variable indices for eval exception cleanup.
         // When evalCleanupLocals is non-null (set by EmitterMethodCreator for eval blocks),
@@ -187,7 +207,9 @@ public class EmitStatement {
         // Phase 2: Null all my variable slots to help GC collect associated objects.
         // For anonymous filehandle globs, this makes them unreachable so the
         // PhantomReference-based fd recycling in RuntimeIO can close the IO stream.
-        java.util.List<Integer> allIndices = withoutCaptured(ctx, ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex));
+        java.util.List<Integer> allIndices = includeCaptured
+                ? ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex)
+                : withoutCaptured(ctx, ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex));
         // Phase E (refcount_alignment_52leaks_plan.md): deregister each
         // my-variable from MyVarCleanupStack before nulling the local slot.
         // Without this, the static stack holds strong references to
@@ -640,7 +662,14 @@ public class EmitStatement {
                         RuntimeContextType.VOID,
                         true,
                         true);
-                emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels().cleanupScopeIndex = scopeIndex + 1;
+                LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+                loopLabels.cleanupScopeIndex = scopeIndex + 1;
+                loopLabels.lastCleanupScopeIndex = scopeIndex + 1;
+                loopLabels.cleanupMarkSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                        "pushMark", "()I", false);
+                mv.visitVarInsn(Opcodes.ISTORE, loopLabels.cleanupMarkSlot);
 
                 // Visit the loop body
                 if (needsReturnValue) {
