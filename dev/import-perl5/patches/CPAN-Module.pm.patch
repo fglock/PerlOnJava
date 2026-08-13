@@ -1,34 +1,19 @@
 --- perl5/cpan/CPAN/lib/CPAN/Module.pm
 +++ src/main/perl/lib/CPAN/Module.pm
-@@ -16,0 +17,6 @@
+@@ -14,0 +15,6 @@
++}
++
 +sub perlonjava_provider {
 +    my ($self) = @_;
 +    require PerlOnJava::ProviderManifest;
 +    return PerlOnJava::ProviderManifest->provider_for($self->{ID});
-+}
-+
-@@ -460,7 +466,7 @@
-     CPAN->debug("dist-reqtype[$pack->{reqtype}]".
-                 "self-reqtype[$self->{reqtype}]") if $CPAN::DEBUG;
-         if ($pack->{reqtype}) {
+@@ -463 +469 @@
 -            if ($pack->{reqtype} eq "b" && $self->{reqtype} =~ /^[rc]$/) {
 +            if ($pack->{reqtype} =~ /^(?:b|t|q)$/ && $self->{reqtype} =~ /^[rc]$/) {
-                 $pack->{reqtype} = $self->{reqtype};
-                 if (
-                     exists $pack->{install}
-@@ -473,7 +479,7 @@
-                    ) {
-                     delete $pack->{install};
-                     $CPAN::Frontend->mywarn
+@@ -476 +482 @@
 -                        ("Promoting $pack->{ID} from 'build_requires' to 'requires'");
 +                        ("Promoting $pack->{ID} from a non-runtime prerequisite to 'requires'");
-                 }
-             }
-         } else {
-@@ -509,6 +515,14 @@
- #-> sub CPAN::Module::test ;
- sub test   {
-     my $self = shift;
+@@ -511,0 +518,8 @@
 +    if ($ENV{PERLONJAVA_PROVIDER_CONFORMANCE}) {
 +        my $provider = $self->perlonjava_provider
 +            or die $self->id . " is not declared in PerlOnJava's provider manifest\n";
@@ -37,22 +22,10 @@
 +            $self->id, $provider->{provider}, $provider->{version},
 +        ));
 +    }
-     # $self->{badtestcnt} ||= 0;
-     $self->rematein('test',@_);
- }
-@@ -532,6 +546,8 @@
- #-> sub CPAN::Module::uptodate ;
- sub uptodate {
-     my ($self) = @_;
+@@ -534,0 +549,2 @@
 +    my $provider = $self->perlonjava_provider;
 +    return 1 if $provider && $provider->{shadow_policy} eq 'forbidden';
-     local ($_);
-     my $inst = $self->inst_version or return 0;
-     my $cpan = $self->cpan_version;
-@@ -569,6 +585,16 @@
- #-> sub CPAN::Module::install ;
- sub install {
-     my($self) = @_;
+@@ -571,0 +588,10 @@
 +    if (my $provider = $self->perlonjava_provider) {
 +        if ($provider->{shadow_policy} eq 'forbidden') {
 +            $CPAN::Frontend->myprint(sprintf(
@@ -63,16 +36,19 @@
 +            return 1;
 +        }
 +    }
-     my($doit) = 0;
-     if ($self->uptodate
-         &&
-@@ -652,6 +678,9 @@
- #-> sub CPAN::Module::inst_version ;
- sub inst_version {
-     my($self) = @_;
+@@ -654,0 +681,3 @@
 +    if (my $provider = $self->perlonjava_provider) {
 +        return $provider->{version};
 +    }
-     my $parsefile = $self->inst_file or return;
-     my $have = $self->parse_version($parsefile);
-     $have;
+@@ -671 +700,7 @@
+-    if (ALARM_IMPLEMENTED) {
++    # MM_Unix::parse_version only scans bundled jar resources line by line; it
++    # cannot execute module code or block on filesystem I/O.  A wall-clock
++    # alarm here merely turns temporary CPU starvation into a false "module
++    # not installed" result, which can send CPAN into recursive core-module
++    # dependency resolution.  Keep the safety timeout for ordinary files.
++    my $use_alarm = ALARM_IMPLEMENTED && $parsefile !~ /^jar:/;
++    if ($use_alarm) {
+@@ -684 +719 @@
+-    alarm(0) if ALARM_IMPLEMENTED;
++    alarm(0) if $use_alarm;
