@@ -337,10 +337,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 && !activeCodeEnablesRegexp) {
             return;
         }
+        if (warningsOnUse.contains(DYNAMIC_PATTERN_ERROR)) {
+            throw new PerlJavaUnimplementedException(DYNAMIC_PATTERN_ERROR.substring(1));
+        }
         for (String warning : warningsOnUse) {
-            if (warning.equals(DYNAMIC_PATTERN_ERROR)) {
-                throw new PerlJavaUnimplementedException(warning.substring(1));
-            }
             WarnDie.warnWithCategory(new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "regexp");
         }
     }
@@ -411,8 +411,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         String originalPatternString = patternString;
         String compilePatternString = patternString;
-        boolean hasDeferredDynamicPattern = compilePatternString != null
+        boolean hasDynamicPattern = compilePatternString != null
                 && compilePatternString.contains(RegexMarkers.RECURSIVE_PATTERN);
+        boolean warnOnUnimplemented = "warn".equals(
+                GlobalVariable.getGlobalHash("main::ENV")
+                        .get("JPERL_UNIMPLEMENTED").toString());
+        boolean hasDeferredDynamicPattern = hasDynamicPattern && !warnOnUnimplemented;
         if (hasDeferredDynamicPattern) {
             // Perl permits qr// construction before the dynamic callback is
             // needed. Compile a never-matching placeholder and retain a hard
@@ -428,7 +432,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             quoteMetaWarningsOnUse = RegexQuoteMeta.getWarningsOnUse();
         }
 
-        String cacheKey = originalPatternString + "/" + modifiers + "#debug=" + lexicalDebugMode;
+        // Dynamic patterns compile differently in normal and warn modes. Do not
+        // let a placeholder cached in one mode leak into the other. Lexical
+        // regex debugging also changes the compiled representation.
+        String cacheKey = originalPatternString + "/" + modifiers
+                + "#debug=" + lexicalDebugMode
+                + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
 
         // Check if the regex is already cached
         RuntimeRegex regex = state().compiledRegexCache.get(cacheKey);

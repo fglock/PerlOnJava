@@ -1,7 +1,5 @@
 package org.perlonjava.runtime.perlmodule;
 
-import org.perlonjava.app.cli.CompilerOptions;
-import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
@@ -387,84 +385,6 @@ public class FilterUtilCall extends PerlModuleBase {
             context.sourceLines = null;
             context.currentLine = 0;
         }
-    }
-
-    /**
-     * Check if source code contains BEGIN blocks that might install filters.
-     * If so, execute a pre-parse pass to install the filters, then filter the remaining source.
-     * <p>
-     * This is a workaround for the limitation that our architecture tokenizes all source upfront,
-     * while Perl's source filters need to be applied during incremental source reading.
-     *
-     * @param sourceCode The original source code
-     * @return The filtered source code if filters were installed, otherwise the original
-     */
-    public static String preprocessWithBeginFilters(String sourceCode) {
-        // Quick check: does the source contain "filter_add" or similar?
-        if (!sourceCode.contains("filter")) {
-            return sourceCode;
-        }
-
-        // Check for BEGIN blocks - simple regex check
-        if (!sourceCode.matches("(?s).*BEGIN\\s*\\{.*filter.*\\}.*")) {
-            return sourceCode;
-        }
-
-        // Find the END of the first BEGIN block and split the source there
-        // We'll execute everything up to and including the BEGIN block,
-        // then apply any installed filters to the rest
-
-        int beginPos = sourceCode.indexOf("BEGIN");
-        if (beginPos == -1) {
-            return sourceCode;
-        }
-
-        // Find the matching closing brace for the BEGIN block
-        int braceStart = sourceCode.indexOf('{', beginPos);
-        if (braceStart == -1) {
-            return sourceCode;
-        }
-
-        int braceCount = 1;
-        int pos = braceStart + 1;
-        while (pos < sourceCode.length() && braceCount > 0) {
-            char c = sourceCode.charAt(pos);
-            if (c == '{') braceCount++;
-            else if (c == '}') braceCount--;
-            pos++;
-        }
-
-        if (braceCount != 0) {
-            // Couldn't find matching brace
-            return sourceCode;
-        }
-
-        // Split at the end of the BEGIN block
-        String beginPart = sourceCode.substring(0, pos);
-        String remainingPart = sourceCode.substring(pos);
-
-        // Execute the BEGIN part to install any filters.  The BEGIN
-        // block's filter_add must persist *past* this nested call so
-        // applyFilters() below can apply it to the parent file's
-        // remaining source.  This nested executePerlCode does not go
-        // through ModuleOperators.do_file (which is where filter state
-        // is scoped per compilation unit), so the filter install
-        // naturally survives to the caller — exactly what we want here.
-        try {
-            CompilerOptions options = new CompilerOptions();
-            options.fileName = "<filter-install>";
-            options.code = beginPart;
-            PerlLanguageProvider.executePerlCode(options, false);
-        } catch (Exception e) {
-            // If execution fails, just return original source
-            return sourceCode;
-        }
-
-        // Now apply any installed filters to the remaining source
-        String filteredRemaining = applyFilters(remainingPart);
-
-        // Return the BEGIN part + filtered remaining part
-        return beginPart + filteredRemaining;
     }
 
     /**

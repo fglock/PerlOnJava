@@ -39,7 +39,7 @@ was kept in the PerlOnJava validation set.
 
 ## Progress tracking
 
-### Current status: Complete (2026-08-13)
+### Current status: Complete, including regression follow-up (2026-08-13)
 
 ### Completed phases
 
@@ -87,10 +87,26 @@ was kept in the PerlOnJava validation set.
     dependency graph within 20 minutes, so no target-test differential was
     available. The PerlOnJava run was stopped after exceeding the intended
     bound while still resolving dependencies.
+- [x] Core-suite regression follow-up (2026-08-13)
+  - Rebased the branch onto current master and removed the obsolete whole-file
+    source-filter pre-pass. Explicit `BEGIN` filters now run only through the
+    parser-time path, fixing the double filtering seen in `op/incfilter.t`.
+  - Preserved the existing `JPERL_UNIMPLEMENTED=warn` dynamic-regex fallback
+    while retaining normal-mode deferred errors for unused `(??{...})`
+    patterns. Regex cache entries now distinguish those modes.
+  - Replaced the bounded strong B-address registry with weak entries so
+    address recovery does not extend Perl value lifetimes.
+  - Exact runs against an isolated current-master build matched the repaired
+    branch for the remaining reported core-test counts. `op/incfilter.t`
+    improved from the regressed 14 tests to 158 passing assertions.
+  - Revalidated `Hades::Realm::OO` (40 tests),
+    `B::Hooks::AtRuntime::OnlyCoreDependencies` (12 tests), `App::calendr`
+    (2 tests), and `Authen::Simple::Kerberos` (functional suite); all passed.
+  - Full project `make` passed after the final regression repairs.
 
 ### Next steps
 
-1. Open a PR and monitor CI.
+1. Update PR #949 and monitor CI.
 
 ### Open questions
 

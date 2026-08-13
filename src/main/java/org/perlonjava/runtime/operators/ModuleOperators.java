@@ -169,9 +169,6 @@ public class ModuleOperators {
         // Variable for storing @INC hook reference
         RuntimeScalar incHookRef = null;
 
-        // Flag to indicate if source filters should be applied
-        boolean shouldApplyFilters = false;
-
         // ===== STEP 1: Handle ARRAY reference =====
         // Array format: [coderef|filehandle, state...]
         if (runtimeScalar.type == RuntimeScalarType.ARRAYREFERENCE &&
@@ -261,8 +258,6 @@ public class ModuleOperators {
                         }
                     }
                     // Continue to execution phase with the (possibly filtered) code
-                    // Enable BEGIN filter preprocessing since the filtered code might contain BEGIN blocks
-                    shouldApplyFilters = true;
                 }
                 // Case 1c: Array with scalar reference [\'string', $fh, &filter, state...]
                 // Concatenate multiple sources (scalar ref + filehandle + optional filter)
@@ -333,8 +328,6 @@ public class ModuleOperators {
 
                     // Concatenate unfiltered prefix + filtered filehandle content
                     code = unfilteredPrefix.toString() + filterableContent;
-                    // Enable BEGIN filter preprocessing
-                    shouldApplyFilters = true;
                 }
             }
         }
@@ -434,9 +427,6 @@ public class ModuleOperators {
         else if (runtimeScalar.type == RuntimeScalarType.GLOB || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE) {
             // Read entire contents from filehandle
             code = Readline.readline(runtimeScalar, RuntimeContextType.LIST).toString();
-            // Enable source filter preprocessing for filehandle sources
-            // This allows BEGIN blocks to install filters that transform the remaining source
-            shouldApplyFilters = true;
             // Use the stringified glob (e.g. "GLOB(0x...)") as the filename so
             // __FILE__ resolves to a sensible non-null value.  Real Perl uses
             // the same scheme — see perl5_t/t/op/incfilter.t which asserts
@@ -450,9 +440,6 @@ public class ModuleOperators {
             if (deref != null) {
                 // Treat the dereferenced value as source code
                 code = deref.toString();
-                // Enable source filter preprocessing for scalar ref sources
-                // This allows BEGIN blocks to install filters
-                shouldApplyFilters = true;
                 // Use a special filename for error reporting
                 actualFileName = "(eval)";
             }
@@ -571,7 +558,6 @@ public class ModuleOperators {
                             }
                             if (hookSource != null) {
                                 code = hookSource.code;
-                                shouldApplyFilters = shouldApplyFilters || hookSource.applySourceFilters;
                                 actualFileName = fileName;
                                 incHookRef = dirScalar;
                                 break;
@@ -659,7 +645,6 @@ public class ModuleOperators {
         CompilerOptions parsedArgs = new CompilerOptions();
         parsedArgs.fileName = actualFileName;
         parsedArgs.incHook = incHookRef;
-        parsedArgs.applySourceFilters = shouldApplyFilters;  // Enable source filter preprocessing if needed
         parsedArgs.disassembleEnabled = RuntimeCode.isDisassemble();
         parsedArgs.useInterpreter = RuntimeCode.isUseInterpreter();
         if (jarPrefetchedBytes != null) {
@@ -1083,11 +1068,9 @@ public class ModuleOperators {
 
     private static class IncHookSource {
         final String code;
-        final boolean applySourceFilters;
 
-        IncHookSource(String code, boolean applySourceFilters) {
+        IncHookSource(String code) {
             this.code = code;
-            this.applySourceFilters = applySourceFilters;
         }
     }
 
@@ -1155,15 +1138,15 @@ public class ModuleOperators {
 
         if (filehandle != null) {
             String body = readIncHookFilehandle(filehandle, sourceSub, state);
-            return new IncHookSource(prefix + body, true);
+            return new IncHookSource(prefix + body);
         }
 
         if (sourceSub != null) {
-            return new IncHookSource(prefix + readIncHookGenerator(sourceSub, state), true);
+            return new IncHookSource(prefix + readIncHookGenerator(sourceSub, state));
         }
 
         if (!prefix.isEmpty()) {
-            return new IncHookSource(prefix.toString(), true);
+            return new IncHookSource(prefix.toString());
         }
 
         return null;
