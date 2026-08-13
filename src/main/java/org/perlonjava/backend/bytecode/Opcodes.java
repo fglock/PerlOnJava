@@ -2458,6 +2458,9 @@ public class Opcodes {
     /** Refalias an lvalue proxy to a scalar reference. Format: ALIAS_LVALUE_REFERENCE targetReg refReg. */
     public static final short ALIAS_LVALUE_REFERENCE = 517;
 
+    /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
+    public static final short ARRAY_LAST_INDEX_LVALUE = 518;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

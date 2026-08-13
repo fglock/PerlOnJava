@@ -433,6 +433,14 @@ public class CompileAssignment {
      * Handles all forms of assignment including my/our/local, scalars, arrays, hashes, and slices.
      */
     public static void compileAssignmentOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
+        if (node.left instanceof OperatorNode leftOperator
+                && leftOperator.operator.equals("substr")
+                && leftOperator.operand instanceof ListNode arguments
+                && arguments.elements.size() > 3) {
+            bytecodeCompiler.throwCompilerException(
+                    "Can't modify substr in scalar assignment");
+            return;
+        }
         // Determine the calling context for the RHS based on LHS type
         // Use LValueVisitor to properly determine context for all LHS patterns
         // including $array[index], $hash{key}, etc.

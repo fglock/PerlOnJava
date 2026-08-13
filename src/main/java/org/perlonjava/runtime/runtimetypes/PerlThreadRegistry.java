@@ -57,6 +57,22 @@ public final class PerlThreadRegistry {
         return threads.size();
     }
 
+    /** Format Perl's process-exit diagnostic for attached, unjoined children. */
+    public String activeThreadExitWarning() {
+        int running = 0;
+        int finished = 0;
+        for (PerlThreadControlBlock thread : threads.values()) {
+            if (thread.isDetached()) continue;
+            if (thread.isRunning()) running++;
+            else finished++;
+        }
+        if (running == 0 && finished == 0) return "";
+        return "Perl exited with active threads:\n"
+                + "\t" + running + " running and unjoined\n"
+                + "\t" + finished + " finished and unjoined\n"
+                + "\t0 running and detached\n";
+    }
+
     /**
      * Serialize only simultaneous definitions of the same user Unicode property.
      * Different property names remain independent, matching Perl's regex lock

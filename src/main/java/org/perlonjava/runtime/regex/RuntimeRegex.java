@@ -346,6 +346,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return compileSynchronized(patternString, modifiers);
     }
 
+    /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
+    public static boolean requiresRuntimeUnicodePropertyResolution(String patternString) {
+        if (patternString == null) return false;
+        return java.util.regex.Pattern.compile(
+                "\\\\[pP]\\{\\^?\\s*(?:[^}]*::)?[Ii][sSnN][^}]+}")
+                .matcher(patternString).find();
+    }
+
     private static synchronized RuntimeRegex compileSynchronized(
             String patternString, String modifiers) {
         // Debug logging

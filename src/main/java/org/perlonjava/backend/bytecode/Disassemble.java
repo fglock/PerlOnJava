@@ -963,6 +963,11 @@ public class Disassemble {
                         arrayReg = interpretedCode.bytecode[pc++];
                         sb.append("ARRAY_SIZE r").append(rd).append(" = size(r").append(arrayReg).append(")\n");
                         break;
+                    case Opcodes.ARRAY_LAST_INDEX_LVALUE:
+                        rd = interpretedCode.bytecode[pc++];
+                        arrayReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_LAST_INDEX_LVALUE r").append(rd).append(" = $#r").append(arrayReg).append("\n");
+                        break;
                     case Opcodes.CREATE_ARRAY:
                         rd = interpretedCode.bytecode[pc++];
                         int listSourceReg = interpretedCode.bytecode[pc++];

@@ -4,6 +4,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
@@ -274,6 +275,7 @@ public class EmitRegex {
         ListNode operand = (node.operand instanceof ListNode) 
             ? (ListNode) node.operand 
             : ListNode.makeList(node.operand);
+        validateLiteralRegex(emitterVisitor, operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         // Process pattern and flags
@@ -290,6 +292,21 @@ public class EmitRegex {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
         }
+    }
+
+    /** Validate non-interpolated qr// at CV compilation, as Perl does. */
+    private static void validateLiteralRegex(EmitterVisitor emitterVisitor, ListNode operand) {
+        if (operand.elements.size() < 2
+                || !(operand.elements.get(0) instanceof StringNode pattern)
+                || !(operand.elements.get(1) instanceof StringNode flags)
+                || RuntimeRegex.requiresRuntimeUnicodePropertyResolution(pattern.value)) {
+            return;
+        }
+        String modifiers = flags.value;
+        if (unicodeStringsEnabled(emitterVisitor) && !modifiers.contains("u")) {
+            modifiers += "u";
+        }
+        RuntimeRegex.compile(pattern.value, modifiers);
     }
 
     /**

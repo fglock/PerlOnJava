@@ -86,9 +86,20 @@ public class Main {
      * @param args Command-line arguments.
      */
     public static void main(String[] args) {
-        try (PerlRuntime.Binding runtimeBinding = new PerlRuntime().bind()) {
+        PerlRuntime runtime = new PerlRuntime();
+        installThreadExitDiagnostic(runtime);
+        try (PerlRuntime.Binding runtimeBinding = runtime.bind()) {
             run(args);
         }
+    }
+
+    private static void installThreadExitDiagnostic(PerlRuntime runtime) {
+        Thread hook = Thread.ofPlatform().name("perlonjava-thread-exit-diagnostic")
+                .unstarted(() -> {
+                    String warning = runtime.threadRegistry().activeThreadExitWarning();
+                    if (!warning.isEmpty()) System.err.print(warning);
+                });
+        Runtime.getRuntime().addShutdownHook(hook);
     }
 
     private static void run(String[] args) {

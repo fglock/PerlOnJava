@@ -1390,6 +1390,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeSetArrayLastIndex(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_LAST_INDEX_LVALUE -> {
+                                pc = InlineOpcodeHandler.executeArrayLastIndexLvalue(bytecode, pc, registers);
+                            }
+
                             case Opcodes.CREATE_ARRAY -> {
                                 pc = InlineOpcodeHandler.executeCreateArray(bytecode, pc, registers);
                             }
@@ -1551,7 +1555,8 @@ public class BytecodeInterpreter {
                                 // Convert to scalar if called in scalar or lvalue context
                                 if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
                                     RuntimeBase scalarResult = result.scalar();
-                                    registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
+                                    registers[rd] = context == RuntimeContextType.SCALAR && isImmutableProxy(scalarResult)
+                                            ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {
                                     registers[rd] = result;
                                 }
@@ -1672,7 +1677,8 @@ public class BytecodeInterpreter {
                                 // Convert to scalar if called in scalar or lvalue context
                                 if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
                                     RuntimeBase scalarResult = result.scalar();
-                                    registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
+                                    registers[rd] = context == RuntimeContextType.SCALAR && isImmutableProxy(scalarResult)
+                                            ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {
                                     registers[rd] = result;
                                 }

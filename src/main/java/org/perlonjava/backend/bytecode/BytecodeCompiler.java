@@ -1344,7 +1344,8 @@ public class BytecodeCompiler implements Visitor {
             if (!isLastStatement && !(stmt instanceof BinaryOperatorNode && ((BinaryOperatorNode) stmt).operator.equals("="))) {
                 stmtContext = RuntimeContextType.VOID;
             } else {
-                stmtContext = currentCallContext;
+                stmtContext = isLastStatement && node.getBooleanAnnotation("subroutineIsLvalue")
+                        ? RuntimeContextType.LVALUE : currentCallContext;
             }
 
             compileNode(stmt, stmtTarget, stmtContext);

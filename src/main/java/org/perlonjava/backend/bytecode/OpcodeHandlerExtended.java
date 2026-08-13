@@ -918,15 +918,17 @@ public class OpcodeHandlerExtended {
         boolean bytesMode = bytecode[pc++] != 0;
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
+        RuntimeScalar regex = registers[regexReg].scalar();
+        RuntimeScalar string = registers[stringReg].scalar();
         if (bytesMode) {
             registers[rd] = RuntimeRegex.matchRegexBytes(
-                    (RuntimeScalar) registers[regexReg],
-                    (RuntimeScalar) registers[stringReg],
+                    regex,
+                    string,
                     ctx);
         } else {
             registers[rd] = RuntimeRegex.matchRegex(
-                    (RuntimeScalar) registers[regexReg],
-                    (RuntimeScalar) registers[stringReg],
+                    regex,
+                    string,
                     ctx);
         }
         return pc;

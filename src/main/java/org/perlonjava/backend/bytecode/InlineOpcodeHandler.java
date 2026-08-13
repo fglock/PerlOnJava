@@ -667,6 +667,17 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    /**
+     * Return the mutable array-last-index cell used by lvalue expressions.
+     * Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg
+     */
+    public static int executeArrayLastIndexLvalue(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        registers[rd] = RuntimeArray.indexLastElem((RuntimeArray) registers[arrayReg]);
+        return pc;
+    }
+
 
     /**
      * Create array reference from list: rd = new RuntimeArray(rs_list).createReference()

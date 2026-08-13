@@ -774,6 +774,14 @@ public class EmitVariable {
     static void handleAssignOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
+        if (node.left instanceof OperatorNode leftOperator
+                && leftOperator.operator.equals("substr")
+                && leftOperator.operand instanceof ListNode arguments
+                && arguments.elements.size() > 3) {
+            throw new PerlCompilerException(node.tokenIndex,
+                    "Can't modify substr in scalar assignment", ctx.errorUtil);
+        }
+
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("SET " + node);
         MethodVisitor mv = ctx.mv;
         // Determine the assign type based on the left side.
