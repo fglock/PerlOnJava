@@ -115,7 +115,7 @@ public class EmitLogicalOperator {
         // (with undef value) during lvalue resolution, before evaluating the boolean condition.
         mv.visitInsn(Opcodes.DUP);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                "vivifyLvalue", "()V", false);
+                "vivifyLogicalAssignmentLvalue", "()V", false);
 
         int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledLeft = leftSlot >= 0;

@@ -101,6 +101,13 @@ public class TieScalar extends TiedVariableBase {
         }
         inMagic = true;
         try {
+            // Perl updates the SV's backing value before invoking STORE.  Magic
+            // is suppressed while STORE runs, so a recursive read of the same
+            // scalar sees the value being assigned.  Old tie classes use this
+            // to keep a tied hash element and its owner object in sync.
+            RuntimeScalar backingValue = new RuntimeScalar(v);
+            previousValue.type = backingValue.type;
+            previousValue.value = backingValue.value;
             return tieCall("STORE", v);
         } finally {
             inMagic = false;

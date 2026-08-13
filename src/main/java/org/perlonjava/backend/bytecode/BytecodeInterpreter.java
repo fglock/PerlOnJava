@@ -2735,7 +2735,7 @@ public class BytecodeInterpreter {
                                 int reg = bytecode[pc++];
                                 RuntimeBase val = registers[reg];
                                 if (val instanceof RuntimeScalar rs) {
-                                    rs.vivifyLvalue();
+                                    rs.vivifyLogicalAssignmentLvalue();
                                 }
                             }
 

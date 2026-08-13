@@ -406,8 +406,17 @@ public class IdentifierParser {
                 if (isFirstToken && token.type == LexerTokenType.NUMBER) {
                     // Numeric variables like $0, $1, and @0 are never package-qualified.
                     // In strings, "$0::Foo" is $0 followed by literal "::Foo".
-                    variableName.append(token.text);
-                    parser.tokenIndex++;
+                    // The number lexer also accepts underscores for numeric literals, but
+                    // captures stop before an underscore: "$1_000" means $1 followed by
+                    // the literal "_000", not a variable named $1_000.
+                    int underscore = token.text.indexOf('_');
+                    if (underscore >= 0) {
+                        variableName.append(token.text, 0, underscore);
+                        token.text = token.text.substring(underscore);
+                    } else {
+                        variableName.append(token.text);
+                        parser.tokenIndex++;
+                    }
                     return variableName.toString();
                 }
                 if (token.text.equals("$") && (nextToken.text.equals("$")

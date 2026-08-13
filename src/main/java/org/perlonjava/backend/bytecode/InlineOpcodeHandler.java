@@ -1282,7 +1282,11 @@ public class InlineOpcodeHandler {
             registers[rd] = ensureMutableScalar(registers[rd]);
         }
         // Note: += does NOT warn for uninitialized values in Perl
-        MathOperators.addAssign((RuntimeScalar) registers[rd], (RuntimeScalar) registers[rs]);
+        RuntimeBase right = registers[rs];
+        RuntimeScalar rightScalar = right instanceof RuntimeScalar
+                ? (RuntimeScalar) right
+                : right.scalar();
+        MathOperators.addAssign((RuntimeScalar) registers[rd], rightScalar);
         return pc;
     }
 
