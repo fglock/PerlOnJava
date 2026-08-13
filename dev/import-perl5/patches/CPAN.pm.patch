@@ -1,9 +1,6 @@
---- perl5/cpan/CPAN/lib/CPAN.pm	2026-04-10 11:04:21
-+++ src/main/perl/lib/CPAN.pm	2026-08-10 10:12:28
-@@ -703,6 +703,13 @@
-     CPAN::HandleConfig->load unless $CPAN::Config_loaded++;
-     CPAN->debug("mgr[$mgr] class[$class]") if $CPAN::DEBUG;
-     CPAN::Index->reload;
+--- perl5/cpan/CPAN/lib/CPAN.pm
++++ src/main/perl/lib/CPAN.pm
+@@ -705,0 +706,7 @@
 +    # Metadata caches can contain hundreds of thousands of entries.  Keep
 +    # startup cheap by creating their mutable session wrappers only when a
 +    # command really asks to enumerate the whole class.
@@ -11,29 +8,56 @@
 +        $META->{readwrite}{$class}{$id} ||=
 +            $class->new(ID => $id, RO => $META->{readonly}{$class}{$id});
 +    }
-     values %{ $META->{readwrite}{$class} }; # unsafe meta access, ok
- }
- 
-@@ -1320,7 +1327,9 @@
-     $id ||= "";
-     # unsafe meta access, ok?
-     return $META->{readwrite}{$class}{$id} if exists $META->{readwrite}{$class}{$id};
+@@ -1323 +1330,3 @@
 -    $META->{readwrite}{$class}{$id} ||= $class->new(ID => $id);
 +    my $ro = $META->{readonly}{$class}{$id};
 +    $META->{readwrite}{$class}{$id} ||=
 +        $class->new(ID => $id, defined($ro) ? (RO => $ro) : ());
- }
- 
- #-> sub CPAN::new ;
-@@ -1441,7 +1450,10 @@
-     if ($foul) {
-         $CPAN::Frontend->mywarn("Lost build_dir detected ($foul), giving up all cached test results of currently running session.\n");
-         for my $dbd (sort keys %{$self->{is_tested}}) { # distro-build-dir
+@@ -1444 +1453,4 @@
 -        SEARCH: for my $d (sort { $a->id cmp $b->id } $CPAN::META->all_objects("CPAN::Distribution")) {
 +        # build_dir and test state exist only on mutable objects touched in
 +        # this session; cached read-only distributions cannot match here.
 +        SEARCH: for my $d (sort { $a->id cmp $b->id }
 +                              values %{ $CPAN::META->{readwrite}{'CPAN::Distribution'} || {} }) {
-                 if ($d->{build_dir} && $d->{build_dir} eq $dbd) {
-                     $CPAN::Frontend->mywarn(sprintf "Flushing cache for %s\n", $d->pretty_id);
-                     $d->fforce("");
+@@ -1479 +1491,2 @@
+-    my @dirs = map {("$_/blib/arch", "$_/blib/lib")} $self->_list_sorted_descending_is_tested;
++    my @tested_build_dirs = $self->_list_sorted_descending_is_tested;
++    my @dirs = map {("$_/blib/arch", "$_/blib/lib")} @tested_build_dirs;
+@@ -1480,0 +1494,9 @@
++
++    # set_perl5lib is called at every distribution phase.  Feeding the
++    # PERL5LIB produced by the previous call back into the next one used to
++    # duplicate the complete dependency graph repeatedly.  Large graphs such
++    # as Dist::Zilla's eventually consumed gigabytes while CPAN rescanned the
++    # same paths.  Preserve first-seen order while making phase setup
++    # idempotent.
++    my %seen_perllib;
++    my @combined_dirs = grep { !$seen_perllib{$_}++ } @dirs, @env;
+@@ -1481,0 +1504,18 @@
++    # A tested-but-not-yet-installed prerequisite can provide command-line
++    # tools as well as Perl libraries.  CPAN already exposes its blib/lib and
++    # blib/arch through PERL5LIB; expose blib/script through PATH for the same
++    # lifetime.  This lets downstream build rules invoke declared tools such
++    # as Template Toolkit's `tpage` without prematurely installing the
++    # prerequisite.  Repeated phase setup must remain idempotent because the
++    # same dependency graph is visited during configure, make, and test.
++    my @script_dirs = grep { -d $_ }
++                      map { "$_/blib/script" } @tested_build_dirs;
++    if (@script_dirs) {
++        my @path = defined($ENV{PATH}) && length($ENV{PATH})
++                 ? split(/\Q$Config::Config{path_sep}\E/, $ENV{PATH})
++                 : ();
++        my %seen;
++        $ENV{PATH} = join $Config::Config{path_sep},
++                          grep { !$seen{$_}++ } @script_dirs, @path;
++    }
++
+@@ -1484 +1524 @@
+-        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @dirs, @env;
++        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @combined_dirs;
+@@ -1494 +1534 @@
+-        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @dirs, @env;
++        $ENV{PERL5LIB} = join $Config::Config{path_sep}, @combined_dirs;
+@@ -1497 +1537 @@
+-        my $newenv = join $Config::Config{path_sep}, @dirs, @env;
++        my $newenv = join $Config::Config{path_sep}, @combined_dirs;
