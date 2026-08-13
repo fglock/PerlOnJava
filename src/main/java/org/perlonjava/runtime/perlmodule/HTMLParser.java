@@ -137,6 +137,7 @@ public class HTMLParser extends PerlModuleBase {
         // State tracking
         pstate.put("_parsing", scalarFalse);
         pstate.put("_eof", scalarFalse);
+        pstate.put("_started", scalarFalse);
         pstate.put("_buf", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
         pstate.put("_in_cdata", scalarFalse);
@@ -166,6 +167,10 @@ public class HTMLParser extends PerlModuleBase {
             if (args.size() > 1) {
                 RuntimeScalar chunk = args.get(1);
                 if (chunk.getDefinedBoolean()) {
+                    if (!pstate.get("_started").getBoolean()) {
+                        pstate.put("_started", scalarTrue);
+                        fireEvent(self, selfHash, pstate, "start_document");
+                    }
                     String chunkStr = chunk.toString();
 
                     // When utf8_mode is set and the input is a BYTE_STRING, try to
@@ -218,6 +223,10 @@ public class HTMLParser extends PerlModuleBase {
         } else {
             pstate.put("_parsing", scalarTrue);
             try {
+                if (!pstate.get("_started").getBoolean()) {
+                    pstate.put("_started", scalarTrue);
+                    fireEvent(self, selfHash, pstate, "start_document");
+                }
                 // Flush any remaining buffered text
                 String remaining = pstate.get("_buf").toString();
                 if (!remaining.isEmpty()) {
@@ -226,6 +235,7 @@ public class HTMLParser extends PerlModuleBase {
                 }
                 // Fire end_document event
                 fireEvent(self, selfHash, pstate, "end_document");
+                pstate.put("_started", scalarFalse);
             } finally {
                 pstate.put("_parsing", scalarFalse);
             }
@@ -440,13 +450,22 @@ public class HTMLParser extends PerlModuleBase {
     private static void fireEvent(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate, String eventName, RuntimeScalar... eventArgs) {
         RuntimeHash handlers = pstate.get("_handlers").hashDeref();
         RuntimeScalar cb = handlers.get(eventName + "_cb");
+        String handlerName = eventName;
 
         if (cb == null || !cb.getDefinedBoolean()) {
-            return;
+            // HTML::Parser's default handler receives every event which does
+            // not have its own handler.  Plugins commonly use this to process
+            // a complete document with one callback (TagRescue is one such
+            // consumer), so silently dropping these events loses all output.
+            cb = handlers.get("default_cb");
+            handlerName = "default";
+            if (cb == null || !cb.getDefinedBoolean()) {
+                return;
+            }
         }
 
         // Parse argspec to determine what arguments to pass
-        RuntimeScalar argspecSv = handlers.get(eventName + "_argspec");
+        RuntimeScalar argspecSv = handlers.get(handlerName + "_argspec");
         String argspec = (argspecSv != null && argspecSv.getDefinedBoolean()) ?
                 argspecSv.toString() : "";
 
@@ -557,8 +576,11 @@ public class HTMLParser extends PerlModuleBase {
             switch (token) {
                 case "tagname":
                 case "tag":
-                    // First arg for start/end events is tagname
-                    if (eventArgs.length > 0) {
+                    // Only tag events have a tag name. Text and document
+                    // events also carry a first internal argument, but it is
+                    // not a tag and Perl's HTML::Parser returns undef here.
+                    if (("start".equals(eventName) || "end".equals(eventName))
+                            && eventArgs.length > 0) {
                         RuntimeArray.push(result, eventArgs[0]);
                     } else {
                         RuntimeArray.push(result, scalarUndef);
