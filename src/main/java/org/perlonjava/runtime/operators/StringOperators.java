@@ -511,8 +511,20 @@ public class StringOperators {
         RuntimeScalar overloaded = tryStringConcatOverload(runtimeScalar, b);
         if (overloaded != null) return overloaded;
 
-        RuntimeScalar aResolved = stringifyForStringContext(resolveTiedStringOperand(runtimeScalar));
-        RuntimeScalar bResolved = stringifyForStringContext(resolveTiedStringOperand(b));
+        RuntimeScalar aResolved = resolveTiedStringOperand(runtimeScalar);
+        RuntimeScalar bResolved = resolveTiedStringOperand(b);
+        // Most callers select the warning-aware concat at compile time. Eval
+        // STRING can change ${^WARNING_BITS} from a BEGIN block, after the
+        // enclosing call site was compiled, so retain a cheap undef-only
+        // runtime guard here as well. WarnDie performs the lexical category
+        // check and dispatches a localized __WARN__ handler when applicable.
+        if (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean()) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+        }
+        aResolved = stringifyForStringContext(aResolved);
+        bResolved = stringifyForStringContext(bResolved);
         String bStr = bResolved.toString();
         String aStr = aResolved.toString();
 

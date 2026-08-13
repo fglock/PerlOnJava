@@ -2052,6 +2052,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // IMPORTANT: The parseSymbolTable starts with the captured flags so that
             // the eval code is parsed with the correct feature/strict/warning context
             ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+            // BEGIN blocks execute while eval STRING is parsed. Point the
+            // special-variable pragma facade at this eval's private scope so
+            // assignments to $^H/${^WARNING_BITS} affect the generated body,
+            // not the caller's saved compiler scope. The outer finally restores
+            // the previous scope on every success/cache/error path.
+            setCurrentScope(parseSymbolTable);
 
             // CRITICAL: Pre-create aliases for captured variables BEFORE parsing
             // This allows BEGIN blocks in the eval string to access outer lexical variables.
@@ -4266,6 +4272,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // DBIC test runs (t/60core.t, t/96_is_deteministic_value.t,
     // t/cdbi/68-inflate_has_a.t).
     public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        // Java/native callback entry points normally dispatch through this
+        // static facade.  Bind before any warning/caller/cleanup facade is
+        // consulted; binding only inside RuntimeCode.apply(instance) is too
+        // late for a callback arriving on an otherwise unbound provider thread.
+        if (runtimeScalar != null && runtimeScalar.type == RuntimeScalarType.CODE
+                && runtimeScalar.value instanceof RuntimeCode callback
+                && callback.boundRuntime != null
+                && PerlRuntime.currentOrNull() != callback.boundRuntime) {
+            try (PerlRuntime.Binding ignored = callback.boundRuntime.bind()) {
+                return apply(runtimeScalar, a, callContext);
+            }
+        }
         // NOTE: flush() was removed from here. Return values from nested calls
         // (e.g., receiver(coerce => quote_sub(...))) may have pending refCount
         // decrements from their scope exits. Flushing here would decrement them
@@ -4420,6 +4438,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // invocation, so enterCall/exitCall depth tracking is
                     // not re-entered (no inTailCallTrampoline bump needed).
                 } else {
+                    if (result instanceof RuntimeControlFlowList) {
+                        MyVarCleanupStack.unwindTo(cleanupMark);
+                        MortalList.flush();
+                    }
                     // Mortal-ize blessed refs with refCount==0 in void-context calls.
                     // These are objects that were created but never stored in a named
                     // variable (e.g., discarded return values from constructors).

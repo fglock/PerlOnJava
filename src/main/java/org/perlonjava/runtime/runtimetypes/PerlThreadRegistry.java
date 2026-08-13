@@ -29,7 +29,12 @@ public final class PerlThreadRegistry {
     }
 
     void remove(PerlThreadControlBlock thread) {
-        if (threads.remove(thread.id(), thread)) terminalThreads.put(thread.id(), thread);
+        if (threads.get(thread.id()) != thread) return;
+        // Publish the retained terminal record before withdrawing the active
+        // record. Readers of getKnown() must never observe a gap between the
+        // two maps while a child completes, joins, or detaches.
+        terminalThreads.put(thread.id(), thread);
+        if (!threads.remove(thread.id(), thread)) terminalThreads.remove(thread.id(), thread);
     }
 
     public PerlThreadControlBlock get(long id) {
@@ -94,6 +99,8 @@ public final class PerlThreadRegistry {
     }
 
     private static String shortPropertyName(String name) {
+        int modeSeparator = name.indexOf('\0');
+        if (modeSeparator >= 0) name = name.substring(0, modeSeparator);
         int separator = name.lastIndexOf("::");
         return separator >= 0 ? name.substring(separator + 2) : name;
     }

@@ -148,13 +148,15 @@ This is 2-6x faster than typical pure Perl PSGI servers (Starman, Gazelle, Twigg
 =head2 Concurrency Model
 
 This handler uses Netty's async I/O to handle multiple concurrent connections
-on a B<single thread>. This design choice is intentional:
+through one captured PSGI application runtime. This design choice is
+intentional:
 
 =over 4
 
-=item * PerlOnJava does not currently support threads or fork()
+=item * PerlOnJava supports isolated ithreads, but one captured PSGI runtime is
+not concurrently callable merely because ithreads are available
 
-=item * Single-threaded async I/O avoids all thread-safety issues
+=item * One application event loop avoids concurrent calls into that runtime
 
 =item * I/O-bound applications (most web apps) work efficiently
 

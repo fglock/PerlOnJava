@@ -288,11 +288,12 @@ threads are the default; virtual threads are experimental.
 
 Remaining work:
 
-- Complete the currently partial applicable core suites and Storable thread test.
-- Implement thread signals and the remaining `object`/`wantarray` surface.
-- Decide whether effective per-thread stack sizing can be exposed safely.
-- Validate native callback/resource behavior and virtual-thread diagnostics on
-  the supported Java 24 baseline.
+- Complete the currently partial applicable core and regex suites.
+- Extend native-resource inheritance beyond the explicitly supported internal
+  pipe policy only when ownership and last-close semantics are defined.
+- Decide which blessed, tied, or magical values can safely join the supported
+  `threads::shared` tranche.
+- Keep runtime pooling disabled until the reset-equivalence contract is proven.
 
 ---
 

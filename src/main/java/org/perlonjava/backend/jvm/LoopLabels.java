@@ -43,6 +43,16 @@ public class LoopLabels {
     public int cleanupScopeIndex = -1;
 
     /**
+     * Lexical scope lower bound for {@code last}. Exiting a labeled block also
+     * tears down variables declared by the block itself, while next/redo keep
+     * that outer loop scope alive for the following iteration.
+     */
+    public int lastCleanupScopeIndex = -1;
+
+    /** JVM local containing the MyVarCleanupStack mark for this loop body. */
+    public int cleanupMarkSlot = -1;
+
+    /**
      * The context type in which this loop operates
      */
     public int context;

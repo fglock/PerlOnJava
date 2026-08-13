@@ -24,8 +24,10 @@ public final class PerlThreadControlBlock {
     private final EntryPoint entryPoint;
     private final int context;
     private final long stackSize;
+    private final RuntimeIO parentErrorOutput;
     private final CountDownLatch finished = new CountDownLatch(1);
     private final AtomicBoolean joinClaimed = new AtomicBoolean();
+    private final AtomicBoolean abnormalTerminationReported = new AtomicBoolean();
     private volatile State state = State.NEW;
     private volatile RuntimeBase result;
     private volatile Throwable error;
@@ -41,6 +43,7 @@ public final class PerlThreadControlBlock {
         this.childRuntime = parent.snapshotCloneForThread(registry, id).runtime();
         this.context = RuntimeContextType.SCALAR;
         this.stackSize = parent.defaultPerlThreadStackSize();
+        this.parentErrorOutput = RuntimeIO.getStderr();
         childRuntime.setPerlThreadContext(context);
         childRuntime.setPerlThreadStackSize(stackSize);
         childRuntime.setPerlThreadExitOnly(parent.defaultPerlThreadExitOnly());
@@ -57,6 +60,7 @@ public final class PerlThreadControlBlock {
         this.childRuntime = snapshot.runtime();
         this.context = context;
         this.stackSize = stackSize;
+        this.parentErrorOutput = RuntimeIO.getStderr();
         childRuntime.setPerlThreadContext(context);
         childRuntime.setPerlThreadStackSize(stackSize);
         childRuntime.setPerlThreadExitOnly(exitOnly);
@@ -128,6 +132,7 @@ public final class PerlThreadControlBlock {
         } finally {
             finished.countDown();
             if (detached) {
+                reportAbnormalTermination();
                 registry.remove(this);
             }
         }
@@ -166,6 +171,7 @@ public final class PerlThreadControlBlock {
         detached = true;
         if (finished.getCount() == 0) {
             state = State.DETACHED;
+            reportAbnormalTermination();
             registry.remove(this);
         }
     }
@@ -190,6 +196,14 @@ public final class PerlThreadControlBlock {
         PerlSignalQueue.enqueue(childRuntime.signalState, signal);
         Thread javaThread = platformThread;
         if (javaThread != null) javaThread.interrupt();
+    }
+
+    private void reportAbnormalTermination() {
+        Throwable failure = error;
+        if (failure == null || !abnormalTerminationReported.compareAndSet(false, true)) return;
+        String message = failure.getMessage();
+        if (message == null || message.isEmpty()) message = failure.toString();
+        parentErrorOutput.write("Thread " + id + " terminated abnormally: " + message + "\n");
     }
 
     private record Outcome(RuntimeBase value, Throwable error) {}

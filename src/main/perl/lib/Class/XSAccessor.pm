@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(refaddr reftype);
+use Sub::Util ();
 use Class::XSAccessor::Heavy;
 
 our $VERSION = '1.19';
@@ -129,6 +130,7 @@ sub _check_hash_invocant {
 
 sub _install {
     my ($name, $code) = @_;
+    $code = Sub::Util::set_subname($name, $code);
     $_is_emulated_xsub{refaddr($code)} = 1;
     no strict 'refs';
     no warnings 'redefine';

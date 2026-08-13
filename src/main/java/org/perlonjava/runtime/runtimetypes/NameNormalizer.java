@@ -30,6 +30,15 @@ public class NameNormalizer {
         public State() {
             blessStrCache.put(0, "");
         }
+
+        void snapshotInto(State target) {
+            target.blessIdCache.clear();
+            target.blessIdCache.putAll(blessIdCache);
+            target.blessStrCache.clear();
+            target.blessStrCache.putAll(blessStrCache);
+            target.currentBlessId = currentBlessId;
+            target.currentOverloadedBlessId = currentOverloadedBlessId;
+        }
     }
 
     private static State state() {

@@ -38,7 +38,7 @@ public class EmitControlFlow {
                 && (aggregateOp.operator.equals("@") || aggregateOp.operator.equals("%"));
     }
 
-    private static void emitSubroutineExitCleanup(EmitterContext ctx) {
+    static void emitSubroutineExitCleanup(EmitterContext ctx) {
         java.util.List<Integer> scalarIndices =
                 EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(0));
         java.util.List<Integer> hashIndices =
@@ -248,16 +248,36 @@ public class EmitControlFlow {
         Label label = operator.equals("next") ? loopLabels.nextLabel
                 : operator.equals("last") ? loopLabels.lastLabel
                 : loopLabels.redoLabel;
-        emitLoopControlScopeCleanup(ctx, loopLabels);
+        emitLoopControlScopeCleanup(ctx, loopLabels, operator.equals("last"));
         emitMortalFlushAboveMark(ctx);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
     }
 
-    private static void emitLoopControlScopeCleanup(EmitterContext ctx, LoopLabels loopLabels) {
-        if (loopLabels.cleanupScopeIndex < 0) {
+    private static void emitLoopControlScopeCleanup(
+            EmitterContext ctx, LoopLabels loopLabels, boolean exitsLoop) {
+        int cleanupScopeIndex = exitsLoop && loopLabels.lastCleanupScopeIndex >= 0
+                ? loopLabels.lastCleanupScopeIndex
+                : loopLabels.cleanupScopeIndex;
+        if (cleanupScopeIndex < 0) {
             return;
         }
-        EmitStatement.emitScopeExitNullStores(ctx, loopLabels.cleanupScopeIndex, true);
+        EmitStatement.emitLoopControlScopeExit(ctx, cleanupScopeIndex);
+    }
+
+    static void emitLoopControlScopeCleanupForDispatcher(
+            EmitterContext ctx, LoopLabels loopLabels, boolean exitsLoop) {
+        if (loopLabels.cleanupMarkSlot >= 0) {
+            ctx.mv.visitVarInsn(Opcodes.ILOAD, loopLabels.cleanupMarkSlot);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                    "unwindTo", "(I)V", false);
+        }
+        emitLoopControlScopeCleanup(ctx, loopLabels, exitsLoop);
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "flush",
+                "()V",
+                false);
     }
 
     private static void emitMortalFlushAboveMark(EmitterContext ctx) {

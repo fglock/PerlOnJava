@@ -21,6 +21,10 @@ public class UnicodeResolver {
         return PerlRuntime.current().regexState().userUnicodePropertyCache;
     }
 
+    private static String userPropertyCacheKey(String subName, boolean caseInsensitive) {
+        return subName + (caseInsensitive ? "\u0000i" : "\u0000s");
+    }
+
     /**
      * Retrieves the Unicode code point for a given character name.
      * Supports:
@@ -287,7 +291,7 @@ public class UnicodeResolver {
 
         // Try as user-defined property (calls the Perl sub)
         String fallbackRef = propRef.startsWith("utf8::") ? "main::" + propRef.substring(6) : propRef;
-        String userProp = tryUserDefinedProperty(fallbackRef, recursionSet);
+        String userProp = tryUserDefinedProperty(fallbackRef, recursionSet, false);
         if (userProp != null) {
             // userProp is a character class pattern from unicodeSetToJavaPattern
             return new UnicodeSet("[" + userProp + "]");
@@ -439,7 +443,8 @@ public class UnicodeResolver {
      * @param recursionSet Set to track recursive property calls
      * @return The property definition string, or null if not found
      */
-    private static String tryUserDefinedProperty(String property, Set<String> recursionSet) {
+    private static String tryUserDefinedProperty(
+            String property, Set<String> recursionSet, boolean caseInsensitive) {
         // Add to recursion set
         Set<String> newRecursionSet = new HashSet<>(recursionSet);
         newRecursionSet.add(property);
@@ -452,8 +457,9 @@ public class UnicodeResolver {
         }
 
         // Check cache first — Perl only calls user-defined property subs once
-        if (userPropertyCache().containsKey(subName)) {
-            return userPropertyCache().get(subName);
+        String cacheKey = userPropertyCacheKey(subName, caseInsensitive);
+        if (userPropertyCache().containsKey(cacheKey)) {
+            return userPropertyCache().get(cacheKey);
         }
 
         // A property sub is arbitrary Perl and may block. Regex parsing occurs
@@ -472,12 +478,14 @@ public class UnicodeResolver {
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
 
         final String resolvedSubName = subName;
+        final String coordinationKey = cacheKey;
         try {
             String parsed = PerlRuntime.current().threadRegistry()
-                    .resolveUserUnicodeProperty(resolvedSubName,
+                    .resolveUserUnicodeProperty(coordinationKey,
                             () -> resolveUserDefinedProperty(
-                                    codeRef, resolvedSubName, newRecursionSet));
-            userPropertyCache().put(subName, parsed);
+                                    codeRef, resolvedSubName, newRecursionSet,
+                                    caseInsensitive));
+            userPropertyCache().put(cacheKey, parsed);
             return parsed;
         } catch (PerlCompilerException e) {
             // Re-throw Perl exceptions (like die in IsDeath)
@@ -496,10 +504,13 @@ public class UnicodeResolver {
     }
 
     private static String resolveUserDefinedProperty(RuntimeScalar codeRef, String subName,
-                                                     Set<String> recursionSet) {
+                                                     Set<String> recursionSet,
+                                                     boolean caseInsensitive) {
         try {
-            // Call the subroutine with an empty argument list
-            RuntimeArray args = new RuntimeArray();
+            // Perl passes one false/true argument for case-sensitive/folded
+            // expansion. A user property may intentionally return distinct
+            // definitions for the two modes.
+            RuntimeArray args = new RuntimeArray(new RuntimeScalar(caseInsensitive ? 1 : 0));
             RuntimeList result = RuntimeCode.apply(codeRef, args, RuntimeContextType.SCALAR);
 
             if (result.elements.isEmpty()) {
@@ -532,7 +543,7 @@ public class UnicodeResolver {
      * regex compiler. Property subs are arbitrary Perl and may block; keeping
      * them outside that compiler monitor lets unrelated property names proceed.
      */
-    static void preloadUserDefinedProperties(String pattern) {
+    static void preloadUserDefinedProperties(String pattern, boolean caseInsensitive) {
         if (pattern == null || pattern.isEmpty()) return;
 
         for (int slash = pattern.indexOf('\\'); slash >= 0;
@@ -551,17 +562,29 @@ public class UnicodeResolver {
             String property = pattern.substring(slash + 3, end).trim();
             if (property.startsWith("^")) property = property.substring(1).trim();
             if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
-                translateUnicodeProperty(property, marker == 'P');
+                translateUnicodeProperty(property, marker == 'P', new HashSet<>(),
+                        caseInsensitive);
             }
             slash = end;
         }
     }
 
     public static String translateUnicodeProperty(String property, boolean negated) {
-        return translateUnicodeProperty(property, negated, new HashSet<>());
+        return translateUnicodeProperty(property, negated, new HashSet<>(), false);
+    }
+
+    static String translateUnicodeProperty(
+            String property, boolean negated, boolean caseInsensitive) {
+        return translateUnicodeProperty(property, negated, new HashSet<>(), caseInsensitive);
     }
 
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
+        return translateUnicodeProperty(property, negated, recursionSet, false);
+    }
+
+    private static String translateUnicodeProperty(String property, boolean negated,
+                                                   Set<String> recursionSet,
+                                                   boolean caseInsensitive) {
         try {
             // Perl accepts a leading caret inside the braces as property
             // negation: \p{^Latin} is equivalent to \P{Latin}, while
@@ -583,7 +606,8 @@ public class UnicodeResolver {
             // as potentially user-defined, regardless of the character after the prefix
             // (e.g., Is_q, IsMyProp, InMyBlock all trigger user-defined lookup)
             if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
-                String userProp = tryUserDefinedProperty(property, recursionSet);
+                String userProp = tryUserDefinedProperty(
+                        property, recursionSet, caseInsensitive);
                 if (userProp != null) {
                     return wrapCharClass(userProp, negated);
                 }
@@ -770,7 +794,7 @@ public class UnicodeResolver {
                         unicodeSet.applyPropertyAlias("Block", property);
                     } catch (IllegalArgumentException ex2) {
                         // Neither worked - try user-defined property before giving up
-                        String userProp = tryUserDefinedProperty(property, recursionSet);
+                        String userProp = tryUserDefinedProperty(property, recursionSet, false);
                         if (userProp != null) {
                             return wrapCharClass(userProp, negated);
                         }
@@ -787,7 +811,8 @@ public class UnicodeResolver {
             // that should be propagated as-is
             String message = e.getMessage();
             if (message != null && (message.contains("in expansion of")
-                    || message.startsWith("Illegal user-defined property name"))) {
+                    || message.startsWith("Illegal user-defined property name")
+                    || message.startsWith("Timeout waiting for another thread"))) {
                 throw e;
             }
             throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + property, e);

@@ -330,7 +330,8 @@ public class RegexPreprocessorHelper {
             boolean negated = (nextChar == 'P');
             String property = Character.toString(s.charAt(offset + 1));
             try {
-                String translatedProperty = translateUnicodeProperty(property, negated);
+                String translatedProperty = UnicodeResolver.translateUnicodeProperty(
+                        property, negated, regexFlags.isCaseInsensitive());
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 sb.append("(?-i:").append(translatedProperty).append(")");
                 return offset + 1;
@@ -345,7 +346,8 @@ public class RegexPreprocessorHelper {
             if (endBrace != -1) {
                 String property = s.substring(offset, endBrace).trim();
                 try {
-                    String translatedProperty = translateUnicodeProperty(property, negated);
+                    String translatedProperty = UnicodeResolver.translateUnicodeProperty(
+                            property, negated, regexFlags.isCaseInsensitive());
                     sb.setLength(sb.length() - 1); // Remove the backslash
                     // Wrap in (?-i:...) to protect Unicode property from /i flag.
                     // Unicode properties should match by codepoint, not case-folded value.
@@ -776,7 +778,8 @@ public class RegexPreprocessorHelper {
                         if (pEndBrace != -1) {
                             String property = s.substring(offset + 2, pEndBrace).trim();
                             try {
-                                String translatedProperty = UnicodeResolver.translateUnicodeProperty(property, pNegated);
+                                String translatedProperty = UnicodeResolver.translateUnicodeProperty(
+                                        property, pNegated);
                                 // Remove the backslash that was already appended
                                 sb.setLength(sb.length() - 1);
                                 // Append the translated property (e.g., a character class pattern from ICU4J)

@@ -94,6 +94,10 @@ public final class SharedPerlStorage {
     /** Mark declaration storage directly, without manufacturing a reference wrapper. */
     public static RuntimeBase shareValue(RuntimeBase root) {
         if (root == null) throw new IllegalArgumentException("share requires a scalar, array, or hash reference");
+        // Validate the complete graph before publishing any shared markers.  A
+        // late blessed/tied/CODE node must not leave the prefix of the graph
+        // shared after share() reports failure.
+        validateGraph(root, Collections.newSetFromMap(new IdentityHashMap<>()));
         markGraph(root, Collections.newSetFromMap(new IdentityHashMap<>()));
         return root;
     }
@@ -244,35 +248,53 @@ public final class SharedPerlStorage {
         return root;
     }
 
-    private static void markGraph(RuntimeBase value, Set<RuntimeBase> seen) {
+    private static void validateGraph(RuntimeBase value, Set<RuntimeBase> seen) {
         if (value == null || !seen.add(value)) return;
-        if (value.blessId != 0) throw new IllegalArgumentException("Sharing blessed values is not supported");
+        if (value.blessId != 0) {
+            throw new IllegalArgumentException("Sharing blessed values is not supported");
+        }
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
                 throw new IllegalArgumentException("Sharing tied values is not supported");
             }
-            scalar.threadShared = true;
-            if (scalar.value instanceof RuntimeBase nested) markGraph(nested, seen);
+            if (scalar.value instanceof RuntimeBase nested) validateGraph(nested, seen);
             return;
         }
         if (value instanceof RuntimeArray array) {
             if (array.type != RuntimeArray.PLAIN_ARRAY) {
                 throw new IllegalArgumentException("Sharing tied arrays is not supported");
             }
-            for (RuntimeScalar element : array.elements) markGraph(element, seen);
-            array.elements = Collections.synchronizedList(array.elements);
-            array.threadShared = true;
+            for (RuntimeScalar element : array.elements) validateGraph(element, seen);
             return;
         }
         if (value instanceof RuntimeHash hash) {
             if (hash.type != RuntimeHash.PLAIN_HASH) {
                 throw new IllegalArgumentException("Sharing tied hashes is not supported");
             }
+            for (RuntimeScalar element : hash.elements.values()) validateGraph(element, seen);
+            return;
+        }
+        throw new IllegalArgumentException("Unsupported shared value type " + value.getClass().getName());
+    }
+
+    private static void markGraph(RuntimeBase value, Set<RuntimeBase> seen) {
+        if (value == null || !seen.add(value)) return;
+        if (value instanceof RuntimeScalar scalar) {
+            scalar.threadShared = true;
+            if (scalar.value instanceof RuntimeBase nested) markGraph(nested, seen);
+            return;
+        }
+        if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) markGraph(element, seen);
+            array.elements = Collections.synchronizedList(array.elements);
+            array.threadShared = true;
+            return;
+        }
+        if (value instanceof RuntimeHash hash) {
             for (RuntimeScalar element : hash.elements.values()) markGraph(element, seen);
             hash.elements = Collections.synchronizedMap(hash.elements);
             hash.threadShared = true;
             return;
         }
-        throw new IllegalArgumentException("Unsupported shared value type " + value.getClass().getName());
     }
 }

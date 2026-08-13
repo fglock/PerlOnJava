@@ -1399,6 +1399,11 @@ public class BytecodeCompiler implements Visitor {
             loopStack.pop();
         }
 
+        // A surrounding labeled-block dispatcher may need to enter this
+        // block's teardown after a nested sub/eval returns a LAST marker.
+        // Record the first cleanup opcode before regex/local/lexical unwind.
+        node.setAnnotation("interpreterNonLocalExitPc", bytecode.size());
+
         if (regexSaveReg >= 0) {
             emit(Opcodes.RESTORE_REGEX_STATE);
             emitReg(regexSaveReg);
@@ -6395,16 +6400,24 @@ public class BytecodeCompiler implements Visitor {
                     bodyStartPc, true);
             loopStack.push(loopInfo);
 
+            int nonLocalExitPc = -1;
             enterScope();
             try {
                 if (node.body != null) {
                     compileNode(node.body, outerResultReg, currentCallContext);
+                    Object cleanupPc = node.body.getAnnotation("interpreterNonLocalExitPc");
+                    if (cleanupPc instanceof Integer pc) {
+                        nonLocalExitPc = pc;
+                    }
                 }
                 if (outerResultReg >= 0 && lastResultReg >= 0) {
                     emitAliasWithTarget(outerResultReg, lastResultReg);
                 }
             } finally {
                 // Exit scope to clean up lexical variables
+                if (nonLocalExitPc < 0) {
+                    nonLocalExitPc = bytecode.size();
+                }
                 exitScope(true);  // safe to flush — foreach body, not subroutine
             }
 
@@ -6426,8 +6439,10 @@ public class BytecodeCompiler implements Visitor {
 
             if (node.labelName != null) {
                 emit(Opcodes.POP_LABELED_BLOCK);
-                int exitPc = bytecode.size();
-                patchJump(exitPcPlaceholder, exitPc);
+                // A marker returned by a nested sub/eval must enter at the
+                // lexical teardown sequence that ordinary fallthrough runs.
+                // Jumping past it leaks block lexicals and delays DESTROY.
+                patchJump(exitPcPlaceholder, nonLocalExitPc);
             }
 
             // Patch last (break) PCs to jump to local cleanup (or past the block if no locals).

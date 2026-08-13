@@ -368,12 +368,18 @@ public class EmitEval {
                 mv.visitJumpInsn(Opcodes.GOTO, nextLabel);
 
                 mv.visitLabel(isLast);
+                EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                        emitterVisitor.ctx, loopLabels, true);
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabels.lastLabel);
 
                 mv.visitLabel(isNext);
+                EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                        emitterVisitor.ctx, loopLabels, false);
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabels.nextLabel);
 
                 mv.visitLabel(isRedo);
+                EmitControlFlow.emitLoopControlScopeCleanupForDispatcher(
+                        emitterVisitor.ctx, loopLabels, false);
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabels.redoLabel);
 
                 mv.visitLabel(nextLabel);

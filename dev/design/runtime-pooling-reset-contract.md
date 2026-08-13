@@ -2,7 +2,8 @@
 
 ## Status
 
-Runtime pooling is deferred. `PerlRuntime.close()` is a terminal resource-release
+Runtime pooling was re-evaluated on 2026-08-13 and remains deliberately
+disabled. `PerlRuntime.close()` is a terminal resource-release
 operation, not a reset operation, and a closed runtime deliberately rejects
 `bind`, `initialize`, and `execute`. Reusing it would currently expose state that
 a newly constructed runtime does not contain.
@@ -10,6 +11,11 @@ a newly constructed runtime does not contain.
 This document defines the proof required before a pool may be implemented. It
 does not authorize clearing state opportunistically or enabling pooling behind
 an experimental flag.
+
+This is the Phase 34 outcome, not an untracked implementation shortcut. Runtime
+pooling is optional and is not required for Perl ithread correctness. The
+negative automated contract below passes, while every positive equivalence
+item remains a prerequisite for any future pooling PR.
 
 ## Fresh-runtime equivalence
 

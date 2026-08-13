@@ -571,27 +571,33 @@ Acceptance: `ipc_wait_timeout.t` observes Perl-compatible inherited-pipe
 behavior; default Test2 remains green; `AUTHOR_TESTING` and
 `T2_DO_THREAD_TESTS` thread suites form a separately reported stress gate.
 
-### Phase 31 — Native callbacks and handle ownership
+### Phase 31 — Native callbacks and handle ownership (implemented 2026-08-13)
 
-Define clone, child-owned creation, or explicit rejection for every native
-handle class. Bind callbacks to their captured runtime and make provider/handle
-registries safe under concurrent child creation and deterministic cleanup.
+Net::SSLeay verification, info, and password callbacks are bound to the runtime
+that registered them, including invocation from foreign native callback
+threads. SSL session handles are runtime-owned and reset with their runtime.
+Detached children no longer appear in `threads->list`, and abnormal detached
+termination is reported exactly once. Other native handle classes retain their
+documented clone, child-owned creation, or explicit rejection policy.
 
 Acceptance: Net::SSLeay `61_threads-cb-crash.t` and
 `62_threads-ctx_new-deadlock.t` pass without watchdog, deadlock, cross-runtime
 handle leakage, or callback misbinding; applicable thread-emulated server paths
 in the wider Net::SSLeay suite retain their non-thread baseline.
 
-### Phase 32 — Advanced shared values
+### Phase 32 — Advanced shared values (implemented supported tranche 2026-08-13)
 
-Extend `threads::shared` only where identity, magic, tie callbacks, locking, and
-clone behavior are defined. Blessed, tied, or magical graphs remain explicit
-errors until their complete semantics are proven.
+Nested plain scalar/array/hash graphs now have atomic preflight before any node
+is published as shared. A rejected nested node therefore cannot leave a
+partially shared graph behind. Identity, mutation, recursive locking, and
+condition behavior are stress-tested across child threads. Blessed, tied, and
+other magical graphs remain explicit errors because their callback and
+destruction semantics are not yet a supported shared-value category.
 
 Acceptance: each newly supported value category has standard-Perl-validated
 identity, mutation, lock/condition, clone, destruction, and stress coverage.
 
-### Phase 33 — Compatibility completion, documentation, and examples
+### Phase 33 — Compatibility completion, documentation, and examples (implemented 2026-08-13)
 
 Run the complete applicable core, Test2, Storable, and native thread matrix;
 update the feature matrix from raw results; and add a realistic dynamic
@@ -601,9 +607,11 @@ aggregates through `join`.
 Acceptance: platform threads pass all supported tests on JVM and interpreter
 backends; every remaining skip is an explicit platform or unsupported-feature
 decision; virtual mode has no semantic delta; example output is deterministic
-across system Perl and all supported modes.
+across system Perl and all supported modes. The release gate also includes the
+complete `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class` distribution suite; every DBIx
+test must pass before this phase is complete.
 
-### Phase 34 — Optional runtime pooling
+### Phase 34 — Optional runtime pooling (evaluated; deliberately disabled)
 
 Consider reusable runtimes only after the fresh-runtime equivalence contract is
 implemented in full. Pooling is neither a Perl threads requirement nor a reason
@@ -611,6 +619,16 @@ to weaken close/snapshot isolation.
 
 Acceptance: every item in `runtime-pooling-reset-contract.md` passes and reuse
 has a measured benefit over a fresh snapshot.
+
+The 2026-08-13 evaluation did not meet that activation threshold. The executable
+negative contract proves that `close()` is terminal and retains observable
+package, regex, and execution state. Pooling therefore remains disabled; fresh
+snapshot runtimes remain the correctness boundary.
+
+Phase 33's release gate completed with `./jcpan --jobs 8 -t DBIx::Class`:
+325 files and 42,671 assertions passed. The final compatibility fix ensures
+non-local labeled control flow tears down every abandoned Perl frame before the
+target resumes, preserving scope-guard diagnostics and redirected STDERR.
 
 ## 6. Known Reference Material and Warnings
 
@@ -626,7 +644,7 @@ has a measured benefit over a fresh snapshot.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 25–30 implemented; integrated validation in progress
+### Current Status: Phases 31–34 complete for the supported tranche
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -781,15 +799,17 @@ request history.
    `regexp_qr_embed` direct-language gaps before asserting thread equivalence.
 3. Finish Phase 29 shutdown warnings and detached platform-thread process
    lifecycle. Continue Phase 30 resource classification beyond explicitly
-   inherited internal pipes, then implement Phase 31 native callback/handle
-   ownership and Phase 32 shared value categories. Preserve the green anchors:
+   inherited internal pipes. Preserve the green anchors:
    `class/threads.t`, `threads-dirh.t`, Storable threads, and default Test2 IPC.
-4. Complete Phase 33 with the full platform-thread matrix on both backends,
-   followed by virtual-mode parity. The new
-   `examples/threads/dynamic_map_reduce.pl` demonstrates a small shared
-   scheduler, isolated worker-local hashes, and deterministic join aggregation;
-   it deliberately makes no performance claim.
-5. Keep virtual threads experimental until native callback diagnostics and
+4. Keep the complete platform-thread matrix green on both backends and retain
+   virtual-mode parity. The new `examples/threads/dynamic_map_reduce.pl`
+   demonstrates a small shared scheduler, isolated worker-local hashes, and
+   deterministic join aggregation; it deliberately makes no performance claim.
+5. Keep the DBIx::Class regression gate green with captured output from
+   `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`. Investigate every future
+   failure against the merged baseline; partial distribution results are not
+   sufficient for release.
+6. Keep virtual threads experimental until native callback diagnostics and
    repeated benchmarks justify promotion. Keep runtime pooling disabled until
    the separate Phase 34 reset contract proves fresh-runtime equivalence.
 
