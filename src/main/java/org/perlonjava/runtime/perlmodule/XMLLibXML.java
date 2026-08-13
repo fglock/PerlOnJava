@@ -197,6 +197,7 @@ public class XMLLibXML extends PerlModuleBase {
                 {"nodeName"},   {"nodeValue"},   {"nodeType"},
                 {"getName", "nodeName"},
                 {"parentNode"}, {"childNodes"},  {"firstChild"}, {"lastChild"},
+                {"getChildnodes", "childNodes"},
                 {"getFirstChild", "firstChild"}, {"getLastChild", "lastChild"},
                 {"previousSibling"}, {"nextSibling"},
                 {"attributes"}, {"hasAttributes"},

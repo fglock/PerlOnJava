@@ -228,6 +228,59 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
     }
 
+    /**
+     * Perl treats assigning another wrapper for the same cached constant as a
+     * re-export, not a subroutine redefinition.  The wrappers can be distinct
+     * RuntimeCode instances while still sharing the frozen constant payload.
+     */
+    private static boolean isSameCachedConstant(RuntimeCode oldCode, RuntimeCode newCode) {
+        if (oldCode.constantValue == null || newCode.constantValue == null
+                || oldCode.constantValue.size() != newCode.constantValue.size()) {
+            return false;
+        }
+        for (int i = 0; i < oldCode.constantValue.size(); i++) {
+            RuntimeBase oldValue = oldCode.constantValue.elements.get(i);
+            RuntimeBase newValue = newCode.constantValue.elements.get(i);
+            if (oldValue == newValue) {
+                continue;
+            }
+            if (!(oldValue instanceof RuntimeScalar oldScalar)
+                    || !(newValue instanceof RuntimeScalar newScalar)
+                    || oldScalar.type != newScalar.type) {
+                return false;
+            }
+            if (RuntimeScalarType.isReference(oldScalar)) {
+                if (oldScalar.value != newScalar.value) {
+                    return false;
+                }
+            } else if (!oldScalar.toString().equals(newScalar.toString())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** True for a method supplied by a Java-backed PerlModuleBase module. */
+    private static boolean isNativeModuleMethod(RuntimeCode code) {
+        return code.methodHandle != null
+                && code.codeObject instanceof org.perlonjava.runtime.perlmodule.PerlModuleBase;
+    }
+
+    /**
+     * A named CV is entered in the stash while its source is parsed.  The JVM
+     * backend later materializes that declaration through the generated
+     * compilation-unit wrapper (which has no subName).  Replacing the parser's
+     * CV with that same-file wrapper is definition installation, not a runtime
+     * redefinition.
+     */
+    private static boolean isCompiledDeclarationInstall(RuntimeCode oldCode, RuntimeCode newCode) {
+        return oldCode.isDeclared
+                && oldCode.cvStartFile != null
+                && oldCode.cvStartFile.equals(newCode.cvStartFile)
+                && newCode.subName == null
+                && newCode.deparseSourceText != null;
+    }
+
     protected static boolean fillForwardCodeRefInPlace(String globName, RuntimeScalar codeContainer, RuntimeScalar value) {
         if (codeContainer == null
                 || codeContainer.type != CODE
@@ -405,6 +458,30 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 // Get or create the code ref container
                 RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+
+                // A runtime typeglob assignment replaces the CODE slot just as
+                // `*name = sub { ... }` does in Perl.  Emit the lexical
+                // `redefine` warning before changing the slot; when the warning
+                // is fatal the original subroutine must remain installed.  A
+                // repeated assignment of the identical coderef is harmless and
+                // does not warn on Perl.
+                if (codeContainer.value instanceof RuntimeCode oldCode
+                        && oldCode.defined()
+                        && value.value instanceof RuntimeCode newCode
+                        && oldCode != newCode
+                        // Native module shims are preloaded before their Perl
+                        // facade is compiled.  Installing the facade over that
+                        // implementation is initialization, not a user-visible
+                        // redefinition (POSIX::LC_* is the core-test case).
+                        && !oldCode.isBuiltin
+                        && !isNativeModuleMethod(oldCode)
+                        && !isCompiledDeclarationInstall(oldCode, newCode)
+                        && !isSameCachedConstant(oldCode, newCode)) {
+                    org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                            new RuntimeScalar("Subroutine " + this.globName + " redefined"),
+                            new RuntimeScalar(),
+                            "redefine");
+                }
 
                 if (value.value instanceof RuntimeCode sourceCode
                         && !sourceCode.defined()

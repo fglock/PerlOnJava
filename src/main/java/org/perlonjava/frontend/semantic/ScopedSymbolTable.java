@@ -114,8 +114,18 @@ public class ScopedSymbolTable {
         warningDisabledStack.push(new BitSet());
         // Initialize the fatal warnings stack (empty by default)
         warningFatalStack.push(new BitSet());
-        // Initialize the feature categories stack with an empty map for the global scope
-        featureFlagsStack.push(0);
+        // Current Perl accepts `say` in a source file without an explicit
+        // feature pragma, and an older `use VERSION` does not erase that
+        // interpreter default. Keep the rest of PerlOnJava's legacy defaults
+        // unchanged: enabling the whole current-version bundle here would also
+        // disable legacy indirect syntax used by existing code. `-E` enables
+        // the complete current bundle explicitly through FeatureFlags.
+        int defaultFeatures = 0;
+        Integer sayBit = featureBitPositions.get("say");
+        if (sayBit != null) {
+            defaultFeatures |= (1 << sayBit);
+        }
+        featureFlagsStack.push(defaultFeatures);
         postderefQqStack.push(false);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
