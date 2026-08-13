@@ -1439,7 +1439,7 @@ public class StatementParser {
      *
      * @param parser The Parser instance with tokens to filter
      */
-    private static void applySourceFilterToRemainingTokens(Parser parser) {
+    static void applySourceFilterToRemainingTokens(Parser parser) {
         int currentPos = parser.tokenIndex;
 
         // Step 1: Rejoin remaining tokens back to source text

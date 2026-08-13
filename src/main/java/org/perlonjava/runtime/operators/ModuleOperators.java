@@ -486,6 +486,29 @@ public class ModuleOperators {
             // 2. Absolute/relative paths that don't exist on filesystem (try @INC hooks only)
             boolean foundDirectory = false;
             if (fullName == null) {
+                // Tooling overlays can be selected by launchers such as jcpan.
+                // This is deliberately file-specific: globally moving the bundled
+                // library ahead of site modules would hide CPAN upgrades.
+                String preferred = System.getenv("PERLONJAVA_PREFER_BUNDLED_MODULES");
+                if (preferred != null) {
+                    for (String candidate : preferred.split(",")) {
+                        if (!fileName.equals(candidate.trim())) continue;
+                        String resourcePath = "/lib/" + fileName;
+                        URL resource = RuntimeScalar.class.getResource(resourcePath);
+                        if (resource != null && !isDirectoryResource(resource)) {
+                            actualFileName = GlobalContext.JAR_PERLLIB + "/" + fileName;
+                            fullName = Paths.get(resourcePath);
+                            try (InputStream is = resource.openStream()) {
+                                jarPrefetchedBytes = is.readAllBytes();
+                            } catch (IOException ignored) {
+                                fullName = null;
+                                jarPrefetchedBytes = null;
+                            }
+                        }
+                        break;
+                    }
+                }
+
                 // Search in INC directories
                 RuntimeArray incArray = GlobalVariable.getGlobalArray("main::INC");
 
@@ -509,7 +532,7 @@ public class ModuleOperators {
 
                 // Iterate using indexed access to properly handle tied arrays
                 incSize = incArray.size();
-                for (int i = 0; i < incSize; i++) {
+                for (int i = 0; fullName == null && i < incSize; i++) {
                     RuntimeScalar dirScalar = incArray.get(i);
 
                     // If this is a tied scalar, fetch the actual value

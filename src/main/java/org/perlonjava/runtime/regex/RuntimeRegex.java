@@ -169,6 +169,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private List<String> warningsOnUse = new ArrayList<>();
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
+    private static final String DYNAMIC_PATTERN_ERROR =
+            "\u0000(??{...}) recursive/dynamic regex patterns not implemented";
 
     public RuntimeRegex() {
         this.regexFlags = null;
@@ -336,6 +338,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return;
         }
         for (String warning : warningsOnUse) {
+            if (warning.equals(DYNAMIC_PATTERN_ERROR)) {
+                throw new PerlJavaUnimplementedException(warning.substring(1));
+            }
             WarnDie.warnWithCategory(new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "regexp");
         }
     }
@@ -406,6 +411,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         String originalPatternString = patternString;
         String compilePatternString = patternString;
+        boolean hasDeferredDynamicPattern = compilePatternString != null
+                && compilePatternString.contains(RegexMarkers.RECURSIVE_PATTERN);
+        if (hasDeferredDynamicPattern) {
+            // Perl permits qr// construction before the dynamic callback is
+            // needed. Compile a never-matching placeholder and retain a hard
+            // error for the first use instead of rejecting module loading.
+            compilePatternString = compilePatternString.replace(
+                    RegexMarkers.RECURSIVE_PATTERN, "(?!)");
+        }
         List<String> quoteMetaWarningsOnUse = new ArrayList<>();
         if (compilePatternString != null && compilePatternString.contains("\\Q")) {
             // Interpolated-pattern warnings are lexical diagnostics for each
@@ -468,6 +482,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Track if preprocessing deferred user-defined Unicode properties.
                 // These need to be resolved later, once the corresponding Perl subs are defined.
                 regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
+                if (hasDeferredDynamicPattern) {
+                    regex.warningsOnUse.add(DYNAMIC_PATTERN_ERROR);
+                }
                 if (usesRecursiveBackend) {
                     regex.recursivePattern = new JoniRegexPattern(compilePatternString, regex.regexFlags);
                     regex.deferredUserDefinedUnicodeProperties = false;

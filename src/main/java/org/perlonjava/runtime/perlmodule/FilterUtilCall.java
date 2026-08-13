@@ -307,6 +307,18 @@ public class FilterUtilCall extends PerlModuleBase {
                             }
                         }
 
+                        // A one-shot source filter commonly calls filter_del()
+                        // from inside its callback after injecting one chunk.
+                        // Do not invoke the now-deleted callback again; append
+                        // the untouched source that follows the insertion.
+                        if (context.filterStack.isEmpty()) {
+                            while (context.currentLine < context.sourceLines.length) {
+                                filteredCode.append(context.sourceLines[context.currentLine++]);
+                            }
+                            continueFiltering = false;
+                            continue;
+                        }
+
                         // Check status - convert to scalar if it's a list
                         RuntimeScalar statusScalar = result.scalar();
                         int status = statusScalar.getInt();
