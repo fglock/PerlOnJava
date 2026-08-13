@@ -40,10 +40,22 @@ public final class PerlThreadExecutionPolicy {
     }
 
     public Thread unstarted(long id, Runnable task) {
+        return unstarted(id, 0, task);
+    }
+
+    public Thread unstarted(long id, long stackSize, Runnable task) {
         Objects.requireNonNull(task, "task");
+        if (stackSize < 0) throw new IllegalArgumentException("Thread stack size must not be negative");
         String name = "perl-ithread-" + id;
-        return mode == Mode.VIRTUAL
-                ? Thread.ofVirtual().name(name).unstarted(task)
-                : Thread.ofPlatform().name(name).unstarted(task);
+        if (mode == Mode.VIRTUAL) {
+            if (stackSize != 0) {
+                throw new IllegalArgumentException(
+                        "Per-thread stack sizing is not supported by Java virtual threads");
+            }
+            return Thread.ofVirtual().name(name).unstarted(task);
+        }
+        Thread.Builder.OfPlatform builder = Thread.ofPlatform().name(name);
+        if (stackSize != 0) builder = builder.stackSize(stackSize);
+        return builder.unstarted(task);
     }
 }

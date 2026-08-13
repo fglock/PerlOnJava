@@ -58,6 +58,12 @@ public class Overload {
      * @return the string representation based on overloading rules
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
+        // A weak reference can be cleared between graph snapshot and use. Its
+        // scalar may briefly retain the old reference type while the referent
+        // payload is gone; Perl observes undef, not a reference to stringify.
+        if (runtimeScalar.value == null) {
+            return scalarUndef;
+        }
         // Recursion guard — see STRINGIFY_MAX_DEPTH javadoc.
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         int depth = state.overloadStringifyDepth;
@@ -111,6 +117,9 @@ public class Overload {
      * @return the numeric representation based on overloading rules
      */
     public static RuntimeScalar numify(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.value == null) {
+            return scalarUndef;
+        }
         // Prepare overload context and check if object is eligible for overloading
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
 

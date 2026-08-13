@@ -154,9 +154,12 @@ public class LValueVisitor implements Visitor {
             case "vec":
             case "keys":
             case "pos":
-            case "substr":
             case "$#":
                 context = RuntimeContextType.SCALAR;
+                break;
+            case "substr":
+                context = node.operand instanceof ListNode list && list.elements.size() > 3
+                        ? RuntimeContextType.VOID : RuntimeContextType.SCALAR;
                 break;
             default:
                 context = RuntimeContextType.VOID;  // Not an L-value
@@ -264,4 +267,3 @@ public class LValueVisitor implements Visitor {
     public void visit(CompilerFlagNode node) {
     }
 }
-

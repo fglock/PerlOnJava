@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Runtime-owned Perl global state.
@@ -17,6 +18,9 @@ import java.util.Set;
  * services.</p>
  */
 public final class GlobalRuntimeState {
+    private static final int COMPILED_CODE_REF_RANGE_SIZE = 1_000_000;
+    private static final AtomicInteger NEXT_THREAD_COMPILED_CODE_REF_BASE =
+            new AtomicInteger(COMPILED_CODE_REF_RANGE_SIZE);
     private final Map<String, RuntimeScalar> scalarValues = new HashMap<>();
     private final Map<String, RuntimeArray> arrayValues = new HashMap<>();
     private final Map<String, RuntimeHash> hashValues = new HashMap<>();
@@ -298,7 +302,14 @@ public final class GlobalRuntimeState {
         classFields.forEach((name, fields) -> target.classFields.put(name, new HashSet<>(fields)));
         target.classParents.putAll(classParents);
         target.packageVersions.putAll(packageVersions);
-        target.nextCompiledCodeRefId = nextCompiledCodeRefId;
+        // Lazy named CVs may compile in the parent after this snapshot while
+        // the child also compiles new code. Give every snapshot runtime its
+        // own range so later parent metadata cannot collide with IDs already
+        // embedded in child-generated call sites. Fresh independent runtimes
+        // still begin at one and retain their isolated-ID contract.
+        target.nextCompiledCodeRefId = Math.max(nextCompiledCodeRefId,
+                NEXT_THREAD_COMPILED_CODE_REF_BASE.getAndAdd(
+                        COMPILED_CODE_REF_RANGE_SIZE));
         target.stashEnumerationVersion = stashEnumerationVersion;
         target.coreGlobalsInitialized = coreGlobalsInitialized;
         // Class loaders, caches, named IO and formats are child-owned/fresh.

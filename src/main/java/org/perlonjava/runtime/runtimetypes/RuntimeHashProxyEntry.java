@@ -96,6 +96,19 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         }
     }
 
+    /** Replace this hash slot with the scalar referenced by a refaliasing RHS. */
+    public RuntimeScalar aliasToReference(RuntimeScalar reference) {
+        RuntimeScalar referent = reference.scalarDeref();
+        parent.notePackageRootMutation();
+        parent.elements.put(key, referent);
+        parent.markKeyByte(key, byteKey);
+        parent.markPackageRootedValue(referent);
+        this.lvalue = referent;
+        this.type = referent.type;
+        this.value = referent.value;
+        return referent;
+    }
+
     /**
      * Saves the current state of the RuntimeScalar instance.
      *

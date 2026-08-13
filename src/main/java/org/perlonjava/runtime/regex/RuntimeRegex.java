@@ -554,6 +554,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String cacheKey = regex.patternString + "/" + (regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
         state().compiledRegexCache.remove(cacheKey);
 
+        // User property subs can execute arbitrary Perl and block. Resolve them
+        // before compile() takes its process-wide monitor; only simultaneous
+        // definitions of the same property coordinate in PerlThreadRegistry.
+        UnicodeResolver.preloadUserDefinedProperties(regex.patternString);
         RuntimeRegex recompiled = compile(regex.patternString, regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
         regex.pattern = recompiled.pattern;
         regex.patternUnicode = recompiled.patternUnicode;

@@ -1341,6 +1341,16 @@ public class CompileAssignment {
                     if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                         bytecodeCompiler.throwCompilerException("Experimental aliasing via reference not enabled");
                     }
+                    if (leftOp.operand instanceof BinaryOperatorNode element
+                            && element.operator.equals("{")) {
+                        bytecodeCompiler.compileNode(element, -1, RuntimeContextType.LVALUE);
+                        int targetReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = targetReg;
+                        return;
+                    }
                     // Handle ref aliasing: \$y = $ref, \@y = $ref, \%y = $ref
                     if (leftOp.operand instanceof OperatorNode varNode
                             && (varNode.operator.equals("$") || varNode.operator.equals("@") || varNode.operator.equals("%"))) {
@@ -1375,7 +1385,8 @@ public class CompileAssignment {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target: " + leftOp.operator);
                     }
                 } else {
-                    if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")) {
+                    if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")
+                            || leftOp.operator.equals("substr")) {
                         bytecodeCompiler.throwCompilerException("Can't modify " + leftOp.operator + " in scalar assignment");
                     }
                     bytecodeCompiler.throwCompilerException("Assignment to unsupported operator: " + leftOp.operator);

@@ -340,7 +340,11 @@ public class EmitOperator {
             for (Node arg : operand.elements) {
                 // Generate code for argument
                 String argContext = (String) arg.getAnnotation("context");
-                if (argContext != null && argContext.equals("SCALAR")) {
+                if (index == 0 && operand.elements.size() > 3) {
+                    // Four-argument substr gives its first operand loose
+                    // lvalue context (notably `substr delete $h{k}, ...`).
+                    arg.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                } else if (argContext != null && argContext.equals("SCALAR")) {
                     arg.accept(scalarVisitor);
                 } else {
                     arg.accept(listVisitor);
@@ -1039,8 +1043,12 @@ public class EmitOperator {
             return;
         }
 
-        // Accept the operand in SCALAR context.
-        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        // `scalar` preserves lvalueness when its caller requests it; the
+        // prototype wrapper around four-argument substr's first argument
+        // depends on this for loose lvalues such as delete($hash{key}).
+        int operandContext = emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE
+                ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
+        node.operand.accept(emitterVisitor.with(operandContext));
 
         // Handle VOID context - pop the result if not needed
         handleVoidContext(emitterVisitor);

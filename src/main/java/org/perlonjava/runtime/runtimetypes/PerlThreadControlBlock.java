@@ -22,6 +22,8 @@ public final class PerlThreadControlBlock {
     private final PerlThreadRegistry registry;
     private final PerlRuntime childRuntime;
     private final EntryPoint entryPoint;
+    private final int context;
+    private final long stackSize;
     private final CountDownLatch finished = new CountDownLatch(1);
     private final AtomicBoolean joinClaimed = new AtomicBoolean();
     private volatile State state = State.NEW;
@@ -37,16 +39,27 @@ public final class PerlThreadControlBlock {
         this.parentId = parent.perlThreadId();
         this.entryPoint = Objects.requireNonNull(entryPoint, "entryPoint");
         this.childRuntime = parent.snapshotCloneForThread(registry, id).runtime();
+        this.context = RuntimeContextType.SCALAR;
+        this.stackSize = parent.defaultPerlThreadStackSize();
+        childRuntime.setPerlThreadContext(context);
+        childRuntime.setPerlThreadStackSize(stackSize);
+        childRuntime.setPerlThreadExitOnly(parent.defaultPerlThreadExitOnly());
         registry.register(this);
     }
 
-    private PerlThreadControlBlock(PerlRuntime parent, RuntimeScalar code, RuntimeArray args, int context) {
+    private PerlThreadControlBlock(PerlRuntime parent, RuntimeScalar code, RuntimeArray args,
+                                   int context, long stackSize, boolean exitOnly) {
         Objects.requireNonNull(parent, "parent");
         this.registry = parent.threadRegistry();
         this.id = registry.allocateId();
         this.parentId = parent.perlThreadId();
         PerlRuntime.ThreadSnapshot snapshot = parent.snapshotCloneForThread(registry, id);
         this.childRuntime = snapshot.runtime();
+        this.context = context;
+        this.stackSize = stackSize;
+        childRuntime.setPerlThreadContext(context);
+        childRuntime.setPerlThreadStackSize(stackSize);
+        childRuntime.setPerlThreadExitOnly(exitOnly);
 
         List<RuntimeBase> roots = new ArrayList<>(args.size() + 1);
         roots.add(Objects.requireNonNull(code, "code"));
@@ -71,13 +84,20 @@ public final class PerlThreadControlBlock {
     /** Create a Perl thread, cloning its CODE and arguments with the runtime snapshot graph. */
     public static PerlThreadControlBlock create(
             PerlRuntime parent, RuntimeScalar code, RuntimeArray args, int context) {
-        return new PerlThreadControlBlock(parent, code, args, context);
+        return new PerlThreadControlBlock(parent, code, args, context,
+                parent.defaultPerlThreadStackSize(), parent.defaultPerlThreadExitOnly());
+    }
+
+    public static PerlThreadControlBlock create(
+            PerlRuntime parent, RuntimeScalar code, RuntimeArray args, int context,
+            long stackSize, boolean exitOnly) {
+        return new PerlThreadControlBlock(parent, code, args, context, stackSize, exitOnly);
     }
 
     public synchronized PerlThreadControlBlock start() {
         if (state != State.NEW) throw new IllegalStateException("Thread already started");
         state = State.RUNNING;
-        platformThread = PerlThreadExecutionPolicy.configured().unstarted(id, this::run);
+        platformThread = PerlThreadExecutionPolicy.configured().unstarted(id, stackSize, this::run);
         platformThread.start();
         return this;
     }
@@ -161,6 +181,16 @@ public final class PerlThreadControlBlock {
     public String javaThreadName() { return platformThread == null ? null : platformThread.getName(); }
     public boolean isVirtualThread() { return platformThread != null && platformThread.isVirtual(); }
     public Throwable error() { return error; }
+    public int context() { return context; }
+    public long stackSize() { return stackSize; }
+
+    /** Deliver a Perl signal in the target runtime at its next safe point. */
+    public void signal(String signal) {
+        if (!isRunning()) return;
+        PerlSignalQueue.enqueue(childRuntime.signalState, signal);
+        Thread javaThread = platformThread;
+        if (javaThread != null) javaThread.interrupt();
+    }
 
     private record Outcome(RuntimeBase value, Throwable error) {}
 

@@ -404,6 +404,22 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
+     * Clone the narrow resource class Perl ithreads can safely inherit.
+     * Ordinary files, sockets, subprocess handles and native resources retain
+     * the conservative unsupported policy in {@link RuntimeGraphCloner}.
+     */
+    RuntimeIO inheritedPipeCopy() {
+        if (!(ioHandle instanceof InternalPipeHandle pipe)) return null;
+        RuntimeIO copy = new RuntimeIO(pipe.inheritedCopy());
+        copy.currentLineNumber = currentLineNumber;
+        copy.globName = globName;
+        copy.needFlush = needFlush;
+        copy.autoFlush = autoFlush;
+        addHandle(copy.ioHandle);
+        return copy;
+    }
+
+    /**
      * Replace this handle's runtime state with another handle while preserving
      * object identity. Perl keeps the PVIO object stable across {@code open FH}
      * on an already-vivified bareword handle, so values captured by

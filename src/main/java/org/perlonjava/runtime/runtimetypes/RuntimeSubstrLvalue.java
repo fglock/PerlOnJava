@@ -18,6 +18,9 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
      */
     private int length;
 
+    /** True when the original two-argument substr extended to string end. */
+    private final boolean toEnd;
+
     /**
      * Flag indicating the substr offset was out of bounds.
      * When true, assignment to this lvalue should die.
@@ -33,9 +36,15 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
      * @param length The length of the substring.
      */
     public RuntimeSubstrLvalue(RuntimeScalar parent, String str, int offset, int length) {
+        this(parent, str, offset, length, false);
+    }
+
+    public RuntimeSubstrLvalue(
+            RuntimeScalar parent, String str, int offset, int length, boolean toEnd) {
         this.lvalue = parent;
         this.offset = offset;
         this.length = length;
+        this.toEnd = toEnd;
         this.outOfBounds = false;
 
         // Preserve BYTE_STRING type from parent so substr() on byte strings stays byte
@@ -70,6 +79,15 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
      */
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
+        return setInternal(value, null);
+    }
+
+    /** Four-argument substr has already stringified its target once. */
+    public RuntimeScalar setUsingParentSnapshot(RuntimeScalar value, String parentSnapshot) {
+        return setInternal(value, parentSnapshot);
+    }
+
+    private RuntimeScalar setInternal(RuntimeScalar value, String parentSnapshot) {
         // Die on assignment if the original substr was out of bounds
         if (outOfBounds) {
             WarnDie.die(new RuntimeScalar("substr outside of string"),
@@ -78,7 +96,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         }
 
         // Update the local type and value
-        String parentValue = lvalue.toString();
+        String parentValue = parentSnapshot != null ? parentSnapshot : lvalue.toString();
         String newValue = value.toString();
         this.type = value.type;
         this.value = value.value;
@@ -99,8 +117,8 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         }
 
         // Calculate the actual length, handling negative lengths
-        int actualLength = length;
-        if (length < 0) {
+        int actualLength = toEnd ? strLength - actualOffset : length;
+        if (!toEnd && length < 0) {
             actualLength = strLength + length - actualOffset;
         }
 
@@ -171,9 +189,11 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
             // Negative-offset aliases stay anchored to the same suffix of the
             // parent.  If the replacement changes width, shift the negative
             // start by the opposite delta so that suffix length remains fixed.
-            this.offset += this.length - replacementLength;
+            this.offset += actualLength - replacementLength;
         }
-        this.length = replacementLength;
+        if (!toEnd && this.length >= 0) {
+            this.length = replacementLength;
+        }
         this.type = value.type;
         this.value = newValue;
         this.tainted = updated.tainted;
@@ -208,9 +228,9 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         int actualOffset = offset < 0 ? strLength + offset : offset;
         actualOffset = Math.max(0, Math.min(actualOffset, strLength));
 
-        int actualLength = length < 0
-                ? strLength + length - actualOffset
-                : length;
+        int actualLength = toEnd
+                ? strLength - actualOffset
+                : length < 0 ? strLength + length - actualOffset : length;
         actualLength = Math.max(0, Math.min(actualLength, strLength - actualOffset));
 
         int startIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, 0, actualOffset);

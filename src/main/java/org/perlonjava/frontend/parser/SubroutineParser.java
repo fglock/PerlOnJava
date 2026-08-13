@@ -1691,8 +1691,10 @@ public class SubroutineParser {
                     // references (including hash copies) will see the compiled code.
 
                     // Set captured variables if there are any
-                    if (!paramList.isEmpty()) {
-                        Object[] parameters = paramList.toArray();
+                    List<Object> materializedCaptures = closureCapturesForMaterialization(
+                            placeholder, capturedNames, paramList);
+                    if (!materializedCaptures.isEmpty()) {
+                        Object[] parameters = materializedCaptures.toArray();
                         RuntimeBase[] capturedVars =
                                 new RuntimeBase[parameters.length];
                         for (int i = 0; i < parameters.length; i++) {
@@ -1716,7 +1718,7 @@ public class SubroutineParser {
                     // InterpretedCode implements PerlSubroutine, so we can use it directly
                     placeholder.subroutine = interpretedCode;
                     placeholder.codeObject = interpretedCode;
-                    installClosureCaptureMetadata(placeholder, paramList);
+                    installClosureCaptureMetadata(placeholder, materializedCaptures);
                     placeholder.cvStartFile = interpretedCode.cvStartFile;
                     placeholder.cvStartLine = interpretedCode.cvStartLine;
                 }
@@ -1734,8 +1736,10 @@ public class SubroutineParser {
                 InterpretedCode interpretedCode = EmitterMethodCreator.compileToInterpreter(block, newCtx, false);
 
                 // Set captured variables if there are any
-                if (!paramList.isEmpty()) {
-                    Object[] parameters = paramList.toArray();
+                List<Object> materializedCaptures = closureCapturesForMaterialization(
+                        placeholder, capturedNames, paramList);
+                if (!materializedCaptures.isEmpty()) {
+                    Object[] parameters = materializedCaptures.toArray();
                     RuntimeBase[] capturedVars = new RuntimeBase[parameters.length];
                     for (int i = 0; i < parameters.length; i++) {
                         capturedVars[i] = (RuntimeBase) parameters[i];
@@ -1753,7 +1757,7 @@ public class SubroutineParser {
                 interpretedCode.__SUB__ = codeRef;
                 placeholder.subroutine = interpretedCode;
                 placeholder.codeObject = interpretedCode;
-                installClosureCaptureMetadata(placeholder, paramList);
+                installClosureCaptureMetadata(placeholder, materializedCaptures);
                 placeholder.cvStartFile = interpretedCode.cvStartFile;
                 placeholder.cvStartLine = interpretedCode.cvStartLine;
             } catch (Exception e) {
@@ -1807,6 +1811,27 @@ public class SubroutineParser {
 
     private static void installClosureCaptureMetadata(RuntimeCode code, List<Object> capturedValues) {
         installClosureCaptureMetadata(code, null, capturedValues);
+    }
+
+    /**
+     * Lazy compilation can happen after an ithread snapshot. The supplier's
+     * captured paramList still names parent cells, while the cloned placeholder
+     * already records the corresponding child cells by lexical name.
+     */
+    private static List<Object> closureCapturesForMaterialization(
+            RuntimeCode code, List<String> capturedNames, List<Object> capturedValues) {
+        if (capturedValues == null || capturedValues.isEmpty()
+                || code.closedOverVariables == null || code.closedOverVariables.isEmpty()) {
+            return capturedValues;
+        }
+        ArrayList<Object> result = new ArrayList<>(capturedValues);
+        for (int i = 0; i < result.size() && i < capturedNames.size(); i++) {
+            String name = capturedNames.get(i);
+            if (name != null && code.closedOverVariables.containsKey(name)) {
+                result.set(i, code.closedOverVariables.get(name));
+            }
+        }
+        return result;
     }
 
     private static void installClosureCaptureMetadata(
