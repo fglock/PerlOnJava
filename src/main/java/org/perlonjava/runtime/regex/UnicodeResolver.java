@@ -165,17 +165,21 @@ public class UnicodeResolver {
             // Handle property references
             if (line.startsWith("+")) {
                 // Add another property
-                String propName = line.substring(1).trim();
+                String propName = stripDefinitionComment(line.substring(1));
                 UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
                 resultSet.addAll(propSet);
             } else if (line.startsWith("-") || line.startsWith("!")) {
                 // Remove a property
-                String propName = line.substring(1).trim();
-                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
-                resultSet.removeAll(propSet);
+                String propName = stripDefinitionComment(line.substring(1));
+                // A leading minus may subtract a literal code point/range,
+                // e.g. "-61" in a consonant property definition.
+                if (!(line.startsWith("-") && removeHexRange(resultSet, propName))) {
+                    UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
+                    resultSet.removeAll(propSet);
+                }
             } else if (line.startsWith("&")) {
                 // Intersection with a property
-                String propName = line.substring(1).trim();
+                String propName = stripDefinitionComment(line.substring(1));
                 UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
                 if (!hasIntersection) {
                     intersectionSet = propSet;
@@ -247,6 +251,30 @@ public class UnicodeResolver {
         }
 
         return unicodeSetToJavaPattern(resultSet);
+    }
+
+    private static String stripDefinitionComment(String propertyReference) {
+        int comment = propertyReference.indexOf('#');
+        return (comment >= 0 ? propertyReference.substring(0, comment) : propertyReference).trim();
+    }
+
+    private static boolean removeHexRange(UnicodeSet target, String definition) {
+        String[] endpoints = definition.split("\\t+|\\s+");
+        if (endpoints.length < 1 || endpoints.length > 2) return false;
+        for (String endpoint : endpoints) {
+            if (!endpoint.matches("[0-9A-Fa-f]+")) return false;
+        }
+        try {
+            long start = Long.parseLong(endpoints[0], 16);
+            long end = endpoints.length == 1 ? start : Long.parseLong(endpoints[1], 16);
+            if (start > end) return false;
+            if (start <= 0x10FFFF) {
+                target.remove((int) start, (int) Math.min(end, 0x10FFFF));
+            }
+            return true;
+        } catch (NumberFormatException invalidHex) {
+            return false;
+        }
     }
 
     /**
@@ -445,16 +473,31 @@ public class UnicodeResolver {
      */
     private static String tryUserDefinedProperty(
             String property, Set<String> recursionSet, boolean caseInsensitive) {
-        // Add to recursion set
-        Set<String> newRecursionSet = new HashSet<>(recursionSet);
-        newRecursionSet.add(property);
-
         // Build the full subroutine name
         String subName = property;
         if (!subName.contains("::")) {
             // Try in main package
             subName = "main::" + subName;
         }
+
+        // The runtime-family coordinator also keys properties by their fully
+        // qualified sub name. Keep recursion tracking in that same canonical
+        // namespace; otherwise InFoo -> main::InFoo can wait on its own active
+        // future instead of reporting recursive expansion.
+        if (recursionSet.contains(subName)) {
+            StringBuilder chain = new StringBuilder();
+            for (String recursiveProperty : recursionSet) {
+                if (chain.length() > 0) chain.append(" in expansion of ");
+                chain.append(recursiveProperty);
+            }
+            if (chain.length() > 0) chain.append(" in expansion of ");
+            chain.append(subName);
+            throw new IllegalArgumentException(
+                    "Infinite recursion in user-defined property \"" + subName
+                            + "\" in expansion of " + chain);
+        }
+        Set<String> newRecursionSet = new HashSet<>(recursionSet);
+        newRecursionSet.add(subName);
 
         // Check cache first — Perl only calls user-defined property subs once
         String cacheKey = userPropertyCacheKey(subName, caseInsensitive);
@@ -562,8 +605,14 @@ public class UnicodeResolver {
             String property = pattern.substring(slash + 3, end).trim();
             if (property.startsWith("^")) property = property.substring(1).trim();
             if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
-                translateUnicodeProperty(property, marker == 'P', new HashSet<>(),
-                        caseInsensitive);
+                // Preloading is an optimization for callbacks that are already
+                // available. Perl permits qr// to contain a forward reference
+                // to a user property; RegexPreprocessor represents that with a
+                // placeholder and recompiles on first use. Calling the complete
+                // translator here would turn that intentional forward reference
+                // into an early "unsupported property" fatal before the
+                // placeholder path can run.
+                tryUserDefinedProperty(property, new HashSet<>(), caseInsensitive);
             }
             slash = end;
         }

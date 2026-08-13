@@ -1073,7 +1073,7 @@ public class CompileOperator {
                             && !modifiers.contains("u")) {
                         modifiers += "u";
                     }
-                    RuntimeRegex.compile(literalPattern.value, modifiers);
+                    RuntimeRegex.validateLiteralSyntax(literalPattern.value, modifiers);
                 }
                 boolean hasOModifier = false;
                 Node flagsNode = operand.elements.get(1);

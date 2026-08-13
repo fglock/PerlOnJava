@@ -306,7 +306,7 @@ public class EmitRegex {
         if (unicodeStringsEnabled(emitterVisitor) && !modifiers.contains("u")) {
             modifiers += "u";
         }
-        RuntimeRegex.compile(pattern.value, modifiers);
+        RuntimeRegex.validateLiteralSyntax(pattern.value, modifiers);
     }
 
     /**

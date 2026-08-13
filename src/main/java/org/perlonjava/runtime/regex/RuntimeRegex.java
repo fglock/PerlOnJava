@@ -354,6 +354,29 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 .matcher(patternString).find();
     }
 
+    /**
+     * Validate literal syntax without executing user-property callbacks.
+     *
+     * <p>CV compilation must reject malformed literals, but it must not turn a
+     * valid Perl feature that this backend cannot yet execute into an early
+     * compile-time fatal. Runtime compilation retains the existing
+     * JPERL_UNIMPLEMENTED policy for those patterns.</p>
+     */
+    public static void validateLiteralSyntax(String patternString, String modifiers) {
+        try {
+            compileSynchronized(patternString, modifiers);
+        } catch (PerlJavaUnimplementedException unsupported) {
+            String message = unsupported.getMessage();
+            if (message != null && (message.contains("Unclosed character class")
+                    || message.contains("Unclosed group")
+                    || message.contains("Dangling meta character")
+                    || message.contains("Unmatched closing")
+                    || message.contains("Illegal repetition"))) {
+                throw new PerlCompilerException(message);
+            }
+        }
+    }
+
     private static synchronized RuntimeRegex compileSynchronized(
             String patternString, String modifiers) {
         // Debug logging
