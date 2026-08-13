@@ -1,5 +1,5 @@
 AnyDBM_File	SKIP				2026-06-18	distroprefs	
-Bit::Vector::Overload	SKIP				2026-08-11	bundled	
+Bit::Vector::Overload	SKIP				2026-08-13	bundled	
 CGI	SKIP				2026-06-18	distroprefs	
 CGI::Carp	SKIP				2026-06-15	distroprefs	
 CGI::Cookie	SKIP				2026-06-13	distroprefs	
@@ -8,7 +8,7 @@ CGI::Simple::Cookie	SKIP				2026-06-18	distroprefs
 Class::Load	SKIP				2026-06-18	bundled	
 Class::Load::XS	SKIP				2026-06-11	bundled	
 Class::XSAccessor::Array	SKIP				2026-06-15	bundled	
-Clone	SKIP				2026-08-12	bundled	
+Clone	SKIP				2026-08-13	bundled	
 Cpanel::JSON::XS	SKIP				2026-06-18	bundled	
 Cwd	SKIP				2026-06-11	bundled	
 DBD::DBM	SKIP				2026-08-13	bundled	
@@ -30,6 +30,7 @@ Hg::Lib	SKIP				2026-08-11	bundled
 Hook::LexWrap	SKIP				2026-06-18	distroprefs	
 IO::Pipe	SKIP				2026-08-13	bundled	
 Image::Magick	SKIP				2026-06-18	bundled	
+JSON::Syck	SKIP				2026-08-13	bundled	
 LWP	SKIP				2026-06-18	distroprefs	
 LWP::Protocol::http	SKIP				2026-06-18	distroprefs	
 LWP::Simple	SKIP				2026-06-18	distroprefs	
@@ -47,6 +48,7 @@ Mojo::UserAgent	SKIP				2026-06-03	distroprefs
 Mojolicious	SKIP				2026-06-18	distroprefs	
 Monkey::Patch::Action	SKIP				2026-06-03	distroprefs	
 NEXT	SKIP				2026-06-15	bundled	
+Net::Traceroute	SKIP				2026-08-13	bundled	
 Package::DeprecationManager	SKIP				2026-06-10	bundled	
 Package::Stash::XS	SKIP				2026-06-18	distroprefs	
 Proc::Killall	SKIP				2026-08-13	bundled	

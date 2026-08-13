@@ -86,6 +86,7 @@ Alt	PASS	9	9		2026-05-16		d8a8a9f34
 AltaVista::BabelFish	PASS	17	17		2026-05-18		bd327bb57
 Amazon::S3	PASS	19	19		2026-04-21		73edc8aba
 Amethyst	PASS	1	1		2026-05-11		2b8886eec
+Amon2::Plugin::ShareDir	PASS	1	1		2026-08-13		2103d7edf
 Anansi::Component	PASS	1	1		2026-08-11		19f3fff98
 AnnoCPAN::Perldoc	PASS	5	5		2026-05-10		1e95a0902
 Announcements	PASS	21	21		2026-05-18		b5536d190
@@ -131,16 +132,19 @@ App::Antigen	PASS	1	1		2026-08-12		cc69cbb4c
 App::ArticleWrap	PASS	7	7		2026-08-11		19f3fff98
 App::CLI	PASS	24	24		2026-06-18		c3e9fa049
 App::CLI::Plugin::StackTrace	PASS	1	1		2026-08-11		19f3fff98
+App::CMAM	PASS	1	1		2026-08-13		2103d7edf
 App::Cache	PASS	49	49		2026-04-21		73edc8aba
 App::Cmd::Command::version	PASS	87	87		2026-06-18		c3e9fa049
 App::Cmd::Plugin::Prompt	PASS	2	2		2026-04-26		1d5def215
 App::Cmd::Setup	PASS	87	87		2026-06-18		c3e9fa049
+App::CommentToPod	PASS	13	13		2026-08-13		2103d7edf
 App::GitHub::update	PASS	1	1		2026-08-11		19f3fff98
 App::Isa::Splain	PASS	29	29		2026-08-12		004ce4b1f
 App::JSON::to	PASS	5	5		2026-08-11		19f3fff98
 App::LJ	PASS	5	5		2026-08-12		cc69cbb4c
 App::NetdiscoX::Web::Plugin::GraphLinkSwitch	PASS				2026-08-11		19f3fff98
 App::Options	PASS	87	87		2026-06-10		959012866
+App::PerlLocalEnv	PASS				2026-08-13		2103d7edf
 App::Pod2CpanHtml	PASS	1	1		2026-06-18		c3e9fa049
 App::Prove::Plugin::Count	PASS	17	17		2026-05-12		312b4f902
 App::REPL	PASS	1	1		2026-08-11		19f3fff98
@@ -156,12 +160,15 @@ App::cpm	PASS	1	1		2026-05-12		b5c01ce1c
 App::crosstable	PASS				2026-08-13		cc69cbb4c
 App::expskip	PASS				2026-08-11		19f3fff98
 App::filewatch	PASS	7	7		2026-08-12		004ce4b1f
+App::git_log_ch_usrdata	PASS	1	1		2026-08-13		2103d7edf
 App::hr	PASS	3	3		2026-08-11		19f3fff98
 App::mymeta_requires	PASS	12	12		2026-08-12		004ce4b1f
 App::pandoc::preprocess::File	PASS	42	42		2026-08-12		004ce4b1f
+App::plstrace	PASS				2026-08-13		2103d7edf
 App::pnc	PASS	1	1		2026-08-11		19f3fff98
 App::quickabspath	PASS	2	2		2026-08-12		cc69cbb4c
 App::realpath	PASS	3	3		2026-08-13		cc69cbb4c
+App::rename	PASS				2026-08-13		2103d7edf
 App::rsync::retry	PASS	4	4		2026-08-13		cc69cbb4c
 App::tcpproxy	PASS				2026-08-12		cc69cbb4c
 App::zoo	PASS				2026-08-12		004ce4b1f
@@ -180,6 +187,7 @@ Array::AsObject	PASS	159	159		2026-05-11		b5c01ce1c
 Array::Columnize	PASS	40	40		2026-05-19		b5536d190
 Array::Compare	PASS	38	38		2026-05-19		b5536d190
 Array::Diff	PASS	15	15		2026-06-18		c3e9fa049
+Array::Each	PASS	236	236		2026-08-13		2103d7edf
 Array::GroupBy	PASS	55	55		2026-08-13		cc69cbb4c
 Array::IntSpan	PASS	178	178		2026-05-19		b5536d190
 Array::Util::MultiTarget	PASS	8	8		2026-08-12		004ce4b1f
@@ -244,6 +252,7 @@ BellmanFord	PASS	1	1		2026-06-11		959012866
 Bencher::Scenario::AppHr::Completion	PASS	5	5		2026-08-11		19f3fff98
 Bencher::Scenario::FileFlockRetry::Startup	PASS	3	3		2026-08-13		cc69cbb4c
 Bencher::Scenario::HashUnique	PASS	2	2		2026-08-11		19f3fff98
+Bencher::Scenario::IntValidation	PASS	2	2		2026-08-13		2103d7edf
 Bencher::Scenario::LogDispatch::Startup	PASS	3	3		2026-08-11		19f3fff98
 Bencher::Scenario::PathNaive::abs_path	PASS	11	11		2026-08-13		cc69cbb4c
 BenchmarkAnything::Config	PASS	4	4		2026-05-12		312b4f902
@@ -252,11 +261,13 @@ BenchmarkAnything::Storage::Search::Elasticsearch	PASS	2	2		2026-05-10		1e95a090
 Bencode	PASS	88	88		2026-06-18		c3e9fa049
 Best	PASS	101	101		2026-05-17		d8a8a9f34
 BibTeX::Parser	PASS	478	478		2026-05-17		bd327bb57
+Biblio::SIF	PASS				2026-08-13		2103d7edf
 BigIP::GTM::ParseConfig	PASS	1	1		2026-05-12		93dfa497b
 BigIP::ParseConfig	PASS	7	7		2026-05-17		bd327bb57
 BigIP::iControl	PASS	6	6		2026-05-12		b5c01ce1c
 Bijection	PASS	5042	5042		2026-05-12		93dfa497b
 Bio::Coordinate::Pair	PASS	485	485		2026-05-01		5ce10aaac
+Bio::Das::ProServer::SourceAdaptor::edgeexpress	PASS				2026-08-13		2103d7edf
 Bio::MAGE::Array	PASS	7101	7101		2026-08-13		cc69cbb4c
 Bio::PDB::Structure::Atom	PASS	37	37		2026-08-13		cc69cbb4c
 Bio::Trace::ABIF	PASS	27	27		2026-05-18		bd327bb57
@@ -283,6 +294,7 @@ Btrees	PASS	7	7		2026-05-16		d8a8a9f34
 Builder	PASS	35	35		2026-05-16		d8a8a9f34
 Bundler	PASS	2	2		2026-05-11		2b8886eec
 Business::BR::PIS	PASS	2956	2956		2026-05-16		75a25eb21
+Business::BalancedPayments::HTTP	PASS	8	8		2026-08-13		2103d7edf
 Business::CreditCard	PASS	11	11		2026-06-18		c3e9fa049
 Business::GoCardless	PASS	40	40		2026-08-12		004ce4b1f
 Business::ID::NPWP	PASS	18	18		2026-08-11		19f3fff98
@@ -327,6 +339,7 @@ CGI::Application::Plugin::AutoRunmode	PASS	74	74		2026-06-18		c3e9fa049
 CGI::Application::Plugin::Config::Any	PASS	10	10		2026-05-11		b5c01ce1c
 CGI::Application::Plugin::Config::Context	PASS	399	399		2026-05-12		b5c01ce1c
 CGI::Application::Plugin::ConfigAuto	PASS	12	12		2026-05-18		b5536d190
+CGI::Application::Plugin::DBH	PASS	28	28		2026-08-13		2103d7edf
 CGI::Application::Plugin::DBIC::Schema	PASS	1	1		2026-05-11		b5c01ce1c
 CGI::Application::Plugin::DebugScreen	PASS	1	1		2026-05-11		1e95a0902
 CGI::Application::Plugin::DeclareREST	PASS	20	20		2026-05-16		75a25eb21
@@ -551,6 +564,7 @@ Catalyst::Helper::Model::Facebook	PASS	2	2		2026-08-13		cc69cbb4c
 Catalyst::Helper::Model::MetaCPAN	PASS				2026-08-13		cc69cbb4c
 Catalyst::Helper::View::BK	PASS	4	4		2026-08-13		cc69cbb4c
 Catalyst::Model::Adaptor	PASS	4	4		2026-05-12		93dfa497b
+Catalyst::Plugin::Authentication::Credential::GooglePlus	PASS				2026-08-13		2103d7edf
 Catalyst::Plugin::Authentication::Credential::Hatena	PASS	7	7		2026-08-11		19f3fff98
 Catalyst::Plugin::BootstrapAlert	PASS	1	1		2026-08-13		cc69cbb4c
 Catalyst::Plugin::CodeEval	PASS	1	1		2026-08-11		19f3fff98
@@ -563,6 +577,7 @@ Catalyst::Plugin::ServeFile	PASS	26	26		2026-08-13		cc69cbb4c
 Catalyst::Plugin::Session::DynamicExpiry	PASS	1	1		2026-05-08		454bddc34
 Catalyst::Plugin::Session::Store::CHI	PASS	1	1		2026-08-12		cc69cbb4c
 Catalyst::Plugin::SimpleMessage	PASS	31	31		2026-08-13		cc69cbb4c
+Catalyst::Plugin::Static::Simple	PASS	72	72		2026-08-13		2103d7edf
 Catalyst::Plugin::URI	PASS	20	20		2026-08-12		cc69cbb4c
 Catalyst::Plugin::Upload::Basename	PASS	1	1		2026-08-12		cc69cbb4c
 CatalystX::AppBuilder	PASS	1	1		2026-05-16		75a25eb21
@@ -696,6 +711,7 @@ Complete::Country	PASS	1	1		2026-05-16		75a25eb21
 Complete::Env	PASS	4	4		2026-06-18		c3e9fa049
 Complete::File	PASS	14	14		2026-06-18		c3e9fa049
 Complete::Fish	PASS	3	3		2026-06-18		c3e9fa049
+Complete::Fish::Gen::FromGetoptLongDescriptive	PASS	1	1		2026-08-13		2103d7edf
 Complete::Module	PASS	14	14		2026-05-17		d8a8a9f34
 Complete::Path	PASS	1	1		2026-06-18		c3e9fa049
 Complete::Sah	PASS	9	9		2026-05-17		d8a8a9f34
@@ -728,6 +744,7 @@ Config::ZOMG	PASS	79	79		2026-06-18		c3e9fa049
 ConfigReader::Simple	PASS	205	205		2026-05-11		b5c01ce1c
 Const::Fast	PASS	26	26		2026-06-18		c3e9fa049
 ConstantCalculus::CircleConstant	PASS	1	1		2026-05-10		1e95a0902
+Context::Preserve	PASS	14	14		2026-08-13		2103d7edf
 Contize	PASS	1	1		2026-06-14		cc8aa9561
 Control::CLI::AvayaData	PASS	3	3		2026-08-12		004ce4b1f
 Convert::ASN1	PASS	595	595		2026-06-14		cc8aa9561
@@ -982,13 +999,16 @@ Data::Search	PASS	1	1		2026-08-13		cc69cbb4c
 Data::Section::Simple	PASS	8	8		2026-06-13		cc8aa9561
 Data::Serializer	PASS	716	716		2026-06-11		959012866
 Data::Serializer::JSON	PASS	716	716		2026-06-18		c3e9fa049
+Data::Serializer::JSON::MaybeXS	PASS	1	1		2026-08-13		2103d7edf
 Data::Stag	PASS	102	102		2026-06-15		cc8aa9561
 Data::Storage	PASS	35	35		2026-08-13		cc69cbb4c
 Data::Stream::Bulk	PASS	170	170		2026-06-18		c3e9fa049
 Data::Stream::Bulk::AnyEvent	PASS	50	50		2026-05-07		24f4fb162
 Data::Table	PASS	92	92		2026-05-18		bd327bb57
+Data::Timeline	PASS	18	18		2026-08-13		2103d7edf
 Data::Traverse	PASS	5	5		2026-04-25		1d5def215
 Data::UUID	PASS	32	32		2026-06-11		959012866
+Data::Unixish::ANSI	PASS	4	4		2026-08-13		2103d7edf
 Data::Validate::Domain	PASS	85	85		2026-06-18		c3e9fa049
 Data::Verifier	PASS	244	244		2026-05-15		3fe76ed3b
 Data::Visitor	PASS	106	106		2026-06-14		cc8aa9561
@@ -996,6 +1016,7 @@ Data::Visitor::Callback	PASS	106	106		2026-06-15		cc8aa9561
 Data::Walk	PASS	266	266		2026-05-17		d8a8a9f34
 DataDog::DogStatsd	PASS	68	68		2026-05-19		b5536d190
 DataStruct::Flat	PASS	4	4		2026-05-12		312b4f902
+Database::Wrapper	PASS				2026-08-13		2103d7edf
 Date::Calc	PASS	3005	3005		2026-06-18		c3e9fa049
 Date::Day	PASS				2026-08-12		cc69cbb4c
 Date::DayOfWeek	PASS	32	32		2026-05-20		b5536d190
@@ -1094,6 +1115,8 @@ DateTimeX::Period	PASS	47	47		2026-05-10		1e95a0902
 DateTimeX::TO_JSON	PASS	6	6		2026-05-17		d8a8a9f34
 DateTimeX::Tiny::Compact	PASS	1	1		2026-05-10		a0cb33710
 DateTimeX::Web	PASS	131	131		2026-05-15		3fe76ed3b
+Debug::Phases	PASS	1	1		2026-08-13		2103d7edf
+Debug::Print	PASS	1	1		2026-08-13		2103d7edf
 Debug::STDERR	PASS	4	4		2026-05-12		b5c01ce1c
 Debug::Simple	PASS	3	3		2026-05-16		75a25eb21
 Declare::Constraints::Simple	PASS	238	238		2026-06-18		c3e9fa049
@@ -1105,6 +1128,7 @@ Deplide::RFID::EPCISSubmitter	PASS	1	1		2026-08-11		19f3fff98
 Devel::Autoflush	PASS	2	2		2026-06-18		c3e9fa049
 Devel::CheckBin	PASS	5	5		2026-06-15		cc8aa9561
 Devel::CheckLib	PASS	27	27		2026-06-18		c3e9fa049
+Devel::Confess::Patch::UseDataDumpIfSmall	PASS	1	1		2026-08-13		2103d7edf
 Devel::Cover::Report::Coveralls	PASS	9	9		2026-05-05		15e508248
 Devel::DLMProf::Apache	PASS	1	1		2026-08-11		19f3fff98
 Devel::EndStats::LoadedMods	PASS	1	1		2026-08-12		cc69cbb4c
@@ -1118,10 +1142,12 @@ Devel::TakeHashArgs	PASS	17	17		2026-06-03		d0f827461
 Devel::TraceINC	PASS	8	8		2026-08-13		cc69cbb4c
 Device::I2C	PASS	3	3		2026-06-14		cc8aa9561
 Device::Leap	PASS	1	1		2026-08-11		19f3fff98
+Device::Modbus	PASS	568	568		2026-08-13		2103d7edf
 Device::Onkyo	PASS	17	17		2026-05-12		312b4f902
 Device::ParallelPort	PASS	35	35		2026-06-18		c3e9fa049
 Device::Power::Synaccess::NP05B	PASS	22	22		2026-08-11		19f3fff98
 Device::SaleaeLogic	PASS				2026-08-12		004ce4b1f
+Device::Spektrum	PASS	8	8		2026-08-13		2103d7edf
 Device::WebIO::TMP102	PASS	2	2		2026-08-13		cc69cbb4c
 Diamond	PASS	1	1		2026-05-10		1e95a0902
 Digest::Adler32	PASS	10	10		2026-04-22		3f3336774
@@ -1166,6 +1192,7 @@ Eidolon	PASS	126	126		2026-05-17		d8a8a9f34
 Eircode	PASS	40	40		2026-05-10		1e95a0902
 ElasticSearch::SearchBuilder	PASS	831	831		2026-06-03		d0f827461
 Email::Abstract	PASS	174	174		2026-06-18		c3e9fa049
+Email::ConstantContact	PASS	5	5		2026-08-13		2103d7edf
 Email::Date::Format	PASS	8	8		2026-06-18		c3e9fa049
 Email::MIME::ContentType	PASS	118	118		2026-06-18		c3e9fa049
 Email::MessageID	PASS	9	9		2026-06-18		c3e9fa049
@@ -1269,6 +1296,7 @@ File::Object	PASS	81	81		2026-06-18		c3e9fa049
 File::PathConvert	PASS	266	266		2026-06-18		c3e9fa049
 File::Pid	PASS	7	7		2026-05-18		bd327bb57
 File::Process	PASS	26	26		2026-05-10		1e95a0902
+File::RdistByRsync	PASS				2026-08-13		2103d7edf
 File::ReadBackwards	PASS	171	171		2026-06-15		cc8aa9561
 File::SearchPath	PASS	16	16		2026-06-15		cc8aa9561
 File::ShareDir::Dist	PASS	19	19		2026-06-03		d0f827461
@@ -1278,6 +1306,7 @@ File::Signature	PASS	53	53		2026-06-10		959012866
 File::Slurp::Tiny	PASS	10	10		2026-06-18		c3e9fa049
 File::Slurp::WithinPolicy	PASS	35	35		2026-05-10		a0cb33710
 File::Slurper	PASS	8	8		2026-06-18		c3e9fa049
+File::Slurper::Temp	PASS	4	4		2026-08-13		2103d7edf
 File::SortedSeek::PERLANCAR	PASS	4	4		2026-06-14		cc8aa9561
 File::Spec::Native	PASS	9	9		2026-04-21		73edc8aba
 File::Tabular	PASS	32	32		2026-05-17		d8a8a9f34
@@ -1294,6 +1323,7 @@ File::chdir	PASS	94	94		2026-06-18		c3e9fa049
 File::pushd	PASS	47	47		2026-06-18		c3e9fa049
 FileCache::Appender	PASS	20	20		2026-05-07		24f4fb162
 FileSystem::LL::FAT	PASS	1	1		2026-05-17		d8a8a9f34
+Filename::Type::Backup	PASS	11	11		2026-08-13		2103d7edf
 Filesys::Btrfs	PASS	4	4		2026-08-12		004ce4b1f
 Filesys::Cap	PASS	1	1		2026-05-17		d8a8a9f34
 Filesys::Virtual	PASS	1	1		2026-06-10		959012866
@@ -1340,8 +1370,10 @@ Generic::ColorTheme::Kuler	PASS	1	1		2026-08-13		cc69cbb4c
 GenericSHIB	PASS	1	1		2026-05-10		1e95a0902
 Gentoo::MetaEbuild::Spec::MiniSpec	PASS	10	10		2026-08-13		cc69cbb4c
 Gentoo::MirrorList	PASS	1066	1066		2026-08-13		cc69cbb4c
+Gentoo::Perl::Distmap	PASS	10	10		2026-08-13		2103d7edf
 Gentoo::Util::VirtualDepend	PASS	23	23		2026-08-11		19f3fff98
 Geo::Coder::Google	PASS	8	8		2026-05-17		d8a8a9f34
+Geo::Coder::Mappy	PASS	5	5		2026-08-13		2103d7edf
 Geo::Constants	PASS	14	14		2026-06-14		cc8aa9561
 Geo::Coordinates::ITM	PASS	7	7		2026-05-10		a0cb33710
 Geo::Coordinates::Transform	PASS	17	17		2026-05-19		b5536d190
@@ -1356,6 +1388,7 @@ Geo::Postcode	PASS	40	40		2026-05-11		b5c01ce1c
 Geo::SypexGeo	PASS	5	5		2026-08-12		cc69cbb4c
 Geo::WKT::Simple	PASS	15	15		2026-08-13		cc69cbb4c
 Geoffrey	PASS	426	426		2026-05-11		2b8886eec
+Geoffrey::Changelog::Yaml	PASS	1	1		2026-08-13		2103d7edf
 Geohash	PASS	89	89		2026-08-13		cc69cbb4c
 GermaNet::Flat	PASS	1	1		2026-05-19		b5536d190
 Getopt::ArgvFile	PASS	44	44		2026-04-22		3f3336774
@@ -1507,6 +1540,7 @@ HTML::Widgets::NavMenu::Object	PASS	342	342		2026-06-10		959012866
 HTML::Widgets::NavMenu::ToJSON	PASS	23	23		2026-06-10		959012866
 HTML::Widgets::Table	PASS	1	1		2026-05-11		2b8886eec
 HTML::WikiConverter::Confluence	PASS	6	6		2026-05-17		d8a8a9f34
+HTML::XHTML::Lite	PASS	1	1		2026-08-13		2103d7edf
 HTTP::Accept	PASS	126	126		2026-06-10		959012866
 HTTP::AcceptCharset	PASS	115	115		2026-05-12		b5c01ce1c
 HTTP::AcceptLanguage	PASS	23	23		2026-05-13		3fe76ed3b
@@ -1579,6 +1613,7 @@ HTTP::UA::Parser	PASS	51	51		2026-05-16		d8a8a9f34
 HTTP::UserAgentStr::Util::ByNickname	PASS	1	1		2026-06-03		d0f827461
 HTTPD::Bench::ApacheBench	PASS	46	46		2026-05-11		1e95a0902
 HTTPD::Log::Filter	PASS	25	25		2026-05-12		312b4f902
+Ham::Reference::Solar	PASS	1	1		2026-08-13		2103d7edf
 Hash::AsObject	PASS	97	97		2026-06-18		c3e9fa049
 Hash::DefHash	PASS	6	6		2026-08-11		19f3fff98
 Hash::Inflator	PASS	16	16		2026-06-15		cc8aa9561
@@ -1777,6 +1812,7 @@ Jinja2::TT2	PASS	59	59		2026-05-15		3fe76ed3b
 JomonTest	PASS	1	1		2026-05-11		2b8886eec
 Jq	PASS	1	1		2026-05-10		1e95a0902
 KIF::Bootloader	PASS	1	1		2026-05-10		1e95a0902
+Kafka::Client	PASS				2026-08-13		2103d7edf
 Kasago	PASS	3	3		2026-04-21		73edc8aba
 KashFlowAPI	PASS	6	6		2026-05-18		bd327bb57
 Kelp::Module::Config::ConfigGeneral	PASS	11	11		2026-08-11		19f3fff98
@@ -1839,6 +1875,7 @@ Limper::SendFile	PASS	1	1		2026-04-22		e228c2529
 Limper::SendJSON	PASS	1	1		2026-04-22		e228c2529
 Lingua::AM::Abbreviate	PASS				2026-08-12		19f3fff98
 Lingua::Align	PASS	1	1		2026-08-13		cc69cbb4c
+Lingua::ELL::Num2Word	PASS	3	3		2026-08-13		2103d7edf
 Lingua::EN::FindNumber	PASS	5	5		2026-06-14		cc8aa9561
 Lingua::EN::Inflect	PASS	2147	2147		2026-06-18		c3e9fa049
 Lingua::EN::Inflect::Number	PASS	21	21		2026-06-14		cc8aa9561
@@ -1852,10 +1889,12 @@ Lingua::FRA::Num2Word	PASS				2026-08-11		19f3fff98
 Lingua::GL::Stemmer	PASS	12	12		2026-06-14		cc8aa9561
 Lingua::Han::Utils	PASS	11	11		2026-06-10		959012866
 Lingua::Identify::Any	PASS	1	1		2026-05-12		93dfa497b
+Lingua::Klingon::Recode	PASS	571	571		2026-08-13		2103d7edf
 Lingua::Klingon::Segment	PASS	63	63		2026-08-12		004ce4b1f
 Lingua::LAV::Num2Word	PASS	3	3		2026-08-11		19f3fff98
 Lingua::PT::Abbrev	PASS	7	7		2026-04-22		3f3336774
 Lingua::Preferred	PASS				2026-08-13		cc69cbb4c
+Lingua::RON::Num2Word	PASS	3	3		2026-08-13		2103d7edf
 Lingua::SLK::Num2Word	PASS	3	3		2026-08-13		cc69cbb4c
 Lingua::Sentence	PASS	33	33		2026-06-13		cc8aa9561
 Lingua::Stem	PASS	7	7		2026-06-14		cc8aa9561
@@ -1870,6 +1909,7 @@ Lingua::StopWords	PASS	86	86		2026-05-18		b5536d190
 Lingua::StopWords::EN	PASS	86	86		2026-05-12		b5c01ce1c
 Lingua::ZH::MMSEG	PASS	15	15		2026-05-07		9bda7d2ed
 Linux::APT	PASS	1	1		2026-08-13		cc69cbb4c
+Linux::hddtemp	PASS				2026-08-13		2103d7edf
 Linux::usermod	PASS	10	10		2026-06-15		cc8aa9561
 List::BinarySearch	PASS	28	28		2026-04-28		e3750ee00
 List::Categorize	PASS	20	20		2026-04-22		3f3336774
@@ -1916,6 +1956,7 @@ Log::Any::Adapter::Screen	PASS	1	1		2026-06-03		d0f827461
 Log::Any::Plugin	PASS	76	76		2026-06-18		c3e9fa049
 Log::Any::Plugin::History	PASS	9	9		2026-06-18		c3e9fa049
 Log::Contextual	PASS	347	347		2026-06-15		cc8aa9561
+Log::Contextual::LogDispatchouli	PASS	1	1		2026-08-13		2103d7edf
 Log::Fu	PASS	32	32		2026-08-13		cc69cbb4c
 Log::Handler	PASS	185	185		2026-06-18		c3e9fa049
 Log::LTSV::Instance	PASS	16	16		2026-08-12		cc69cbb4c
@@ -1934,10 +1975,12 @@ Log::Report	PASS	274	274		2026-06-18		c3e9fa049
 Log::Report::Optional	PASS	76	76		2026-06-18		c3e9fa049
 Log::Sprintf	PASS	14	14		2026-06-18		c3e9fa049
 Log::StdLog	PASS	70	70		2026-08-12		cc69cbb4c
+Log::StringFormatter	PASS	8	8		2026-08-13		2103d7edf
 Log::Structured	PASS	13	13		2026-06-18		c3e9fa049
 Log::Syslog::Abstract	PASS	61	61		2026-08-11		19f3fff98
 Log::Syslog::Constants	PASS	59	59		2026-05-16		d8a8a9f34
 Log::Trace	PASS	83	83		2026-06-15		cc8aa9561
+Log::err	PASS	1	1		2026-08-13		2103d7edf
 Log::ger	PASS	28	28		2026-06-18		c3e9fa049
 Log::ger::Format	PASS	28	28		2026-06-18		c3e9fa049
 Log::ger::Format::Sprintfn	PASS	2	2		2026-08-12		cc69cbb4c
@@ -2007,6 +2050,7 @@ Mail::ListDetector	PASS	240	240		2026-05-18		bd327bb57
 Mail::Mailer	PASS	109	109		2026-05-18		b5536d190
 Mail::POP3Client	PASS	28	28		2026-06-14		cc8aa9561
 Mail::Send	PASS	109	109		2026-05-14		3fe76ed3b
+Mail::SendGrid	PASS	4	4		2026-08-13		2103d7edf
 MailTools	PASS	109	109		2026-05-18		bd327bb57
 Mailru::Cloud	PASS	5	5		2026-08-12		004ce4b1f
 Maple	PASS	6	6		2026-05-14		3fe76ed3b
@@ -2059,9 +2103,11 @@ Minio	PASS				2026-08-11		19f3fff98
 Minion	PASS	12	12		2026-06-15		cc8aa9561
 Mira	PASS	19	19		2026-05-14		3fe76ed3b
 Mo	PASS	153	153		2026-06-14		cc8aa9561
+Mo::utils::CSS	PASS	181	181		2026-08-13		2103d7edf
 Mo::utils::Language	PASS	15	15		2026-05-08		454bddc34
 Mo::utils::common	PASS	11	11		2026-05-15		3fe76ed3b
 MobilePhone	PASS	1	1		2026-05-20		b5536d190
+Mock::Person::CZ	PASS	46	46		2026-08-13		2103d7edf
 Mock::Quick	PASS	174	174		2026-05-18		bd327bb57
 Mockery	PASS	6	6		2026-05-17		bd327bb57
 ModPerl::VersionUtil	PASS	25	25		2026-05-10		1e95a0902
@@ -2118,7 +2164,9 @@ MojoX::Mysql	PASS	5	5		2026-05-06		9bda7d2ed
 Mojolicious::Plugin::ACME::Command::acme::automate	PASS	1	1		2026-08-12		004ce4b1f
 Mojolicious::Plugin::AnyData	PASS	1	1		2026-08-11		19f3fff98
 Mojolicious::Plugin::DebugDumperHelper	PASS	3	3		2026-08-12		cc69cbb4c
+Mojolicious::Plugin::GetSentry	PASS	1	1		2026-08-13		2103d7edf
 Mojolicious::Plugin::Mojolyst	PASS	3	3		2026-08-12		004ce4b1f
+Mojolicious::Plugin::OAuth2::Che	PASS	1	1		2026-08-13		2103d7edf
 Mojolicious::Plugin::Renderer::WithoutCache	PASS	161	161		2026-08-13		cc69cbb4c
 Mojolicious::Plugin::SlapbirdAPM	PASS	1	1		2026-08-11		19f3fff98
 Moment	PASS	649	649		2026-05-12		b5c01ce1c
@@ -2257,6 +2305,7 @@ MooseX::Types::DateTime	PASS	28	28		2026-05-17		d8a8a9f34
 MooseX::Types::DateTime::MySQL	PASS	12	12		2026-05-17		d8a8a9f34
 MooseX::Types::DateTime::W3C	PASS	72	72		2026-05-10		1e95a0902
 MooseX::Types::Digest	PASS	81	81		2026-05-12		312b4f902
+MooseX::Types::Email	PASS	15	15		2026-08-13		2103d7edf
 MooseX::Types::JSON	PASS	11	11		2026-05-15		3fe76ed3b
 MooseX::Types::LoadableClass	PASS	54	54		2026-05-19		b5536d190
 MooseX::Types::Locale::Currency	PASS	5	5		2026-05-17		d8a8a9f34
@@ -2277,6 +2326,8 @@ MooseX::UndefTolerant	PASS	158	158		2026-05-12		b5c01ce1c
 MooseX::WhatTheTrig	PASS	7	7		2026-05-12		b5c01ce1c
 MooseY	PASS	3	3		2026-05-11		b5c01ce1c
 Morale	PASS	1	1		2026-05-11		2b8886eec
+Mouse::Meta::Attribute::Custom::Trait::Array	PASS	48	48		2026-08-13		2103d7edf
+MouseX::Object::Pluggable	PASS	34	34		2026-08-13		2103d7edf
 MozRepl	PASS	74	74		2026-05-17		bd327bb57
 MozRepl::RemoteObject	PASS	1	1		2026-05-17		bd327bb57
 Mozilla::CA	PASS	2	2		2026-06-18		c3e9fa049
@@ -2313,7 +2364,9 @@ Neo4j::Error	PASS	28	28		2026-06-14		cc8aa9561
 Neo4j::Types	PASS	124	124		2026-06-14		cc8aa9561
 Net::ASN	PASS	74	74		2026-05-17		d8a8a9f34
 Net::Amazon::AlexaValidator	PASS	1	1		2026-08-11		19f3fff98
+Net::Amazon::DirectConnect	PASS	1	1		2026-08-13		2103d7edf
 Net::Amazon::Signature::V4	PASS	126	126		2026-04-21		73edc8aba
+Net::Async::ControlChannel	PASS	17	17		2026-08-13		2103d7edf
 Net::Async::PostgreSQL	PASS	2	2		2026-08-12		cc69cbb4c
 Net::BigIP	PASS				2026-08-13		cc69cbb4c
 Net::CIDR	PASS	6	6		2026-05-13		3fe76ed3b
@@ -2379,6 +2432,7 @@ Number::Closest::NonOO	PASS	15	15		2026-08-11		19f3fff98
 Number::Compare	PASS	24	24		2026-06-18		c3e9fa049
 Number::Format	PASS	171	171		2026-06-18		c3e9fa049
 Number::Format::Metric	PASS	2	2		2026-05-08		24f4fb162
+Number::Iterator	PASS	11	11		2026-08-13		2103d7edf
 Number::Phone::Normalize	PASS	126	126		2026-05-12		b5c01ce1c
 NumericCodes	PASS	9	9		2026-05-18		bd327bb57
 OAuth::Lite	PASS	197	197		2026-05-10		1e95a0902
@@ -2565,7 +2619,9 @@ Palm::PDB	PASS	38	38		2026-06-13		cc8aa9561
 Panda::Install	PASS	1	1		2026-05-06		9bda7d2ed
 Papery	PASS	65	65		2026-05-11		2b8886eec
 Params::Filter	PASS	84	84		2026-05-17		d8a8a9f34
+Params::Registry	PASS	4	4		2026-08-13		2103d7edf
 Params::Validate	PASS	2512	2512		2026-05-21		474c0f049
+Params::ValidationCompiler	PASS	88	88		2026-08-13		2103d7edf
 Parse::ANSIColor::Tiny	PASS	1170	1170		2026-05-10		1e95a0902
 Parse::Arcconf	PASS	2	2		2026-08-13		cc69cbb4c
 Parse::CPAN::MirroredBy	PASS	4	4		2026-06-10		959012866
@@ -2573,6 +2629,7 @@ Parse::CPAN::Whois	PASS	8	8		2026-05-16		75a25eb21
 Parse::CommandLine	PASS	9	9		2026-05-18		bd327bb57
 Parse::DebControl	PASS	155	155		2026-05-07		9bda7d2ed
 Parse::Distname	PASS	857	857		2026-06-18		c3e9fa049
+Parse::Flash::Cookie	PASS	125	125		2026-08-13		2103d7edf
 Parse::RecDescent	PASS	139	139		2026-06-18		c3e9fa049
 Parse::Text	PASS				2026-08-11		19f3fff98
 Parse::Yapp	PASS	33	33		2026-06-10		959012866
@@ -2581,6 +2638,7 @@ Pask	PASS	1	1		2026-05-12		312b4f902
 Passwd::Keyring::Auto	PASS	97	97		2026-04-26		1d5def215
 Passwd::Keyring::Auto::KeyringAPI	PASS	68	68		2026-08-13		cc69cbb4c
 Passwd::Keyring::Memory	PASS	72	72		2026-04-26		1d5def215
+Password::OWASP::AbstractBaseX	PASS	38	38		2026-08-13		2103d7edf
 Path::Class	PASS	248	248		2026-05-20		b5536d190
 Path::Class::File::Lockable	PASS	18	18		2026-04-22		3f3336774
 Path::Class::File::Stat	PASS	16	16		2026-04-22		3f3336774
@@ -2614,6 +2672,7 @@ Perl6::Junction	PASS	374	374		2026-06-10		959012866
 Perl6::Roles	PASS	163	163		2026-05-17		d8a8a9f34
 Perl6::Take	PASS	22	22		2026-05-19		b5536d190
 Perl::Command	PASS	4	4		2026-05-15		3fe76ed3b
+Perl::Critic::Itch	PASS	9	9		2026-08-13		2103d7edf
 Perl::Version	PASS	1056	1056		2026-05-20		b5536d190
 Perl::osnames	PASS	3	3		2026-06-15		cc8aa9561
 PerlGuard::Agent	PASS	6	6		2026-05-17		d8a8a9f34
@@ -2685,6 +2744,7 @@ Pod::ROBODoc	PASS	19	19		2026-08-11		19f3fff98
 Pod::Simpler::Aoh	PASS	11	11		2026-04-22		3f3336774
 Pod::Term	PASS	230	230		2026-04-30		1766659c7
 Pod::Tree	PASS	131	131		2026-05-17		d8a8a9f34
+Pod::Weaver::Plugin::TableData	PASS	1	1		2026-08-13		2103d7edf
 Pod::Weaver::Role::SortSections	PASS	1	1		2026-08-12		cc69cbb4c
 Pod::Xhtml	PASS	46	46		2026-05-11		1e95a0902
 PostFilter	PASS	10	10		2026-05-15		3fe76ed3b
@@ -2720,7 +2780,9 @@ Protocol::WebSocket::Frame	PASS	685	685		2026-05-13		3fe76ed3b
 Pry	PASS	1	1		2026-05-14		3fe76ed3b
 PubNub::PubSub	PASS	26	26		2026-05-12		b5c01ce1c
 Pye	PASS	1	1		2026-06-14		cc8aa9561
+Python::Serialise::Pickle	PASS	94	94		2026-08-13		2103d7edf
 Python::Version	PASS	48	48		2026-08-11		19f3fff98
+QBit::WebInterface::FastCGI	PASS				2026-08-13		2103d7edf
 QML::File	PASS	13	13		2026-05-14		3fe76ed3b
 QMail::QueueHandler	PASS	12	12		2026-05-13		3fe76ed3b
 QRCode::Encoder	PASS	12	12		2026-05-12		b5c01ce1c
@@ -2728,6 +2790,7 @@ Queue::Base	PASS	22	22		2026-05-12		b5c01ce1c
 Quiz::Flashcards::Sets::Hiragana::Romaji_Simple	PASS	4	4		2026-08-11		19f3fff98
 R::DescriptionFile	PASS	6	6		2026-05-12		b5c01ce1c
 R::YapRI	PASS	51	51		2026-05-16		d8a8a9f34
+RAS::HiPerARC	PASS				2026-08-13		2103d7edf
 RBAC::Tiny	PASS	19	19		2026-05-13		3fe76ed3b
 RCU	PASS	1	1		2026-05-12		93dfa497b
 RDF::NS	PASS	98	98		2026-05-18		bd327bb57
@@ -2765,6 +2828,7 @@ RT::Extension::MandatoryFields	PASS	6	6		2026-05-14		3fe76ed3b
 RT::Extension::MandatoryOnTransition::Test	PASS				2026-08-12		004ce4b1f
 RT::Extension::MandatoryRequestor	PASS	6	6		2026-05-10		1e95a0902
 RT::Extension::MandatorySubject	PASS	6	6		2026-05-18		bd327bb57
+RT::Extension::OneClickClose	PASS				2026-08-13		2103d7edf
 RT::Extension::QuickDelete	PASS	3	3		2026-05-18		bd327bb57
 RT::Extension::ReferenceIDoitObjects	PASS	6	6		2026-05-11		b5c01ce1c
 RT::Extension::SavedSearchResults	PASS	1	1		2026-05-15		3fe76ed3b
@@ -2810,6 +2874,7 @@ Retry::Policy	PASS	12	12		2026-05-15		3fe76ed3b
 Return::Value	PASS	98	98		2026-06-15		cc8aa9561
 ReturnValue	PASS	3	3		2026-05-11		b5c01ce1c
 Riemann::Client	PASS	19	19		2026-05-10		a0cb33710
+Rinchi::DOM	PASS	1	1		2026-08-13		2103d7edf
 RiveScript	PASS	162	162		2026-05-17		d8a8a9f34
 RogueCurses	PASS	1	1		2026-06-14		cc8aa9561
 RogueQuest	PASS	1	1		2026-05-12		93dfa497b
@@ -2921,6 +2986,7 @@ SWISH::API::More	PASS	1	1		2026-05-14		3fe76ed3b
 SWISH::API::Stat	PASS	1	1		2026-05-17		d8a8a9f34
 SWISH::Filter	PASS	20	20		2026-05-10		1e95a0902
 SWISH::HiLiter	PASS	22	22		2026-05-11		b5c01ce1c
+SWISHED	PASS	1	1		2026-08-13		2103d7edf
 Safe::Isa	PASS	88	88		2026-06-18		c3e9fa049
 Sah::Schema::negint	PASS	47	47		2026-05-17		d8a8a9f34
 Sah::Schema::perl::arraydata::modname	PASS	9	9		2026-08-12		004ce4b1f
@@ -2937,6 +3003,7 @@ Sed	PASS	3	3		2026-05-12		93dfa497b
 SelectPdf	PASS	1	1		2026-08-12		004ce4b1f
 Selenium::Server	PASS	1	1		2026-05-15		3fe76ed3b
 Sentry::Raven	PASS	40	40		2026-08-13		cc69cbb4c
+Service::Engine	PASS				2026-08-13		2103d7edf
 Set::DynamicGroups	PASS	38	38		2026-06-14		cc8aa9561
 Set::Infinite	PASS	446	446		2026-04-21		73edc8aba
 Set::Select	PASS	24	24		2026-08-12		cc69cbb4c
@@ -2966,6 +3033,7 @@ Solaris::Contents	PASS				2026-08-12		cc69cbb4c
 Solr	PASS	1	1		2026-05-11		b5c01ce1c
 Soo	PASS	9	9		2026-05-12		312b4f902
 Sort::ArbBiLex	PASS	57	57		2026-08-11		19f3fff98
+Sort::ArrayOfArrays	PASS	11	11		2026-08-13		2103d7edf
 Sort::BySpec	PASS	3	3		2026-05-17		d8a8a9f34
 Sort::DataTypes	PASS	88	88		2026-05-11		b5c01ce1c
 Sort::Naturally	PASS	23	23		2026-06-10		959012866
@@ -3004,6 +3072,7 @@ Statistics::Descriptive	PASS	131	131		2026-05-19		b5536d190
 Statistics::Descriptive::Discrete	PASS	66	66		2026-08-13		cc69cbb4c
 Statistics::Forecast	PASS	3	3		2026-08-11		19f3fff98
 Statistics::Standard_Normal	PASS	35	35		2026-08-13		cc69cbb4c
+Statistics::Welford	PASS	18	18		2026-08-13		2103d7edf
 StoredHash	PASS	78	78		2026-05-12		b5c01ce1c
 Stream::Buffered	PASS	18	18		2026-08-11		19f3fff98
 Stream::Reader	PASS	1	1		2026-04-22		3f3336774
@@ -3047,6 +3116,7 @@ Sub::Regex	PASS	12	12		2026-08-12		cc69cbb4c
 Sub::SymMethod	PASS	12	12		2026-06-18		c3e9fa049
 Subtitles	PASS	17	17		2026-05-18		b5536d190
 Switch	PASS	590	590		2026-06-15		cc8aa9561
+Symbol::Name	PASS	6	6		2026-08-13		2103d7edf
 Syntax::Feature::Junction	PASS	386	386		2026-06-18		c3e9fa049
 Syntax::Highlight::Engine::Kate	PASS	588	588		2026-06-11		959012866
 Syntax::Highlight::Perl	PASS				2026-08-13		cc69cbb4c
@@ -3170,6 +3240,7 @@ Test2::Tools::Expressive	PASS	48	48		2026-05-19		b5536d190
 Test2::Tools::PerlTidy	PASS	7	7		2026-05-17		bd327bb57
 Test2::Util::DistFiles	PASS	4	4		2026-05-17		d8a8a9f34
 Test2::Util::UUID	PASS	5	5		2026-06-15		cc8aa9561
+Test::API	PASS	32	32		2026-08-13		2103d7edf
 Test::AllModules	PASS	24	24		2026-05-13		3fe76ed3b
 Test::Arrow	PASS	113	113		2026-05-07		24f4fb162
 Test::Assertions	PASS	64	64		2026-06-15		cc8aa9561
@@ -3203,6 +3274,7 @@ Test::Fake::HTTPD	PASS	1	1		2026-05-19		b5536d190
 Test::Fatal	PASS	19	19		2026-05-20		b5536d190
 Test::File::Cleaner	PASS	42	42		2026-06-03		d0f827461
 Test::File::Contents	PASS	70	70		2026-06-03		d0f827461
+Test::File::ShareDir	PASS	29	29		2026-08-13		2103d7edf
 Test::Filename	PASS	27	27		2026-04-21		73edc8aba
 Test::Future::IO::Impl	PASS	2	2		2026-06-15		cc8aa9561
 Test::GetVolatileData	PASS	15	15		2026-05-16		75a25eb21
@@ -3256,6 +3328,7 @@ Test::Roo	PASS	21	21		2026-06-18		c3e9fa049
 Test::Roo::DataDriven	PASS	27	27		2026-06-18		c3e9fa049
 Test::Routini	PASS	5	5		2026-05-10		a0cb33710
 Test::Settings	PASS	47	47		2026-06-15		cc8aa9561
+Test::Skeleton::Generator	PASS	53	53		2026-08-13		2103d7edf
 Test::Slow	PASS	5	5		2026-05-15		3fe76ed3b
 Test::Snapshot	PASS	11	11		2026-06-14		cc8aa9561
 Test::Spellunker	PASS	161	161		2026-06-13		cc8aa9561
@@ -3296,6 +3369,8 @@ Text::Context::EitherSide	PASS	12	12		2026-05-10		1e95a0902
 Text::Control	PASS	166	166		2026-06-14		cc8aa9561
 Text::DSV	PASS	29	29		2026-06-15		cc8aa9561
 Text::Diff	PASS	33	33		2026-06-18		c3e9fa049
+Text::DumbTemplate	PASS	1	1		2026-08-13		2103d7edf
+Text::FindLinks	PASS	13	13		2026-08-13		2103d7edf
 Text::Format	PASS	15	15		2026-05-16		75a25eb21
 Text::German	PASS	34	34		2026-06-14		cc8aa9561
 Text::Gitignore	PASS	42	42		2026-05-18		bd327bb57
@@ -3319,6 +3394,7 @@ Text::Quote	PASS	53	53		2026-06-18		c3e9fa049
 Text::Soundex	PASS	18	18		2026-06-18		c3e9fa049
 Text::SpanningTable	PASS	20	20		2026-06-14		cc8aa9561
 Text::Table	PASS	175	175		2026-06-18		c3e9fa049
+Text::Table::Tiny::_ModuleFeatures	PASS	1	1		2026-08-13		2103d7edf
 Text::TagTemplate	PASS	75	75		2026-08-12		cc69cbb4c
 Text::Tags	PASS	89	89		2026-06-15		cc8aa9561
 Text::Template	PASS	9	9		2026-08-11		19f3fff98
@@ -3328,6 +3404,7 @@ Text::Tree	PASS	13	13		2026-08-11		19f3fff98
 Text::Typoifier	PASS				2026-08-11		19f3fff98
 Text::Unaccent::PurePerl	PASS	66	66		2026-05-17		d8a8a9f34
 Text::Unidecode	PASS	1483	1483		2026-06-18		c3e9fa049
+Text::Unpack::Auto	PASS	24	24		2026-08-13		2103d7edf
 Text::WagnerFischer::Amharic	PASS	6	6		2026-08-11		19f3fff98
 Text::WikiFormat	PASS	143	143		2026-06-15		cc8aa9561
 Text::WikiFormat::SAX	PASS	10	10		2026-05-11		2b8886eec
@@ -3364,6 +3441,7 @@ Tie::Persistent	PASS	34	34		2026-05-17		bd327bb57
 Tie::RegexpHash	PASS	20	20		2026-05-10		1e95a0902
 Tie::Scalar::Sticky	PASS	17	17		2026-08-13		cc69cbb4c
 Tie::Simple	PASS	31	31		2026-06-18		c3e9fa049
+Tie::Static	PASS				2026-08-13		2103d7edf
 Tie::Sub	PASS	20	20		2026-06-18		c3e9fa049
 Tie::Tk::Text	PASS	1	1		2026-05-15		3fe76ed3b
 Tie::ToObject	PASS	10	10		2026-06-15		cc8aa9561
@@ -3395,6 +3473,7 @@ Transform::Canvas	PASS	34	34		2026-05-12		b5c01ce1c
 Tree::Base	PASS	32	32		2026-06-15		cc8aa9561
 Tree::Create::Callback::ChildrenPerLevel	PASS	4	4		2026-04-22		3f3336774
 Tree::Dump	PASS	1	1		2026-04-22		3f3336774
+Tree::From::ObjArray	PASS	2	2		2026-08-13		2103d7edf
 Tree::Numbered	PASS	37	37		2026-06-18		c3e9fa049
 Tree::Numbered::DB	PASS	29	29		2026-06-18		c3e9fa049
 Tree::Object::Hash	PASS	12	12		2026-04-22		3f3336774
@@ -3480,6 +3559,7 @@ Unix::PID	PASS	1	1		2026-05-12		312b4f902
 Unix::Process	PASS	2	2		2026-06-18		c3e9fa049
 Unixish	PASS	1	1		2026-05-12		b5c01ce1c
 Uplug::CS	PASS				2026-08-13		cc69cbb4c
+User::AccountChecker	PASS	1	1		2026-08-13		2103d7edf
 VBTK	PASS	4	4		2026-05-10		1e95a0902
 VCF	PASS	57	57		2026-05-16		75a25eb21
 VCS::Lite	PASS	47	47		2026-06-14		cc8aa9561
@@ -3619,6 +3699,7 @@ WWW::SlideShare	PASS	1	1		2026-05-12		312b4f902
 WWW::SolveMedia	PASS	1	1		2026-05-11		b5c01ce1c
 WWW::Spotify	PASS	33	33		2026-05-18		bd327bb57
 WWW::StatsMix	PASS	100	100		2026-05-17		d8a8a9f34
+WWW::Suffit::Client::NoAPI	PASS	2	2		2026-08-13		2103d7edf
 WWW::Suffit::Plugin::CommonHelpers	PASS	4	4		2026-05-09		d7916b01c
 WWW::Suffit::Plugin::ServerInfo	PASS	6	6		2026-05-14		3fe76ed3b
 WWW::TMDB::API	PASS	1	1		2026-05-18		bd327bb57
@@ -3647,6 +3728,7 @@ WWW::Yandex::MailForDomain	PASS	3	3		2026-05-11		b5c01ce1c
 WWW::Zotero	PASS	3	3		2026-05-12		93dfa497b
 WWW::eiNetwork	PASS	2	2		2026-05-10		1e95a0902
 Weasel::Driver::Selenium2	PASS	1	1		2026-08-13		cc69cbb4c
+Weasel::FindExpanders::Dojo	PASS	4	4		2026-08-13		2103d7edf
 Weather::API::Base	PASS	17	17		2026-05-11		b5c01ce1c
 WebApp::Helpers::JsonEncoder	PASS	6	6		2026-05-12		b5c01ce1c
 WebColors	PASS	29	29		2026-05-16		d8a8a9f34
@@ -3673,6 +3755,7 @@ WebService::Discord::Webhook	PASS	11	11		2026-05-18		bd327bb57
 WebService::Eulerian::Analytics	PASS	1	1		2026-05-12		b5c01ce1c
 WebService::Eventful::JSON	PASS	4	4		2026-05-17		bd327bb57
 WebService::Freebox	PASS	11	11		2026-08-12		004ce4b1f
+WebService::FritzBox	PASS	1	1		2026-08-13		2103d7edf
 WebService::Geograph::API	PASS	9	9		2026-05-12		93dfa497b
 WebService::Gnavi	PASS	1	1		2026-05-18		bd327bb57
 WebService::GoShippo	PASS	1	1		2026-05-14		3fe76ed3b
@@ -3739,6 +3822,7 @@ Win32::AutoItX	PASS	10	10		2026-05-16		75a25eb21
 Win32::Codepage::Simple	PASS	7	7		2026-05-12		b5c01ce1c
 Win32::Locale	PASS	2	2		2026-06-15		cc8aa9561
 Win32::MailboxGUID	PASS	8	8		2026-05-17		d8a8a9f34
+Win32::Mock	PASS	9	9		2026-08-13		2103d7edf
 Win32::ShellQuote	PASS	197	197		2026-05-20		b5536d190
 Win32::Tracert	PASS	30	30		2026-05-20		b5536d190
 Win32::Vcpkg	PASS	4	4		2026-06-03		d0f827461
@@ -3832,6 +3916,7 @@ XML::LibXML::Augment	PASS	8	8		2026-05-18		bd327bb57
 XML::LibXML::Iterator	PASS	19	19		2026-05-18		bd327bb57
 XML::LibXML::LazyMatcher	PASS	21	21		2026-05-10		a0cb33710
 XML::LibXML::TreeDumper	PASS	13	13		2026-05-18		bd327bb57
+XML::Maker	PASS	9	9		2026-08-13		2103d7edf
 XML::MinWriter	PASS	256	256		2026-05-11		2b8886eec
 XML::NamespaceSupport	PASS	49	49		2026-06-18		c3e9fa049
 XML::NewsML	PASS	2	2		2026-05-12		93dfa497b
@@ -3893,6 +3978,8 @@ YANG	PASS	1	1		2026-05-16		75a25eb21
 YAPC::Russia	PASS	3	3		2026-05-12		b5c01ce1c
 YAPE::HTML	PASS				2026-08-12		cc69cbb4c
 YAX	PASS	91	91		2026-05-16		75a25eb21
+Yahoo::Answers	PASS	1	1		2026-08-13		2103d7edf
+Yahoo::Weather	PASS	3	3		2026-08-13		2103d7edf
 Ym	PASS	1	1		2026-06-14		cc8aa9561
 Yote::Spiderpup	PASS	61	61		2026-08-12		cc69cbb4c
 YouTube::Util	PASS	1	1		2026-05-12		b5c01ce1c
