@@ -24,7 +24,7 @@ captured under `/tmp/jcpan_*_baseline.log`.
 
 ## Progress Tracking
 
-### Current Status: Implementation complete; PR validation in progress
+### Current Status: Implementation and regression validation complete
 
 ### Completed Phases
 
@@ -63,11 +63,19 @@ captured under `/tmp/jcpan_*_baseline.log`.
     pre-existing harness/resource failures (principally relative `t/*.inc` and
     helper modules not copied into the test working directory). The requested
     CPAN target runs and the full unit build are unaffected.
+- [x] Core-suite regression follow-up (2026-08-13)
+  - Restricted runtime CODE-slot redefinition warnings so declaration
+    materialization, Java-backed module methods, and same-value constant
+    re-exports retain Perl's non-warning behavior.
+  - Restored `re/pat.t` to 1098/1302, `op/gv.t` to 233/304, and `uni/gv.t`
+    to 163/206; each failed-test set now matches master exactly.
+  - Revalidated the new unit coverage with system Perl and completed a green
+    full `make` build.
 
 ### Next Steps
 
-1. Run final bundled-module and full-build verification.
-2. Commit, push, open a PR, and monitor CI to completion.
+1. Push the regression follow-up to PR #946.
+2. Monitor Linux and Windows CI to completion.
 
 ### Open Questions
 

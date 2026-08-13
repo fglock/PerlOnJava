@@ -26,6 +26,25 @@ use Test::More;
     is(runtime_redefined(), 'first', 'fatal redefine leaves the original coderef installed');
 }
 
+{
+    no strict 'refs';
+    use warnings FATAL => 'redefine';
+
+    use constant exported_constant => 'same value';
+    *constant_alias = \&exported_constant;
+
+    my $reexport_error = do {
+        local $@;
+        eval { *constant_alias = \&exported_constant };
+        $@;
+    };
+    is(
+        $reexport_error,
+        '',
+        're-exporting the same underlying constant does not warn',
+    );
+}
+
 BEGIN {
     package FatalRedefinePragma;
     sub import {
