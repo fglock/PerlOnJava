@@ -327,6 +327,7 @@ These are loaded automatically or via `use`:
 |--------|---------------|-------|
 | `XML::Parser` | Perl | |
 | `XML::Parser::Expat` | Java | Uses Java SAX parser |
+| `XML::LibXSLT` | Java + Perl | Core XSLT transformation API backed by JDK JAXP; requires bundled `XML::LibXML` |
 | `HTML::Parser` | Java | |
 | `HTML::Content::Extractor` | Java | Uses jsoup for HTML5 parsing; install the CPAN `.pm` with `jcpan` |
 

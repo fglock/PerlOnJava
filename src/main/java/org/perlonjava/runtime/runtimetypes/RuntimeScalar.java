@@ -203,17 +203,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean numericContextSeen;
 
-    /**
-     * True if this scalar was the direct target of an {@code open()} call that
-     * created a new anonymous filehandle glob. Used by {@link #scopeExitCleanup}
-     * to distinguish "owned" filehandles (should be closed at scope exit) from
-     * copies/aliases of shared handles (should NOT be closed, as other variables
-     * still reference the same glob).
-     * <p>
-     * Set by {@link org.perlonjava.runtime.operators.IOOperator#open} after creating
-     * a new anonymous glob. NOT copied by {@link #set(RuntimeScalar)}, so copies
-     * like {@code my $io = $handles->[$hid]} remain {@code false}.
-     */
+    /** True on the scalar slot that owns a newly created anonymous IO glob. */
     public boolean ioOwner;
 
     /**
@@ -1703,10 +1693,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // See also: closeIOOnDrop() javadoc, dev/design/io_handle_lifecycle.md
         // ──────────────────────────────────────────────────────────────────
 
-        // Track ioHolderCount for anonymous glob IO lifecycle management.
-        // When a GLOBREFERENCE is copied to another variable, increment the glob's
-        // holder count so scopeExitCleanup won't close the IO prematurely.
-        // When a GLOBREFERENCE is overwritten, decrement the old glob's holder count.
+        // Track anonymous-glob aliases so the owning slot only releases the
+        // descriptor when no copied scalar still points at that glob.
         if (value.type == GLOBREFERENCE && value.value instanceof RuntimeGlob newGlob
                 && newGlob.globName == null) {
             newGlob.ioHolderCount++;
@@ -3377,34 +3365,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
-    /**
-     * Called from JVM bytecode at scope exit to eagerly free fd numbers
-     * for anonymous lexical filehandles ({@code open(my $fh, ...)}).
-     * <p>
-     * This only <b>unregisters the fileno</b> (returning the fd number to the
-     * recycle pool) — it does NOT close the underlying IO stream. This is safe
-     * for shared handles: if another variable references the same RuntimeGlob,
-     * the IO stream stays open and functional. If the other reference calls
-     * {@code fileno()}, a new fd number is assigned via {@code assignFileno()}.
-     * <p>
-     * The actual IO close is still handled by PhantomReference-based GC in
-     * {@link RuntimeIO#processAbandonedGlobs()}, which only fires when the
-     * RuntimeGlob is truly unreachable (no variables reference it).
-     * <p>
-     * <b>Why we don't close IO here:</b> Without reference counting, there is
-     * no way to know if other variables still reference the same RuntimeGlob.
-     * Closing IO at scope exit broke Test2::Formatter::TAP and Capture::Tiny
-     * (see git history). Unregistering the fd is safe because:
-     * <ul>
-     *   <li>The IO stream stays open for reading/writing</li>
-     *   <li>Other references can still use the handle normally</li>
-     *   <li>{@code fileno()} on other references will assign a fresh fd</li>
-     * </ul>
-     *
-     * @param scalar the RuntimeScalar being cleaned up (may be null)
-     * @see RuntimeIO#registerGlobForFdRecycling
-     * @see RuntimeIO#processAbandonedGlobs()
-     */
+    /** Performs scalar-specific scope cleanup, including owned anonymous IO fds. */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
 
@@ -3433,7 +3394,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // When all three conditions are true, the entire method body is a no-op:
         // - refCountOwned=false → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
-        // - ioOwner=false → IO fd recycling branch not taken
         if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner
                 && !scalar.ownsScalarReferenceContents
                 && scalar.type != RuntimeScalarType.TIED_SCALAR) {
@@ -3542,7 +3502,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
 
-        // Existing: IO fd recycling for anonymous filehandle globs
         if (scalar.ioOwner && scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
@@ -3553,9 +3512,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     glob.ioHolderCount--;
                 }
                 if (glob.ioHolderCount <= 0) {
-                    // Only unregister the fd number — do NOT close the IO stream.
-                    // This frees the fd for reuse while keeping the IO functional
-                    // for any other variables that reference the same glob.
                     io.unregisterFileno();
                 }
             }

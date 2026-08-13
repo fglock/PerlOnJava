@@ -802,6 +802,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Text::CSV** module.
 - ✅  **TOML** module.
 - ✅  **XML::Parser** module backed by JDK SAX (replaces native libexpat XS).
+- ✅  **XML::LibXSLT** core transformation API backed by JDK JAXP (replaces native libxslt XS).
 - ✅  **YAML::PP** module.
 - ✅  **YAML** module.
 - ✅  **YAML::Syck** compatibility module backed by bundled `YAML::PP`.

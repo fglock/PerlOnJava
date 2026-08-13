@@ -251,6 +251,10 @@ public class DestroyDispatch {
         // %DEFERRED hash), causing infinite recursion in Moo/DBIx::Class.
         if (referent instanceof RuntimeCode code) {
             if (code.stashRefCount <= 0) {
+                if (ReachabilityWalker.strongCycleRetainsWeakReferent(code)) {
+                    code.refCount = 1;
+                    return;
+                }
                 code.releaseCaptures();
             }
         }

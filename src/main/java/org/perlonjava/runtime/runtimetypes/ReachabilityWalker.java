@@ -563,6 +563,13 @@ public class ReachabilityWalker {
                     if (enqueueStrongScalar(cap, target, seen, todo)) return true;
                 }
             }
+            if (code.capturedAggregates != null) {
+                for (RuntimeBase cap : code.capturedAggregates) {
+                    if (cap == null) continue;
+                    if (cap == target) return true;
+                    if (seen.add(cap)) todo.addLast(cap);
+                }
+            }
             if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                     && interpreted.capturedVars != null) {
                 for (RuntimeBase cap : interpreted.capturedVars) {
@@ -591,6 +598,28 @@ public class ReachabilityWalker {
             }
         } else if (cur instanceof RuntimeScalar s) {
             return enqueueStrongScalar(s, target, seen, todo);
+        }
+        return false;
+    }
+
+    /**
+     * True when a CODE cycle strongly retains an object that has an external
+     * weak reference. Perl refcounting keeps this graph alive; AnyEvent uses
+     * it for weak event-loop registries whose watcher callbacks own themselves
+     * through captured state.
+     */
+    public static boolean strongCycleRetainsWeakReferent(RuntimeCode code) {
+        if (code == null || !hasStrongCycle(code)) return false;
+        final int MAX_VISITS = 50_000;
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        seen.add(code);
+        todo.addLast(code);
+        int visits = 0;
+        while (!todo.isEmpty() && visits++ < MAX_VISITS) {
+            RuntimeBase current = todo.removeFirst();
+            if (WeakRefRegistry.hasWeakRefsTo(current)) return true;
+            enqueueStrongEdges(current, null, seen, todo);
         }
         return false;
     }

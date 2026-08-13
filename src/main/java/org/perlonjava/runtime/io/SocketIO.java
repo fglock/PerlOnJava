@@ -130,7 +130,11 @@ public class SocketIO implements IOHandle {
         }
         try {
             this.socket = socketChannel.socket();
-            if (socketChannel.isConnected()) {
+            // java.net.Socket streams cannot be obtained while their channel is
+            // non-blocking (IllegalBlockingModeException). Non-blocking sockets
+            // use SocketChannel reads/writes below and initialize streams only
+            // if they later transition back to blocking mode.
+            if (socketChannel.isConnected() && socketChannel.isBlocking()) {
                 this.inputStream = socket.getInputStream();
                 this.outputStream = socket.getOutputStream();
             }
@@ -257,9 +261,7 @@ public class SocketIO implements IOHandle {
                         boolean finished = socketChannel.finishConnect();
                         if (finished) {
                             // Connection completed — return EISCONN to match POSIX behavior
-                            this.socket = socketChannel.socket();
-                            this.inputStream = socket.getInputStream();
-                            this.outputStream = socket.getOutputStream();
+                            initializeInternetSocketStreams();
                             getGlobalVariable("main::!").set(ErrnoVariable.EISCONN());
                             return scalarUndef;
                         }
@@ -307,9 +309,7 @@ public class SocketIO implements IOHandle {
                     return scalarUndef;
                 }
                 // Connected immediately
-                this.socket = socketChannel.socket();
-                this.inputStream = socket.getInputStream();
-                this.outputStream = socket.getOutputStream();
+                initializeInternetSocketStreams();
                 return scalarTrue;
             }
 
@@ -1084,6 +1084,15 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar getpeername() {
         try {
+            // A non-blocking connect is only finalized in Java after
+            // finishConnect(). POSIX callers commonly wait for write readiness
+            // and then use getpeername() to distinguish success from failure
+            // (AnyEvent::Socket does exactly this), so complete the pending
+            // connection at this observation point just as read/write do.
+            if (!ensureConnected()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                return scalarUndef;
+            }
             if (socketChannel != null
                     && socketChannel.getRemoteAddress() instanceof UnixDomainSocketAddress unixAddress) {
                 return packSockaddrUn(unixAddress);

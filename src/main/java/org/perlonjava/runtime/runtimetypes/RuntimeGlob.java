@@ -75,13 +75,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // See dev/modules/anon_sub_naming.md.
     public String nameOverride;
 
-    /**
-     * Tracks how many RuntimeScalar variables hold a GLOBREFERENCE to this glob.
-     * Used by scopeExitCleanup to avoid closing IO when other variables still
-     * reference the same glob. Starts at 0 (before any variable holds it).
-     * Incremented in RuntimeScalar.setLarge() when a GLOBREFERENCE is assigned,
-     * decremented in scopeExitCleanup(). IO is only closed when this reaches 0.
-     */
+    /** Number of scalar wrappers currently pointing at this anonymous IO glob. */
     public int ioHolderCount = 0;
 
     /**
