@@ -949,11 +949,14 @@ request history.
 
 The core differential runner now reserves an exclusive serial lane for the
 resource-sensitive `gv.t`, advanced-regex, regex-speed, GH7094 benchmark, and
-Abigail JAPH tests. These tests have internal watchdogs or timing assertions
-whose TAP totals changed when they competed with the normal parallel corpus;
-they retain stable original indices, a 600-second minimum outer deadline, and
-`gv.t` receives the upstream timeout factor. This is test scheduling policy,
-not a relaxation of expected Perl behavior. The parser also accepts Perl's
+Abigail JAPH tests. The thread wrappers for `pat.t`, `pat_psycho.t`, and
+`speed.t` use that same lane and a 600-second minimum outer deadline because
+runtime snapshot startup plus the upstream watchdogs exceed the normal
+300-second budget under parallel load. These tests have internal watchdogs or
+timing assertions whose TAP totals changed when they competed with the normal
+parallel corpus; they retain stable original indices, and `gv.t` receives the
+upstream timeout factor. This is test scheduling policy, not a relaxation of
+expected Perl behavior. The parser also accepts Perl's
 adjacent quoted import form (`use overload'""' => ...`) without weakening the
 old-style `Foo'Bar` package separator. Identical serialized runs with
 `--jobs 8` and `--jobs 1` produced `gv.t` 255/304, both advanced-regex tests
