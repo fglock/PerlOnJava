@@ -250,11 +250,14 @@ sub run_single_test {
     # preserving any larger timeout requested by the caller.
     my $test_timeout = timeout_for_test($test_file);
 
-    # gv.t has its own watchdog and scales it through this upstream variable.
-    # Keep a caller's larger value, but do not let the internal deadline expire
-    # before the resource-aware runner's outer deadline.
+    # These tests have their own watchdogs and scale them through this upstream
+    # variable. Keep a caller's larger value, but do not let an internal
+    # deadline expire before the resource-aware runner's outer deadline.
     local $ENV{PERL_TEST_TIMEOUT_FACTOR} = $ENV{PERL_TEST_TIMEOUT_FACTOR};
-    if ($test_file =~ m{(?:^|/)perl5_t/t/op/gv\.t$}
+    if ($test_file =~ m{
+              (?:^|/)perl5_t/t/op/gv\.t$
+            | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
+        }x
             && (!defined($ENV{PERL_TEST_TIMEOUT_FACTOR})
                 || $ENV{PERL_TEST_TIMEOUT_FACTOR} < 2)) {
         $ENV{PERL_TEST_TIMEOUT_FACTOR} = 2;
