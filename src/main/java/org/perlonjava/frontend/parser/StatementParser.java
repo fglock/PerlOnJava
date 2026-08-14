@@ -739,7 +739,7 @@ public class StatementParser {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("use module: " + token);
-            packageName = IdentifierParser.parseSubroutineIdentifier(parser);
+            packageName = IdentifierParser.parseSubroutineIdentifier(parser, true);
             if (packageName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
             }

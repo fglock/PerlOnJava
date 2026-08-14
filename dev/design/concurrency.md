@@ -815,6 +815,19 @@ document. The implementation record, validation details, regressions, and
 review decisions can be recovered from the phase commit messages and pull-
 request history.
 
+The core differential runner now reserves an exclusive serial lane for the
+resource-sensitive `gv.t`, advanced-regex, regex-speed, GH7094 benchmark, and
+Abigail JAPH tests. These tests have internal watchdogs or timing assertions
+whose TAP totals changed when they competed with the normal parallel corpus;
+they retain stable original indices, a 600-second minimum outer deadline, and
+`gv.t` receives the upstream timeout factor. This is test scheduling policy,
+not a relaxation of expected Perl behavior. The parser also accepts Perl's
+adjacent quoted import form (`use overload'""' => ...`) without weakening the
+old-style `Foo'Bar` package separator. Identical serialized runs with
+`--jobs 8` and `--jobs 1` produced `gv.t` 255/304, both advanced-regex tests
+1376/1687, `speed.t` 26/59, GH7094 6/6, and Abigail 109/130; the latter gains
+three assertions from the adjacent-import parser fix.
+
 ### Next Steps
 
 1. Complete lexical `re 'debug'` as a direct regex feature with parser/CV
@@ -840,6 +853,10 @@ request history.
    addressing the remaining regex-parser/diagnostic gaps in `pat_advanced.t` and
    `speed.t`; compare serialized same-base runs because their historical totals
    vary under concurrent machine load.
+7. Keep resource-sensitive core tests in the runner's exclusive lane when new
+   full-corpus evidence proves load-dependent watchdog or timing behavior. Do
+   not classify high-water TAP fluctuations as semantic regressions without a
+   serialized same-commit reproduction.
 
 ### Open Questions
 

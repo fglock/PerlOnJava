@@ -84,13 +84,25 @@ my %feature_patterns = (
 );
 
 my $total_files = @test_files;
+my @indexed_tests = map {
+    +{ test_file => $test_files[$_], test_index => $_ + 1 }
+} 0 .. $#test_files;
+my (@parallel_tests, @exclusive_tests);
+for my $test (@indexed_tests) {
+    push @{ requires_exclusive_slot($test->{test_file})
+        ? \@exclusive_tests : \@parallel_tests }, $test;
+}
 
 print "Found $total_files test files\n";
-print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout)\n";
+print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout; "
+    . scalar(@exclusive_tests) . " resource-sensitive tests run serially)\n";
 print "-" x 60, "\n";
 
-# Run tests in parallel
-run_tests_parallel(\@test_files, $test_dir);
+# Run the normal corpus in parallel, then give known CPU-heavy tests an
+# exclusive slot. Their upstream watchdogs and TAP totals are load-sensitive,
+# so merely increasing the outer timeout is not sufficient under contention.
+run_tests_parallel(\@parallel_tests, $test_dir, $jobs, $total_files);
+run_tests_parallel(\@exclusive_tests, $test_dir, 1, $total_files);
 
 print "-" x 60, "\n";
 print_summary();
@@ -114,8 +126,7 @@ sub find_test_files {
 }
 
 sub run_tests_parallel {
-    my ($test_files, $test_dir) = @_;
-    my $total_files = @$test_files;
+    my ($test_files, $test_dir, $max_jobs, $total_files) = @_;
     my $completed = 0;
     my %children;
     my @test_queue = @$test_files;
@@ -124,7 +135,7 @@ sub run_tests_parallel {
     local $SIG{CHLD} = 'DEFAULT';
 
     # Start initial batch of jobs
-    while (@test_queue && keys(%children) < $jobs) {
+    while (@test_queue && keys(%children) < $max_jobs) {
         start_test_job(\@test_queue, \%children, $total_files, $completed);
     }
 
@@ -141,7 +152,7 @@ sub run_tests_parallel {
                 $completed++;
 
                 # Start a new job if queue has items
-                if (@test_queue && keys(%children) < $jobs) {
+                if (@test_queue && keys(%children) < $max_jobs) {
                     start_test_job(\@test_queue, \%children, $total_files, $completed);
                 }
             } elsif ($res < 0) {
@@ -238,6 +249,16 @@ sub run_single_test {
     # Give those known outliers a stable minimum wall-clock allowance while
     # preserving any larger timeout requested by the caller.
     my $test_timeout = timeout_for_test($test_file);
+
+    # gv.t has its own watchdog and scales it through this upstream variable.
+    # Keep a caller's larger value, but do not let the internal deadline expire
+    # before the resource-aware runner's outer deadline.
+    local $ENV{PERL_TEST_TIMEOUT_FACTOR} = $ENV{PERL_TEST_TIMEOUT_FACTOR};
+    if ($test_file =~ m{(?:^|/)perl5_t/t/op/gv\.t$}
+            && (!defined($ENV{PERL_TEST_TIMEOUT_FACTOR})
+                || $ENV{PERL_TEST_TIMEOUT_FACTOR} < 2)) {
+        $ENV{PERL_TEST_TIMEOUT_FACTOR} = 2;
+    }
 
     # Temporarily disable fatal unimplemented errors
     # so we can run tests that mix implemented and unimplemented features
@@ -426,8 +447,24 @@ sub timeout_for_test {
     return 600 if $test_file =~ m{
           (?:^|/)perl5_t/t/lib/croak\.t$
         | (?:^|/)perl5_t/t/re/pat\.t$
+        | (?:^|/)perl5_t/t/op/gv\.t$
+        | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/speed\.t$
+        | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
+        | (?:^|/)perl5_t/t/japh/abigail\.t$
     }x && $timeout < 600;
     return $timeout;
+}
+
+sub requires_exclusive_slot {
+    my ($test_file) = @_;
+    return $test_file =~ m{
+          (?:^|/)perl5_t/t/op/gv\.t$
+        | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/speed\.t$
+        | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
+        | (?:^|/)perl5_t/t/japh/abigail\.t$
+    }x;
 }
 
 sub start_test_job {
@@ -435,8 +472,9 @@ sub start_test_job {
 
     return unless @$test_queue;
 
-    my $test_file = shift @$test_queue;
-    my $test_index = $total_files - @$test_queue;
+    my $test = shift @$test_queue;
+    my $test_file = $test->{test_file};
+    my $test_index = $test->{test_index};
 
     my $pid = fork();
     if (!defined $pid) {
@@ -732,7 +770,7 @@ Options:
   --jperl PATH     Path to jperl executable (default: ./jperl)
   --timeout SEC    Base timeout per test in seconds (default: 300; selected
                    subprocess-heavy tests have a documented minimum)
-  --jobs|-j NUM    Number of parallel jobs (default: 4)
+  --jobs|-j NUM    Number of parallel jobs (default: 5)
   --output FILE    Save detailed results to JSON file
   --help           Show this help message
 
