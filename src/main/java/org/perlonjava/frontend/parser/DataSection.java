@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.ScalarBackedIO;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
@@ -71,6 +72,11 @@ public class DataSection {
      * @param content    the content after __DATA__ or __END__
      */
     public static void createDataHandle(Parser parser, String handleName, String content) {
+        createDataHandle(parser, handleName, content, 0);
+    }
+
+    private static void createDataHandle(
+            Parser parser, String handleName, String content, int initialPosition) {
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Populating DATA handle for package: " + handleName + " with content: " + content);
 
         // Get the existing RuntimeIO (which should be the placeholder we created earlier)
@@ -81,12 +87,14 @@ public class DataSection {
             // This ensures that any aliased handles (like *ARGV = *DATA) continue to work
             RuntimeScalar contentScalar = new RuntimeScalar(content);
             ScalarBackedIO newScalarIO = new ScalarBackedIO(contentScalar);
+            newScalarIO.seek(initialPosition, IOHandle.SEEK_SET);
             existingIO.ioHandle = newScalarIO;
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Updated existing DATA handle with new content");
         } else {
             // Fallback: create new handle if no placeholder exists
             RuntimeScalar contentScalar = new RuntimeScalar(content);
             var fileHandle = RuntimeIO.open(contentScalar.createReference(), "<");
+            fileHandle.ioHandle.seek(initialPosition, IOHandle.SEEK_SET);
             GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Created new DATA handle");
         }
@@ -129,7 +137,9 @@ public class DataSection {
      * @param markerText  the marker to search for ("__DATA__" or "__END__")
      * @return the DATA content as a string (Latin-1 encoded), or null if marker not found
      */
-    private static String extractDataFromRawBytes(byte[] rawBytes, String markerText) {
+    private record RawDataHandle(String content, int initialPosition) {}
+
+    private static RawDataHandle extractDataFromRawBytes(byte[] rawBytes, String markerText) {
         byte[] marker = markerText.getBytes(StandardCharsets.US_ASCII);
         int markerLen = marker.length;
 
@@ -176,7 +186,9 @@ public class DataSection {
             // Always store as Latin-1 (each byte = one character) to preserve raw bytes.
             // The DATA handle's encoding layer (applied by parseDataSection) handles
             // UTF-8 decoding at read time when `use utf8` is active.
-            return new String(rawBytes, dataStart, rawBytes.length - dataStart, StandardCharsets.ISO_8859_1);
+            return new RawDataHandle(
+                    new String(rawBytes, StandardCharsets.ISO_8859_1),
+                    dataStart);
         }
 
         return null; // Marker not found
@@ -226,30 +238,34 @@ public class DataSection {
                 // In Perl 5, <DATA> reads raw bytes from the file.
                 byte[] rawBytes = parser.ctx.compilerOptions.rawCodeBytes;
                 boolean useUtf8 = parser.ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8);
-                String rawContent = null;
+                RawDataHandle rawContent = null;
                 if (rawBytes != null) {
                     rawContent = extractDataFromRawBytes(rawBytes, token.text);
                 }
 
                 if (rawContent != null) {
-                    createDataHandle(parser, handleName, rawContent);
+                    createDataHandle(
+                            parser,
+                            handleName,
+                            rawContent.content(),
+                            rawContent.initialPosition());
                 } else {
-                    // Fallback: concatenate remaining tokens (for eval/string-based code
-                    // where raw bytes are not available)
-                    StringBuilder dataContent = new StringBuilder();
-                    while (tokenIndex < tokens.size()) {
-                        LexerToken currentToken = tokens.get(tokenIndex);
-
-                        // Stop if we hit an end marker
-                        if (isEndMarker(currentToken)) {
-                            break;
+                    // String/eval callers do not have raw source bytes. Rebuild the
+                    // complete token stream so DATA still behaves like a source-file
+                    // handle: its initial position is after the marker, while seek(0)
+                    // exposes the source and marker that precede the payload.
+                    StringBuilder sourceContent = new StringBuilder();
+                    int initialPosition = 0;
+                    for (int index = 0; index < tokens.size(); index++) {
+                        if (index == tokenIndex) {
+                            initialPosition = sourceContent.toString()
+                                    .getBytes(StandardCharsets.ISO_8859_1).length;
                         }
-
-                        dataContent.append(currentToken.text);
-                        tokenIndex++;
+                        LexerToken currentToken = tokens.get(index);
+                        if (isEndMarker(currentToken)) break;
+                        sourceContent.append(currentToken.text);
                     }
-
-                    createDataHandle(parser, handleName, dataContent.toString());
+                    createDataHandle(parser, handleName, sourceContent.toString(), initialPosition);
                 }
 
                 // When `use utf8` is active, apply :utf8 layer to the DATA handle.

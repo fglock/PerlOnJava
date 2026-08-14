@@ -621,6 +621,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private void emitCompileDebugTrace() {
         if (lexicalDebugMode == 0) return;
+        registerDebugLifecycle();
         String patternDescription = patternString == null ? "" : patternString;
         debugWrite("Compiling REx \"" + patternDescription + "\"\n"
                 + "Final program:\n"
@@ -630,6 +631,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public void emitExecutionDebugTrace(String input) {
         if (lexicalDebugMode == 0) return;
+        registerDebugLifecycle();
         StringBuilder trace = new StringBuilder(Math.max(96, input.length() * 72));
         trace.append("Matching REx \"").append(patternString == null ? "" : patternString)
                 .append("\" against input of length ").append(input.length()).append('\n');
@@ -643,6 +645,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     .append("  ").append(offset).append(": ADVANCE\n");
         }
         debugWrite(trace.toString());
+    }
+
+    private void registerDebugLifecycle() {
+        List<RuntimeRegex> active = state().activeDebugRegexes;
+        for (RuntimeRegex regex : active) {
+            if (regex == this) return;
+        }
+        active.add(this);
+    }
+
+    /** Emit Perl-style lifecycle records after END and before runtime teardown. */
+    public static void emitCurrentRuntimeDebugFreeTraces() {
+        List<RuntimeRegex> active = state().activeDebugRegexes;
+        for (RuntimeRegex regex : active) {
+            if (regex.lexicalDebugMode == 0) continue;
+            String patternDescription = regex.patternString == null ? "" : regex.patternString;
+            regex.debugWrite("Freeing REx: \"" + patternDescription + "\"\n");
+        }
+        active.clear();
     }
 
     private void debugWrite(String message) {

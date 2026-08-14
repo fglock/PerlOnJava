@@ -647,7 +647,7 @@ Phase 33's release gate completed with `./jcpan --jobs 8 -t DBIx::Class`:
 non-local labeled control flow tears down every abandoned Perl frame before the
 target resumes, preserving scope-guard diagnostics and redirected STDERR.
 
-### Phase 35 — Lexical regex debugging (implemented core 2026-08-14)
+### Phase 35 — Lexical regex debugging (completed 2026-08-14)
 
 Implement scoped `use/no re 'debug'` and `debugcolor` as compiler hints carried
 by regex and CODE metadata on both backends. Diagnostics use the bound runtime's
@@ -656,10 +656,10 @@ trace flag. Acceptance: `re/stclass_threads.t` reaches 6/6 and direct/child
 traces have identical behavior and runtime ownership.
 
 The compiler hints, JVM/interpreter propagation, runtime-owned STDERR routing,
-snapshot behavior, and focused six-assertion oracle are implemented. The core
-`stclass_threads.t` gate is 3/6: all three trace-linearity assertions pass, but
-each child trace contains one additional record. That direct/child formatting
-delta remains part of Phase 35 acceptance.
+snapshot behavior, and focused six-assertion oracle are implemented. Debug
+regex lifecycle records now drain after END in the owning main or child
+runtime. The core `stclass_threads.t` gate reaches 6/6 with equal direct/child
+record counts and linear scaling.
 
 ### Phase 36 — Complete regex parity exercised by thread wrappers (in progress)
 
@@ -671,10 +671,12 @@ applicable `perl5_t/t/re/*thr*.t` test and direct companion completes its plan
 without unexpected failure on JVM or interpreter backends.
 
 This tranche restores recursive-definition compilation for `reg_email` and
-keeps direct/thread compilation behavior aligned. Its test body is still
-blocked in both paths by the direct DATA-handle gap. `pat_re_eval` and the
-remaining `qr//`, conditional, control-verb, lookbehind, Unicode-property, and
-diagnostic coverage remain shared regex-language work.
+keeps direct/thread compilation behavior aligned. DATA now models the source
+file positioned after its marker, remains seekable to the source start, and
+crosses thread snapshots through the named-handle inheritance policy. Direct
+and threaded `reg_email` therefore pass 13/13 on both backends. `pat_re_eval`
+and the remaining `qr//`, conditional, control-verb, lookbehind,
+Unicode-property, and diagnostic coverage remain shared regex-language work.
 
 ### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
 
@@ -793,7 +795,7 @@ CI.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 35–39 implemented for the supported tranche
+### Current Status: Phase 35 complete; Phase 36 and Phase 39b next
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -965,9 +967,10 @@ three assertions from the adjacent-import parser fix.
 
 ### Next Steps
 
-1. Close the remaining Phase 35 trace-record delta and Phase 36 direct regex
-   language/DATA-handle gaps; wrapper behavior must follow the corrected direct
-   implementation without special cases.
+1. Complete Phase 36's direct regex-language gaps in `pat_re_eval`, `qr//`,
+   conditionals, control verbs, lookbehind, Unicode properties, and diagnostics;
+   wrapper behavior must follow the corrected direct implementation without
+   special cases.
 2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
    weak/cyclic ownership, and the destructive `share` versus preserving
    `shared_clone` distinction.

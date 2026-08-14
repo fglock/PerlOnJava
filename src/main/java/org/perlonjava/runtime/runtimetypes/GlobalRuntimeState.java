@@ -282,6 +282,7 @@ public final class GlobalRuntimeState {
         cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
         cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
         cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);
+        cloneMap(ioSlots, target.ioSlots, cloner, RuntimeGlob.class);
         for (Map.Entry<Integer, RuntimeScalar> entry : compiledCodeRefs.entrySet()) {
             target.compiledCodeRefs.put(entry.getKey(),
                     (RuntimeScalar) cloner.cloneValue(entry.getValue()));
@@ -290,6 +291,7 @@ public final class GlobalRuntimeState {
         target.importedSubs.putAll(importedSubs);
         target.operatorOverrideGlobs.putAll(operatorOverrideGlobs);
         target.deletedCodeRefPins.addAll(deletedCodeRefPins);
+        target.hiddenIoSlotsAfterStashDelete.addAll(hiddenIoSlotsAfterStashDelete);
         target.localizedCodeRefDepth.putAll(localizedCodeRefDepth);
         target.stashAliases.putAll(stashAliases);
         target.resolvedStashAliases.putAll(resolvedStashAliases);
@@ -312,7 +314,9 @@ public final class GlobalRuntimeState {
                         COMPILED_CODE_REF_RANGE_SIZE));
         target.stashEnumerationVersion = stashEnumerationVersion;
         target.coreGlobalsInitialized = coreGlobalsInitialized;
-        // Class loaders, caches, named IO and formats are child-owned/fresh.
+        // Class loaders, caches, and formats are child-owned/fresh. Standard
+        // handles remain the child's canonical PerlRuntime globs; named IO
+        // slots cross through RuntimeGraphCloner's explicit handle policies.
     }
 
     /** Copy CV ids registered by a named sub that was materialized after snapshot. */
