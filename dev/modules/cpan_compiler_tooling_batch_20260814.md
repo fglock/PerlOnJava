@@ -10,7 +10,7 @@ distribution-specific preferences.
 
 ## Progress Tracking
 
-### Current Status: complete; PR #955 open with CI passing
+### Current Status: PR #955 regression fixes validated locally; CI pending
 
 ### Completed Phases
 
@@ -46,10 +46,31 @@ distribution-specific preferences.
 - [x] Phase 6: pull request and CI (2026-08-14)
   - Opened PR #955 from `fix/cpan-compiler-tooling-20260814`.
   - Ubuntu and Windows CI jobs passed.
+- [x] Phase 7: post-PR regression repair (2026-08-14)
+  - Rebased PR #955 onto `origin/master` at `4de2934e4`.
+  - Replaced the broad `RuntimeBase` list-add fallback with a verifier-safe
+    `RuntimeList.addList(RuntimeBase)` entry point for statically list-valued
+    expressions, retaining specialized overloads and existing control-flow-list
+    flattening semantics.
+  - Limited conditional caller-line overrides to conditions containing lexical
+    declarations, matching Perl without changing ordinary `if`/`elsif` calls.
+  - Restored the rebased-master counts for `op/do.t` (94/99), `op/caller.t`
+    (92/115 locally), and `op/lexsub.t` (110/160); the additional caller failure
+    reported by the comparison also reproduces on current master.
+  - Confirmed the keys benchmark is load-sensitive (branch results varied from
+    5/6 to 6/6; paired current master scored 4/6 while the branch scored 5/6).
+  - Restored watchdog-limited regex progress to 26/59 for `re/speed.t` and
+    20/59 for `re/speed_thr.t`, meeting or exceeding the reported baselines.
+  - Full `make` suite passes; focused caller-line behavior passes with system
+    Perl and with both PerlOnJava backends.
+  - Revalidated the affected CPAN paths: `Test::XML::Compare` (13 files / 67
+    tests), `Lingua::EN::Keywords` (2 tests), and `CPAN::Index::API` (7 files /
+    74 tests) all pass.
 
 ### Next Steps
 
-1. Review and merge PR #955.
+1. Push the rebased regression fix and wait for PR #955 CI.
+2. Review and merge PR #955 after CI passes.
 
 ### Open Questions
 

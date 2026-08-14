@@ -524,7 +524,7 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
 
             // Add the element to the list
-            addElementToList(mv);
+            addElementToList(mv, element, contextType);
             // Stack: []
         }
 
@@ -701,27 +701,40 @@ public class EmitLiteral {
     }
 
     /**
-     * Adds an element to a RuntimeList through its verifier-safe base overload.
+     * Adds an element to a RuntimeList with verifier-safe specialization.
      *
-     * <p>AST return-type guesses are not reliable after context conversion, so
-     * list construction deliberately uses the common RuntimeBase contract.</p>
+     * <p>List-valued expressions can cross control-flow/context boundaries that
+     * widen their verifier type to RuntimeBase. Other statically known values
+     * retain the specialized overloads used by hot list-construction paths.</p>
      *
      * <p>Stack transformation: [RuntimeList] [element] → [RuntimeList]</p>
      *
      * @param mv          The method visitor for bytecode generation
+     * @param element     The AST node representing the element being added
+     * @param contextType The context in which the list element was emitted
      */
-    private static void addElementToList(MethodVisitor mv) {
+    private static void addElementToList(MethodVisitor mv, Node element, int contextType) {
         // Stack: [RuntimeList] [element]
 
-        // List elements can cross context boundaries while they are emitted.  In
-        // particular, a subroutine call is statically described as RuntimeList but
-        // is converted to RuntimeBase when it appears in a runtime-context closure.
-        // Selecting an overload from the AST return-type guess therefore produced
-        // unverifiable bytecode for Memoize::_wrap.  Every runtime value derives
-        // from RuntimeBase, so use the type-safe overload here.  The JVM still
-        // dispatches this monomorphic call efficiently after warm-up.
+        String returnType = ReturnTypeVisitor.getReturnType(element);
+        String methodName = "add";
+        // Memoize::_wrap exposed a list-valued expression whose verifier type had
+        // been widened while control-flow branches were merged. The addList base
+        // entry point keeps the bytecode verifier-safe while preserving the old
+        // list-flattening semantics inside RuntimeList.
+        if (RuntimeDescriptorConstants.LIST_TYPE.equals(returnType)
+                && contextType != RuntimeContextType.RUNTIME) {
+            methodName = "addList";
+            returnType = RuntimeDescriptorConstants.BASE_TYPE;
+        } else if (contextType == RuntimeContextType.RUNTIME) {
+            returnType = RuntimeDescriptorConstants.BASE_TYPE;
+        }
+
+        if (!RuntimeDescriptorConstants.isKnownRuntimeType(returnType)) {
+            returnType = RuntimeDescriptorConstants.BASE_TYPE;
+        }
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                "add", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
+                methodName, "(" + returnType + ")V", false);
     }
 
     /**

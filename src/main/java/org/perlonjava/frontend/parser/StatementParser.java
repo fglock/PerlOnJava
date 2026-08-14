@@ -376,12 +376,11 @@ public class StatementParser {
         TestMoreHelper.handleSkipTest(parser, thenBranch);
 
         IfNode result = new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
-        // Perl associates a standalone call that is the first statement of an
-        // if/unless body with the conditional's source line.  Test::Builder::Tester
-        // relies on this when test_fail() is the first statement in a conditional.
-        // Preserve that call-site quirk for both execution backends without
-        // changing the source location of later statements in the block.
-        if (!thenBranch.elements.isEmpty()
+        // A lexical declaration in the condition owns the next COP in Perl, so
+        // the first standalone call reports the conditional's source line.
+        // Ordinary conditions keep the call's own line (see op/caller.t).
+        if (conditionContainsLexicalDeclaration(condition)
+                && !thenBranch.elements.isEmpty()
                 && thenBranch.elements.get(0) instanceof BinaryOperatorNode first
                 && "(".equals(first.operator)) {
             first.setAnnotation("callerLineTokenOverride", statementStartIndex);
@@ -390,6 +389,27 @@ public class StatementParser {
             result.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
         }
         return result;
+    }
+
+    private static boolean conditionContainsLexicalDeclaration(Node node) {
+        if (node instanceof OperatorNode operatorNode) {
+            if ("my".equals(operatorNode.operator) || "state".equals(operatorNode.operator)) {
+                return true;
+            }
+            return conditionContainsLexicalDeclaration(operatorNode.operand);
+        }
+        if (node instanceof BinaryOperatorNode binaryNode) {
+            return conditionContainsLexicalDeclaration(binaryNode.left)
+                    || conditionContainsLexicalDeclaration(binaryNode.right);
+        }
+        if (node instanceof ListNode listNode) {
+            for (Node element : listNode.elements) {
+                if (conditionContainsLexicalDeclaration(element)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
