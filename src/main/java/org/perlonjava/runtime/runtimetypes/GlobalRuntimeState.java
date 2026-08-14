@@ -282,7 +282,18 @@ public final class GlobalRuntimeState {
         cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
         cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
         cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);
-        cloneMap(ioSlots, target.ioSlots, cloner, RuntimeGlob.class);
+        // Parsers register many inert glob placeholders (notably through eval).
+        // Cloning all of them into every ithread makes snapshot cost quadratic
+        // for regex matrices that compile thousands of evals. Only an IO slot
+        // with an actual RuntimeIO is observable as an inherited filehandle;
+        // undef placeholders are recreated on demand in the child.
+        for (Map.Entry<String, RuntimeGlob> entry : ioSlots.entrySet()) {
+            RuntimeGlob glob = entry.getValue();
+            if (glob != null && glob.IO != null && glob.IO.value instanceof RuntimeIO) {
+                target.ioSlots.put(entry.getKey(),
+                        (RuntimeGlob) cloner.cloneValue(glob));
+            }
+        }
         for (Map.Entry<Integer, RuntimeScalar> entry : compiledCodeRefs.entrySet()) {
             target.compiledCodeRefs.put(entry.getKey(),
                     (RuntimeScalar) cloner.cloneValue(entry.getValue()));

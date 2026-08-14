@@ -16,7 +16,9 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -97,5 +99,38 @@ class RuntimeGraphClonerResourceInheritanceTest {
         assertSame(childBacking, ((ScalarBackedIO) childIO.ioHandle).backingScalar());
         assertEquals("x", childIO.ioHandle.doRead(1, StandardCharsets.ISO_8859_1).toString());
         assertEquals("x", parentIO.ioHandle.doRead(1, StandardCharsets.ISO_8859_1).toString());
+    }
+
+    @Test
+    void snapshotSkipsInertNamedIoPlaceholdersAndInheritsOpenAliases() {
+        PerlRuntime parent = new PerlRuntime();
+        parent.initialize();
+        PerlRuntime child;
+        RuntimeGlob parentHandle;
+        RuntimeScalar backing = new RuntimeScalar("wxyz");
+
+        try (PerlRuntime.Binding ignored = parent.bind()) {
+            GlobalVariable.getGlobalIO("Snapshot::PLACEHOLDER");
+            ScalarBackedIO scalarHandle = new ScalarBackedIO(backing);
+            assertEquals("w", scalarHandle.doRead(1, StandardCharsets.ISO_8859_1).toString());
+            parentHandle = GlobalVariable.getGlobalIO("Snapshot::DATA")
+                    .setIO(new RuntimeIO(scalarHandle));
+            GlobalVariable.globalIORefs.put("Snapshot::ALIAS", parentHandle);
+            child = parent.snapshotClone();
+        }
+
+        try (PerlRuntime.Binding ignored = child.bind()) {
+            assertNull(GlobalVariable.peekGlobalIO("Snapshot::PLACEHOLDER"));
+            RuntimeGlob childHandle = GlobalVariable.peekGlobalIO("Snapshot::DATA");
+            assertNotNull(childHandle);
+            assertNotSame(parentHandle, childHandle);
+            assertSame(childHandle, GlobalVariable.peekGlobalIO("Snapshot::ALIAS"));
+            assertEquals("x", childHandle.getRuntimeIO().ioHandle
+                    .doRead(1, StandardCharsets.ISO_8859_1).toString());
+        }
+        try (PerlRuntime.Binding ignored = parent.bind()) {
+            assertEquals("x", parentHandle.getRuntimeIO().ioHandle
+                    .doRead(1, StandardCharsets.ISO_8859_1).toString());
+        }
     }
 }

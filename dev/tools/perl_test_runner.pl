@@ -457,6 +457,7 @@ sub timeout_for_test {
         | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/op/gv\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
         | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$
@@ -471,6 +472,7 @@ sub requires_exclusive_slot {
         | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
         | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$

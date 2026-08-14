@@ -973,10 +973,16 @@ request history.
 
 The core differential runner now reserves an exclusive serial lane for the
 resource-sensitive `gv.t`, advanced-regex, regex-speed, GH7094 benchmark, and
-Abigail JAPH tests. The thread wrappers for `pat.t`, `pat_psycho.t`, and
-`speed.t` use that same lane and a 600-second minimum outer deadline because
-runtime snapshot startup plus the upstream watchdogs exceed the normal
-300-second budget under parallel load. These tests have internal watchdogs or
+Abigail JAPH tests. The thread wrappers `pat_thr.t`, `pat_psycho_thr.t`,
+`regexp_qr_embed_thr.t`, and `speed_thr.t` use that same lane and a 600-second
+minimum outer deadline because runtime snapshot startup plus the upstream
+watchdogs exceed the normal 300-second budget under parallel load. The
+`regexp_qr_embed_thr.t` classification also prevents a full-corpus memory spike
+from exhausting its child runtime near the end of the 2,210-case matrix. Thread
+snapshots inherit named IO slots only when they contain a real handle; inert
+parser placeholders are child-vivified on demand instead of being copied
+quadratically across thousands of eval-created runtimes. These tests have
+internal watchdogs or
 timing assertions whose TAP totals changed when they competed with the normal
 parallel corpus; they retain stable original indices, and `gv.t` receives the
 upstream timeout factor. This is test scheduling policy, not a relaxation of
