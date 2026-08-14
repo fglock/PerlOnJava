@@ -117,6 +117,19 @@ was kept in the PerlOnJava validation set.
   - Revalidated `Marlin::X::Clone` (8 tests), `App::calendr` (2 tests),
     `Hades::Realm::OO` (40 tests), and `Authen::Simple::Kerberos` (1 functional
     test); all passed.
+- [x] Contention-sensitive regression tooling (2026-08-14)
+  - Confirmed the reported `re/speed*.t` losses coincided with concurrent
+    PerlOnJava regression runs and CPAN JVMs from other worktrees; the tests'
+    internal watchdogs expired before the runner's outer timeout.
+  - Applied the runner's existing timeout factor to `re/speed*.t`, keeping the
+    watchdog inside the 600-second resource-sensitive allowance.
+  - Increased the `gh7094` Benchmark.pm sample from three to five CPU seconds
+    to stabilize its global-versus-lexical hash ratios under JVM contention.
+  - Verified `re/pat_advanced.t` at 1376/1687 and the benchmark at 6/6 before
+    the tooling change; `run/switches.t` matched current master at 76/142.
+  - Under continued CPAN JVM load, the adjusted runner reported the benchmark
+    at 6/6, `re/speed.t` at the 26/59 baseline, and `re/speed_thr.t` at 25/59
+    versus the reported 18/59 baseline.
 
 ### Next steps
 

@@ -257,6 +257,7 @@ sub run_single_test {
     if ($test_file =~ m{
               (?:^|/)perl5_t/t/op/gv\.t$
             | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
+            | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         }x
             && (!defined($ENV{PERL_TEST_TIMEOUT_FACTOR})
                 || $ENV{PERL_TEST_TIMEOUT_FACTOR} < 2)) {
@@ -364,6 +365,13 @@ sub run_single_test {
     # Use absolute path for jperl
     my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
     my $test_name = File::Spec->abs2rel($test_file, $local_test_dir || '.');
+    # Benchmark.pm's default three-CPU-second sample is too noisy while other
+    # JVM builds or CPAN testers are active. A five-second sample still fits
+    # the resource-sensitive test's 600-second runner allowance and makes its
+    # relative global/lexical hash comparisons substantially more stable.
+    my $test_args = $test_file =~ m{
+        (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
+    }x ? ' -5' : '';
 
     # Try to use system timeout command if available.
     # Use --kill-after (-k) so a SIGTERM that the JVM ignores is followed
@@ -388,7 +396,7 @@ sub run_single_test {
     # Never inherit an interactive terminal as stdin: a test that reads from
     # it would receive SIGTTIN and stop indefinitely as a background group.
     my $devnull = File::Spec->devnull();
-    my $cmd = "${timeout_cmd}$abs_jperl $test_name < $devnull 2>&1";
+    my $cmd = "${timeout_cmd}$abs_jperl $test_name$test_args < $devnull 2>&1";
 
     # Capture output with timeout
     my $output = '';
