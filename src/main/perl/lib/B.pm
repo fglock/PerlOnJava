@@ -49,10 +49,6 @@ use constant {
 
 # Stub classes for B objects
 package B::SV {
-    sub object_2svref {
-        Internals::jperl_reference_by_address(${$_[0]});
-    }
-
     sub new {
         # IMPORTANT: Avoid `my ($class, $ref) = @_` or `shift` — each local
         # variable assignment that holds a reference inflates the referent's
