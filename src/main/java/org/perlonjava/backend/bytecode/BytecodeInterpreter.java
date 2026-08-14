@@ -1030,6 +1030,12 @@ public class BytecodeInterpreter {
                                 registers[rs].addToScalar(rdScalar);
                             }
 
+                            case Opcodes.COPY_DO_BLOCK_RESULT -> {
+                                int rd = bytecode[pc++];
+                                int rs = bytecode[pc++];
+                                registers[rd] = RuntimeCode.copyDoBlockListResult(registers[rs]);
+                            }
+
                             case Opcodes.ASSIGN_LEXICAL_SCALAR -> {
                                 int rd = bytecode[pc++];
                                 int rs = bytecode[pc++];
@@ -1390,6 +1396,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeSetArrayLastIndex(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_LAST_INDEX_LVALUE -> {
+                                pc = InlineOpcodeHandler.executeArrayLastIndexLvalue(bytecode, pc, registers);
+                            }
+
                             case Opcodes.CREATE_ARRAY -> {
                                 pc = InlineOpcodeHandler.executeCreateArray(bytecode, pc, registers);
                             }
@@ -1551,7 +1561,8 @@ public class BytecodeInterpreter {
                                 // Convert to scalar if called in scalar or lvalue context
                                 if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
                                     RuntimeBase scalarResult = result.scalar();
-                                    registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
+                                    registers[rd] = context == RuntimeContextType.SCALAR && isImmutableProxy(scalarResult)
+                                            ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {
                                     registers[rd] = result;
                                 }
@@ -1672,7 +1683,8 @@ public class BytecodeInterpreter {
                                 // Convert to scalar if called in scalar or lvalue context
                                 if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
                                     RuntimeBase scalarResult = result.scalar();
-                                    registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
+                                    registers[rd] = context == RuntimeContextType.SCALAR && isImmutableProxy(scalarResult)
+                                            ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {
                                     registers[rd] = result;
                                 }
@@ -2520,20 +2532,17 @@ public class BytecodeInterpreter {
                                 int hintHashId = bytecode[pc++];
                                 int warningScopeId = bytecode[pc++];
                                 WarningBitsRegistry.setCallSiteBits(code.stringPool[warningBitsIdx]);
-                                // A lexical `no warnings` node carries a runtime
-                                // warningScopeId whose localized suppression is
-                                // unwound at block exit. Do not overwrite the
-                                // enclosing enabled bits with its temporary mask.
-                                if (warningScopeId == 0) {
-                                    WarningBitsRegistry.setRuntimeWarningBits(code.stringPool[warningBitsIdx]);
-                                }
                                 WarningBitsRegistry.setCallSiteHints(hints);
                                 HintHashRegistry.setCallSiteHintHashId(hintHashId);
                                 if (warningScopeId > 0) {
+                                    // Localize the scope before installing its
+                                    // warning mask so dynamic unwind can restore
+                                    // the enclosing interpreter mask.
                                     RuntimeScalar warningScope = GlobalRuntimeScalar.makeLocal(
                                             GlobalContext.WARNING_SCOPE);
                                     warningScope.set(new RuntimeScalar(warningScopeId));
                                 }
+                                WarningBitsRegistry.setRuntimeWarningBits(code.stringPool[warningBitsIdx]);
                             }
 
                             case Opcodes.SET_CALL_SITE_HINTS ->

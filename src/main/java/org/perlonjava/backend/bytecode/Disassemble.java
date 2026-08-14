@@ -963,6 +963,11 @@ public class Disassemble {
                         arrayReg = interpretedCode.bytecode[pc++];
                         sb.append("ARRAY_SIZE r").append(rd).append(" = size(r").append(arrayReg).append(")\n");
                         break;
+                    case Opcodes.ARRAY_LAST_INDEX_LVALUE:
+                        rd = interpretedCode.bytecode[pc++];
+                        arrayReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_LAST_INDEX_LVALUE r").append(rd).append(" = $#r").append(arrayReg).append("\n");
+                        break;
                     case Opcodes.CREATE_ARRAY:
                         rd = interpretedCode.bytecode[pc++];
                         int listSourceReg = interpretedCode.bytecode[pc++];
@@ -1201,6 +1206,12 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("SET_SCALAR r").append(rd).append(".set(r").append(rs).append(")\n");
+                        break;
+                    case Opcodes.COPY_DO_BLOCK_RESULT:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("COPY_DO_BLOCK_RESULT r").append(rd)
+                                .append(" = copy_do(r").append(rs).append(")\n");
                         break;
                     case Opcodes.NOT:
                         rd = interpretedCode.bytecode[pc++];

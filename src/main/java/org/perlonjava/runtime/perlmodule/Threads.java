@@ -75,6 +75,16 @@ public final class Threads extends PerlModuleBase {
             stub.put("state", new RuntimeScalar("detached"));
             return ReferenceOperators.bless(stub.createReference(), new RuntimeScalar(CLASS)).getList();
         }
+        // Perl compiles an anonymous thread entry in the parent. In
+        // particular, a malformed qr// inside that CODE must fail in the
+        // surrounding eval before an ithread exists. Deferring the entry CV
+        // until child execution lost $@ and created a large direct-vs-thread
+        // diagnostic delta in regexp_qr_embed_thr.t.
+        if (code.type == RuntimeScalarType.CODE
+                && code.value instanceof RuntimeCode runtimeCode
+                && runtimeCode.compilerSupplier != null) {
+            runtimeCode.compilerSupplier.get();
+        }
         RuntimeArray threadArgs = new RuntimeArray();
         for (int i = codeIndex + 1; i < args.size(); i++) threadArgs.push(args.get(i));
         PerlRuntime parent = PerlRuntime.current();

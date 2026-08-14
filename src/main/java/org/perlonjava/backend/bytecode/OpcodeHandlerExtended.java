@@ -338,7 +338,7 @@ public class OpcodeHandlerExtended {
         // (both operands were non-UTF-8). When concat produces STRING (at least
         // one operand was UTF-8), preserve the UTF-8 flag per Perl semantics.
         boolean wasByteString = (target.type == RuntimeScalarType.BYTE_STRING);
-        RuntimeScalar result = StringOperators.stringConcat(
+        RuntimeScalar result = StringOperators.stringConcatAssign(
                 target,
                 (RuntimeScalar) registers[rs]
         );
@@ -918,15 +918,17 @@ public class OpcodeHandlerExtended {
         boolean bytesMode = bytecode[pc++] != 0;
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
+        RuntimeScalar regex = registers[regexReg].scalar();
+        RuntimeScalar string = registers[stringReg].scalar();
         if (bytesMode) {
             registers[rd] = RuntimeRegex.matchRegexBytes(
-                    (RuntimeScalar) registers[regexReg],
-                    (RuntimeScalar) registers[stringReg],
+                    regex,
+                    string,
                     ctx);
         } else {
             registers[rd] = RuntimeRegex.matchRegex(
-                    (RuntimeScalar) registers[regexReg],
-                    (RuntimeScalar) registers[stringReg],
+                    regex,
+                    string,
                     ctx);
         }
         return pc;

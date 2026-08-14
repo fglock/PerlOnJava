@@ -595,6 +595,22 @@ public class IdentifierParser {
      * @return The parsed subroutine identifier as a String, or null if there is no valid identifier.
      */
     public static String parseSubroutineIdentifier(Parser parser) {
+        return parseSubroutineIdentifier(parser, false);
+    }
+
+    /**
+     * Parses a subroutine identifier, optionally leaving a trailing quote for
+     * the caller to interpret as the start of an adjacent quoted argument.
+     * Perl permits declarations such as {@code use overload'""' => ...}, while
+     * the same quote remains an old-style package separator in names such as
+     * {@code Foo'Bar}.
+     *
+     * @param parser The parser object containing the tokens and current parsing state.
+     * @param allowTrailingQuoteDelimiter whether a quote not followed by an
+     *                                    identifier may delimit the identifier
+     * @return The parsed subroutine identifier as a String, or null if there is no valid identifier.
+     */
+    public static String parseSubroutineIdentifier(Parser parser, boolean allowTrailingQuoteDelimiter) {
         // Skip any leading whitespace to find the start of the identifier
         parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
         StringBuilder variableName = new StringBuilder();
@@ -690,6 +706,11 @@ public class IdentifierParser {
                         token = parser.tokens.get(parser.tokenIndex);
                         nextToken = parser.tokens.get(parser.tokenIndex + 1);
                         continue;
+                    } else if (allowTrailingQuoteDelimiter) {
+                        // The caller owns the adjacent quote as the beginning
+                        // of a quoted argument (for example overload'""').
+                        parser.tokenIndex++;
+                        return variableName.toString();
                     } else {
                         // Bad name after '
                         parser.throwCleanError("Bad name after " + variableName + "'");

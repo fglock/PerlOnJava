@@ -439,6 +439,22 @@ public class EmitBlock {
                     false);
         }
 
+        if (node.getBooleanAnnotation("blockIsDoBlock")) {
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "copyDoBlockResult",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.LIST) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "copyDoBlockListResult",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+            }
+        }
+
         Local.localTeardown(localRecord, mv);
 
         if (regexStateLocal >= 0) {

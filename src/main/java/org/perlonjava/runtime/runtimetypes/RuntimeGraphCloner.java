@@ -79,8 +79,12 @@ public class RuntimeGraphCloner {
         Object existing = clones.get(value);
         if (existing != null) return (RuntimeBase) existing;
 
-        if (value instanceof RuntimeScalarReadOnly) {
-            // Constants are immutable and may safely retain process identity.
+        if (value instanceof RuntimeScalarReadOnly scalar
+                && !RuntimeScalarType.isReference(scalar)) {
+            // Plain immutable values may safely retain process identity. A
+            // readonly reference is only an immutable reference *slot*; its
+            // referent is still part of the ithread snapshot and must pass
+            // through this cloner's identity map.
             clones.put(value, value);
             return value;
         }
@@ -100,6 +104,17 @@ public class RuntimeGraphCloner {
         RuntimeCode target;
         if (source instanceof InterpretedCode interpreted) {
             target = cloneInterpretedCode(interpreted);
+        } else if (source.subroutine instanceof InterpretedCode interpreted) {
+            // Lazy named subs keep their stable RuntimeCode placeholder and
+            // install the materialized interpreter body into subroutine/codeObject.
+            // Cloning the wrapper as an opaque Java PerlSubroutine would retain
+            // the parent's capturedVars array even though the placeholder's
+            // metadata had been cloned correctly.
+            target = new RuntimeCode((PerlSubroutine) null, source.prototype);
+            clones.put(source, target);
+            InterpretedCode clonedBody = cloneInterpretedCode(interpreted);
+            target.subroutine = clonedBody;
+            target.codeObject = clonedBody;
         } else {
             target = new RuntimeCode((PerlSubroutine) null, source.prototype);
             clones.put(source, target);

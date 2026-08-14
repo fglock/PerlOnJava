@@ -715,7 +715,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     yield scalarUndef;
                 }
                 if (index == elements.size() - 1) {
-                    yield pop(this);
+                    RuntimeScalar previous = pop(this);
+                    // Perl arrays do not retain trailing nonexistent slots after
+                    // deleting the last existing element. This matters for sparse
+                    // arrays and for restoring a localized high tied index.
+                    while (!elements.isEmpty() && elements.getLast() == null) {
+                        elements.removeLast();
+                    }
+                    yield previous;
                 }
                 RuntimeScalar previous = this.get(index);
                 this.elements.set(index, null);
@@ -821,6 +828,35 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
     public RuntimeScalar deleteLocal(RuntimeScalar indexScalar) {
         int index = indexScalar.getInt();
+        if (type == TIED_ARRAY) {
+            if (index < 0 && !TieArray.negativeIndicesAllowed(this)) {
+                index = TieArray.tiedFetchSize(this).getInt() + index;
+            }
+            final RuntimeScalar tiedIndex = new RuntimeScalar(index);
+            final boolean tiedExisted = TieArray.tiedExists(this, tiedIndex).getBoolean();
+            final RuntimeScalar tiedSavedValue = tiedExisted
+                    ? new RuntimeScalar(TieArray.tiedFetch(this, tiedIndex)) : null;
+            final RuntimeScalar tiedReturnValue = tiedExisted
+                    ? new RuntimeScalar(tiedSavedValue) : new RuntimeScalar();
+            RuntimeArray self = this;
+
+            DynamicVariableManager.pushLocalVariable(new DynamicState() {
+                @Override
+                public void dynamicSaveState() {
+                    TieArray.tiedDelete(self, tiedIndex);
+                }
+
+                @Override
+                public void dynamicRestoreState() {
+                    if (tiedExisted) {
+                        TieArray.tiedStore(self, tiedIndex, tiedSavedValue);
+                    } else {
+                        TieArray.tiedDelete(self, tiedIndex);
+                    }
+                }
+            });
+            return tiedReturnValue;
+        }
         if (index < 0) {
             index = elements.size() + index;
         }

@@ -730,6 +730,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return code != null && code.attributes != null && code.attributes.contains("lvalue");
     }
 
+    private static void restoreLazyAttributes(RuntimeCode code, java.util.List<String> savedAttributes) {
+        if (savedAttributes == null || savedAttributes.isEmpty()) {
+            return;
+        }
+        if (code.attributes == null) {
+            code.attributes = new java.util.ArrayList<>(savedAttributes);
+            return;
+        }
+        for (String attribute : savedAttributes) {
+            if (!code.attributes.contains(attribute)) {
+                code.attributes.add(attribute);
+            }
+        }
+    }
+
     public static void requireLvalueCallable(RuntimeCode code, int callContext, String subroutineName) {
         if ((callContext != RuntimeContextType.LVALUE && callContext != RuntimeContextType.LVALUE_LIST)
                 || isLvalueCode(code)
@@ -1427,9 +1442,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (savedConstantValue != null && code.constantValue == null) {
                         code.constantValue = savedConstantValue;
                     }
-                    if (savedAttributes != null && code.attributes == null) {
-                        code.attributes = savedAttributes;
-                    }
+                    restoreLazyAttributes(code, savedAttributes);
                 }
 
                 if (!code.defined() && "CORE".equals(code.packageName) && code.subName != null) {
@@ -4327,9 +4340,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (savedConstantValue != null && code.constantValue == null) {
                     code.constantValue = savedConstantValue;
                 }
-                if (savedAttributes != null && code.attributes == null) {
-                    code.attributes = savedAttributes;
-                }
+                restoreLazyAttributes(code, savedAttributes);
             }
 
             // Check if it's an unfilled forward declaration (not defined)
@@ -4717,9 +4728,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (savedConstantValue != null && code.constantValue == null) {
                     code.constantValue = savedConstantValue;
                 }
-                if (savedAttributes != null && code.attributes == null) {
-                    code.attributes = savedAttributes;
-                }
+                restoreLazyAttributes(code, savedAttributes);
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call
@@ -4984,9 +4993,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (savedConstantValue != null && code.constantValue == null) {
                     code.constantValue = savedConstantValue;
                 }
-                if (savedAttributes != null && code.attributes == null) {
-                    code.attributes = savedAttributes;
-                }
+                restoreLazyAttributes(code, savedAttributes);
             }
 
             // Lazily generate CORE:: subroutine wrappers on first call
@@ -5382,6 +5389,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (result instanceof ScalarSpecialVariable ssv) {
             RuntimeScalar resolved = ssv.getValueAsScalar();
             return new RuntimeScalar(resolved);
+        }
+        return result;
+    }
+
+    /**
+     * A do-block returns a mortal copy of its last scalar expression, not the
+     * underlying lvalue. In particular, a deleted hash element must stop
+     * aliasing its former storage when it crosses the do-block boundary.
+     */
+    public static RuntimeScalar copyDoBlockResult(RuntimeScalar result) {
+        return new RuntimeScalar(result);
+    }
+
+    /** Copy a do-block result used in list context without collapsing the list. */
+    public static RuntimeBase copyDoBlockListResult(RuntimeBase result) {
+        if (result instanceof RuntimeScalar scalar) {
+            return new RuntimeScalar(scalar);
+        }
+        if (result instanceof RuntimeList list) {
+            RuntimeList copy = new RuntimeList();
+            for (RuntimeBase element : list.elements) {
+                copy.elements.add(element instanceof RuntimeScalar scalar
+                        ? new RuntimeScalar(scalar) : element);
+            }
+            return copy;
         }
         return result;
     }

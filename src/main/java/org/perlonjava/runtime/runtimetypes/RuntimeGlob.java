@@ -625,8 +625,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
                 return value;
             case UNDEF:
-                // TODO: Add "Undefined value assigned to typeglob" warning with proper guards
-                // to avoid false positives during module loading
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Undefined value assigned to typeglob"),
+                        RuntimeScalarCache.scalarEmptyString,
+                        "misc");
                 return value;
             case INTEGER:
             case DOUBLE:

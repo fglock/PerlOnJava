@@ -437,11 +437,12 @@ public class Operator {
             // Example: substr("a", -2, 2) -> offset=-1, adjustedLen=1, returns "a" (no warning)
             if (offset < 0) {
                 // Adjust length by the overshoot (negative offset value)
-                int adjustedLength = hasExplicitLength && length < 0
-                        ? strLength + length : length + offset;
+                int adjustedLength = !hasExplicitLength
+                        ? strLength
+                        : length < 0 ? strLength + length : length + offset;
                 if (adjustedLength < 0) {
                     // Adjusted length is negative - warn and return undef
-                    if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
+                    if (warnEnabled && ctx != RuntimeContextType.LVALUE && !hasReplacement) {
                         WarnDie.warn(new RuntimeScalar("substr outside of string"),
                                 RuntimeScalarCache.scalarEmptyString);
                     }
@@ -471,7 +472,7 @@ public class Operator {
 
         // Only warn/error for positive offsets that exceed string length
         if (offset > strLength) {
-            if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
+            if (warnEnabled && ctx != RuntimeContextType.LVALUE && !hasReplacement) {
                 WarnDie.warn(new RuntimeScalar("substr outside of string"),
                         RuntimeScalarCache.scalarEmptyString);
             }

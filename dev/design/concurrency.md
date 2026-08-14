@@ -495,23 +495,24 @@ Acceptance: `pat_psycho_thr.t`, `pat_rt_report_thr.t`, `pat_thr.t`,
 `regexp_unicode_prop_thr.t`, and `speed_thr.t` reach their direct, unthreaded
 suite baselines without clone exceptions on either backend.
 
-### Phase 26 — Scalar lvalue and magic parity (in progress)
+### Phase 26 — Scalar lvalue and magic parity (completed 2026-08-13)
 
 Fix the ordinary `index`/`substr` lvalue, warning, overload, reference-
 stringification, and lexical-magic behavior exposed by their thread wrappers.
 Treat failures present in the direct suite as language/operator gaps rather than
 thread-cloning failures.
 
-Implemented substantial shared JVM/interpreter lvalue context, negative offset/length
+Implemented shared JVM/interpreter lvalue context, negative offset/length
 clipping, warning/die behavior, live substring extent modes, one-time overload
-stringification, and loose refalias lvalue handling.
+stringification, loose refalias lvalue handling, graph-safe constant and lazy-CV
+capture identity, and an interpreter `$#array` lvalue opcode. Lazy named
+subroutines now preserve both their declaration attributes and lvalue compile
+context.
 
-The `index` gate is complete on the JVM backend; interpreter lazy-capture
-identity and the remaining direct `substr` assertions are still under
-validation. Acceptance: direct and threaded forms both reach `index_thr.t` 415/415 and
-`substr_thr.t` 400/400 on JVM and interpreter backends.
+Acceptance is complete: direct and threaded forms reach `index_thr.t` 415/415
+and `substr_thr.t` 400/400 on JVM and interpreter backends.
 
-### Phase 27 — Regex runtime concurrency (implemented 2026-08-12) and debug state
+### Phase 27 — Regex runtime concurrency (runtime portion completed 2026-08-13)
 
 Runtime-local user-defined Unicode-property results are inherited at snapshot,
 and simultaneous sibling resolution is coordinated per property name without
@@ -523,13 +524,24 @@ environment flag written to `System.err`. Correct support requires lexical
 parser/CV metadata, both backends, and a runtime diagnostic sink before thread
 trace equivalence can be claimed.
 
-Acceptance: `user_prop_race_thr.t` reaches 3/3 within its bounded deadlines and
-`stclass_threads.t` reaches 6/6 with parent/child trace equivalence.
+The runtime-concurrency acceptance gate is complete: repeated bounded runs of
+`user_prop_race_thr.t` reach 3/3. Static CV validation deliberately defers
+user-defined properties because resolving them executes arbitrary Perl in the
+owning runtime. Lexical-debug acceptance remains open: `stclass_threads.t`
+cannot reach 6/6 until the direct `re 'debug'` feature exists.
 
 ### Phase 28 — General regex parity exposed by thread wrappers (in progress)
 
 The recursive regex backend now supports `(?(DEFINE)...)`, named subroutine
 calls in that container, and extended bracket classes within definitions.
+Literal `qr//` syntax is now validated when a thread entry CV is materialized,
+so malformed entry code fails in the parent and does not create a child.
+User-defined Unicode properties remain runtime-resolved.
+
+The direct/thread `regexp_qr_embed` differential has narrowed from 45
+assertions to one while both paths execute the same 2207 of 2210 planned
+assertions. The remaining one-assertion delta and three blocked direct tests are
+still Phase 28 language work; this phase is not marked complete.
 
 Implement the remaining parser/runtime features in `pat_re_eval`,
 `regexp_qr_embed`, Unicode-property, conditional, control-verb, and lookbehind
@@ -539,13 +551,13 @@ the `_thr.t` harness.
 Acceptance: every applicable regex `_thr.t` wrapper has zero assertion delta
 from its direct companion suite and neither path terminates early.
 
-### Phase 29 — Complete and truthful `threads` API (implemented tranche 2026-08-12)
+### Phase 29 — Complete and truthful `threads` API (completed tranche 2026-08-13)
 
 Implemented current-thread/class-form `detach`, targeted thread signals,
 `object`, persisted creation context and `wantarray`, exit/context options,
 main-thread state, terminal alias records, and truthful platform/virtual
-stack-size behavior. Shutdown warnings and process retention for detached
-platform threads remain explicit follow-up work.
+stack-size behavior. CLI shutdown now reports exact running/finished unjoined
+counts, while detached children remain silent and do not retain the process.
 
 Complete remaining compatibility details for
 `wantarray`, exit/context options, exit status, and the stack-size API where the
@@ -566,6 +578,11 @@ conservative undef/rejection policy.
 Continue to define descriptor and filehandle behavior for thread snapshots.
 Preserve the already-green default Test2 thread/IPC suites, then enable the
 applicable timeout and opt-in thread stress paths without changing Test2.
+
+The current compatibility gate also proves that CPAN configuration can safely
+scalarize list-valued regex operands. Test::Simple's bundled-module install
+path completes, and the full DBIx::Class suite passes with 325 files and 42,671
+tests under `--jobs 8`.
 
 Acceptance: `ipc_wait_timeout.t` observes Perl-compatible inherited-pipe
 behavior; default Test2 remains green; `AUTHOR_TESTING` and
@@ -780,6 +797,17 @@ not a reset, and representative package, regex, and execution state deliberately
 remains observable on the closed object. The complete fresh-runtime equivalence
 contract and state inventory live in `runtime-pooling-reset-contract.md`.
 
+The 2026-08-14 post-activation compatibility pass also resolved several direct
+language defects exposed by the broader thread test surface. Reference
+stringification and numeric coercion now use one Perl identity, typeglob pseudo
+constants survive stash reconstruction and symbolic CODE lookup, tied-array
+localization no longer corrupts sparse storage, `do NAME(...)` follows modern
+syntax while `do BLOCK` copies its result, and `.=` preserves Perl's undef-warning
+rules. Interpreter compiler-flag opcodes now activate lexical warning masks at
+the same boundaries as generated JVM code. These are general Perl compatibility
+fixes rather than changes to ithread ownership. The detailed investigation and
+validation history is retained in the corresponding commit messages.
+
 ### Implementation History
 
 Completed phase history is intentionally kept out of this living design
@@ -787,31 +815,48 @@ document. The implementation record, validation details, regressions, and
 review decisions can be recovered from the phase commit messages and pull-
 request history.
 
+The core differential runner now reserves an exclusive serial lane for the
+resource-sensitive `gv.t`, advanced-regex, regex-speed, GH7094 benchmark, and
+Abigail JAPH tests. These tests have internal watchdogs or timing assertions
+whose TAP totals changed when they competed with the normal parallel corpus;
+they retain stable original indices, a 600-second minimum outer deadline, and
+`gv.t` receives the upstream timeout factor. This is test scheduling policy,
+not a relaxation of expected Perl behavior. The parser also accepts Perl's
+adjacent quoted import form (`use overload'""' => ...`) without weakening the
+old-style `Foo'Bar` package separator. Identical serialized runs with
+`--jobs 8` and `--jobs 1` produced `gv.t` 255/304, both advanced-regex tests
+1376/1687, `speed.t` 26/59, GH7094 6/6, and Abigail 109/130; the latter gains
+three assertions from the adjacent-import parser fix.
+
 ### Next Steps
 
-1. Finish the remaining Phase 26 interpreter lazy-lexical identity case and the
-   thirteen direct `substr.t` assertions. Keep direct and `_thr.t` companions in
-   the same run; a wrapper may not be called fixed merely because it no longer
-   terminates early.
-2. Complete lexical `re 'debug'` as a direct regex feature with parser/CV
+1. Complete lexical `re 'debug'` as a direct regex feature with parser/CV
    metadata, JVM and interpreter propagation, and runtime-owned diagnostic
    routing. Then finish the remaining Phase 28 `pat_re_eval` and
    `regexp_qr_embed` direct-language gaps before asserting thread equivalence.
-3. Finish Phase 29 shutdown warnings and detached platform-thread process
-   lifecycle. Continue Phase 30 resource classification beyond explicitly
+2. Continue Phase 30 resource classification beyond explicitly
    inherited internal pipes. Preserve the green anchors:
    `class/threads.t`, `threads-dirh.t`, Storable threads, and default Test2 IPC.
-4. Keep the complete platform-thread matrix green on both backends and retain
+3. Keep the complete platform-thread matrix green on both backends and retain
    virtual-mode parity. The new `examples/threads/dynamic_map_reduce.pl`
    demonstrates a small shared scheduler, isolated worker-local hashes, and
    deterministic join aggregation; it deliberately makes no performance claim.
-5. Keep the DBIx::Class regression gate green with captured output from
+4. Keep the DBIx::Class regression gate green with captured output from
    `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`. Investigate every future
    failure against the merged baseline; partial distribution results are not
    sufficient for release.
-6. Keep virtual threads experimental until native callback diagnostics and
+5. Keep virtual threads experimental until native callback diagnostics and
    repeated benchmarks justify promotion. Keep runtime pooling disabled until
    the separate Phase 34 reset contract proves fresh-runtime equivalence.
+6. Continue the direct-language differential exposed by the thread gate. Preserve
+   the recovered `gv.t`, `assignwarn.t`, `local.t`, and `do.t` behavior while
+   addressing the remaining regex-parser/diagnostic gaps in `pat_advanced.t` and
+   `speed.t`; compare serialized same-base runs because their historical totals
+   vary under concurrent machine load.
+7. Keep resource-sensitive core tests in the runner's exclusive lane when new
+   full-corpus evidence proves load-dependent watchdog or timing behavior. Do
+   not classify high-water TAP fluctuations as semantic regressions without a
+   serialized same-commit reproduction.
 
 ### Open Questions
 

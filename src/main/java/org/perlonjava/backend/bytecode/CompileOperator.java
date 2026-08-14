@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -357,7 +358,10 @@ public class CompileOperator {
         bc.emit(bc.isBytesEnabled() ? 1 : 0);
         int stringReg;
         if (args.elements.size() > 3) {
-            bc.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);
+            boolean nonDestructive = args.elements.get(2) instanceof StringNode flags
+                    && flags.value.contains("r");
+            bc.compileNode(args.elements.get(3), -1,
+                    nonDestructive ? RuntimeContextType.SCALAR : RuntimeContextType.LVALUE);
             stringReg = bc.lastResultReg;
         } else {
             stringReg = loadDefaultUnderscore(bc);
@@ -418,8 +422,13 @@ public class CompileOperator {
             return;
         }
         java.util.List<Integer> argRegs = new java.util.ArrayList<>();
-        for (Node arg : args.elements) {
-            arg.accept(bc);
+        for (int i = 0; i < args.elements.size(); i++) {
+            Node arg = args.elements.get(i);
+            int argContext = i == 0
+                    && (args.elements.size() > 3
+                    || bc.currentCallContext == RuntimeContextType.LVALUE)
+                    ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
+            bc.compileNode(arg, -1, argContext);
             argRegs.add(bc.lastResultReg);
         }
         int argsListReg = bc.allocateRegister();
@@ -1056,6 +1065,16 @@ public class CompileOperator {
                 if (operand.elements.size() < 2) {
                     bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
                 }
+                if (operand.elements.get(0) instanceof StringNode literalPattern
+                        && operand.elements.get(1) instanceof StringNode literalFlags
+                        && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalPattern.value)) {
+                    String modifiers = literalFlags.value;
+                    if (unicodeStringsImplicitUFlag(bytecodeCompiler) != 0
+                            && !modifiers.contains("u")) {
+                        modifiers += "u";
+                    }
+                    RuntimeRegex.validateLiteralSyntax(literalPattern.value, modifiers);
+                }
                 boolean hasOModifier = false;
                 Node flagsNode = operand.elements.get(1);
                 if (flagsNode instanceof StringNode) {
@@ -1520,6 +1539,12 @@ public class CompileOperator {
             if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
             else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
         } else bc.throwCompilerException("$# requires array variable");
+        if (bc.currentCallContext == RuntimeContextType.LVALUE) {
+            int rd = bc.allocateOutputRegister();
+            bc.emit(Opcodes.ARRAY_LAST_INDEX_LVALUE); bc.emitReg(rd); bc.emitReg(arrayReg);
+            bc.lastResultReg = rd;
+            return;
+        }
         int sizeReg = bc.allocateRegister(); bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(sizeReg); bc.emitReg(arrayReg);
         int oneReg = bc.allocateRegister(); bc.emit(Opcodes.LOAD_INT); bc.emitReg(oneReg); bc.emitInt(1);
         int rd = bc.allocateOutputRegister(); bc.emit(Opcodes.SUB_SCALAR); bc.emitReg(rd); bc.emitReg(sizeReg); bc.emitReg(oneReg);
