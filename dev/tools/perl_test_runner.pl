@@ -446,10 +446,11 @@ sub timeout_for_test {
 
     return 600 if $test_file =~ m{
           (?:^|/)perl5_t/t/lib/croak\.t$
-        | (?:^|/)perl5_t/t/re/pat\.t$
+        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/op/gv\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/speed\.t$
+        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$
     }x && $timeout < 600;
@@ -460,8 +461,10 @@ sub requires_exclusive_slot {
     my ($test_file) = @_;
     return $test_file =~ m{
           (?:^|/)perl5_t/t/op/gv\.t$
+        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/speed\.t$
+        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$
     }x;
