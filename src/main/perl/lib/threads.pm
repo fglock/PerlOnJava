@@ -2,7 +2,7 @@ package threads;
 
 use strict;
 use warnings;
-our $VERSION = '2.27';
+our $VERSION = '2.43';
 our $threads = 1;
 
 sub all ()      { 0 }

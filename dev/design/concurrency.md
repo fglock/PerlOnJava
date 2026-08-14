@@ -743,12 +743,18 @@ runtime that releases the final cross-runtime owner. Separate destructive plain
 includes nested rebless/store-back, fresh `refaddr` views, cycles, weak refs,
 one global destructor, and share-versus-shared_clone system-Perl oracles.
 
-### Phase 40 — Complete public `threads` API
+### Phase 40 — Complete public `threads` API (completed 2026-08-14)
 
 Close every remaining lifecycle, signal, context, exit-status, stack-size,
 import, stringify, alias-object, and shutdown-warning gap. Upgrade the module
 version only when its upstream surface passes. A nonzero stack request always
 selects a platform child even after virtual threads become the default.
+
+The public 2.43 method surface is implemented and advertised. Creation context,
+alias objects, current/class detach, signals, exit policy, stack metadata,
+stringification, terminal errors, daemon-carrier shutdown, and attached-child
+exit warnings are covered by focused JVM/interpreter tests. Core
+`op/threads.t` completes 30/30.
 
 ### Phase 41 — Fresh-runtime reset
 
@@ -799,7 +805,7 @@ CI.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 35 complete; Phase 36 and Phase 39b next
+### Current Status: Phase 40 complete; Phase 36 and Phase 39b remain open
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -978,9 +984,9 @@ three assertions from the adjacent-import parser fix.
 2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
    weak/cyclic ownership, and the destructive `share` versus preserving
    `shared_clone` distinction.
-3. Land Phases 40–44 as the final delivery sequence: public API closure,
-   fresh-runtime reset, opt-in pooling and concurrent PSGI, virtual threads by
-   default, and the complete release gate.
+3. Land Phases 41–44 as the final delivery sequence: fresh-runtime reset,
+   opt-in pooling and concurrent PSGI, virtual threads by default, and the
+   complete release gate. Phase 40's public 2.43 API surface is complete.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under
