@@ -39,7 +39,7 @@ was kept in the PerlOnJava validation set.
 
 ## Progress tracking
 
-### Current status: Complete, including regression follow-up (2026-08-13)
+### Current status: Complete, reconciled with current master (2026-08-14)
 
 ### Completed phases
 
@@ -103,6 +103,20 @@ was kept in the PerlOnJava validation set.
     `B::Hooks::AtRuntime::OnlyCoreDependencies` (12 tests), `App::calendr`
     (2 tests), and `Authen::Simple::Kerberos` (functional suite); all passed.
   - Full project `make` passed after the final regression repairs.
+- [x] Upstream reconciliation (2026-08-14)
+  - Rebuilt PR #949 on current `origin/master`, which now contains the shared
+    regex, warning, tied-array, and other core compatibility repairs.
+  - Retained only this batch's CPAN compiler, source-filter, runtime-provider,
+    and tooling changes; dropped the branch-local core regression commit so
+    the upstream implementations remain authoritative.
+  - Preserved the source-filter and weak-reference corrections that are part
+    of the CPAN objectives.
+  - Full `make` passed. The reported core-test set matched an isolated
+    `origin/master` build; `re/speed.t` varied only with its process timeout
+    and reproduced the upstream 25 passing assertions on a quiet repeat.
+  - Revalidated `Marlin::X::Clone` (8 tests), `App::calendr` (2 tests),
+    `Hades::Realm::OO` (40 tests), and `Authen::Simple::Kerberos` (1 functional
+    test); all passed.
 
 ### Next steps
 
