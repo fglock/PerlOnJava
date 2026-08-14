@@ -344,7 +344,13 @@ public class XSLoader extends PerlModuleBase {
         }
         try {
             // Convert module name to file path: Template::Stash::XS -> Template/Stash/XS.pm
-            String filePath = moduleName.replace("::", "/") + ".pm";
+            String filePath = switch (moduleName) {
+                case "Class::XSConstructor" ->
+                        "PerlOnJava/XSOverlay/Class/XSConstructor.pm";
+                case "B::Hooks::AtRuntime::OnlyCoreDependencies" ->
+                        "PerlOnJava/XSOverlay/B/Hooks/AtRuntime/OnlyCoreDependencies.pm";
+                default -> moduleName.replace("::", "/") + ".pm";
+            };
             String jarPath = GlobalContext.JAR_PERLLIB + "/" + filePath;
             
             // Check if a jar: version exists

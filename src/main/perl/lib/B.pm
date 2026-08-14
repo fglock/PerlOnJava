@@ -427,9 +427,6 @@ package B::AV {
         return bless { ref => $ref }, $class;
     }
 
-    sub object_2svref {
-        return $_[0]->{ref};
-    }
 }
 
 package B::STASH {

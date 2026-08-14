@@ -13,6 +13,7 @@ delete $INC{'Module/Build/Base.pm'};
 # Find and load the real Module::Build::Base
 # We need to skip files that match our stub (in jar or this file)
 my $loaded = 0;
+my $shim_file = abs_path(__FILE__);
 for my $inc_path (@INC) {
     next if $inc_path =~ /^jar:/;  # Skip jar entries (that's where our stub is)
     next unless -d $inc_path;
@@ -24,6 +25,8 @@ for my $inc_path (@INC) {
         
         # Get absolute path for do() since '.' is not in @INC
         my $abs_file = abs_path($file);
+        next if defined($shim_file) && defined($abs_file)
+            && $abs_file eq $shim_file;
         
         # Load the real module using do() with absolute path
         my $result = do $abs_file;

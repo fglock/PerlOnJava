@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
-use App::Cpan ();
+require './src/main/perl/lib/App/Cpan.pm';
 
 {
     no warnings 'redefine';
@@ -23,6 +23,14 @@ use App::Cpan ();
     ok(
         !App::Cpan::_cpanpm_status_indicates_failure(),
         'optional recommendation failure does not fail the command',
+    );
+
+    is(
+        App::Cpan::_cpanpm_status_indicates_failure(
+            'A/AU/AUTHOR/Optional.tar.gz',
+        ),
+        App::Cpan::A_MODULE_FAILED_TO_INSTALL(),
+        'failure of the explicitly requested distribution fails the command',
     );
 }
 

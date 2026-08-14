@@ -21,7 +21,6 @@ import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
-import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.WarningBitsRegistry;
@@ -227,11 +226,6 @@ public class PerlLanguageProvider {
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parse code: " + compilerOptions.code);
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("  call context " + ctx.contextType);
 
-        // Apply any BEGIN-block filters before tokenization if requested
-        // This is a workaround for the limitation that our architecture tokenizes all source upfront
-        if (compilerOptions.applySourceFilters) {
-            compilerOptions.code = FilterUtilCall.preprocessWithBeginFilters(compilerOptions.code);
-        }
         compilerOptions.deparseSourceCode = compilerOptions.code;
 
         // Create the LexerToken list

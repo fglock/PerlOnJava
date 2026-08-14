@@ -647,12 +647,13 @@ sub _default
 			$logger->error( "Skipping $arg because I couldn't find a matching namespace." );
 			next;
 			};
+		my $requested_distribution_id = eval { $module->distribution->id };
 
 		_clear_cpanpm_output();
 		$action->( $arg );
 
 		my $error = _cpanpm_output_indicates_failure();
-		$error ||= _cpanpm_status_indicates_failure();
+		$error ||= _cpanpm_status_indicates_failure($requested_distribution_id);
 		push @errors, $error if $error;
 		}
 
@@ -768,12 +769,20 @@ sub _cpanpm_output_indicates_failure
 
 sub _cpanpm_status_indicates_failure
 	{
+	my $requested_distribution_id = shift;
+	$requested_distribution_id =~ s{^./../}{}
+		if defined $requested_distribution_id;
+
 	# CPAN already records structured phase status for every distribution in
 	# the current command, including recursively installed prerequisites.
 	# Prefer that state when App::Cpan's legacy last-output-line heuristic is
 	# fooled by trailing hints or report suggestions.
 	my @failed = CPAN::Shell->find_failed($CPAN::CurrentCommandId);
-	return A_MODULE_FAILED_TO_INSTALL if grep { $_->[5] } @failed;
+	return A_MODULE_FAILED_TO_INSTALL if grep {
+		$_->[5]
+			|| (defined $requested_distribution_id
+				&& $_->[1] eq $requested_distribution_id)
+	} @failed;
 	return;
 	}
 }

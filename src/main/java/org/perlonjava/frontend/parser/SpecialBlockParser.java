@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -175,6 +176,12 @@ public class SpecialBlockParser {
         // but never emit `local ${^WARNING_SCOPE} = N`, so warnings::warnif would
         // not honor the suppression at runtime.
         if ("BEGIN".equals(blockName)) {
+            // Source filters may be installed by code inside an explicit
+            // BEGIN block (B::Hooks::AtRuntime uses this to inject callbacks
+            // at the precise transition from compile time to runtime).
+            if (FilterUtilCall.wasFilterInstalled()) {
+                StatementParser.applySourceFilterToRemainingTokens(parser);
+            }
             int warningScopeId = WarningFlags.getLastScopeId();
             WarningFlags.clearLastScopeId();
 
