@@ -381,7 +381,11 @@ sub run_single_test {
         }
     }
 
-    my $cmd = "${timeout_cmd}$abs_jperl $test_name 2>&1";
+    # Test subprocesses run in their own process groups under GNU timeout.
+    # Never inherit an interactive terminal as stdin: a test that reads from
+    # it would receive SIGTTIN and stop indefinitely as a background group.
+    my $devnull = File::Spec->devnull();
+    my $cmd = "${timeout_cmd}$abs_jperl $test_name < $devnull 2>&1";
 
     # Capture output with timeout
     my $output = '';
@@ -397,7 +401,7 @@ sub run_single_test {
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };
             alarm($test_timeout);
-            $output = `$abs_jperl $test_name 2>&1`;
+            $output = `$cmd`;
             $exit_code = $? >> 8;
             alarm(0);
         };
