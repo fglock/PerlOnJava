@@ -310,6 +310,7 @@ public class CompileOperator {
             bc.emitReg(callsiteId);
             bc.emit(unicodeStringsImplicitUFlag(bc));
             bc.emit(regexWarningState(node));
+            bc.emit(0);
         } else {
             bc.emit(Opcodes.QUOTE_REGEX);
             bc.emitReg(regexReg);
@@ -317,6 +318,7 @@ public class CompileOperator {
             bc.emitReg(flagsReg);
             bc.emit(unicodeStringsImplicitUFlag(bc));
             bc.emit(regexWarningState(node));
+            bc.emit(0);
         }
         int stringReg;
         if (args.elements.size() > 2) {
@@ -1094,6 +1096,7 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(callsiteId);
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                     bytecodeCompiler.emit(regexWarningState(node));
+                    bytecodeCompiler.emit(1);
                 } else {
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
                     bytecodeCompiler.emitReg(rd);
@@ -1101,6 +1104,7 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(flagsReg);
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                     bytecodeCompiler.emit(regexWarningState(node));
+                    bytecodeCompiler.emit(1);
                 }
                 bytecodeCompiler.lastResultReg = rd;
             }

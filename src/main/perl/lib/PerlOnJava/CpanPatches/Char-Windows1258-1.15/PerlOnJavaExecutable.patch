@@ -1,0 +1,176 @@
+--- lib/Windows1258.pm.orig
++++ lib/Windows1258.pm
+@@ -29,7 +29,7 @@
+ $VERSION = $VERSION;
+
+ BEGIN {
+-    if ($^X =~ / jperl /oxmsi) {
++    if ($^X =~ / jperl /oxmsi and not $ENV{PERLONJAVA_EXECUTABLE}) {
+         die __FILE__, ": needs perl(not jperl) 5.00503 or later. (\$^X==$^X)\n";
+     }
+     if (CORE::ord('A') == 193) {
+@@ -226,8 +226,24 @@
+         CORE::eval q{ truncate($fh, 0) };
+         seek($fh, 0, 0) or die __FILE__, ": Can't seek file: $filename.e\n";
+
+-        my $e_script = Windows1258::escape_script($filename);
+-        print {$fh} $e_script;
++        if ($ENV{PERLONJAVA_EXECUTABLE}) {
++            # PerlOnJava can execute the escaped program, but Ewindows1258's source
++            # transformer relies on Perl regex code blocks.  Run only that
++            # build-time transformation with the system Perl.
++            my $generator = gensym();
++            my $system_perl = $ENV{PERLONJAVA_SYSTEM_PERL} || 'perl';
++            open($generator, '-|', $system_perl, __FILE__, $filename)
++                or die __FILE__, ": Can't start system Perl source transformer: $!\n";
++            while (defined(my $line = <$generator>)) {
++                print {$fh} $line;
++            }
++            close($generator)
++                or die __FILE__, ": system Perl source transformer failed: $!\n";
++        }
++        else {
++            my $e_script = Windows1258::escape_script($filename);
++            print {$fh} $e_script;
++        }
+
+         my $mode = (stat($filename))[2] & 0777;
+         chmod $mode, "$filename.e";
+--- lib/Ewindows1258.pm.orig
++++ lib/Ewindows1258.pm
+@@ -29,7 +29,7 @@
+ $VERSION = $VERSION;
+
+ BEGIN {
+-    if ($^X =~ / jperl /oxmsi) {
++    if ($^X =~ / jperl /oxmsi and not $ENV{PERLONJAVA_EXECUTABLE}) {
+         die __FILE__, ": needs perl(not jperl) 5.00503 or later. (\$^X==$^X)\n";
+     }
+     if (CORE::ord('A') == 193) {
+@@ -541,6 +541,15 @@
+         }
+     }
+
++    # PerlOnJava's native split already operates on the byte-preserving regex
++    # and avoids this legacy implementation's zero-width substitution loop.
++    if ($ENV{PERLONJAVA_EXECUTABLE}) {
++        if (defined $limit) {
++            return CORE::split($pattern, $string, $limit);
++        }
++        return CORE::split($pattern, $string);
++    }
++
+     my @split = ();
+
+     # when string is empty
+@@ -2880,46 +2889,24 @@
+ use vars qw($nest);
+
+ # regexp of nested parens in qqXX
+-
+-# P.340 Matching Nested Constructs with Embedded Code
+-# in Chapter 7: Perl
+-# of ISBN 0-596-00289-0 Mastering Regular Expressions, Second edition
+
+-my $qq_paren   = qr{(?{local $nest=0}) (?>(?:
+-                       [^\\()] |
+-                           \(  (?{$nest++}) |
+-                           \)  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                    \\ [^c] |
+-                    \\c[\x40-\x5F] |
+-                       [\x00-\xFF]
+-                 }xms;
+-
+-my $qq_brace   = qr{(?{local $nest=0}) (?>(?:
+-                       [^\\{}] |
+-                           \{  (?{$nest++}) |
+-                           \}  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                    \\ [^c] |
+-                    \\c[\x40-\x5F] |
+-                       [\x00-\xFF]
+-                 }xms;
++# PerlOnJava: Java regexes do not execute Perl code blocks. Expand balanced
++# delimiter patterns to a fixed practical depth using ordinary regexes.
++my $qq_paren_nested   = qr{[^\\()]*};
++my $qq_brace_nested   = qr{[^\\{}]*};
++my $qq_bracket_nested = qr{[^\\\[\]]*};
++my $qq_angle_nested   = qr{[^\\<>]*};
++for (1 .. 4) {
++    $qq_paren_nested   = qr{(?: [^\\()]   | \( $qq_paren_nested \) )*}xms;
++    $qq_brace_nested   = qr{(?: [^\\{}]   | \{ $qq_brace_nested \} )*}xms;
++    $qq_bracket_nested = qr{(?: [^\\\[\]] | \[ $qq_bracket_nested \] )*}xms;
++    $qq_angle_nested   = qr{(?: [^\\<>]   | \< $qq_angle_nested \> )*}xms;
++}
+
+-my $qq_bracket = qr{(?{local $nest=0}) (?>(?:
+-                       [^\\\[\]] |
+-                           \[  (?{$nest++}) |
+-                           \]  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                    \\ [^c] |
+-                    \\c[\x40-\x5F] |
+-                       [\x00-\xFF]
+-                 }xms;
+-
+-my $qq_angle   = qr{(?{local $nest=0}) (?>(?:
+-                       [^\\<>] |
+-                           \<  (?{$nest++}) |
+-                           \>  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                    \\ [^c] |
+-                    \\c[\x40-\x5F] |
+-                       [\x00-\xFF]
+-                 }xms;
++my $qq_paren   = qr{(?>(?: $qq_paren_nested   )) | \\ [^c] | \\c[\x40-\x5F] | [\x00-\xFF]}xms;
++my $qq_brace   = qr{(?>(?: $qq_brace_nested   )) | \\ [^c] | \\c[\x40-\x5F] | [\x00-\xFF]}xms;
++my $qq_bracket = qr{(?>(?: $qq_bracket_nested )) | \\ [^c] | \\c[\x40-\x5F] | [\x00-\xFF]}xms;
++my $qq_angle   = qr{(?>(?: $qq_angle_nested   )) | \\ [^c] | \\c[\x40-\x5F] | [\x00-\xFF]}xms;
+
+ my $qq_scalar  = qr{(?: \{ (?:$qq_brace)*? \} |
+                        (?: ::)? (?:
+@@ -2944,33 +2931,21 @@
+                  }xms;
+
+ # regexp of nested parens in qXX
+-my $q_paren    = qr{(?{local $nest=0}) (?>(?:
+-                       [^()] |
+-                             \(  (?{$nest++}) |
+-                             \)  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                       [\x00-\xFF]
+-                 }xms;
+-
+-my $q_brace    = qr{(?{local $nest=0}) (?>(?:
+-                       [^\{\}] |
+-                             \{  (?{$nest++}) |
+-                             \}  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                       [\x00-\xFF]
+-                 }xms;
+-
+-my $q_bracket  = qr{(?{local $nest=0}) (?>(?:
+-                       [^\[\]] |
+-                             \[  (?{$nest++}) |
+-                             \]  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                    [\x00-\xFF]
+-                 }xms;
++my $q_paren_nested   = qr{[^()]*};
++my $q_brace_nested   = qr{[^{}]*};
++my $q_bracket_nested = qr{[^\[\]]*};
++my $q_angle_nested   = qr{[^<>]*};
++for (1 .. 4) {
++    $q_paren_nested   = qr{(?: [^()]   | \( $q_paren_nested \) )*}xms;
++    $q_brace_nested   = qr{(?: [^{}]   | \{ $q_brace_nested \} )*}xms;
++    $q_bracket_nested = qr{(?: [^\[\]] | \[ $q_bracket_nested \] )*}xms;
++    $q_angle_nested   = qr{(?: [^<>]   | \< $q_angle_nested \> )*}xms;
++}
+
+-my $q_angle    = qr{(?{local $nest=0}) (?>(?:
+-                    [^<>] |
+-                             \<  (?{$nest++}) |
+-                             \>  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!)) |
+-                    [\x00-\xFF]
+-                 }xms;
++my $q_paren   = qr{(?>(?: $q_paren_nested   )) | [\x00-\xFF]}xms;
++my $q_brace   = qr{(?>(?: $q_brace_nested   )) | [\x00-\xFF]}xms;
++my $q_bracket = qr{(?>(?: $q_bracket_nested )) | [\x00-\xFF]}xms;
++my $q_angle   = qr{(?>(?: $q_angle_nested   )) | [\x00-\xFF]}xms;
+
+ my $matched     = '';
+ my $s_matched   = '';

@@ -3278,12 +3278,16 @@ public class BytecodeInterpreter {
                 int flagsReg = bytecode[pc++];
                 int implicitU = bytecode[pc++];
                 int warningState = bytecode[pc++];
+                int quoteConstruction = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
+                if (quoteConstruction != 0) {
+                    registers[rd] = RuntimeRegex.markQuoteConstruction(registers[rd].scalar());
+                }
                 return pc;
             }
             case Opcodes.QUOTE_REGEX_O -> {
@@ -3293,12 +3297,16 @@ public class BytecodeInterpreter {
                 int callsiteId = bytecode[pc++];
                 int implicitU = bytecode[pc++];
                 int warningState = bytecode[pc++];
+                int quoteConstruction = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
+                if (quoteConstruction != 0) {
+                    registers[rd] = RuntimeRegex.markQuoteConstruction(registers[rd].scalar());
+                }
                 return pc;
             }
             default -> throw new RuntimeException("Unknown type opcode: " + opcode);

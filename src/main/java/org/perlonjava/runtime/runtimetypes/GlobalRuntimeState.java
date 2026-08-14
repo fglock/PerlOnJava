@@ -25,6 +25,7 @@ public final class GlobalRuntimeState {
     private final Map<String, RuntimeArray> arrayValues = new HashMap<>();
     private final Map<String, RuntimeHash> hashValues = new HashMap<>();
     private final Map<String, RuntimeScalar> foreachScalarAliases = new HashMap<>();
+    private final Map<String, RuntimeScalar> temporaryScalarAliases = new HashMap<>();
     private final Map<String, Boolean> importedSubs = new HashMap<>();
     private final Map<String, Boolean> operatorOverrideGlobs = new HashMap<>();
     private final Map<String, RuntimeScalar> codeRefs = new HashMap<>();
@@ -75,6 +76,10 @@ public final class GlobalRuntimeState {
 
     Map<String, RuntimeScalar> foreachScalarAliases() {
         return foreachScalarAliases;
+    }
+
+    Map<String, RuntimeScalar> temporaryScalarAliases() {
+        return temporaryScalarAliases;
     }
 
     public Map<String, RuntimeScalar> codeRefs() {
@@ -227,6 +232,7 @@ public final class GlobalRuntimeState {
         arrayValues.clear();
         hashValues.clear();
         foreachScalarAliases.clear();
+        temporaryScalarAliases.clear();
         coreGlobalsInitialized = false;
         invalidateStashEnumeration();
     }
@@ -279,6 +285,7 @@ public final class GlobalRuntimeState {
         cloneMap(arrayValues, target.arrayValues, cloner, RuntimeArray.class);
         cloneMap(hashValues, target.hashValues, cloner, RuntimeHash.class);
         cloneMap(foreachScalarAliases, target.foreachScalarAliases, cloner, RuntimeScalar.class);
+        cloneMap(temporaryScalarAliases, target.temporaryScalarAliases, cloner, RuntimeScalar.class);
         cloneMap(codeRefs, target.codeRefs, cloner, RuntimeScalar.class);
         cloneMap(pseudoConstants, target.pseudoConstants, cloner, RuntimeScalar.class);
         cloneMap(pinnedCodeRefs, target.pinnedCodeRefs, cloner, RuntimeScalar.class);

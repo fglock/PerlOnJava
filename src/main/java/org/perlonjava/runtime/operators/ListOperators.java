@@ -45,6 +45,7 @@ public class ListOperators {
         List<RuntimeBase> transformedElements = new ArrayList<>();
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
+        boolean savedTemporaryAlias = GlobalVariable.isTemporaryGlobalAlias("main::_");
         // Map results are captured by the caller after the operator returns;
         // flushing between iterations can destroy blessed return values early.
         boolean wasFlushing = MortalList.suppressFlush(true);
@@ -57,7 +58,7 @@ public class ListOperators {
             // Iterate over each element in the current RuntimeArray
             for (RuntimeScalar element : runtimeList) {
                 // Create $_ argument for the map subroutine
-                GlobalVariable.aliasGlobalVariable("main::_", element);
+                GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
 
                 // Apply the Perl map subroutine with the outer @_ as arguments
                 RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
@@ -91,7 +92,7 @@ public class ListOperators {
             }
         } finally {
             MortalList.suppressFlush(wasFlushing);
-            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            GlobalVariable.restoreTemporaryGlobalVariable("main::_", saveValue, savedTemporaryAlias);
             releaseEphemeralCaptures(perlMapClosure);
         }
     }
@@ -237,6 +238,7 @@ public class ListOperators {
         List<RuntimeBase> filteredElements = new ArrayList<>();
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
+        boolean savedTemporaryAlias = GlobalVariable.isTemporaryGlobalAlias("main::_");
 
         try {
             // Use the outer @_ instead of an empty array
@@ -246,7 +248,7 @@ public class ListOperators {
             for (RuntimeScalar element : runtimeList) {
                 try {
                     // Create $_ argument for the filter subroutine
-                    GlobalVariable.aliasGlobalVariable("main::_", element);
+                    GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
 
                     // Apply the Perl filter subroutine with the outer @_ as arguments
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
@@ -287,7 +289,7 @@ public class ListOperators {
                 return filteredList;
             }
         } finally {
-            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            GlobalVariable.restoreTemporaryGlobalVariable("main::_", saveValue, savedTemporaryAlias);
             releaseEphemeralCaptures(perlFilterClosure);
         }
     }
@@ -313,6 +315,7 @@ public class ListOperators {
     public static RuntimeList all(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, RuntimeArray outerArgs, int ctx) {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
+        boolean savedTemporaryAlias = GlobalVariable.isTemporaryGlobalAlias("main::_");
 
         try {
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
@@ -321,7 +324,7 @@ public class ListOperators {
             for (RuntimeScalar element : runtimeList) {
                 try {
                     // Create $_ argument for the filter subroutine
-                    GlobalVariable.aliasGlobalVariable("main::_", element);
+                    GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
 
                     // Apply the Perl filter subroutine with the argument
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
@@ -346,7 +349,7 @@ public class ListOperators {
 
             return scalarTrue.getList();
         } finally {
-            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            GlobalVariable.restoreTemporaryGlobalVariable("main::_", saveValue, savedTemporaryAlias);
             releaseEphemeralCaptures(perlFilterClosure);
         }
     }
@@ -372,6 +375,7 @@ public class ListOperators {
     public static RuntimeList any(RuntimeList runtimeList, RuntimeScalar perlFilterClosure, RuntimeArray outerArgs, int ctx) {
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
+        boolean savedTemporaryAlias = GlobalVariable.isTemporaryGlobalAlias("main::_");
 
         try {
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
@@ -380,7 +384,7 @@ public class ListOperators {
             for (RuntimeScalar element : runtimeList) {
                 try {
                     // Create $_ argument for the filter subroutine
-                    GlobalVariable.aliasGlobalVariable("main::_", element);
+                    GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
 
                     // Apply the Perl filter subroutine with the argument
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
@@ -405,7 +409,7 @@ public class ListOperators {
 
             return scalarFalse.getList();
         } finally {
-            GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            GlobalVariable.restoreTemporaryGlobalVariable("main::_", saveValue, savedTemporaryAlias);
             releaseEphemeralCaptures(perlFilterClosure);
         }
     }

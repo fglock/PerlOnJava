@@ -97,6 +97,10 @@ public class GlobalVariable {
         return globalState().foreachScalarAliases();
     }
 
+    private static Map<String, RuntimeScalar> temporaryGlobalAliases() {
+        return globalState().temporaryScalarAliases();
+    }
+
     private static Map<String, RuntimeScalar> globalPseudoConstants() {
         return globalState().pseudoConstants();
     }
@@ -1017,7 +1021,7 @@ public class GlobalVariable {
             markPackageGlobalRoot(var);
             globalVariables.put(storageKey, var);
             invalidatePackageRootSnapshot();
-        } else {
+        } else if (temporaryGlobalAliases().get(key) != var) {
             markPackageGlobalRoot(var);
         }
         return var;
@@ -1035,6 +1039,43 @@ public class GlobalVariable {
     public static void aliasGlobalVariable(String key, RuntimeScalar var) {
         clearForeachGlobalAlias(key);
         markPackageGlobalRoot(var);
+        globalVariables.put(key, var);
+        invalidatePackageRootSnapshot();
+    }
+
+    /**
+     * Temporarily aliases a package scalar without permanently labelling the
+     * aliased value as package-global. Operators such as map and grep localize
+     * {@code $_} to each input element; the global slot is a reachability root
+     * while the alias is installed, but the input SV must become ephemeral
+     * again when the operator restores the old slot.
+     */
+    public static void aliasTemporaryGlobalVariable(String key, RuntimeScalar var) {
+        clearForeachGlobalAlias(key);
+        temporaryGlobalAliases().put(key, var);
+        globalVariables.put(key, var);
+        invalidatePackageRootSnapshot();
+    }
+
+    public static boolean isTemporaryGlobalAlias(String key) {
+        return temporaryGlobalAliases().containsKey(key);
+    }
+
+    public static boolean isTemporaryGlobalAliasValue(RuntimeScalar value) {
+        for (RuntimeScalar alias : temporaryGlobalAliases().values()) {
+            if (alias == value) return true;
+        }
+        return false;
+    }
+
+    public static void restoreTemporaryGlobalVariable(
+            String key, RuntimeScalar var, boolean wasTemporary) {
+        clearForeachGlobalAlias(key);
+        if (wasTemporary) {
+            temporaryGlobalAliases().put(key, var);
+        } else {
+            temporaryGlobalAliases().remove(key);
+        }
         globalVariables.put(key, var);
         invalidatePackageRootSnapshot();
     }

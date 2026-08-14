@@ -7,6 +7,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Utility class for Unicode::Normalize operations in Perl.
@@ -86,6 +88,9 @@ public class UnicodeNormalize extends PerlModuleBase {
             unicodeNormalize.registerMethod("NFC", "$");
             unicodeNormalize.registerMethod("NFKD", "$");
             unicodeNormalize.registerMethod("NFKC", "$");
+            unicodeNormalize.registerMethod("decompose", "$;$");
+            unicodeNormalize.registerMethod("reorder", "$");
+            unicodeNormalize.registerMethod("compose", "$");
             unicodeNormalize.registerMethod("getCombinClass", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Unicode::Normalize method: " + e.getMessage());
@@ -138,6 +143,51 @@ public class UnicodeNormalize extends PerlModuleBase {
         return new RuntimeList(new RuntimeScalar(
                 Normalizer.normalize(arg.toString(), Form.NFKC)
         ));
+    }
+
+    /** Canonically decompose, optionally applying compatibility mappings. */
+    public static RuntimeList decompose(RuntimeArray args, int ctx) {
+        String input = args.get(0).toString();
+        boolean compatibility = args.size() > 1 && args.get(1).getBoolean();
+        return new RuntimeScalar(Normalizer.normalize(
+                input, compatibility ? Form.NFKD : Form.NFD)).getList();
+    }
+
+    /** Reorder combining marks by canonical combining class without decomposing. */
+    public static RuntimeList reorder(RuntimeArray args, int ctx) {
+        String input = args.get(0).toString();
+        StringBuilder output = new StringBuilder(input.length());
+        List<Integer> marks = new ArrayList<>();
+        List<Integer> classes = new ArrayList<>();
+
+        input.codePoints().forEach(codePoint -> {
+            int combiningClass = UCharacter.getCombiningClass(codePoint);
+            if (combiningClass == 0) {
+                appendCodePoints(output, marks);
+                marks.clear();
+                classes.clear();
+                output.appendCodePoint(codePoint);
+                return;
+            }
+
+            int insertion = classes.size();
+            while (insertion > 0 && classes.get(insertion - 1) > combiningClass) {
+                insertion--;
+            }
+            marks.add(insertion, codePoint);
+            classes.add(insertion, combiningClass);
+        });
+        appendCodePoints(output, marks);
+        return new RuntimeScalar(output.toString()).getList();
+    }
+
+    /** Canonically compose an already-decomposed string. */
+    public static RuntimeList compose(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(Normalizer.normalize(args.get(0).toString(), Form.NFC)).getList();
+    }
+
+    private static void appendCodePoints(StringBuilder output, List<Integer> codePoints) {
+        for (int codePoint : codePoints) output.appendCodePoint(codePoint);
     }
 
     // Normalize based on the form specified

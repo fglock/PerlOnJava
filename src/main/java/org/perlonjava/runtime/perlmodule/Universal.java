@@ -155,13 +155,22 @@ public class Universal extends PerlModuleBase {
                 }
         }
 
-        // Handle SUPER::method - search parent classes only (skip index 0)
-        // This is used by Mojo::DynamicMethods: $caller->can('SUPER::can')
+        // A bare SUPER:: name is lexical: Perl resolves it relative to the
+        // package containing the call to can(), not relative to the invocant.
+        // This matters when a subclass inherits a method that asks
+        // $class->can('SUPER::method').
         if (methodName.startsWith("SUPER::")) {
             String actualMethod = methodName.substring(7);
+            String callerPackage = RuntimeCode.getCurrentPackage();
+            while (callerPackage.endsWith("::")) {
+                callerPackage = callerPackage.substring(0, callerPackage.length() - 2);
+            }
+            if (callerPackage.isEmpty()) {
+                callerPackage = perlClassName;
+            }
             RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
-                    actualMethod, perlClassName, perlClassName + "::" + methodName, 1);
-            if (method != null && !isAutoloadDispatch(method, actualMethod, perlClassName)) {
+                    actualMethod, callerPackage, callerPackage + "::" + methodName, 1);
+            if (method != null && !isAutoloadDispatch(method, actualMethod, callerPackage)) {
                 return method.getList();
             }
             return scalarUndef.getList();
