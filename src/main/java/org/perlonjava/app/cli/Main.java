@@ -1,6 +1,7 @@
 package org.perlonjava.app.cli;
 
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
@@ -97,7 +98,19 @@ public class Main {
         Thread hook = Thread.ofPlatform().name("perlonjava-thread-exit-diagnostic")
                 .unstarted(() -> {
                     String warning = runtime.threadRegistry().activeThreadExitWarning();
-                    if (!warning.isEmpty()) System.err.print(warning);
+                    if (warning.isEmpty()) return;
+                    try (PerlRuntime.Binding ignored = runtime.bind()) {
+                        // This is a Perl warning, so honor $SIG{__WARN__}
+                        // exactly like an ordinary warn() call. Core tests use
+                        // an empty handler while deliberately leaving a child
+                        // unjoined; printing directly to Java stderr made that
+                        // otherwise successful subprocess fail comparison.
+                        WarnDie.warn(new RuntimeScalar(warning), new RuntimeScalar());
+                    } catch (RuntimeException unavailableRuntime) {
+                        // Shutdown must still report an attached child if the
+                        // runtime has already become unusable.
+                        System.err.print(warning);
+                    }
                 });
         Runtime.getRuntime().addShutdownHook(hook);
     }
