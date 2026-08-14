@@ -47,6 +47,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * @see OutputStream
  */
 public class CustomOutputStreamHandle implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
     /**
      * The underlying Java OutputStream that performs actual output operations
      */

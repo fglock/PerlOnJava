@@ -22,6 +22,10 @@ import java.nio.charset.StandardCharsets;
  * file descriptor via FFM system calls.</p>
  */
 public class NativeFdIOHandle implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
 
     private final int nativeFd;
     private boolean closed = false;

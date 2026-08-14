@@ -289,10 +289,9 @@ threads are the default; virtual threads are experimental.
 Remaining work:
 
 - Complete the currently partial applicable core and regex suites.
-- Extend native-resource inheritance beyond the explicitly supported internal
-  pipe policy only when ownership and last-close semantics are defined.
-- Decide which blessed, tied, or magical values can safely join the supported
-  `threads::shared` tranche.
+- Finish exact nested-reference proxy identity and global `DESTROY` ownership
+  for blessed values fetched through `threads::shared` aggregates. Root
+  blessed storage and the system-Perl tied conversion rules are implemented.
 - Keep runtime pooling disabled until the reset-equivalence contract is proven.
 
 ---

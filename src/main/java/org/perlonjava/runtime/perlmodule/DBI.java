@@ -64,6 +64,7 @@ public class DBI extends PerlModuleBase {
             dbi.registerMethod("available_drivers", null);
             dbi.registerMethod("data_sources", null);
             dbi.registerMethod("get_info", null);
+            dbi.registerMethod("_handle_owned_by_current_runtime", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -84,6 +85,10 @@ public class DBI extends PerlModuleBase {
     private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, RuntimeHash secondHandle, String methodName) {
         try {
             return operation.execute();
+        } catch (DBIThreadOwnershipException e) {
+            // Ownership violations are unconditional DBI handle errors. They
+            // must not be converted into RaiseError/PrintError state.
+            throw new PerlCompilerException(e.getMessage());
         } catch (SQLException e) {
             setError(handle, e);
             if (secondHandle != null) setError(secondHandle, e);
@@ -156,7 +161,7 @@ public class DBI extends PerlModuleBase {
             dbh.delete(new RuntimeScalar("Password"));
 
             // Create database handle (dbh) hash and store connection
-            dbh.put("connection", new RuntimeScalar(conn));
+            dbh.put("connection", resourceScalar(conn));
             dbh.put("Active", new RuntimeScalar(true));
             dbh.put("Type", new RuntimeScalar("db"));
             dbh.put("Name", new RuntimeScalar(jdbcUrl));
@@ -210,7 +215,7 @@ public class DBI extends PerlModuleBase {
             sth.put("Active", new RuntimeScalar(false));
 
             // Get connection from database handle
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "prepare");
 
             // Set AutoCommit attribute in case it was changed
             conn.setAutoCommit(dbh.get("AutoCommit").getBoolean());
@@ -228,7 +233,7 @@ public class DBI extends PerlModuleBase {
             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
 
             // Create statement handle (sth) hash
-            sth.put("statement", new RuntimeScalar(stmt));
+            sth.put("statement", resourceScalar(stmt));
             sth.put("sql", new RuntimeScalar(sql));
             sth.put("Statement", new RuntimeScalar(sql));
             sth.put("Type", new RuntimeScalar("st"));
@@ -277,7 +282,7 @@ public class DBI extends PerlModuleBase {
 
         final RuntimeHash finalDbh = dbh;
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) finalDbh.get("connection").value;
+            Connection conn = connection(finalDbh, "last_insert_id");
 
             // Use database-specific SQL to retrieve the last auto-generated ID.
             // This is more reliable than getGeneratedKeys() because it works
@@ -294,7 +299,9 @@ public class DBI extends PerlModuleBase {
                 // Generic fallback (H2, etc.): use getGeneratedKeys() on the last statement
                 // dbh.sth now stores the raw JDBC Statement (not the full sth ref)
                 RuntimeScalar stmtScalar = finalDbh.get("sth");
-                if (stmtScalar != null && stmtScalar.value instanceof Statement stmt) {
+                if (stmtScalar != null && stmtScalar.value instanceof DBIHandleResource<?>) {
+                    Statement stmt = resource(finalDbh, stmtScalar,
+                            "last_insert_id", Statement.class);
                     ResultSet rs = stmt.getGeneratedKeys();
                     if (rs.next()) {
                         long id = rs.getLong(1);
@@ -347,7 +354,8 @@ public class DBI extends PerlModuleBase {
             }
 
             // Get prepared statement from statement handle
-            PreparedStatement stmt = (PreparedStatement) stmtScalar.value;
+            PreparedStatement stmt = resource(sth, stmtScalar,
+                    "execute", PreparedStatement.class);
 
             // Detect literal transaction SQL before execution
             // Strip leading comments (-- comment\n) for detection
@@ -366,7 +374,7 @@ public class DBI extends PerlModuleBase {
             boolean isCommit = sqlUpper.startsWith("COMMIT") || sqlUpper.startsWith("END");
             boolean isRollback = sqlUpper.startsWith("ROLLBACK") && !sqlUpper.contains("SAVEPOINT");
 
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "execute");
 
             // Intercept transaction control SQL — use JDBC API instead of executing
             // as SQL, because JDBC drivers (especially SQLite) don't handle literal
@@ -403,8 +411,8 @@ public class DBI extends PerlModuleBase {
                 try {
                     RuntimeHash prevResult = prevResultRef.hashDeref();
                     RuntimeScalar rsScalar = prevResult.get("resultset");
-                    if (rsScalar != null && rsScalar.value instanceof ResultSet) {
-                        ((ResultSet) rsScalar.value).close();
+                    if (rsScalar != null && rsScalar.value instanceof DBIHandleResource<?>) {
+                        resource(sth, rsScalar, "execute", ResultSet.class).close();
                     }
                 } catch (Exception ignored) {
                     // Best effort — old result set may already be closed
@@ -460,7 +468,7 @@ public class DBI extends PerlModuleBase {
                             && e.getMessage().contains("not executing")) {
                         retried = true;
                         stmt = conn.prepareStatement(sql);
-                        sth.put("statement", new RuntimeScalar(stmt));
+                        sth.put("statement", resourceScalar(stmt));
                         continue; // Retry with fresh statement
                     }
                     throw e; // Rethrow other errors
@@ -475,7 +483,7 @@ public class DBI extends PerlModuleBase {
             if (hasResultSet) {
                 // Store result set if available
                 ResultSet rs = stmt.getResultSet();
-                result.put("resultset", new RuntimeScalar(rs));
+                result.put("resultset", resourceScalar(rs));
 
                 // Get column metadata
                 ResultSetMetaData metaData = rs.getMetaData();
@@ -539,7 +547,8 @@ public class DBI extends PerlModuleBase {
 
         return executeWithErrorHandling(() -> {
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
-            ResultSet rs = (ResultSet) executeResult.get("resultset").value;
+            ResultSet rs = resource(sth, executeResult.get("resultset"),
+                    "fetchrow_arrayref", ResultSet.class);
 
             // Fetch next row if available
             if (rs.next()) {
@@ -645,7 +654,8 @@ public class DBI extends PerlModuleBase {
             }
 
             RuntimeHash executeResult = sth.get("execute_result").hashDeref();
-            ResultSet rs = (ResultSet) executeResult.get("resultset").value;
+            ResultSet rs = resource(sth, executeResult.get("resultset"),
+                    "fetchrow_hashref", ResultSet.class);
 
             // Fetch next row if available
             if (rs.next()) {
@@ -731,7 +741,8 @@ public class DBI extends PerlModuleBase {
             }
 
             // Get statement handle
-            PreparedStatement stmt = (PreparedStatement) sth.get("statement").value;
+            PreparedStatement stmt = resource(sth, sth.get("statement"),
+                    "rows", PreparedStatement.class);
             int rowCount = -1;
 
             // Try to get update count for DML operations
@@ -743,7 +754,8 @@ public class DBI extends PerlModuleBase {
 
             // For SELECT queries, try to get result set row count
             if (rowCount == -1 && sth.elements.containsKey("resultset")) {
-                ResultSet rs = (ResultSet) sth.get("resultset").value;
+                ResultSet rs = resource(sth, sth.get("resultset"),
+                        "rows", ResultSet.class);
                 try {
                     // Move to last row to get total count
                     if (rs.last()) {
@@ -771,7 +783,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "disconnect");
 
             conn.close();
             dbh.put("Active", new RuntimeScalar(false));
@@ -796,23 +808,32 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList finish(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
 
-        RuntimeScalar prevResultRef = sth.get("execute_result");
-        if (prevResultRef != null && RuntimeScalarType.isReference(prevResultRef)) {
-            try {
-                RuntimeHash prevResult = prevResultRef.hashDeref();
-                RuntimeScalar rsScalar = prevResult.get("resultset");
-                if (rsScalar != null && rsScalar.value instanceof ResultSet rs) {
-                    if (!rs.isClosed()) {
-                        rs.close();
-                    }
-                }
-            } catch (Exception ignored) {
-                // Best effort — cursor may already be closed
+        return executeWithErrorHandling(() -> {
+            // Validate the statement owner even when no cursor is active. Native
+            // DBI rejects finish() on an inherited handle unconditionally.
+            RuntimeScalar statementSlot = sth.get("statement");
+            if (statementSlot != null
+                    && statementSlot.value instanceof DBIHandleResource<?>) {
+                resource(sth, statementSlot, "finish", PreparedStatement.class);
             }
-        }
-
-        sth.put("Active", new RuntimeScalar(false));
-        return new RuntimeScalar(1).getList();
+            RuntimeScalar prevResultRef = sth.get("execute_result");
+            if (prevResultRef != null && RuntimeScalarType.isReference(prevResultRef)) {
+                try {
+                    RuntimeHash prevResult = prevResultRef.hashDeref();
+                    RuntimeScalar rsScalar = prevResult.get("resultset");
+                    if (rsScalar != null && rsScalar.value instanceof DBIHandleResource<?>) {
+                        ResultSet rs = resource(sth, rsScalar, "finish", ResultSet.class);
+                        if (!rs.isClosed()) rs.close();
+                    }
+                } catch (DBIThreadOwnershipException e) {
+                    throw e;
+                } catch (Exception ignored) {
+                    // Best effort — cursor may already be closed.
+                }
+            }
+            sth.put("Active", new RuntimeScalar(false));
+            return new RuntimeScalar(1).getList();
+        }, sth, "finish");
     }
 
     /**
@@ -928,6 +949,54 @@ public class DBI extends PerlModuleBase {
         getGlobalVariable("DBI::errstr").set(handle.get("errstr"));
     }
 
+    private static RuntimeScalar resourceScalar(Object resource) {
+        return new RuntimeScalar(DBIHandleResource.owned(resource));
+    }
+
+    private static Connection connection(RuntimeHash handle, String operation) {
+        return resource(handle, handle.get("connection"), operation, Connection.class);
+    }
+
+    private static <T> T resource(
+            RuntimeHash handle, RuntimeScalar slot, String operation, Class<T> expectedType) {
+        if (slot == null || !(slot.value instanceof DBIHandleResource<?> owned)) {
+            throw new IllegalStateException("DBI " + operation + " has no active JDBC resource");
+        }
+        return expectedType.cast(owned.requireCurrentOwner(
+                handleClass(handle), operation, expectedType));
+    }
+
+    private static String handleClass(RuntimeHash handle) {
+        if (handle != null && handle.blessId != 0) {
+            String className = NameNormalizer.getBlessStr(handle.blessId);
+            if (className != null && !className.isEmpty()) return className;
+        }
+        String type = handle == null ? "" : handle.get("Type").toString();
+        return "st".equals(type) ? "DBI::st" : "DBI::db";
+    }
+
+    /** Used by Perl-level DESTROY to avoid touching inherited native handles. */
+    public static RuntimeList _handle_owned_by_current_runtime(RuntimeArray args, int ctx) {
+        if (args.isEmpty() || !RuntimeScalarType.isReference(args.get(0))) {
+            return scalarFalse.getList();
+        }
+        RuntimeHash handle = args.get(0).hashDeref();
+        RuntimeScalar slot = handle.get("connection");
+        if (slot == null || !(slot.value instanceof DBIHandleResource<?>)) {
+            slot = handle.get("statement");
+        }
+        if ((slot == null || !(slot.value instanceof DBIHandleResource<?>))) {
+            RuntimeScalar resultRef = handle.get("execute_result");
+            if (resultRef != null && RuntimeScalarType.isReference(resultRef)) {
+                slot = resultRef.hashDeref().get("resultset");
+            }
+        }
+        boolean owned = slot != null
+                && slot.value instanceof DBIHandleResource<?> resource
+                && resource.isOwnedByCurrentRuntime();
+        return new RuntimeScalar(owned).getList();
+    }
+
     public static RuntimeList begin_work(RuntimeArray args, int ctx) {
         RuntimeHash dbh = args.get(0).hashDeref();
 
@@ -938,7 +1007,7 @@ public class DBI extends PerlModuleBase {
             if (ac != null && !ac.getBoolean()) {
                 throw new RuntimeException("begin_work invalidates a transaction already in progress");
             }
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "begin_work");
             conn.setAutoCommit(false);
             dbh.put("AutoCommit", new RuntimeScalar(false));
             return scalarTrue.getList();
@@ -949,7 +1018,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "commit");
             conn.commit();
             conn.setAutoCommit(true);
             dbh.put("AutoCommit", new RuntimeScalar(true));
@@ -961,7 +1030,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "rollback");
             conn.rollback();
             conn.setAutoCommit(true);
             dbh.put("AutoCommit", new RuntimeScalar(true));
@@ -1053,7 +1122,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "table_info");
             DatabaseMetaData metaData = conn.getMetaData();
 
             // Treat undef/empty as null so JDBC drivers apply their default
@@ -1086,7 +1155,7 @@ public class DBI extends PerlModuleBase {
                 throw new IllegalStateException("Bad number of arguments for DBI->column_info");
             }
 
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "column_info");
             String table = args.get(3).toString();
 
             // For SQLite, use PRAGMA table_info() to preserve original type case
@@ -1206,7 +1275,7 @@ public class DBI extends PerlModuleBase {
                 throw new IllegalStateException("Bad number of arguments for DBI->primary_key_info");
             }
 
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "primary_key_info");
             DatabaseMetaData metaData = conn.getMetaData();
 
             String catalog = metadataPattern(args.get(1));
@@ -1235,7 +1304,7 @@ public class DBI extends PerlModuleBase {
                 throw new IllegalStateException("Bad number of arguments for DBI->primary_key");
             }
 
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "primary_key");
             DatabaseMetaData metaData = conn.getMetaData();
             try (ResultSet rs = metaData.getPrimaryKeys(
                     metadataPattern(args.get(1)),
@@ -1262,7 +1331,7 @@ public class DBI extends PerlModuleBase {
                 throw new IllegalStateException("Bad number of arguments for DBI->foreign_key_info");
             }
 
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "foreign_key_info");
             DatabaseMetaData metaData = conn.getMetaData();
 
             String pkCatalog = args.get(1).toString();
@@ -1285,7 +1354,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "type_info");
             DatabaseMetaData metaData = conn.getMetaData();
             ResultSet rs = metaData.getTypeInfo();
 
@@ -1311,7 +1380,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash result = new RuntimeHash();
         result.put("success", scalarTrue);
         result.put("has_resultset", scalarTrue);
-        result.put("resultset", new RuntimeScalar(rs));
+        result.put("resultset", resourceScalar(rs));
 
         // Get column metadata
         ResultSetMetaData metaData = rs.getMetaData();
@@ -1345,7 +1414,7 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "ping");
             return new RuntimeScalar(conn.isValid(5)).getList(); // 5 second timeout
         }, dbh, "ping");
     }
@@ -1401,7 +1470,7 @@ public class DBI extends PerlModuleBase {
         int infoType = args.size() > 1 ? args.get(1).getInt() : -1;
 
         return executeWithErrorHandling(() -> {
-            Connection conn = (Connection) dbh.get("connection").value;
+            Connection conn = connection(dbh, "get_info");
             DatabaseMetaData meta = conn.getMetaData();
 
             // DBI get_info() takes a numeric SQL info type constant and returns a scalar.

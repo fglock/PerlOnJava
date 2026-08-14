@@ -22,6 +22,10 @@ import java.nio.charset.StandardCharsets;
  * (> 10MB), this could be a concern, but most Perl modules are much smaller.
  */
 public class SeekableJarHandle implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
 
     private final byte[] content;
     private int position = 0;

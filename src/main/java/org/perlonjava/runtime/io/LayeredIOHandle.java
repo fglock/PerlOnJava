@@ -100,6 +100,18 @@ public class LayeredIOHandle implements IOHandle {
         return delegate;
     }
 
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.WRAPPER_COPY;
+    }
+
+    /** Copy layer configuration while keeping decoder/buffer state runtime-local. */
+    public LayeredIOHandle threadCopy(IOHandle inheritedDelegate) {
+        LayeredIOHandle copy = new LayeredIOHandle(inheritedDelegate);
+        if (!activeLayers.isEmpty()) copy.binmode(getCurrentLayers());
+        return copy;
+    }
+
     private IOLayer topInterceptingLayer() {
         if (activeLayers.isEmpty()) {
             return null;

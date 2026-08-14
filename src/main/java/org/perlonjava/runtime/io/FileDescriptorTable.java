@@ -156,6 +156,9 @@ public class FileDescriptorTable {
         if (handle instanceof BorrowedIOHandle borrowedHandle) {
             return isReadReady(borrowedHandle.getDelegate());
         }
+        if (handle instanceof SharedTransportIOHandle sharedHandle) {
+            return isReadReady(sharedHandle.getDelegate());
+        }
         if (handle instanceof InternalPipeHandle pipeHandle) {
             return pipeHandle.hasDataAvailable();
         }
@@ -181,6 +184,9 @@ public class FileDescriptorTable {
         }
         if (handle instanceof BorrowedIOHandle borrowedHandle) {
             return isWriteReady(borrowedHandle.getDelegate());
+        }
+        if (handle instanceof SharedTransportIOHandle sharedHandle) {
+            return isWriteReady(sharedHandle.getDelegate());
         }
         if (handle instanceof InternalPipeHandle pipeHandle) {
             return pipeHandle.hasWriteCapacity();

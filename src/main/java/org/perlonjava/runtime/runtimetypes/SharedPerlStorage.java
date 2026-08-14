@@ -16,9 +16,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /** Marker and first-tranche synchronization policy for threads::shared. */
 public final class SharedPerlStorage {
-    private static final WeakIdentityRegistry<RuntimeBase, LockState> LOCKS =
+    private static final WeakIdentityRegistry<Object, LockState> LOCKS =
             new WeakIdentityRegistry<>();
-    private static final Map<RuntimeBase, ArrayDeque<Waiter>> WAITERS =
+    private static final Map<Object, ArrayDeque<Waiter>> WAITERS =
             Collections.synchronizedMap(new IdentityHashMap<>());
 
     private SharedPerlStorage() {}
@@ -159,20 +159,21 @@ public final class SharedPerlStorage {
     public static boolean conditionSignal(RuntimeScalar conditionReference, boolean broadcast) {
         RuntimeBase condition = requireShared(conditionReference,
                 broadcast ? "cond_broadcast" : "cond_signal");
+        Object conditionIdentity = sharedIdentity(condition);
         if (!lockState(condition).lock.isHeldByCurrentThread()) {
             return false;
         }
 
         List<Waiter> wake = new ArrayList<>();
         synchronized (WAITERS) {
-            ArrayDeque<Waiter> queue = WAITERS.get(condition);
+            ArrayDeque<Waiter> queue = WAITERS.get(conditionIdentity);
             if (queue != null) {
                 if (broadcast) {
                     while (!queue.isEmpty()) wake.add(queue.removeFirst());
                 } else if (!queue.isEmpty()) {
                     wake.add(queue.removeFirst());
                 }
-                if (queue.isEmpty()) WAITERS.remove(condition);
+                if (queue.isEmpty()) WAITERS.remove(conditionIdentity);
             }
         }
         for (Waiter waiter : wake) waiter.latch().countDown();
@@ -185,6 +186,7 @@ public final class SharedPerlStorage {
                                          boolean timed) {
         RuntimeBase condition = requireShared(conditionReference,
                 timed ? "cond_timedwait" : "cond_wait");
+        Object conditionIdentity = sharedIdentity(condition);
         RuntimeBase lockRoot = requireShared(lockReference,
                 timed ? "cond_timedwait" : "cond_wait");
         ReentrantLock lock = lockState(lockRoot).lock;
@@ -195,7 +197,7 @@ public final class SharedPerlStorage {
 
         Waiter waiter = new Waiter(new CountDownLatch(1));
         synchronized (WAITERS) {
-            WAITERS.computeIfAbsent(condition, ignored -> new ArrayDeque<>()).addLast(waiter);
+            WAITERS.computeIfAbsent(conditionIdentity, ignored -> new ArrayDeque<>()).addLast(waiter);
         }
 
         int holds = lock.getHoldCount();
@@ -216,10 +218,10 @@ public final class SharedPerlStorage {
         } finally {
             if (!signalled) {
                 synchronized (WAITERS) {
-                    ArrayDeque<Waiter> queue = WAITERS.get(condition);
+                    ArrayDeque<Waiter> queue = WAITERS.get(conditionIdentity);
                     if (queue != null) {
                         queue.remove(waiter);
-                        if (queue.isEmpty()) WAITERS.remove(condition);
+                        if (queue.isEmpty()) WAITERS.remove(conditionIdentity);
                     }
                 }
             }
@@ -229,7 +231,7 @@ public final class SharedPerlStorage {
     }
 
     private static LockState lockState(RuntimeBase root) {
-        return LOCKS.computeIfAbsent(root, ignored -> new LockState());
+        return LOCKS.computeIfAbsent(sharedIdentity(root), ignored -> new LockState());
     }
 
     static int expungeStaleLocksForTesting() {
@@ -251,25 +253,30 @@ public final class SharedPerlStorage {
     private static void validateGraph(RuntimeBase value, Set<RuntimeBase> seen) {
         if (value == null || !seen.add(value)) return;
         if (value.blessId != 0) {
-            throw new IllegalArgumentException("Sharing blessed values is not supported");
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            if (runtime == null || NameNormalizer.getBlessStr(value.blessId) == null) {
+                throw new IllegalArgumentException("Cannot share a value with an unknown blessing");
+            }
         }
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
-                throw new IllegalArgumentException("Sharing tied values is not supported");
+                return;
             }
             if (scalar.value instanceof RuntimeBase nested) validateGraph(nested, seen);
             return;
         }
         if (value instanceof RuntimeArray array) {
             if (array.type != RuntimeArray.PLAIN_ARRAY) {
-                throw new IllegalArgumentException("Sharing tied arrays is not supported");
+                if (array.type == RuntimeArray.TIED_ARRAY) return;
+                throw new IllegalArgumentException("Unsupported shared array type " + array.type);
             }
             for (RuntimeScalar element : array.elements) validateGraph(element, seen);
             return;
         }
         if (value instanceof RuntimeHash hash) {
             if (hash.type != RuntimeHash.PLAIN_HASH) {
-                throw new IllegalArgumentException("Sharing tied hashes is not supported");
+                if (hash.type == RuntimeHash.TIED_HASH) return;
+                throw new IllegalArgumentException("Unsupported shared hash type " + hash.type);
             }
             for (RuntimeScalar element : hash.elements.values()) validateGraph(element, seen);
             return;
@@ -280,21 +287,61 @@ public final class SharedPerlStorage {
     private static void markGraph(RuntimeBase value, Set<RuntimeBase> seen) {
         if (value == null || !seen.add(value)) return;
         if (value instanceof RuntimeScalar scalar) {
-            scalar.threadShared = true;
+            if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                // Perl keeps scalar magic runtime-local, but share() first
+                // stores undef through the current tie object.
+                scalar.set(RuntimeScalarCache.scalarUndef);
+                markShared(scalar);
+                return;
+            }
+            markShared(scalar);
             if (scalar.value instanceof RuntimeBase nested) markGraph(nested, seen);
             return;
         }
         if (value instanceof RuntimeArray array) {
+            if (array.type == RuntimeArray.TIED_ARRAY) {
+                // threads::shared replaces an existing aggregate tie with its
+                // own shared storage without invoking CLEAR or UNTIE.
+                if (array.elements instanceof TieArray tie) tie.releaseTiedObject();
+                array.type = RuntimeArray.PLAIN_ARRAY;
+                array.elements = Collections.synchronizedList(new ArrayList<>());
+                markShared(array);
+                return;
+            }
+            markShared(array);
             for (RuntimeScalar element : array.elements) markGraph(element, seen);
             array.elements = Collections.synchronizedList(array.elements);
-            array.threadShared = true;
             return;
         }
         if (value instanceof RuntimeHash hash) {
+            if (hash.type == RuntimeHash.TIED_HASH) {
+                if (hash.elements instanceof TieHash tie) tie.releaseTiedObject();
+                hash.type = RuntimeHash.PLAIN_HASH;
+                hash.elements = Collections.synchronizedMap(new StableHashMap<>());
+                hash.resetIterator();
+                markShared(hash);
+                return;
+            }
+            markShared(hash);
             for (RuntimeScalar element : hash.elements.values()) markGraph(element, seen);
             hash.elements = Collections.synchronizedMap(hash.elements);
-            hash.threadShared = true;
             return;
+        }
+    }
+
+    private static void markShared(RuntimeBase value) {
+        synchronized (value) {
+            if (value.threadSharedIdentity == null) value.threadSharedIdentity = new Object();
+            value.threadShared = true;
+        }
+    }
+
+    private static Object sharedIdentity(RuntimeBase value) {
+        Object identity = value.threadSharedIdentity;
+        if (identity != null) return identity;
+        synchronized (value) {
+            if (value.threadSharedIdentity == null) value.threadSharedIdentity = new Object();
+            return value.threadSharedIdentity;
         }
     }
 }

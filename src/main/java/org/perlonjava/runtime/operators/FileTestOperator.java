@@ -289,6 +289,8 @@ public class FileTestOperator {
                     innerHandle = dh.getDelegate();
                 } else if (innerHandle instanceof BorrowedIOHandle bh) {
                     innerHandle = bh.getDelegate();
+                } else if (innerHandle instanceof SharedTransportIOHandle sh) {
+                    innerHandle = sh.getDelegate();
                 } else {
                     break;
                 }

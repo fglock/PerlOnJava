@@ -2,6 +2,14 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.io.BorrowedIOHandle;
+import org.perlonjava.runtime.io.ClosedIOHandle;
+import org.perlonjava.runtime.io.DupIOHandle;
+import org.perlonjava.runtime.io.IOHandle;
+import org.perlonjava.runtime.io.InternalPipeHandle;
+import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.io.ScalarBackedIO;
+import org.perlonjava.runtime.io.SharedTransportIOHandle;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -26,6 +34,8 @@ public class RuntimeGraphCloner {
     private final PerlRuntime sourceRuntime;
     private final PerlRuntime targetRuntime;
     private final IdentityHashMap<Object, Object> clones = new IdentityHashMap<>();
+    private final IdentityHashMap<IOHandle, InheritedHandlePair> inheritedHandles =
+            new IdentityHashMap<>();
     private final List<RuntimeScalar> weakReferences = new ArrayList<>();
     private final Set<String> skippedClasses;
     private int publicDepth;
@@ -102,7 +112,11 @@ public class RuntimeGraphCloner {
     /** Package/runtime snapshot entry point that retains the shared graph map. */
     RuntimeBase cloneValue(RuntimeBase value) {
         if (value == null) return null;
-        if (value.threadShared) return value;
+        // Plain shared storage keeps object identity across ithreads. Tied
+        // variables are different: Perl clones the tie callback object into
+        // each runtime, while lock/condition operations still refer to one
+        // shared synchronization identity.
+        if (value.threadShared && !needsSharedRuntimeView(value)) return value;
         Object existing = clones.get(value);
         if (existing != null) return (RuntimeBase) existing;
 
@@ -363,14 +377,20 @@ public class RuntimeGraphCloner {
         } else if (source.value instanceof RuntimeRegex regex) {
             target.value = regex.cloneTracked();
         } else if (source.value instanceof RuntimeIO io) {
-            RuntimeIO inherited = cloneInheritedPipe(io);
+            RuntimeIO inherited = cloneRuntimeIO(io);
             if (inherited != null) {
                 target.value = inherited;
             } else {
-                // Files, sockets and native descriptors have no portable
-                // ithread duplication semantics and remain unsupported.
                 target.type = UNDEF;
                 target.value = null;
+            }
+        } else if (source.value instanceof ThreadCloneableResource resource) {
+            Object inherited = cloneThreadResource(resource);
+            if (inherited == null) {
+                target.type = UNDEF;
+                target.value = null;
+            } else {
+                target.value = inherited;
             }
         } else if (source.value instanceof RuntimeBase base) {
             if (shouldSkip(base)) {
@@ -408,7 +428,11 @@ public class RuntimeGraphCloner {
         target.elementsOwned = source.elementsOwned;
         target.elementsAliased = source.elementsAliased;
 
-        if (source.elements instanceof ArraySpecialVariable special) {
+        if (source.threadShared && source.type == RuntimeArray.PLAIN_ARRAY) {
+            // The aggregate wrapper (including blessing) is runtime-local;
+            // only its synchronized backing storage crosses by identity.
+            target.elements = source.elements;
+        } else if (source.elements instanceof ArraySpecialVariable special) {
             // Regex capture arrays are dynamic views over the bound runtime's
             // match state. Copy the view mode, never its current elements.
             target.elements = special.snapshotView();
@@ -435,7 +459,10 @@ public class RuntimeGraphCloner {
         target.isGlobalPackageHash = source.isGlobalPackageHash;
         target.isEnvironmentHash = source.isEnvironmentHash;
 
-        if (source.type == RuntimeHash.TIED_HASH && source.elements instanceof TieHash tie) {
+        if (source.threadShared && source.type == RuntimeHash.PLAIN_HASH) {
+            // See cloneArray: class identity is local, contents are shared.
+            target.elements = source.elements;
+        } else if (source.type == RuntimeHash.TIED_HASH && source.elements instanceof TieHash tie) {
             target.elements = new TieHash(tie.getTiedPackage(),
                     (RuntimeHash) cloneValue(tie.getPreviousValue()),
                     (RuntimeScalar) cloneValue(tie.getSelf()));
@@ -479,10 +506,10 @@ public class RuntimeGraphCloner {
         if (source.codeSlot != null) {
             target.codeSlot = (RuntimeScalar) cloneValue(source.codeSlot);
         }
-        // Standard handles are installed by PerlRuntime. Internal pipe
-        // endpoints have an explicit inherited lease; other handles remain empty.
-        if (source.IO != null && source.IO.value instanceof RuntimeIO io
-                && io.ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle) {
+        // PerlRuntime installs the child's canonical standard globs first. Other
+        // glob handles cross the snapshot using the same explicit resource policy
+        // as lexical and aggregate-held handles.
+        if (source.IO != null && source.IO.value instanceof RuntimeIO) {
             target.IO = (RuntimeScalar) cloneValue(source.IO);
         } else {
             target.IO = new RuntimeScalar();
@@ -490,16 +517,128 @@ public class RuntimeGraphCloner {
         return target;
     }
 
-    private RuntimeIO cloneInheritedPipe(RuntimeIO source) {
+    private RuntimeIO cloneRuntimeIO(RuntimeIO source) {
         Object existing = clones.get(source);
         if (existing != null) return (RuntimeIO) existing;
-        RuntimeIO target;
-        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-            target = source.inheritedPipeCopy();
+
+        if (source instanceof TieHandle tied) {
+            RuntimeIO placeholder = new RuntimeIO();
+            clones.put(source, placeholder);
+            RuntimeIO previous = cloneRuntimeIO(tied.getPreviousValue());
+            RuntimeScalar self = (RuntimeScalar) cloneValue(tied.getSelf());
+            TieHandle target = new TieHandle(tied.getTiedPackage(), previous, self);
+            clones.put(source, target);
+            copyBase(source, target);
+            target.currentLineNumber = source.currentLineNumber;
+            target.globName = source.globName;
+            target.setCloneFlags(source.needsFlushForThreadClone(), source.isAutoFlush());
+            return target;
         }
-        if (target != null) clones.put(source, target);
+
+        RuntimeIO target = new RuntimeIO();
+        clones.put(source, target);
+        target.currentLineNumber = source.currentLineNumber;
+        target.globName = source.globName;
+        target.setCloneFlags(source.needsFlushForThreadClone(), source.isAutoFlush());
+
+        if (source.directoryIO != null) {
+            target.directoryIO = source.directoryIO.inheritedCopy();
+            return target;
+        }
+
+        InheritedHandlePair pair = inheritHandle(source.ioHandle);
+        if (pair == null || pair.child() == null || pair.child() instanceof ClosedIOHandle) {
+            clones.remove(source);
+            return null;
+        }
+        // Shared transports replace the parent's raw owner with its lease. For
+        // wrapper stacks this also ensures the parent and child have independent
+        // layer state over the same underlying transport.
+        source.ioHandle = pair.parent();
+        target.ioHandle = pair.child();
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            RuntimeIO.addHandle(target.ioHandle);
+        }
         return target;
     }
+
+    private InheritedHandlePair inheritHandle(IOHandle source) {
+        if (source == null) return null;
+        InheritedHandlePair existing = inheritedHandles.get(source);
+        if (existing != null) return existing;
+
+        InheritedHandlePair result;
+        switch (source.threadInheritancePolicy()) {
+            case SHARED_TRANSPORT -> {
+                SharedTransportIOHandle[] leases = SharedTransportIOHandle.createPair(source);
+                result = new InheritedHandlePair(leases[0], leases[1]);
+            }
+            case IMPLEMENTATION_COPY -> {
+                if (source instanceof InternalPipeHandle pipe) {
+                    result = new InheritedHandlePair(source, pipe.inheritedCopy());
+                } else if (source instanceof SharedTransportIOHandle shared) {
+                    IOHandle child = shared.inheritedCopy();
+                    result = child == null ? null : new InheritedHandlePair(source, child);
+                } else {
+                    result = null;
+                }
+            }
+            case WRAPPER_COPY -> result = inheritWrapper(source);
+            case VALUE_COPY -> result = inheritValueHandle(source);
+            case CLOSED, UNSUPPORTED -> result = null;
+            default -> result = null;
+        }
+        if (result != null) inheritedHandles.put(source, result);
+        return result;
+    }
+
+    private InheritedHandlePair inheritWrapper(IOHandle source) {
+        if (source instanceof LayeredIOHandle layered) {
+            InheritedHandlePair delegate = inheritHandle(layered.getDelegate());
+            if (delegate == null) return null;
+            LayeredIOHandle parentCopy;
+            LayeredIOHandle childCopy;
+            try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+                parentCopy = layered.threadCopy(delegate.parent());
+            }
+            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                childCopy = layered.threadCopy(delegate.child());
+            }
+            return new InheritedHandlePair(parentCopy, childCopy);
+        }
+        if (source instanceof DupIOHandle duplicate) {
+            return new InheritedHandlePair(source, DupIOHandle.addDup(duplicate));
+        }
+        if (source instanceof BorrowedIOHandle borrowed) {
+            return new InheritedHandlePair(source,
+                    new BorrowedIOHandle(borrowed.getDelegate()));
+        }
+        return null;
+    }
+
+    private InheritedHandlePair inheritValueHandle(IOHandle source) {
+        if (source instanceof ScalarBackedIO scalar) {
+            RuntimeScalar backing = (RuntimeScalar) cloneValue(scalar.backingScalar());
+            return new InheritedHandlePair(source, scalar.threadCopy(backing));
+        }
+        return null;
+    }
+
+    private Object cloneThreadResource(ThreadCloneableResource source) {
+        Object existing = clones.get(source);
+        if (existing != null) return existing;
+        Object result = source.cloneForThread(new ThreadCloneableResource.ThreadCloneContext() {
+            @Override public PerlRuntime sourceRuntime() { return sourceRuntime; }
+            @Override public PerlRuntime targetRuntime() { return targetRuntime; }
+            @Override public RuntimeBase clonePerlValue(RuntimeBase value) {
+                return cloneValue(value);
+            }
+        });
+        if (result != null) clones.put(source, result);
+        return result;
+    }
+
+    private record InheritedHandlePair(IOHandle parent, IOHandle child) {}
 
     private void copyScalarMetadata(RuntimeScalar source, RuntimeScalar target) {
         target.type = source.type;
@@ -515,6 +654,8 @@ public class RuntimeGraphCloner {
 
     private void copyBase(RuntimeBase source, RuntimeBase target) {
         target.blessId = cloneBlessId(source.blessId);
+        target.threadShared = source.threadShared;
+        target.threadSharedIdentity = source.threadSharedIdentity;
         target.localBindingExists = source.localBindingExists;
         target.storedInPackageGlobal = source.storedInPackageGlobal;
         target.isPackageGlobalRoot = source.isPackageGlobalRoot;
@@ -539,6 +680,14 @@ public class RuntimeGraphCloner {
         try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
             return skippedClasses.contains(NameNormalizer.getBlessStr(base.blessId));
         }
+    }
+
+    private static boolean needsSharedRuntimeView(RuntimeBase value) {
+        if (value instanceof RuntimeArray || value instanceof RuntimeHash) return true;
+        if (value instanceof RuntimeScalar scalar) {
+            return scalar.type == TIED_SCALAR;
+        }
+        return false;
     }
 
     private boolean isWeak(RuntimeScalar scalar) {

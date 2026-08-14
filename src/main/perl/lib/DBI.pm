@@ -272,6 +272,9 @@ sub DBD::_::st::finish {
 sub DBI::st::DESTROY {
     my $sth = $_[0];
     return unless $sth && ref($sth);
+    return if $sth->{InactiveDestroy};
+    return if _is_jdbc_handle($sth)
+        && !DBI::_handle_owned_by_current_runtime($sth);
     if ($sth->{Active}) {
         eval { $sth->finish() };
     }
@@ -282,6 +285,9 @@ sub DBI::st::DESTROY {
 sub DBI::db::DESTROY {
     my $dbh = $_[0];
     return unless $dbh && ref($dbh);
+    return if $dbh->{InactiveDestroy};
+    return if _is_jdbc_handle($dbh)
+        && !DBI::_handle_owned_by_current_runtime($dbh);
     if ($dbh->{Active}) {
         if ($ENV{DBI_TRACE_DESTROY}) {
             warn "DBI::db::DESTROY calling disconnect() on dbh=" . ($dbh+0) . " Active=" . ($dbh->{Active}//0) . "\n";
@@ -829,6 +835,18 @@ our %CACHED_STATEMENTS;
 our $MAX_CACHED_STATEMENTS = 100;
 our %CACHED_CONNECTIONS;
 our $MAX_CACHED_CONNECTIONS = 10;
+
+# DBI's connection cache is interpreter-local.  An ithread receives a snapshot
+# of the Perl package graph, but cached native/JDBC handles still belong to the
+# interpreter that opened them.  Native DBI clears its internal handle cache at
+# clone time; do the same here so connect_cached() creates a child-owned
+# connection instead of attempting to reuse an inherited handle.
+sub CLONE {
+    %CACHED_CONNECTIONS = ();
+    $err = undef;
+    $errstr = undef;
+    $state = undef;
+}
 
 # FETCH/STORE methods for tied-hash compatibility
 # In real Perl DBI, handles are tied hashes. DBIx::Class calls

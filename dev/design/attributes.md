@@ -49,8 +49,10 @@ attributes::->import(Canine => \$spot, "Watchful");
 The `shared` attribute is active when `threads::shared` is loaded. Shared
 scalars, arrays, and hashes retain identity across ithread cloning and support
 the locking and condition-variable operations described in
-`dev/design/concurrency.md`. It is not a general deep-sharing marker for tied
-or otherwise unsupported magic objects; callers should use
+`dev/design/concurrency.md`. Blessed aggregate roots retain runtime-local class
+metadata over shared backing. Tied scalars clone callback state per runtime;
+sharing an already tied array or hash replaces user magic with native shared
+storage. Callers should use
 `threads::shared::shared_clone` for supported aggregate graphs.
 
 ### `import()` Flow
@@ -280,7 +282,7 @@ The only remaining attrs.t failure is TODO test 155 (expected failure).
 
 1. **Variable attribute storage**: Should variables store their attributes? Currently `RuntimeCode` has an `attributes` field, but `RuntimeScalar`/`RuntimeArray`/`RuntimeHash` do not. Most test cases only need the `MODIFY_*_ATTRIBUTES` callback (side effects like `tie`), not persistent storage. The `FETCH_*_ATTRIBUTES` tests are only for CODE refs. **Decision: Don't add storage to variables yet — not needed for any current test.**
 
-2. **`_modify_attrs` implementation level**: The system Perl implements this as XS that directly manipulates SV flags. In PerlOnJava, CODE attributes use `RuntimeCode.attributes`; variable `shared` marks the scalar/array/hash storage so ithread graph cloning preserves its identity. Blessed and tied storage is rejected until its sharing policy is defined.
+2. **`_modify_attrs` implementation level**: The system Perl implements this as XS that directly manipulates SV flags. In PerlOnJava, CODE attributes use `RuntimeCode.attributes`; variable `shared` marks scalar/array/hash storage so ithread graph cloning preserves its synchronization identity. Aggregate blessings remain runtime-local, tied scalar callbacks clone per runtime, and tied arrays/hashes convert to native shared storage when shared.
 
 3. **Attribute::Handlers**: The module exists at `src/main/perl/lib/Attribute/Handlers.pm` and the core dependencies (`attributes.pm`, CHECK blocks, MODIFY_CODE_ATTRIBUTES) are now implemented. All core attrhand.t tests pass (4/4). Remaining edge cases are in multi.t (DESTROY, END handler warning) and linerep.t (eval context file/line).
 

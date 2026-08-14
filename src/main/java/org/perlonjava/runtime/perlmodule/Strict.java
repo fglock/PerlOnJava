@@ -48,6 +48,8 @@ public class Strict extends PerlModuleBase {
     public static final int HINT_RE_ASCII_AA = 0x04000000;  // use re '/aa'
     public static final int HINT_RE_EVAL = 0x08000000;      // use re 'eval'
     public static final int HINT_RE_TAINT = 0x10000000;     // use re 'taint'
+    public static final int HINT_RE_DEBUG = 0x20000000;     // use re 'debug'
+    public static final int HINT_RE_DEBUGCOLOR = 0x40000000; // use re 'debugcolor'
 
     /**
      * Constructor for Strict.

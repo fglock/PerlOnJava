@@ -21,8 +21,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   `object`/`wantarray`, and platform-thread stack sizing. Native-style callback
   registrations retain their owning runtime, internal pipes have an explicit
   inherited-handle policy, and nested plain shared graphs are validated before
-  publication. Blessed/tied shared values and some upstream core/regex suites
-  remain limited;
+  publication. General resource inheritance, DBI ownership, lexical regex
+  diagnostics, blessed roots, and tied shared-value conversion are implemented;
+  exact nested shared-reference proxies remain limited;
   see the [feature matrix](../reference/feature-matrix.md#concurrency-and-perl-threads).
 - CPAN/tooling: expose tested dependency scripts through `PATH`, deduplicate
   repeated `PERL5LIB` setup, and resolve test prerequisites against tested

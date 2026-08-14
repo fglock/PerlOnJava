@@ -50,6 +50,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * </pre>
  */
 public class PipeOutputChannel implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
 
     /**
      * Pattern to detect shell metacharacters

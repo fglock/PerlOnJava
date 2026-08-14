@@ -15,6 +15,10 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  * Used by IPC::Open3 and IPC::Open2 to read from child process stdout/stderr.
  */
 public class ProcessInputHandle implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
 
     private final InputStream inputStream;
     private final Process process; // may be null; used for EOF detection

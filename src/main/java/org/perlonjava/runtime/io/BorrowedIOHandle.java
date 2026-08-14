@@ -38,6 +38,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  */
 public class BorrowedIOHandle implements IOHandle {
 
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.WRAPPER_COPY;
+    }
+
     /** The underlying handle we're borrowing — never closed by us. */
     private final IOHandle delegate;
     /** Per-instance closed flag. Once true, all I/O operations on THIS wrapper fail. */

@@ -427,6 +427,10 @@ public class IOOperator {
                 handle = layeredHandle.getDelegate();
                 continue;
             }
+            if (handle instanceof SharedTransportIOHandle sharedHandle) {
+                handle = sharedHandle.getDelegate();
+                continue;
+            }
             return handle;
         }
     }

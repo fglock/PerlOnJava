@@ -92,6 +92,10 @@ public class TieOperators {
                     org.perlonjava.runtime.runtimetypes.AutovivificationArray.vivify(array);
                 }
                 RuntimeArray previousValue = new RuntimeArray(array);
+                // A user tie installed after threads::shared replaces the
+                // native shared aggregate with ordinary runtime-local magic.
+                array.threadShared = false;
+                array.threadSharedIdentity = null;
                 array.type = TIED_ARRAY;
                 array.elements = new TieArray(className, previousValue, self, array);
             }
@@ -108,6 +112,8 @@ public class TieOperators {
                     org.perlonjava.runtime.runtimetypes.AutovivificationHash.vivify(hash);
                 }
                 RuntimeHash previousValue = RuntimeHash.createHash(hash);
+                hash.threadShared = false;
+                hash.threadSharedIdentity = null;
                 hash.type = TIED_HASH;
                 hash.elements = new TieHash(className, previousValue, self);
                 hash.resetIterator();
@@ -274,12 +280,14 @@ public class TieOperators {
                 if (array.type == TIED_ARRAY && array.elements instanceof TieArray) {
                     return ((TieArray) array.elements).getSelf();
                 }
+                if (array.threadShared) return sharedTieMarker();
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
                 if (hash.type == TIED_HASH && hash.elements instanceof TieHash) {
                     return ((TieHash) hash.elements).getSelf();
                 }
+                if (hash.threadShared) return sharedTieMarker();
             }
             case GLOBREFERENCE -> {
                 RuntimeGlob glob = variable.globDeref();
@@ -309,6 +317,12 @@ public class TieOperators {
             }
         }
         return scalarUndef;
+    }
+
+    private static RuntimeScalar sharedTieMarker() {
+        RuntimeScalar marker = new RuntimeScalar();
+        marker.setBlessId(NameNormalizer.getBlessId("threads::shared::tie"));
+        return marker.createReference();
     }
 
     /**

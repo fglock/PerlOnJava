@@ -62,6 +62,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * @see FileChannel
  */
 public class CustomFileChannel implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
 
     // Perl flock constants
     private static final int LOCK_SH = 1;  // Shared lock

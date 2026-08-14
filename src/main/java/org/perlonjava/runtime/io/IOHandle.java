@@ -52,6 +52,14 @@ public interface IOHandle {
     ThreadLocal<Deque<Integer>> ungetBuffer = ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Explicit ithread inheritance contract. Resource-backed implementations
+     * must opt in; an unknown handle is never silently shared across runtimes.
+     */
+    default ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.UNSUPPORTED;
+    }
+
+    /**
      * Writes data to this I/O handle.
      *
      * @param string the data to write

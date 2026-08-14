@@ -31,6 +31,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * which is more faithful to how Perl's I/O system actually works.
  */
 public class PipeInputChannel implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
 
     /**
      * Pattern to detect shell metacharacters

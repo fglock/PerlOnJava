@@ -46,6 +46,21 @@ public class DirectoryIO {
         this.absoluteDirectoryPath = path.toAbsolutePath().normalize();
     }
 
+    private DirectoryIO(String directoryPath, Path absoluteDirectoryPath,
+                        List<String> allEntries, int currentPosition) {
+        this.directoryPath = directoryPath;
+        this.absoluteDirectoryPath = absoluteDirectoryPath;
+        this.allEntries = new ArrayList<>(allEntries);
+        this.currentPosition = currentPosition;
+        this.entriesLoaded = true;
+    }
+
+    /** Snapshot directory iteration state without sharing a closable stream. */
+    public synchronized DirectoryIO inheritedCopy() {
+        loadAllEntries();
+        return new DirectoryIO(directoryPath, absoluteDirectoryPath, allEntries, currentPosition);
+    }
+
     /**
      * Load all directory entries into memory for consistent seeking
      */
@@ -82,7 +97,7 @@ public class DirectoryIO {
      * @throws PerlCompilerException if seeking is not supported or an I/O error occurs
      */
     public RuntimeScalar seekdir(int position) {
-        if (directoryStream == null) {
+        if (directoryStream == null && !entriesLoaded) {
             throw new PerlCompilerException("seekdir is not supported for non-directory streams");
         }
 
