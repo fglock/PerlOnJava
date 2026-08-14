@@ -10,7 +10,7 @@ distribution-specific preferences.
 
 ## Progress Tracking
 
-### Current Status: implementation and local validation complete; PR in progress
+### Current Status: complete; PR #955 open with CI passing
 
 ### Completed Phases
 
@@ -43,10 +43,13 @@ distribution-specific preferences.
 - [x] Phase 5: regression validation (2026-08-14)
   - New focused tests pass with system Perl and with both PerlOnJava backends.
   - Full `make` suite passes.
+- [x] Phase 6: pull request and CI (2026-08-14)
+  - Opened PR #955 from `fix/cpan-compiler-tooling-20260814`.
+  - Ubuntu and Windows CI jobs passed.
 
 ### Next Steps
 
-1. Commit, push, open a PR, and monitor CI.
+1. Review and merge PR #955.
 
 ### Open Questions
 
