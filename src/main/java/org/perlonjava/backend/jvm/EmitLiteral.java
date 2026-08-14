@@ -524,7 +524,7 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
 
             // Add the element to the list
-            addElementToList(mv, element, contextType);
+            addElementToList(mv);
             // Stack: []
         }
 
@@ -701,44 +701,27 @@ public class EmitLiteral {
     }
 
     /**
-     * Adds an element to a RuntimeList with type-specific optimizations.
+     * Adds an element to a RuntimeList through its verifier-safe base overload.
      *
-     * <p>This method uses compile-time type information to generate optimized
-     * bytecode that calls the specific addToList method for known types, avoiding
-     * the overhead of interface dispatch when possible.</p>
+     * <p>AST return-type guesses are not reliable after context conversion, so
+     * list construction deliberately uses the common RuntimeBase contract.</p>
      *
      * <p>Stack transformation: [RuntimeList] [element] → [RuntimeList]</p>
      *
      * @param mv          The method visitor for bytecode generation
-     * @param element     The AST node representing the element being added
-     * @param contextType The context type (used for scalar context optimization)
      */
-    private static void addElementToList(MethodVisitor mv, Node element, int contextType) {
-        String returnType;
+    private static void addElementToList(MethodVisitor mv) {
         // Stack: [RuntimeList] [element]
 
-        // Determine the element's return type for optimization
-        if (contextType == RuntimeContextType.SCALAR) {
-            // In scalar context, all elements are treated as scalars
-            returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
-        } else if (contextType == RuntimeContextType.RUNTIME) {
-            // In RUNTIME context, array/hash elements may have been converted to RuntimeBase
-            // via emitRuntimeContextConversion(), so we must use the generic add(RuntimeBase)
-            returnType = RuntimeDescriptorConstants.BASE_TYPE;
-        } else {
-            // Use static analysis to determine the element's return type
-            returnType = ReturnTypeVisitor.getReturnType(element);
-        }
-
-        // Generate type-specific method call for better performance
-        if (RuntimeDescriptorConstants.isKnownRuntimeType(returnType)) {
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                    "add", "(" + returnType + ")V", false);
-        } else {
-            // Fall back for unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                    "add", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
-        }
+        // List elements can cross context boundaries while they are emitted.  In
+        // particular, a subroutine call is statically described as RuntimeList but
+        // is converted to RuntimeBase when it appears in a runtime-context closure.
+        // Selecting an overload from the AST return-type guess therefore produced
+        // unverifiable bytecode for Memoize::_wrap.  Every runtime value derives
+        // from RuntimeBase, so use the type-safe overload here.  The JVM still
+        // dispatches this monomorphic call efficiently after warm-up.
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
+                "add", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
     }
 
     /**

@@ -338,6 +338,7 @@ public class StatementParser {
      * @return An IfNode representing the if/unless/elsif statement
      */
     private static Node parseIfStatementInternal(Parser parser, boolean enterNewScope) {
+        int statementStartIndex = parser.tokenIndex;
         LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
 
         // Enter a new scope for 'if' and 'unless' (but not for 'elsif' which is part of the same chain)
@@ -375,6 +376,16 @@ public class StatementParser {
         TestMoreHelper.handleSkipTest(parser, thenBranch);
 
         IfNode result = new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
+        // Perl associates a standalone call that is the first statement of an
+        // if/unless body with the conditional's source line.  Test::Builder::Tester
+        // relies on this when test_fail() is the first statement in a conditional.
+        // Preserve that call-site quirk for both execution backends without
+        // changing the source location of later statements in the block.
+        if (!thenBranch.elements.isEmpty()
+                && thenBranch.elements.get(0) instanceof BinaryOperatorNode first
+                && "(".equals(first.operator)) {
+            first.setAnnotation("callerLineTokenOverride", statementStartIndex);
+        }
         if (enterNewScope) {
             result.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
         }
