@@ -89,6 +89,7 @@ public final class PerlRuntime implements AutoCloseable {
     public final Deque<Long> netSslErrorQueue = new ArrayDeque<>();
     public NetSSLeay.State netSslState = new NetSSLeay.State();
     public ForkOpenState.PendingForkOpen pendingForkOpen;
+    public int forkOpenOccurrence;
     public RuntimeArray libOriginalInc;
     public boolean storableLastOpInNetorder;
     public final Set<String> xsShimLoadingInProgress = new HashSet<>();
@@ -128,7 +129,11 @@ public final class PerlRuntime implements AutoCloseable {
     private PerlRuntime(PerlThreadRegistry threadRegistry, long perlThreadId) {
         this.threadRegistry = Objects.requireNonNull(threadRegistry, "threadRegistry");
         this.perlThreadId = perlThreadId;
-        ioStdout = new RuntimeIO(new StandardIO(System.out, true));
+        ioStdout = new RuntimeIO(new StandardIO(
+                ForkOpenState.isReplayProcess()
+                        ? java.io.OutputStream.nullOutputStream()
+                        : System.out,
+                true));
         ioStderr = new RuntimeIO(new StandardIO(System.err, false));
         ioStderr.autoFlush = true;
         ioStdin = new RuntimeIO(new StandardIO(System.in));
@@ -144,6 +149,18 @@ public final class PerlRuntime implements AutoCloseable {
         ioStdout.globName = "main::STDOUT";
         ioStderr.globName = "main::STDERR";
         ioStdin.globName = "main::STDIN";
+    }
+
+    /** Make replay-child output visible once execution reaches its fork point. */
+    public void activateForkOpenChildStdout() {
+        RuntimeIO muted = ioStdout;
+        RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
+        replaceStandardHandle("main::STDOUT", stdout);
+        replaceStandardHandle("main::stdout", stdout);
+        if (ioSelectedHandle == muted) ioSelectedHandle = stdout;
+        if (ioLastWrittenHandle == muted) ioLastWrittenHandle = stdout;
+        GlobalVariable.getGlobalVariable("main::$").set(pid);
+        GlobalVariable.getGlobalHash("main::ENV").elements.remove(ForkOpenState.REPLAY_ENV);
     }
 
     /** Return the runtime bound to this thread, failing clearly when absent. */

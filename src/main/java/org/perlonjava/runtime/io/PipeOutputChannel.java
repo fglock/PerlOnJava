@@ -12,6 +12,7 @@ import java.io.*;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -112,6 +113,13 @@ public class PipeOutputChannel implements IOHandle {
         startProcessDirect(commandArgs);
     }
 
+    public PipeOutputChannel(List<String> commandArgs, Map<String, String> environmentOverrides)
+            throws IOException {
+        this.isClosed = false;
+        ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+        setupProcess(processBuilder, environmentOverrides);
+    }
+
     /**
      * Starts the external process using shell interpretation.
      *
@@ -167,12 +175,18 @@ public class PipeOutputChannel implements IOHandle {
      * @throws IOException if an I/O error occurs starting the process
      */
     private void setupProcess(ProcessBuilder processBuilder) throws IOException {
+        setupProcess(processBuilder, Map.of());
+    }
+
+    private void setupProcess(ProcessBuilder processBuilder, Map<String, String> environmentOverrides)
+            throws IOException {
         // Set working directory to current directory
         String userDir = org.perlonjava.runtime.runtimetypes.RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
 
         // Copy %ENV to the subprocess environment
         copyPerlEnvToProcessBuilder(processBuilder);
+        processBuilder.environment().putAll(environmentOverrides);
 
         // Start the process
         process = processBuilder.start();

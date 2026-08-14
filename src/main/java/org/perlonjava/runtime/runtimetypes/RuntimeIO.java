@@ -984,6 +984,31 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
+     * Re-executes the current PerlOnJava invocation to emulate a no-command
+     * {@code open FH, "-|"} or {@code open FH, "|-"}. The child suppresses
+     * replayed output until it reaches the selected open occurrence.
+     */
+    public static RuntimeIO openForkPipe(String mode, int occurrence) {
+        RuntimeIO fh = new RuntimeIO();
+        try {
+            Map<String, String> marker = Map.of(
+                    org.perlonjava.runtime.ForkOpenState.REPLAY_ENV,
+                    occurrence + ":" + ProcessHandle.current().pid());
+            List<String> invocation = org.perlonjava.runtime.ForkOpenState.currentInvocation();
+            if ("-|".equals(mode)) {
+                fh.ioHandle = new PipeInputChannel(invocation, marker);
+            } else {
+                fh.ioHandle = new PipeOutputChannel(invocation, marker);
+            }
+            addHandle(fh.ioHandle);
+            return fh;
+        } catch (IOException | RuntimeException e) {
+            handleIOError("fork-open failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Converts a filename to a Path object relative to the current directory.
      *
      * @param fileName the filename to convert
