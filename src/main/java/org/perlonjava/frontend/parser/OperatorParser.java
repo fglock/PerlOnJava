@@ -53,6 +53,18 @@ public class OperatorParser {
             block.setAnnotation("blockIsDoBlock", true);
             return block;
         }
+        // Since Perl 5.42, `do NAME(...)` is a syntax error rather than an
+        // ambiguous do-file expression. CORE() retains its historical special
+        // case and `do NAME` without parentheses is still parsed as do-file.
+        if (token.type == IDENTIFIER && !token.text.equals("CORE")) {
+            int nextIndex = Whitespace.skipWhitespace(
+                    parser, parser.tokenIndex + 1, parser.tokens);
+            if (nextIndex < parser.tokens.size()
+                    && parser.tokens.get(nextIndex).type == OPERATOR
+                    && parser.tokens.get(nextIndex).text.equals("(")) {
+                parser.throwError("syntax error");
+            }
+        }
         // `do` file
         Node operand = ListParser.parseZeroOrOneList(parser, 1);
         return new OperatorNode("doFile", operand, parser.tokenIndex);

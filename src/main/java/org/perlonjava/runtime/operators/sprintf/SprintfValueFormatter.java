@@ -2,6 +2,9 @@ package org.perlonjava.runtime.operators.sprintf;
 
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.operators.WarnDie;
 
 /**
  * Main formatter for sprintf operations.
@@ -64,6 +67,18 @@ public class SprintfValueFormatter {
         }
         if (conversion == 'n') {
             throw new PerlCompilerException("%n specifier not supported");
+        }
+
+        // A bare typeglob is a string-like symbol, not a glob reference. Perl
+        // warns and converts it to numeric zero for every numeric sprintf
+        // conversion. Handling this once here also avoids duplicate warnings
+        // from the preliminary Inf/NaN check and the actual formatter.
+        if (value.type == RuntimeScalarType.GLOB) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Argument \"" + value + "\" isn't numeric in sprintf"),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "numeric");
+            value = RuntimeScalarCache.scalarZero;
         }
 
         // Check for special floating-point values for numeric conversions

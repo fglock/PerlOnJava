@@ -797,6 +797,17 @@ not a reset, and representative package, regex, and execution state deliberately
 remains observable on the closed object. The complete fresh-runtime equivalence
 contract and state inventory live in `runtime-pooling-reset-contract.md`.
 
+The 2026-08-14 post-activation compatibility pass also resolved several direct
+language defects exposed by the broader thread test surface. Reference
+stringification and numeric coercion now use one Perl identity, typeglob pseudo
+constants survive stash reconstruction and symbolic CODE lookup, tied-array
+localization no longer corrupts sparse storage, `do NAME(...)` follows modern
+syntax while `do BLOCK` copies its result, and `.=` preserves Perl's undef-warning
+rules. Interpreter compiler-flag opcodes now activate lexical warning masks at
+the same boundaries as generated JVM code. These are general Perl compatibility
+fixes rather than changes to ithread ownership. The detailed investigation and
+validation history is retained in the corresponding commit messages.
+
 ### Implementation History
 
 Completed phase history is intentionally kept out of this living design
@@ -824,6 +835,11 @@ request history.
 5. Keep virtual threads experimental until native callback diagnostics and
    repeated benchmarks justify promotion. Keep runtime pooling disabled until
    the separate Phase 34 reset contract proves fresh-runtime equivalence.
+6. Continue the direct-language differential exposed by the thread gate. Preserve
+   the recovered `gv.t`, `assignwarn.t`, `local.t`, and `do.t` behavior while
+   addressing the remaining regex-parser/diagnostic gaps in `pat_advanced.t` and
+   `speed.t`; compare serialized same-base runs because their historical totals
+   vary under concurrent machine load.
 
 ### Open Questions
 

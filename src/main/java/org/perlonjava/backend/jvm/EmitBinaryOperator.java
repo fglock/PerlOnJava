@@ -399,12 +399,21 @@ public class EmitBinaryOperator {
                 baseOpHandler = OperatorHandler.get(baseOperator);
             }
             if (baseOpHandler != null) {
-                mv.visitMethodInsn(
-                        baseOpHandler.methodType(),
-                        baseOpHandler.className(),
-                        baseOpHandler.methodName(),
-                        baseOpHandler.descriptor(),
-                        false);
+                if (node.operator.equals(".=")) {
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/operators/StringOperators",
+                            "stringConcatAssign",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                } else {
+                    mv.visitMethodInsn(
+                            baseOpHandler.methodType(),
+                            baseOpHandler.className(),
+                            baseOpHandler.methodName(),
+                            baseOpHandler.descriptor(),
+                            false);
+                }
             } else {
                 throw new RuntimeException("No operator handler found for base operator: " + baseOperator);
             }

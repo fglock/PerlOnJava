@@ -1376,7 +1376,13 @@ public class BytecodeCompiler implements Visitor {
 
         // Save the last statement's result to the outer register BEFORE exiting scope
         if (outerResultReg >= 0 && lastResultReg >= 0) {
-            emitAliasWithTarget(outerResultReg, lastResultReg);
+            if (node.getBooleanAnnotation("blockIsDoBlock")) {
+                emit(Opcodes.COPY_DO_BLOCK_RESULT);
+                emitReg(outerResultReg);
+                emitReg(lastResultReg);
+            } else {
+                emitAliasWithTarget(outerResultReg, lastResultReg);
+            }
         } else if (outerResultReg >= 0 && lastResultReg < 0) {
             // Last statement didn't produce a result (e.g., for loop), initialize to undef
             emit(Opcodes.LOAD_UNDEF);
@@ -4960,6 +4966,11 @@ public class BytecodeCompiler implements Visitor {
                 RuntimeScalar codeRef = GlobalVariable.createPseudoConstantCodeRef(globalName);
                 if (codeRef == null) {
                     codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(globalName);
+                }
+                if (codeRef.type == RuntimeScalarType.CODE
+                        && codeRef.value instanceof RuntimeCode rc) {
+                    rc.isSymbolicReference = true;
+                    rc.referenceOriginFqn = globalName;
                 }
                 int rd = allocateOutputRegister();
                 int constIdx = addToConstantPool(codeRef);

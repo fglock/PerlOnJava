@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.Stack;
+import org.perlonjava.runtime.WarningBitsRegistry;
 
 /**
  * A RuntimeScalar subclass for global variables that knows its fully qualified name.
@@ -75,7 +76,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             // is intentionally read-only and therefore is not suitable here.
             originalVariable.tiedStore(new RuntimeScalar());
             localizedStack.push(
-                    new SavedGlobalState(fullName, originalVariable, savedValue, null));
+                    new SavedGlobalState(fullName, originalVariable, savedValue, null, null));
             // Do NOT replace the slot — the tied scalar stays in place so
             // that the subsequent `= value` assignment dispatches STORE.
             return;
@@ -101,7 +102,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             newLocal = new GlobalRuntimeScalar(fullName);
         }
 
-        localizedStack.push(new SavedGlobalState(fullName, originalVariable, null, newLocal));
+        String savedRuntimeWarningBits = fullName.equals(GlobalContext.WARNING_SCOPE)
+                ? WarningBitsRegistry.getRuntimeWarningBits() : null;
+        localizedStack.push(new SavedGlobalState(
+                fullName, originalVariable, null, newLocal, savedRuntimeWarningBits));
 
         // Replace this variable in the global symbol table with the new one
         GlobalVariable.globalVariables.put(fullName, newLocal);
@@ -177,6 +181,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
 
                 // Restore the original variable in the global symbol table
                 GlobalVariable.globalVariables.put(saved.fullName, saved.originalVariable);
+
+                if (saved.fullName.equals(GlobalContext.WARNING_SCOPE)) {
+                    WarningBitsRegistry.setRuntimeWarningBits(saved.savedRuntimeWarningBits);
+                }
 
                 // Also restore all glob aliases to the original shared variable
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
@@ -266,6 +274,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             String fullName,
             RuntimeScalar originalVariable,
             RuntimeScalar savedTiedValue,
-            RuntimeScalar localizedVariable) {
+            RuntimeScalar localizedVariable,
+            String savedRuntimeWarningBits) {
     }
 }

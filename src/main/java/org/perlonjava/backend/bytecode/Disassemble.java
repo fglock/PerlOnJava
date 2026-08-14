@@ -1207,6 +1207,12 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("SET_SCALAR r").append(rd).append(".set(r").append(rs).append(")\n");
                         break;
+                    case Opcodes.COPY_DO_BLOCK_RESULT:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("COPY_DO_BLOCK_RESULT r").append(rd)
+                                .append(" = copy_do(r").append(rs).append(")\n");
+                        break;
                     case Opcodes.NOT:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];

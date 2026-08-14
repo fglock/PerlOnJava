@@ -3088,7 +3088,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> {
                 // Symbolic reference: treat the scalar's string value as a subroutine name
                 String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-                yield GlobalVariable.getGlobalCodeRef(varName);
+                RuntimeScalar pseudoCode = GlobalVariable.createPseudoConstantCodeRef(varName);
+                yield pseudoCode != null ? pseudoCode : GlobalVariable.getGlobalCodeRef(varName);
             }
         };
     }

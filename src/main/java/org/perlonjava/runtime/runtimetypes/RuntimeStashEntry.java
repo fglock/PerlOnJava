@@ -22,6 +22,12 @@ public class RuntimeStashEntry extends RuntimeGlob {
         super(globName);
         if (!isDefined) {
             type = RuntimeScalarType.UNDEF;
+        } else if (GlobalVariable.hasGlobalPseudoConstant(globName)) {
+            // The stash hash exposes a scalar-reference proxy constant as the
+            // assigned reference even though globDeref() still provides the
+            // symbol's complete typeglob.
+            type = REFERENCE;
+            value = GlobalVariable.getGlobalVariable(globName);
         }
         // System.out.println("Stash Entry create: " + globName + " " + isDefined);
     }
@@ -88,6 +94,20 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 && sourceEntry.globName.endsWith("::")) {
             return super.set((RuntimeGlob) sourceEntry);
         }
+        // A symbolic \&name can be compiled before an earlier runtime stash
+        // assignment has installed name's pseudo-constant. Resolve that
+        // placeholder at the typeglob assignment point, after the preceding
+        // statement has run but before clearing the destination metadata.
+        if (value.type == CODE
+                && value.value instanceof RuntimeCode code
+                && !code.defined()
+                && code.referenceOriginFqn != null) {
+            RuntimeScalar pseudoCode = GlobalVariable.createPseudoConstantCodeRef(
+                    code.referenceOriginFqn);
+            if (pseudoCode != null) {
+                value = pseudoCode;
+            }
+        }
         type = RuntimeScalarType.GLOB;
         GlobalVariable.clearGlobalPseudoConstant(this.globName);
         if (value.type == READONLY_SCALAR) {
@@ -116,6 +136,10 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     // lookup without installing an actual CODE slot.
                     super.set(value);
                     GlobalVariable.setGlobalPseudoConstant(this.globName, targetScalar);
+                    // The hash-view value remains the assigned scalar reference;
+                    // globDeref() still exposes this symbol's live typeglob slots.
+                    this.type = REFERENCE;
+                    this.value = targetScalar;
                     notifyCodeSlotChanged();
                 }
             }
@@ -222,8 +246,8 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 }
                 return value;
             case UNDEF:
-                // TODO: Add "Undefined value assigned to typeglob" warning with proper guards
-                // to avoid false positives during module loading
+                // Direct `$stash{name} = undef` does not carry the warning
+                // emitted by the distinct `*name = undef` typeglob operation.
                 return value;
             case INTEGER:
             case DOUBLE:

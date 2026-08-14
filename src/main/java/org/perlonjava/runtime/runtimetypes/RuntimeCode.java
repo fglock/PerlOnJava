@@ -5393,6 +5393,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return result;
     }
 
+    /**
+     * A do-block returns a mortal copy of its last scalar expression, not the
+     * underlying lvalue. In particular, a deleted hash element must stop
+     * aliasing its former storage when it crosses the do-block boundary.
+     */
+    public static RuntimeScalar copyDoBlockResult(RuntimeScalar result) {
+        return new RuntimeScalar(result);
+    }
+
+    /** Copy a do-block result used in list context without collapsing the list. */
+    public static RuntimeBase copyDoBlockListResult(RuntimeBase result) {
+        if (result instanceof RuntimeScalar scalar) {
+            return new RuntimeScalar(scalar);
+        }
+        if (result instanceof RuntimeList list) {
+            RuntimeList copy = new RuntimeList();
+            for (RuntimeBase element : list.elements) {
+                copy.elements.add(element instanceof RuntimeScalar scalar
+                        ? new RuntimeScalar(scalar) : element);
+            }
+            return copy;
+        }
+        return result;
+    }
+
     public boolean defined() {
         // Built-in operators are always considered "defined"
         if (this.isBuiltin) {

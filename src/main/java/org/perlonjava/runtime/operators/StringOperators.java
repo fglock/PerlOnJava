@@ -508,6 +508,21 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        return stringConcat(runtimeScalar, b, true);
+    }
+
+    /**
+     * Implements {@code .=}. Perl treats an undefined left operand as the empty
+     * string without issuing the uninitialized warning that ordinary {@code .}
+     * emits. Keep this as a distinct entry point so eval-time warning changes do
+     * not turn concat-assignment into warning-aware concatenation.
+     */
+    public static RuntimeScalar stringConcatAssign(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        return stringConcat(runtimeScalar, b, false);
+    }
+
+    private static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b,
+                                              boolean warnUninitialized) {
         RuntimeScalar overloaded = tryStringConcatOverload(runtimeScalar, b);
         if (overloaded != null) return overloaded;
 
@@ -518,7 +533,8 @@ public class StringOperators {
         // enclosing call site was compiled, so retain a cheap undef-only
         // runtime guard here as well. WarnDie performs the lexical category
         // check and dispatches a localized __WARN__ handler when applicable.
-        if (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean()) {
+        if (warnUninitialized
+                && (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean())) {
             WarnDie.warnWithCategory(
                     new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");

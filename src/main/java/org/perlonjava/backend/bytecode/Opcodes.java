@@ -2458,6 +2458,9 @@ public class Opcodes {
     /** Refalias an lvalue proxy to a scalar reference. Format: ALIAS_LVALUE_REFERENCE targetReg refReg. */
     public static final short ALIAS_LVALUE_REFERENCE = 517;
 
+    /** Copy a do-block scalar/list result so loose lvalues do not escape. Format: rd, rs. */
+    public static final short COPY_DO_BLOCK_RESULT = 519;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 
