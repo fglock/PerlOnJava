@@ -756,7 +756,7 @@ stringification, terminal errors, daemon-carrier shutdown, and attached-child
 exit warnings are covered by focused JVM/interpreter tests. Core
 `op/threads.t` completes 30/30.
 
-### Phase 41 — Fresh-runtime reset
+### Phase 41 — Fresh-runtime reset (completed 2026-08-14)
 
 Add reset as a lifecycle distinct from terminal `close()`. Reset is allowed only
 after execution, compilation, callbacks, children, locks, waiters, handles, and
@@ -764,6 +764,18 @@ destruction work quiesce. Rebuild every domain in
 `runtime-pooling-reset-contract.md` from an immutable bootstrap template and
 poison a runtime after any partial reset failure. Acceptance is exhaustive
 `A; reset; B == fresh; B` parity plus classloader/package-graph collection.
+
+`PerlRuntime.reset()` is now a distinct exclusive lifecycle transition. It
+rejects active bindings, compilation, children, shared locks, and waiters;
+drains END/destruction and owned resources; replaces every runtime state holder;
+rebuilds standard handles and core globals; clears terminal thread-family state;
+and poisons the runtime after any partial failure. JVM/interpreter differentials
+prove representative package, CODE, `%INC`, regex, execution, and I/O freshness.
+Pooling remains off pending Phase 42's checkout stress, collection, and measured
+benefit gates.
+
+The post-reset regression gate retains all 325 DBIx::Class files and 42,671
+assertions under `./jcpan --jobs 8 -t DBIx::Class`.
 
 ### Phase 42 — Opt-in pooling and concurrent PSGI
 
@@ -805,7 +817,7 @@ CI.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 40 complete; Phase 36 and Phase 39b remain open
+### Current Status: Phase 41 complete; Phase 36 and Phase 39b remain open
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -984,9 +996,9 @@ three assertions from the adjacent-import parser fix.
 2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
    weak/cyclic ownership, and the destructive `share` versus preserving
    `shared_clone` distinction.
-3. Land Phases 41–44 as the final delivery sequence: fresh-runtime reset,
-   opt-in pooling and concurrent PSGI, virtual threads by default, and the
-   complete release gate. Phase 40's public 2.43 API surface is complete.
+3. Land Phases 42–44 as the final delivery sequence: opt-in pooling and
+   concurrent PSGI, virtual threads by default, and the complete release gate.
+   Phases 40 and 41's public API and fresh-reset foundations are complete.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under
