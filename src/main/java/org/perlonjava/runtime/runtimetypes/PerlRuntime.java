@@ -18,17 +18,18 @@ import org.perlonjava.runtime.perlmodule.FilterRuntimeState;
 import org.perlonjava.runtime.perlmodule.NetSSLeay;
 import org.perlonjava.runtime.nativ.ExtendedNativeUtils;
 
+import java.lang.ref.WeakReference;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.TreeSet;
 
 /**
  * Identity and scoped thread binding for one Perl interpreter instance.
@@ -68,6 +69,7 @@ public final class PerlRuntime implements AutoCloseable {
     public final Map<Integer, ScalarFlipFlopOperator> flipFlopState = new HashMap<>();
     public final Map<Integer, ScalarGlobOperator> scalarGlobState = new HashMap<>();
     public final Map<Integer, String> pointerPackState = new HashMap<>();
+    final Map<Integer, WeakReference<RuntimeBase>> bObjectState = new HashMap<>();
     public final IORuntimeRegistryState ioRegistryState = new IORuntimeRegistryState();
     public final FileTestOperator.State fileTestState = new FileTestOperator.State();
     public final DebugRuntimeState debugState = new DebugRuntimeState();

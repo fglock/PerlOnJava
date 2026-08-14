@@ -64,6 +64,9 @@ public class Overload {
         if (runtimeScalar.value == null) {
             return scalarUndef;
         }
+        if (runtimeScalar.value instanceof RuntimeBase referent) {
+            BObjectRegistry.register(referent);
+        }
         // Recursion guard — see STRINGIFY_MAX_DEPTH javadoc.
         ExecutionRuntimeState state = PerlRuntime.current().executionState();
         int depth = state.overloadStringifyDepth;

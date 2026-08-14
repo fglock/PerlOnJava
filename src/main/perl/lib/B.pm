@@ -88,6 +88,15 @@ package B::SV {
         Internals::SvREFCNT($_[0]->{ref});
     }
 
+    sub object_2svref {
+        require Scalar::Util;
+        return $_[0]->{ref}
+            if Scalar::Util::reftype($_[0]) eq 'HASH';
+
+        require Internals;
+        return Internals::jperl_b_object_2svref(${$_[0]});
+    }
+
     sub RV {
         my $self = shift;
         my $r = $self->{ref};

@@ -68,6 +68,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_cv_deparse_info", "jperlCvDeparseInfo", "$");
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
+            internals.registerMethod("jperl_b_object_2svref", "jperlBObject2svref", "$");
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
             internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
             internals.registerMethod("jperl_peek_sub", "jperlPeekSub", null);
@@ -82,6 +83,14 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList jperlEndAvRef(RuntimeArray args, int ctx) {
         return SpecialBlock.getEndBlocks().createReference().getList();
+    }
+
+    /** Resolve a reference pseudo-address previously exposed by stringification. */
+    public static RuntimeList jperlBObject2svref(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalArgumentException("Usage: Internals::jperl_b_object_2svref(ADDRESS)");
+        }
+        return BObjectRegistry.resolve(args.get(0).getLong()).getList();
     }
 
     /**

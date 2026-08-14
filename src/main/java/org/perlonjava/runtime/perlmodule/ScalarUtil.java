@@ -110,6 +110,9 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for refaddr() method");
         }
         RuntimeScalar scalar = magicallyDeref(args.get(0));
+        if (scalar.value instanceof RuntimeBase referent) {
+            BObjectRegistry.register(referent);
+        }
         // refaddr returns undef for non-references
         // For references, return the identity hash code of the underlying referenced object
         switch (scalar.type) {

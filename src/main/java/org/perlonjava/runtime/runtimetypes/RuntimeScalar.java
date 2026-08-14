@@ -1367,6 +1367,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // No-op for plain scalars
     }
 
+    /**
+     * Vivify an lvalue before testing a logical compound assignment. Read-only
+     * argument aliases must be testable without raising; a later assignment
+     * still reaches set()/vivify() and reports the canonical read-only error.
+     */
+    public void vivifyLogicalAssignmentLvalue() {
+        if (!(this instanceof RuntimeScalarReadOnly)) {
+            vivifyLvalue();
+        }
+    }
+
     // Setters
 
     /**
@@ -2267,6 +2278,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public String toStringRef() {
+        if (value instanceof RuntimeBase referent) {
+            BObjectRegistry.register(referent);
+        }
         String ref = switch (type) {
             case UNDEF -> "SCALAR(0x" + scalarUndef.hashCode() + ")";
             case CODE -> {
