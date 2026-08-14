@@ -675,8 +675,12 @@ keeps direct/thread compilation behavior aligned. DATA now models the source
 file positioned after its marker, remains seekable to the source start, and
 crosses thread snapshots through the named-handle inheritance policy. Direct
 and threaded `reg_email` therefore pass 13/13 on both backends. `pat_re_eval`
-and the remaining `qr//`, conditional, control-verb, lookbehind,
-Unicode-property, and diagnostic coverage remain shared regex-language work.
+now parses quoted code-block-shaped text correctly: `(?{` inside `\Q...\E`
+is literal rather than an embedded Perl block. This advances both direct and
+threaded files to runtime construction, where arbitrary match-time `(?{...})`
+execution remains the next blocker. The remaining `qr//`, conditional,
+control-verb, lookbehind, Unicode-property, and diagnostic coverage likewise
+remains shared regex-language work.
 
 ### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
 
