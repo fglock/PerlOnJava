@@ -92,7 +92,16 @@ final class JoniRegexPattern {
                 continue;
             }
             if (!inClass && pattern.startsWith("(?[", i)) {
-                i = ExtendedCharClass.handleExtendedCharacterClass(pattern, i, out, flags);
+                StringBuilder translatedClass = new StringBuilder();
+                int end = ExtendedCharClass.handleExtendedCharacterClass(
+                        pattern, i, translatedClass, flags);
+                String sourceClass = pattern.substring(i, Math.min(pattern.length(), end + 1));
+                if (sourceClass.toLowerCase(java.util.Locale.ROOT).contains("[:ascii:]")) {
+                    appendAsciiClassForJoni(out, translatedClass.toString());
+                } else {
+                    out.append(translatedClass);
+                }
+                i = end;
                 continue;
             }
             if (!inClass && pattern.startsWith("(?^", i)) {
@@ -142,6 +151,25 @@ final class JoniRegexPattern {
             out.append(ch);
         }
         return out.toString();
+    }
+
+    /**
+     * Joni's Ruby syntax does not understand Java's {@code &&} character-class
+     * intersection.  For an explicitly ASCII-bounded Perl extended class,
+     * evaluate the already-translated Java class and emit the exact byte set.
+     */
+    private static void appendAsciiClassForJoni(StringBuilder out, String javaClass) {
+        // Java requires literal closing/opening brackets to be escaped even in
+        // the leading position accepted by Perl's bracket syntax.
+        javaClass = javaClass.replace("[^][", "[^\\]\\[");
+        java.util.regex.Pattern predicate = java.util.regex.Pattern.compile(javaClass);
+        out.append('[');
+        for (int value = 0; value < 128; value++) {
+            if (predicate.matcher(Character.toString((char) value)).matches()) {
+                out.append(String.format("\\x%02X", value));
+            }
+        }
+        out.append(']');
     }
 
     /**

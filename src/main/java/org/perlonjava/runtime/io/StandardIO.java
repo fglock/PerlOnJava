@@ -22,6 +22,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
  * program to continue executing without being blocked by IO operations.
  */
 public class StandardIO implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
     public static final int STDIN_FILENO = 0;
     public static final int STDOUT_FILENO = 1;
     public static final int STDERR_FILENO = 2;

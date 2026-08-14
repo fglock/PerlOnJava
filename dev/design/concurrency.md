@@ -647,6 +647,138 @@ Phase 33's release gate completed with `./jcpan --jobs 8 -t DBIx::Class`:
 non-local labeled control flow tears down every abandoned Perl frame before the
 target resumes, preserving scope-guard diagnostics and redirected STDERR.
 
+### Phase 35 — Lexical regex debugging (implemented core 2026-08-14)
+
+Implement scoped `use/no re 'debug'` and `debugcolor` as compiler hints carried
+by regex and CODE metadata on both backends. Diagnostics use the bound runtime's
+STDERR and survive snapshot cloning; they never reuse the process-wide internal
+trace flag. Acceptance: `re/stclass_threads.t` reaches 6/6 and direct/child
+traces have identical behavior and runtime ownership.
+
+The compiler hints, JVM/interpreter propagation, runtime-owned STDERR routing,
+snapshot behavior, and focused six-assertion oracle are implemented. The core
+`stclass_threads.t` gate is 3/6: all three trace-linearity assertions pass, but
+each child trace contains one additional record. That direct/child formatting
+delta remains part of Phase 35 acceptance.
+
+### Phase 36 — Complete regex parity exercised by thread wrappers (in progress)
+
+Finish embedded and dynamic regex code, optimistic evaluation, conditionals,
+control verbs, recursive definitions, lookbehind, Unicode properties, and
+`qr//` diagnostics in the shared parser/runtime. Direct language behavior is
+the target; `_thr.t` wrappers receive no special cases. Acceptance: every
+applicable `perl5_t/t/re/*thr*.t` test and direct companion completes its plan
+without unexpected failure on JVM or interpreter backends.
+
+This tranche restores recursive-definition compilation for `reg_email` and
+keeps direct/thread compilation behavior aligned. Its test body is still
+blocked in both paths by the direct DATA-handle gap. `pat_re_eval` and the
+remaining `qr//`, conditional, control-verb, lookbehind, Unicode-property, and
+diagnostic coverage remain shared regex-language work.
+
+### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
+
+Give every `IOHandle` implementation an explicit thread-inheritance policy.
+Files, sockets, process pipes, and native descriptors use per-runtime wrappers
+over leased transport cores so aliases share position and transport while close
+is wrapper-local until the final owner. Layer, tied, scalar-backed, standard,
+borrowed, directory, and packaged-resource handles preserve their appropriate
+state instead of silently becoming `undef`. Acceptance covers position,
+buffering, aliases, close order, local sockets, child processes, redirects, and
+cleanup on Linux and Windows against system Perl.
+
+Every current handle class now declares an explicit policy. Supported captured
+handles use runtime-local wrappers over leased shared transports, while unsafe
+native resources reject inheritance explicitly. Focused system-Perl, JVM, and
+interpreter tests cover inherited file position, scalar handles, close order,
+and parent survival. Wider socket, process, redirect, and Windows coverage
+remains part of the final release matrix.
+
+### Phase 38 — DBI thread ownership (implemented 2026-08-14)
+
+Match native DBI's thread-owned handle contract. JDBC database, statement, and
+result handles become magical runtime-owned resources: inherited handles are
+unusable in the child, child teardown cannot disconnect the parent, child-created
+handles belong only to the child, and join-returned handles are invalid in the
+parent. DBI errors, cached handles, transactions, and destruction state remain
+runtime-local. Acceptance includes system-Perl DBI/SQLite oracles,
+`./jcpan --jobs 8 -t DBI`, and the complete DBIx::Class suite.
+
+JDBC connections, statements, and result sets now use runtime-owned adapters.
+Inherited and join-returned handles fail without disconnecting their owner;
+child-created handles remain child-owned. The focused DBI/SQLite ownership
+oracle passes ten assertions on system Perl and both PerlOnJava backends. The
+release gate also passes all 325 DBIx::Class files and 42,671 assertions with
+`./jcpan --jobs 8 -t DBIx::Class`. A JVM-to-interpreter fallback now restores
+only missing internal lexical-handoff cells before retrying a partially entered
+module body, preserving named closures without changing successful destructive
+handoff semantics.
+
+### Phase 39 — Advanced `threads::shared` values (implemented root tranche 2026-08-14)
+
+Support blessed aggregate roots through runtime-local class views over common
+backing. A tied scalar keeps a cloned runtime-local callback object and shared
+synchronization identity; sharing an already tied array/hash discards user
+magic and installs empty native shared storage, while tying a shared aggregate
+returns it to runtime-local magic. Preserve recursive locks and conditions
+across every runtime-local view.
+
+Acceptance for this tranche covers root reblessing, shared mutations, scalar
+tie callback isolation, aggregate tie conversion/order, and both backends.
+
+### Phase 39b — Exact nested shared proxies and destruction
+
+Implement Perl's fetch-time proxy semantics for references stored inside shared
+aggregates: each fetch produces a runtime-local wrapper over canonical backing;
+reblessing stays local until the reference is stored back. Make weak edges and
+cycles use that canonical backing, and deliver `DESTROY` exactly once in the
+runtime that releases the final cross-runtime owner. Separate destructive plain
+`share` initialization from preserving recursive `shared_clone`. Acceptance
+includes nested rebless/store-back, fresh `refaddr` views, cycles, weak refs,
+one global destructor, and share-versus-shared_clone system-Perl oracles.
+
+### Phase 40 — Complete public `threads` API
+
+Close every remaining lifecycle, signal, context, exit-status, stack-size,
+import, stringify, alias-object, and shutdown-warning gap. Upgrade the module
+version only when its upstream surface passes. A nonzero stack request always
+selects a platform child even after virtual threads become the default.
+
+### Phase 41 — Fresh-runtime reset
+
+Add reset as a lifecycle distinct from terminal `close()`. Reset is allowed only
+after execution, compilation, callbacks, children, locks, waiters, handles, and
+destruction work quiesce. Rebuild every domain in
+`runtime-pooling-reset-contract.md` from an immutable bootstrap template and
+poison a runtime after any partial reset failure. Acceptance is exhaustive
+`A; reset; B == fresh; B` parity plus classloader/package-graph collection.
+
+### Phase 42 — Opt-in pooling and concurrent PSGI
+
+Add a bounded runtime-family pool configured by
+`-Djperl.runtime.pool.size=N` or `JPERL_RUNTIME_POOL_SIZE` (default zero).
+Return runtimes only after result cloning, END/destruction, callbacks, and
+detached children complete. Concurrent Netty PSGI requests use checked-out
+snapshot runtimes and streaming responses retain their runtime until completion;
+`psgi.multithread` is true only in that mode. Pooling must improve create/join
+or request median time by at least 10% without a hot-path regression above 5%.
+
+### Phase 43 — Virtual threads by default
+
+Make Java virtual threads the default while retaining
+`JPERL_THREAD_MODE=platform`. Explicit nonzero stack sizing transparently uses
+a platform child. Validate FFM/JDBC, sockets, process I/O, regex timeouts,
+shared conditions, callbacks, pooling, and detached shutdown under both modes.
+
+### Phase 44 — Release closure
+
+Run the complete core and bundled thread matrix, DBI/DBIx, Test2 opt-in stress,
+Storable, and native callback gates. Add a DBI example where each child owns its
+connection and returns ordinary data through `join`; update every public claim
+only from captured results. Acceptance requires `make`, link checks, all thread
+gates, `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`, and green Ubuntu/Windows
+CI.
+
 ## 6. Known Reference Material and Warnings
 
 - `dev/prompts/multiplicity-v2-plan.md` documents the incremental response to
@@ -661,7 +793,7 @@ target resumes, preserving scope-guard diagnostics and redirected STDERR.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 31–34 complete for the supported tranche
+### Current Status: Phases 35–39 implemented for the supported tranche
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -817,11 +949,14 @@ request history.
 
 The core differential runner now reserves an exclusive serial lane for the
 resource-sensitive `gv.t`, advanced-regex, regex-speed, GH7094 benchmark, and
-Abigail JAPH tests. These tests have internal watchdogs or timing assertions
-whose TAP totals changed when they competed with the normal parallel corpus;
-they retain stable original indices, a 600-second minimum outer deadline, and
-`gv.t` receives the upstream timeout factor. This is test scheduling policy,
-not a relaxation of expected Perl behavior. The parser also accepts Perl's
+Abigail JAPH tests. The thread wrappers for `pat.t`, `pat_psycho.t`, and
+`speed.t` use that same lane and a 600-second minimum outer deadline because
+runtime snapshot startup plus the upstream watchdogs exceed the normal
+300-second budget under parallel load. These tests have internal watchdogs or
+timing assertions whose TAP totals changed when they competed with the normal
+parallel corpus; they retain stable original indices, and `gv.t` receives the
+upstream timeout factor. This is test scheduling policy, not a relaxation of
+expected Perl behavior. The parser also accepts Perl's
 adjacent quoted import form (`use overload'""' => ...`) without weakening the
 old-style `Foo'Bar` package separator. Identical serialized runs with
 `--jobs 8` and `--jobs 1` produced `gv.t` 255/304, both advanced-regex tests
@@ -830,43 +965,31 @@ three assertions from the adjacent-import parser fix.
 
 ### Next Steps
 
-1. Complete lexical `re 'debug'` as a direct regex feature with parser/CV
-   metadata, JVM and interpreter propagation, and runtime-owned diagnostic
-   routing. Then finish the remaining Phase 28 `pat_re_eval` and
-   `regexp_qr_embed` direct-language gaps before asserting thread equivalence.
-2. Continue Phase 30 resource classification beyond explicitly
-   inherited internal pipes. Preserve the green anchors:
-   `class/threads.t`, `threads-dirh.t`, Storable threads, and default Test2 IPC.
-3. Keep the complete platform-thread matrix green on both backends and retain
-   virtual-mode parity. The new `examples/threads/dynamic_map_reduce.pl`
-   demonstrates a small shared scheduler, isolated worker-local hashes, and
-   deterministic join aggregation; it deliberately makes no performance claim.
-4. Keep the DBIx::Class regression gate green with captured output from
-   `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`. Investigate every future
-   failure against the merged baseline; partial distribution results are not
-   sufficient for release.
-5. Keep virtual threads experimental until native callback diagnostics and
-   repeated benchmarks justify promotion. Keep runtime pooling disabled until
-   the separate Phase 34 reset contract proves fresh-runtime equivalence.
-6. Continue the direct-language differential exposed by the thread gate. Preserve
-   the recovered `gv.t`, `assignwarn.t`, `local.t`, and `do.t` behavior while
-   addressing the remaining regex-parser/diagnostic gaps in `pat_advanced.t` and
-   `speed.t`; compare serialized same-base runs because their historical totals
-   vary under concurrent machine load.
-7. Keep resource-sensitive core tests in the runner's exclusive lane when new
-   full-corpus evidence proves load-dependent watchdog or timing behavior. Do
-   not classify high-water TAP fluctuations as semantic regressions without a
-   serialized same-commit reproduction.
+1. Close the remaining Phase 35 trace-record delta and Phase 36 direct regex
+   language/DATA-handle gaps; wrapper behavior must follow the corrected direct
+   implementation without special cases.
+2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
+   weak/cyclic ownership, and the destructive `share` versus preserving
+   `shared_clone` distinction.
+3. Land Phases 40–44 as the final delivery sequence: public API closure,
+   fresh-runtime reset, opt-in pooling and concurrent PSGI, virtual threads by
+   default, and the complete release gate.
+4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
+   DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
+   all 325 files and 42,671 assertions under
+   `./jcpan --jobs 8 -t DBIx::Class`; every later phase must retain that result.
+5. Keep resource-sensitive tests in the runner's exclusive lane and require a
+   serialized same-commit reproduction before classifying timing TAP deltas.
 
-### Open Questions
+### Resolved Delivery Decisions
 
-- Exact Perl-compatible cloning policy for each filehandle/native resource type.
-- Which tied and magical value classes can be safely shared in the first
-  `threads::shared` compatibility tranche.
-- Whether Java 24 virtual-thread behavior in native/FFM workloads is acceptable
-  enough to promote virtual mode beyond experimental opt-in.
-- What complete reset proof would be required before runtime pooling can preserve
-  fresh-snapshot semantics.
+- Every `IOHandle` class receives an explicit inheritance adapter; there is no
+  generic shallow Java-resource fallback.
+- Blessed and tied shared values are in scope when system Perl accepts them.
+- Virtual threads become the default after full platform/virtual parity;
+  nonzero stack requests select platform children.
+- Pooling is opt-in and cannot activate until the full reset contract passes.
+  `close()` remains terminal.
 
 ## Related Documents
 

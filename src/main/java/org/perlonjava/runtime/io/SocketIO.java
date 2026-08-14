@@ -27,6 +27,10 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  * data over sockets.
  */
 public class SocketIO implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
     // Socket options storage: key is "level:optname", value is the option value
     private final Map<String, Integer> socketOptions;
     private Socket socket;

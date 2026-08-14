@@ -11,6 +11,7 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,8 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_TAINT;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUG;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUGCOLOR;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_LOCALE;
 import static org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
@@ -550,6 +553,7 @@ public class StringParser {
                 && !modifierStr.contains("T")) {
             modifierStr = "T" + modifierStr;
         }
+        modifierStr = addLexicalRegexDebugMarker(ctx, modifierStr);
         Node parsed = parseRegexString(ctx, rawStr, parser, modifierStr);
 
         Node replace;
@@ -627,6 +631,7 @@ public class StringParser {
                 modStr = "T" + modStr;
             }
         }
+        modStr = addLexicalRegexDebugMarker(ctx, modStr);
         
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
         if (rawStr.startDelim == '?') {
@@ -645,6 +650,21 @@ public class StringParser {
         node.setAnnotation("regexWarningsFatal",
                 ctx.symbolTable != null && ctx.symbolTable.isFatalWarningCategory("regexp"));
         return node;
+    }
+
+    /**
+     * Carries lexical re-debug state through the existing flags operand.  The
+     * private markers are stripped before public modifier validation and never
+     * appear in a stringified qr//.  Keeping the state on the regex AST operand
+     * makes the JVM and interpreter backends capture the same call-site value.
+     */
+    private static String addLexicalRegexDebugMarker(EmitterContext ctx, String modifiers) {
+        if (ctx.symbolTable == null || !ctx.symbolTable.isStrictOptionEnabled(HINT_RE_DEBUG)) {
+            return modifiers;
+        }
+        return modifiers + (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_DEBUGCOLOR)
+                ? RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER
+                : RuntimeRegex.INTERNAL_DEBUG_MARKER);
     }
 
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {

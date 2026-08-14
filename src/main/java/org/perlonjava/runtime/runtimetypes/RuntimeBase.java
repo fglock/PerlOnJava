@@ -12,6 +12,12 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScalar> {
     /** Storage identity retained across ithread graph clones. */
     public volatile boolean threadShared;
+    /**
+     * Synchronization identity for {@code threads::shared}. Plain shared
+     * containers are retained by identity, while tied variables are cloned as
+     * runtime-local callback views and keep this token in common.
+     */
+    public volatile Object threadSharedIdentity;
     // Index to the class that this reference belongs
     public int blessId;
 

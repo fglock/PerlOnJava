@@ -15,6 +15,10 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  * Used by IPC::Open3 and IPC::Open2 to write to child process stdin.
  */
 public class ProcessOutputHandle implements IOHandle {
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.SHARED_TRANSPORT;
+    }
 
     private final OutputStream outputStream;
     private boolean isClosed = false;

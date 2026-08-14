@@ -21,6 +21,24 @@ public class ScalarBackedIO implements IOHandle {
     }
 
     @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.VALUE_COPY;
+    }
+
+    public RuntimeScalar backingScalar() {
+        return backingScalar;
+    }
+
+    public ScalarBackedIO threadCopy(RuntimeScalar clonedBackingScalar) {
+        ScalarBackedIO copy = new ScalarBackedIO(clonedBackingScalar);
+        copy.position = position;
+        copy.isEOF = isEOF;
+        copy.isClosed = isClosed;
+        copy.appendMode = appendMode;
+        return copy;
+    }
+
+    @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         if (isClosed) {
             return RuntimeScalarCache.scalarUndef;

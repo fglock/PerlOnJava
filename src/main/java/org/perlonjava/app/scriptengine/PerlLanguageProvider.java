@@ -28,7 +28,9 @@ import org.perlonjava.runtime.WarningBitsRegistry;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.resetAllGlobals;
@@ -555,6 +557,14 @@ public class PerlLanguageProvider {
             String savedCallSiteBits = WarningBitsRegistry.getCallSiteBits();
             WarningBitsRegistry.setCallSiteBits(executionWarningBits);
             WarningBitsRegistry.pushCurrent(executionWarningBits);
+            Map<String, RuntimeScalar> beginScalars = null;
+            Map<String, RuntimeArray> beginArrays = null;
+            Map<String, RuntimeHash> beginHashes = null;
+            if (runtimeCode instanceof CompiledCode) {
+                beginScalars = snapshotBeginHandoffs(GlobalVariable.globalVariables);
+                beginArrays = snapshotBeginHandoffs(GlobalVariable.globalArrays);
+                beginHashes = snapshotBeginHandoffs(GlobalVariable.globalHashes);
+            }
             try {
                 result = runtimeCode.apply(new RuntimeArray(), executionContext);
             } catch (Throwable t) {
@@ -565,6 +575,16 @@ public class PerlLanguageProvider {
                     if (CompilerOptions.DEBUG_ENABLED) {
                         ctx.logDebug("Falling back to bytecode interpreter after runtime verify error: " + t);
                     }
+                    // A deferred verifier failure can originate in a lazy named
+                    // sub after the enclosing module body has already consumed
+                    // its compile-time lexical handoff. The interpreter retry
+                    // re-executes that body, so restore the exact cells that
+                    // existed before the failed attempt. Normal successful
+                    // execution remains destructive, which preserves fresh
+                    // lexical pads on recursive calls.
+                    restoreBeginHandoffs(GlobalVariable.globalVariables, beginScalars);
+                    restoreBeginHandoffs(GlobalVariable.globalArrays, beginArrays);
+                    restoreBeginHandoffs(GlobalVariable.globalHashes, beginHashes);
                     InterpretedCode interpretedCode;
                     try (CompilationLockGuard ignored = acquireCompilationLock()) {
                         BytecodeCompiler compiler = new BytecodeCompiler(
@@ -773,6 +793,24 @@ public class PerlLanguageProvider {
                 }
             }
         }
+    }
+
+    private static <T> Map<String, T> snapshotBeginHandoffs(Map<String, T> variables) {
+        Map<String, T> snapshot = new HashMap<>();
+        for (Map.Entry<String, T> entry : variables.entrySet()) {
+            if (entry.getKey().startsWith("PerlOnJava::_BEGIN_")) {
+                snapshot.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return snapshot;
+    }
+
+    private static <T> void restoreBeginHandoffs(
+            Map<String, T> variables, Map<String, T> snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        snapshot.forEach(variables::putIfAbsent);
     }
 
     private static boolean needsInterpreterFallback(Throwable e) {

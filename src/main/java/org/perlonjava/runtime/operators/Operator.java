@@ -133,6 +133,7 @@ public class Operator {
 
         if (quotedRegex.type == RuntimeScalarType.REGEX) {
             RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
+            regex.emitExecutionDebugTrace(inputStr);
             Pattern pattern = regex.selectPattern(string);
 
             // Special case: if the pattern is "/^/", treat it as if it used the multiline modifier

@@ -692,7 +692,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🟡  **threads** module: isolated create/join, identity, listing, detach,
   state inspection, child exit, errors, `async`, `yield`, and supported import
   options. See [Concurrency and Perl Threads](#concurrency-and-perl-threads).
-- 🟡  **threads::shared** module: shared scalar/array/hash storage, recursive
+- 🟡  **threads::shared** module: shared scalar/array/hash storage, including
+  blessed aggregate roots and supported tied-value conversions, recursive
   lexical locks, condition variables, and supported graph cloning.
 - ✅  **Cwd** module
 - ✅  **Data::Dumper**: use the same version as Perl.
@@ -848,7 +849,7 @@ ithreads on both the JVM compiler and bytecode interpreter backends.
 | Runtime isolation | ✅ | Mutable globals, dynamic state, hints, warnings, regex state, lifecycle queues, signals, alarms, and I/O registries are runtime-owned. |
 | `threads->create`, `async`, `join`, `detach` | ✅ | A child receives a snapshot; ordinary parent and child values then evolve independently. Join results are cloned back to the caller. |
 | Identity and state | ✅ | `self`, `tid`, `list`, equality, running/joinable/detached checks, errors, nested threads, and child-only `threads->exit` are supported. |
-| `threads::shared` | 🟡 | `share`, `is_shared`, `shared_clone`, and `:shared` support unblessed, untied scalar/array/hash graphs. Shared identity crosses the snapshot boundary. |
+| `threads::shared` | 🟡 | `share`, `is_shared`, `shared_clone`, and `:shared` support scalar/array/hash graphs. Blessed aggregate roots use runtime-local class views over common backing; tied scalars clone callback state and tied arrays/hashes convert to native shared storage when shared. |
 | Locks and conditions | ✅ | Recursive lexical `lock`, `cond_wait`, absolute `cond_timedwait`, `cond_signal`, and `cond_broadcast` are supported. |
 | Platform threads | ✅ | Stable default. |
 | Virtual threads | 🟡 | Experimental process-wide opt-in; semantic parity is measured, but no performance benefit or complete native-I/O diagnostic clearance on Java 24 is claimed. |
@@ -865,9 +866,9 @@ storage as their parent counterparts. Values explicitly shared through
 | Thread signals | `threads->kill` targets live attached children and resolves the handler inside the child runtime. Completed and detached targets are not signalable. |
 | Effective stack sizing | Platform-backed children honor supported `stack_size` create/import requests. Virtual threads reject nonzero stack sizes because their stacks are JVM-managed. |
 | Additional introspection | `threads->object` and creation-context `wantarray` are implemented. CLI shutdown reports running and finished unjoined threads; detached children are silent. |
-| Shared object classes | Blessed and tied values are rejected by the supported `share`/`shared_clone` tranche. |
-| Native resources and callbacks | Internal pipes have an inherited lease policy. Net::SSLeay handles are runtime-owned and stored callbacks bind their registering runtime. Ordinary files, sockets, and other native handles are still rejected rather than silently shared. |
-| Upstream suite coverage | Core thread/lvalue coverage includes `op/index_thr.t` 415/415 and `op/substr_thr.t` 400/400 on both backends. `class/threads.t`, Storable's thread test, `threads-dirh.t`, Test2's default thread IPC acceptance, and `user_prop_race_thr.t` complete. General regex-language parity remains partial; `re/stclass_threads.t` is blocked by unsupported lexical `re 'debug'`. |
+| Nested shared-object proxy identity | Root blessed/tied policies are implemented. Exact fresh proxy identity for nested references fetched from shared aggregates, and one global `DESTROY` owner across those views, remain follow-up work. |
+| Native resources and callbacks | File, socket, process, native-descriptor, scalar, layered, duplicated, borrowed, directory, and standard handles have explicit inheritance policies. Net::SSLeay handles remain runtime-owned and stored callbacks bind their registering runtime. |
+| Upstream suite coverage | Core thread/lvalue coverage includes `op/index_thr.t` 415/415 and `op/substr_thr.t` 400/400 on both backends. `class/threads.t`, Storable's thread test, `threads-dirh.t`, Test2's default thread IPC acceptance, and `user_prop_race_thr.t` complete. Lexical `re 'debug'` is runtime-owned; remaining regex-language gaps are tracked against direct companion tests. |
 | PSGI | Availability of ithreads does not make one captured PSGI application runtime concurrently callable. `Plack::Handler::Netty` advertises `psgi.multithread => \0`. |
 
 The complete design and measured validation record is in

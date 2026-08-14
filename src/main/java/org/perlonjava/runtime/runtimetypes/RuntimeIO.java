@@ -403,20 +403,11 @@ public class RuntimeIO extends RuntimeScalar {
         this.directoryIO = directoryIO;
     }
 
-    /**
-     * Clone the narrow resource class Perl ithreads can safely inherit.
-     * Ordinary files, sockets, subprocess handles and native resources retain
-     * the conservative unsupported policy in {@link RuntimeGraphCloner}.
-     */
-    RuntimeIO inheritedPipeCopy() {
-        if (!(ioHandle instanceof InternalPipeHandle pipe)) return null;
-        RuntimeIO copy = new RuntimeIO(pipe.inheritedCopy());
-        copy.currentLineNumber = currentLineNumber;
-        copy.globName = globName;
-        copy.needFlush = needFlush;
-        copy.autoFlush = autoFlush;
-        addHandle(copy.ioHandle);
-        return copy;
+    boolean needsFlushForThreadClone() { return needFlush; }
+
+    void setCloneFlags(boolean needFlush, boolean autoFlush) {
+        this.needFlush = needFlush;
+        this.autoFlush = autoFlush;
     }
 
     /**
@@ -1633,6 +1624,7 @@ public class RuntimeIO extends RuntimeScalar {
                 || ioHandle instanceof InternalPipeHandle
                 || ioHandle instanceof LayeredIOHandle
                 || ioHandle instanceof BorrowedIOHandle
+                || ioHandle instanceof SharedTransportIOHandle
                 || ioHandle instanceof SocketIO
                 || ioHandle instanceof ProcessInputHandle
                 || ioHandle instanceof ProcessOutputHandle) {
@@ -1747,6 +1739,10 @@ public class RuntimeIO extends RuntimeScalar {
             }
             if (handle instanceof LayeredIOHandle layered) {
                 handle = layered.getDelegate();
+                continue;
+            }
+            if (handle instanceof SharedTransportIOHandle shared) {
+                handle = shared.getDelegate();
                 continue;
             }
             return null;

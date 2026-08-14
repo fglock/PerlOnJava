@@ -70,6 +70,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  */
 public class DupIOHandle implements IOHandle {
 
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.WRAPPER_COPY;
+    }
+
     /** The underlying I/O implementation (StandardIO, FileIOHandle, etc.) — never another DupIOHandle. */
     private final IOHandle delegate;
     /** Shared across all dups of the same delegate. Decremented on close; delegate closed at zero. */

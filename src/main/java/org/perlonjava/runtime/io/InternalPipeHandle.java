@@ -22,6 +22,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  */
 public class InternalPipeHandle implements IOHandle {
 
+    @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.IMPLEMENTATION_COPY;
+    }
+
     public static final int PIPE_SIZE = 65536;
 
     private final PipedInputStream inputStream;

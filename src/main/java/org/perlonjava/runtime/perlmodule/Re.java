@@ -21,6 +21,8 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  *   <li>{@code use re '/aa'} - ASCII-restrict including case folding</li>
  *   <li>{@code use re '/u'} - Unicode semantics for character classes</li>
  *   <li>{@code use re 'strict'} - Enables experimental regex warnings</li>
+ *   <li>{@code use re 'debug'} - Lexically enables regex compilation/execution tracing</li>
+ *   <li>{@code use re 'debugcolor'} - Enables colorized lexical regex tracing</li>
  *   <li>{@code re::is_regexp($ref)} - Check if reference is a compiled regex</li>
  *   <li>{@code re::regexp_pattern($ref)} - Return pattern and modifiers from qr//</li>
  * </ul>
@@ -30,8 +32,6 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  *   <li>{@code use re '/l'} - Locale-aware matching</li>
  *   <li>{@code use re '/d'} - Default/legacy semantics</li>
  *   <li>{@code use re 'eval'} - Allow (?{}) in interpolated patterns without 'use re eval'</li>
- *   <li>{@code use re 'debug'} - Regex debugging output</li>
- *   <li>{@code use re 'debugcolor'} - Colorized regex debugging</li>
  *   <li>{@code use re 'taint'} - Taint mode for regex</li>
  *   <li>Combining multiple flags: {@code use re '/xms'}</li>
  *   <li>Scoped flag restoration with {@code no re '/flags'}</li>
@@ -168,6 +168,10 @@ public class Re extends PerlModuleBase {
                 symbolTable.enableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equalsIgnoreCase("taint")) {
                 symbolTable.enableStrictOption(Strict.HINT_RE_TAINT);
+            } else if (opt.equals("debug")) {
+                symbolTable.enableStrictOption(Strict.HINT_RE_DEBUG);
+            } else if (opt.equals("debugcolor")) {
+                symbolTable.enableStrictOption(Strict.HINT_RE_DEBUG | Strict.HINT_RE_DEBUGCOLOR);
             } else if (opt.equals("/a")) {
                 // use re '/a' - ASCII-restrict regex character classes
                 symbolTable.enableStrictOption(Strict.HINT_RE_ASCII);
@@ -203,6 +207,10 @@ public class Re extends PerlModuleBase {
                 symbolTable.disableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equalsIgnoreCase("taint")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_TAINT);
+            } else if (opt.equals("debug")) {
+                symbolTable.disableStrictOption(Strict.HINT_RE_DEBUG | Strict.HINT_RE_DEBUGCOLOR);
+            } else if (opt.equals("debugcolor")) {
+                symbolTable.disableStrictOption(Strict.HINT_RE_DEBUGCOLOR);
             } else if (opt.equals("/a") || opt.equals("/aa")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
             } else if (opt.equals("/u")) {

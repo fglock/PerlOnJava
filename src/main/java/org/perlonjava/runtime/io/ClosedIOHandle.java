@@ -8,6 +8,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class ClosedIOHandle implements IOHandle {
 
     @Override
+    public ThreadInheritancePolicy threadInheritancePolicy() {
+        return ThreadInheritancePolicy.CLOSED;
+    }
+
+    @Override
     public RuntimeScalar write(String string) {
         return RuntimeIO.handleIOError("Cannot write to a closed handle.");
     }

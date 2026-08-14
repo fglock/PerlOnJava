@@ -119,7 +119,9 @@ ones are:
 - `fork` is not implemented. Perl ithreads are supported through isolated
   runtime snapshots, and lifecycle/refcount registries are runtime-owned.
   Explicitly shared scalar/array/hash storage uses synchronized visibility and
-  locking; blessed and tied values remain outside the supported shared tranche.
+  locking. Blessed aggregate roots use runtime-local views over shared backing;
+  tied scalars keep runtime-local callback state, while tied arrays/hashes are
+  converted to native shared storage when shared.
 - `local($@, $!, $?)` around `DESTROY`: only `$@` is currently saved and
   restored.
 
