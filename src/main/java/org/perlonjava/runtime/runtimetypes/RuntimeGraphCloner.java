@@ -56,7 +56,7 @@ public class RuntimeGraphCloner {
         try {
             return (T) cloneValue(value);
         } finally {
-            if (--publicDepth == 0) finishWeakReferences();
+            if (--publicDepth == 0) finishCloneBoundary();
         }
     }
 
@@ -68,8 +68,35 @@ public class RuntimeGraphCloner {
             for (RuntimeBase root : roots) result.add(cloneValue(root));
             return result;
         } finally {
-            if (--publicDepth == 0) finishWeakReferences();
+            if (--publicDepth == 0) finishCloneBoundary();
         }
+    }
+
+    private void finishCloneBoundary() {
+        Map<Long, RuntimeBase> observed = sourceRuntime.snapshotReferenceAddresses();
+        // A stringified object can remain visible only through a weak Perl
+        // edge. ithreads still clone that live SV before invoking CLONE, so
+        // ensure it participates in this graph even when no strong root led
+        // to it during the ordinary traversal.
+        for (RuntimeBase source : observed.values()) {
+            if (!source.threadShared && !clones.containsKey(source)) {
+                cloneValue(source);
+            }
+        }
+        finishWeakReferences();
+        for (Map.Entry<Long, RuntimeBase> entry : observed.entrySet()) {
+            RuntimeBase source = entry.getValue();
+            RuntimeBase target = source.threadShared
+                    ? source : (RuntimeBase) clones.get(source);
+            if (target != null) {
+                targetRuntime.registerReferenceAddress(entry.getKey(), target);
+            }
+        }
+    }
+
+    /** Complete a runtime snapshot before any child CLONE hooks execute. */
+    void finishSnapshot() {
+        finishCloneBoundary();
     }
 
     /** Package/runtime snapshot entry point that retains the shared graph map. */

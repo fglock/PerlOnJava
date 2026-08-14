@@ -2280,6 +2280,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public String toStringRef() {
         if (value instanceof RuntimeBase referent) {
             BObjectRegistry.register(referent);
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            if (runtime != null) {
+                runtime.registerReferenceAddress(referent);
+            }
         }
         String ref = switch (type) {
             case UNDEF -> "SCALAR(0x" + scalarUndef.hashCode() + ")";
@@ -2334,7 +2338,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         default -> "SCALAR";
                     };
                 }
-                String refStr = typeName + "(0x" + Integer.toHexString(value.hashCode()) + ")";
+                String refStr = typeName + "(0x" + ((RuntimeBase) value).referenceAddressHex() + ")";
                 // For REFERENCE type, the blessId is on the value (referent), not on the
                 // reference itself. We handle it here; the outer blessId check is skipped
                 // for REFERENCE type to avoid double-prepending the class name for circular

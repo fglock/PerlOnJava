@@ -37,6 +37,7 @@ public class Internals extends PerlModuleBase {
             // against native Perl. See dev/design/refcount_alignment_plan.md.
             internals.registerMethod("jperl_refstate", "jperl_refstate", "$");
             internals.registerMethod("jperl_refstate_str", "jperl_refstate_str", "$");
+            internals.registerMethod("jperl_reference_by_address", "jperlReferenceByAddress", "$");
             // Phase 4 (refcount_alignment_plan.md): On-demand reachability
             // sweep. Walks Perl-visible roots (globals, stashes, rescued
             // objects) and clears weak refs for unreachable objects. Returns
@@ -371,6 +372,13 @@ public class Internals extends PerlModuleBase {
             return new RuntimeScalar(rc + extra + adjust).getList();
         }
         return new RuntimeScalar(1).getList();
+    }
+
+    /** Return a reference whose displayed address was observed in this runtime. */
+    public static RuntimeList jperlReferenceByAddress(RuntimeArray args, int ctx) {
+        long address = args.get(0).getLong();
+        RuntimeBase value = PerlRuntime.current().resolveReferenceAddress(address);
+        return value == null ? RuntimeScalarCache.scalarUndef.getList() : value.createReference().getList();
     }
 
     /**

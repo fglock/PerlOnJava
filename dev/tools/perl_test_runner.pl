@@ -381,7 +381,11 @@ sub run_single_test {
         }
     }
 
-    my $cmd = "${timeout_cmd}$abs_jperl $test_name 2>&1";
+    # Test subprocesses run in their own process groups under GNU timeout.
+    # Never inherit an interactive terminal as stdin: a test that reads from
+    # it would receive SIGTTIN and stop indefinitely as a background group.
+    my $devnull = File::Spec->devnull();
+    my $cmd = "${timeout_cmd}$abs_jperl $test_name < $devnull 2>&1";
 
     # Capture output with timeout
     my $output = '';
@@ -397,7 +401,7 @@ sub run_single_test {
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };
             alarm($test_timeout);
-            $output = `$abs_jperl $test_name 2>&1`;
+            $output = `$cmd`;
             $exit_code = $? >> 8;
             alarm(0);
         };
@@ -446,10 +450,11 @@ sub timeout_for_test {
 
     return 600 if $test_file =~ m{
           (?:^|/)perl5_t/t/lib/croak\.t$
-        | (?:^|/)perl5_t/t/re/pat\.t$
+        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/op/gv\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/speed\.t$
+        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$
     }x && $timeout < 600;
@@ -460,8 +465,10 @@ sub requires_exclusive_slot {
     my ($test_file) = @_;
     return $test_file =~ m{
           (?:^|/)perl5_t/t/op/gv\.t$
+        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/speed\.t$
+        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$
     }x;

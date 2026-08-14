@@ -28,7 +28,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -81,6 +85,7 @@ public final class PerlRuntime implements AutoCloseable {
     public RuntimeArray libOriginalInc;
     public boolean storableLastOpInNetorder;
     public final Set<String> xsShimLoadingInProgress = new HashSet<>();
+    private final Map<Long, WeakReference<RuntimeBase>> referenceAddresses = new ConcurrentHashMap<>();
 
     RuntimeIO ioStdout;
     RuntimeIO ioStderr;
@@ -148,6 +153,43 @@ public final class PerlRuntime implements AutoCloseable {
     public static PerlRuntime currentOrNull() {
         BindingFrame frame = CURRENT.get();
         return frame != null ? frame.runtime : null;
+    }
+
+    /** Record the address exposed by Perl reference stringification for B introspection. */
+    public void registerReferenceAddress(RuntimeBase value) {
+        registerReferenceAddress(referenceAddress(value), value);
+    }
+
+    public static long referenceAddress(RuntimeBase value) {
+        // Perl exposes the same pointer token through both reference
+        // stringification and numeric reference coercion. Runtime types may
+        // override hashCode() to implement that established token (notably
+        // typeglobs), so the B/refaddr registry must use it as well.
+        return Integer.toUnsignedLong(value.hashCode());
+    }
+
+    /** Record an inherited address token for the corresponding cloned referent. */
+    public void registerReferenceAddress(long address, RuntimeBase value) {
+        referenceAddresses.put(address, new WeakReference<>(value));
+    }
+
+    /** Resolve an address previously exposed in this interpreter instance. */
+    public RuntimeBase resolveReferenceAddress(long address) {
+        WeakReference<RuntimeBase> reference = referenceAddresses.get(address);
+        RuntimeBase value = reference == null ? null : reference.get();
+        if (reference != null && value == null) {
+            referenceAddresses.remove(address, reference);
+        }
+        return value;
+    }
+
+    Map<Long, RuntimeBase> snapshotReferenceAddresses() {
+        Map<Long, RuntimeBase> snapshot = new HashMap<>();
+        referenceAddresses.forEach((address, reference) -> {
+            RuntimeBase value = reference.get();
+            if (value != null) snapshot.put(address, value);
+        });
+        return snapshot;
     }
 
     /** Bind this runtime until the returned scope is closed. */
@@ -318,6 +360,7 @@ public final class PerlRuntime implements AutoCloseable {
                 runtimeCodeState.snapshotCompiledMetadataInto(child.runtimeCodeState);
                 regexState.snapshotInto(child.regexState);
             }
+            cloner.finishSnapshot();
             child.currentDirectory = currentDirectory;
             child.initialized = true;
             try (Binding ignored = child.bind()) {
@@ -393,6 +436,7 @@ public final class PerlRuntime implements AutoCloseable {
                 flipFlopState.clear();
                 scalarGlobState.clear();
                 pointerPackState.clear();
+                referenceAddresses.clear();
             }
             closed = true;
         } finally {

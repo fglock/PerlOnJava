@@ -27,7 +27,10 @@ public final class BObjectRegistry {
         RuntimeBase referent = reference == null ? null : reference.get();
         if (referent == null) {
             state().remove((int) address);
-            return new RuntimeScalar();
+            // An ithread clone retains the parent's already-exposed address,
+            // but resolves it to the cloned referent in the child runtime.
+            referent = PerlRuntime.current().resolveReferenceAddress(address);
+            if (referent == null) return new RuntimeScalar();
         }
         return referent.createReference();
     }

@@ -1610,7 +1610,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A string representing the array reference.
      */
     public String toStringRef() {
-        String ref = "ARRAY(0x" + Integer.toHexString(this.hashCode()) + ")";
+        registerReferenceAddress();
+        String ref = "ARRAY(0x" + referenceAddressHex() + ")";
         return (blessId == 0
                 ? ref
                 : NameNormalizer.getBlessStr(blessId) + "=" + ref);

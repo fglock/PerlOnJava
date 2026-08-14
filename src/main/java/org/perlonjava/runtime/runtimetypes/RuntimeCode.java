@@ -5770,7 +5770,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return a string representing the CODE reference
      */
     public String toStringRef() {
-        String ref = "CODE(0x" + Integer.toHexString(this.hashCode()) + ")";
+        registerReferenceAddress();
+        String ref = "CODE(0x" + referenceAddressHex() + ")";
         return (blessId == 0
                 ? ref
                 : NameNormalizer.getBlessStr(blessId) + "=" + ref);
