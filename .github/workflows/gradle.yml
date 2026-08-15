@@ -41,6 +41,19 @@ jobs:
         if: runner.os == 'Linux'
         run: make ci
 
+      - name: Checkout Perl 5.44 thread test distributions
+        if: runner.os == 'Linux'
+        uses: actions/checkout@v4
+        with:
+          repository: Perl/perl5
+          ref: v5.44.0
+          path: perl5
+          sparse-checkout: |
+            dist/threads
+            dist/threads-shared
+            dist/Thread-Queue
+            dist/Thread-Semaphore
+
       - name: Run Perl thread compatibility gate
         if: runner.os == 'Linux'
         timeout-minutes: 20

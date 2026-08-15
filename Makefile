@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter test-threads test-threads-release test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources test-threads test-threads-release test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
 THREAD_PLATFORM_TESTS := \
@@ -109,11 +109,23 @@ test-interpreter:
 	@echo "Running unit tests with bytecode interpreter..."
 	JPERL_INTERPRETER=1 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_interpreter_results.json src/test/resources/unit
 
+# Verify the unchanged upstream test distributions are available. GitHub CI
+# sparse-checks them out at the Perl v5.44.0 tag; local developers normally use
+# their adjacent/gitignored perl5 source tree.
+check-thread-test-sources:
+	@for dir in $(THREAD_DIST_DIRS); do \
+		if [ ! -d "$$dir" ]; then \
+			echo "Error: $$dir is missing."; \
+			echo "Clone Perl v5.44.0 into ./perl5 before running the thread gates."; \
+			exit 1; \
+		fi; \
+	done
+
 # Permanent Perl ithread compatibility gate used by Ubuntu pull-request CI.
 # Full upstream distributions run on both backends with the default virtual
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
 # runs on the platform carrier. Reports are retained under build/reports/threads.
-test-threads: check-java-gradle
+test-threads: check-java-gradle check-thread-test-sources
 	@mkdir -p build/reports/threads
 	JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 300 --output build/reports/threads/jvm-virtual.json $(THREAD_DIST_DIRS)
 	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 300 --output build/reports/threads/interpreter-virtual.json $(THREAD_DIST_DIRS)
