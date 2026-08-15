@@ -663,41 +663,17 @@ record counts and linear scaling.
 
 ### Phase 36 — Complete regex parity exercised by thread wrappers (in progress)
 
-Finish embedded and dynamic regex code, optimistic evaluation, conditionals,
-control verbs, recursive definitions, lookbehind, Unicode properties, and
-`qr//` diagnostics in the shared parser/runtime. Direct language behavior is
-the target; `_thr.t` wrappers receive no special cases. Acceptance: every
-applicable `perl5_t/t/re/*thr*.t` test and direct companion completes its plan
-without unexpected failure on JVM or interpreter backends.
+Phase 36 is now an independent parallel project documented in
+`dev/design/phase36-regex-parity.md`. It owns executable callbacks, dynamic
+patterns, conditionals, control verbs, lookbehind, Unicode properties, regex
+objects, and diagnostics in the shared direct-language implementation. Thread
+wrappers remain unchanged acceptance tests and receive no special cases.
 
-This tranche restores recursive-definition compilation for `reg_email` and
-keeps direct/thread compilation behavior aligned. DATA now models the source
-file positioned after its marker, remains seekable to the source start, and
-crosses thread snapshots through the named-handle inheritance policy. Direct
-and threaded `reg_email` therefore pass 13/13 on both backends. `pat_re_eval`
-now parses quoted code-block-shaped text correctly: `(?{` inside `\Q...\E`
-is literal rather than an embedded Perl block. This advances both direct and
-threaded files to runtime construction, where arbitrary match-time `(?{...})`
-execution remains the next blocker. The remaining `qr//`, conditional,
-control-verb, lookbehind, Unicode-property, and diagnostic coverage likewise
-remains shared regex-language work.
-
-The 2026-08-15 continuation adds two more direct-language pieces. Literal
-regex expressions assembled only from strings, concatenation, and
-`quotemeta` are now validated at CV compilation on both backends, so a
-malformed `qr/[a\Q]]\Ec/` inside a thread entry fails in the creating
-runtime's surrounding eval instead of becoming an abnormal child exit.
-Snapshot preflight leaves expected-invalid lazy helper definitions deferred;
-only actual CLONE-hook compilation errors abort the snapshot. `(*FAIL)` and
-its `(*F)` spelling now map to a real always-failing zero-width assertion,
-including regex objects returned through `join`. Focused system-Perl, JVM,
-and interpreter oracles pass 2/2 and 4/4 respectively.
-
-Arbitrary match-time `(?{...})`, optimistic `(*{...})`, and dynamic
-`(??{...})` still require a callback-capable regex execution layer. The
-current parser deliberately does not retain those Perl ASTs, and the Java/Joni
-matchers do not expose Perl callouts, so `pat_re_eval` remains the architectural
-boundary rather than being approximated with post-match callbacks.
+The concurrency project consumes Phase 36 through focused integration slices
+and preserves Phase 44's green thread matrix. Current completed foundations and
+the callback-capable matcher architecture, staged implementation plan, direct
+and wrapper gates, risks, and resumable next steps are maintained in the
+separate Phase 36 document.
 
 ### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
 
@@ -1072,11 +1048,9 @@ three assertions from the adjacent-import parser fix.
 
 ### Next Steps
 
-1. Complete Phase 36's callback-capable regex execution layer for
-   `pat_re_eval`, then finish the remaining conditionals, ACCEPT/PRUNE/SKIP/
-   THEN/COMMIT verbs, lookbehind, Unicode properties, and diagnostics. Literal
-   thread-entry validation and FAIL/F are complete; wrappers continue to
-   receive no special cases.
+1. Integrate Phase 36 slices from the independent regex project described in
+   `dev/design/phase36-regex-parity.md`. Direct regex behavior is fixed first;
+   unchanged wrappers remain the thread ownership and snapshot gate.
 2. Resolve Phase 39b's sole compatibility decision: whether to replace the
    immutable Java-specific preserving-`share` assertion with system Perl's
    destructive initialization. Nested proxies, runtime-local blessing,
@@ -1109,4 +1083,5 @@ three assertions from the adjacent-import parser fix.
 - `dev/design/clone.md` — historical clone exploration, not the ithread cloner
 - `dev/design/attributes.md` — current attribute behavior
 - `dev/design/runtime-pooling-reset-contract.md` — required proof before pooling
+- `dev/design/phase36-regex-parity.md` — independent regex parity project
 - `dev/design/fork_open_emulation.md` — process/fork-related alternatives
