@@ -706,17 +706,16 @@ public class IOOperator {
             // Check for fork-open pattern: open FH, "-|" or open FH, "|-" with no command
             // This is the 2-arg piped open that normally forks in Perl
             if (args.length == 2 && (mode.equals("-|") || mode.equals("|-"))) {
-                // Fork-open emulation: set pending state and return 0 (child PID)
-                // The actual pipe will be created when exec() is called
-                ForkOpenState.setPending(fileHandle, 0, "");
-                if (ioDebug) {
-                    System.err.println("[JPERL_IO_DEBUG] Fork-open emulation: pending state set for " + mode);
-                    System.err.flush();
+                int occurrence = ForkOpenState.nextOccurrence();
+                if (ForkOpenState.isReplayChildOccurrence(occurrence)) {
+                    PerlRuntime.current().activateForkOpenChildStdout();
+                    return new RuntimeScalar(0);
                 }
-                return new RuntimeScalar(0);  // Return 0 = "child" branch
+                fh = RuntimeIO.openForkPipe(mode, occurrence);
+            } else {
+                // Pipe open with command (3+ arg form)
+                fh = RuntimeIO.openPipe(runtimeList);
             }
-            // Pipe open with command (3+ arg form)
-            fh = RuntimeIO.openPipe(runtimeList);
         } else if (args.length > 2) {
             // 3-argument open
             RuntimeScalar secondArg = args[2].scalar();

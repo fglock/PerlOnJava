@@ -2,6 +2,7 @@ package HTTP::Cookies;
 
 use strict;
 use warnings;
+use HTTP::Date ();
 
 our $VERSION = '6.11';
 our $EPOCH_OFFSET = 0;
@@ -117,6 +118,52 @@ sub scan {
         }
     }
     return 1;
+}
+
+sub _join_header_words {
+    my @cur = @{ $_[0] };
+    my @attributes;
+    while (@cur) {
+        my $key = shift @cur;
+        my $value = shift @cur;
+        if (defined $value) {
+            if (!length($value)
+                || $value =~ /[\x00-\x20()<>@,;:\\"\/\[\]?={}\x7f-\xff]/) {
+                $value =~ s/(["\\])/\\$1/g;
+                $key .= qq(="$value");
+            }
+            else {
+                $key .= "=$value";
+            }
+        }
+        push @attributes, $key;
+    }
+    return join '; ', @attributes;
+}
+
+sub as_string {
+    my ($self, $skip_discard) = @_;
+    my @result;
+
+    $self->scan(sub {
+        my ($version, $key, $value, $path, $domain, $port,
+            $path_spec, $secure, $expires, $discard, $rest) = @_;
+        return if $discard && $skip_discard;
+
+        my @header = ($key, $value, path => $path, domain => $domain);
+        push @header, port => $port if defined $port;
+        push @header, path_spec => undef if $path_spec;
+        push @header, secure => undef if $secure;
+        push @header, expires => HTTP::Date::time2isoz($expires) if $expires;
+        push @header, discard => undef if $discard;
+        for my $attribute (sort keys %{ $rest || {} }) {
+            push @header, $attribute => $rest->{$attribute};
+        }
+        push @header, version => $version;
+        push @result, 'Set-Cookie3: ' . _join_header_words(\@header);
+    });
+
+    return join "\n", @result, '';
 }
 
 sub extract_cookies {
