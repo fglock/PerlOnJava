@@ -653,9 +653,16 @@ public class RuntimeGraphCloner {
     }
 
     private void copyBase(RuntimeBase source, RuntimeBase target) {
-        target.blessId = cloneBlessId(source.blessId);
         target.threadShared = source.threadShared;
         target.threadSharedIdentity = source.threadSharedIdentity;
+        target.threadSharedBlessName = source.threadSharedBlessName;
+        if (source.threadShared && source.threadSharedBlessName != null) {
+            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                target.blessId = NameNormalizer.getBlessId(source.threadSharedBlessName);
+            }
+        } else {
+            target.blessId = cloneBlessId(source.blessId);
+        }
         target.localBindingExists = source.localBindingExists;
         target.storedInPackageGlobal = source.storedInPackageGlobal;
         target.isPackageGlobalRoot = source.isPackageGlobalRoot;

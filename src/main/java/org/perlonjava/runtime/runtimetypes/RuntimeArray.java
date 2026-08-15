@@ -943,7 +943,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
         }
 
-        return element;
+        return SharedPerlStorage.fetchedElement(this, element);
     }
 
     /**
@@ -1002,7 +1002,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return new RuntimeArrayProxyEntry(RuntimeArray.this, index);
         }
 
-        return element;
+        return SharedPerlStorage.fetchedElement(this, element);
     }
 
     /**

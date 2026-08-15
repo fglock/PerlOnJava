@@ -618,7 +618,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         var value = elements.get(key);
         if (value != null) {
-            return value;
+            return SharedPerlStorage.fetchedElement(this, value);
         }
         // Lazy autovivification
         return new RuntimeHashProxyEntry(this, key);
@@ -697,7 +697,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // Update the key's byte/UTF-8 flag to match the accessing key's type.
                     // In Perl, the key's UTF-8 flag is updated on each access.
                     markKeyByte(key, keyScalar.type == BYTE_STRING);
-                    yield value;
+                    yield SharedPerlStorage.fetchedElement(this, value);
                 }
                 // Lazy element autovivification - pass key's byte flag for type tracking
                 boolean isByteKey = keyScalar.type == BYTE_STRING;

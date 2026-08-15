@@ -18,6 +18,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * runtime-local callback views and keep this token in common.
      */
     public volatile Object threadSharedIdentity;
+    /** Canonical class name published with shared aggregate storage. */
+    public volatile String threadSharedBlessName;
     // Index to the class that this reference belongs
     public int blessId;
 

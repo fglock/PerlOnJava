@@ -743,6 +743,18 @@ runtime that releases the final cross-runtime owner. Separate destructive plain
 includes nested rebless/store-back, fresh `refaddr` views, cycles, weak refs,
 one global destructor, and share-versus-shared_clone system-Perl oracles.
 
+Fetch-time aggregate proxies are implemented: every nested array/hash reference
+read from shared storage receives a fresh runtime-local wrapper over canonical
+synchronized backing. Local reblessing is private until the view is stored
+back, cycles retain common storage without retaining wrapper identity, and a
+weak fetched view can disappear without deleting the canonical value. The
+focused ten-assertion oracle passes on system Perl and both PerlOnJava backends.
+Cross-runtime final-owner destruction remains open. Destructive plain `share`
+also remains open because the existing immutable compatibility test records the
+older Java-specific preserving behavior; changing that contract requires a
+separately approved compatibility transition rather than silently weakening an
+existing assertion.
+
 ### Phase 40 — Complete public `threads` API (completed 2026-08-14)
 
 Close every remaining lifecycle, signal, context, exit-status, stack-size,
@@ -1011,9 +1023,11 @@ three assertions from the adjacent-import parser fix.
    conditionals, control verbs, lookbehind, Unicode properties, and diagnostics;
    wrapper behavior must follow the corrected direct implementation without
    special cases.
-2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
-   weak/cyclic ownership, and the destructive `share` versus preserving
-   `shared_clone` distinction.
+2. Complete Phase 39b's global final-owner destruction. Fetch-time nested
+   proxies, runtime-local reblessing, store-back publication, cycles, and weak
+   proxy release are complete. Resolve the existing preserving-`share` test
+   contract explicitly before switching plain `share` to system Perl's
+   destructive initialization; `shared_clone` remains preserving.
 3. Complete Phase 44's release gate. Phases 40–43's public API, fresh reset,
    bounded pooling, concurrent PSGI, and default virtual-carrier foundations
    are complete.
