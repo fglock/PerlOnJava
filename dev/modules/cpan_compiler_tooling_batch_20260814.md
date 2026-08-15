@@ -10,7 +10,7 @@ distribution-specific preferences.
 
 ## Progress Tracking
 
-### Current Status: PR #955 regression fixes validated locally; CI pending
+### Current Status: PR #955 rebased and validated locally; CI pending
 
 ### Completed Phases
 
@@ -66,10 +66,19 @@ distribution-specific preferences.
   - Revalidated the affected CPAN paths: `Test::XML::Compare` (13 files / 67
     tests), `Lingua::EN::Keywords` (2 tests), and `CPAN::Index::API` (7 files /
     74 tests) all pass.
+- [x] Phase 8: rebase onto current master (2026-08-15)
+  - Rebased PR #955 onto `origin/master` at `1be14c00b`.
+  - Kept master's newer full-source DATA handle implementation and dropped the
+    superseded scalar-handle base-offset shim while retaining the absolute
+    DATA-position regression test.
+  - Full `make` suite passes after the rebase.
+  - Rechecked the reported regression files: `op/do.t` 94/99,
+    `op/caller.t` 93/115, `op/lexsub.t` 110/160, keys benchmark 5/6,
+    `re/speed.t` 26/59, and `re/speed_thr.t` 26/59.
 
 ### Next Steps
 
-1. Push the rebased regression fix and wait for PR #955 CI.
+1. Push the current-master rebase and wait for PR #955 CI.
 2. Review and merge PR #955 after CI passes.
 
 ### Open Questions
