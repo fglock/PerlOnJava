@@ -479,7 +479,15 @@ public final class PerlRuntime implements AutoCloseable {
                     && !code.closedOverVariables.isEmpty();
             if (!cloneHook && !fqn.startsWith("threads::") && !capturesLexicals) continue;
             if (code.compilerSupplier != null) {
-                code.compilerSupplier.get();
+                try {
+                    code.compilerSupplier.get();
+                } catch (PerlCompilerException expectedAtUseSite) {
+                    // Snapshot preflight must not turn an expected-invalid lazy
+                    // helper into a require-time failure. The definition stays
+                    // lazy and reports its compile error when user code invokes
+                    // it. CLONE hooks are part of snapshot itself and must fail.
+                    if (cloneHook) throw expectedAtUseSite;
+                }
             }
         }
     }

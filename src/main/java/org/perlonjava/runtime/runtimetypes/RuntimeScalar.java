@@ -1769,6 +1769,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 nb.refCount = 0;
             }
             if (nb.refCount >= 0) {
+                if (nb.refCount == 0) nb.registerSharedFetchedView();
                 nb.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (increment on store)");
                 nb.recordOwner(this, "setLargeRefCounted store");
                 nb.recordActiveOwner(this);

@@ -341,6 +341,9 @@ public final class SharedPerlStorage {
     private static void markShared(RuntimeBase value) {
         synchronized (value) {
             if (value.threadSharedIdentity == null) value.threadSharedIdentity = new Object();
+            if (value.threadSharedLifecycle == null) {
+                value.threadSharedLifecycle = new RuntimeBase.SharedLifecycle();
+            }
             value.threadSharedBlessName = currentBlessName(value);
             value.threadShared = true;
         }
@@ -356,6 +359,7 @@ public final class SharedPerlStorage {
         }
         PerlRuntime runtime = PerlRuntime.current();
         RuntimeBase view = new RuntimeGraphCloner(runtime, runtime).cloneGraph(nested);
+        view.threadSharedFetchedView = true;
         return new SharedElementProxy(stored, view);
     }
 

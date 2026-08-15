@@ -682,6 +682,23 @@ execution remains the next blocker. The remaining `qr//`, conditional,
 control-verb, lookbehind, Unicode-property, and diagnostic coverage likewise
 remains shared regex-language work.
 
+The 2026-08-15 continuation adds two more direct-language pieces. Literal
+regex expressions assembled only from strings, concatenation, and
+`quotemeta` are now validated at CV compilation on both backends, so a
+malformed `qr/[a\Q]]\Ec/` inside a thread entry fails in the creating
+runtime's surrounding eval instead of becoming an abnormal child exit.
+Snapshot preflight leaves expected-invalid lazy helper definitions deferred;
+only actual CLONE-hook compilation errors abort the snapshot. `(*FAIL)` and
+its `(*F)` spelling now map to a real always-failing zero-width assertion,
+including regex objects returned through `join`. Focused system-Perl, JVM,
+and interpreter oracles pass 2/2 and 4/4 respectively.
+
+Arbitrary match-time `(?{...})`, optimistic `(*{...})`, and dynamic
+`(??{...})` still require a callback-capable regex execution layer. The
+current parser deliberately does not retain those Perl ASTs, and the Java/Joni
+matchers do not expose Perl callouts, so `pat_re_eval` remains the architectural
+boundary rather than being approximated with post-match callbacks.
+
 ### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
 
 Give every `IOHandle` implementation an explicit thread-inheritance policy.
@@ -749,11 +766,21 @@ synchronized backing. Local reblessing is private until the view is stored
 back, cycles retain common storage without retaining wrapper identity, and a
 weak fetched view can disappear without deleting the canonical value. The
 focused ten-assertion oracle passes on system Perl and both PerlOnJava backends.
-Cross-runtime final-owner destruction remains open. Destructive plain `share`
-also remains open because the existing immutable compatibility test records the
-older Java-specific preserving behavior; changing that contract requires a
-separately approved compatibility transition rather than silently weakening an
-existing assertion.
+Cross-runtime final-owner destruction is now implemented. Canonical shared
+storage and its fetched runtime-local wrappers carry one atomic lifecycle:
+canonical deletion waits for live fetched views, releasing a non-final view
+does not run `DESTROY`, and the runtime releasing the final owner performs the
+callback exactly once. The ordering is race-safe when canonical deletion and
+the last view release happen concurrently. A system-Perl-valid five-assertion
+oracle passes on JVM and interpreter backends in addition to the existing
+ten-assertion nested-proxy matrix.
+
+Destructive plain `share` remains the one explicit compatibility transition.
+The existing immutable test records the older Java-specific preserving
+behavior, while system Perl clears scalar/array/hash contents and reserves
+preserving recursive publication for `shared_clone`. The implementation must
+not silently invert that assertion; the test contract needs an explicit user
+decision before production behavior changes.
 
 ### Phase 40 — Complete public `threads` API (completed 2026-08-14)
 
@@ -1037,15 +1064,16 @@ three assertions from the adjacent-import parser fix.
 
 ### Next Steps
 
-1. Complete Phase 36's direct regex-language gaps in `pat_re_eval`, `qr//`,
-   conditionals, control verbs, lookbehind, Unicode properties, and diagnostics;
-   wrapper behavior must follow the corrected direct implementation without
-   special cases.
-2. Complete Phase 39b's global final-owner destruction. Fetch-time nested
-   proxies, runtime-local reblessing, store-back publication, cycles, and weak
-   proxy release are complete. Resolve the existing preserving-`share` test
-   contract explicitly before switching plain `share` to system Perl's
-   destructive initialization; `shared_clone` remains preserving.
+1. Complete Phase 36's callback-capable regex execution layer for
+   `pat_re_eval`, then finish the remaining conditionals, ACCEPT/PRUNE/SKIP/
+   THEN/COMMIT verbs, lookbehind, Unicode properties, and diagnostics. Literal
+   thread-entry validation and FAIL/F are complete; wrappers continue to
+   receive no special cases.
+2. Resolve Phase 39b's sole compatibility decision: whether to replace the
+   immutable Java-specific preserving-`share` assertion with system Perl's
+   destructive initialization. Nested proxies, runtime-local blessing,
+   cycles, weak views, and exactly-once cross-runtime destruction are complete;
+   `shared_clone` remains preserving.
 3. Complete Phase 44's release gate. Fix the Test2 AsyncSubtest attach/detach
    clone-lifetime gap and its skip-all recursion consequence, rerun the opt-in
    matrix, bundled modules, DBIx::Class, and Ubuntu/Windows CI. Phases 40–43's

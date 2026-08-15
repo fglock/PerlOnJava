@@ -656,6 +656,7 @@ public class RuntimeGraphCloner {
         target.threadShared = source.threadShared;
         target.threadSharedIdentity = source.threadSharedIdentity;
         target.threadSharedBlessName = source.threadSharedBlessName;
+        target.threadSharedLifecycle = source.threadSharedLifecycle;
         if (source.threadShared && source.threadSharedBlessName != null) {
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
                 target.blessId = NameNormalizer.getBlessId(source.threadSharedBlessName);

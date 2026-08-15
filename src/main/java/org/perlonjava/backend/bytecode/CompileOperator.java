@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -1065,15 +1066,16 @@ public class CompileOperator {
                 if (operand.elements.size() < 2) {
                     bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
                 }
-                if (operand.elements.get(0) instanceof StringNode literalPattern
+                String literalPattern = RegexLiteralAnalyzer.constantString(operand.elements.get(0));
+                if (literalPattern != null
                         && operand.elements.get(1) instanceof StringNode literalFlags
-                        && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalPattern.value)) {
+                        && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalPattern)) {
                     String modifiers = literalFlags.value;
                     if (unicodeStringsImplicitUFlag(bytecodeCompiler) != 0
                             && !modifiers.contains("u")) {
                         modifiers += "u";
                     }
-                    RuntimeRegex.validateLiteralSyntax(literalPattern.value, modifiers);
+                    RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers);
                 }
                 boolean hasOModifier = false;
                 Node flagsNode = operand.elements.get(1);
