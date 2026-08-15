@@ -18,12 +18,14 @@ my $timeout = 300; # Default to 300 seconds
 my $jobs = 5;     # Default to 5 parallel jobs
 my $output_file;
 my $help;
+my $strict_exit = 0;
 
 GetOptions(
     'jperl=s'   => \$jperl_path,
     'timeout=f' => \$timeout,
     'jobs|j=i'  => \$jobs,
     'output=s'  => \$output_file,
+    'strict-exit!' => \$strict_exit,
     'help'      => \$help,
 ) or die "Error in command line arguments\n";
 
@@ -111,6 +113,12 @@ print_feature_impact();
 
 if ($output_file) {
     save_results($output_file);
+}
+
+if ($strict_exit
+        && ($summary{fail} || $summary{error} || $summary{timeout}
+            || $summary{incomplete})) {
+    exit 1;
 }
 
 # Subroutines
@@ -504,6 +512,8 @@ sub timeout_for_test {
 sub requires_exclusive_slot {
     my ($test_file) = @_;
     return $test_file =~ m{
+          (?:^|/)perl5/dist/threads/t/join\.t$
+        |
           (?:^|/)perl5_t/t/op/gv\.t$
         | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
@@ -820,6 +830,7 @@ Options:
                    subprocess-heavy tests have a documented minimum)
   --jobs|-j NUM    Number of parallel jobs (default: 5)
   --output FILE    Save detailed results to JSON file
+  --strict-exit    Exit nonzero if any file fails, errors, times out, or is incomplete
   --help           Show this help message
 
 Examples:

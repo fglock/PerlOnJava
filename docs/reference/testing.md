@@ -57,7 +57,9 @@ make test-threads-release
 
 Both targets use eight jobs and a hard 300-second timeout for each file. JSON
 reports are written under `build/reports/threads/`. The shorter target is used
-by Ubuntu pull-request CI; Windows continues to run the Java/unit build gate.
+by Ubuntu pull-request CI and uses the runner's strict exit mode, so any failed,
+errored, timed-out, or incomplete file fails the Make target. Windows continues
+to run the Java/unit build gate.
 See the [Perl threads reference](threads.md) for the compatibility contract and
 resource policies.
 

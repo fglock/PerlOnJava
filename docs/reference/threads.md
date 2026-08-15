@@ -112,8 +112,9 @@ make test-threads-release
 ```
 
 Both targets use eight test jobs, a hard 300-second timeout per file, and write
-JSON reports under `build/reports/threads/`. DBIx::Class is a separate long
-release gate:
+JSON reports under `build/reports/threads/`. Timing-sensitive join coverage is
+given an exclusive runner slot, and strict exit mode makes any non-passing file
+fail the gate. DBIx::Class is a separate long release gate:
 
 ```bash
 timeout 3600 ./jcpan --jobs 8 -t DBIx::Class

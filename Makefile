@@ -127,16 +127,16 @@ check-thread-test-sources:
 # runs on the platform carrier. Reports are retained under build/reports/threads.
 test-threads: check-java-gradle check-thread-test-sources
 	@mkdir -p build/reports/threads
-	JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 300 --output build/reports/threads/jvm-virtual.json $(THREAD_DIST_DIRS)
-	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 300 --output build/reports/threads/interpreter-virtual.json $(THREAD_DIST_DIRS)
-	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 300 --output build/reports/threads/platform-focused.json $(THREAD_PLATFORM_TESTS)
+	JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/jvm-virtual.json $(THREAD_DIST_DIRS)
+	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/interpreter-virtual.json $(THREAD_DIST_DIRS)
+	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/platform-focused.json $(THREAD_PLATFORM_TESTS)
 
 # Thread release gate: extend the PR gate to the complete platform-carrier
 # distribution matrix. Together with test-threads this covers both backends on
 # both carrier policies without making every pull request repeat all four runs.
 test-threads-release: test-threads
-	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 300 --output build/reports/threads/jvm-platform.json $(THREAD_DIST_DIRS)
-	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 300 --output build/reports/threads/interpreter-platform.json $(THREAD_DIST_DIRS)
+	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/jvm-platform.json $(THREAD_DIST_DIRS)
+	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/interpreter-platform.json $(THREAD_DIST_DIRS)
 
 # Bundled CPAN module tests (XML::Parser, etc.)
 # Tests live under src/test/resources/module/{ModuleName}/t/
