@@ -781,7 +781,10 @@ public class RuntimeIO extends RuntimeScalar {
             // open.pm defaults are lexical compiler hints. An unrelated
             // package's use open must not leak through the process-global
             // ${^OPEN} compatibility scalar into this call site.
-            ioLayers = lexicalLayer == null || lexicalLayer.isEmpty() ? ":raw" : lexicalLayer;
+            // ":" asks binmode() for the platform default (:crlf on Windows,
+            // :raw elsewhere) without consulting the legacy process-global
+            // ${^OPEN} value.
+            ioLayers = lexicalLayer == null || lexicalLayer.isEmpty() ? ":" : lexicalLayer;
         }
         RuntimeScalar status = binmode(ioLayers);
         if (status.getBoolean()) {

@@ -52,6 +52,9 @@ The following are not treated as PerlOnJava regressions because their current di
 - [x] Phase 5: final verification (2026-08-15)
   - Full `make` passed.
   - Mail::BIMI passed all 31 test programs and 82 assertions; network- and author-only tests skipped as expected.
+  - Preserved the platform-default I/O layer when no lexical `open` pragma is
+    active, including Windows `:crlf`, without consulting the leaked
+    process-global `${^OPEN}` value.
 
 ### Next Steps
 
