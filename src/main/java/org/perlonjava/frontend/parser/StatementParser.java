@@ -379,10 +379,10 @@ public class StatementParser {
         // A lexical declaration in the condition owns the next COP in Perl, so
         // the first standalone call reports the conditional's source line.
         // Ordinary conditions keep the call's own line (see op/caller.t).
-        if (conditionContainsLexicalDeclaration(condition)
-                && !thenBranch.elements.isEmpty()
+        if (!thenBranch.elements.isEmpty()
                 && thenBranch.elements.get(0) instanceof BinaryOperatorNode first
-                && "(".equals(first.operator)) {
+                && "(".equals(first.operator)
+                && conditionContainsLexicalDeclaration(condition)) {
             first.setAnnotation("callerLineTokenOverride", statementStartIndex);
         }
         if (enterNewScope) {

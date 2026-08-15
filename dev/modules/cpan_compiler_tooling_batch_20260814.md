@@ -75,6 +75,16 @@ distribution-specific preferences.
   - Rechecked the reported regression files: `op/do.t` 94/99,
     `op/caller.t` 93/115, `op/lexsub.t` 110/160, keys benchmark 5/6,
     `re/speed.t` 26/59, and `re/speed_thr.t` 26/59.
+- [x] Phase 9: latest-master regex regression repair (2026-08-15)
+  - Rebased PR #955 onto newly fetched `origin/master` at `d22f54d24`.
+  - Moved the recursive lexical-declaration scan behind the cheap branch-shape
+    checks, avoiding compiler work for conditionals that cannot need a caller
+    line override.
+  - Restored `re/pat_advanced.t` and `re/pat_advanced_thr.t` to 1376/1687,
+    matching a clean latest-master build.
+  - Confirmed `japh/abigail.t` is 109/130 on both PR #955 and latest master, so
+    the reported one-test difference is not caused by this PR.
+  - Full `make` suite passes after the latest rebase and fast-path change.
 
 ### Next Steps
 
