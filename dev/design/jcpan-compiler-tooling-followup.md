@@ -37,7 +37,7 @@ The following are not treated as PerlOnJava regressions because their current di
 
 ## Progress Tracking
 
-### Current Status: implementation complete; PR ready for review
+### Current Status: implementation complete; PR #963 validation in progress
 
 ### Completed Phases
 
@@ -63,11 +63,25 @@ The following are not treated as PerlOnJava regressions because their current di
   - Replaced deprecated `Zstd.decompressedSize` calls with
     `Zstd.getFrameContentSize` and reject unknown or invalid frame sizes before
     allocating decoder buffers.
+- [x] Phase 8: core-suite regression audit (2026-08-15)
+  - Compared the reported core files against isolated current-master and
+    historical baseline builds instead of treating aggregate TAP counts as
+    deterministic.
+  - Fixed PVLV filehandle handling so `-t` follows the glob's IO slot without
+    stringification and `close` warnings retain ASCII and Unicode glob names.
+  - Restored `op/gv.t` from 253/304 to 255/304 and `uni/gv.t` from 176/206 to
+    178/206. `re/pat_advanced.t`, `re/pat_advanced_thr.t`, and
+    `test_pl/examples.t` reproduce their higher reported counts. The remaining
+    `japh/abigail.t` 109/130 result matches both current master and the
+    documented historical baseline, so it is not a PR #963 regression.
+  - Added a four-case system-Perl oracle and verified it with both PerlOnJava
+    backends; the full `make` suite passes.
 
 ### Next Steps
 
-1. Review PR #962.
-2. Merge after approval.
+1. Push the regression repair to PR #963.
+2. Wait for Ubuntu and Windows CI before handing the unified PR back for user
+   testing.
 
 ### Open Questions
 
