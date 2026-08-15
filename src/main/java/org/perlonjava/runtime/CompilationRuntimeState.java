@@ -43,7 +43,16 @@ public final class CompilationRuntimeState {
     public final Map<String, Deque<RuntimeScalar>> endOfScopeFileCallbacks =
             new ConcurrentHashMap<>();
     public final Deque<String> loadingFileStack = new ArrayDeque<>();
-    public final Deque<Deque<RuntimeScalar>> compileScopes = new ArrayDeque<>();
+    public static final class EndOfScopeCompileScope {
+        public final String ownerFile;
+        public final Deque<RuntimeScalar> callbacks = new ArrayDeque<>();
+
+        public EndOfScopeCompileScope(String ownerFile) {
+            this.ownerFile = ownerFile;
+        }
+    }
+
+    public final Deque<EndOfScopeCompileScope> compileScopes = new ArrayDeque<>();
     /** UNITCHECK queue belonging to each parser currently compiling a file/eval. */
     public final ThreadLocal<Deque<RuntimeArray>> unitcheckQueueStack =
             ThreadLocal.withInitial(ArrayDeque::new);

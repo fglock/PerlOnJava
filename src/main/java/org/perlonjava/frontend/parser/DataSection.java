@@ -54,6 +54,18 @@ public class DataSection {
             return; // Already created placeholder for this package
         }
 
+        // A nested require starts parsing in the caller's package until the
+        // loaded file's package declaration is seen.  Do not let that
+        // temporary package context replace the caller's populated DATA
+        // handle with an empty placeholder.
+        var existingGlob = GlobalVariable.getExistingGlobalIO(handleName);
+        RuntimeIO existingIO = existingGlob == null ? null : existingGlob.getRuntimeIO();
+        if (existingIO != null
+                && !(existingIO.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle)) {
+            state().placeholderCreated.add(handleName);
+            return;
+        }
+
         state().placeholderCreated.add(handleName);
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Creating placeholder DATA handle for package: " + handleName);

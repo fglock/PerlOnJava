@@ -158,6 +158,12 @@ sub _method_check {
         # target stash, but the coderefs keep Class::XSAccessor::__ANON__
         # subnames. Those are generated methods, not imports to clean.
         return 1 if $code_stash eq 'Class::XSAccessor';
+        # DateTime::Format::Builder likewise installs parser methods into the
+        # target class from factory coderefs whose subnames remain in Builder.
+        # Nested compile-time dependency loading can defer our scope callback
+        # until after those methods are installed, so identify the provider as
+        # a method generator rather than deleting the generated API.
+        return 1 if $code_stash eq 'DateTime::Format::Builder';
         # Companion/helper packages (e.g. DateTime::PP for DateTime) install
         # functions via glob assignment — these are intentional methods, not imports.
         # In PerlOnJava, method calls are resolved at runtime through the stash,

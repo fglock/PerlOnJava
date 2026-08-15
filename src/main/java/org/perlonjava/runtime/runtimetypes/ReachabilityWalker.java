@@ -272,11 +272,17 @@ public class ReachabilityWalker {
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
                 if (h.elements instanceof HashSpecialVariable) continue;
+                if (h.elements instanceof TieHash tieHash) {
+                    visitScalar(tieHash.getSelf(), todo);
+                }
                 for (RuntimeScalar v : h.elements.values()) {
                     addReachable(v, todo);
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeArray a) {
+                if (a.elements instanceof TieArray tieArray) {
+                    visitScalar(tieArray.getSelf(), todo);
+                }
                 for (RuntimeScalar v : a.elements) {
                     addReachable(v, todo);
                     visitScalar(v, todo);
