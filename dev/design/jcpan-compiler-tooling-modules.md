@@ -10,7 +10,7 @@ over distribution preferences.
 
 ## Progress Tracking
 
-### Current Status: PR #964 open; CI in progress
+### Current Status: complete; PR #964 open with CI passing
 
 ### Completed Phases
 
@@ -41,14 +41,14 @@ over distribution preferences.
     reproduces the missing-module failure.
 - [x] Phase 5: full verification (2026-08-15)
   - Full `make` passed all unit shards.
-- [ ] Phase 6: pull request and CI
+- [x] Phase 6: pull request and CI (2026-08-15)
   - Opened [PR #964](https://github.com/fglock/PerlOnJava/pull/964).
-  - CI checks are in progress.
+  - Ubuntu CI passed in 11m20s.
+  - Windows CI passed in 18m10s.
 
 ### Next Steps
 
-1. Monitor all PR #964 CI checks to completion.
-2. Record the final CI result here.
+1. Await review of PR #964.
 
 ### Open Questions
 
