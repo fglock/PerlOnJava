@@ -3141,7 +3141,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (this.refCount == -1
                 && !isRegisteredLexical
                 && captureCount == 0
-                && !isPackageGlobalRoot
+                && (!isPackageGlobalRoot || GlobalVariable.isTemporaryGlobalAliasValue(this))
                 && containerOwner == null
                 && !RuntimeCode.isInstalledPadConstant(this)) {
             // An unbound scalar value returned from a subroutine is an

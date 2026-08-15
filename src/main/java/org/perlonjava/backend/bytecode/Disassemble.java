@@ -1279,9 +1279,11 @@ public class Disassemble {
                         int flagsReg = interpretedCode.bytecode[pc++];
                         int implicitU = interpretedCode.bytecode[pc++];
                         int warningState = interpretedCode.bytecode[pc++];
+                        int quoteConstruction = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" implicitU=").append(implicitU)
-                                .append(" warningState=").append(warningState).append("\n");
+                                .append(" warningState=").append(warningState)
+                                .append(" quoteConstruction=").append(quoteConstruction).append("\n");
                         break;
                     case Opcodes.QUOTE_REGEX_O:
                         rd = interpretedCode.bytecode[pc++];
@@ -1290,10 +1292,12 @@ public class Disassemble {
                         int callsiteId = interpretedCode.bytecode[pc++];
                         implicitU = interpretedCode.bytecode[pc++];
                         warningState = interpretedCode.bytecode[pc++];
+                        quoteConstruction = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX_O r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" callsite=").append(callsiteId)
                                 .append(" implicitU=").append(implicitU)
-                                .append(" warningState=").append(warningState).append("\n");
+                                .append(" warningState=").append(warningState)
+                                .append(" quoteConstruction=").append(quoteConstruction).append("\n");
                         break;
                     case Opcodes.ITERATOR_CREATE:
                         rd = interpretedCode.bytecode[pc++];

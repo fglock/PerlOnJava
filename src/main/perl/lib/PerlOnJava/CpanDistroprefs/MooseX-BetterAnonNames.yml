@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava compatibility patch: this Moose metaclass trait uses
+  autobox::Core for a single string split.
+  Replace that call with Perl's portable split operator and remove the matching
+  MakeMaker prerequisite so CPAN does not install autobox's deep compile-op XS
+  hooks merely to derive an anonymous package serial number.
+match:
+  distribution: "^.*/MooseX-TraitFor-Meta-Class-BetterAnonClassNames-"
+patches:
+  - "MooseX-BetterAnonNames/NoAutobox.patch"

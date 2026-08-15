@@ -99,6 +99,7 @@ public class Charnames extends PerlModuleBase {
         Charnames charnames = new Charnames();
         try {
             charnames.registerMethod("_java_viacode", "javaViacode", "$");
+            charnames.registerMethod("_java_vianame", "javaVianame", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing _charnames method: " + e.getMessage());
         }
@@ -128,5 +129,12 @@ public class Charnames extends PerlModuleBase {
             return new RuntimeList(scalarUndef);
         }
         return new RuntimeList(new RuntimeScalar(name));
+    }
+
+    /** Return the code point for an official Unicode character name. */
+    public static RuntimeList javaVianame(RuntimeArray args, int ctx) {
+        int codePoint = UCharacter.getCharFromName(args.getFirst().toString());
+        if (codePoint < 0) return new RuntimeList(scalarUndef);
+        return new RuntimeScalar(codePoint).getList();
     }
 }

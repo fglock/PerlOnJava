@@ -92,7 +92,7 @@ our @EXPORT_OK = qw(
 
     # Math functions
     abs acos asin atan atan2 ceil cos cosh exp fabs floor fmod frexp
-    ldexp log log10 modf pow sin sinh sqrt tan tanh strtod
+    ldexp log log10 log2 modf pow sin sinh sqrt tan tanh strtod
     HUGE_VAL
 
     # String functions
@@ -554,6 +554,7 @@ sub sinh { (CORE::exp($_[0]) - CORE::exp(-$_[0])) / 2 }
 sub cosh { (CORE::exp($_[0]) + CORE::exp(-$_[0])) / 2 }
 sub tanh { sinh($_[0]) / cosh($_[0]) }
 sub log10 { CORE::log($_[0]) / CORE::log(10) }
+sub log2 { CORE::log($_[0]) / CORE::log(2) }
 sub ldexp { $_[0] * (2 ** $_[1]) }
 sub frexp {
     my $x = CORE::abs($_[0]);

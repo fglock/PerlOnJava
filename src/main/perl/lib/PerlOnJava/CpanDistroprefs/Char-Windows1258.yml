@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava compatibility patch for Char::Windows1258. The distribution
+  rejects executables named `jperl` because that name historically referred
+  to a different Japanese Perl implementation. Keep that guard while
+  recognizing PerlOnJava's launcher through PERLONJAVA_EXECUTABLE. Delegate
+  its regex-code-block source transformer to system Perl, use PerlOnJava's
+  native split implementation, and replace runtime regex code blocks with
+  bounded ordinary patterns that both compiler backends can execute.
+match:
+  distribution: "^.*/Char-Windows1258-"
+patches:
+  - "Char-Windows1258/PerlOnJavaExecutable.patch"

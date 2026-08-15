@@ -346,6 +346,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** Return a stable snapshot of the live lexical cells for an active CV. */
+    public static Map<String, RuntimeBase> snapshotActiveLexicals(RuntimeCode code) {
+        if (code == null) return Collections.emptyMap();
+        PerlRuntime runtime = PerlRuntime.current();
+        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) {
+            return Collections.emptyMap();
+        }
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            if (sameLogicalCode(frame.code(), code)) {
+                return new LinkedHashMap<>(frame.cells());
+            }
+        }
+        return Collections.emptyMap();
+    }
+
     /**
      * Get the caller's @_ array (one level up from current).
      * Used by Java-implemented functions (like List::Util::any) that need to pass
@@ -4116,6 +4131,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static RuntimeCode getActiveCodeAtCallerFrame(int logicalFrame) {
         return activeCodeAtCallerFrame(logicalFrame);
+    }
+
+    /**
+     * Resolve a PadWalker caller level from inside its Perl wrapper.
+     * Java builtins and map/grep block CVs are runtime implementation frames,
+     * not Perl subroutine levels, and therefore must not shift LEVEL.
+     */
+    public static RuntimeCode getActiveCodeAtPadWalkerFrame(int level) {
+        if (level < 0) return null;
+        RuntimeCode previous = null;
+        int plumbingFrames = 2; // Internals::jperl_var_name and PadWalker::var_name
+        int logicalIndex = 0;
+        for (RuntimeCode active : activeCodeStack()) {
+            if (active == previous || isCompilerWrapperPair(active, previous)) {
+                continue;
+            }
+            previous = active;
+            if (active.isBuiltin || active.isMapGrepBlock) continue;
+            if (plumbingFrames > 0) {
+                plumbingFrames--;
+                continue;
+            }
+            if (logicalIndex++ == level) return active;
+        }
+        return null;
     }
 
     private static boolean isCompilerWrapperPair(RuntimeCode left, RuntimeCode right) {

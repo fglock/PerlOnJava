@@ -166,6 +166,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private boolean deferredUserDefinedUnicodeProperties = false;
     private boolean hasBranchReset = false;  // True if pattern uses (?|...) branch reset
     private boolean hasBackslashK = false;   // True if pattern uses \K (keep assertion)
+    // An empty qr// object keeps its own empty pattern when interpolated;
+    // only empty match/substitution string syntax reuses the previous match.
+    private boolean quoteConstruction = false;
     private List<String> warningsOnUse = new ArrayList<>();
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
@@ -205,6 +208,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.deferredUserDefinedUnicodeProperties = this.deferredUserDefinedUnicodeProperties;
         copy.hasBranchReset = this.hasBranchReset;
         copy.hasBackslashK = this.hasBackslashK;
+        copy.quoteConstruction = this.quoteConstruction;
         copy.warningsOnUse = new ArrayList<>(this.warningsOnUse);
         copy.lexicalDebugMode = this.lexicalDebugMode;
         // replacement and callerArgs are not copied — they are set per-substitution
@@ -1138,6 +1142,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
             regex.patternString = originalRegex.patternString;
             regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
+            regex.quoteConstruction = originalRegex.quoteConstruction;
             regex.warningsOnUse = new ArrayList<>(originalRegex.warningsOnUse);
             regex.lexicalDebugMode = callSiteDebugMode != 0
                     ? callSiteDebugMode : originalRegex.lexicalDebugMode;
@@ -1175,6 +1180,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
                     regex.patternString = originalRegex.patternString;
                     regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
+                    regex.quoteConstruction = originalRegex.quoteConstruction;
                     regex.warningsOnUse = new ArrayList<>(originalRegex.warningsOnUse);
                     regex.lexicalDebugMode = callSiteDebugMode != 0
                             ? callSiteDebugMode : originalRegex.lexicalDebugMode;
@@ -1200,6 +1206,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // so the cached RuntimeRegex is not corrupted by refCount changes)
         return new RuntimeScalar(compile(patternString.toString(), modifierStr, callSiteDebugMode).cloneTracked())
                 .propagateTaint(patternString);
+    }
+
+    /** Mark a compiled value as originating from Perl's qr// constructor. */
+    public static RuntimeScalar markQuoteConstruction(RuntimeScalar quotedRegex) {
+        resolveRegex(quotedRegex).quoteConstruction = true;
+        return quotedRegex;
     }
 
     private static void validateTaintedPatternSecurity(RuntimeScalar patternString) {
@@ -1292,6 +1304,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.patternString = resolvedRegex.patternString;
         regex.regexFlags = resolvedRegex.regexFlags;
         regex.hasPreservesMatch = resolvedRegex.hasPreservesMatch;
+        regex.quoteConstruction = resolvedRegex.quoteConstruction;
         regex.useGAssertion = resolvedRegex.useGAssertion;
         regex.patternFlags = resolvedRegex.patternFlags;
         regex.hasBranchReset = resolvedRegex.hasBranchReset;
@@ -1517,7 +1530,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexFlags originalFlags = regex.regexFlags;
 
         // Handle empty pattern - reuse last successful pattern or use empty pattern
-        if (regex.patternString == null || regex.patternString.isEmpty()) {
+        if (!regex.quoteConstruction
+                && (regex.patternString == null || regex.patternString.isEmpty())) {
             if (regexState.lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current flags (especially /g and /i)
@@ -2367,7 +2381,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.callerArgs = null;
 
         // Handle empty pattern - reuse last successful pattern or use empty pattern
-        if (regex.patternString == null || regex.patternString.isEmpty()) {
+        if (!regex.quoteConstruction
+                && (regex.patternString == null || regex.patternString.isEmpty())) {
             if (state().lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current replacement and flags (especially /g and /i)

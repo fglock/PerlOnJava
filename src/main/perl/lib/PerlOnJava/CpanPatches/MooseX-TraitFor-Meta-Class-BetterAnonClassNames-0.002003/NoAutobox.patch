@@ -1,0 +1,38 @@
+--- lib/MooseX/TraitFor/Meta/Class/BetterAnonClassNames.pm.orig
++++ lib/MooseX/TraitFor/Meta/Class/BetterAnonClassNames.pm
+@@ -14,7 +14,6 @@
+
+ use Moose::Role;
+ use namespace::autoclean;
+-use autobox::Core;
+
+ use Moose::Exporter;
+
+@@ -67,7 +66,8 @@
+         unless $opts{is_anon} && $opts{anon_package_prefix};
+
+     ### old anon package name: $opts{package}
+-    my $serial = $opts{package}->split(qr/::/)->[-1]; #at(-1); #tail(1);
++    my @package_parts = split qr/::/, $opts{package};
++    my $serial = $package_parts[-1];
+     $opts{package} = $opts{anon_package_prefix} . $serial;
+
+     ### new anon package name: $opts{package}
+--- Makefile.PL.orig
++++ Makefile.PL
+@@ -28,7 +28,6 @@
+   "PREREQ_PM" => {
+     "Moose::Exporter" => 0,
+     "Moose::Role" => 0,
+-    "autobox::Core" => 0,
+     "namespace::autoclean" => 0
+   },
+   "TEST_REQUIRES" => {
+@@ -64,7 +63,6 @@
+   "Test::CheckDeps" => "0.010",
+   "Test::Moose::More" => 0,
+   "Test::More" => "0.94",
+-  "autobox::Core" => 0,
+   "blib" => "1.01",
+   "namespace::autoclean" => 0,
+   "strict" => 0,

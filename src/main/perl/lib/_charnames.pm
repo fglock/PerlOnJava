@@ -428,6 +428,15 @@ sub lookup_name ($name, $wants_ord, $runtime, $regex_loose //= 0) {
       {
         $result = chr $ord;
       }
+      # PerlOnJava bundles ICU4J, whose Unicode name database is complete and
+      # current. Use it for strict official-name lookup before falling back to
+      # the generated Perl table, just as viacode() does for reverse lookup.
+      elsif (! $loose && $^H{charnames_full} && defined &_java_vianame
+             && defined(my $java_ord = _java_vianame($lookup_name)))
+      {
+        $result = chr $java_ord;
+        $full_names_cache{$name} = $result;
+      }
       else {
 
         # Not algorithmically determinable; look up in the table.  The name

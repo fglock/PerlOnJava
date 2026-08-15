@@ -20,7 +20,7 @@ sub _unsupported {
 
 sub peek_my         { _unsupported('peek_my') }
 sub peek_our        { _unsupported('peek_our') }
-sub var_name        { _unsupported('var_name') }
+sub var_name        { Internals::jperl_var_name(@_) }
 sub set_closed_over { Internals::jperl_set_closed_over(@_) }
 
 1;

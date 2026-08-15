@@ -520,9 +520,9 @@ public class DBI extends PerlModuleBase {
 
             // Return value per DBI spec:
             // - For DML (INSERT/UPDATE/DELETE): number of rows affected, or "0E0" for 0 rows
-            // - For SELECT: -1 (unknown number of rows)
+            // - For SELECT: "0E0" (true zero; row count is not known until fetching)
             if (hasResultSet) {
-                return new RuntimeScalar(-1).getList();
+                return new RuntimeScalar("0E0").getList();
             } else {
                 int updateCount = stmt.getUpdateCount();
                 if (updateCount == 0) {

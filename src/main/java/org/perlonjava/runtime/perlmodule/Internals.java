@@ -22,6 +22,10 @@ public class Internals extends PerlModuleBase {
      * Static initializer to set up the module.
      */
     public static void initialize() {
+        // PadWalker and Devel::LexAlias need live pad cells for active frames.
+        // Enable registration before user code begins so numeric caller-level
+        // lookups can see lexicals that were instantiated before the query.
+        RuntimeCode.enableLexicalAliasSupport();
         Internals internals = new Internals();
         try {
             internals.registerMethod("SvREADONLY", "svReadonly", "\\[$@%];$");
@@ -73,6 +77,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
             internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
             internals.registerMethod("jperl_peek_sub", "jperlPeekSub", null);
+            internals.registerMethod("jperl_var_name", "jperlVarName", null);
             internals.registerMethod("jperl_caller_cv", "jperlCallerCv", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
@@ -202,6 +207,41 @@ public class Internals extends PerlModuleBase {
             result.put(entry.getKey(), entry.getValue());
         }
         return result.createReference().getList();
+    }
+
+    /** Return the pad name whose live cell is the supplied reference. */
+    public static RuntimeList jperlVarName(RuntimeArray args, int ctx) {
+        if (args.size() != 2 || !RuntimeScalarType.isReference(args.get(1))
+                || !(args.get(1).value instanceof RuntimeBase target)) {
+            return new RuntimeList();
+        }
+
+        RuntimeScalar scope = args.get(0);
+        RuntimeCode code;
+        Map<String, RuntimeBase> active;
+        if (scope.type == RuntimeScalarType.CODE) {
+            code = (RuntimeCode) scope.value;
+            active = RuntimeCode.snapshotActiveLexicals(code);
+        } else {
+            int level = scope.getInt();
+            code = RuntimeCode.getActiveCodeAtPadWalkerFrame(level);
+            active = RuntimeCode.snapshotActiveLexicals(code);
+        }
+
+        String name = findLexicalName(active, target);
+        if (name == null && code != null) {
+            name = findLexicalName(code.closedOverVariables, target);
+        }
+        return name == null ? new RuntimeList() : new RuntimeScalar(name).getList();
+    }
+
+    private static String findLexicalName(
+            Map<String, ? extends RuntimeBase> lexicals, RuntimeBase target) {
+        if (lexicals == null) return null;
+        for (Map.Entry<String, ? extends RuntimeBase> entry : lexicals.entrySet()) {
+            if (entry.getValue() == target) return entry.getKey();
+        }
+        return null;
     }
 
     /** Return the exact CV for a caller frame, for Devel::Caller::caller_cv. */
