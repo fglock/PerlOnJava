@@ -414,11 +414,18 @@ public class SpecialBlockParser {
                     loc.fileName(),
                     loc.lineNumber());
             try {
+                // Deferred phasers must return the anonymous CODE value to the
+                // parser so it can be queued.  Compiling that wrapper in VOID
+                // context let the interpreter discard the last expression;
+                // the JVM happened to preserve it.  BEGIN keeps its caller's
+                // requested context because it executes immediately.
+                int executionContext = blockPhase.equals("BEGIN")
+                        ? contextType : RuntimeContextType.SCALAR;
                 result = PerlLanguageProvider.executePerlAST(
                         new BlockNode(nodes, tokenIndex),
                         parser.tokens,
                         parsedArgs,
-                        contextType);
+                        executionContext);
             } finally {
                 CallerStack.pop();
                 Deque<ScopedSymbolTable> scopes = compileTimeMutationScopes.get();

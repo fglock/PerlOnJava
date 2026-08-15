@@ -1,10 +1,8 @@
 # Perl Threads Implementation Plan
 
 **Status:** Active implementation plan
-**Version:** 2.1
-**Date:** 2026-08-12
-**Supersedes:** the previous `concurrency.md` proposal and
-`dev/prompts/multiplicity-v2-plan.md`
+**Version:** 2.2
+**Date:** 2026-08-15
 
 ## 1. Goal and Non-Negotiable Delivery Rule
 
@@ -12,26 +10,14 @@ Implement Perl 5 interpreter threads (ithreads) on the JVM. Each Perl thread
 owns an isolated, cloned interpreter. Perl values are copied at thread creation
 unless their storage was explicitly marked shared.
 
-Each numbered phase below normally forms an independent pull request. A phase
-may be split further when its audit shows that it cannot be reviewed or reverted
-safely. Phases 3 and 4 were combined at the maintainer's request, as were
-Phases 5 through 7 and Phases 8a through 8c; each combined changeset preserves
-the same green-boundary requirements. Phases 8d, 8e, and 9 form one further
-maintainer-requested combined PR, as do Phases 10 through 12. At every merge
+Thread compatibility is delivered in reviewable pull requests. At every merge
 boundary:
 
 - the compiler and both execution backends remain functional;
 - `make` passes;
 - the previously supported Perl surface remains supported;
-- `Config` continues to report `useithreads` as false until the activation
-  phase;
-- no partially exposed `threads` API is advertised;
-- the phase can be reverted without reverting a later phase.
-
-The earlier multiplicity implementation in PR #480 violated this rule: it moved
-roughly 10,000 lines across 96 files and was reverted by PR #487 after an
-unbound regex-timeout worker broke version parsing. Its branches are useful as
-file-level references, not as commits to cherry-pick.
+- advertised thread APIs match their validated compatibility level;
+- the change can be reverted without reverting unrelated work.
 
 ## 2. Compatibility Target
 
@@ -51,10 +37,10 @@ runtime:
    parallel once runtime isolation is complete.
 
 This plan does not implement POSIX `fork()`. Process creation remains the
-supported replacement for fork-and-exec patterns. Virtual threads are a later,
-optional optimization: Java 24 removes monitor pinning, but native/FFM blocking
-and workload diagnostics still require validation, while cloning an ithread
-interpreter already dominates thread creation cost.
+supported replacement for fork-and-exec patterns. Java 24 virtual threads are
+the default carrier; platform threads remain available explicitly and are
+selected automatically for nonzero stack-size requests. Runtime cloning, not
+carrier creation, remains the dominant cost of starting an ithread.
 
 ## 3. Architecture
 
@@ -130,9 +116,6 @@ one PR. Known worker paths include regex timeouts, alarms, pipe input/output,
 Shutdown hooks may remain process-global only when they do not call runtime
 facades requiring a current binding.
 
-The original failure proves this rule: moving regex state to `PerlRuntime`
-without binding the timeout executor made `Scalar::Util` version parsing fail.
-
 ### 3.5 Value graph cloning
 
 Thread cloning uses a dedicated `RuntimeGraphCloner` with an identity map. It
@@ -172,13 +155,13 @@ must match Perl tests.
 All output is captured to files. Every `jperl`, `jcpan`, and `prove` invocation
 is wrapped in `timeout`.
 
-Required for every phase:
+Required for every implementation pull request:
 
 ```bash
 make > /tmp/perl-threads-make.log 2>&1
 ```
 
-Also run `make test-all` when that target is healthy at the start of the phase.
+Also run `make test-all` when that target is healthy at the start of the work.
 If it has baseline failures, record them and run the affected suites plus the
 full `make` gate; never conceal a new failure as baseline noise.
 
@@ -199,888 +182,101 @@ timeout 60 ./jperl --interpreter -e 'use Scalar::Util; print $Scalar::Util::VERS
 Expected version is the version bundled by the branch (`1.70` when this plan
 was finalized). Moo/module-loading smoke tests accompany it.
 
-Performance-sensitive phases record the global, lexical, method, closure,
+Performance-sensitive changes record the global, lexical, method, closure,
 regex, and eval benchmarks against the same-base master build. A hot-path
-regression over 5% blocks that phase unless the design document records a
+regression over 5% blocks the change unless the design document records a
 reviewed exception.
 
 Before ending an investigation, inspect exact Java command lines and terminate
 only workers proven to belong to an abandoned test. Never kill from a CPU list
 alone.
 
-## 5. Pull Request Train
-
-### Phase 1 — Import health and compiler identity safety
-
-Make Perl 5 imports reproducible, repair any stale/malformed patches found by a
-full sync, convert generated class/call-site identifiers to atomic allocation,
-make immutable compiler constants final, and instantiate mutable control-flow
-visitors per invocation.
-
-Acceptance:
-
-- affected filtered syncs are idempotent;
-- the full import manifest completes without a failed patch;
-- concurrent class-name generation produces no duplicates;
-- `make` passes;
-- no claim of concurrent compilation is made yet.
-
-### Phase 2 — Serialized compilation
-
-Add one documented `ReentrantLock` around every initial and runtime compilation
-path, including lazy named-sub materialization and verifier fallback. Preserve
-reentrant nested compilation and release each entry point's own hold before
-ordinary code execution. `executePerlAST` remains locked because it runs
-compile-time `BEGIN` wrappers inside an enclosing parse.
-
-Acceptance: concurrent JVM/bytecode compilations, nested `BEGIN`/`require`, and
-both `eval STRING` paths are deterministic and deadlock-free.
-
-### Phase 3 — `PerlRuntime` shell and scoped binding
-
-Introduce the runtime object and scoped binding API without moving state. Bind
-all CLI, test, JSR-223, `require`, and eval entry points.
-
-Acceptance: absent binding fails clearly; nested/exceptional bindings restore
-the prior runtime; two Java threads bind different empty runtimes without
-leakage.
-
-### Phase 4 — I/O state isolation
-
-Move standard/selected handles and current I/O bookkeeping into `PerlRuntime`.
-Preserve static facades and generated bytecode compatibility.
-
-Acceptance: two runtimes can redirect stdin/stdout/stderr independently and all
-existing IO tests pass.
-
-### Phase 5 — Execution stacks and special blocks
-
-Move caller stacks, interpreter/eval frames, dynamic scope, every `local`
-save/restore stack, lexical cleanup registrations, and the runtime-owned
-`CHECK`/`INIT`/`END` collections. `BEGIN` remains immediate under the compile
-lock and `UNITCHECK` remains attached to its compilation context. The coupled
-mortal/weak/`DESTROY` sweep machinery moves atomically in Phase 11.
-
-Acceptance: execution/save-stack ownership, caller, defer, callback binding,
-and special-block tests show no cross-runtime state. Package-global values
-themselves remain shared until Phase 8 and are not claimed isolated here.
-
-### Phase 6 — Regex state and timeout binding
-
-Move all numbered/named captures, whole/prior/post-match values, last-capture
-state, match offsets, and `/g` state, and bind the regex-timeout worker in the
-same PR.
-
-Acceptance: simultaneous matches, `/g` positions, `/o`, and match-once state
-are isolated; alarm-mediated matching retains the captured runtime; and
-Scalar::Util/Moo regression gates pass. Concurrent independent alarms remain a
-Phase 11 signal/alarm-state concern.
-
-### Phase 7 — Inheritance and method caches
-
-Move MRO policy, method/overload/ISA caches, generations, reverse-ISA data, and
-invalidation state. Until Phase 8 migrates symbol tables, a shared mutation
-epoch lazily invalidates derived caches in every runtime.
-
-Acceptance: cache and policy state are runtime-owned, shared symbol mutations
-cannot leave another runtime's cache stale, and method/closure benchmarks stay
-within budget. Conflicting package and method definitions become possible only
-after the Phase 8 symbol-table migrations.
-
-### Phase 8a — Core global values
-
-Move global scalar, array, and hash storage, foreach alias bookkeeping, stash
-enumeration invalidation, and per-runtime core-global initialization. Keep
-`CompilerOptions` detached until its provider binds the owning runtime and
-installs that exact argument array as `@ARGV`.
-
-### Phase 8b — Code and subroutine globals
-
-Move code references, pseudo constants, pinned/deleted pins, compiled-reference
-IDs, localization bookkeeping, prototypes, imported-sub state, and operator
-override flags. Preserve a declared-but-undefined CODE slot after `undef &name`.
-
-### Phase 8c — IO and format globals
-
-Move named global IO slots, hidden-after-stash-delete state, and formats,
-reconciling them with Phase 4's runtime-owned standard handles/globs. Glob and
-stash alias tables remain Phase 8d state.
-
-### Phase 8d — Globs, aliases, and stashes
-
-Move glob tables, stash/package objects, and alias maps.
-
-### Phase 8e — Declarations and package services
-
-Move declared-global sets, package-existence caches, class-loader ownership, and
-remaining symbol-table runtime state.
-
-Each remaining Phase 8 subphase normally forms its own PR; 8a through 8c and
-the 8d-through-9 group are maintainer-requested combined exceptions. Acceptance
-for each: conflicting in-scope global state in two runtimes remains isolated on
-JVM and interpreter backends; global, lexical, and eval benchmarks meet the
-budget. No phase claims alias/stash isolation before 8d or declaration/package-
-service isolation before 8e.
-
-### Phase 9 — RuntimeCode and eval caches
-
-Move eval IDs/cache/context/depth, anonymous/interpreted sub registries, method
-handles, and inline caches. Update emitted access only where facade preservation
-is impossible.
-
-Acceptance: eval, parser, goto-sub, closure, and fallback suites pass on both
-backends with independent runtime caches.
-
-### Phase 10 — Hints, warnings, filters, and source mapping
-
-Classify compile-time versus runtime portions of warnings/hints and move runtime
-stacks, filter state, and bytecode source maps. Keep compile-only registries
-inside Phase 2's lock until independently made safe.
-
-Acceptance: lexical warnings/features and error locations remain correct during
-alternating and concurrent runtime use.
-
-### Phase 11 — Lifecycle and miscellaneous runtime state
-
-Migrate the remaining lifecycle, weak/destroy, signal/alarm, CWD/PID, stat,
-random, state-variable, data-section, debugger, tied-proxy, flip-flop, and IO
-registry inventory. Split this phase into independently green PRs if the audit
-finds unrelated ownership domains; document the split here before coding.
-
-Worker binding for alarms, pipes, system stream routers, and callbacks lands
-with the state each worker accesses.
-
-The implementation groups this inventory into explicit runtime-owned domains:
-lifecycle/reachability, signals/alarms, process and IO registries, filesystem
-environment/stat state, debugger state, parser data sections, random/state
-variables, native/module registries, and object-name/bless identity. Opaque
-Net::SSLeay handles and provider registries are interpreter-owned; cryptographic
-algorithms and native bindings remain immutable process services.
-
-Acceptance: the mutable-static/thread-spawn audit has no unclassified
-runtime-dependent state.
-
-### Phase 12 — Multiplicity completion
-
-Expose a lifecycle-managed API for independent runtimes, including initialize,
-bind, execute, and close. Prohibit concurrent ownership of one runtime.
-
-Acceptance: concurrent Java integration tests execute conflicting Perl programs
-in isolated runtimes. `useithreads` remains false.
-
-### Phase 13 — Multiplicity performance recovery
-
-Apply only measured optimizations: cache `PerlRuntime.current()` in hot methods,
-batch stack transitions, and remove redundant state work. Reference
-`origin/feature/multiplicity-opt` selectively.
-
-Acceptance: all benchmark gates are within 5% or have a reviewed exception.
-
-### Phase 14 — Identity-preserving value graph cloner
-
-Implement the explicit graph-cloning core for non-code Perl values, including
-cycles, aliasing, blessings, weak references, readonly values, and documented
-tie/resource policies.
-
-Acceptance: system-Perl-validated graph fixtures match, and the original graph
-is never mutated.
-
-### Phase 15 — Closure and code cloning
-
-Clone JVM and interpreter code using explicit capture metadata; support scalar,
-array, hash, state, recursive, and nested captures. Do not reflect over Java
-field order.
-
-Acceptance: closure graphs behave identically on both backends after cloning.
-
-### Phase 16 — Runtime snapshot, `CLONE_SKIP`, and `CLONE`
-
-Compose runtime-state and graph cloning. Clone entry code and arguments as one
-graph, create fresh execution stacks, apply type-specific resource policies,
-preflight `CLONE_SKIP`, and invoke `CLONE` in the child.
-
-Acceptance: child mutation cannot affect the parent; alias/cycle identity is
-correct; package hooks run in Perl-compatible order.
-
-### Phase 17 — Internal thread control block
-
-Implement unique IDs, ownership, state transitions, completion, errors,
-join/detach, registry cleanup, and parent/child relationships at Java level.
-Use platform threads. Do not change the public Perl stub or `Config` yet.
-
-Acceptance: Java-level race, double-join/detach, cleanup, and nested-control
-tests pass without leaked threads.
-
-### Phase 18 — Basic Perl `threads` API
-
-Replace the stub with `create`/`new`/`async`, `self`, `tid`, `list`, state
-queries, `join`, `detach`, `yield`, and equality. Clone arguments into the child
-and results/errors into the joiner with context-correct return behavior.
-
-Acceptance: a selected basic compatibility tranche passes on both backends,
-while `Config useithreads` remains false for unrelated core suites.
-
-### Phase 19 — Thread termination and lifecycle
-
-Implement thread-local `threads->exit`, child `END` blocks, uncaught-error
-reporting, `error()`, nested threads, detached cleanup, and main-program shutdown
-rules. Do not use unsafe Java thread stopping.
-
-Acceptance: exit/error/lifecycle tests match system Perl for the supported API;
-limitations of `kill` are explicit.
-
-### Phase 20 — Shared storage and `threads::shared`
-
-Make `:shared` real and implement `share`, `is_shared`, and `shared_clone` for
-supported scalar/array/hash graphs. Define blessed/tied restrictions before
-exposure.
-
-Acceptance: shared identity survives clone while ordinary identity does not;
-concurrent mutations do not corrupt storage.
-
-### Phase 21 — Locks and condition variables
-
-Implement `lock`, `cond_wait`, `cond_timedwait`, `cond_signal`, and
-`cond_broadcast` with `ReentrantLock` and `Condition`.
-
-Acceptance: lexical and recursive locking, atomic wait/reacquire, timeout,
-signal/broadcast, lost-wakeup, and stress tests pass.
-
-### Phase 22 — Compatibility activation
-
-Set `Config` thread flags, implement/document import options and stringification,
-run the applicable Perl core `threads*` suites and representative CPAN suites,
-and update documents that currently call `:shared` a no-op or advertise a
-single-threaded PSGI environment.
-
-Acceptance: the supported compatibility matrix is green and the compiler is
-fully functional with ithreads advertised.
-
-### Phase 23 — Optional virtual threads
-
-After correctness and diagnostics are stable, benchmark an opt-in virtual-thread
-executor. Virtual threads are not required for Perl compatibility and remain an
-experimental process-wide choice until the complete platform-thread compatibility
-matrix also passes in virtual mode.
-
-Acceptance: no semantic change or native/FFM surprise in supported workloads.
-Promotion beyond experimental additionally requires a measured benefit over
-platform threads; runtime-clone cost must not be mistaken for scheduler cost.
-
-### Phase 24 — Final core syntax compatibility (completed 2026-08-12)
-
-Finish the remaining `op/threads.t` postfix create/join expression without a
-thread-specific parser shortcut that changes ordinary anonymous-sub precedence.
-
-Implemented by keeping an unknown print-filehandle candidate as an expression
-when it is followed by a known indirect-object package. This fixes the general
-`print method Package LIST` ambiguity rather than recognizing `threads` or the
-specific postfix chain. A system-Perl-validated regression test covers the
-generic form.
-
-Acceptance: `op/threads.t` reaches 30/30 on JVM and interpreter backends while
-`class/threads.t` remains 4/4 and `threads-dirh.t` continues to exit cleanly.
-
-### Phase 25 — Snapshot graph integrity under large suites (implemented 2026-08-12)
-
-Remove null-payload and CODE-root cloning failures exposed by the large regex
-thread wrappers. Preserve graph identity, weak edges, and source immutability;
-do not repair these failures by sharing ordinary child values with the parent.
-
-Implemented null-safe cleared weak-reference handling, type-preserving cloning
-for magic regex capture scalars, CODE-root cloning, constant-result graph cloning,
-and identity-map reuse when a lazy named CV materializes after snapshot.
-
-Acceptance: `pat_psycho_thr.t`, `pat_rt_report_thr.t`, `pat_thr.t`,
-`regexp_unicode_prop_thr.t`, and `speed_thr.t` reach their direct, unthreaded
-suite baselines without clone exceptions on either backend.
-
-### Phase 26 — Scalar lvalue and magic parity (completed 2026-08-13)
-
-Fix the ordinary `index`/`substr` lvalue, warning, overload, reference-
-stringification, and lexical-magic behavior exposed by their thread wrappers.
-Treat failures present in the direct suite as language/operator gaps rather than
-thread-cloning failures.
-
-Implemented shared JVM/interpreter lvalue context, negative offset/length
-clipping, warning/die behavior, live substring extent modes, one-time overload
-stringification, loose refalias lvalue handling, graph-safe constant and lazy-CV
-capture identity, and an interpreter `$#array` lvalue opcode. Lazy named
-subroutines now preserve both their declaration attributes and lvalue compile
-context.
-
-Acceptance is complete: direct and threaded forms reach `index_thr.t` 415/415
-and `substr_thr.t` 400/400 on JVM and interpreter backends.
-
-### Phase 27 — Regex runtime concurrency (runtime portion completed 2026-08-13)
-
-Runtime-local user-defined Unicode-property results are inherited at snapshot,
-and simultaneous sibling resolution is coordinated per property name without
-serializing unrelated names or executing Perl callbacks under the compile lock.
-
-Lexical `re 'debug'` remains a direct regex feature blocker: the pragma is
-currently ignored and the existing implementation trace is a process-wide
-environment flag written to `System.err`. Correct support requires lexical
-parser/CV metadata, both backends, and a runtime diagnostic sink before thread
-trace equivalence can be claimed.
-
-The runtime-concurrency acceptance gate is complete: repeated bounded runs of
-`user_prop_race_thr.t` reach 3/3. Static CV validation deliberately defers
-user-defined properties because resolving them executes arbitrary Perl in the
-owning runtime. Lexical-debug acceptance remains open: `stclass_threads.t`
-cannot reach 6/6 until the direct `re 'debug'` feature exists.
-
-### Phase 28 — General regex parity exposed by thread wrappers (in progress)
-
-The recursive regex backend now supports `(?(DEFINE)...)`, named subroutine
-calls in that container, and extended bracket classes within definitions.
-Literal `qr//` syntax is now validated when a thread entry CV is materialized,
-so malformed entry code fails in the parent and does not create a child.
-User-defined Unicode properties remain runtime-resolved.
-
-The direct/thread `regexp_qr_embed` differential has narrowed from 45
-assertions to one while both paths execute the same 2207 of 2210 planned
-assertions. The remaining one-assertion delta and three blocked direct tests are
-still Phase 28 language work; this phase is not marked complete.
-
-Implement the remaining parser/runtime features in `pat_re_eval`,
-`regexp_qr_embed`, Unicode-property, conditional, control-verb, and lookbehind
-coverage. These are shared regex-language gaps, not permission to special-case
-the `_thr.t` harness.
-
-Acceptance: every applicable regex `_thr.t` wrapper has zero assertion delta
-from its direct companion suite and neither path terminates early.
-
-### Phase 29 — Complete and truthful `threads` API (completed tranche 2026-08-13)
-
-Implemented current-thread/class-form `detach`, targeted thread signals,
-`object`, persisted creation context and `wantarray`, exit/context options,
-main-thread state, terminal alias records, and truthful platform/virtual
-stack-size behavior. CLI shutdown now reports exact running/finished unjoined
-counts, while detached children remain silent and do not retain the process.
-
-Complete remaining compatibility details for
-`wantarray`, exit/context options, exit status, and the stack-size API where the
-JVM can honor it. Unsupported platform guarantees must fail clearly; capability
-methods must never advertise a silent no-op such as the current `kill` stub.
-
-Acceptance: system-Perl-validated API tests cover object and class forms,
-success/error/exit lifecycle, watchdog cancellation, import options, and
-capability reporting on both backends.
-
-### Phase 30 — Resource inheritance and Test2 stress (implemented tranche 2026-08-12)
-
-Internal pipe endpoints now have explicit inherited copies with shared endpoint
-leases, independent wrapper close, child handle registration, and deterministic
-last-owner cleanup. Other files, sockets, and native handles retain the
-conservative undef/rejection policy.
-
-Continue to define descriptor and filehandle behavior for thread snapshots.
-Preserve the already-green default Test2 thread/IPC suites, then enable the
-applicable timeout and opt-in thread stress paths without changing Test2.
-
-The current compatibility gate also proves that CPAN configuration can safely
-scalarize list-valued regex operands. Test::Simple's bundled-module install
-path completes, and the full DBIx::Class suite passes with 325 files and 42,671
-tests under `--jobs 8`.
-
-Acceptance: `ipc_wait_timeout.t` observes Perl-compatible inherited-pipe
-behavior; default Test2 remains green; `AUTHOR_TESTING` and
-`T2_DO_THREAD_TESTS` thread suites form a separately reported stress gate.
-
-### Phase 31 — Native callbacks and handle ownership (implemented 2026-08-13)
-
-Net::SSLeay verification, info, and password callbacks are bound to the runtime
-that registered them, including invocation from foreign native callback
-threads. SSL session handles are runtime-owned and reset with their runtime.
-Detached children no longer appear in `threads->list`, and abnormal detached
-termination is reported exactly once. Other native handle classes retain their
-documented clone, child-owned creation, or explicit rejection policy.
-
-Acceptance: Net::SSLeay `61_threads-cb-crash.t` and
-`62_threads-ctx_new-deadlock.t` pass without watchdog, deadlock, cross-runtime
-handle leakage, or callback misbinding; applicable thread-emulated server paths
-in the wider Net::SSLeay suite retain their non-thread baseline.
-
-### Phase 32 — Advanced shared values (implemented supported tranche 2026-08-13)
-
-Nested plain scalar/array/hash graphs now have atomic preflight before any node
-is published as shared. A rejected nested node therefore cannot leave a
-partially shared graph behind. Identity, mutation, recursive locking, and
-condition behavior are stress-tested across child threads. Blessed, tied, and
-other magical graphs remain explicit errors because their callback and
-destruction semantics are not yet a supported shared-value category.
-
-Acceptance: each newly supported value category has standard-Perl-validated
-identity, mutation, lock/condition, clone, destruction, and stress coverage.
-
-### Phase 33 — Compatibility completion, documentation, and examples (implemented 2026-08-13)
-
-Run the complete applicable core, Test2, Storable, and native thread matrix;
-update the feature matrix from raw results; and add a realistic dynamic
-map/reduce example that shares only its scheduler while returning worker-local
-aggregates through `join`.
-
-Acceptance: platform threads pass all supported tests on JVM and interpreter
-backends; every remaining skip is an explicit platform or unsupported-feature
-decision; virtual mode has no semantic delta; example output is deterministic
-across system Perl and all supported modes. The release gate also includes the
-complete `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class` distribution suite; every DBIx
-test must pass before this phase is complete.
-
-### Phase 34 — Optional runtime pooling (evaluated; deliberately disabled)
-
-Consider reusable runtimes only after the fresh-runtime equivalence contract is
-implemented in full. Pooling is neither a Perl threads requirement nor a reason
-to weaken close/snapshot isolation.
-
-Acceptance: every item in `runtime-pooling-reset-contract.md` passes and reuse
-has a measured benefit over a fresh snapshot.
-
-The 2026-08-13 evaluation did not meet that activation threshold. The executable
-negative contract proves that `close()` is terminal and retains observable
-package, regex, and execution state. Pooling therefore remains disabled; fresh
-snapshot runtimes remain the correctness boundary.
-
-Phase 33's release gate completed with `./jcpan --jobs 8 -t DBIx::Class`:
-325 files and 42,671 assertions passed. The final compatibility fix ensures
-non-local labeled control flow tears down every abandoned Perl frame before the
-target resumes, preserving scope-guard diagnostics and redirected STDERR.
-
-### Phase 35 — Lexical regex debugging (completed 2026-08-14)
-
-Implement scoped `use/no re 'debug'` and `debugcolor` as compiler hints carried
-by regex and CODE metadata on both backends. Diagnostics use the bound runtime's
-STDERR and survive snapshot cloning; they never reuse the process-wide internal
-trace flag. Acceptance: `re/stclass_threads.t` reaches 6/6 and direct/child
-traces have identical behavior and runtime ownership.
-
-The compiler hints, JVM/interpreter propagation, runtime-owned STDERR routing,
-snapshot behavior, and focused six-assertion oracle are implemented. Debug
-regex lifecycle records now drain after END in the owning main or child
-runtime. The core `stclass_threads.t` gate reaches 6/6 with equal direct/child
-record counts and linear scaling.
-
-### Phase 36 — Complete regex parity exercised by thread wrappers (in progress)
-
-Phase 36 is now an independent parallel project documented in
-`dev/design/phase36-regex-parity.md`. It owns executable callbacks, dynamic
-patterns, conditionals, control verbs, lookbehind, Unicode properties, regex
-objects, and diagnostics in the shared direct-language implementation. Thread
-wrappers remain unchanged acceptance tests and receive no special cases.
-
-The concurrency project consumes Phase 36 through focused integration slices
-and preserves Phase 44's green thread matrix. Current completed foundations and
-the callback-capable matcher architecture, staged implementation plan, direct
-and wrapper gates, risks, and resumable next steps are maintained in the
-separate Phase 36 document.
-
-### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
-
-Give every `IOHandle` implementation an explicit thread-inheritance policy.
-Files, sockets, process pipes, and native descriptors use per-runtime wrappers
-over leased transport cores so aliases share position and transport while close
-is wrapper-local until the final owner. Layer, tied, scalar-backed, standard,
-borrowed, directory, and packaged-resource handles preserve their appropriate
-state instead of silently becoming `undef`. Acceptance covers position,
-buffering, aliases, close order, local sockets, child processes, redirects, and
-cleanup on Linux and Windows against system Perl.
-
-Every current handle class now declares an explicit policy. Supported captured
-handles use runtime-local wrappers over leased shared transports, while unsafe
-native resources reject inheritance explicitly. Focused system-Perl, JVM, and
-interpreter tests cover inherited file position, scalar handles, close order,
-and parent survival. Wider socket, process, redirect, and Windows coverage
-remains part of the final release matrix.
-
-### Phase 38 — DBI thread ownership (implemented 2026-08-14)
-
-Match native DBI's thread-owned handle contract. JDBC database, statement, and
-result handles become magical runtime-owned resources: inherited handles are
-unusable in the child, child teardown cannot disconnect the parent, child-created
-handles belong only to the child, and join-returned handles are invalid in the
-parent. DBI errors, cached handles, transactions, and destruction state remain
-runtime-local. Acceptance includes system-Perl DBI/SQLite oracles,
-`./jcpan --jobs 8 -t DBI`, and the complete DBIx::Class suite.
-
-JDBC connections, statements, and result sets now use runtime-owned adapters.
-Inherited and join-returned handles fail without disconnecting their owner;
-child-created handles remain child-owned. The focused DBI/SQLite ownership
-oracle passes ten assertions on system Perl and both PerlOnJava backends. The
-release gate also passes all 325 DBIx::Class files and 42,671 assertions with
-`./jcpan --jobs 8 -t DBIx::Class`. A JVM-to-interpreter fallback now restores
-only missing internal lexical-handoff cells before retrying a partially entered
-module body, preserving named closures without changing successful destructive
-handoff semantics.
-
-### Phase 39 — Advanced `threads::shared` values (implemented root tranche 2026-08-14)
-
-Support blessed aggregate roots through runtime-local class views over common
-backing. A tied scalar keeps a cloned runtime-local callback object and shared
-synchronization identity; sharing an already tied array/hash discards user
-magic and installs empty native shared storage, while tying a shared aggregate
-returns it to runtime-local magic. Preserve recursive locks and conditions
-across every runtime-local view.
-
-Acceptance for this tranche covers root reblessing, shared mutations, scalar
-tie callback isolation, aggregate tie conversion/order, and both backends.
-
-### Phase 39b — Exact nested shared proxies and destruction
-
-Implement Perl's fetch-time proxy semantics for references stored inside shared
-aggregates: each fetch produces a runtime-local wrapper over canonical backing;
-reblessing stays local until the reference is stored back. Make weak edges and
-cycles use that canonical backing, and deliver `DESTROY` exactly once in the
-runtime that releases the final cross-runtime owner. Separate destructive plain
-`share` initialization from preserving recursive `shared_clone`. Acceptance
-includes nested rebless/store-back, fresh `refaddr` views, cycles, weak refs,
-one global destructor, and share-versus-shared_clone system-Perl oracles.
-
-Fetch-time aggregate proxies are implemented: every nested array/hash reference
-read from shared storage receives a fresh runtime-local wrapper over canonical
-synchronized backing. Local reblessing is private until the view is stored
-back, cycles retain common storage without retaining wrapper identity, and a
-weak fetched view can disappear without deleting the canonical value. The
-focused ten-assertion oracle passes on system Perl and both PerlOnJava backends.
-Cross-runtime final-owner destruction is now implemented. Canonical shared
-storage and its fetched runtime-local wrappers carry one atomic lifecycle:
-canonical deletion waits for live fetched views, releasing a non-final view
-does not run `DESTROY`, and the runtime releasing the final owner performs the
-callback exactly once. The ordering is race-safe when canonical deletion and
-the last view release happen concurrently. A system-Perl-valid five-assertion
-oracle passes on JVM and interpreter backends in addition to the existing
-ten-assertion nested-proxy matrix.
-
-Destructive plain `share` remains the one explicit compatibility transition.
-The existing immutable test records the older Java-specific preserving
-behavior, while system Perl clears scalar/array/hash contents and reserves
-preserving recursive publication for `shared_clone`. The implementation must
-not silently invert that assertion; the test contract needs an explicit user
-decision before production behavior changes.
-
-### Phase 40 — Complete public `threads` API (completed 2026-08-14)
-
-Close every remaining lifecycle, signal, context, exit-status, stack-size,
-import, stringify, alias-object, and shutdown-warning gap. Upgrade the module
-version only when its upstream surface passes. A nonzero stack request always
-selects a platform child even after virtual threads become the default.
-
-The public 2.43 method surface is implemented and advertised. Creation context,
-alias objects, current/class detach, signals, exit policy, stack metadata,
-stringification, terminal errors, daemon-carrier shutdown, and attached-child
-exit warnings are covered by focused JVM/interpreter tests. Core
-`op/threads.t` completes 30/30.
-
-### Phase 41 — Fresh-runtime reset (completed 2026-08-14)
-
-Add reset as a lifecycle distinct from terminal `close()`. Reset is allowed only
-after execution, compilation, callbacks, children, locks, waiters, handles, and
-destruction work quiesce. Rebuild every domain in
-`runtime-pooling-reset-contract.md` from an immutable bootstrap template and
-poison a runtime after any partial reset failure. Acceptance is exhaustive
-`A; reset; B == fresh; B` parity plus classloader/package-graph collection.
-
-`PerlRuntime.reset()` is now a distinct exclusive lifecycle transition. It
-rejects active bindings, compilation, children, shared locks, and waiters;
-drains END/destruction and owned resources; replaces every runtime state holder;
-rebuilds standard handles and core globals; clears terminal thread-family state;
-and poisons the runtime after any partial failure. JVM/interpreter differentials
-prove representative package, CODE, `%INC`, regex, execution, and I/O freshness.
-Pooling remains off pending Phase 42's checkout stress, collection, and measured
-benefit gates.
-
-The post-reset regression gate retains all 325 DBIx::Class files and 42,671
-assertions under `./jcpan --jobs 8 -t DBIx::Class`.
-
-### Phase 42 — Opt-in pooling and concurrent PSGI (completed 2026-08-15)
-
-Add a bounded runtime-family pool configured by
-`-Djperl.runtime.pool.size=N` or `JPERL_RUNTIME_POOL_SIZE` (default zero).
-Return runtimes only after result cloning, END/destruction, callbacks, and
-detached children complete. Concurrent Netty PSGI requests use checked-out
-snapshot runtimes and streaming responses retain their runtime until completion;
-`psgi.multithread` is true only in that mode. Pooling must improve create/join
-or request median time by at least 10% without a hot-path regression above 5%.
-
-The bounded pool defaults to zero, enforces exclusive leases, resets reusable
-core runtimes, replaces poisoned entries, and never resets an active lease.
-Netty prebuilds independent application snapshots, checks one out per request,
-retains it through streaming dispatch, and advertises `psgi.multithread` only
-in pooled mode. Three controlled eight-request runs measured about 74% lower
-median completion time with four pooled runtimes; a retention probe collected
-the returned tenant graph and replaced state holder.
-
-### Phase 43 — Virtual threads by default (completed 2026-08-15)
-
-Make Java virtual threads the default while retaining
-`JPERL_THREAD_MODE=platform`. Explicit nonzero stack sizing transparently uses
-a platform child. Validate FFM/JDBC, sockets, process I/O, regex timeouts,
-shared conditions, callbacks, pooling, and detached shutdown under both modes.
-
-The Java 24 launcher now defaults to virtual carriers and preserves explicit
-platform selection. A nonzero stack request selects a platform child rather
-than discarding the option. The mandatory unit build is green, and the focused
-core lifecycle, class, and lexical-regex matrix passes 40/40 in both default
-virtual and explicit platform modes.
-
-### Phase 44 — Release closure (completed 2026-08-15)
-
-Run the complete core and bundled thread matrix, DBI/DBIx, Test2 opt-in stress,
-Storable, and native callback gates. Add a DBI example where each child owns its
-connection and returns ordinary data through `join`; update every public claim
-only from captured results. Acceptance requires `make`, link checks, all thread
-gates, `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`, and green Ubuntu/Windows
-CI.
-
-Release evidence collected on 2026-08-15: the 17-file core thread-wrapper
-matrix completed without timeout; the supported anchors include `threads.t`
-30/30, `index_thr.t` 415/415, `substr_thr.t` 400/400, lexical regex debugging
-6/6, the user-property race 3/3, and `pat_psycho_thr.t` 17/17. Remaining partial
-regex totals match the shared direct-language gaps recorded in Phase 36 rather
-than thread-only failures.
-
-The default Test2 matrix passes 13 files and 38/38 assertions. All ten opt-in
-Test2 stress files now pass 562/562 assertions after preserving cloned closure
-capture ownership, rooting the active child CODE during lifecycle sweeps, and
-recovering the active method package for nested `SUPER` dispatch. Storable
-passes 2/2, and the two Net::SSLeay callback/context stress gates pass 1/1
-each. New system-Perl-valid lifetime, nested-method, and weak-assignment
-oracles pass 8/8 on both JVM and interpreter backends. The child-owned DBI
-connection example passes with identical output on system Perl, JVM, and
-interpreter.
-
-The mandatory unit build and documentation link validation are green. The
-required `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class` gate passes all 325
-files and 42,671 assertions in 1,371 seconds. The broad bundled-module task
-remains red at 239/391 files; its 152 failures span unrelated unported
-Text::CSV/YAML and other module behavior, while the thread-specific bundled
-Storable and Net::SSLeay gates above are green. It is recorded as a wider
-project baseline, not presented as threads release success. Ubuntu and Windows
-CI remain the final external PR acceptance check.
-
-## 6. Known Reference Material and Warnings
-
-- `dev/prompts/multiplicity-v2-plan.md` documents the incremental response to
-  PR #480, but its phase ordering and inventory are now stale.
-- `origin/feature/multiplicity` and `origin/feature/multiplicity-opt` contain
-  useful target-state examples.
-- Do not trust `origin/feature/multiplicity-v2` as a branch-tip reference:
-  `d87fe1885` adds regex worker binding and later `f98ce32be` removes it.
-- `dev/design/clone.md` does not meet the identity/cycle/closure requirements
-  above and must not be reused as the ithread cloning algorithm.
-- `dev/design/attributes.md` records the supported `shared` attribute tranche.
+## 5. Current Release Contract
+
+The supported implementation includes:
+
+- the Perl `threads` 2.43 lifecycle, context, stack, object, join/detach, error,
+  exit, version, signal, and terminal-alias surface;
+- exact scalar and aggregate `threads::shared` behavior, including destructive
+  aggregate `share`, preserving scalar `share`, recursive `shared_clone`,
+  attributes, dualvars, UTF-8, aliases, cycles, blessing, ties, weak views,
+  refcount diagnostics, locking, conditions, and deterministic destruction;
+- the standard `Thread::Queue` and `Thread::Semaphore` distributions, including
+  blocking, timed, nonblocking, force, limit, insert/extract, and error paths;
+- isolated JVM and interpreter runtimes on both platform and virtual Java
+  carriers, with deterministic ownership of CODE, result, resource, shared
+  storage, END blocks, and Test2 IPC lifecycle.
+
+Every file in the unchanged upstream `threads`, `threads-shared`,
+`Thread-Queue`, and `Thread-Semaphore` distributions is a mandatory release
+gate. The same matrix runs on JVM/interpreter and platform/virtual carriers.
+`make`, documentation links, the thread preservation matrix, and
+`timeout 3600 ./jcpan --jobs 8 -t DBIx::Class` must pass before a pull request
+is opened. Merge additionally requires green Ubuntu and Windows CI.
+
+Direct regex-language parity, including Joni integration, is maintained
+separately.
+Threaded regex wrappers remain preservation gates against their same-commit
+direct companions.
+
+## 6. Supporting Design Contracts
+
+- `dev/design/attributes.md` defines the supported `shared` attribute surface.
+- `dev/design/runtime-pooling-reset-contract.md` defines the proof required
+  before runtime pooling can be enabled.
+- `dev/design/phase36-regex-parity.md` owns direct regex-language and Joni work.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 44 local release gate complete; Phases 36 and 39b remain open
+### Current Status: release validation in progress; Joni/regex parity is separate
 
-Hints, warnings, filters, and source maps are runtime-owned while compiler-only
-scratch remains protected by the global compile lock. The Phase 11 inventory is
-split internally into explicit state holders for lifecycle/reachability,
-signals/alarms, process and IO registries, filesystem/stat/random state,
-debugging, data sections, native/module registries, and bless identity. The
-mutable-static and spawned-worker audit classifies remaining statics as immutable
-caches/constants, synchronized process services, globally unique ID allocators,
-or compile-only state under the Phase 2 lock.
+`PerlRuntime` owns interpreter state, ithreads clone one isolated runtime graph,
+and `threads::shared` supplies explicit cross-runtime storage and synchronization.
+The unchanged upstream `threads`, `threads-shared`, `Thread-Queue`, and
+`Thread-Semaphore` distributions are the executable compatibility contract on
+both execution backends and both Java carrier policies.
 
-`PerlRuntime` now provides idempotent initialization and close plus exclusive,
-reentrant managed execution. Closing releases alarms, signals, I/O and native
-registries, and lifecycle roots. Concurrent integration tests run conflicting
-JVM and interpreter programs in separate runtimes. `Config` thread flags are
-enabled for the supported ithread tranche, with the remaining compatibility
-limits documented explicitly.
+Direct regex-language parity, including Joni integration, is maintained in the
+separate regex project. Threaded regex wrappers remain preservation gates
+against their same-commit direct companions.
 
-Validation completed with the full unit build and the comprehensive compatibility
-gate. `make test-all` retained the established partial-support baseline. Focused
-JVM/interpreter checks covered warning and hint state, source locations, filters,
-CWD, alarms/signals, random and regex state, data sections, I/O registries,
-lifecycle/weak references, and runtime close.
-Scalar::Util reports 1.70 on both backends; the JVM Moo constructor smoke passes.
-The interpreter's pre-existing parser rejection of Moo attribute syntax remains
-outside this runtime-state migration.
-
-Three-run same-base benchmark medians are within the 5% gate. The measured
-current/base rates were global 37030/35671 (+3.8%), lexical 127349/118820
-(+7.2%), method 91.45/94.40 (-3.1%), closure 34.68/32.37 (+7.1%), regex
-21657.60/22048.45 (-1.8%), and eval-string 15070.22/14910.07 (+1.1%). The
-runtime lookup batching and idle lifecycle fast paths used to recover these
-results preserve the runtime-owned state boundaries. This satisfies Phase 13;
-no speculative optimization from the historical branches is required.
-
-`RuntimeGraphCloner` now clones non-code Perl graphs through one identity map.
-Container shells are registered before their contents, so aliases and cycles
-survive; blessings are translated by class name, weak edges are installed only
-after the strong graph exists, and readonly constants stay shared. Tie wrappers
-are rebuilt without invoking FETCH/STORE. Nonportable Java I/O resources follow
-the documented conservative policy and become `undef` in the clone. Focused
-tests prove source immutability and cross-root alias preservation.
-
-Generated JVM closures now implement `CloneablePerlSubroutine`, exposing their
-captures in constructor order and rebuilding themselves from an explicit capture
-array. The graph cloner uses that contract without reflecting over field order.
-Interpreter closures rebuild immutable bytecode metadata while cloning constants,
-captures, state values, and recursive self references through the same identity
-map. Cross-backend tests prove scalar, array, and hash captures evolve independently
-after cloning.
-
-`PerlRuntime.snapshotClone()` now pre-materializes lazy clone hooks, evaluates
-`CLONE_SKIP` in the parent, copies package globals and CODE slots through one
-graph cloner, and invokes `CLONE` in deterministic package order after the child
-graph is installed. The child keeps fresh execution, lifecycle, signal/alarm,
-native, classloader, cache, and I/O state. Snapshot tests cover both backends,
-global alias isolation, skipped blessed objects, parent immutability, hook
-context, and empty child execution stacks. Capability advertisement is covered
-by the later activation gate described below.
-
-The thread control block owns platform-thread IDs, parent/child
-relationships, completion and error state, join/detach transitions, and runtime-
-family cleanup. The Perl API supports creation, identity, listing,
-context-sensitive join results, nested threads, controlled thread exit, and
-retained uncaught errors. Entry CODE references and arguments share the runtime
-snapshot identity map; join results cross back through a fresh graph clone.
-Child-owned END queues are drained at the thread boundary, and unsafe Java
-thread stopping is not used.
-
-`threads::shared` marks scalar, array, and hash storage so graph cloning retains
-its identity. Shared aggregate backing collections are synchronized and scalar
-payload fields provide cross-thread visibility. `share`, `is_shared`,
-`shared_clone`, and `:shared` are implemented for the supported unblessed,
-untied tranche; blessed and tied values are rejected explicitly. Lock and
-condition-variable semantics are implemented in Phase 21, and Phase 22 now
-advertises the supported ithread surface through `Config`.
-
-Shared storage now has recursive, lexical `lock` ownership and condition
-variables with atomic waiter publication, full recursive release/reacquisition,
-absolute timed waits, FIFO signal, and broadcast. JVM and interpreter backends
-both emit the lock cleanup boundary. The focused lock/condition stress suite
-passes on system Perl and both PerlOnJava backends.
-
-`Config` now advertises `useithreads`, `usethreads`, and `usemultiplicity`.
-The supported `threads` import/stringification surface is documented, while
-signals, effective stack sizing, `object`, and `wantarray` remain explicit
-limitations. Activation coverage passes on both backends. The first broader
-compatibility inventory currently reaches 29/30 in core `op/threads.t`, 368/400
-in `op/substr_thr.t`, and 2/6 in `re/stclass_threads.t`; `class/threads.t`,
-Storable's thread test, and `threads-dirh.t` complete. These are measured
-follow-up targets, not a claim that every upstream thread suite is green.
-
-The post-activation comprehensive gate records the changed test surface rather
-than comparing unlike totals: Perl core is 263443/321811 (81.9%) and bundled
-modules are 9966/12339 (80.8%). Scalar::Util 1.70 loads on both backends and the
-JVM Moo constructor smoke passes; the interpreter retains its previously
-documented Moo attribute-syntax parser limitation.
-
-Java 24 virtual threads are the launcher default. Explicit
-`JPERL_THREAD_MODE=platform` selection remains supported, and a nonzero Perl
-stack-size request transparently selects a platform child. Unknown modes are
-rejected and diagnostics expose the actual Java thread kind. Runtime pooling
-is opt-in and defaults to zero after passing Phase 42's stress, retention, and
-concurrent-request performance gates.
-
-The public documentation now treats the feature matrix as the canonical support
-table, records the implementation in the changelog and roadmap, explains runtime
-ownership and snapshot cloning, and documents the Java 24 requirement and
-virtual-thread opt-in. Self-checking examples demonstrate isolated create/join
-and shared lock/condition workflows on system Perl and both PerlOnJava backends.
-Link validation covers the updated documentation.
-
-Shared lock state no longer permanently retains every storage root ever locked.
-The lock registry uses weak identity keys while preserving one recursive lock
-per live root; condition waiters remain strongly held only while a waiter is
-published. Focused contention and collection tests cover both properties.
-
-Java 24 virtual-thread diagnostics cover shared conditions, regex timeouts,
-thread lifecycle, representative native FFM identity calls, child-created file
-I/O, and Test2 IPC without a pinning trace or semantic delta. A platform/virtual
-inherited-descriptor probe failed identically in the current host environment,
-so broader native callback coverage remains required before virtual mode can be
-promoted.
-
-Test2's general thread suites now pass, including the six-assertion IPC
-acceptance test on platform and virtual threads. This required preserving genuine
-closure captures through END dispatch and synchronizing the compiled-CV registry
-used by concurrent lazy materialization; no Test2-specific patch was added.
-
-Runtime pooling remains disabled. `PerlRuntime.close()` is a terminal operation,
-not a reset, and representative package, regex, and execution state deliberately
-remains observable on the closed object. The complete fresh-runtime equivalence
-contract and state inventory live in `runtime-pooling-reset-contract.md`.
-
-The 2026-08-14 post-activation compatibility pass also resolved several direct
-language defects exposed by the broader thread test surface. Reference
-stringification and numeric coercion now use one Perl identity, typeglob pseudo
-constants survive stash reconstruction and symbolic CODE lookup, tied-array
-localization no longer corrupts sparse storage, `do NAME(...)` follows modern
-syntax while `do BLOCK` copies its result, and `.=` preserves Perl's undef-warning
-rules. Interpreter compiler-flag opcodes now activate lexical warning masks at
-the same boundaries as generated JVM code. These are general Perl compatibility
-fixes rather than changes to ithread ownership. The detailed investigation and
-validation history is retained in the corresponding commit messages.
-
-### Implementation History
-
-Completed phase history is intentionally kept out of this living design
-document. The implementation record, validation details, regressions, and
-review decisions can be recovered from the phase commit messages and pull-
-request history.
-
-The core differential runner now reserves an exclusive serial lane for the
-resource-sensitive `gv.t`, advanced-regex, regex-speed, GH7094 benchmark, and
-Abigail JAPH tests. The thread wrappers `pat_thr.t`, `pat_psycho_thr.t`,
-`regexp_qr_embed_thr.t`, and `speed_thr.t` use that same lane and a 600-second
-minimum outer deadline because runtime snapshot startup plus the upstream
-watchdogs exceed the normal 300-second budget under parallel load. The
-`regexp_qr_embed_thr.t` classification also prevents a full-corpus memory spike
-from exhausting its child runtime near the end of the 2,210-case matrix. Thread
-snapshots inherit named IO slots only when they contain a real handle; inert
-parser placeholders are child-vivified on demand instead of being copied
-quadratically across thousands of eval-created runtimes. These tests have
-internal watchdogs or
-timing assertions whose TAP totals changed when they competed with the normal
-parallel corpus; they retain stable original indices, and `gv.t` receives the
-upstream timeout factor. This is test scheduling policy, not a relaxation of
-expected Perl behavior. The parser also accepts Perl's
-adjacent quoted import form (`use overload'""' => ...`) without weakening the
-old-style `Foo'Bar` package separator. Identical serialized runs with
-`--jobs 8` and `--jobs 1` produced `gv.t` 255/304, both advanced-regex tests
-1376/1687, `speed.t` 26/59, GH7094 6/6, and Abigail 109/130; the latter gains
-three assertions from the adjacent-import parser fix.
+Completed implementation history, validation evidence, and superseded decisions
+are intentionally omitted here and are recoverable from commit messages and pull
+requests.
 
 ### Next Steps
 
-1. Integrate Phase 36 slices from the independent regex project described in
-   `dev/design/phase36-regex-parity.md`. Direct regex behavior is fixed first;
-   unchanged wrappers remain the thread ownership and snapshot gate.
-2. Resolve Phase 39b's sole compatibility decision: whether to replace the
-   immutable Java-specific preserving-`share` assertion with system Perl's
-   destructive initialization. Nested proxies, runtime-local blessing,
-   cycles, weak views, and exactly-once cross-runtime destruction are complete;
-   `shared_clone` remains preserving.
-3. Preserve the completed Phase 44 matrix while Phase 36 and Phase 39b close:
-   core thread wrappers must finish without timeout; default and opt-in Test2,
-   Storable, Net::SSLeay, DBI, and DBIx::Class must remain green on every PR;
-   Ubuntu and Windows CI are mandatory delivery gates.
-4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
-   DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
-   all 325 files and 42,671 assertions under
-   `./jcpan --jobs 8 -t DBIx::Class`; every later phase must retain that result.
-5. Keep resource-sensitive tests in the runner's exclusive lane and require a
-   serialized same-commit reproduction before classifying timing TAP deltas.
+1. Finish the local release gates: `make`, documentation links, all four
+   upstream distribution configurations, the thread preservation matrix,
+   and `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`.
+2. Review the final diff for temporary diagnostics, generated files, accidental
+   upstream-test edits, and any mutable runtime state lacking an ownership
+   classification.
+3. Open the pull request with the exact gate results in its commit messages and
+   description.
+4. Require green Ubuntu and Windows CI. Investigate and fix any CI failure on
+   the branch; do not merge on a rerun-only explanation.
+5. After merge, treat the four unchanged upstream distributions as permanent
+   regression gates. Continue direct regex-language work, including Joni, only
+   in the separate Phase 36 project.
+
+Direct regex-language work, including Joni integration, is not part of this
+release.
+Unchanged regex thread wrappers remain preservation gates and must not regress
+relative to their same-commit direct companions.
 
 ### Resolved Delivery Decisions
 
 - Every `IOHandle` class receives an explicit inheritance adapter; there is no
   generic shallow Java-resource fallback.
 - Blessed and tied shared values are in scope when system Perl accepts them.
-- Virtual threads become the default after full platform/virtual parity;
-  nonzero stack requests select platform children.
-- Pooling is opt-in and cannot activate until the full reset contract passes.
-  `close()` remains terminal.
+- Virtual threads are the default; nonzero stack requests select platform
+  children.
+- Runtime pooling is bounded and opt-in. It activates only through the reset
+  contract and fresh-runtime replacement policy; `close()` remains terminal.
 
 ## Related Documents
 
-- `dev/prompts/multiplicity-v2-plan.md` — historical incremental plan
-- `dev/design/clone.md` — historical clone exploration, not the ithread cloner
 - `dev/design/attributes.md` — current attribute behavior
 - `dev/design/runtime-pooling-reset-contract.md` — required proof before pooling
 - `dev/design/phase36-regex-parity.md` — independent regex parity project

@@ -5,6 +5,11 @@ use warnings;
 our $VERSION = '2.43';
 our $threads = 1;
 
+BEGIN {
+    warn "Warning, threads::shared has already been loaded. To use shared variables, load threads before threads::shared\n"
+        if $threads::shared::threads_shared;
+}
+
 sub all ()      { 0 }
 sub running ()  { 1 }
 sub joinable () { 2 }
@@ -16,7 +21,8 @@ sub create {
         my $inherited = $invocant->get_stack_size;
         if (ref($_[0]) eq 'HASH') {
             my %options = %{$_[0]};
-            $options{stack_size} = $inherited unless exists $options{stack_size};
+            $options{stack_size} = $inherited
+                unless exists($options{stack_size}) || exists($options{stack});
             $_[0] = \%options;
         }
         else {
@@ -37,6 +43,7 @@ sub new { shift->create(@_) }
 sub async (&;@) { return __PACKAGE__->create(@_) }
 sub self { return _self() }
 sub tid { return ref($_[0]) ? $_[0]->{tid} : _self()->{tid} }
+sub _handle { return $_[0]->{tid} }
 sub object { shift; return _object(@_) }
 sub list { shift if @_ && !ref($_[0]) && $_[0] eq __PACKAGE__; return _list(@_) }
 sub join { return _join($_[0]) }
@@ -112,6 +119,10 @@ __END__
 =head1 NAME
 
 threads - PerlOnJava interpreter threads
+
+=head1 VERSION
+
+This document describes threads version 2.43
 
 =head1 IMPORT OPTIONS
 

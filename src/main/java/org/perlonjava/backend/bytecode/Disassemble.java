@@ -208,6 +208,12 @@ public class Disassemble {
                         src = interpretedCode.bytecode[pc++];
                         sb.append("ASSIGN_LEXICAL_SCALAR r").append(rd).append(" = r").append(src).append("\n");
                         break;
+                    case Opcodes.DISPATCH_VAR_ATTRS:
+                        rd = interpretedCode.bytecode[pc++];
+                        int attributeMetadataIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DISPATCH_VAR_ATTRS r").append(rd)
+                                .append(" const[").append(attributeMetadataIdx).append("]\n");
+                        break;
                     case Opcodes.RELEASE_CONSUMED_TEMP:
                         src = interpretedCode.bytecode[pc++];
                         rd = interpretedCode.bytecode[pc++];

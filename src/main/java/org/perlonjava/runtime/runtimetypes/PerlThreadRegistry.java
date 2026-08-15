@@ -9,17 +9,22 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /** Runtime-family registry for platform threads created by Perl ithreads. */
 public final class PerlThreadRegistry {
     private final AtomicLong nextId = new AtomicLong(1);
+    private final AtomicLong defaultStackSize = new AtomicLong();
+    private final AtomicBoolean defaultExitOnly = new AtomicBoolean();
+    private final AtomicInteger requestedProcessExit = new AtomicInteger(Integer.MIN_VALUE);
     private final ConcurrentHashMap<Long, PerlThreadControlBlock> threads = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletableFuture<String>> userUnicodeProperties =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, PerlThreadControlBlock> terminalThreads = new ConcurrentHashMap<>();
 
-    long allocateId() {
+    public long allocateId() {
         return nextId.getAndIncrement();
     }
 
@@ -57,12 +62,30 @@ public final class PerlThreadRegistry {
         return threads.size();
     }
 
+    public long defaultStackSize() { return defaultStackSize.get(); }
+    public void setDefaultStackSize(long value) { defaultStackSize.set(value); }
+    public boolean defaultExitOnly() { return defaultExitOnly.get(); }
+    public void setDefaultExitOnly(boolean value) { defaultExitOnly.set(value); }
+
+    /** Publish the first process-wide exit requested by a non-thread-only child. */
+    public void requestProcessExit(int status) {
+        requestedProcessExit.compareAndSet(Integer.MIN_VALUE, status);
+    }
+
+    public int requestedProcessExitOr(int fallback) {
+        int requested = requestedProcessExit.get();
+        return requested == Integer.MIN_VALUE ? fallback : requested;
+    }
+
     void clearTerminalStateForReset() {
         if (!threads.isEmpty() || !userUnicodeProperties.isEmpty()) {
             throw new IllegalStateException("Thread registry is not quiescent");
         }
         terminalThreads.clear();
         nextId.set(1);
+        defaultStackSize.set(0);
+        defaultExitOnly.set(false);
+        requestedProcessExit.set(Integer.MIN_VALUE);
     }
 
     /** Format Perl's process-exit diagnostic for attached, unjoined children. */

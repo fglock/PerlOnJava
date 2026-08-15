@@ -92,6 +92,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
+            if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
             if (owner.isEnvironmentHash
                     && value != null
                     && !(value instanceof RuntimeEnvironmentScalar)) {
@@ -117,6 +118,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             owner.notePackageRootMutationIf(invalidates);
             for (RuntimeScalar value : m.values()) {
+                if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
                 if (value != null) value.markContainerOwner(owner);
                 owner.markPackageRootedValue(value);
             }
@@ -476,7 +478,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // slot container. This matters for pure-Perl deep-cloners
                 // which preserve referent identity while populating hashes.
                 RuntimeScalar existing = elements.get(key);
-                if (existing != null
+                if (isDestroyRescueAssignment(existing, value)) {
+                    value.addToScalar(existing);
+                } else if (existing != null
                         && existing.type != READONLY_SCALAR
                         && !(existing instanceof RuntimeScalarReadOnly)
                         && isAggregateClearAssignment(existing, value)) {
@@ -489,7 +493,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case AUTOVIVIFY_HASH -> {
                 AutovivificationHash.vivify(this);
                 RuntimeScalar existing = elements.get(key);
-                if (existing != null
+                if (isDestroyRescueAssignment(existing, value)) {
+                    value.addToScalar(existing);
+                } else if (existing != null
                         && existing.type != READONLY_SCALAR
                         && !(existing instanceof RuntimeScalarReadOnly)
                         && isAggregateClearAssignment(existing, value)) {
@@ -507,6 +513,25 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
+    }
+
+    /**
+     * DBIx::Class rescues a Schema from DESTROY by replacing a ResultSource's
+     * weak {@code schema} element with a strong reference to the same object.
+     * Keep that existing Perl scalar slot so setLargeRefCounted can remove the
+     * weak registration and record resurrection. Replacing the Java map value
+     * bypasses both operations and clears every sibling weak back-reference.
+     */
+    private static boolean isDestroyRescueAssignment(
+            RuntimeScalar existing, RuntimeScalar replacement) {
+        if (PerlRuntime.currentOrNull() == null) return false;
+        RuntimeBase target = DestroyDispatch.currentDestroyTarget();
+        return target != null
+                && existing != null
+                && replacement != null
+                && WeakRefRegistry.isweak(existing)
+                && existing.value == target
+                && replacement.value == target;
     }
 
     /**

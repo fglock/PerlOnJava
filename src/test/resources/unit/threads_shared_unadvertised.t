@@ -35,9 +35,7 @@ my ($thread) = threads->create(sub {
 my @result = $thread->join;
 check($result[0] == 7, 'child sees shared scalar');
 check($scalar == 7, 'parent sees child scalar mutation');
-check($Config::Config{archname} =~ /^java-/
-        ? (@array == 3 && $array[2] == 3)
-        : (@array == 1 && $array[0] == 3),
+check(@array == 1 && $array[0] == 3,
     'shared array mutation survives clone');
 check($hash{b} == 2, 'shared hash mutation survives clone');
 

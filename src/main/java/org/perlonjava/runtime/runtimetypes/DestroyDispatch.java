@@ -180,6 +180,12 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
+        // Shared canonical objects carry a published class name across
+        // runtimes, but numeric bless IDs are runtime-local. Destruction may
+        // be the parent's first observation of an object created and blessed
+        // in a child, so resolve the published name before method lookup.
+        referent.synchronizePublishedSharedBlessing();
+
         // A shared aggregate may have runtime-local fetch views in another
         // ithread. Canonical deletion waits for those views; the runtime that
         // releases the last view performs the one Perl DESTROY callback.
@@ -660,6 +666,26 @@ public class DestroyDispatch {
     }
 
     /**
+     * Clear weak callbacks to objects owned by a rescued aggregate while
+     * preserving weak back-references to the rescued root itself.
+     *
+     * <p>DBIx::Class keeps a rescued Schema usable through ResultSource
+     * back-references after the user's schema lexical is undefined. At the
+     * same time, a separately retained DBI handle must observe that the nested
+     * Storage object has gone away and use its fallback HandleError callback.
+     * The normal final rescued-object sweep still clears the complete graph.</p>
+     */
+    public static boolean clearNestedWeakRefsForRescued(RuntimeBase rescued) {
+        if (!(rescued instanceof RuntimeHash hash)) return false;
+        java.util.List<RuntimeBase> rescuedObjects = state().rescuedObjects;
+        synchronized (rescuedObjects) {
+            if (!rescuedObjects.contains(rescued)) return false;
+        }
+        deepClearWeakRefsImpl(hash, 5, rescued);
+        return true;
+    }
+
+    /**
      * Recursively walk a hash's values and clear weak refs for any blessed
      * objects found, including nested hashes and arrays. This is used after
      * DESTROY rescue to clear weak refs for objects contained inside the
@@ -676,7 +702,7 @@ public class DestroyDispatch {
      * @param hash The hash to walk
      */
     private static void deepClearWeakRefs(RuntimeHash hash) {
-        deepClearWeakRefsImpl(hash, 5);
+        deepClearWeakRefsImpl(hash, 5, null);
     }
 
     /**
@@ -685,7 +711,8 @@ public class DestroyDispatch {
      * @param hash     The hash to walk
      * @param maxDepth Maximum recursion depth (prevents infinite loops on circular refs)
      */
-    private static void deepClearWeakRefsImpl(RuntimeHash hash, int maxDepth) {
+    private static void deepClearWeakRefsImpl(
+            RuntimeHash hash, int maxDepth, RuntimeBase excludedRoot) {
         if (maxDepth <= 0) return;
         for (RuntimeScalar val : hash.elements.values()) {
             // Check for any reference type (REFERENCE, HASHREFERENCE, ARRAYREFERENCE, etc.)
@@ -693,6 +720,7 @@ public class DestroyDispatch {
             // may have type HASHREFERENCE rather than plain REFERENCE.
             if ((val.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && val.value instanceof RuntimeBase base) {
+                if (base == excludedRoot) continue;
                 // Clear weak refs for this blessed object (e.g., Storage::DBI, DBI::db).
                 // Only clear if the object is blessed (blessId != 0) to avoid clearing
                 // weak refs for plain unblessed containers that might be shared.
@@ -702,7 +730,7 @@ public class DestroyDispatch {
                 // Recurse into nested hashes to find deeper blessed objects
                 // (e.g., Schema → {storage} → Storage → {_dbh} → DBI::db)
                 if (base instanceof RuntimeHash nestedHash) {
-                    deepClearWeakRefsImpl(nestedHash, maxDepth - 1);
+                    deepClearWeakRefsImpl(nestedHash, maxDepth - 1, excludedRoot);
                 }
             }
         }

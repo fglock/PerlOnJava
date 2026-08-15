@@ -37,6 +37,7 @@ public class RuntimeGraphCloner {
     private final IdentityHashMap<IOHandle, InheritedHandlePair> inheritedHandles =
             new IdentityHashMap<>();
     private final List<RuntimeScalar> weakReferences = new ArrayList<>();
+    private final List<RuntimeBase> snapshotStrongRoots = new ArrayList<>();
     private final Set<String> skippedClasses;
     private int publicDepth;
 
@@ -80,6 +81,18 @@ public class RuntimeGraphCloner {
         } finally {
             if (--publicDepth == 0) finishCloneBoundary();
         }
+    }
+
+    /**
+     * Add thread-entry roots while a runtime snapshot is still being built.
+     * Weak edges and observed-address publication are finalized only after the
+     * package graph, entry CODE, and arguments all share this identity map.
+     */
+    List<RuntimeBase> cloneSnapshotRoots(List<? extends RuntimeBase> roots) {
+        List<RuntimeBase> result = new ArrayList<>(roots.size());
+        for (RuntimeBase root : roots) result.add(cloneValue(root));
+        snapshotStrongRoots.addAll(result);
+        return result;
     }
 
     private void finishCloneBoundary() {
@@ -144,7 +157,12 @@ public class RuntimeGraphCloner {
 
         RuntimeCode target;
         if (source instanceof InterpretedCode interpreted) {
-            target = cloneInterpretedCode(interpreted);
+            // cloneInterpretedCode copies metadata itself because it is also
+            // used for an interpreted body nested inside a lazy RuntimeCode
+            // wrapper. Do not copy it a second time here: capture metadata
+            // retains every captured scalar, and a duplicate retain leaks
+            // shared lexical storage across the child snapshot boundary.
+            return cloneInterpretedCode(interpreted);
         } else if (source.subroutine instanceof InterpretedCode interpreted) {
             // Lazy named subs keep their stable RuntimeCode placeholder and
             // install the materialized interpreter body into subroutine/codeObject.
@@ -720,11 +738,13 @@ public class RuntimeGraphCloner {
     private void copyBase(RuntimeBase source, RuntimeBase target) {
         target.threadShared = source.threadShared;
         target.threadSharedIdentity = source.threadSharedIdentity;
-        target.threadSharedBlessName = source.threadSharedBlessName;
         target.threadSharedLifecycle = source.threadSharedLifecycle;
-        if (source.threadShared && source.threadSharedBlessName != null) {
+        target.threadSharedRuntimeView = source.threadShared && sourceRuntime != targetRuntime;
+        target.threadSharedBlessName = source.threadSharedLifecycle == null
+                ? source.threadSharedBlessName : source.threadSharedLifecycle.publishedBlessName;
+        if (source.threadShared && target.threadSharedBlessName != null) {
             try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-                target.blessId = NameNormalizer.getBlessId(source.threadSharedBlessName);
+                target.blessId = NameNormalizer.getBlessId(target.threadSharedBlessName);
             }
         } else {
             target.blessId = cloneBlessId(source.blessId);
@@ -773,9 +793,10 @@ public class RuntimeGraphCloner {
         if (weakReferences.isEmpty()) return;
         try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
             for (RuntimeScalar weakReference : weakReferences) {
-                WeakRefRegistry.weaken(weakReference);
+                WeakRefRegistry.weakenForSnapshot(weakReference, snapshotStrongRoots);
             }
         }
         weakReferences.clear();
+        snapshotStrongRoots.clear();
     }
 }

@@ -798,12 +798,12 @@ public class CompileAssignment {
                                             }
                                         }
                                         bytecodeCompiler.registerVariable(varName, varReg);
-                                        // Outer `my ($a,$b) : ATTR` puts attributes on the `my` node, not on
-                                        // each list slot; dispatching MODIFY_*_ once per RETRIEVE_BEGIN_* slot
-                                        // would duplicate calls. Variable attributes + RETRIEVE_BEGIN_* are
-                                        // fully handled for `my $x`, `my @x`, `my %x`, and `my $x=` forms above.
                                         bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                         bytecodeCompiler.emitReg(varReg);
+                                        // Attributes on a list declaration belong to every declared slot.
+                                        // The assignment-specific path constructs these slots directly, so
+                                        // it must dispatch attributes here before SET_FROM_LIST populates them.
+                                        bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, varReg, sigil);
                                     } else {
                                         varReg = bytecodeCompiler.addVariable(varName, "my");
                                         switch (sigil) {
@@ -823,6 +823,7 @@ public class CompileAssignment {
                                         bytecodeCompiler.emitLexicalAlias(varReg, varName);
                                         bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                         bytecodeCompiler.emitReg(varReg);
+                                        bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, varReg, sigil);
                                     }
                                     varRegs.add(varReg);
                                 }

@@ -2355,9 +2355,9 @@ public class Opcodes {
     /**
      * Assign to an existing lexical scalar.
      * Plain lexicals are replaced with a fresh RuntimeScalar, preserving the
-     * current interpreter behavior for local/alias restoration. Magical lexicals
-     * such as tied scalars and Internals::SvREADONLY scalars are assigned in
-     * place so STORE/read-only checks still fire.
+     * current interpreter behavior for local/alias restoration. Magical and
+     * shared lexicals are assigned in place so STORE/read-only checks and
+     * shared storage identity are preserved.
      * Format: ASSIGN_LEXICAL_SCALAR rd rs
      */
     public static final short ASSIGN_LEXICAL_SCALAR = 491;

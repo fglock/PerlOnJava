@@ -61,6 +61,10 @@ public final class Threads extends PerlModuleBase {
             }
             code = GlobalVariable.getGlobalCodeRef(name);
         }
+        RuntimeArray threadArgs = new RuntimeArray();
+        for (int i = codeIndex + 1; i < args.size(); i++) threadArgs.push(args.get(i));
+        PerlRuntime parent = PerlRuntime.current();
+        int threadContext = creationContext(options, ctx);
         // Perl accepts a reference-valued entry here and creates the ithread;
         // the child then fails with "Not a CODE reference". Keeping creation
         // asynchronous preserves join/error lifecycle and core diagnostics.
@@ -71,8 +75,20 @@ public final class Threads extends PerlModuleBase {
         // starting a real child here could deadlock on the enclosing compile lock.
         if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
             RuntimeHash stub = new RuntimeHash();
-            stub.put("tid", new RuntimeScalar(-1));
-            stub.put("state", new RuntimeScalar("detached"));
+            stub.put("tid", new RuntimeScalar(parent.threadRegistry().allocateId()));
+            stub.put("state", new RuntimeScalar("compile-stub"));
+            stub.put("context", new RuntimeScalar(threadContext));
+            try {
+                RuntimeList result = RuntimeCode.apply(code, threadArgs, threadContext);
+                stub.put("result", new RuntimeArray(result).createReference());
+            } catch (Throwable failure) {
+                PerlThreadExitException threadExit = findThreadExit(failure);
+                if (threadExit != null) {
+                    stub.put("result", threadExit.values().createReference());
+                } else {
+                    stub.put("error", new RuntimeScalar(errorText(failure)));
+                }
+            }
             return ReferenceOperators.bless(stub.createReference(), new RuntimeScalar(CLASS)).getList();
         }
         // Perl compiles an anonymous thread entry in the parent. In
@@ -85,15 +101,33 @@ public final class Threads extends PerlModuleBase {
                 && runtimeCode.compilerSupplier != null) {
             runtimeCode.compilerSupplier.get();
         }
-        RuntimeArray threadArgs = new RuntimeArray();
-        for (int i = codeIndex + 1; i < args.size(); i++) threadArgs.push(args.get(i));
-        PerlRuntime parent = PerlRuntime.current();
-        int threadContext = creationContext(options, ctx);
-        long stackSize = optionLong(options, "stack_size", parent.defaultPerlThreadStackSize());
+        long stackSize = optionLong(options, "stack_size",
+                optionLong(options, "stack", parent.defaultPerlThreadStackSize()));
         boolean exitOnly = optionExitOnly(options, parent.defaultPerlThreadExitOnly());
-        PerlThreadControlBlock thread = PerlThreadControlBlock.create(
-                parent, code, threadArgs, threadContext, stackSize, exitOnly).start();
+        PerlThreadControlBlock thread;
+        try {
+            thread = PerlThreadControlBlock.create(
+                    parent, code, threadArgs, threadContext, stackSize, exitOnly).start();
+        } finally {
+            releaseTemporaryEntryCode(code);
+        }
         return threadObject(thread.id(), null).getList();
+    }
+
+    /**
+     * Drop the parent half of an inline anonymous thread entry after its graph
+     * has been cloned. A CODE value stored in a lexical/package scalar has a
+     * real refCount owner and must remain callable; a direct {@code async {}}
+     * argument has neither and otherwise keeps its captured pads alive until
+     * top-level destruction.
+     */
+    private static void releaseTemporaryEntryCode(RuntimeScalar code) {
+        if (code == null || code.globalCodeRefFqn != null
+                || MyVarCleanupStack.isRegistered(code)
+                || !(code.value instanceof RuntimeCode runtimeCode)) {
+            return;
+        }
+        runtimeCode.releaseCaptures();
     }
 
     public static RuntimeList _self(RuntimeArray args, int ctx) {
@@ -108,31 +142,81 @@ public final class Threads extends PerlModuleBase {
             // returns them from list(), even while their Java carrier is still
             // winding down.
             if (thread.isDetached()) continue;
+            if (thread.isJoining()) continue;
             if (filter == 1 && !thread.isRunning()) continue;
             if (filter == 2 && !thread.isJoinable()) continue;
             result.add(threadObject(thread.id(), thread));
+        }
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(result.size()).getList();
         }
         return result;
     }
 
     public static RuntimeList _join(RuntimeArray args, int ctx) {
         RuntimeHash object = threadHash(args);
-        PerlThreadControlBlock thread = findThread(object);
+        RuntimeScalar objectTid = object.get("tid");
+        if (objectTid != null && "compile-stub".equals(object.get("state").toString())) {
+            object.put("state", new RuntimeScalar("joined"));
+            RuntimeScalar error = object.get("error");
+            if (error != null && error.getDefinedBoolean()) {
+                org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                        new RuntimeScalar("Thread " + objectTid + " terminated abnormally: " + error),
+                        new RuntimeScalar(), "threads");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            RuntimeScalar stored = object.get("result");
+            RuntimeArray values = stored != null && stored.value instanceof RuntimeArray array
+                    ? array : new RuntimeArray();
+            int creationContext = object.get("context").getInt();
+            if (creationContext == RuntimeContextType.VOID || ctx == RuntimeContextType.VOID) {
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            if (ctx == RuntimeContextType.SCALAR) {
+                return values.isEmpty() ? RuntimeScalarCache.scalarUndef.getList()
+                        : values.get(values.size() - 1).getList();
+            }
+            return new RuntimeList(values.elements.toArray(RuntimeBase[]::new));
+        }
+        PerlThreadControlBlock thread = findKnownThread(object);
         if (thread == null) throw new IllegalStateException("Thread is no longer joinable");
+        if (thread.id() == PerlRuntime.current().perlThreadId()) {
+            throw new IllegalStateException("Cannot join self");
+        }
         try {
-            PerlThreadControlBlock.Completion completion = thread.join();
+            PerlThreadControlBlock caller = PerlRuntime.current().threadRegistry()
+                    .get(PerlRuntime.current().perlThreadId());
+            if (caller != null && caller != thread) caller.beginJoinWait();
+            PerlThreadControlBlock.Completion completion;
+            try {
+                completion = thread.join();
+            } finally {
+                if (caller != null && caller != thread) caller.endJoinWait();
+            }
             try {
                 object.put("state", new RuntimeScalar("joined"));
                 String error = errorText(completion.error());
-                object.put("error", error.isEmpty() ? RuntimeScalarCache.scalarUndef : new RuntimeScalar(error));
+                RuntimeScalar errorValue = threadErrorValue(thread);
+                object.put("error", errorValue);
                 if (completion.error() instanceof PerlExitException processExit) throw processExit;
                 if (!error.isEmpty()) {
-                    RuntimeIO.getStderr().write(
-                            "Thread " + thread.id() + " terminated abnormally: " + error + "\n");
+                    org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                            new RuntimeScalar("Thread " + thread.id()
+                                    + " terminated abnormally: " + error),
+                            new RuntimeScalar(), "threads");
                 }
                 if (!(completion.value() instanceof RuntimeArray values)) return new RuntimeList();
                 List<RuntimeBase> cloned = new RuntimeGraphCloner(
                         thread.childRuntime(), PerlRuntime.current()).cloneRoots(values.elements);
+                // Join-cloned scalar roots are Perl temporaries. The receiving
+                // assignment acquires its own owner; leaving the clone's
+                // reconstructed owner live suppresses DESTROY for the joined
+                // value at parent scope/global destruction.
+                for (RuntimeBase clonedValue : cloned) {
+                    if (clonedValue instanceof RuntimeScalar scalar) {
+                        MortalList.deferDecrementIfTracked(scalar);
+                    }
+                }
                 if (thread.context() == RuntimeContextType.VOID) {
                     return RuntimeScalarCache.scalarUndef.getList();
                 }
@@ -153,7 +237,12 @@ public final class Threads extends PerlModuleBase {
 
     public static RuntimeList _detach(RuntimeArray args, int ctx) {
         RuntimeHash object = threadHash(args);
-        PerlThreadControlBlock thread = findThread(object);
+        RuntimeScalar objectTid = object.get("tid");
+        if (objectTid != null && "compile-stub".equals(object.get("state").toString())) {
+            object.put("state", new RuntimeScalar("detached"));
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        PerlThreadControlBlock thread = findKnownThread(object);
         if (thread == null) throw new IllegalStateException("Thread is no longer detachable");
         thread.detach();
         object.put("state", new RuntimeScalar("detached"));
@@ -188,8 +277,9 @@ public final class Threads extends PerlModuleBase {
         RuntimeScalar saved = object.get("error");
         PerlThreadControlBlock thread = findKnownThread(object);
         if (thread != null) {
-            return thread.error() == null ? RuntimeScalarCache.scalarUndef.getList()
-                    : new RuntimeScalar(errorText(thread.error())).getList();
+            if (thread.error() == null) return RuntimeScalarCache.scalarUndef.getList();
+            RuntimeScalar current = threadErrorValue(thread);
+            if (current.getDefinedBoolean()) return current.getList();
         }
         return saved == null || !saved.getDefinedBoolean()
                 ? RuntimeScalarCache.scalarUndef.getList() : saved.getList();
@@ -230,9 +320,19 @@ public final class Threads extends PerlModuleBase {
         RuntimeHash hash = threadHash(args);
         if (args.size() < 2) throw new IllegalArgumentException("Usage: $thr->kill('SIG...')");
         String signal = normalizeSignal(args.get(1));
-        PerlThreadControlBlock thread = findThread(hash);
-        if (thread == null || !thread.isRunning() || thread.isDetached()) {
+        PerlThreadControlBlock thread = findKnownThread(hash);
+        // Java cannot deliver Perl's uncatchable KILL semantics to a detached
+        // carrier. Preserve the documented explicit no-op for that one signal;
+        // ordinary safe signals remain deliverable to running detached threads.
+        if (thread != null && thread.isDetached() && "KILL".equals(signal)) {
             return RuntimeScalarCache.scalarUndef.getList();
+        }
+        if (thread == null || !thread.isRunning()) {
+            return thread != null && !thread.isDetached()
+                    ? object.getList() : RuntimeScalarCache.scalarUndef.getList();
+        }
+        if (!thread.hasSignalHandler(signal)) {
+            throw new IllegalStateException("Signal " + signal + " has no signal handler set");
         }
         thread.signal(signal);
         return object.getList();
@@ -331,7 +431,8 @@ public final class Threads extends PerlModuleBase {
 
     private static final Set<String> SIGNALS = Set.of(
             "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE",
-            "KILL", "USR1", "SEGV", "USR2", "PIPE", "ALRM", "TERM", "CHLD");
+            "KILL", "USR1", "SEGV", "USR2", "PIPE", "ALRM", "TERM", "CHLD",
+            "STOP", "CONT");
 
     private static String normalizeSignal(RuntimeScalar value) {
         String signal = value.toString().toUpperCase(Locale.ROOT);
@@ -364,5 +465,24 @@ public final class Threads extends PerlModuleBase {
         if (error == null) return "";
         String message = error.getMessage();
         return message == null || message.isEmpty() ? error.toString() : message;
+    }
+
+    private static PerlThreadExitException findThreadExit(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof PerlThreadExitException exit) return exit;
+            if (current.getCause() == current) break;
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private static RuntimeScalar threadErrorValue(PerlThreadControlBlock thread) {
+        Throwable failure = thread.error();
+        PerlRuntime child = thread.childRuntime();
+        if (failure == null || child == null) return RuntimeScalarCache.scalarUndef;
+        RuntimeScalar source = ErrorMessageUtil.exceptionValue(failure);
+        return new RuntimeGraphCloner(child, PerlRuntime.current())
+                .cloneRoots(List.of(source)).getFirst().scalar();
     }
 }

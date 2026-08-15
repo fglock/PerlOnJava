@@ -345,7 +345,9 @@ public class TieOperators {
         // A threaded perl still accepts lock() as a compatibility no-op until
         // threads::shared is loaded.  Core's op/lock.t relies on this behavior
         // for ordinary scalar, aggregate, and code slots.
-        if (GlobalVariable.getGlobalHash("main::INC").elements.containsKey("threads/shared.pm")) {
+        RuntimeHash inc = GlobalVariable.getGlobalHash("main::INC");
+        if (inc.elements.containsKey("threads.pm")
+                && inc.elements.containsKey("threads/shared.pm")) {
             SharedPerlStorage.lock(variable);
         }
         // For scalar references, dereference to get the value

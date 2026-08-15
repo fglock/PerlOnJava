@@ -68,6 +68,18 @@ public class WeakRefRegistry {
      * deterministically (see Strategy A in weaken-destroy.md).
      */
     public static void weaken(RuntimeScalar ref) {
+        weaken(ref, java.util.List.of());
+    }
+
+    /** Install a cloned weak edge while treating the not-yet-running thread
+     * entry graph as a strong root. */
+    static void weakenForSnapshot(
+            RuntimeScalar ref, java.util.List<? extends RuntimeBase> snapshotRoots) {
+        weaken(ref, snapshotRoots);
+    }
+
+    private static void weaken(
+            RuntimeScalar ref, java.util.List<? extends RuntimeBase> snapshotRoots) {
         if (ref.destroySelfArgument
                 || ref instanceof RuntimeScalarReadOnly
                 || ref.type == RuntimeScalarType.READONLY_SCALAR) {
@@ -159,6 +171,7 @@ public class WeakRefRegistry {
                         && (ReachabilityWalker.isReachableFromRoots(base)
                         || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
                         || ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
+                        || ReachabilityWalker.isReachableFromStrongRoots(base, snapshotRoots)
                         || RuntimeCode.isInstalledPadConstant(base))) {
                     // A temporary probe can be weakened without owning the last
                     // strong Perl reference. Test::Refcount does this when it

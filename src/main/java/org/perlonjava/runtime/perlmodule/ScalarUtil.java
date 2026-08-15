@@ -284,7 +284,13 @@ public class ScalarUtil extends PerlModuleBase {
         // that can still be an alias to the result slot; retaining that alias
         // makes the dualvar's numeric side point back to the dualvar itself
         // and numeric conversion recurses forever.
-        scalar.value = new DualVar(new RuntimeScalar(args.get(0)), new RuntimeScalar(args.get(1)));
+        // dualvar(NUM, STR) copies the two coercion channels, not the source
+        // scalar's implementation object. This matters for magic variables
+        // such as $!: its RuntimeScalar payload is dual-valued, but the
+        // authoritative errno lives in the ErrnoVariable accessors.
+        RuntimeScalar numeric = new RuntimeScalar(args.get(0).getNumber());
+        RuntimeScalar string = new RuntimeScalar(args.get(1).toString());
+        scalar.value = new DualVar(numeric, string);
         return scalar.getList();
     }
 

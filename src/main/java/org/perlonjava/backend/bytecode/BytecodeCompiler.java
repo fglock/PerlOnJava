@@ -3399,6 +3399,11 @@ public class BytecodeCompiler implements Visitor {
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
 
+                                // A captured declaration-list slot is retrieved from the
+                                // persistent definition-time cell, but attributes still
+                                // apply at runtime to that exact cell before its first use.
+                                emitVarAttrsIfNeeded(node, reg, sigil);
+
                                 varRegs.add(reg);
                                 wrapWithRef.add(isDeclaredReference);
                             } else {

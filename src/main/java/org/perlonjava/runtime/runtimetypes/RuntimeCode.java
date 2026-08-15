@@ -4553,7 +4553,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // On die: run scopeExitCleanup for my-variables whose normal
                 // SCOPE_EXIT_CLEANUP bytecodes were skipped by the exception.
                 // PerlExitException (exit()) is excluded — global destruction handles it.
-                if (!(e instanceof PerlExitException)) {
+                if (!(e instanceof PerlExitException)
+                        && !(e instanceof PerlThreadExitException)) {
                     MyVarCleanupStack.unwindTo(cleanupMark);
                     MortalList.flush();
                 }

@@ -83,12 +83,36 @@ public final class SharedPerlStorage {
 
     public static RuntimeBase referent(RuntimeScalar reference) {
         if (reference == null) return null;
-        return reference.value instanceof RuntimeBase base ? base : reference;
+        RuntimeBase current = reference;
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (current instanceof RuntimeScalar scalar
+                && !current.threadShared
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase next
+                && visited.add(current)) {
+            current = next;
+        }
+        return current;
     }
 
     public static RuntimeBase share(RuntimeScalar reference) {
         RuntimeBase root = referent(reference);
-        return shareValue(root);
+        if (root == null) {
+            throw new IllegalArgumentException("share requires a scalar, array, or hash reference");
+        }
+        validateShareRoot(root);
+
+        // Perl's public share() initializes shared storage. It preserves a
+        // scalar value but clears aggregate contents, including on re-share.
+        // The aggregate shell retains its blessing metadata.
+        if (root instanceof RuntimeArray array && array.type == RuntimeArray.PLAIN_ARRAY) {
+            array.setFromList(new RuntimeList());
+        } else if (root instanceof RuntimeHash hash && hash.type == RuntimeHash.PLAIN_HASH) {
+            hash.setFromList(new RuntimeList());
+        }
+
+        markGraph(root, Collections.newSetFromMap(new IdentityHashMap<>()));
+        return root;
     }
 
     /** Mark declaration storage directly, without manufacturing a reference wrapper. */
@@ -107,10 +131,49 @@ public final class SharedPerlStorage {
         return root != null && root.threadShared;
     }
 
+    /** Stable numeric identity for one canonical shared storage graph node. */
+    public static long sharedId(RuntimeScalar reference) {
+        RuntimeBase current = reference;
+        List<RuntimeBase> path = new ArrayList<>();
+        Map<RuntimeBase, Integer> positions = new IdentityHashMap<>();
+        while (current instanceof RuntimeScalar scalar) {
+            Integer cycleStart = positions.putIfAbsent(current, path.size());
+            if (cycleStart != null) {
+                long identity = Long.MAX_VALUE;
+                for (int i = cycleStart; i < path.size(); i++) {
+                    RuntimeBase member = path.get(i);
+                    if (member.threadShared) {
+                        identity = Math.min(identity, Integer.toUnsignedLong(
+                                System.identityHashCode(sharedIdentity(member))));
+                    }
+                }
+                return identity == Long.MAX_VALUE ? 0L : identity;
+            }
+            path.add(current);
+            if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    || !(scalar.value instanceof RuntimeBase next)) {
+                return current.threadShared
+                        ? Integer.toUnsignedLong(System.identityHashCode(sharedIdentity(current)))
+                        : 0L;
+            }
+            current = next;
+        }
+        return current != null && current.threadShared
+                ? Integer.toUnsignedLong(System.identityHashCode(sharedIdentity(current)))
+                : 0L;
+    }
+
+    /** Number of runtime views that may currently access shared storage. */
+    public static int sharedReferenceCount(RuntimeScalar reference) {
+        RuntimeBase root = referent(reference);
+        if (root == null || !root.threadShared) return 0;
+        return 1 + PerlRuntime.current().threadRegistry().snapshot().size();
+    }
+
     public static RuntimeScalar sharedClone(RuntimeScalar reference) {
         PerlRuntime runtime = PerlRuntime.current();
         RuntimeScalar clone = new RuntimeGraphCloner(runtime, runtime).cloneGraph(reference);
-        share(clone);
+        shareValue(referent(clone));
         return clone;
     }
 
@@ -166,9 +229,7 @@ public final class SharedPerlStorage {
         RuntimeBase condition = requireShared(conditionReference,
                 broadcast ? "cond_broadcast" : "cond_signal");
         Object conditionIdentity = sharedIdentity(condition);
-        if (!lockState(condition).lock.isHeldByCurrentThread()) {
-            return false;
-        }
+        boolean locked = lockState(condition).lock.isHeldByCurrentThread();
 
         List<Waiter> wake = new ArrayList<>();
         synchronized (WAITERS) {
@@ -183,7 +244,10 @@ public final class SharedPerlStorage {
             }
         }
         for (Waiter waiter : wake) waiter.latch().countDown();
-        return true;
+        // Perl permits signaling a condition while a distinct lock is held.
+        // It emits a threads warning because the condition variable itself is
+        // unlocked, but it still wakes the waiter.
+        return locked || PerlRuntime.current().hasSharedLock();
     }
 
     private static boolean conditionWait(RuntimeScalar conditionReference,
@@ -293,6 +357,26 @@ public final class SharedPerlStorage {
         throw new IllegalArgumentException("Unsupported shared value type " + value.getClass().getName());
     }
 
+    /** Validate only the storage shell that destructive public share() retains. */
+    private static void validateShareRoot(RuntimeBase value) {
+        if (value.blessId != 0) {
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            if (runtime == null || NameNormalizer.getBlessStr(value.blessId) == null) {
+                throw new IllegalArgumentException("Cannot share a value with an unknown blessing");
+            }
+        }
+        if (value instanceof RuntimeScalar) return;
+        if (value instanceof RuntimeArray array) {
+            if (array.type == RuntimeArray.PLAIN_ARRAY || array.type == RuntimeArray.TIED_ARRAY) return;
+            throw new IllegalArgumentException("Unsupported shared array type " + array.type);
+        }
+        if (value instanceof RuntimeHash hash) {
+            if (hash.type == RuntimeHash.PLAIN_HASH || hash.type == RuntimeHash.TIED_HASH) return;
+            throw new IllegalArgumentException("Unsupported shared hash type " + hash.type);
+        }
+        throw new IllegalArgumentException("Unsupported shared value type " + value.getClass().getName());
+    }
+
     private static void markGraph(RuntimeBase value, Set<RuntimeBase> seen) {
         if (value == null || !seen.add(value)) return;
         if (value instanceof RuntimeScalar scalar) {
@@ -345,6 +429,7 @@ public final class SharedPerlStorage {
                 value.threadSharedLifecycle = new RuntimeBase.SharedLifecycle();
             }
             value.threadSharedBlessName = currentBlessName(value);
+            value.threadSharedLifecycle.publishedBlessName = value.threadSharedBlessName;
             value.threadShared = true;
         }
     }
@@ -364,9 +449,13 @@ public final class SharedPerlStorage {
     }
 
     /** Publish the local class of a shared view when that view is stored. */
-    static void publishBlessing(RuntimeScalar value) {
+    public static void publishBlessing(RuntimeScalar value) {
         if (value != null && value.value instanceof RuntimeBase base && base.threadShared) {
-            base.threadSharedBlessName = currentBlessName(base);
+            String className = currentBlessName(base);
+            base.threadSharedBlessName = className;
+            if (base.threadSharedLifecycle != null) {
+                base.threadSharedLifecycle.publishedBlessName = className;
+            }
         }
     }
 
