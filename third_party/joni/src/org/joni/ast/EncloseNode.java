@@ -33,6 +33,7 @@ public final class EncloseNode extends StateNode implements EncloseType {
     public int maxLength;           // OnigDistance
     public int charLength;
     public int optCount;            // referenced count in optimize_node_left()
+    public int calloutConditionId = -1;
     public Node containingAnchor;   //
 
     // node_new_enclose / onig_node_new_enclose
@@ -86,6 +87,7 @@ public final class EncloseNode extends StateNode implements EncloseType {
         value.append(", maxLength: " + maxLength);
         value.append(", charLength: " + charLength);
         value.append(", optCount: " + optCount);
+        value.append(", calloutConditionId: " + calloutConditionId);
         value.append("\n  target: " + pad(target, level + 1));
         return value.toString();
     }

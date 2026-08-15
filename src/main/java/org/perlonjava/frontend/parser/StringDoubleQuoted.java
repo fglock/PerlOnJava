@@ -275,7 +275,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             applyCaseModifier(caseModifiers.pop());
         }
 
-        return createJoinNode(segments);
+        return needsStructuredRegexTemplate() ? buildResult() : createJoinNode(segments);
     }
 
     /**

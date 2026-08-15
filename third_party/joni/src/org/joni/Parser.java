@@ -523,8 +523,12 @@ class Parser extends Lexer {
                 if (left() && syntax.op2QMarkLParenCondition()) {
                     int num = -1;
                     int name = -1;
+                    int calloutConditionId = -1;
                     fetch();
-                    if (enc.isDigit(c)) { /* (n) */
+                    if (c == '?' && left() && peekIs('{')) {
+                        fetch();
+                        calloutConditionId = parseInternalCalloutId();
+                    } else if (enc.isDigit(c)) { /* (n) */
                         unfetch();
                         num = fetchName('(', true);
                         if (syntax.strictCheckBackref()) {
@@ -544,6 +548,7 @@ class Parser extends Lexer {
                     }
                     EncloseNode en = new EncloseNode(EncloseType.CONDITION);
                     en.regNum = num;
+                    en.calloutConditionId = calloutConditionId;
                     if (name != -1) en.setNameRef();
                     node = en;
                 } else {
@@ -716,6 +721,10 @@ class Parser extends Lexer {
     }
 
     private Node parseInternalCallout() {
+        return new CalloutNode(parseInternalCalloutId());
+    }
+
+    private int parseInternalCalloutId() {
         final String prefix = "=CALL:";
         for (int i = 0; i < prefix.length(); i++) {
             if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
@@ -743,7 +752,7 @@ class Parser extends Lexer {
         if (c != ')') newSyntaxException(UNMATCHED_CLOSE_PARENTHESIS);
 
         returnCode = 0;
-        return new CalloutNode(calloutId);
+        return calloutId;
     }
 
     private Node parseEncloseNamedGroup2(boolean listCapture) {

@@ -24,4 +24,9 @@ public interface CalloutHandler {
     CalloutResult execute(int calloutId, MatchView match);
 
     void unwind(Object backtrackToken);
+
+    /** Complete a token on a successful path. The default preserves the original cleanup contract. */
+    default void complete(Object backtrackToken) {
+        unwind(backtrackToken);
+    }
 }

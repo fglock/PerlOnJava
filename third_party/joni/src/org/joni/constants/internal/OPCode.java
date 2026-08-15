@@ -142,6 +142,7 @@ public interface OPCode {
     int EXACT1_IC_SB                  = 98;           /* single byte, N = 1, ignore case */
     int EXACTN_IC_SB                  = 99;           /* single byte,        ignore case */
     int CALLOUT                       = 100;          /* generic match-time callout */
+    int CALLOUT_CONDITION             = 101;          /* callback-selected conditional */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -246,6 +247,7 @@ public interface OPCode {
         "exact1-ic-sb", /*OP_EXACT1_IC*/
         "exactn-ic-sb", /*OP_EXACTN_IC*/
         "callout", /*OP_CALLOUT*/
+        "callout-condition", /*OP_CALLOUT_CONDITION*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -351,5 +353,6 @@ public interface OPCode {
         Arguments.SPECIAL, /*OP_EXACT1_IC*/
         Arguments.SPECIAL, /*OP_EXACTN_IC*/
         Arguments.MEMNUM, /*OP_CALLOUT*/
+        Arguments.SPECIAL, /*OP_CALLOUT_CONDITION*/
     } : null;
 }

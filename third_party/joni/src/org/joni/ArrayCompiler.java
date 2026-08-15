@@ -875,7 +875,7 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case EncloseType.CONDITION:
-            len = OPSize.CONDITION;
+            len = node.calloutConditionId >= 0 ? OPSize.CALLOUT_CONDITION : OPSize.CONDITION;
             if (node.target.getType() == NodeType.ALT) {
                 ListNode x = (ListNode)node.target;
                 tlen = compileLengthTree(x.value); /* yes-node */
@@ -975,8 +975,11 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case EncloseType.CONDITION:
-            addOpcode(OPCode.CONDITION);
-            addMemNum(node.regNum);
+            if (node.calloutConditionId >= 0) regex.requireStack = true;
+            addOpcode(node.calloutConditionId >= 0
+                    ? OPCode.CALLOUT_CONDITION : OPCode.CONDITION);
+            addMemNum(node.calloutConditionId >= 0
+                    ? node.calloutConditionId : node.regNum);
             if (node.target.getType() == NodeType.ALT) {
                 ListNode x = (ListNode)node.target;
                 len = compileLengthTree(x.value); /* yes-node */

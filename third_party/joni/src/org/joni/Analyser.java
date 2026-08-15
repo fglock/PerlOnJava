@@ -277,7 +277,7 @@ final class Analyser extends Parser {
 
         case NodeType.ENCLOSE:
             EncloseNode en = (EncloseNode)node;
-            if (en.type == EncloseType.CONDITION) {
+            if (en.type == EncloseType.CONDITION && en.calloutConditionId < 0) {
                 en.regNum = map[en.regNum];
             }
             renumberByMap(en.target, map);

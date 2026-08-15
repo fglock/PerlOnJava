@@ -402,6 +402,18 @@ abstract class StackMachine extends Matcher implements StackType {
         }
     }
 
+    protected final void completeActiveCallouts() {
+        if (stack == null) return;
+        for (int i = stk - 1; i >= 0; i--) {
+            if (stack[i].type == CALLOUT) completeCallout(stack[i]);
+        }
+    }
+
+    private void completeCallout(StackEntry entry) {
+        Object token = entry.takeCalloutToken();
+        if (token != null) getCalloutHandler().complete(token);
+    }
+
     private void unwindCallout(StackEntry entry) {
         Object token = entry.takeCalloutToken();
         if (token != null) getCalloutHandler().unwind(token);

@@ -159,6 +159,8 @@ public class EmitOperatorNode {
             // Regular expression operations
             case "matchRegex" -> EmitRegex.handleMatchRegex(emitterVisitor, node);
             case "quoteRegex" -> EmitRegex.handleQuoteRegex(emitterVisitor, node);
+            case "regexCallback" -> EmitRegex.handleRegexCallback(emitterVisitor, node);
+            case "regexTemplate" -> EmitRegex.handleRegexTemplate(emitterVisitor, node);
             case "replaceRegex" -> EmitRegex.handleReplaceRegex(emitterVisitor, node);
             case "tr", "y" -> EmitRegex.handleTransliterate(emitterVisitor, node);
             case "qx" -> EmitRegex.handleSystemCommand(emitterVisitor, node);

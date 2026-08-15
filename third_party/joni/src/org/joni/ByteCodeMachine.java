@@ -168,11 +168,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         bestLen = -1;
         s = _sstart;
         pkeep = _sstart;
+        int result = -1;
         try {
-            return enc.isSingleByte() || (msaOptions & Option.CR_7_BIT) != 0
+            result = enc.isSingleByte() || (msaOptions & Option.CR_7_BIT) != 0
                     ? executeSb(interrupt) : execute(interrupt);
+            return result;
         } finally {
-            unwindActiveCallouts();
+            if (result >= 0) completeActiveCallouts();
+            else unwindActiveCallouts();
         }
     }
 
@@ -299,6 +302,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
+                case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
 
                 case OPCode.STATE_CHECK_ANYCHAR_STAR:   if (USE_CEC) {opStateCheckAnyCharStar(); break;}
                 case OPCode.STATE_CHECK_ANYCHAR_ML_STAR:if (USE_CEC) {opStateCheckAnyCharMLStar();break;}
@@ -440,6 +444,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
+                case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
 
                 case OPCode.EXACT1_IC_SB:               opExact1ICSb();            break;
                 case OPCode.EXACTN_IC_SB:               opExactNICSb();            continue;
@@ -1934,6 +1939,17 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (result == null) throw new NullPointerException("callout result");
         if (result.getBacktrackToken() != null) pushCallout(result.getBacktrackToken());
         if (result.getAction() == CalloutAction.FAIL) opFail();
+    }
+
+    private void opCalloutCondition() {
+        int calloutId = code[ip++];
+        int addr = code[ip++];
+        CalloutHandler handler = getCalloutHandler();
+        if (handler == null) throw new IllegalStateException("callout pattern has no handler");
+        CalloutResult result = handler.execute(calloutId, this);
+        if (result == null) throw new NullPointerException("callout result");
+        if (result.getBacktrackToken() != null) pushCallout(result.getBacktrackToken());
+        if (result.getAction() == CalloutAction.FAIL) ip += addr;
     }
 
     @Override
