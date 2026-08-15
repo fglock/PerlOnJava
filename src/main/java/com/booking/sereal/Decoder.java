@@ -334,7 +334,13 @@ public class Decoder implements SerealHeader {
     int len = (int) read_varint();
 
     byte[] compressedData = Arrays.copyOfRange(originalData.array, position, position + len);
-    long decompressedSize = Zstd.decompressedSize(compressedData);
+    long decompressedSize = Zstd.getFrameContentSize(compressedData);
+    if (Zstd.isError(decompressedSize)) {
+      String message = decompressedSize == -1
+          ? "Zstd frame content size is unknown"
+          : Zstd.getErrorName(decompressedSize);
+      throw new SerealException(message);
+    }
 
     if (decompressedSize > this.maxSize) {
       throw new SerealException("The expected uncompressed size is larger than the allowed maximum size");

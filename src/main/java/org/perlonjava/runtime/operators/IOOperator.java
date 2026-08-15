@@ -8,6 +8,7 @@ import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.perlmodule.Socket;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -922,6 +923,12 @@ public class IOOperator {
 
         // Handle case where the filehandle is invalid/corrupted
         if (fh == null) {
+            if (unopenedWarningsEnabled()) {
+                String name = filehandleShortName(handle);
+                String message = "close() on unopened filehandle"
+                        + (name == null || name.isEmpty() ? "" : " " + name);
+                WarnDie.warn(new RuntimeScalar(message), new RuntimeScalar(""));
+            }
             // Return false (undef in boolean context) for invalid filehandle
             return new RuntimeScalar();
         }
@@ -931,6 +938,20 @@ public class IOOperator {
         }
 
         return fh.close();
+    }
+
+    private static boolean unopenedWarningsEnabled() {
+        return getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean()
+                || Warnings.warningManager.isWarningEnabled("unopened")
+                || Warnings.warningManager.isWarningEnabled("all");
+    }
+
+    private static String filehandleShortName(RuntimeScalar handle) {
+        if (!(handle.value instanceof RuntimeGlob glob) || glob.globName == null) {
+            return null;
+        }
+        int separator = glob.globName.lastIndexOf("::");
+        return separator >= 0 ? glob.globName.substring(separator + 2) : glob.globName;
     }
 
     /**

@@ -1314,20 +1314,33 @@ sub _shell_mkdir {
 
 sub _current_perl_path {
     my $perl = $ENV{PERLONJAVA_EXECUTABLE} || $Config{perlpath} || $^X;
-    return $perl if File::Spec->file_name_is_absolute($perl);
+    return _makefile_shell_path($perl)
+        if File::Spec->file_name_is_absolute($perl);
 
     for my $base ($ENV{PWD}, getcwd()) {
         next unless defined $base && length $base;
         my $candidate = File::Spec->catfile($base, $perl);
-        return abs_path($candidate) || $candidate if -x $candidate;
+        return _makefile_shell_path(abs_path($candidate) || $candidate)
+            if -x $candidate;
     }
 
     for my $dir (File::Spec->path()) {
         my $candidate = File::Spec->catfile($dir, $perl);
-        return abs_path($candidate) || $candidate if -x $candidate;
+        return _makefile_shell_path(abs_path($candidate) || $candidate)
+            if -x $candidate;
     }
 
-    return $perl;
+    return _makefile_shell_path($perl);
+}
+
+# Generated Makefiles deliberately use a POSIX shell, including on the
+# Windows CI image.  A native path such as D:\a\project\jperl.bat is therefore
+# parsed as shell escapes and collapses to D:aprojectjperl.bat.  Windows APIs
+# accept forward slashes, and the POSIX shell preserves them.
+sub _makefile_shell_path {
+    my ($path) = @_;
+    $path =~ tr{\\}{/} if $^O eq 'MSWin32';
+    return $path;
 }
 
 # Helper: generate a shell cp command for Makefile.
@@ -1347,7 +1360,7 @@ sub _shell_cp {
     my $autosplit_dir = $autodir;
     if ($should_autosplit) {
         $autosplit_dir =~ s/'/'\\''/g;
-        $autosplit = " && if grep -q '^__END__\$\$' '$dest'; then \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'; fi";
+        $autosplit = " && if grep -Eq '^__END__;?[[:space:]]*\$\$' '$dest'; then \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'; fi";
     }
     return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'$autosplit; else echo 'PerlOnJava: skipping missing source: $src'; fi";
 }
@@ -1391,7 +1404,7 @@ sub _shell_fixin {
     for ($file, $payload, $payload_name) {
         s/'/'\\''/g;
     }
-    return "\t\@\$(PERL) -e 'my (\$\$f,\$\$payload,\$\$payload_name,\$\$perl)=\@ARGV; open my \$\$in,q{<},\$\$f or exit 0; my \@lines=<\$\$in>; close \$\$in; exit 0 unless \@lines && \$\$lines[0] =~ /^#!.*\\bperl(?:\\s+(.*))?\\r?\\n?\\z/; my \$\$args=defined \$\$1 ? q{ }.\$\$1 : q{}; open my \$\$payload_fh,q{>},\$\$payload or die \$\$!; print \$\$payload_fh \@lines; close \$\$payload_fh or die \$\$!; chmod 0644,\$\$payload; my \$\$d=chr 36; my \$\$at=chr 64; open my \$\$out,q{>},\$\$f or die \$\$!; print \$\$out qq{#!/bin/sh\\n}; print \$\$out q{dir=}.\$\$d.q{(dirname \"}.\$\$d.q{0\")}.qq{\\n}; print \$\$out q{exec \"}.\$\$perl.q{\"}.\$\$args.q{ \"}.\$\$d.q{dir/}.\$\$payload_name.q{\" \"}.\$\$d.\$\$at.q{\"}.qq{\\n}; close \$\$out or die \$\$!; chmod 0755,\$\$f;' '$file' '$payload' '$payload_name' '\$(PERL)'";
+    return "\t\@\$(PERL) -e 'my (\$\$f,\$\$payload,\$\$payload_name,\$\$perl)=\@ARGV; open my \$\$in,q{<},\$\$f or exit 0; my \@lines=<\$\$in>; close \$\$in; exit 0 unless \@lines && \$\$lines[0] =~ /^#!.*\\bperl(?:\\s+(.*))?\\r?\\n?\\z/; my \$\$args=defined \$\$1 ? q{ }.\$\$1 : q{}; open my \$\$payload_fh,q{>},\$\$payload or die \$\$!; print \$\$payload_fh \@lines; close \$\$payload_fh or die \$\$!; chmod 0644,\$\$payload; my \$\$d=chr 36; my \$\$at=chr 64; chmod 0644,\$\$f or die \$\$!; open my \$\$out,q{>},\$\$f or die \$\$!; print \$\$out qq{#!/bin/sh\\n}; print \$\$out q{dir=}.\$\$d.q{(dirname \"}.\$\$d.q{0\")}.qq{\\n}; print \$\$out q{exec \"}.\$\$perl.q{\"}.\$\$args.q{ \"}.\$\$d.q{dir/}.\$\$payload_name.q{\" \"}.\$\$d.\$\$at.q{\"}.qq{\\n}; close \$\$out or die \$\$!; chmod 0755,\$\$f;' '$file' '$payload' '$payload_name' '\$(PERL)'";
 }
 
 # Helper: generate postamble for File::ShareDir::Install

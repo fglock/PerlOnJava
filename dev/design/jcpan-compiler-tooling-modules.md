@@ -10,7 +10,7 @@ over distribution preferences.
 
 ## Progress Tracking
 
-### Current Status: complete; PR #964 open with CI passing
+### Current Status: PR #963 commits unified into PR #964; combined CI pending
 
 ### Completed Phases
 
@@ -45,10 +45,16 @@ over distribution preferences.
   - Opened [PR #964](https://github.com/fglock/PerlOnJava/pull/964).
   - Ubuntu CI passed in 11m20s.
   - Windows CI passed in 18m10s.
+- [x] Phase 7: unified review branch (2026-08-15)
+  - Merged all five commits from PR #963 into PR #964 for joint testing and
+    approval.
+  - The combined full `make` suite passed before push.
 
 ### Next Steps
 
-1. Await review of PR #964.
+1. Complete unified PR #964 CI.
+2. Mark PR #963 as superseded by PR #964.
+3. Await joint testing and review of PR #964.
 
 ### Open Questions
 
