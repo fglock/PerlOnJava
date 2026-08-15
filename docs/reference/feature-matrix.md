@@ -769,6 +769,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ❌  **Safe** module.
 
 ### Non-core modules
+- 🟡 **Object::Pad**: core class, field, method, parameter, and inheritance
+  syntax is handled by PerlOnJava's native class compiler; Object::Pad-specific
+  MOP extensions are not implemented.
 - ✅  **JSON::DWIW**: relaxed JSON conversion implemented over the bundled
   pure-Perl `JSON::PP` backend.
 - ✅  **Taint::Runtime**: Java XS replacement for runtime taint toggling and

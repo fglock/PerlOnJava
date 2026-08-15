@@ -790,7 +790,7 @@ sub _perlonjava_missing_modules_from_test_output {
 
     my %seen;
     my @modules;
-    while ($output =~ /(?:\A|\n)Can't locate ([A-Za-z_][A-Za-z0-9_]*(?:\/[A-Za-z_][A-Za-z0-9_]*)*\.pm) in \@INC\b/g) {
+    while ($output =~ /(?:\A|\n)[^\n]*?Can't locate ([A-Za-z_][A-Za-z0-9_]*(?:\/[A-Za-z_][A-Za-z0-9_]*)*\.pm) in \@INC\b/g) {
         my $module = $1;
         $module =~ s{/}{::}g;
         $module =~ s{\.pm\z}{};

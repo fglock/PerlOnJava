@@ -233,7 +233,13 @@ public class StatementResolver {
                         if (peek(parser).text.equals("(")) {
                             // Parse the signature properly to generate parameter declarations
                             // Pass true for isMethod flag to account for implicit $self in error messages
-                            signatureAST = SignatureParser.parseSignature(parser, methodName, true);
+                            boolean wasInMethod = parser.isInMethod;
+                            parser.isInMethod = true;
+                            try {
+                                signatureAST = SignatureParser.parseSignature(parser, methodName, true);
+                            } finally {
+                                parser.isInMethod = wasInMethod;
+                            }
                             // Note: SignatureParser consumes the closing )
                         }
 
@@ -617,7 +623,13 @@ public class StatementResolver {
                             ListNode signatureAST = null;
                             if (peek(parser).text.equals("(")) {
                                 // Pass true for isMethod flag to account for implicit $self in error messages
-                                signatureAST = SignatureParser.parseSignature(parser, methodName, true);
+                                boolean wasInMethod = parser.isInMethod;
+                                parser.isInMethod = true;
+                                try {
+                                    signatureAST = SignatureParser.parseSignature(parser, methodName, true);
+                                } finally {
+                                    parser.isInMethod = wasInMethod;
+                                }
                             }
 
                             try {

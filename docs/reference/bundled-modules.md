@@ -377,6 +377,7 @@ These are loaded automatically or via `use`:
 
 | Module | Implementation | Notes |
 |--------|---------------|-------|
+| `Object::Pad` | Perl/compiler | Core `class`, `field`, `method`, `:param`, and `:isa` syntax uses PerlOnJava's native class compiler; Object::Pad MOP extensions are not included |
 | `Scalar::Util` | Java | |
 | `Sub::Name` | Java | |
 | `Sub::Util` | Java | |

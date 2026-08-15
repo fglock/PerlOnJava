@@ -404,6 +404,11 @@ public class YAMLPP extends PerlModuleBase {
             case DOUBLE -> scalar.getDouble();
             case INTEGER -> scalar.getLong();
             case BOOLEAN -> scalar.getBoolean();
+            // YAML::PP's Perl schema serializes scalar references (including
+            // boolean.pm's blessed scalar references) by their referent.  A
+            // null result here incorrectly turned true and false into YAML
+            // nulls in consumers such as Pegex::JSON.
+            case REFERENCE -> convertRuntimeScalarToYaml(scalar.scalarDeref(), seen);
             case READONLY_SCALAR -> convertRuntimeScalarToYaml((RuntimeScalar) scalar.value, seen);
             default -> null;
         };

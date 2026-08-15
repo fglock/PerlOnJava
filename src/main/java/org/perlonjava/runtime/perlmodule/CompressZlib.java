@@ -832,6 +832,7 @@ public class CompressZlib extends PerlModuleBase {
             self.put("_mode", new RuntimeScalar(mode));
             self.put("_eof", new RuntimeScalar(0));
             self.put("_pos", new RuntimeScalar(0));
+            self.put("_error", new RuntimeScalar(0));
             GlobalVariable.getGlobalVariable("Compress::Zlib::gzerrno").set(new RuntimeScalar(0));
 
             if (mode.startsWith("r")) {

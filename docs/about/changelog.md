@@ -4,6 +4,11 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- CPAN/compiler tooling: restore YAML::PP's object `dump` API, recognize
+  TAP-indented missing prerequisites, report gzip stream completion for CPAN
+  single-file distributions, and route Object::Pad's core syntax through the
+  native class compiler. This unblocks Pegex::JSON, Music::Factory,
+  App::Chained, and Queue without distribution preferences.
 - CPAN/compiler tooling: add transitive prerequisites to the bundled-provider
   manifest, provide a JAXP-backed `XML::LibXSLT`, and preserve descriptors for
   anonymous handles stored in container lvalues. This unblocks
