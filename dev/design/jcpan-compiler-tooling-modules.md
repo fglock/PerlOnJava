@@ -10,7 +10,7 @@ over distribution preferences.
 
 ## Progress Tracking
 
-### Current Status: PR #963 commits unified into PR #964; combined CI pending
+### Current Status: PR #963 commits unified into PR #964; combined CI passing
 
 ### Completed Phases
 
@@ -49,12 +49,12 @@ over distribution preferences.
   - Merged all five commits from PR #963 into PR #964 for joint testing and
     approval.
   - The combined full `make` suite passed before push.
+  - Unified PR #964 CI passed on Ubuntu in 14m35s and Windows in 17m27s.
 
 ### Next Steps
 
-1. Complete unified PR #964 CI.
-2. Mark PR #963 as superseded by PR #964.
-3. Await joint testing and review of PR #964.
+1. Mark PR #963 as superseded by PR #964.
+2. Await joint testing and review of PR #964.
 
 ### Open Questions
 

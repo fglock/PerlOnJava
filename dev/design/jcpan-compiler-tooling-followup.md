@@ -37,7 +37,7 @@ The following are not treated as PerlOnJava regressions because their current di
 
 ## Progress Tracking
 
-### Current Status: unified into PR #964; combined CI pending
+### Current Status: unified into PR #964; combined CI passing
 
 ### Completed Phases
 
@@ -81,14 +81,12 @@ The following are not treated as PerlOnJava regressions because their current di
   - Merged all five PR #963 commits into PR #964 so the compiler, runtime,
     CPAN-tooling, and Java-module changes can be tested and approved together.
   - The combined full `make` suite passed before the unified branch was pushed.
-  - PR #963 remains available as the source history until unified PR #964 CI
-    completes.
+  - Unified PR #964 CI passed on Ubuntu in 14m35s and Windows in 17m27s.
 
 ### Next Steps
 
-1. Complete unified PR #964 CI.
-2. Mark PR #963 as superseded by PR #964.
-3. Hand PR #964 back for user testing and review.
+1. Mark PR #963 as superseded by PR #964.
+2. Hand PR #964 back for user testing and review.
 
 ### Open Questions
 
