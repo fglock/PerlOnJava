@@ -554,6 +554,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 && (value.containerOwner != this || elements.containsValue(value))) {
             return new RuntimeScalar(value);
         }
+        // @_ entries alias the caller's scalar. Hash assignment copies the SV
+        // value into a distinct element slot; retaining the alias lets a later
+        // weaken($hash{key}) weaken the caller itself. Test2's weak hub->{ast}
+        // backlink exposed this when an ithread captured the caller object.
+        if (RuntimeCode.isCurrentArgumentAlias(value)) {
+            return new RuntimeScalar(value);
+        }
         return value;
     }
 
@@ -618,7 +625,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         var value = elements.get(key);
         if (value != null) {
-            return value;
+            return SharedPerlStorage.fetchedElement(this, value);
         }
         // Lazy autovivification
         return new RuntimeHashProxyEntry(this, key);
@@ -697,7 +704,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // Update the key's byte/UTF-8 flag to match the accessing key's type.
                     // In Perl, the key's UTF-8 flag is updated on each access.
                     markKeyByte(key, keyScalar.type == BYTE_STRING);
-                    yield value;
+                    yield SharedPerlStorage.fetchedElement(this, value);
                 }
                 // Lazy element autovivification - pass key's byte flag for type tracking
                 boolean isByteKey = keyScalar.type == BYTE_STRING;

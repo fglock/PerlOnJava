@@ -113,7 +113,7 @@ The handler provides all standard PSGI v1.1 environment keys:
 - `CONTENT_LENGTH`, `CONTENT_TYPE`
 - `HTTP_*` headers (normalized to uppercase with underscores)
 - `psgi.version`, `psgi.url_scheme`, `psgi.input`, `psgi.errors`
-- `psgi.multithread` (false), `psgi.multiprocess` (false)
+- `psgi.multithread` (false by default; true with a runtime pool), `psgi.multiprocess` (false)
 - `psgi.run_once` (false), `psgi.nonblocking` (true), `psgi.streaming` (true)
 
 ## Configuration Options
@@ -193,15 +193,16 @@ connections without concurrent callbacks into the captured PSGI application:
 ✅ **Handles:** Thousands of concurrent connections efficiently  
 ⚠️ **Limitation:** CPU-bound request handlers may block other requests
 
-PerlOnJava supports isolated Perl ithreads, but that capability does not make a
-single captured PSGI runtime concurrently callable. The handler therefore
-advertises `psgi.multithread => \0`. Applications may explicitly create
-ithreads for isolated work, subject to the documented thread limitations.
+PerlOnJava supports isolated Perl ithreads, but that capability alone does not
+make a single captured PSGI runtime concurrently callable. The default handler
+therefore advertises `psgi.multithread => \0`. Set
+`JPERL_RUNTIME_POOL_SIZE=N` to prebuild N independent application snapshots;
+pooled requests then advertise `psgi.multithread => \1`.
 
 ## Limitations
 
-- **Single application runtime** - CPU-intensive handlers block other requests;
-  the handler does not provide a pool of concurrently callable app runtimes
+- **Pooling is explicit** - The correctness-first default is one application
+  runtime. Size the opt-in pool for the application's memory and latency needs.
 
 ## Performance
 

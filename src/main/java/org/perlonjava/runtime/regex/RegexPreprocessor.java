@@ -1570,6 +1570,15 @@ public class RegexPreprocessor {
             }
             String verbName = s.substring(offset + 2, verbNameEnd);
 
+            // Perl's (*FAIL) / (*F) is a zero-width assertion that can never
+            // succeed. Java's empty negative lookahead has exactly that
+            // declarative behavior and preserves surrounding backtracking.
+            if ((verbName.equals("FAIL") || verbName.equals("F"))
+                    && verbNameEnd < length && s.codePointAt(verbNameEnd) == ')') {
+                sb.append("(?!)");
+                return verbNameEnd;
+            }
+
             // Check for alpha assertion aliases (Perl 5.28+)
             String replacement = switch (verbName) {
                 case "pla", "positive_lookahead" -> "(?=";

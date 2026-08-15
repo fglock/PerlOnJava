@@ -443,6 +443,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** True when this scalar is one of the current call's original @_ aliases. */
+    public static boolean isCurrentArgumentAlias(RuntimeScalar scalar) {
+        if (scalar == null) return false;
+        if (PerlRuntime.currentOrNull() == null) return false;
+        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        if (stack.isEmpty()) return false;
+        for (RuntimeScalar argument : stack.peek()) {
+            if (argument == scalar) return true;
+        }
+        return false;
+    }
+
     /**
      * Return the pristine arguments belonging to a specific active code object.
      * The formatted caller stack collapses compiler/interpreter wrapper pairs,
@@ -1023,6 +1035,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } catch (ReflectiveOperationException e) {
                 throw new IllegalStateException("Unable to inherit __SUB__ for callback", e);
             }
+        }
+    }
+
+    /** Restore this CODE value's own __SUB__ reference after an ithread clone. */
+    void restoreClonedSelfReference(RuntimeScalar selfRef) {
+        __SUB__ = selfRef;
+        Object implementation = codeObject != null ? codeObject : subroutine;
+        if (implementation == null || implementation instanceof org.perlonjava.backend.bytecode.InterpretedCode) {
+            return;
+        }
+        try {
+            Field field = implementation.getClass().getDeclaredField("__SUB__");
+            field.set(implementation, selfRef);
+        } catch (NoSuchFieldException ignored) {
+            // Native/Java-backed implementations have no generated __SUB__ field.
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to restore cloned __SUB__ reference", e);
         }
     }
 

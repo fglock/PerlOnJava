@@ -111,6 +111,16 @@ public class ReachabilityWalker {
         for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
             visitScalar(e.getValue(), todo);
         }
+        // An executing anonymous closure is a live Perl root even when no
+        // package/global slot refers to its CODE value. Statement-boundary
+        // sweeps run inside RuntimeCode.apply(); follow that active closure's
+        // captures before deciding that a blessed referent is unreachable.
+        // Test2::AsyncSubtest exposes this with a weak hub back-reference: the
+        // child entry closure is the sole strong owner of $self while it runs.
+        for (RuntimeCode active : new ArrayList<>(
+                PerlRuntime.current().executionState().activeCodeStack)) {
+            addReachable(active, todo);
+        }
         bfs(todo, /*walkCaptures=*/ true);
 
         // Phase 2: seed remaining roots.

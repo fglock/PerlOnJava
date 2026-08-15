@@ -22,8 +22,8 @@ public final class PerlThreadControlBlock {
     private final long id;
     private final long parentId;
     private final PerlThreadRegistry registry;
-    private final PerlRuntime childRuntime;
-    private final EntryPoint entryPoint;
+    private volatile PerlRuntime childRuntime;
+    private volatile EntryPoint entryPoint;
     private final int context;
     private final long stackSize;
     private final RuntimeIO parentErrorOutput;
@@ -103,7 +103,9 @@ public final class PerlThreadControlBlock {
     public synchronized PerlThreadControlBlock start() {
         if (state != State.NEW) throw new IllegalStateException("Thread already started");
         state = State.RUNNING;
-        platformThread = PerlThreadExecutionPolicy.configured().unstarted(id, stackSize, this::run);
+        platformThread = PerlThreadExecutionPolicy.configured()
+                .effectiveForStackSize(stackSize)
+                .unstarted(id, stackSize, this::run);
         platformThread.start();
         return this;
     }
@@ -114,7 +116,9 @@ public final class PerlThreadControlBlock {
                 RuntimeBase value = null;
                 Throwable failure = null;
                 try {
-                    value = entryPoint.run(childRuntime);
+                    EntryPoint work = entryPoint;
+                    if (work == null) throw new IllegalStateException("Thread entry point was released early");
+                    value = work.run(childRuntime);
                 } catch (Throwable thrown) {
                     PerlThreadExitException exit = findThreadExit(thrown);
                     if (exit != null) value = exit.values();
@@ -138,6 +142,7 @@ public final class PerlThreadControlBlock {
             if (detached) {
                 reportAbnormalTermination();
                 registry.remove(this);
+                releaseTerminalResources();
             }
         }
     }
@@ -177,6 +182,7 @@ public final class PerlThreadControlBlock {
             state = State.DETACHED;
             reportAbnormalTermination();
             registry.remove(this);
+            releaseTerminalResources();
         }
     }
 
@@ -197,9 +203,29 @@ public final class PerlThreadControlBlock {
     /** Deliver a Perl signal in the target runtime at its next safe point. */
     public void signal(String signal) {
         if (!isRunning()) return;
-        PerlSignalQueue.enqueue(childRuntime.signalState, signal);
+        PerlRuntime runtime = childRuntime;
+        if (runtime == null) return;
+        PerlSignalQueue.enqueue(runtime.signalState, signal);
         Thread javaThread = platformThread;
         if (javaThread != null) javaThread.interrupt();
+    }
+
+    /**
+     * Drop the completed child's package graph after its return values have
+     * been cloned into the joining runtime. Terminal thread-object aliases
+     * retain this control block's state and error, but must not retain an
+     * entire interpreter snapshot indefinitely.
+     */
+    public void releaseTerminalResources() {
+        PerlRuntime runtime;
+        synchronized (this) {
+            if (state != State.JOINED && state != State.DETACHED) return;
+            result = null;
+            entryPoint = null;
+            runtime = childRuntime;
+            childRuntime = null;
+        }
+        if (runtime != null) runtime.close();
     }
 
     private void reportAbnormalTermination() {

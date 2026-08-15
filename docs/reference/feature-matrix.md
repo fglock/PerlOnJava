@@ -851,8 +851,8 @@ ithreads on both the JVM compiler and bytecode interpreter backends.
 | Identity and state | ✅ | `self`, `tid`, `list`, equality, running/joinable/detached checks, errors, nested threads, and child-only `threads->exit` are supported. |
 | `threads::shared` | 🟡 | `share`, `is_shared`, `shared_clone`, and `:shared` support scalar/array/hash graphs. Blessed aggregate roots use runtime-local class views over common backing; tied scalars clone callback state and tied arrays/hashes convert to native shared storage when shared. |
 | Locks and conditions | ✅ | Recursive lexical `lock`, `cond_wait`, absolute `cond_timedwait`, `cond_signal`, and `cond_broadcast` are supported. |
-| Platform threads | ✅ | Stable default. |
-| Virtual threads | 🟡 | Experimental process-wide opt-in; semantic parity is measured, but no performance benefit or complete native-I/O diagnostic clearance on Java 24 is claimed. |
+| Platform threads | ✅ | Explicit compatibility mode and automatic fallback for a nonzero stack-size request. |
+| Virtual threads | ✅ | Java 24 launcher default; snapshot, lifecycle, shared-storage, native-callback, DBI, and Test2 gates retain platform parity. |
 
 The clone-versus-share rule is important: ordinary references are cloned with
 aliasing and cycles preserved inside the child graph, but they are not the same
@@ -864,12 +864,12 @@ storage as their parent counterparts. Values explicitly shared through
 | Limitation | Effect |
 |---|---|
 | Thread signals | `threads->kill` targets live attached children and resolves the handler inside the child runtime. Completed and detached targets are not signalable. |
-| Effective stack sizing | Platform-backed children honor supported `stack_size` create/import requests. Virtual threads reject nonzero stack sizes because their stacks are JVM-managed. |
+| Effective stack sizing | Platform-backed children honor supported `stack_size` create/import requests. A nonzero request under the default virtual policy transparently selects a platform child. |
 | Additional introspection | `threads->object` and creation-context `wantarray` are implemented. CLI shutdown reports running and finished unjoined threads; detached children are silent. |
 | Nested shared-object proxy identity | Root blessed/tied policies are implemented. Exact fresh proxy identity for nested references fetched from shared aggregates, and one global `DESTROY` owner across those views, remain follow-up work. |
 | Native resources and callbacks | File, socket, process, native-descriptor, scalar, layered, duplicated, borrowed, directory, and standard handles have explicit inheritance policies. Net::SSLeay handles remain runtime-owned and stored callbacks bind their registering runtime. |
 | Upstream suite coverage | Core thread/lvalue coverage includes `op/index_thr.t` 415/415 and `op/substr_thr.t` 400/400 on both backends. `class/threads.t`, Storable's thread test, `threads-dirh.t`, Test2's default thread IPC acceptance, and `user_prop_race_thr.t` complete. Lexical `re 'debug'` is runtime-owned; remaining regex-language gaps are tracked against direct companion tests. |
-| PSGI | Availability of ithreads does not make one captured PSGI application runtime concurrently callable. `Plack::Handler::Netty` advertises `psgi.multithread => \0`. |
+| PSGI | The default single-runtime handler advertises `psgi.multithread => \0`. A bounded opt-in pool gives every concurrent request an independent app snapshot and advertises `\1`; pool size defaults to zero. |
 
 The complete design and measured validation record is in
 [Concurrency and runtime isolation](../../dev/design/concurrency.md).

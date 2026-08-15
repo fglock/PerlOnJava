@@ -2,6 +2,7 @@ package org.perlonjava.backend.jvm;
 
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -300,16 +301,16 @@ public class EmitRegex {
     /** Validate non-interpolated qr// at CV compilation, as Perl does. */
     private static void validateLiteralRegex(EmitterVisitor emitterVisitor, ListNode operand) {
         if (operand.elements.size() < 2
-                || !(operand.elements.get(0) instanceof StringNode pattern)
-                || !(operand.elements.get(1) instanceof StringNode flags)
-                || RuntimeRegex.requiresRuntimeUnicodePropertyResolution(pattern.value)) {
+                || !(operand.elements.get(1) instanceof StringNode flags)) {
             return;
         }
+        String pattern = RegexLiteralAnalyzer.constantString(operand.elements.get(0));
+        if (pattern == null || RuntimeRegex.requiresRuntimeUnicodePropertyResolution(pattern)) return;
         String modifiers = flags.value;
         if (unicodeStringsEnabled(emitterVisitor) && !modifiers.contains("u")) {
             modifiers += "u";
         }
-        RuntimeRegex.validateLiteralSyntax(pattern.value, modifiers);
+        RuntimeRegex.validateLiteralSyntax(pattern, modifiers);
     }
 
     /**

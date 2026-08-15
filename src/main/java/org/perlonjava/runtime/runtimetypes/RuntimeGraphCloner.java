@@ -277,6 +277,13 @@ public class RuntimeGraphCloner {
         target.isMapGrepBlock = source.isMapGrepBlock;
         target.isEvalBlock = source.isEvalBlock;
         target.isTryExpressionWrapper = source.isTryExpressionWrapper;
+        target.inheritsSelfReference = source.inheritsSelfReference;
+        target.explicitlyRenamed = source.explicitlyRenamed;
+        target.isConstantCv = source.isConstantCv;
+        target.stashInstallPackage = source.stashInstallPackage;
+        target.stashInstallSub = source.stashInstallSub;
+        target.hadStashRef = source.hadStashRef;
+        target.installedViaAnonGlobAssign = source.installedViaAnonGlobAssign;
         target.cvStartFile = source.cvStartFile;
         target.cvStartLine = source.cvStartLine;
         target.deparseSourceText = source.deparseSourceText;
@@ -289,6 +296,10 @@ public class RuntimeGraphCloner {
         target.stateVariable = cloneScalarMap(source.stateVariable);
         target.stateArray = cloneArrayMap(source.stateArray);
         target.stateHash = cloneHashMap(source.stateHash);
+        if (source.__SUB__ != null) {
+            target.restoreClonedSelfReference(
+                    (RuntimeScalar) cloneValue(source.__SUB__));
+        }
         if (source.constantValue == null) {
             target.constantValue = null;
         } else {
@@ -303,12 +314,38 @@ public class RuntimeGraphCloner {
             for (Map.Entry<String, RuntimeBase> entry : source.closedOverVariables.entrySet()) {
                 target.closedOverVariables.put(entry.getKey(), cloneValue(entry.getValue()));
             }
-            target.capturedScalars = target.closedOverVariables.values().stream()
-                    .filter(RuntimeScalar.class::isInstance).map(RuntimeScalar.class::cast)
-                    .toArray(RuntimeScalar[]::new);
-            target.capturedAggregates = target.closedOverVariables.values().stream()
-                    .filter(value -> value instanceof RuntimeArray || value instanceof RuntimeHash)
-                    .toArray(RuntimeBase[]::new);
+        }
+
+        // capturedScalars/capturedAggregates are the authoritative ownership
+        // lists built by makeCodeObject()/CREATE_CLOSURE. closedOverVariables
+        // is diagnostic/name metadata and can legitimately omit executable
+        // captures, so rebuilding ownership from that map allowed a method
+        // return to DESTROY a still-live captured object in an ithread.
+        if (source.capturedScalars != null) {
+            target.capturedScalars = new RuntimeScalar[source.capturedScalars.length];
+            for (int i = 0; i < source.capturedScalars.length; i++) {
+                target.capturedScalars[i] =
+                        (RuntimeScalar) cloneValue(source.capturedScalars[i]);
+            }
+            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                for (RuntimeScalar captured : target.capturedScalars) {
+                    captured.retainThreadCloneClosureCapture();
+                }
+            }
+        }
+        if (source.capturedAggregates != null) {
+            target.capturedAggregates = new RuntimeBase[source.capturedAggregates.length];
+            for (int i = 0; i < source.capturedAggregates.length; i++) {
+                target.capturedAggregates[i] = cloneValue(source.capturedAggregates[i]);
+            }
+            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                for (RuntimeBase captured : target.capturedAggregates) {
+                    captured.retainClosureCapture();
+                }
+            }
+        }
+        if (target.capturedScalars != null || target.capturedAggregates != null) {
+            target.refCount = 0;
         }
     }
 
@@ -405,16 +442,44 @@ public class RuntimeGraphCloner {
             target.value = source.value;
         }
 
-        if (isWeak(source)) weakReferences.add(target);
-        if (target.value instanceof RuntimeCode code
-                && code.subroutine instanceof CloneablePerlSubroutine cloneable
-                && code.__SUB__ == null) {
-            code.__SUB__ = target;
-            cloneable.setSelfReference(target);
-        } else if (target.value instanceof InterpretedCode interpreted && interpreted.__SUB__ == null) {
-            interpreted.__SUB__ = target;
+        boolean weak = isWeak(source);
+        if (weak) {
+            weakReferences.add(target);
+        } else {
+            restoreScalarReferenceOwnership(source, target);
+        }
+        if (target.value instanceof RuntimeCode code && code.__SUB__ == null) {
+            // JVM CODE commonly stores its generated implementation in
+            // codeObject/methodHandle with subroutine == null. The old
+            // CloneablePerlSubroutine-only branch therefore left the generated
+            // __SUB__ field null after a thread snapshot, making a second-level
+            // SUPER call restart from the most-derived invocant and recurse.
+            code.restoreClonedSelfReference(target);
         }
         return target;
+    }
+
+    private void restoreScalarReferenceOwnership(RuntimeScalar source, RuntimeScalar target) {
+        if (!source.refCountOwned
+                || (target.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(target.value instanceof RuntimeBase referent)) {
+            return;
+        }
+        if (referent.refCount < 0
+                && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)) {
+            referent.refCount = 0;
+        }
+        if (referent.refCount < 0) return;
+        if (referent.refCount == 0) referent.registerSharedFetchedView();
+        referent.traceRefCount(+1, "RuntimeGraphCloner.restoreScalarReferenceOwnership");
+        referent.recordOwner(target, "thread clone scalar owner");
+        referent.recordActiveOwner(target);
+        referent.refCount++;
+        referent.hadCountedReference = true;
+        target.refCountOwned = true;
+        try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+            ScalarRefRegistry.registerRef(target);
+        }
     }
 
     private RuntimeArray cloneArray(RuntimeArray source) {
@@ -653,9 +718,17 @@ public class RuntimeGraphCloner {
     }
 
     private void copyBase(RuntimeBase source, RuntimeBase target) {
-        target.blessId = cloneBlessId(source.blessId);
         target.threadShared = source.threadShared;
         target.threadSharedIdentity = source.threadSharedIdentity;
+        target.threadSharedBlessName = source.threadSharedBlessName;
+        target.threadSharedLifecycle = source.threadSharedLifecycle;
+        if (source.threadShared && source.threadSharedBlessName != null) {
+            try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                target.blessId = NameNormalizer.getBlessId(source.threadSharedBlessName);
+            }
+        } else {
+            target.blessId = cloneBlessId(source.blessId);
+        }
         target.localBindingExists = source.localBindingExists;
         target.storedInPackageGlobal = source.storedInPackageGlobal;
         target.isPackageGlobalRoot = source.isPackageGlobalRoot;

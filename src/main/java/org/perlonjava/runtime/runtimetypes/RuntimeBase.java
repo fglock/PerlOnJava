@@ -18,6 +18,66 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * runtime-local callback views and keep this token in common.
      */
     public volatile Object threadSharedIdentity;
+    /** Canonical class name published with shared aggregate storage. */
+    public volatile String threadSharedBlessName;
+    /**
+     * Cross-runtime lifetime shared by a canonical threads::shared aggregate
+     * and the runtime-local proxy views fetched from aggregate slots.
+     */
+    public volatile SharedLifecycle threadSharedLifecycle;
+    /** True only for a fetch-time proxy wrapper, never for canonical storage. */
+    public boolean threadSharedFetchedView;
+    /** True after this wrapper has registered one live view with the lifecycle. */
+    private boolean threadSharedViewRegistered;
+
+    public static final class SharedLifecycle {
+        final java.util.concurrent.atomic.AtomicInteger liveViews =
+                new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicBoolean destroyPending =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        final java.util.concurrent.atomic.AtomicBoolean destroyFired =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        volatile boolean active;
+    }
+
+    void registerSharedFetchedView() {
+        SharedLifecycle lifecycle = threadSharedLifecycle;
+        if (!threadSharedFetchedView || lifecycle == null || threadSharedViewRegistered) return;
+        synchronized (this) {
+            if (!threadSharedViewRegistered) {
+                lifecycle.active = true;
+                lifecycle.liveViews.incrementAndGet();
+                threadSharedViewRegistered = true;
+            }
+        }
+    }
+
+    /**
+     * @return true when ordinary DESTROY dispatch must be suppressed.
+     */
+    boolean deferSharedDestroy() {
+        SharedLifecycle lifecycle = threadSharedLifecycle;
+        if (!threadShared || lifecycle == null || !lifecycle.active) return false;
+
+        if (threadSharedFetchedView) {
+            int remaining = lifecycle.liveViews.get();
+            synchronized (this) {
+                if (threadSharedViewRegistered) {
+                    threadSharedViewRegistered = false;
+                    remaining = lifecycle.liveViews.decrementAndGet();
+                }
+            }
+            if (remaining == 0 && lifecycle.destroyPending.get()
+                    && lifecycle.destroyFired.compareAndSet(false, true)) {
+                return false;
+            }
+            return true;
+        }
+
+        lifecycle.destroyPending.set(true);
+        if (lifecycle.liveViews.get() > 0) return true;
+        return !lifecycle.destroyFired.compareAndSet(false, true);
+    }
     // Index to the class that this reference belongs
     public int blessId;
 

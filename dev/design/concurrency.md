@@ -663,24 +663,17 @@ record counts and linear scaling.
 
 ### Phase 36 — Complete regex parity exercised by thread wrappers (in progress)
 
-Finish embedded and dynamic regex code, optimistic evaluation, conditionals,
-control verbs, recursive definitions, lookbehind, Unicode properties, and
-`qr//` diagnostics in the shared parser/runtime. Direct language behavior is
-the target; `_thr.t` wrappers receive no special cases. Acceptance: every
-applicable `perl5_t/t/re/*thr*.t` test and direct companion completes its plan
-without unexpected failure on JVM or interpreter backends.
+Phase 36 is now an independent parallel project documented in
+`dev/design/phase36-regex-parity.md`. It owns executable callbacks, dynamic
+patterns, conditionals, control verbs, lookbehind, Unicode properties, regex
+objects, and diagnostics in the shared direct-language implementation. Thread
+wrappers remain unchanged acceptance tests and receive no special cases.
 
-This tranche restores recursive-definition compilation for `reg_email` and
-keeps direct/thread compilation behavior aligned. DATA now models the source
-file positioned after its marker, remains seekable to the source start, and
-crosses thread snapshots through the named-handle inheritance policy. Direct
-and threaded `reg_email` therefore pass 13/13 on both backends. `pat_re_eval`
-now parses quoted code-block-shaped text correctly: `(?{` inside `\Q...\E`
-is literal rather than an embedded Perl block. This advances both direct and
-threaded files to runtime construction, where arbitrary match-time `(?{...})`
-execution remains the next blocker. The remaining `qr//`, conditional,
-control-verb, lookbehind, Unicode-property, and diagnostic coverage likewise
-remains shared regex-language work.
+The concurrency project consumes Phase 36 through focused integration slices
+and preserves Phase 44's green thread matrix. Current completed foundations and
+the callback-capable matcher architecture, staged implementation plan, direct
+and wrapper gates, risks, and resumable next steps are maintained in the
+separate Phase 36 document.
 
 ### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
 
@@ -743,6 +736,28 @@ runtime that releases the final cross-runtime owner. Separate destructive plain
 includes nested rebless/store-back, fresh `refaddr` views, cycles, weak refs,
 one global destructor, and share-versus-shared_clone system-Perl oracles.
 
+Fetch-time aggregate proxies are implemented: every nested array/hash reference
+read from shared storage receives a fresh runtime-local wrapper over canonical
+synchronized backing. Local reblessing is private until the view is stored
+back, cycles retain common storage without retaining wrapper identity, and a
+weak fetched view can disappear without deleting the canonical value. The
+focused ten-assertion oracle passes on system Perl and both PerlOnJava backends.
+Cross-runtime final-owner destruction is now implemented. Canonical shared
+storage and its fetched runtime-local wrappers carry one atomic lifecycle:
+canonical deletion waits for live fetched views, releasing a non-final view
+does not run `DESTROY`, and the runtime releasing the final owner performs the
+callback exactly once. The ordering is race-safe when canonical deletion and
+the last view release happen concurrently. A system-Perl-valid five-assertion
+oracle passes on JVM and interpreter backends in addition to the existing
+ten-assertion nested-proxy matrix.
+
+Destructive plain `share` remains the one explicit compatibility transition.
+The existing immutable test records the older Java-specific preserving
+behavior, while system Perl clears scalar/array/hash contents and reserves
+preserving recursive publication for `shared_clone`. The implementation must
+not silently invert that assertion; the test contract needs an explicit user
+decision before production behavior changes.
+
 ### Phase 40 — Complete public `threads` API (completed 2026-08-14)
 
 Close every remaining lifecycle, signal, context, exit-status, stack-size,
@@ -777,7 +792,7 @@ benefit gates.
 The post-reset regression gate retains all 325 DBIx::Class files and 42,671
 assertions under `./jcpan --jobs 8 -t DBIx::Class`.
 
-### Phase 42 — Opt-in pooling and concurrent PSGI
+### Phase 42 — Opt-in pooling and concurrent PSGI (completed 2026-08-15)
 
 Add a bounded runtime-family pool configured by
 `-Djperl.runtime.pool.size=N` or `JPERL_RUNTIME_POOL_SIZE` (default zero).
@@ -787,14 +802,28 @@ snapshot runtimes and streaming responses retain their runtime until completion;
 `psgi.multithread` is true only in that mode. Pooling must improve create/join
 or request median time by at least 10% without a hot-path regression above 5%.
 
-### Phase 43 — Virtual threads by default
+The bounded pool defaults to zero, enforces exclusive leases, resets reusable
+core runtimes, replaces poisoned entries, and never resets an active lease.
+Netty prebuilds independent application snapshots, checks one out per request,
+retains it through streaming dispatch, and advertises `psgi.multithread` only
+in pooled mode. Three controlled eight-request runs measured about 74% lower
+median completion time with four pooled runtimes; a retention probe collected
+the returned tenant graph and replaced state holder.
+
+### Phase 43 — Virtual threads by default (completed 2026-08-15)
 
 Make Java virtual threads the default while retaining
 `JPERL_THREAD_MODE=platform`. Explicit nonzero stack sizing transparently uses
 a platform child. Validate FFM/JDBC, sockets, process I/O, regex timeouts,
 shared conditions, callbacks, pooling, and detached shutdown under both modes.
 
-### Phase 44 — Release closure
+The Java 24 launcher now defaults to virtual carriers and preserves explicit
+platform selection. A nonzero stack request selects a platform child rather
+than discarding the option. The mandatory unit build is green, and the focused
+core lifecycle, class, and lexical-regex matrix passes 40/40 in both default
+virtual and explicit platform modes.
+
+### Phase 44 — Release closure (completed 2026-08-15)
 
 Run the complete core and bundled thread matrix, DBI/DBIx, Test2 opt-in stress,
 Storable, and native callback gates. Add a DBI example where each child owns its
@@ -802,6 +831,32 @@ connection and returns ordinary data through `join`; update every public claim
 only from captured results. Acceptance requires `make`, link checks, all thread
 gates, `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`, and green Ubuntu/Windows
 CI.
+
+Release evidence collected on 2026-08-15: the 17-file core thread-wrapper
+matrix completed without timeout; the supported anchors include `threads.t`
+30/30, `index_thr.t` 415/415, `substr_thr.t` 400/400, lexical regex debugging
+6/6, the user-property race 3/3, and `pat_psycho_thr.t` 17/17. Remaining partial
+regex totals match the shared direct-language gaps recorded in Phase 36 rather
+than thread-only failures.
+
+The default Test2 matrix passes 13 files and 38/38 assertions. All ten opt-in
+Test2 stress files now pass 562/562 assertions after preserving cloned closure
+capture ownership, rooting the active child CODE during lifecycle sweeps, and
+recovering the active method package for nested `SUPER` dispatch. Storable
+passes 2/2, and the two Net::SSLeay callback/context stress gates pass 1/1
+each. New system-Perl-valid lifetime, nested-method, and weak-assignment
+oracles pass 8/8 on both JVM and interpreter backends. The child-owned DBI
+connection example passes with identical output on system Perl, JVM, and
+interpreter.
+
+The mandatory unit build and documentation link validation are green. The
+required `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class` gate passes all 325
+files and 42,671 assertions in 1,371 seconds. The broad bundled-module task
+remains red at 239/391 files; its 152 failures span unrelated unported
+Text::CSV/YAML and other module behavior, while the thread-specific bundled
+Storable and Net::SSLeay gates above are green. It is recorded as a wider
+project baseline, not presented as threads release success. Ubuntu and Windows
+CI remain the final external PR acceptance check.
 
 ## 6. Known Reference Material and Warnings
 
@@ -817,7 +872,7 @@ CI.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 41 complete; Phase 36 and Phase 39b remain open
+### Current Status: Phase 44 local release gate complete; Phases 36 and 39b remain open
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -915,14 +970,12 @@ modules are 9966/12339 (80.8%). Scalar::Util 1.70 loads on both backends and the
 JVM Moo constructor smoke passes; the interpreter retains its previously
 documented Moo attribute-syntax parser limitation.
 
-Platform threads remain the default. An experimental process-wide opt-in selects
-virtual threads with `-Djperl.thread.mode=virtual` or
-`JPERL_THREAD_MODE=virtual`; unknown modes are rejected and diagnostics expose
-the actual Java thread kind. Runtime pooling is deferred because no reset
-contract yet proves that a reused interpreter is equivalent to a fresh snapshot.
-The supported Java baseline is 24. Monitor pinning is removed on that baseline,
-but native/FFM blocking diagnostics remain a release gate for promoting virtual
-mode.
+Java 24 virtual threads are the launcher default. Explicit
+`JPERL_THREAD_MODE=platform` selection remains supported, and a nonzero Perl
+stack-size request transparently selects a platform child. Unknown modes are
+rejected and diagnostics expose the actual Java thread kind. Runtime pooling
+is opt-in and defaults to zero after passing Phase 42's stress, retention, and
+concurrent-request performance gates.
 
 The public documentation now treats the feature matrix as the canonical support
 table, records the implementation in the changelog and roadmap, explains runtime
@@ -995,16 +1048,18 @@ three assertions from the adjacent-import parser fix.
 
 ### Next Steps
 
-1. Complete Phase 36's direct regex-language gaps in `pat_re_eval`, `qr//`,
-   conditionals, control verbs, lookbehind, Unicode properties, and diagnostics;
-   wrapper behavior must follow the corrected direct implementation without
-   special cases.
-2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
-   weak/cyclic ownership, and the destructive `share` versus preserving
-   `shared_clone` distinction.
-3. Land Phases 42–44 as the final delivery sequence: opt-in pooling and
-   concurrent PSGI, virtual threads by default, and the complete release gate.
-   Phases 40 and 41's public API and fresh-reset foundations are complete.
+1. Integrate Phase 36 slices from the independent regex project described in
+   `dev/design/phase36-regex-parity.md`. Direct regex behavior is fixed first;
+   unchanged wrappers remain the thread ownership and snapshot gate.
+2. Resolve Phase 39b's sole compatibility decision: whether to replace the
+   immutable Java-specific preserving-`share` assertion with system Perl's
+   destructive initialization. Nested proxies, runtime-local blessing,
+   cycles, weak views, and exactly-once cross-runtime destruction are complete;
+   `shared_clone` remains preserving.
+3. Preserve the completed Phase 44 matrix while Phase 36 and Phase 39b close:
+   core thread wrappers must finish without timeout; default and opt-in Test2,
+   Storable, Net::SSLeay, DBI, and DBIx::Class must remain green on every PR;
+   Ubuntu and Windows CI are mandatory delivery gates.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under
@@ -1028,4 +1083,5 @@ three assertions from the adjacent-import parser fix.
 - `dev/design/clone.md` — historical clone exploration, not the ithread cloner
 - `dev/design/attributes.md` — current attribute behavior
 - `dev/design/runtime-pooling-reset-contract.md` — required proof before pooling
+- `dev/design/phase36-regex-parity.md` — independent regex parity project
 - `dev/design/fork_open_emulation.md` — process/fork-related alternatives

@@ -341,8 +341,38 @@ public final class SharedPerlStorage {
     private static void markShared(RuntimeBase value) {
         synchronized (value) {
             if (value.threadSharedIdentity == null) value.threadSharedIdentity = new Object();
+            if (value.threadSharedLifecycle == null) {
+                value.threadSharedLifecycle = new RuntimeBase.SharedLifecycle();
+            }
+            value.threadSharedBlessName = currentBlessName(value);
             value.threadShared = true;
         }
+    }
+
+    /** Return a fresh runtime-local reference view for a nested shared aggregate. */
+    static RuntimeScalar fetchedElement(RuntimeBase owner, RuntimeScalar stored) {
+        if (!owner.threadShared || stored == null
+                || !(stored.value instanceof RuntimeBase nested)
+                || !nested.threadShared
+                || !(nested instanceof RuntimeArray || nested instanceof RuntimeHash)) {
+            return stored;
+        }
+        PerlRuntime runtime = PerlRuntime.current();
+        RuntimeBase view = new RuntimeGraphCloner(runtime, runtime).cloneGraph(nested);
+        view.threadSharedFetchedView = true;
+        return new SharedElementProxy(stored, view);
+    }
+
+    /** Publish the local class of a shared view when that view is stored. */
+    static void publishBlessing(RuntimeScalar value) {
+        if (value != null && value.value instanceof RuntimeBase base && base.threadShared) {
+            base.threadSharedBlessName = currentBlessName(base);
+        }
+    }
+
+    private static String currentBlessName(RuntimeBase value) {
+        if (value.blessId == 0) return null;
+        return NameNormalizer.getBlessStr(value.blessId);
     }
 
     private static Object sharedIdentity(RuntimeBase value) {

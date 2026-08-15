@@ -16,8 +16,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   inspection, nested threads, child-only exit, `CLONE`/`CLONE_SKIP`, recursive
   locks, condition variables, and compatible imports/stringification.
   `Config` now reports `useithreads`, `usethreads`, and `usemultiplicity` as
-  `define`. Platform threads remain the default and virtual threads are an
-  experimental opt-in. Live attached children support targeted signals,
+  `define`. Java 24 virtual threads are the default and platform carriers remain
+  an explicit compatibility mode. Live attached children support targeted signals,
   `object`/`wantarray`, and platform-thread stack sizing. Native-style callback
   registrations retain their owning runtime, internal pipes have an explicit
   inherited-handle policy, and nested plain shared graphs are validated before

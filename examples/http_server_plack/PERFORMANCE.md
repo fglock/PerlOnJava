@@ -51,9 +51,8 @@ Tests streaming response path with responder callbacks.
 
 ### Performance Characteristics
 
-- **Single application runtime**: This handler deliberately avoids concurrent
-  callbacks into one captured PSGI app. PerlOnJava itself supports explicit,
-  isolated ithreads.
+- **Isolated application runtimes**: The default avoids concurrent callbacks
+  into one captured PSGI app. The opt-in pool checks out independent snapshots.
 - **Async I/O**: Handles high concurrency efficiently via Netty's NIO
 - **Memory Efficient**: No buffering of responses, constant memory usage
 - **CPU Bound**: Performance limited by single-thread CPU usage, not I/O
@@ -79,9 +78,9 @@ Tests streaming response path with responder callbacks.
    - Database queries, API calls, file I/O all benefit from async model
    
 2. **CPU-Bound Apps**: Consider implications
-   - Heavy computation blocks other requests in this single-runtime handler
-   - Applications may use explicit ithreads for isolated work, but the handler
-     still advertises `psgi.multithread => \0`
+   - Heavy computation blocks other requests in the default single-runtime handler
+   - Set `JPERL_RUNTIME_POOL_SIZE=N` to use N isolated application snapshots;
+     pooled requests advertise `psgi.multithread => \1`
    - Solution: Offload to background workers
    
 3. **High-Traffic Sites**: Run multiple instances
@@ -101,6 +100,6 @@ Tests streaming response path with responder callbacks.
 ✅ **Scalable**: Handles high concurrency efficiently  
 ✅ **Memory efficient**: Constant memory usage, no leaks  
 
-The single-runtime limitation belongs to this handler design, not to the
-availability of Perl ithreads. Horizontal scaling remains the recommended way
-to run multiple PSGI application runtimes concurrently.
+The single-runtime mode remains the safe default. The bounded runtime pool is
+an explicit in-process scaling option; horizontal scaling remains appropriate
+when process isolation is required.

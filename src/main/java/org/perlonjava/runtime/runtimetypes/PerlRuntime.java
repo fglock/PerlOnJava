@@ -411,6 +411,15 @@ public final class PerlRuntime implements AutoCloseable {
         return snapshotCloneInternal(new PerlThreadRegistry(), 0).runtime();
     }
 
+    /** Snapshot this runtime and clone additional non-global roots through the same graph map. */
+    public RootSnapshot snapshotCloneWithRoots(java.util.List<? extends RuntimeBase> roots) {
+        Objects.requireNonNull(roots, "roots");
+        ThreadSnapshot snapshot = snapshotCloneInternal(new PerlThreadRegistry(), 0);
+        return new RootSnapshot(snapshot.runtime(), snapshot.cloner().cloneRoots(roots));
+    }
+
+    public record RootSnapshot(PerlRuntime runtime, java.util.List<RuntimeBase> roots) {}
+
     record ThreadSnapshot(PerlRuntime runtime, RuntimeGraphCloner cloner) {}
 
     ThreadSnapshot snapshotCloneForThread(PerlThreadRegistry registry, long threadId) {
@@ -487,7 +496,15 @@ public final class PerlRuntime implements AutoCloseable {
                     && !code.closedOverVariables.isEmpty();
             if (!cloneHook && !fqn.startsWith("threads::") && !capturesLexicals) continue;
             if (code.compilerSupplier != null) {
-                code.compilerSupplier.get();
+                try {
+                    code.compilerSupplier.get();
+                } catch (PerlCompilerException expectedAtUseSite) {
+                    // Snapshot preflight must not turn an expected-invalid lazy
+                    // helper into a require-time failure. The definition stays
+                    // lazy and reports its compile error when user code invokes
+                    // it. CLONE hooks are part of snapshot itself and must fail.
+                    if (cloneHook) throw expectedAtUseSite;
+                }
             }
         }
     }

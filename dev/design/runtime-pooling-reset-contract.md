@@ -2,20 +2,19 @@
 
 ## Status
 
-Fresh-runtime reset was implemented on 2026-08-14. Runtime pooling remains
-deliberately disabled until Phase 42's checkout stress, retention measurements,
-and performance gate pass. `PerlRuntime.close()` remains a terminal
+Fresh-runtime reset was implemented on 2026-08-14. Bounded opt-in pooling was
+activated on 2026-08-15 after Phase 42's checkout stress, retention measurements,
+and concurrent-request performance gate passed. `PerlRuntime.close()` remains a terminal
 resource-release operation; reusable runtimes use the separate exclusive
 `reset()` transition.
 
-This document defines the proof required before a pool may be implemented. It
-does not authorize clearing state opportunistically or enabling pooling behind
-an experimental flag.
+This document defines the proof required by the implemented pool. It does not
+authorize clearing state opportunistically or enabling pooling by default.
 
 This is the Phase 34 outcome, not an untracked implementation shortcut. Runtime
 pooling is optional and is not required for Perl ithread correctness. The
-negative automated contract below passes, while every positive equivalence
-item remains a prerequisite for any future pooling PR.
+negative and positive automated contracts below pass. Pooling remains optional
+and defaults to zero.
 
 ## Fresh-runtime equivalence
 
@@ -62,7 +61,7 @@ correct terminal lifecycle, but it is intentionally insufficient for pooling.
 
 ## Acceptance checklist
 
-Pooling remains disabled until all items below are complete:
+Pooling remains disabled by default; opt-in activation requires all items below:
 
 - [x] Introduce one exclusive lifecycle transition that prevents reset while
   execution, compilation, callbacks, ithreads, detached children, shared-lock
@@ -84,11 +83,11 @@ Pooling remains disabled until all items below are complete:
 - [x] Prove `A; reset; B == fresh; B` on both compiler backends across globals,
   closures, eval/require, regex, warnings/hints, MRO, I/O, lifecycle, signals,
   native modules, DATA, debugger state, and exceptions.
-- [ ] Add concurrency/stress coverage for checkout ownership, cancellation,
+- [x] Add concurrency/stress coverage for checkout ownership, cancellation,
   detached-thread completion, repeated churn, and shared-storage lifetime.
-- [ ] Add retention measurements showing that workload classloaders, package
+- [x] Add retention measurements showing that workload classloaders, package
   graphs, handles, and shared-lock entries become collectible after reset.
-- [ ] Benchmark against fresh construction and snapshot cloning. Enable pooling
+- [x] Benchmark against fresh construction and snapshot cloning. Enable pooling
   only for a measured benefit large enough to justify the new lifecycle risk.
 
 ## Current automated guard
@@ -99,6 +98,16 @@ CODE, `%INC`, regex, execution, thread-option, and standard-I/O state matches a
 fresh runtime on both backends; reset rejects bindings, child threads, and
 shared locks; pending END work drains; failed reset poisons the runtime; and the
 same Java runtime identity executes again after successful reset.
+
+`PerlRuntimePoolTest` covers exclusive bounded checkout, reset on return,
+active-lease shutdown, replacement after reset failure, and concurrent churn.
+An EmbeddedChannel acceptance test proves that pooled PSGI requests receive
+distinct application snapshots and truthful `psgi.multithread`. A bounded
+retention probe collected both a prior tenant graph and its replaced state
+holder. Three concurrent-request benchmark runs measured approximately 118 ms
+for one serialized runtime versus 30.6 ms for four pooled runtimes (about 74%
+lower median completion time). Empty-runtime reset churn is not faster than
+construction, so no universal microbenchmark speedup is claimed.
 
 ## Related documents
 

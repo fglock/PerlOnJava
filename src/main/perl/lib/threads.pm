@@ -120,8 +120,8 @@ C<stringify> changes string conversion of a thread object from the stable
 C<threads=ID> form to its numeric thread ID.
 
 The standard C<stack_size> and C<exit> declarations configure subsequently
-created platform threads. Java virtual threads reject a non-zero stack-size
-request because their stack size cannot be selected by the application.
+created threads. A non-zero stack-size request selects a platform carrier
+because Java virtual-thread stack size cannot be selected by the application.
 Missing values and unknown import options are errors.
 
 =head1 COMPATIBILITY

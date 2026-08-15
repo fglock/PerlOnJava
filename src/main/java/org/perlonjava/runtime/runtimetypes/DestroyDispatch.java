@@ -180,6 +180,11 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
+        // A shared aggregate may have runtime-local fetch views in another
+        // ithread. Canonical deletion waits for those views; the runtime that
+        // releases the last view performs the one Perl DESTROY callback.
+        if (referent.deferSharedDestroy()) return;
+
         // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
         // If this object is already inside its own DESTROY body, a transient
         // decrement-to-0 (local temp release, deferred MortalList flush,
