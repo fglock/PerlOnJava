@@ -394,6 +394,15 @@ public final class PerlRuntime implements AutoCloseable {
         return snapshotCloneInternal(new PerlThreadRegistry(), 0).runtime();
     }
 
+    /** Snapshot this runtime and clone additional non-global roots through the same graph map. */
+    public RootSnapshot snapshotCloneWithRoots(java.util.List<? extends RuntimeBase> roots) {
+        Objects.requireNonNull(roots, "roots");
+        ThreadSnapshot snapshot = snapshotCloneInternal(new PerlThreadRegistry(), 0);
+        return new RootSnapshot(snapshot.runtime(), snapshot.cloner().cloneRoots(roots));
+    }
+
+    public record RootSnapshot(PerlRuntime runtime, java.util.List<RuntimeBase> roots) {}
+
     record ThreadSnapshot(PerlRuntime runtime, RuntimeGraphCloner cloner) {}
 
     ThreadSnapshot snapshotCloneForThread(PerlThreadRegistry registry, long threadId) {

@@ -229,6 +229,21 @@ semantics. A nonzero per-thread stack request automatically selects a platform
 carrier because virtual-thread stacks are JVM-managed. See the
 [concurrency feature matrix](feature-matrix.md#concurrency-and-perl-threads).
 
+### Runtime pooling
+
+- **`JPERL_RUNTIME_POOL_SIZE`** — Prebuild a bounded number of independent
+  runtime snapshots for concurrent PSGI requests. The default is `0`, which
+  keeps the single-runtime handler. Negative and nonnumeric values are errors.
+
+  ```bash
+  JPERL_RUNTIME_POOL_SIZE=4 ./jperl app.psgi
+  ```
+
+The equivalent JVM property is `-Djperl.runtime.pool.size=4`. A checked-out
+runtime is never entered by another request. Core-runtime users are reset on
+return; PSGI application snapshots are closed and replenished from the
+authoritative template after the response completes.
+
 ## Combining Options
 
 Options can be combined for powerful one-liners:

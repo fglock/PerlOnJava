@@ -14,6 +14,10 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * PlackHandlerNetty - PSGI server implementation using Netty.
@@ -25,14 +29,14 @@ import java.nio.charset.StandardCharsets;
  * Key Features:
  * - Full PSGI v1.1 environment hash construction
  * - Synchronous array response support (Phase 1)
- * - Single-threaded event loop (PerlOnJava thread-safety requirement)
+ * - Runtime-pooled concurrent request handling when explicitly configured
  * - Error handling
  * - HTTP/1.1 with keep-alive support
  *
  * Thread Safety:
- * PerlOnJava is currently NOT thread-safe. This server uses a single-threaded
- * event loop (NioEventLoopGroup(1)) to avoid race conditions. Multiple concurrent
- * connections are handled via Netty's async I/O on one thread.
+ * The default pool size is zero, retaining one captured runtime and one worker.
+ * An explicitly configured pool checks out an independent runtime snapshot for
+ * each request; a runtime is never entered concurrently.
  *
  * Usage:
  * <pre>
@@ -346,6 +350,9 @@ public class PlackHandlerNetty extends PerlModuleBase {
                                         String sslCa, String[] sslProtocols, String sslCiphers)
                                         throws InterruptedException {
         PerlRuntime runtime = PerlRuntime.current();
+        int poolSize = PerlRuntimePool.configuredSize();
+        PsgiRuntimePool runtimePool = poolSize == 0
+                ? null : new PsgiRuntimePool(runtime, psgiApp, poolSize);
 
         // Build SSL context if enabled
         io.netty.handler.ssl.SslContext sslContext = null;
@@ -363,10 +370,11 @@ public class PlackHandlerNetty extends PerlModuleBase {
 
         final io.netty.handler.ssl.SslContext finalSslContext = sslContext;
 
-        // Single-threaded event loop to avoid PerlOnJava thread-safety issues
-        // This still handles many concurrent connections via async I/O
+        // Pooling is opt-in. Without it, retain the historical single-runtime,
+        // single-worker boundary. With it, every event-loop worker checks out
+        // a distinct interpreter snapshot.
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup(1);
+        EventLoopGroup workerGroup = new NioEventLoopGroup(Math.max(1, poolSize));
 
         // Add shutdown hook for graceful shutdown on SIGTERM/SIGINT
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -400,7 +408,8 @@ public class PlackHandlerNetty extends PerlModuleBase {
                      pipeline.addLast(new HttpObjectAggregator(maxRequestSize));
 
                      // PSGI request handler
-                     pipeline.addLast(new PSGIRequestHandler(psgiApp, host, port, keepAlive, runtime));
+                     pipeline.addLast(new PSGIRequestHandler(
+                             psgiApp, host, port, keepAlive, runtime, runtimePool));
                  }
              })
              .option(ChannelOption.SO_BACKLOG, backlog)
@@ -418,6 +427,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
             e.printStackTrace(System.err);
             throw e;
         } finally {
+            if (runtimePool != null) runtimePool.close();
             // Shutdown event loops if not already shutdown
             if (!bossGroup.isShutdown()) {
                 bossGroup.shutdownGracefully();
@@ -425,6 +435,61 @@ public class PlackHandlerNetty extends PerlModuleBase {
             if (!workerGroup.isShutdown()) {
                 workerGroup.shutdownGracefully();
             }
+        }
+    }
+
+    /** Prepared request snapshots plus their app root, bounded by the configured pool size. */
+    static final class PsgiRuntimePool implements AutoCloseable {
+        private final PerlRuntime template;
+        private final RuntimeScalar templateApp;
+        private final Map<PerlRuntime, RuntimeScalar> apps =
+                Collections.synchronizedMap(new WeakHashMap<>());
+        private final PerlRuntimePool pool;
+
+        PsgiRuntimePool(PerlRuntime template, RuntimeScalar templateApp, int size) {
+            this.template = template;
+            this.templateApp = templateApp;
+            this.pool = new PerlRuntimePool(size, this::createSnapshot, this::replaceSnapshot);
+        }
+
+        private PerlRuntime createSnapshot() {
+            PerlRuntime.RootSnapshot snapshot = template.snapshotCloneWithRoots(
+                    java.util.List.of(templateApp));
+            RuntimeScalar app = (RuntimeScalar) snapshot.roots().getFirst();
+            apps.put(snapshot.runtime(), app);
+            return snapshot.runtime();
+        }
+
+        private PerlRuntime replaceSnapshot(PerlRuntime used) {
+            apps.remove(used);
+            used.close();
+            return createSnapshot();
+        }
+
+        RequestLease checkout() throws InterruptedException {
+            PerlRuntimePool.Lease lease = pool.checkout(Duration.ofSeconds(30));
+            RuntimeScalar app = apps.get(lease.runtime());
+            if (app == null) {
+                lease.close();
+                throw new IllegalStateException("PSGI runtime has no cloned application root");
+            }
+            return new RequestLease(lease, app);
+        }
+
+        int size() {
+            return pool.capacity();
+        }
+
+        @Override
+        public void close() {
+            pool.close();
+            apps.clear();
+        }
+
+        record RequestLease(PerlRuntimePool.Lease lease, RuntimeScalar app)
+                implements AutoCloseable {
+            PerlRuntime runtime() { return lease.runtime(); }
+            @Override public void close() { lease.close(); }
         }
     }
 
@@ -444,19 +509,32 @@ public class PlackHandlerNetty extends PerlModuleBase {
         private final int serverPort;
         private final boolean keepAlive;
         private final PerlRuntime runtime;
+        private final PsgiRuntimePool runtimePool;
 
         public PSGIRequestHandler(RuntimeScalar psgiApp, String serverName,
                                   int serverPort, boolean keepAlive, PerlRuntime runtime) {
+            this(psgiApp, serverName, serverPort, keepAlive, runtime, null);
+        }
+
+        PSGIRequestHandler(RuntimeScalar psgiApp, String serverName,
+                           int serverPort, boolean keepAlive, PerlRuntime runtime,
+                           PsgiRuntimePool runtimePool) {
             this.psgiApp = psgiApp;
             this.serverName = serverName;
             this.serverPort = serverPort;
             this.keepAlive = keepAlive;
             this.runtime = runtime;
+            this.runtimePool = runtimePool;
         }
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) {
-            try (PerlRuntime.Binding ignored = runtime.bind()) {
+            PsgiRuntimePool.RequestLease requestLease = null;
+            try {
+                if (runtimePool != null) requestLease = runtimePool.checkout();
+                PerlRuntime requestRuntime = requestLease == null ? runtime : requestLease.runtime();
+                RuntimeScalar requestApp = requestLease == null ? psgiApp : requestLease.app();
+                try (PerlRuntime.Binding ignored = requestRuntime.bind()) {
                 try {
                     // Detect if connection is SSL/TLS by checking for SslHandler in pipeline
                     boolean isHttps = ctx.pipeline().get(io.netty.handler.ssl.SslHandler.class) != null;
@@ -468,13 +546,13 @@ public class PlackHandlerNetty extends PerlModuleBase {
                     RuntimeArray args = new RuntimeArray();
                     RuntimeArray.push(args, RuntimeHash.createHashRef(env));
 
-                    RuntimeList resultList = RuntimeCode.apply(psgiApp, args, RuntimeContextType.SCALAR);
+                    RuntimeList resultList = RuntimeCode.apply(requestApp, args, RuntimeContextType.SCALAR);
                     RuntimeScalar result = resultList.scalar();
 
                     // Handle streaming responses (coderef) and synchronous responses (arrayref)
                     if (result.type == RuntimeScalarType.CODE) {
                         // Streaming response - create responder callback
-                        handleStreamingResponse(ctx, req, result, keepAlive);
+                        handleStreamingResponse(ctx, req, result, keepAlive, requestRuntime);
                     } else if (result.type == RuntimeScalarType.ARRAYREFERENCE) {
                         // Synchronous array response
                         handleArrayResponse(ctx, req, result, keepAlive);
@@ -502,6 +580,16 @@ public class PlackHandlerNetty extends PerlModuleBase {
                         HttpResponseStatus.INTERNAL_SERVER_ERROR,
                         errorMessage);
                 }
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                sendErrorResponse(ctx, req, HttpResponseStatus.SERVICE_UNAVAILABLE,
+                        "Interrupted while waiting for a Perl runtime");
+            } catch (Exception failure) {
+                sendErrorResponse(ctx, req, HttpResponseStatus.SERVICE_UNAVAILABLE,
+                        "Perl runtime checkout failed: " + failure.getMessage());
+            } finally {
+                if (requestLease != null) requestLease.close();
             }
         }
 
@@ -514,10 +602,12 @@ public class PlackHandlerNetty extends PerlModuleBase {
          * than trying to create Perl-callable callbacks from Java.
          */
         private void handleStreamingResponse(ChannelHandlerContext ctx, FullHttpRequest req,
-                                            RuntimeScalar streamingCoderef, boolean keepAlive) {
+                                            RuntimeScalar streamingCoderef, boolean keepAlive,
+                                            PerlRuntime requestRuntime) {
             try {
                 // Create a Java-side callback that Perl can invoke to send HTTP response
-                CallableHttpResponse responseCallback = new CallableHttpResponse(ctx, req, keepAlive, runtime);
+                CallableHttpResponse responseCallback = new CallableHttpResponse(
+                        ctx, req, keepAlive, requestRuntime);
 
                 // Call Perl helper: Plack::Handler::Netty::_handle_streaming_response($coderef, $callback)
                 RuntimeArray args = new RuntimeArray();
@@ -687,10 +777,10 @@ public class PlackHandlerNetty extends PerlModuleBase {
             // Wrap in a new RuntimeScalar to ensure it's stored correctly
             env.put("psgi.errors", new RuntimeScalar(RuntimeIO.getStderr()));
 
-            // psgi.multithread - \0: this handler owns one captured PerlRuntime.
-            // Explicit Perl ithreads are supported, but availability of ithreads
-            // does not make concurrent callbacks into one PSGI app safe.
-            env.put("psgi.multithread", new RuntimeScalar(0));
+            // True only when every concurrent request owns a checked-out
+            // snapshot runtime. Explicit ithreads alone do not make callbacks
+            // into one captured application runtime safe.
+            env.put("psgi.multithread", new RuntimeScalar(runtimePool == null ? 0 : 1));
 
             // psgi.multiprocess - \0 (PerlOnJava doesn't support fork)
             env.put("psgi.multiprocess", new RuntimeScalar(0));

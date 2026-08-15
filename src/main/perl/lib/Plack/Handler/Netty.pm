@@ -308,8 +308,9 @@ The handler provides all required PSGI 1.1 environment keys:
 
 =item * C<psgi.errors> - Error log (STDERR)
 
-=item * C<psgi.multithread> - \0. PerlOnJava supports explicit ithreads, but
-this handler owns one application runtime and does not invoke it concurrently.
+=item * C<psgi.multithread> - \0 by default. When
+C<JPERL_RUNTIME_POOL_SIZE> (or C<-Djperl.runtime.pool.size>) is nonzero, each
+request owns an independent application snapshot and this value is \1.
 
 =item * C<psgi.multiprocess> - \0 (PerlOnJava doesn't support fork)
 

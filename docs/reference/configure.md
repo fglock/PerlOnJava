@@ -32,6 +32,10 @@ available process-wide with `JPERL_THREAD_MODE=platform` or the JVM property
 [CLI Options](cli-options.md#thread-execution-mode) and the
 [feature matrix](feature-matrix.md#concurrency-and-perl-threads).
 
+Runtime pooling is independently opt-in. `JPERL_RUNTIME_POOL_SIZE=N` (or
+`-Djperl.runtime.pool.size=N`) enables N prepared PSGI application snapshots;
+the default `0` retains the single-runtime handler.
+
 ## Options
 
 ### Help and Information

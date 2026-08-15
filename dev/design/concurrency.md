@@ -777,7 +777,7 @@ benefit gates.
 The post-reset regression gate retains all 325 DBIx::Class files and 42,671
 assertions under `./jcpan --jobs 8 -t DBIx::Class`.
 
-### Phase 42 — Opt-in pooling and concurrent PSGI
+### Phase 42 — Opt-in pooling and concurrent PSGI (completed 2026-08-15)
 
 Add a bounded runtime-family pool configured by
 `-Djperl.runtime.pool.size=N` or `JPERL_RUNTIME_POOL_SIZE` (default zero).
@@ -786,6 +786,14 @@ detached children complete. Concurrent Netty PSGI requests use checked-out
 snapshot runtimes and streaming responses retain their runtime until completion;
 `psgi.multithread` is true only in that mode. Pooling must improve create/join
 or request median time by at least 10% without a hot-path regression above 5%.
+
+The bounded pool defaults to zero, enforces exclusive leases, resets reusable
+core runtimes, replaces poisoned entries, and never resets an active lease.
+Netty prebuilds independent application snapshots, checks one out per request,
+retains it through streaming dispatch, and advertises `psgi.multithread` only
+in pooled mode. Three controlled eight-request runs measured about 74% lower
+median completion time with four pooled runtimes; a retention probe collected
+the returned tenant graph and replaced state holder.
 
 ### Phase 43 — Virtual threads by default (completed 2026-08-15)
 
@@ -823,7 +831,7 @@ CI.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 43 complete; Phases 36, 39b, and 42 remain open
+### Current Status: Phases 42 and 43 complete; Phases 36 and 39b remain open
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -925,7 +933,8 @@ Java 24 virtual threads are the launcher default. Explicit
 `JPERL_THREAD_MODE=platform` selection remains supported, and a nonzero Perl
 stack-size request transparently selects a platform child. Unknown modes are
 rejected and diagnostics expose the actual Java thread kind. Runtime pooling
-remains opt-in and pending Phase 42's stress and retention gates.
+is opt-in and defaults to zero after passing Phase 42's stress, retention, and
+concurrent-request performance gates.
 
 The public documentation now treats the feature matrix as the canonical support
 table, records the implementation in the changelog and roadmap, explains runtime
@@ -1005,9 +1014,9 @@ three assertions from the adjacent-import parser fix.
 2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
    weak/cyclic ownership, and the destructive `share` versus preserving
    `shared_clone` distinction.
-3. Land Phase 42's opt-in pooling and concurrent PSGI, then complete Phase 44's
-   release gate. Phases 40, 41, and 43's public API, fresh-reset, and default
-   virtual-carrier foundations are complete.
+3. Complete Phase 44's release gate. Phases 40–43's public API, fresh reset,
+   bounded pooling, concurrent PSGI, and default virtual-carrier foundations
+   are complete.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under
