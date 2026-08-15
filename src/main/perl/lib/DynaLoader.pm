@@ -41,6 +41,9 @@ BEGIN {
     unless (defined &dl_load_file) {
         *dl_load_file = sub { return };
     }
+    unless (defined &dl_load_flags) {
+        *dl_load_flags = sub { return 0 };
+    }
     unless (defined &dl_find_symbol) {
         *dl_find_symbol = sub { return };
     }

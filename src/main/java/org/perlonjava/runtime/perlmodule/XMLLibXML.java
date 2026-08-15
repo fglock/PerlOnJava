@@ -14,6 +14,8 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.*;
 import javax.xml.transform.dom.*;
 import javax.xml.transform.stream.*;
+import javax.xml.validation.Schema;
+import javax.xml.validation.Validator;
 import javax.xml.xpath.*;
 import org.w3c.dom.*;
 import org.xml.sax.*;
@@ -40,6 +42,7 @@ public class XMLLibXML extends PerlModuleBase {
     private static final String OPTS_KEY = "_parser_opts";
     private static final String XPC_KEY  = "_xpc_state";
     private static final String READER_KEY = "_reader_state";
+    private static final String RELAXNG_KEY = "_relaxng_schema";
 
     /** Pseudo-namespace for functions registered without namespace ("{}name"). */
     private static final String NONS_NS     = "http://perlonjava.org/xpc-nons";
@@ -422,6 +425,15 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethodInPackage(xpePkg, "new",        "xpeNew");
             module.registerMethodInPackage(xpePkg, "expression", "xpeExpression");
 
+            // XML::LibXML::RelaxNG. Jing supplies the standard JAXP RELAX NG
+            // provider; the compiled schema is retained in the blessed Perl
+            // object just as DOM nodes retain their backing Java object.
+            String rngPkg = "XML::LibXML::RelaxNG";
+            module.registerMethodInPackage(rngPkg, "parse_buffer", "relaxNGParseBuffer");
+            module.registerMethodInPackage(rngPkg, "parse_location", "relaxNGParseLocation");
+            module.registerMethodInPackage(rngPkg, "parse_document", "relaxNGParseDocument");
+            module.registerMethodInPackage(rngPkg, "validate", "relaxNGValidate");
+
             setupISA();
 
         } catch (NoSuchMethodException e) {
@@ -504,6 +516,70 @@ public class XMLLibXML extends PerlModuleBase {
             return n;
         }
         throw new RuntimeException("Not a valid XML::LibXML node (missing " + NODE_KEY + " key)");
+    }
+
+    private static RuntimeScalar wrapRelaxNG(Schema schema) {
+        RuntimeHash hash = new RuntimeHash();
+        hash.put(RELAXNG_KEY, new RuntimeScalar(schema));
+        RuntimeScalar ref = hash.createReferenceWithTrackedElements();
+        return ReferenceOperators.bless(ref, new RuntimeScalar("XML::LibXML::RelaxNG"));
+    }
+
+    private static Schema getRelaxNG(RuntimeScalar self) {
+        RuntimeScalar state = self.hashDerefRaw().get(RELAXNG_KEY);
+        if (state != null && state.type == RuntimeScalarType.JAVAOBJECT
+                && state.value instanceof Schema schema) return schema;
+        throw new PerlDieException(new RuntimeScalar("Invalid XML::LibXML::RelaxNG object\n"));
+    }
+
+    private static Schema compileRelaxNG(Source source) throws SAXException {
+        // Jing does not publish a META-INF JAXP provider entry, so instantiate
+        // its standard XML-syntax factory explicitly.
+        return new com.thaiopensource.relaxng.jaxp.XMLSyntaxSchemaFactory().newSchema(source);
+    }
+
+    private static RuntimeList relaxNGError(Exception error) {
+        Throwable cause = error;
+        while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+        String message = cause.getMessage();
+        if (message == null || message.isEmpty()) message = cause.toString();
+        throw new PerlDieException(new RuntimeScalar(message + "\n"));
+    }
+
+    public static RuntimeList relaxNGParseBuffer(RuntimeArray args, int ctx) {
+        try {
+            return wrapRelaxNG(compileRelaxNG(new StreamSource(new StringReader(args.get(1).toString())))).getList();
+        } catch (Exception e) {
+            return relaxNGError(e);
+        }
+    }
+
+    public static RuntimeList relaxNGParseLocation(RuntimeArray args, int ctx) {
+        try {
+            return wrapRelaxNG(compileRelaxNG(new StreamSource(args.get(1).toString()))).getList();
+        } catch (Exception e) {
+            return relaxNGError(e);
+        }
+    }
+
+    public static RuntimeList relaxNGParseDocument(RuntimeArray args, int ctx) {
+        try {
+            String schemaText = serializeNode(getNode(args.get(1)), false, true);
+            return wrapRelaxNG(compileRelaxNG(new StreamSource(new StringReader(schemaText)))).getList();
+        } catch (Exception e) {
+            return relaxNGError(e);
+        }
+    }
+
+    public static RuntimeList relaxNGValidate(RuntimeArray args, int ctx) {
+        try {
+            Validator validator = getRelaxNG(args.get(0)).newValidator();
+            String documentText = serializeNode(getNode(args.get(1)), false, true);
+            validator.validate(new StreamSource(new StringReader(documentText)));
+            return scalarZero.getList();
+        } catch (Exception e) {
+            return relaxNGError(e);
+        }
     }
 
     /**

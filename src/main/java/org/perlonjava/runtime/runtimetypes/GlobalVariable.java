@@ -1217,6 +1217,18 @@ public class GlobalVariable {
         return resolvedKey != key && globalPseudoConstants().containsKey(resolvedKey);
     }
 
+    public static RuntimeScalar getGlobalPseudoConstant(String key) {
+        if (key == null) {
+            return null;
+        }
+        RuntimeScalar scalar = globalPseudoConstants().get(key);
+        if (scalar != null) {
+            return scalar;
+        }
+        String resolvedKey = resolveAliasedFqn(key);
+        return resolvedKey != key ? globalPseudoConstants().get(resolvedKey) : null;
+    }
+
     /**
      * Retrieves a global array by its key, initializing it if necessary.
      *

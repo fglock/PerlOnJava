@@ -27,7 +27,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
             // assigned reference even though globDeref() still provides the
             // symbol's complete typeglob.
             type = REFERENCE;
-            value = GlobalVariable.getGlobalVariable(globName);
+            value = GlobalVariable.getGlobalPseudoConstant(globName);
         }
         // System.out.println("Stash Entry create: " + globName + " " + isDefined);
     }
@@ -41,6 +41,23 @@ public class RuntimeStashEntry extends RuntimeGlob {
     @Override
     public RuntimeGlob createDetachedCopy() {
         return this;
+    }
+
+    /**
+     * A constant.pm proxy is a scalar-reference value stored directly in the
+     * stash hash, not a typeglob value. Taking a reference to that hash value
+     * must therefore preserve the scalar shape instead of forcing the
+     * GLOBREFERENCE representation used by ordinary stash entries.
+     */
+    @Override
+    public RuntimeScalar createReference() {
+        if (GlobalVariable.hasGlobalPseudoConstant(this.globName)) {
+            RuntimeScalar reference = new RuntimeScalar();
+            reference.type = REFERENCE;
+            reference.value = this;
+            return reference;
+        }
+        return super.createReference();
     }
 
     /**
@@ -128,6 +145,15 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     code.constantValue = value.scalarDeref().getList();
                     GlobalVariable.defineGlobalCodeRef(this.globName).set(
                             new RuntimeScalar(code));
+                    // Perl 5 exposes a constant.pm entry through the stash hash
+                    // as the assigned scalar-reference proxy, even though the
+                    // same symbol also has a callable CODE slot. Keep the proxy
+                    // metadata alongside our concrete constant CV so stash
+                    // introspection can distinguish constants from ordinary
+                    // subroutines.
+                    GlobalVariable.setGlobalPseudoConstant(this.globName, targetScalar);
+                    this.type = REFERENCE;
+                    this.value = targetScalar;
                     notifyCodeSlotChanged();
                 } else {
                     // Ordinary scalar references alias the stash scalar slot,

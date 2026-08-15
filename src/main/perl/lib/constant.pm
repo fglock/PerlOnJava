@@ -165,6 +165,10 @@ sub import {
 		    Internals::SvREADONLY($scalar, 1);
 		    if (!exists $symtab->{$name}) {
 			$symtab->{$name} = \$scalar;
+			# PerlOnJava stores a concrete CV for callable constant
+			# lookup; retain the scalar-reference proxy separately so
+			# stash introspection still sees Perl's PCS representation.
+			Internals::jperl_mark_pseudo_constant($full_name, \$scalar);
 			++$flush_mro->{$pkg};
 		    }
 		    else {

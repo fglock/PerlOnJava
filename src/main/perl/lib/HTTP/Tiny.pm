@@ -227,15 +227,13 @@ sub _set_proxies {
 
 for my $sub_name ( qw/get head put post patch delete/ ) {
     my $req_method = uc $sub_name;
-    for my $accessor ( @attributes ) {
-        my $sym_ref = qualify_to_ref($sub_name, __PACKAGE__);
-        *{$sym_ref} = sub {
-            my ($self, $url, $args) = @_;
-            @_ == 2 || (@_ == 3 && ref $args eq 'HASH')
-            or _croak("Usage: \$http->$sub_name(URL, [HASHREF])\n");
-            return $self->request($req_method, $url, $args || {});
-        };
-    }
+    my $sym_ref = qualify_to_ref($sub_name, __PACKAGE__);
+    *{$sym_ref} = sub {
+        my ($self, $url, $args) = @_;
+        @_ == 2 || (@_ == 3 && ref $args eq 'HASH')
+        or _croak("Usage: \$http->$sub_name(URL, [HASHREF])\n");
+        return $self->request($req_method, $url, $args || {});
+    };
 }
 
 #pod =method post_form

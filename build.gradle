@@ -214,6 +214,7 @@ dependencies {
     implementation libs.asm.util                      // ASM utilities
     implementation libs.icu4j                         // Unicode support
     implementation libs.jsoup                        // HTML5 parsing for HTML::Content::Extractor
+    implementation libs.jing                         // RELAX NG validation for XML::LibXML
     implementation libs.snakeyaml.engine              // YAML processing
     implementation libs.tomlj                         // TOML processing
     implementation libs.commons.csv                   // CSV processing
@@ -226,6 +227,8 @@ dependencies {
     implementation libs.sqlite.jdbc                    // SQLite JDBC driver
     implementation libs.bcprov                         // Bouncy Castle crypto (SHA-3, Keccak, etc.)
     implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
+    implementation libs.snappy.java                    // Official Sereal Java codec compression
+    implementation libs.zstd.jni                       // Official Sereal Java codec compression
     implementation 'org.jruby.joni:joni:2.2.7'         // Stack-safe recursive regex backend
     implementation 'io.netty:netty-codec-http:4.1.115.Final'  // Netty HTTP codec for PSGI server
 

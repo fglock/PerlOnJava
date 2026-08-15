@@ -35,6 +35,7 @@ public class TimeHiRes extends PerlModuleBase {
             module.registerMethod("time", "");
             module.registerMethod("sleep", null);
             module.registerMethod("alarm", null);
+            module.registerMethod("ualarm", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Time::HiRes method: " + e.getMessage());
         }
@@ -86,6 +87,13 @@ public class TimeHiRes extends PerlModuleBase {
 
     public static RuntimeList alarm(RuntimeArray args, int ctx) {
         // Implement alarm functionality if needed
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList ualarm(RuntimeArray args, int ctx) {
+        // Match the existing alarm compatibility behavior. Registering the
+        // function is important even where JVM signal delivery is unavailable:
+        // callers commonly use ualarm(0) to cancel an optional timeout.
         return new RuntimeScalar(0).getList();
     }
 }

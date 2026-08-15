@@ -102,9 +102,25 @@ public class HttpTiny extends PerlModuleBase {
             responseMap.put("headers", responseHeaders.createReference());
 
             return responseMap.createReference().getList();
-        } catch (IOException | InterruptedException e) {
-            throw new RuntimeException("HTTP request failed", e);
+        } catch (IOException e) {
+            return transportFailure(url, e).getList();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return transportFailure(url, e).getList();
         }
+    }
+
+    private static RuntimeScalar transportFailure(String url, Exception error) {
+        RuntimeHash response = new RuntimeHash();
+        response.put("success", new RuntimeScalar(false));
+        response.put("status", new RuntimeScalar(599));
+        response.put("reason", new RuntimeScalar("Internal Exception"));
+        String message = error.getMessage();
+        response.put("content", new RuntimeScalar(
+                message == null || message.isEmpty() ? error.getClass().getSimpleName() : message));
+        response.put("url", new RuntimeScalar(url));
+        response.put("headers", new RuntimeHash().createReference());
+        return response.createReference();
     }
 
     private static String getStatusReason(int statusCode) {

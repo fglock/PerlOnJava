@@ -96,7 +96,7 @@ public class DFS {
         // Get current @ISA array - FORCE fresh read
         RuntimeArray isaArray = InheritanceResolver.getIsaArrayForClass(className);
         List<String> parents = new ArrayList<>();
-        for (RuntimeBase entity : isaArray.elements) {
+        for (RuntimeBase entity : InheritanceResolver.visibleArrayElements(isaArray)) {
             String parentName = entity.toString();
             // FIXED: Skip empty or null parent names
             if (parentName != null && !parentName.isEmpty()) {
