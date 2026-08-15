@@ -1314,20 +1314,33 @@ sub _shell_mkdir {
 
 sub _current_perl_path {
     my $perl = $ENV{PERLONJAVA_EXECUTABLE} || $Config{perlpath} || $^X;
-    return $perl if File::Spec->file_name_is_absolute($perl);
+    return _makefile_shell_path($perl)
+        if File::Spec->file_name_is_absolute($perl);
 
     for my $base ($ENV{PWD}, getcwd()) {
         next unless defined $base && length $base;
         my $candidate = File::Spec->catfile($base, $perl);
-        return abs_path($candidate) || $candidate if -x $candidate;
+        return _makefile_shell_path(abs_path($candidate) || $candidate)
+            if -x $candidate;
     }
 
     for my $dir (File::Spec->path()) {
         my $candidate = File::Spec->catfile($dir, $perl);
-        return abs_path($candidate) || $candidate if -x $candidate;
+        return _makefile_shell_path(abs_path($candidate) || $candidate)
+            if -x $candidate;
     }
 
-    return $perl;
+    return _makefile_shell_path($perl);
+}
+
+# Generated Makefiles deliberately use a POSIX shell, including on the
+# Windows CI image.  A native path such as D:\a\project\jperl.bat is therefore
+# parsed as shell escapes and collapses to D:aprojectjperl.bat.  Windows APIs
+# accept forward slashes, and the POSIX shell preserves them.
+sub _makefile_shell_path {
+    my ($path) = @_;
+    $path =~ tr{\\}{/} if $^O eq 'MSWin32';
+    return $path;
 }
 
 # Helper: generate a shell cp command for Makefile.
