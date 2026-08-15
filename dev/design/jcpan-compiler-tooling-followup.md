@@ -37,7 +37,7 @@ The following are not treated as PerlOnJava regressions because their current di
 
 ## Progress Tracking
 
-### Current Status: implementation and local verification complete
+### Current Status: implementation complete; PR ready for review
 
 ### Completed Phases
 
@@ -55,11 +55,15 @@ The following are not treated as PerlOnJava regressions because their current di
   - Preserved the platform-default I/O layer when no lexical `open` pragma is
     active, including Windows `:crlf`, without consulting the leaked
     process-global `${^OPEN}` value.
+- [x] Phase 6: pull request and CI (2026-08-15)
+  - Opened PR #962 from `fix/jcpan-compiler-tooling-followup`.
+  - GitHub Actions passed on Ubuntu and Windows; the Windows run specifically
+    confirmed the platform-default newline fix in `pipe_jperl_shebang.t`.
 
 ### Next Steps
 
-1. Open the pull request.
-2. Verify CI.
+1. Review PR #962.
+2. Merge after approval.
 
 ### Open Questions
 
