@@ -4,6 +4,7 @@ import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.HashMap;
@@ -680,6 +681,7 @@ public class WarnDie {
         try {
             runEndBlocks(false);  // Don't reset $? - we just set it to the exit code
         } catch (Throwable t) {
+            RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
             RuntimeIO.closeAllHandles();
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.err.println(errorMessage);
@@ -687,6 +689,7 @@ public class WarnDie {
         } finally {
             MortalList.flushDeferredCaptures();
         }
+        RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
         // Global destruction: walk stashes for tracked blessed objects
         GlobalDestruction.runGlobalDestruction();
         RuntimeIO.closeAllHandles();

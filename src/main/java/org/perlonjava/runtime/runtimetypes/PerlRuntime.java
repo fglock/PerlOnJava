@@ -33,6 +33,7 @@ import java.util.Deque;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -48,8 +49,14 @@ public final class PerlRuntime implements AutoCloseable {
     public final long pid = ProcessHandle.current().pid();
     String currentDirectory = System.getProperty("user.dir");
     private final ReentrantLock executionLock = new ReentrantLock();
+    private final Object lifecycleMonitor = new Object();
+    private final AtomicInteger activeBindings = new AtomicInteger();
+    private final AtomicInteger activeSharedLocks = new AtomicInteger();
+    private final AtomicInteger activeSharedWaiters = new AtomicInteger();
     private volatile boolean initialized;
     private volatile boolean closed;
+    private volatile boolean resetting;
+    private volatile Thread resetOwner;
     private final PerlThreadRegistry threadRegistry;
     private final long perlThreadId;
     private volatile int perlThreadContext = RuntimeContextType.SCALAR;
@@ -58,29 +65,29 @@ public final class PerlRuntime implements AutoCloseable {
     private volatile boolean perlThreadExitOnly;
     private volatile boolean defaultPerlThreadExitOnly;
 
-    public final ExecutionRuntimeState executionState = new ExecutionRuntimeState();
-    public final RuntimeRegexState regexState = new RuntimeRegexState();
-    public final MroRuntimeState mroState = new MroRuntimeState();
-    public final GlobalRuntimeState globalState = new GlobalRuntimeState();
-    public final RuntimeCodeRuntimeState runtimeCodeState = new RuntimeCodeRuntimeState();
-    public final CompilationRuntimeState compilationState = new CompilationRuntimeState();
-    public final ByteCodeSourceMapper.State sourceMapperState = new ByteCodeSourceMapper.State();
-    public final FilterRuntimeState filterState = new FilterRuntimeState();
-    public final Time.State timeState = new Time.State();
-    public final PerlSignalQueue.State signalState = new PerlSignalQueue.State();
-    public final Random.State randomState = new Random.State();
-    public final DataSection.State dataSectionState = new DataSection.State();
+    public ExecutionRuntimeState executionState = new ExecutionRuntimeState();
+    public RuntimeRegexState regexState = new RuntimeRegexState();
+    public MroRuntimeState mroState = new MroRuntimeState();
+    public GlobalRuntimeState globalState = new GlobalRuntimeState();
+    public RuntimeCodeRuntimeState runtimeCodeState = new RuntimeCodeRuntimeState();
+    public CompilationRuntimeState compilationState = new CompilationRuntimeState();
+    public ByteCodeSourceMapper.State sourceMapperState = new ByteCodeSourceMapper.State();
+    public FilterRuntimeState filterState = new FilterRuntimeState();
+    public Time.State timeState = new Time.State();
+    public PerlSignalQueue.State signalState = new PerlSignalQueue.State();
+    public Random.State randomState = new Random.State();
+    public DataSection.State dataSectionState = new DataSection.State();
     public final Map<Integer, ScalarFlipFlopOperator> flipFlopState = new HashMap<>();
     public final Map<Integer, ScalarGlobOperator> scalarGlobState = new HashMap<>();
     public final Map<Integer, String> pointerPackState = new HashMap<>();
     final Map<Integer, WeakReference<RuntimeBase>> bObjectState = new HashMap<>();
-    public final IORuntimeRegistryState ioRegistryState = new IORuntimeRegistryState();
-    public final FileTestOperator.State fileTestState = new FileTestOperator.State();
-    public final DebugRuntimeState debugState = new DebugRuntimeState();
-    public final DiamondIO.State diamondIOState = new DiamondIO.State();
-    public final ExtendedNativeUtils.State nativeState = new ExtendedNativeUtils.State();
+    public IORuntimeRegistryState ioRegistryState = new IORuntimeRegistryState();
+    public FileTestOperator.State fileTestState = new FileTestOperator.State();
+    public DebugRuntimeState debugState = new DebugRuntimeState();
+    public DiamondIO.State diamondIOState = new DiamondIO.State();
+    public ExtendedNativeUtils.State nativeState = new ExtendedNativeUtils.State();
     public final Deque<Long> netSslErrorQueue = new ArrayDeque<>();
-    public final NetSSLeay.State netSslState = new NetSSLeay.State();
+    public NetSSLeay.State netSslState = new NetSSLeay.State();
     public ForkOpenState.PendingForkOpen pendingForkOpen;
     public RuntimeArray libOriginalInc;
     public boolean storableLastOpInNetorder;
@@ -111,8 +118,8 @@ public final class PerlRuntime implements AutoCloseable {
     private final Map<String, RuntimeGlob> standardIOGlobs = new HashMap<>();
     private final Set<String> hiddenStandardIOGlobs = new HashSet<>();
     final Map<String, Boolean> stateVariableInitialized = new HashMap<>();
-    final LifecycleRuntimeState lifecycleState = new LifecycleRuntimeState();
-    final NameNormalizer.State nameNormalizerState = new NameNormalizer.State();
+    LifecycleRuntimeState lifecycleState = new LifecycleRuntimeState();
+    NameNormalizer.State nameNormalizerState = new NameNormalizer.State();
 
     public PerlRuntime() {
         this(new PerlThreadRegistry(), 0);
@@ -194,12 +201,18 @@ public final class PerlRuntime implements AutoCloseable {
 
     /** Bind this runtime until the returned scope is closed. */
     public Binding bind() {
-        if (closed) {
-            throw new IllegalStateException("PerlRuntime is closed");
+        synchronized (lifecycleMonitor) {
+            if (closed) {
+                throw new IllegalStateException("PerlRuntime is closed");
+            }
+            if (resetting && resetOwner != Thread.currentThread()) {
+                throw new IllegalStateException("PerlRuntime is resetting");
+            }
+            activeBindings.incrementAndGet();
         }
         BindingFrame frame = new BindingFrame(this, CURRENT.get());
         CURRENT.set(frame);
-        return new Binding(frame, Thread.currentThread());
+        return new Binding(frame, Thread.currentThread(), this);
     }
 
     /** Convenience form for {@code runtime.bind()}. */
@@ -316,6 +329,61 @@ public final class PerlRuntime implements AutoCloseable {
 
     public boolean isClosed() {
         return closed;
+    }
+
+    /**
+     * Return this runtime to fresh-initialized state without changing its Java identity.
+     * Reset is rejected rather than delayed whenever observable work is still active.
+     * A failure after the transition starts permanently poisons the runtime.
+     */
+    public PerlRuntime reset() {
+        if (!executionLock.tryLock()) {
+            throw new IllegalStateException("PerlRuntime reset requires exclusive execution ownership");
+        }
+        try {
+            synchronized (lifecycleMonitor) {
+                if (closed) throw new IllegalStateException("PerlRuntime is closed");
+                if (resetting) throw new IllegalStateException("PerlRuntime is already resetting");
+                if (activeBindings.get() != 0) {
+                    throw new IllegalStateException("PerlRuntime reset requires all bindings to be closed");
+                }
+                if (threadRegistry.size() != 0) {
+                    throw new IllegalStateException("PerlRuntime reset requires all child threads to finish");
+                }
+                if (activeSharedLocks.get() != 0 || activeSharedWaiters.get() != 0) {
+                    throw new IllegalStateException(
+                            "PerlRuntime reset requires shared locks and waiters to be quiescent");
+                }
+                if (org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.isLocked()) {
+                    throw new IllegalStateException("PerlRuntime reset requires compilation to be quiescent");
+                }
+                resetting = true;
+                resetOwner = Thread.currentThread();
+            }
+
+            try {
+                try (Binding ignored = bind()) {
+                    releaseResettableResources();
+                }
+                replaceRuntimeState();
+                initialized = false;
+                initialize();
+                threadRegistry.clearTerminalStateForReset();
+                return this;
+            } catch (Throwable failure) {
+                closed = true;
+                if (failure instanceof RuntimeException runtime) throw runtime;
+                if (failure instanceof Error error) throw error;
+                throw new IllegalStateException("PerlRuntime reset failed", failure);
+            } finally {
+                synchronized (lifecycleMonitor) {
+                    resetting = false;
+                    resetOwner = null;
+                }
+            }
+        } finally {
+            executionLock.unlock();
+        }
     }
 
     /**
@@ -444,6 +512,97 @@ public final class PerlRuntime implements AutoCloseable {
         }
     }
 
+    private void releaseResettableResources() {
+        MortalList.flush();
+        MortalList.flushDeferredCapturesBeforeEnd();
+        try {
+            SpecialBlock.runEndBlocks(false);
+        } finally {
+            MortalList.flushDeferredCaptures();
+            org.perlonjava.runtime.regex.RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
+        }
+        GlobalDestruction.runGlobalDestruction();
+        Time.cancelCurrentAlarm();
+        PerlSignalQueue.clearSignals();
+        RuntimeIO.closeAllHandles();
+        NetSSLeay.resetState();
+        MortalList.clearCurrentRuntimeState();
+    }
+
+    private void replaceRuntimeState() {
+        executionState = new ExecutionRuntimeState();
+        regexState = new RuntimeRegexState();
+        mroState = new MroRuntimeState();
+        globalState = new GlobalRuntimeState();
+        runtimeCodeState = new RuntimeCodeRuntimeState();
+        compilationState = new CompilationRuntimeState();
+        sourceMapperState = new ByteCodeSourceMapper.State();
+        filterState = new FilterRuntimeState();
+        timeState = new Time.State();
+        signalState = new PerlSignalQueue.State();
+        randomState = new Random.State();
+        dataSectionState = new DataSection.State();
+        ioRegistryState = new IORuntimeRegistryState();
+        fileTestState = new FileTestOperator.State();
+        debugState = new DebugRuntimeState();
+        diamondIOState = new DiamondIO.State();
+        nativeState = new ExtendedNativeUtils.State();
+        lifecycleState = new LifecycleRuntimeState();
+        nameNormalizerState = new NameNormalizer.State();
+
+        flipFlopState.clear();
+        scalarGlobState.clear();
+        pointerPackState.clear();
+        bObjectState.clear();
+        netSslErrorQueue.clear();
+        netSslState = new NetSSLeay.State();
+        xsShimLoadingInProgress.clear();
+        referenceAddresses.clear();
+        stateVariableInitialized.clear();
+        pendingForkOpen = null;
+        libOriginalInc = null;
+        storableLastOpInNetorder = false;
+        currentDirectory = System.getProperty("user.dir");
+        perlThreadContext = RuntimeContextType.SCALAR;
+        perlThreadStackSize = 0;
+        defaultPerlThreadStackSize = 0;
+        perlThreadExitOnly = false;
+        defaultPerlThreadExitOnly = false;
+        resetStandardIOState();
+    }
+
+    private void resetStandardIOState() {
+        ioOpenHandles.clear();
+        standardIOGlobs.clear();
+        hiddenStandardIOGlobs.clear();
+        ioStdout = new RuntimeIO(new StandardIO(System.out, true));
+        ioStderr = new RuntimeIO(new StandardIO(System.err, false));
+        ioStderr.autoFlush = true;
+        ioStdin = new RuntimeIO(new StandardIO(System.in));
+        ioSelectedHandle = ioStdout;
+        ioLastWrittenHandle = ioStdout;
+        ioLastAccessedHandle = null;
+        ioLastReadlineHandleName = null;
+        installInitialStandardGlob("main::STDOUT", ioStdout);
+        installInitialStandardGlob("main::stdout", ioStdout);
+        installInitialStandardGlob("main::STDERR", ioStderr);
+        installInitialStandardGlob("main::stderr", ioStderr);
+        installInitialStandardGlob("main::STDIN", ioStdin);
+        installInitialStandardGlob("main::stdin", ioStdin);
+        ioStdout.globName = "main::STDOUT";
+        ioStderr.globName = "main::STDERR";
+        ioStdin.globName = "main::STDIN";
+    }
+
+    private void releaseBinding() {
+        activeBindings.decrementAndGet();
+    }
+
+    void sharedLockAcquired() { activeSharedLocks.incrementAndGet(); }
+    void sharedLockReleased() { activeSharedLocks.decrementAndGet(); }
+    void sharedWaiterEntered() { activeSharedWaiters.incrementAndGet(); }
+    void sharedWaiterExited() { activeSharedWaiters.decrementAndGet(); }
+
     RuntimeGlob standardIOGlob(String name) {
         return standardIOGlobs.get(name);
     }
@@ -526,11 +685,13 @@ public final class PerlRuntime implements AutoCloseable {
     public static final class Binding implements AutoCloseable {
         private final BindingFrame frame;
         private final Thread owner;
+        private final PerlRuntime runtime;
         private boolean closed;
 
-        private Binding(BindingFrame frame, Thread owner) {
+        private Binding(BindingFrame frame, Thread owner, PerlRuntime runtime) {
             this.frame = frame;
             this.owner = owner;
+            this.runtime = runtime;
         }
 
         @Override
@@ -550,6 +711,7 @@ public final class PerlRuntime implements AutoCloseable {
             } else {
                 CURRENT.set(frame.previous);
             }
+            runtime.releaseBinding();
         }
     }
 }

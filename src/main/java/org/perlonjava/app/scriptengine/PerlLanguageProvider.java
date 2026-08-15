@@ -22,6 +22,7 @@ import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 import org.perlonjava.runtime.WarningBitsRegistry;
 
@@ -618,6 +619,7 @@ public class PerlLanguageProvider {
                         // END may itself fail; captured cleanup still belongs after
                         // the attempted END dispatch and before runtime teardown.
                         MortalList.flushDeferredCaptures();
+                        RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
                     }
                     // Global destruction: walk stashes for tracked blessed objects
                     GlobalDestruction.runGlobalDestruction();
@@ -647,6 +649,7 @@ public class PerlLanguageProvider {
                 } finally {
                     CallerStack.pop();
                     MortalList.flushDeferredCaptures();  // Live captures outlast END
+                    RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
                 }
                 RuntimeIO.closeAllHandles();
             }

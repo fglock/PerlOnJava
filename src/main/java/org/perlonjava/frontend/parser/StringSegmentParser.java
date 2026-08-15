@@ -155,6 +155,14 @@ public abstract class StringSegmentParser {
         return isRegex && inRegexCharClass;
     }
 
+    /**
+     * Whether regex code-block openers have their ordinary special meaning at the current point.
+     * Subclasses may suppress them while parsing a quoting region such as {@code \Q...\E}.
+     */
+    protected boolean regexCodeBlocksAreActive() {
+        return true;
+    }
+
     private void updateRegexCharClassState(char c) {
         if (!isRegex) {
             return;
@@ -779,10 +787,10 @@ public abstract class StringSegmentParser {
             }
             case "(" -> {
                 // Check for (?{...}) and (??{...}) regex code blocks - only in regex context
-                if (isRegex && isRegexCodeBlock()) {
+                if (isRegex && regexCodeBlocksAreActive() && isRegexCodeBlock()) {
                     parseRegexCodeBlock(false);  // (?{...}) - code execution
                     yield true;
-                } else if (isRegex && isRegexRecursiveBlock()) {
+                } else if (isRegex && regexCodeBlocksAreActive() && isRegexRecursiveBlock()) {
                     parseRegexCodeBlock(true);   // (??{...}) - recursive pattern
                     yield true;
                 }

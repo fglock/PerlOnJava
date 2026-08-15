@@ -647,7 +647,7 @@ Phase 33's release gate completed with `./jcpan --jobs 8 -t DBIx::Class`:
 non-local labeled control flow tears down every abandoned Perl frame before the
 target resumes, preserving scope-guard diagnostics and redirected STDERR.
 
-### Phase 35 — Lexical regex debugging (implemented core 2026-08-14)
+### Phase 35 — Lexical regex debugging (completed 2026-08-14)
 
 Implement scoped `use/no re 'debug'` and `debugcolor` as compiler hints carried
 by regex and CODE metadata on both backends. Diagnostics use the bound runtime's
@@ -656,10 +656,10 @@ trace flag. Acceptance: `re/stclass_threads.t` reaches 6/6 and direct/child
 traces have identical behavior and runtime ownership.
 
 The compiler hints, JVM/interpreter propagation, runtime-owned STDERR routing,
-snapshot behavior, and focused six-assertion oracle are implemented. The core
-`stclass_threads.t` gate is 3/6: all three trace-linearity assertions pass, but
-each child trace contains one additional record. That direct/child formatting
-delta remains part of Phase 35 acceptance.
+snapshot behavior, and focused six-assertion oracle are implemented. Debug
+regex lifecycle records now drain after END in the owning main or child
+runtime. The core `stclass_threads.t` gate reaches 6/6 with equal direct/child
+record counts and linear scaling.
 
 ### Phase 36 — Complete regex parity exercised by thread wrappers (in progress)
 
@@ -671,10 +671,16 @@ applicable `perl5_t/t/re/*thr*.t` test and direct companion completes its plan
 without unexpected failure on JVM or interpreter backends.
 
 This tranche restores recursive-definition compilation for `reg_email` and
-keeps direct/thread compilation behavior aligned. Its test body is still
-blocked in both paths by the direct DATA-handle gap. `pat_re_eval` and the
-remaining `qr//`, conditional, control-verb, lookbehind, Unicode-property, and
-diagnostic coverage remain shared regex-language work.
+keeps direct/thread compilation behavior aligned. DATA now models the source
+file positioned after its marker, remains seekable to the source start, and
+crosses thread snapshots through the named-handle inheritance policy. Direct
+and threaded `reg_email` therefore pass 13/13 on both backends. `pat_re_eval`
+now parses quoted code-block-shaped text correctly: `(?{` inside `\Q...\E`
+is literal rather than an embedded Perl block. This advances both direct and
+threaded files to runtime construction, where arbitrary match-time `(?{...})`
+execution remains the next blocker. The remaining `qr//`, conditional,
+control-verb, lookbehind, Unicode-property, and diagnostic coverage likewise
+remains shared regex-language work.
 
 ### Phase 37 — General filehandle and resource inheritance (implemented tranche 2026-08-14)
 
@@ -737,14 +743,20 @@ runtime that releases the final cross-runtime owner. Separate destructive plain
 includes nested rebless/store-back, fresh `refaddr` views, cycles, weak refs,
 one global destructor, and share-versus-shared_clone system-Perl oracles.
 
-### Phase 40 — Complete public `threads` API
+### Phase 40 — Complete public `threads` API (completed 2026-08-14)
 
 Close every remaining lifecycle, signal, context, exit-status, stack-size,
 import, stringify, alias-object, and shutdown-warning gap. Upgrade the module
 version only when its upstream surface passes. A nonzero stack request always
 selects a platform child even after virtual threads become the default.
 
-### Phase 41 — Fresh-runtime reset
+The public 2.43 method surface is implemented and advertised. Creation context,
+alias objects, current/class detach, signals, exit policy, stack metadata,
+stringification, terminal errors, daemon-carrier shutdown, and attached-child
+exit warnings are covered by focused JVM/interpreter tests. Core
+`op/threads.t` completes 30/30.
+
+### Phase 41 — Fresh-runtime reset (completed 2026-08-14)
 
 Add reset as a lifecycle distinct from terminal `close()`. Reset is allowed only
 after execution, compilation, callbacks, children, locks, waiters, handles, and
@@ -752,6 +764,18 @@ destruction work quiesce. Rebuild every domain in
 `runtime-pooling-reset-contract.md` from an immutable bootstrap template and
 poison a runtime after any partial reset failure. Acceptance is exhaustive
 `A; reset; B == fresh; B` parity plus classloader/package-graph collection.
+
+`PerlRuntime.reset()` is now a distinct exclusive lifecycle transition. It
+rejects active bindings, compilation, children, shared locks, and waiters;
+drains END/destruction and owned resources; replaces every runtime state holder;
+rebuilds standard handles and core globals; clears terminal thread-family state;
+and poisons the runtime after any partial failure. JVM/interpreter differentials
+prove representative package, CODE, `%INC`, regex, execution, and I/O freshness.
+Pooling remains off pending Phase 42's checkout stress, collection, and measured
+benefit gates.
+
+The post-reset regression gate retains all 325 DBIx::Class files and 42,671
+assertions under `./jcpan --jobs 8 -t DBIx::Class`.
 
 ### Phase 42 — Opt-in pooling and concurrent PSGI
 
@@ -793,7 +817,7 @@ CI.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 35–39 implemented for the supported tranche
+### Current Status: Phase 41 complete; Phase 36 and Phase 39b remain open
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -949,10 +973,16 @@ request history.
 
 The core differential runner now reserves an exclusive serial lane for the
 resource-sensitive `gv.t`, advanced-regex, regex-speed, GH7094 benchmark, and
-Abigail JAPH tests. The thread wrappers for `pat.t`, `pat_psycho.t`, and
-`speed.t` use that same lane and a 600-second minimum outer deadline because
-runtime snapshot startup plus the upstream watchdogs exceed the normal
-300-second budget under parallel load. These tests have internal watchdogs or
+Abigail JAPH tests. The thread wrappers `pat_thr.t`, `pat_psycho_thr.t`,
+`regexp_qr_embed_thr.t`, and `speed_thr.t` use that same lane and a 600-second
+minimum outer deadline because runtime snapshot startup plus the upstream
+watchdogs exceed the normal 300-second budget under parallel load. The
+`regexp_qr_embed_thr.t` classification also prevents a full-corpus memory spike
+from exhausting its child runtime near the end of the 2,210-case matrix. Thread
+snapshots inherit named IO slots only when they contain a real handle; inert
+parser placeholders are child-vivified on demand instead of being copied
+quadratically across thousands of eval-created runtimes. These tests have
+internal watchdogs or
 timing assertions whose TAP totals changed when they competed with the normal
 parallel corpus; they retain stable original indices, and `gv.t` receives the
 upstream timeout factor. This is test scheduling policy, not a relaxation of
@@ -965,15 +995,16 @@ three assertions from the adjacent-import parser fix.
 
 ### Next Steps
 
-1. Close the remaining Phase 35 trace-record delta and Phase 36 direct regex
-   language/DATA-handle gaps; wrapper behavior must follow the corrected direct
-   implementation without special cases.
+1. Complete Phase 36's direct regex-language gaps in `pat_re_eval`, `qr//`,
+   conditionals, control verbs, lookbehind, Unicode properties, and diagnostics;
+   wrapper behavior must follow the corrected direct implementation without
+   special cases.
 2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
    weak/cyclic ownership, and the destructive `share` versus preserving
    `shared_clone` distinction.
-3. Land Phases 40–44 as the final delivery sequence: public API closure,
-   fresh-runtime reset, opt-in pooling and concurrent PSGI, virtual threads by
-   default, and the complete release gate.
+3. Land Phases 42–44 as the final delivery sequence: opt-in pooling and
+   concurrent PSGI, virtual threads by default, and the complete release gate.
+   Phases 40 and 41's public API and fresh-reset foundations are complete.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under

@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.regex.RuntimeRegex;
+
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -122,6 +124,8 @@ public final class PerlThreadControlBlock {
                     SpecialBlock.runEndBlocks(false);
                 } catch (Throwable endFailure) {
                     if (failure == null) failure = endFailure;
+                } finally {
+                    RuntimeRegex.emitCurrentRuntimeDebugFreeTraces();
                 }
                 return new Outcome(value, failure);
             });

@@ -4,6 +4,7 @@ import org.perlonjava.runtime.regex.RegexMatcher;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +54,9 @@ public final class RuntimeRegexState {
                     return size() > MAX_REGEX_CACHE_SIZE;
                 }
             };
+
+    /** Regex objects whose lexical debug lifecycle is active in this runtime. */
+    public final List<RuntimeRegex> activeDebugRegexes = new ArrayList<>();
 
     /** Per-runtime {@code pos()} values and zero-length-match bookkeeping. */
     final Map<RuntimeScalar, RuntimePosLvalue.CacheEntry> positionCache =

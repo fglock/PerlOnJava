@@ -2,11 +2,11 @@
 
 ## Status
 
-Runtime pooling was re-evaluated on 2026-08-13 and remains deliberately
-disabled. `PerlRuntime.close()` is a terminal resource-release
-operation, not a reset operation, and a closed runtime deliberately rejects
-`bind`, `initialize`, and `execute`. Reusing it would currently expose state that
-a newly constructed runtime does not contain.
+Fresh-runtime reset was implemented on 2026-08-14. Runtime pooling remains
+deliberately disabled until Phase 42's checkout stress, retention measurements,
+and performance gate pass. `PerlRuntime.close()` remains a terminal
+resource-release operation; reusable runtimes use the separate exclusive
+`reset()` transition.
 
 This document defines the proof required before a pool may be implemented. It
 does not authorize clearing state opportunistically or enabling pooling behind
@@ -64,24 +64,24 @@ correct terminal lifecycle, but it is intentionally insufficient for pooling.
 
 Pooling remains disabled until all items below are complete:
 
-- [ ] Introduce one exclusive lifecycle transition that prevents reset while
+- [x] Introduce one exclusive lifecycle transition that prevents reset while
   execution, compilation, callbacks, ithreads, detached children, shared-lock
   ownership, or condition waiters remain active.
-- [ ] Define whether core bootstrap state is reconstructed or restored from an
+- [x] Define whether core bootstrap state is reconstructed or restored from an
   immutable template; user package/CODE/class state and `%INC` must never leak.
-- [ ] Recreate standard I/O wrappers and glob topology without closing borrowed
+- [x] Recreate standard I/O wrappers and glob topology without closing borrowed
   JVM streams, and restore selected/last-handle and visibility defaults.
-- [ ] Drain END/destruction work according to normal Perl semantics before
+- [x] Drain END/destruction work according to normal Perl semantics before
   clearing lifecycle roots; prove weak references and rescued objects do not
   cross tenants.
-- [ ] Clear every state domain in the inventory, including counters and caches,
+- [x] Clear every state domain in the inventory, including counters and caches,
   without retaining generated classes or prior workload object graphs.
-- [ ] Restore process-derived defaults (`cwd`, environment view, random policy,
+- [x] Restore process-derived defaults (`cwd`, environment view, random policy,
   warning/feature defaults) according to an explicitly documented checkout
   contract.
-- [ ] Reject or quarantine a runtime after reset failure; a partially reset
+- [x] Reject or quarantine a runtime after reset failure; a partially reset
   runtime must never return to the pool.
-- [ ] Prove `A; reset; B == fresh; B` on both compiler backends across globals,
+- [x] Prove `A; reset; B == fresh; B` on both compiler backends across globals,
   closures, eval/require, regex, warnings/hints, MRO, I/O, lifecycle, signals,
   native modules, DATA, debugger state, and exceptions.
 - [ ] Add concurrency/stress coverage for checkout ownership, cancellation,
@@ -93,12 +93,12 @@ Pooling remains disabled until all items below are complete:
 
 ## Current automated guard
 
-`PerlRuntimePoolingResetContractTest` records the present negative contract:
-close is terminal, closed runtimes cannot be rebound or executed, and package,
-regex-cache, and execution settings retained by the terminal object differ from
-a fresh runtime. The test prevents a future pool from treating `close()` as a
-reset without first replacing this negative proof with the full equivalence
-suite above.
+`PerlRuntimePoolingResetContractTest` preserves the negative `close()` contract.
+`PerlRuntimeResetTest` proves the positive transition: representative package,
+CODE, `%INC`, regex, execution, thread-option, and standard-I/O state matches a
+fresh runtime on both backends; reset rejects bindings, child threads, and
+shared locks; pending END work drains; failed reset poisons the runtime; and the
+same Java runtime identity executes again after successful reset.
 
 ## Related documents
 

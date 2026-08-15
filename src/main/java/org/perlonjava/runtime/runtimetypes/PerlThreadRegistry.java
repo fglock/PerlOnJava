@@ -57,6 +57,14 @@ public final class PerlThreadRegistry {
         return threads.size();
     }
 
+    void clearTerminalStateForReset() {
+        if (!threads.isEmpty() || !userUnicodeProperties.isEmpty()) {
+            throw new IllegalStateException("Thread registry is not quiescent");
+        }
+        terminalThreads.clear();
+        nextId.set(1);
+    }
+
     /** Format Perl's process-exit diagnostic for attached, unjoined children. */
     public String activeThreadExitWarning() {
         int running = 0;

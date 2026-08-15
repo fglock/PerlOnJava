@@ -117,8 +117,10 @@ public final class SharedPerlStorage {
     /** Acquire a recursive advisory lock until the surrounding Perl scope exits. */
     public static RuntimeBase lock(RuntimeScalar reference) {
         RuntimeBase root = requireShared(reference, "lock");
+        PerlRuntime owner = PerlRuntime.current();
         LockState state = lockState(root);
         state.lock.lock();
+        owner.sharedLockAcquired();
         DynamicVariableManager.pushLocalVariable(new DynamicState() {
             @Override
             public void dynamicSaveState() {
@@ -127,7 +129,11 @@ public final class SharedPerlStorage {
 
             @Override
             public void dynamicRestoreState() {
-                state.lock.unlock();
+                try {
+                    state.lock.unlock();
+                } finally {
+                    owner.sharedLockReleased();
+                }
             }
 
             @Override
@@ -201,6 +207,8 @@ public final class SharedPerlStorage {
         }
 
         int holds = lock.getHoldCount();
+        PerlRuntime owner = PerlRuntime.current();
+        owner.sharedWaiterEntered();
         for (int i = 0; i < holds; i++) lock.unlock();
         boolean signalled = false;
         try {
@@ -226,6 +234,7 @@ public final class SharedPerlStorage {
                 }
             }
             for (int i = 0; i < holds; i++) lock.lock();
+            owner.sharedWaiterExited();
         }
         return signalled;
     }

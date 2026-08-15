@@ -56,6 +56,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
      */
     private final Stack<CaseModifier> caseModifiers = new Stack<>();
 
+    @Override
+    protected boolean regexCodeBlocksAreActive() {
+        return caseModifiers.stream().noneMatch(modifier -> "Q".equals(modifier.type));
+    }
+
     /**
      * Private constructor for StringDoubleQuoted parser.
      *
