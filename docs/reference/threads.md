@@ -96,12 +96,14 @@ backends with virtual carriers, plus focused lifecycle, signal, stack, wait,
 timeout, and deadlock coverage on platform carriers:
 
 ```bash
-git clone --depth 1 --branch v5.44.0 https://github.com/Perl/perl5.git perl5
+git clone https://github.com/Perl/perl5.git perl5
+git -C perl5 checkout de80c8ecd40c6d5b677847699e5482b44bc748c6
 make test-threads
 ```
 
 The clone is required only when an adjacent `perl5/` source tree is not already
-present. CI performs a sparse checkout of just the four distributions.
+present. CI performs a sparse checkout of the four distributions and their core
+test harness at this exact compatibility-corpus commit.
 
 Before a thread/runtime release, run the complete four-mode matrix:
 

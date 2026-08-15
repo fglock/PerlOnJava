@@ -110,13 +110,13 @@ test-interpreter:
 	JPERL_INTERPRETER=1 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_interpreter_results.json src/test/resources/unit
 
 # Verify the unchanged upstream test distributions are available. GitHub CI
-# sparse-checks them out at the Perl v5.44.0 tag; local developers normally use
-# their adjacent/gitignored perl5 source tree.
+# sparse-checks them out at the compatibility-corpus commit recorded below;
+# local developers normally use their adjacent/gitignored perl5 source tree.
 check-thread-test-sources:
 	@for dir in $(THREAD_DIST_DIRS); do \
 		if [ ! -d "$$dir" ]; then \
 			echo "Error: $$dir is missing."; \
-			echo "Clone Perl v5.44.0 into ./perl5 before running the thread gates."; \
+			echo "Clone Perl commit de80c8ecd40c6d5b677847699e5482b44bc748c6 into ./perl5 before running the thread gates."; \
 			exit 1; \
 		fi; \
 	done

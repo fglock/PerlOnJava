@@ -39,12 +39,14 @@ lifecycle, signal, stack, condition, timeout, and deadlock tests with platform
 carriers:
 
 ```bash
-git clone --depth 1 --branch v5.44.0 https://github.com/Perl/perl5.git perl5
+git clone https://github.com/Perl/perl5.git perl5
+git -C perl5 checkout de80c8ecd40c6d5b677847699e5482b44bc748c6
 make test-threads
 ```
 
 Skip the clone when the gitignored `perl5/` source tree is already present. CI
-uses a sparse checkout containing only the four required distributions.
+uses a sparse checkout containing the four required distributions and the core
+test harness at the same pinned commit.
 
 Before a thread/runtime release, extend that gate to the complete four-mode
 matrix (both execution backends on virtual and platform carriers):

@@ -41,14 +41,15 @@ jobs:
         if: runner.os == 'Linux'
         run: make ci
 
-      - name: Checkout Perl 5.44 thread test distributions
+      - name: Checkout pinned Perl thread compatibility corpus
         if: runner.os == 'Linux'
         uses: actions/checkout@v4
         with:
           repository: Perl/perl5
-          ref: v5.44.0
+          ref: de80c8ecd40c6d5b677847699e5482b44bc748c6
           path: perl5
           sparse-checkout: |
+            t
             dist/threads
             dist/threads-shared
             dist/Thread-Queue
