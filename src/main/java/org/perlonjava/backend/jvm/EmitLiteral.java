@@ -512,6 +512,7 @@ public class EmitLiteral {
         // Stack: []
 
         // Populate the list with elements
+        boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"));
         for (Node element : node.elements) {
             // Generate code for the element with an empty operand stack so non-local control flow
             // cannot leak extra operands.
@@ -524,7 +525,12 @@ public class EmitLiteral {
             emitterVisitor.ctx.javaClassInfo.releaseSpillRef(elementRef);
 
             // Add the element to the list
-            addElementToList(mv, element, contextType);
+            if (forceListSnapshot) {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
+                        "addSnapshot", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
+            } else {
+                addElementToList(mv, element, contextType);
+            }
             // Stack: []
         }
 

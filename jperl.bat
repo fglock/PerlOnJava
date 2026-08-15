@@ -32,15 +32,22 @@ rem Override via `JPERL_OPTS=-Xmx<size>` in the environment if needed.
 
 rem Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
 rem warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
+if not defined PERLONJAVA_JAVA_BIN (
+    for /f "delims=" %%j in ('where java 2^>nul') do if not defined PERLONJAVA_JAVA_BIN set "PERLONJAVA_JAVA_BIN=%%j"
+)
+if not defined PERLONJAVA_JAVA_BIN (
+    echo ERROR: PerlOnJava requires Java 24 or later; java was not found in PATH. 1>&2
+    exit /b 1
+)
 set JAVA_VERSION=
-for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do (
+for /f "tokens=3" %%v in ('"%PERLONJAVA_JAVA_BIN%" -version 2^>^&1 ^| "%SystemRoot%\System32\findstr.exe" /i "version"') do (
     for /f "tokens=1 delims=." %%m in ("%%~v") do (
         set JAVA_VERSION=%%m
         if %%m GEQ 23 set JVM_OPTS=%JVM_OPTS% --sun-misc-unsafe-memory-access=allow
     )
 )
 if not defined JAVA_VERSION (
-    echo ERROR: PerlOnJava requires Java 24 or later; java was not found in PATH. 1>&2
+    echo ERROR: PerlOnJava requires Java 24 or later; Java version could not be determined. 1>&2
     exit /b 1
 )
 if %JAVA_VERSION% LSS 24 (
@@ -63,4 +70,4 @@ if exist "%SCRIPT_DIR%target\perlonjava-5.44.0.jar" (
 )
 
 rem Launch Java
-java %JVM_OPTS% %JPERL_OPTS% -cp "%CLASSPATH%;%PERLONJAVA_CP%" org.perlonjava.app.cli.Main %*
+"%PERLONJAVA_JAVA_BIN%" %JVM_OPTS% %JPERL_OPTS% -cp "%CLASSPATH%;%PERLONJAVA_CP%" org.perlonjava.app.cli.Main %*

@@ -6,8 +6,15 @@
 # Repository: github.com/fglock/PerlOnJava
 #
 
-# Get the directory where this script is located, resolving symlinks
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Get the directory where this script is located without depending on the
+# external dirname utility. CPAN build tools can intentionally replace PATH
+# with prerequisite script directories before launching a nested $^X.
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+case "$SCRIPT_SOURCE" in
+    */*) SCRIPT_PARENT="${SCRIPT_SOURCE%/*}" ;;
+    *)   SCRIPT_PARENT="." ;;
+esac
+SCRIPT_DIR="$(cd "$SCRIPT_PARENT" && pwd -P)"
 
 # Get the full path to this script to set $^X correctly
 JPERL_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$SCRIPT_DIR/jperl")"
@@ -58,11 +65,24 @@ JVM_OPTS="--enable-native-access=ALL-UNNAMED"
 
 # Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
 # warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
-if ! command -v java >/dev/null 2>&1; then
+JAVA_BIN="${PERLONJAVA_JAVA_BIN:-}"
+if [ -z "$JAVA_BIN" ] && [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    JAVA_BIN="$JAVA_HOME/bin/java"
+fi
+if [ -z "$JAVA_BIN" ]; then
+    JAVA_BIN="$(command -v java 2>/dev/null || true)"
+fi
+if [ -z "$JAVA_BIN" ] || [ ! -x "$JAVA_BIN" ]; then
     echo "ERROR: PerlOnJava requires Java 24 or later; java was not found in PATH." >&2
     exit 1
 fi
-JAVA_VERSION=$(java -version 2>&1 | head -1 | sed 's/.*version "\([0-9]*\).*/\1/')
+export PERLONJAVA_JAVA_BIN="$JAVA_BIN"
+JAVA_VERSION_OUTPUT="$("$JAVA_BIN" -version 2>&1)"
+if [[ "$JAVA_VERSION_OUTPUT" =~ version\ \"([0-9]+) ]]; then
+    JAVA_VERSION="${BASH_REMATCH[1]}"
+else
+    JAVA_VERSION=""
+fi
 if ! [[ "$JAVA_VERSION" =~ ^[0-9]+$ ]] || [ "$JAVA_VERSION" -lt 24 ]; then
     echo "ERROR: PerlOnJava requires Java 24 or later (found: ${JAVA_VERSION:-unknown})." >&2
     exit 1
@@ -77,4 +97,4 @@ if [ -n "$CLASSPATH" ]; then
 else
     CP="$PERLONJAVA_CP"
 fi
-exec java $JVM_OPTS ${JPERL_OPTS} -cp "$CP" org.perlonjava.app.cli.Main "$@"
+exec "$JAVA_BIN" $JVM_OPTS ${JPERL_OPTS} -cp "$CP" org.perlonjava.app.cli.Main "$@"

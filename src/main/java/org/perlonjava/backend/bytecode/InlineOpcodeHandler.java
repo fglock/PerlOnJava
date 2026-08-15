@@ -904,6 +904,10 @@ public class InlineOpcodeHandler {
     public static int executeCreateList(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int count = bytecode[pc++];
+        boolean forceListSnapshot = count < 0;
+        if (forceListSnapshot) {
+            count = -count - 1;
+        }
 
         if (count == 0) {
             // Empty list - fastest path
@@ -912,7 +916,11 @@ public class InlineOpcodeHandler {
             // Single element - avoid loop overhead
             int rs = bytecode[pc++];
             RuntimeList list = new RuntimeList();
-            list.add(registers[rs]);
+            if (forceListSnapshot) {
+                list.addSnapshot(registers[rs]);
+            } else {
+                list.add(registers[rs]);
+            }
             registers[rd] = list;
         } else {
             // Multiple elements - preallocate and populate
@@ -920,7 +928,11 @@ public class InlineOpcodeHandler {
 
             for (int i = 0; i < count; i++) {
                 int rs = bytecode[pc++];
-                list.add(registers[rs]);
+                if (forceListSnapshot) {
+                    list.addSnapshot(registers[rs]);
+                } else {
+                    list.add(registers[rs]);
+                }
             }
 
             registers[rd] = list;

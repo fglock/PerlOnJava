@@ -22,6 +22,27 @@ class PerlOnJavaHomeIntegrationTest {
     Path temporaryDirectory;
 
     @Test
+    void nestedLauncherDoesNotRequireChildPath() throws Exception {
+        Path projectDirectory = Path.of(System.getProperty("user.dir")).toAbsolutePath();
+        boolean windows = System.getProperty("os.name").toLowerCase().startsWith("windows");
+        Path launcher = projectDirectory.resolve(windows ? "jperl.bat" : "jperl");
+        Path probe = temporaryDirectory.resolve("empty_path_probe.pl");
+        Files.writeString(probe, "local $ENV{PATH} = ''; exit(system($^X, '-e', 'exit 0'));\n");
+
+        ProcessBuilder builder = launcherCommand(windows, launcher, probe);
+        builder.directory(projectDirectory.toFile());
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        if (!process.waitFor(60, TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            process.waitFor(10, TimeUnit.SECONDS);
+            throw new AssertionError("empty-PATH nested launcher probe timed out");
+        }
+        String output = new String(process.getInputStream().readAllBytes());
+        assertEquals(0, process.exitValue(), output);
+    }
+
+    @Test
     void launcherKeepsRuntimeAndCpanStateInsideExplicitHome() throws Exception {
         Path projectDirectory = Path.of(System.getProperty("user.dir")).toAbsolutePath();
         boolean windows = System.getProperty("os.name").toLowerCase().startsWith("windows");

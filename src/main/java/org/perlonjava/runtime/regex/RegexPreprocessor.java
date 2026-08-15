@@ -154,6 +154,7 @@ public class RegexPreprocessor {
         // DISABLED: Causes test regressions - needs more work
         // s = escapeInvalidQuantifierBraces(s);
 
+        s = translateTopLevelPruneVerbs(s);
         s = convertPythonStyleGroups(s);
         s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
@@ -171,6 +172,321 @@ public class RegexPreprocessor {
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
         return preferOmniHolderLiteralAlternation(result);
+    }
+
+    /**
+     * Translate the common top-level forms of Perl's {@code (*PRUNE)} cut
+     * verb into constructs supported by {@link java.util.regex.Pattern}.
+     *
+     * <p>Within one alternation branch, PRUNE makes everything already
+     * consumed atomic. If that branch later fails, alternatives to its right
+     * must also be rejected when the pruned prefix matched at the same start
+     * position. The latter can be represented by a negative lookahead when
+     * the prefix contains no groups (and therefore cannot perturb capture
+     * numbering when copied into the guard):</p>
+     *
+     * <pre>A(*PRUNE)B|C  ->  (?>A)B|(?!A)C</pre>
+     *
+     * <p>Nested PRUNE sites and grouped prefixes followed by alternatives
+     * remain on the existing explicit-unimplemented path. Keeping this
+     * translation deliberately structural avoids silently weakening cut
+     * semantics for patterns that need a full Perl backtracking VM.</p>
+     */
+    private static String translateTopLevelPruneVerbs(String pattern) {
+        final String prune = "(*PRUNE)";
+        pattern = translatePruneVerbsInNestedGroups(pattern);
+        int searchFrom = 0;
+
+        while (true) {
+            int pruneAt = findTopLevelToken(pattern, prune, searchFrom);
+            if (pruneAt < 0) return pattern;
+
+            int branchStart = findPreviousTopLevelPipe(pattern, pruneAt) + 1;
+            String prefix = pattern.substring(branchStart, pruneAt);
+            List<Integer> laterPipes = findFollowingTopLevelPipes(pattern, pruneAt + prune.length());
+
+            if (!laterPipes.isEmpty() && !isPruneGuardSafe(prefix)) {
+                // Leave the verb untouched so handleParentheses reports the
+                // established, honest unsupported-feature diagnostic.
+                searchFrom = pruneAt + prune.length();
+                continue;
+            }
+
+            String atomicPrefix = "(?>" + prefix + ")";
+            String guard = laterPipes.isEmpty() ? "" : "(?!" + prefix + ")";
+            StringBuilder rewritten = new StringBuilder(
+                    pattern.length() + atomicPrefix.length() + guard.length() * laterPipes.size());
+
+            rewritten.append(pattern, 0, branchStart).append(atomicPrefix);
+            int cursor = pruneAt + prune.length();
+            for (int pipeAt : laterPipes) {
+                rewritten.append(pattern, cursor, pipeAt + 1).append(guard);
+                cursor = pipeAt + 1;
+            }
+            rewritten.append(pattern, cursor, pattern.length());
+            pattern = rewritten.toString();
+
+            // Continue after the atomic prefix. Any later PRUNE in this same
+            // branch may atomize the already-translated prefix again, which
+            // is both valid and equivalent to the successive Perl cuts.
+            searchFrom = branchStart + atomicPrefix.length();
+        }
+    }
+
+    private static String translatePruneVerbsInNestedGroups(String pattern) {
+        if (!pattern.contains("(*PRUNE)")) return pattern;
+
+        StringBuilder rewritten = new StringBuilder(pattern.length());
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean quoted = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                rewritten.append(ch);
+                if (!inClass && ch == 'Q') quoted = true;
+                else if (!inClass && ch == 'E') quoted = false;
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                rewritten.append(ch);
+                escaped = true;
+                continue;
+            }
+            if (quoted) {
+                rewritten.append(ch);
+                continue;
+            }
+            if (ch == '[' && !inClass) {
+                inClass = true;
+                rewritten.append(ch);
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                rewritten.append(ch);
+                continue;
+            }
+            if (inClass || ch != '(' || pattern.startsWith("(*", i)) {
+                rewritten.append(ch);
+                continue;
+            }
+
+            int close = findRegexGroupEnd(pattern, i);
+            int contentStart = pruneGroupContentStart(pattern, i, close);
+            if (close < 0 || contentStart < 0
+                    || !pattern.substring(contentStart, close).contains("(*PRUNE)")) {
+                rewritten.append(ch);
+                continue;
+            }
+
+            rewritten.append(pattern, i, contentStart);
+            rewritten.append(translateTopLevelPruneVerbs(
+                    pattern.substring(contentStart, close)));
+            rewritten.append(')');
+            i = close;
+        }
+        return rewritten.toString();
+    }
+
+    private static int pruneGroupContentStart(String pattern, int open, int close) {
+        if (close < 0 || open + 1 >= close || pattern.charAt(open + 1) != '?') {
+            return open + 1;
+        }
+        if (open + 2 >= close) return -1;
+        char kind = pattern.charAt(open + 2);
+        if (kind == ':' || kind == '=' || kind == '!' || kind == '>') return open + 3;
+        if (kind == '#' || kind == '(' || kind == '{') return -1;
+        if (kind == '?' && open + 3 < close && pattern.charAt(open + 3) == '{') return -1;
+        if (kind == '<') {
+            if (open + 3 < close
+                    && (pattern.charAt(open + 3) == '=' || pattern.charAt(open + 3) == '!')) {
+                return open + 4;
+            }
+            int end = pattern.indexOf('>', open + 3);
+            return end >= 0 && end < close ? end + 1 : -1;
+        }
+        if (kind == '\'') {
+            int end = pattern.indexOf('\'', open + 3);
+            return end >= 0 && end < close ? end + 1 : -1;
+        }
+        if (kind == 'P' && open + 3 < close && pattern.charAt(open + 3) == '<') {
+            int end = pattern.indexOf('>', open + 4);
+            return end >= 0 && end < close ? end + 1 : -1;
+        }
+
+        // Inline modifier groups, including Perl's normalized (?^x:...),
+        // have their regex body after the first colon.
+        int colon = pattern.indexOf(':', open + 2);
+        return colon >= 0 && colon < close ? colon + 1 : -1;
+    }
+
+    private static int findRegexGroupEnd(String pattern, int open) {
+        int depth = 1;
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean quoted = false;
+        for (int i = open + 1; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                if (!inClass && ch == 'Q') quoted = true;
+                else if (!inClass && ch == 'E') quoted = false;
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (quoted) continue;
+            if (ch == '[' && !inClass) {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass) continue;
+            if (ch == '(') depth++;
+            else if (ch == ')' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    private static int findTopLevelToken(String pattern, String token, int start) {
+        int depth = 0;
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean quoted = false;
+        for (int i = Math.max(0, start); i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                if (!inClass && ch == 'Q') quoted = true;
+                else if (!inClass && ch == 'E') quoted = false;
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (quoted) continue;
+            if (ch == '[' && !inClass) {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass) continue;
+            if (depth == 0 && pattern.startsWith(token, i)) return i;
+            if (ch == '(') depth++;
+            else if (ch == ')' && depth > 0) depth--;
+        }
+        return -1;
+    }
+
+    private static int findPreviousTopLevelPipe(String pattern, int end) {
+        int depth = 0;
+        int lastPipe = -1;
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean quoted = false;
+        for (int i = 0; i < end; i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                if (!inClass && ch == 'Q') quoted = true;
+                else if (!inClass && ch == 'E') quoted = false;
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (quoted) continue;
+            if (ch == '[' && !inClass) {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass) continue;
+            if (ch == '(') depth++;
+            else if (ch == ')' && depth > 0) depth--;
+            else if (ch == '|' && depth == 0) lastPipe = i;
+        }
+        return lastPipe;
+    }
+
+    private static List<Integer> findFollowingTopLevelPipes(String pattern, int start) {
+        List<Integer> pipes = new ArrayList<>();
+        int depth = 0;
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean quoted = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                if (!inClass && ch == 'Q') quoted = true;
+                else if (!inClass && ch == 'E') quoted = false;
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (quoted) continue;
+            if (ch == '[' && !inClass) {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass) continue;
+            if (ch == '(') depth++;
+            else if (ch == ')' && depth > 0) depth--;
+            else if (i >= start && ch == '|' && depth == 0) pipes.add(i);
+        }
+        return pipes;
+    }
+
+    private static boolean isPruneGuardSafe(String prefix) {
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean quoted = false;
+        for (int i = 0; i < prefix.length(); i++) {
+            char ch = prefix.charAt(i);
+            if (escaped) {
+                if (!inClass && ch == 'Q') quoted = true;
+                else if (!inClass && ch == 'E') quoted = false;
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (quoted) continue;
+            if (ch == '[' && !inClass) {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (!inClass && (ch == '(' || ch == ')')) return false;
+        }
+        return true;
     }
 
     private static String optimizeTerminatedWhitespaceQuantifiers(String pattern) {
