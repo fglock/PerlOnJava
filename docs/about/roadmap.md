@@ -283,8 +283,8 @@ Implement `fork()` via runtime cloning + thread. Currently returns `undef`.
 
 The supported ithread tranche is shipped: snapshot-based variable isolation,
 create/join/detach and lifecycle inspection, nested threads and child exit,
-`threads::shared` storage, recursive locks, and condition variables. Platform
-threads are the default; virtual threads are experimental.
+`threads::shared` storage, recursive locks, and condition variables. Java 24
+virtual threads are the default; platform carriers remain selectable.
 
 Remaining work:
 

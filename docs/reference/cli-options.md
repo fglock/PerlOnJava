@@ -210,23 +210,23 @@ jperl [options] [program | -e 'command'] [arguments]
 ### Thread execution mode
 
 - **`JPERL_THREAD_MODE`** — Select the Java carrier used by newly created
-  Perl ithreads. `platform` is the stable default; `virtual` enables the
-  experimental virtual-thread policy.
+  Perl ithreads. `virtual` is the Java 24 launcher default; `platform` selects
+  the retained platform-thread policy.
 
   ```bash
-  JPERL_THREAD_MODE=virtual ./jperl threaded.pl
+  JPERL_THREAD_MODE=platform ./jperl threaded.pl
   ```
 
-The equivalent JVM property is `-Djperl.thread.mode=virtual`, supplied through
+The equivalent JVM property is `-Djperl.thread.mode=platform`, supplied through
 `JPERL_OPTS` when using the launcher:
 
 ```bash
-JPERL_OPTS='-Djperl.thread.mode=virtual' ./jperl threaded.pl
+JPERL_OPTS='-Djperl.thread.mode=platform' ./jperl threaded.pl
 ```
 
-Virtual mode currently claims semantic parity only. It has not demonstrated a
-material speedup and still requires native-I/O diagnostics on the supported
-Java 24 baseline described in the
+The carrier selection does not change Perl snapshot or shared-storage
+semantics. A nonzero per-thread stack request automatically selects a platform
+carrier because virtual-thread stacks are JVM-managed. See the
 [concurrency feature matrix](feature-matrix.md#concurrency-and-perl-threads).
 
 ## Combining Options

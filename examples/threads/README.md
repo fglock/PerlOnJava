@@ -30,17 +30,17 @@ perl examples/threads/shared_lock_condition.pl
 perl examples/threads/dynamic_map_reduce.pl
 ```
 
-PerlOnJava supports platform threads by default. Virtual threads are an
-experimental process-wide execution mode; selecting them does not change Perl
-snapshot or shared-storage semantics:
+PerlOnJava uses Java 24 virtual threads by default. Platform threads remain a
+process-wide compatibility mode; selecting them does not change Perl snapshot
+or shared-storage semantics:
 
 ```bash
-JPERL_OPTS=-Djperl.thread.mode=virtual \
+JPERL_THREAD_MODE=platform \
   ./jperl examples/threads/isolated_create_join.pl
 ```
 
-Live attached children support targeted thread signals. Platform-backed
-ithreads accept an effective Java stack-size request; virtual mode rejects a
-nonzero request because virtual-thread stacks are JVM-managed. Sharing tied or
+Live attached children support targeted thread signals. A nonzero stack-size
+request automatically selects a platform-backed child because virtual-thread
+stacks are JVM-managed. Sharing tied or
 blessed values remains outside the supported tranche. A captured PSGI runtime
 is also not made concurrently callable merely by enabling ithreads.

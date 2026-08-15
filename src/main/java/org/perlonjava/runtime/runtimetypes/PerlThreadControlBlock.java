@@ -103,7 +103,9 @@ public final class PerlThreadControlBlock {
     public synchronized PerlThreadControlBlock start() {
         if (state != State.NEW) throw new IllegalStateException("Thread already started");
         state = State.RUNNING;
-        platformThread = PerlThreadExecutionPolicy.configured().unstarted(id, stackSize, this::run);
+        platformThread = PerlThreadExecutionPolicy.configured()
+                .effectiveForStackSize(stackSize)
+                .unstarted(id, stackSize, this::run);
         platformThread.start();
         return this;
     }

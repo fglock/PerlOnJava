@@ -787,12 +787,18 @@ snapshot runtimes and streaming responses retain their runtime until completion;
 `psgi.multithread` is true only in that mode. Pooling must improve create/join
 or request median time by at least 10% without a hot-path regression above 5%.
 
-### Phase 43 — Virtual threads by default
+### Phase 43 — Virtual threads by default (completed 2026-08-15)
 
 Make Java virtual threads the default while retaining
 `JPERL_THREAD_MODE=platform`. Explicit nonzero stack sizing transparently uses
 a platform child. Validate FFM/JDBC, sockets, process I/O, regex timeouts,
 shared conditions, callbacks, pooling, and detached shutdown under both modes.
+
+The Java 24 launcher now defaults to virtual carriers and preserves explicit
+platform selection. A nonzero stack request selects a platform child rather
+than discarding the option. The mandatory unit build is green, and the focused
+core lifecycle, class, and lexical-regex matrix passes 40/40 in both default
+virtual and explicit platform modes.
 
 ### Phase 44 — Release closure
 
@@ -817,7 +823,7 @@ CI.
 
 ## 7. Progress Tracking
 
-### Current Status: Phase 41 complete; Phase 36 and Phase 39b remain open
+### Current Status: Phase 43 complete; Phases 36, 39b, and 42 remain open
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -915,14 +921,11 @@ modules are 9966/12339 (80.8%). Scalar::Util 1.70 loads on both backends and the
 JVM Moo constructor smoke passes; the interpreter retains its previously
 documented Moo attribute-syntax parser limitation.
 
-Platform threads remain the default. An experimental process-wide opt-in selects
-virtual threads with `-Djperl.thread.mode=virtual` or
-`JPERL_THREAD_MODE=virtual`; unknown modes are rejected and diagnostics expose
-the actual Java thread kind. Runtime pooling is deferred because no reset
-contract yet proves that a reused interpreter is equivalent to a fresh snapshot.
-The supported Java baseline is 24. Monitor pinning is removed on that baseline,
-but native/FFM blocking diagnostics remain a release gate for promoting virtual
-mode.
+Java 24 virtual threads are the launcher default. Explicit
+`JPERL_THREAD_MODE=platform` selection remains supported, and a nonzero Perl
+stack-size request transparently selects a platform child. Unknown modes are
+rejected and diagnostics expose the actual Java thread kind. Runtime pooling
+remains opt-in and pending Phase 42's stress and retention gates.
 
 The public documentation now treats the feature matrix as the canonical support
 table, records the implementation in the changelog and roadmap, explains runtime
@@ -1002,9 +1005,9 @@ three assertions from the adjacent-import parser fix.
 2. Implement Phase 39b's fetch-time nested shared proxies, global destruction,
    weak/cyclic ownership, and the destructive `share` versus preserving
    `shared_clone` distinction.
-3. Land Phases 42–44 as the final delivery sequence: opt-in pooling and
-   concurrent PSGI, virtual threads by default, and the complete release gate.
-   Phases 40 and 41's public API and fresh-reset foundations are complete.
+3. Land Phase 42's opt-in pooling and concurrent PSGI, then complete Phase 44's
+   release gate. Phases 40, 41, and 43's public API, fresh-reset, and default
+   virtual-carrier foundations are complete.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under

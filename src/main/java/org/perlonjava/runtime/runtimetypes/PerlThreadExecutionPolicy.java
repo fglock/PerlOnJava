@@ -39,6 +39,15 @@ public final class PerlThreadExecutionPolicy {
         return mode;
     }
 
+    /** Select a platform carrier when Perl requests an explicit stack size. */
+    PerlThreadExecutionPolicy effectiveForStackSize(long stackSize) {
+        if (stackSize < 0) throw new IllegalArgumentException("Thread stack size must not be negative");
+        if (mode == Mode.VIRTUAL && stackSize != 0) {
+            return new PerlThreadExecutionPolicy(Mode.PLATFORM);
+        }
+        return this;
+    }
+
     public Thread unstarted(long id, Runnable task) {
         return unstarted(id, 0, task);
     }

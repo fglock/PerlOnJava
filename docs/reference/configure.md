@@ -26,10 +26,9 @@ module reports the shipped runtime capabilities directly:
 | `usethreads` | `define` | The supported Perl thread API is enabled. |
 | `usemultiplicity` | `define` | Independent `PerlRuntime` instances are supported in one JVM. |
 
-Platform Java threads are the stable default. The experimental virtual-thread
-executor is selected process-wide with `JPERL_THREAD_MODE=virtual` or the JVM
-property `-Djperl.thread.mode=virtual`; `platform` selects the default
-explicitly. Unknown values are rejected. See
+Java 24 virtual threads are the launcher default. The platform executor remains
+available process-wide with `JPERL_THREAD_MODE=platform` or the JVM property
+`-Djperl.thread.mode=platform`. Unknown values are rejected. See
 [CLI Options](cli-options.md#thread-execution-mode) and the
 [feature matrix](feature-matrix.md#concurrency-and-perl-threads).
 

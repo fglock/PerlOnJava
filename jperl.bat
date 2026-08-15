@@ -13,6 +13,10 @@ set JPERL_PATH=%~f0
 rem Set environment variable for PerlOnJava to use as $^X
 set PERLONJAVA_EXECUTABLE=%JPERL_PATH%
 
+rem Java 24 virtual threads are the default Perl ithread carrier. Preserve an
+rem explicit caller selection (JPERL_THREAD_MODE=platform remains supported).
+if not defined JPERL_THREAD_MODE set JPERL_THREAD_MODE=virtual
+
 rem Determine JVM options based on Java version
 rem --enable-native-access=ALL-UNNAMED: Required by FFM (Foreign Function & Memory) API
 rem   for native system calls (file operations, process management).

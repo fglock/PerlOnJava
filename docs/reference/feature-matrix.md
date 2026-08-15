@@ -851,8 +851,8 @@ ithreads on both the JVM compiler and bytecode interpreter backends.
 | Identity and state | ✅ | `self`, `tid`, `list`, equality, running/joinable/detached checks, errors, nested threads, and child-only `threads->exit` are supported. |
 | `threads::shared` | 🟡 | `share`, `is_shared`, `shared_clone`, and `:shared` support scalar/array/hash graphs. Blessed aggregate roots use runtime-local class views over common backing; tied scalars clone callback state and tied arrays/hashes convert to native shared storage when shared. |
 | Locks and conditions | ✅ | Recursive lexical `lock`, `cond_wait`, absolute `cond_timedwait`, `cond_signal`, and `cond_broadcast` are supported. |
-| Platform threads | ✅ | Stable default. |
-| Virtual threads | 🟡 | Experimental process-wide opt-in; semantic parity is measured, but no performance benefit or complete native-I/O diagnostic clearance on Java 24 is claimed. |
+| Platform threads | ✅ | Explicit compatibility mode and automatic fallback for a nonzero stack-size request. |
+| Virtual threads | ✅ | Java 24 launcher default; snapshot, lifecycle, shared-storage, native-callback, DBI, and Test2 gates retain platform parity. |
 
 The clone-versus-share rule is important: ordinary references are cloned with
 aliasing and cycles preserved inside the child graph, but they are not the same
