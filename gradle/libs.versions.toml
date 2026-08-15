@@ -13,6 +13,7 @@ snappy-java = "1.1.10.8"
 sqlite-jdbc = "3.53.2.1"
 tomlj = "1.1.1"
 zstd-jni = "1.5.7-8"
+zxing = "3.5.4"
 
 [libraries]
 asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
@@ -37,6 +38,7 @@ snappy-java = { module = "org.xerial.snappy:snappy-java", version.ref = "snappy-
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
 zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstd-jni" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 cyclonedx = "org.cyclonedx.bom:2.3.0"

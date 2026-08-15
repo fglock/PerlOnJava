@@ -217,6 +217,7 @@ dependencies {
     implementation libs.jing                         // RELAX NG validation for XML::LibXML
     implementation libs.snakeyaml.engine              // YAML processing
     implementation libs.tomlj                         // TOML processing
+    implementation libs.zxing.core                    // QR encoding for Text::QRCode
     implementation libs.commons.csv                   // CSV processing
     implementation libs.commonmark                    // CommonMark rendering
     implementation libs.commonmark.autolink           // GFM autolinks

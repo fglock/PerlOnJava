@@ -1347,7 +1347,7 @@ sub _shell_cp {
     my $autosplit_dir = $autodir;
     if ($should_autosplit) {
         $autosplit_dir =~ s/'/'\\''/g;
-        $autosplit = " && if grep -q '^__END__\$\$' '$dest'; then \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'; fi";
+        $autosplit = " && if grep -Eq '^__END__;?[[:space:]]*\$\$' '$dest'; then \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'; fi";
     }
     return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'$autosplit; else echo 'PerlOnJava: skipping missing source: $src'; fi";
 }
@@ -1391,7 +1391,7 @@ sub _shell_fixin {
     for ($file, $payload, $payload_name) {
         s/'/'\\''/g;
     }
-    return "\t\@\$(PERL) -e 'my (\$\$f,\$\$payload,\$\$payload_name,\$\$perl)=\@ARGV; open my \$\$in,q{<},\$\$f or exit 0; my \@lines=<\$\$in>; close \$\$in; exit 0 unless \@lines && \$\$lines[0] =~ /^#!.*\\bperl(?:\\s+(.*))?\\r?\\n?\\z/; my \$\$args=defined \$\$1 ? q{ }.\$\$1 : q{}; open my \$\$payload_fh,q{>},\$\$payload or die \$\$!; print \$\$payload_fh \@lines; close \$\$payload_fh or die \$\$!; chmod 0644,\$\$payload; my \$\$d=chr 36; my \$\$at=chr 64; open my \$\$out,q{>},\$\$f or die \$\$!; print \$\$out qq{#!/bin/sh\\n}; print \$\$out q{dir=}.\$\$d.q{(dirname \"}.\$\$d.q{0\")}.qq{\\n}; print \$\$out q{exec \"}.\$\$perl.q{\"}.\$\$args.q{ \"}.\$\$d.q{dir/}.\$\$payload_name.q{\" \"}.\$\$d.\$\$at.q{\"}.qq{\\n}; close \$\$out or die \$\$!; chmod 0755,\$\$f;' '$file' '$payload' '$payload_name' '\$(PERL)'";
+    return "\t\@\$(PERL) -e 'my (\$\$f,\$\$payload,\$\$payload_name,\$\$perl)=\@ARGV; open my \$\$in,q{<},\$\$f or exit 0; my \@lines=<\$\$in>; close \$\$in; exit 0 unless \@lines && \$\$lines[0] =~ /^#!.*\\bperl(?:\\s+(.*))?\\r?\\n?\\z/; my \$\$args=defined \$\$1 ? q{ }.\$\$1 : q{}; open my \$\$payload_fh,q{>},\$\$payload or die \$\$!; print \$\$payload_fh \@lines; close \$\$payload_fh or die \$\$!; chmod 0644,\$\$payload; my \$\$d=chr 36; my \$\$at=chr 64; chmod 0644,\$\$f or die \$\$!; open my \$\$out,q{>},\$\$f or die \$\$!; print \$\$out qq{#!/bin/sh\\n}; print \$\$out q{dir=}.\$\$d.q{(dirname \"}.\$\$d.q{0\")}.qq{\\n}; print \$\$out q{exec \"}.\$\$perl.q{\"}.\$\$args.q{ \"}.\$\$d.q{dir/}.\$\$payload_name.q{\" \"}.\$\$d.\$\$at.q{\"}.qq{\\n}; close \$\$out or die \$\$!; chmod 0755,\$\$f;' '$file' '$payload' '$payload_name' '\$(PERL)'";
 }
 
 # Helper: generate postamble for File::ShareDir::Install

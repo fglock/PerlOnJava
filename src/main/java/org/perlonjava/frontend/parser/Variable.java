@@ -519,6 +519,7 @@ public class Variable {
                     }
                     case "{" -> {
                         // Hash access
+                        preprocessBackslashQuotesInInterpolatedHashAccess(parser, parser.tokenIndex);
                         operand = ParseInfix.parseInfixOperation(parser, operand, 0);
                         if (operand == null) {
                             throw new PerlCompilerException(parser.tokenIndex, "syntax error: Missing closing brace", parser.ctx.errorUtil);
@@ -534,6 +535,10 @@ public class Variable {
                             switch (text) {
                                 case "[", "{", "@*", "$*", "%*", "&*", "$#", "@", "%" -> {
                                     // Dereference followed by access: $var->[0] or $var->{key}
+                                    if (text.equals("{")) {
+                                        preprocessBackslashQuotesInInterpolatedHashAccess(
+                                                parser, parser.tokenIndex);
+                                    }
                                     parser.tokenIndex = previousIndex;  // Re-parse "->"
                                     operand = ParseInfix.parseInfixOperation(parser, operand, 0);
                                     if (operand == null) {
@@ -563,6 +568,41 @@ public class Variable {
             }
         }
         return operand;
+    }
+
+    /**
+     * Inside a double-quoted string, quotes delimiting an interpolated hash key
+     * are escaped for the outer string: {@code "$ref->{\"key\"}"}.  The string
+     * lexer preserves those backslashes, but the embedded expression parser must
+     * see an ordinary quoted key.
+     */
+    private static void preprocessBackslashQuotesInInterpolatedHashAccess(
+            Parser parser, int openingBraceIndex) {
+        if (!parser.preprocessBracedBackslashQuotesInInterpolation) {
+            return;
+        }
+
+        int scan = openingBraceIndex;
+        int braceLevel = 0;
+        while (scan < parser.tokens.size()) {
+            String text = parser.tokens.get(scan).text;
+            if ("{".equals(text)) {
+                braceLevel++;
+                scan++;
+            } else if ("}".equals(text)) {
+                braceLevel--;
+                if (braceLevel == 0) {
+                    return;
+                }
+                scan++;
+            } else if ("\\".equals(text)
+                    && scan + 1 < parser.tokens.size()
+                    && "\"".equals(parser.tokens.get(scan + 1).text)) {
+                parser.tokens.remove(scan);
+            } else {
+                scan++;
+            }
+        }
     }
 
     /**
@@ -640,6 +680,7 @@ public class Variable {
                     }
                     case "{" -> {
                         // Hash access
+                        preprocessBackslashQuotesInInterpolatedHashAccess(parser, parser.tokenIndex);
                         int savedIndex = parser.tokenIndex;
                         Node result = null;
                         try {
@@ -664,6 +705,10 @@ public class Variable {
                             switch (text) {
                                 case "[", "{", "@*", "$*", "%*", "&*", "$#", "@", "%" -> {
                                     // Dereference followed by access: $var->[0] or $var->{key}
+                                    if (text.equals("{")) {
+                                        preprocessBackslashQuotesInInterpolatedHashAccess(
+                                                parser, parser.tokenIndex);
+                                    }
                                     parser.tokenIndex = previousIndex;  // Re-parse "->"
                                     Node result = ParseInfix.parseInfixOperation(parser, operand, 0);
                                     if (result == null) {

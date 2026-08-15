@@ -678,16 +678,14 @@ public class SystemOperator {
             // For backticks: stdout will be captured (default behavior),
             // stderr goes through Perl STDERR handle
 
-            // Always redirect stdin from /dev/null to prevent subprocess blocking
-            // This prevents the subprocess from waiting for input that will never come
-            try {
-                processBuilder.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
-            } catch (Exception e) {
-                // Fallback for systems where /dev/null might not be available
-                // This should be rare, but provides robustness
-            }
-
             process = processBuilder.start();
+
+            // system() and qx// subprocesses are deliberately non-interactive in
+            // PerlOnJava.  Closing the ProcessBuilder pipe is the only portable
+            // way to guarantee EOF here.  Redirect.from("/dev/null") left nested
+            // jperl launchers waiting forever on macOS (for example an old CPAN
+            // Makefile.PL which reads configuration answers from STDIN).
+            closeChildStdin(process);
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -770,6 +768,7 @@ public class SystemOperator {
             copyPerlEnvToProcessBuilder(processBuilder);
 
             process = processBuilder.start();
+            closeChildStdin(process);
 
             // Route stdout and stderr through Perl handles so that
             // Perl-level redirections are honored
@@ -824,6 +823,7 @@ public class SystemOperator {
             // Route stderr through Perl STDERR handle (not INHERIT which bypasses Perl redirections)
 
             process = processBuilder.start();
+            closeChildStdin(process);
 
             final Process finalProcess = process;
             final StringBuilder finalOutput = output;
@@ -914,6 +914,14 @@ public class SystemOperator {
                 // Log the exception or handle it as needed
                 System.err.println("Error closing stream: " + e.getMessage());
             }
+        }
+    }
+
+    private static void closeChildStdin(Process process) {
+        try {
+            process.getOutputStream().close();
+        } catch (IOException ignored) {
+            // The child may have exited before its stdin was closed.
         }
     }
 
