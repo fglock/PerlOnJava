@@ -40,7 +40,9 @@ if not defined PERLONJAVA_JAVA_BIN (
     exit /b 1
 )
 set JAVA_VERSION=
-for /f "tokens=3" %%v in ('"%PERLONJAVA_JAVA_BIN%" -version 2^>^&1 ^| "%SystemRoot%\System32\findstr.exe" /i "version"') do (
+rem CALL is required when a quoted absolute executable starts the command
+rem parsed by FOR /F; without it cmd.exe treats the nested quote as syntax.
+for /f "tokens=3" %%v in ('call "%PERLONJAVA_JAVA_BIN%" -version 2^>^&1') do if not defined JAVA_VERSION (
     for /f "tokens=1 delims=." %%m in ("%%~v") do (
         set JAVA_VERSION=%%m
         if %%m GEQ 23 set JVM_OPTS=%JVM_OPTS% --sun-misc-unsafe-memory-access=allow
