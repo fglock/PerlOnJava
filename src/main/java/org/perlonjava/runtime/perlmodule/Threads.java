@@ -121,26 +121,30 @@ public final class Threads extends PerlModuleBase {
         if (thread == null) throw new IllegalStateException("Thread is no longer joinable");
         try {
             PerlThreadControlBlock.Completion completion = thread.join();
-            object.put("state", new RuntimeScalar("joined"));
-            String error = errorText(completion.error());
-            object.put("error", error.isEmpty() ? RuntimeScalarCache.scalarUndef : new RuntimeScalar(error));
-            if (completion.error() instanceof PerlExitException processExit) throw processExit;
-            if (!error.isEmpty()) {
-                RuntimeIO.getStderr().write(
-                        "Thread " + thread.id() + " terminated abnormally: " + error + "\n");
+            try {
+                object.put("state", new RuntimeScalar("joined"));
+                String error = errorText(completion.error());
+                object.put("error", error.isEmpty() ? RuntimeScalarCache.scalarUndef : new RuntimeScalar(error));
+                if (completion.error() instanceof PerlExitException processExit) throw processExit;
+                if (!error.isEmpty()) {
+                    RuntimeIO.getStderr().write(
+                            "Thread " + thread.id() + " terminated abnormally: " + error + "\n");
+                }
+                if (!(completion.value() instanceof RuntimeArray values)) return new RuntimeList();
+                List<RuntimeBase> cloned = new RuntimeGraphCloner(
+                        thread.childRuntime(), PerlRuntime.current()).cloneRoots(values.elements);
+                if (thread.context() == RuntimeContextType.VOID) {
+                    return RuntimeScalarCache.scalarUndef.getList();
+                }
+                if (ctx == RuntimeContextType.VOID) return new RuntimeList();
+                if (ctx == RuntimeContextType.SCALAR) {
+                    return cloned.isEmpty() ? RuntimeScalarCache.scalarUndef.getList()
+                            : cloned.getLast().scalar().getList();
+                }
+                return new RuntimeList(cloned.toArray(RuntimeBase[]::new));
+            } finally {
+                thread.releaseTerminalResources();
             }
-            if (!(completion.value() instanceof RuntimeArray values)) return new RuntimeList();
-            List<RuntimeBase> cloned = new RuntimeGraphCloner(
-                    thread.childRuntime(), PerlRuntime.current()).cloneRoots(values.elements);
-            if (thread.context() == RuntimeContextType.VOID) {
-                return RuntimeScalarCache.scalarUndef.getList();
-            }
-            if (ctx == RuntimeContextType.VOID) return new RuntimeList();
-            if (ctx == RuntimeContextType.SCALAR) {
-                return cloned.isEmpty() ? RuntimeScalarCache.scalarUndef.getList()
-                        : cloned.getLast().scalar().getList();
-            }
-            return new RuntimeList(cloned.toArray(RuntimeBase[]::new));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Thread join interrupted", e);
@@ -264,7 +268,8 @@ public final class Threads extends PerlModuleBase {
         boolean value = args.get(1).getBoolean();
         if (invocant.type == RuntimeScalarType.HASHREFERENCE) {
             PerlThreadControlBlock thread = findKnownThread(threadHash(args));
-            if (thread != null) thread.childRuntime().setPerlThreadExitOnly(value);
+            PerlRuntime child = thread == null ? null : thread.childRuntime();
+            if (child != null) child.setPerlThreadExitOnly(value);
         } else {
             PerlRuntime.current().setPerlThreadExitOnly(value);
         }
