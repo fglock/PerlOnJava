@@ -73,6 +73,9 @@ version = '5.44.0'
 
 // CycloneDX SBOM generation configuration
 cyclonedxBom {
+    // Production runtime dependencies are the contents of the standalone JAR;
+    // test and annotation configurations do not belong in the shipped SBOM.
+    includeConfigs = ["runtimeClasspath"]
     projectType = "application"
     schemaVersion = "1.5"
     includeLicenseText = false
@@ -229,7 +232,7 @@ dependencies {
     implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
     implementation libs.snappy.java                    // Official Sereal Java codec compression
     implementation libs.zstd.jni                       // Official Sereal Java codec compression
-    implementation 'org.jruby.joni:joni:2.2.7'         // Stack-safe recursive regex backend
+    implementation 'org.jruby.jcodings:jcodings:1.0.64' // Encoding support for vendored Joni
     implementation 'io.netty:netty-codec-http:4.1.115.Final'  // Netty HTTP codec for PSGI server
 
     // Testing dependencies
@@ -343,11 +346,39 @@ shadowJar {
     }
     exclude 'module-info.class'
     exclude 'META-INF/MANIFEST.MF'
+
+    // Keep the embedded regex engine private when PerlOnJava shares a
+    // classpath with JRuby or another Joni/JCodings version.
+    relocate 'org.joni', 'org.perlonjava.internal.joni'
+    relocate 'org.jcodings', 'org.perlonjava.internal.jcodings'
+
+    from('third_party/joni/LICENSE') {
+        into 'META-INF/licenses'
+        rename { 'joni-LICENSE.txt' }
+    }
+    from('third_party/licenses/jcodings-LICENSE.txt') {
+        into 'META-INF/licenses'
+    }
+    from('third_party/joni/PERLONJAVA-NOTICE.md') {
+        into 'META-INF/licenses'
+        rename { 'joni-PERLONJAVA-NOTICE.md' }
+    }
     
     // Include combined SBOM in JAR's META-INF/sbom/ directory
     from("$buildDir/reports/sbom.json") {
         into 'META-INF/sbom'
     }
+}
+
+tasks.register('verifyJoniPackaging', Exec) {
+    description = 'Verifies Joni namespace isolation, notices, and SBOM metadata'
+    group = 'verification'
+    dependsOn shadowJar
+    inputs.file("dev/tools/verify-joni-packaging.pl")
+    inputs.file("target/perlonjava-${project.version}.jar")
+    inputs.file("build/reports/sbom.json")
+    commandLine 'perl', 'dev/tools/verify-joni-packaging.pl',
+        "target/perlonjava-${project.version}.jar", 'build/reports/sbom.json'
 }
 
 // Some Perl unit tests spawn a child interpreter via $^X. Under Gradle those
@@ -392,6 +423,7 @@ tasks.register('mergeSbom', Exec) {
     // Declare inputs so Gradle knows dependencies
     inputs.file("build/reports/bom.json")
     inputs.file("build/reports/perl-bom.json")
+    inputs.file("dev/tools/merge-sbom.pl")
     
     workingDir = projectDir
     commandLine 'perl', 'dev/tools/merge-sbom.pl',
@@ -420,6 +452,11 @@ tasks.named('build') {
 // Source sets configuration for including Perl resources
 sourceSets {
     main {
+        java {
+            // Start below Joni's optional Java 9 module descriptor so the
+            // otherwise classpath-based PerlOnJava build remains unnamed.
+            srcDir 'third_party/joni/src/org'
+        }
         resources {
             srcDir 'src/main/perl'
             srcDir 'src/main/resources'
@@ -437,11 +474,33 @@ sourceSets {
             include 'META-INF/services/**'
         }
     }
+    joniTest {
+        java.srcDir 'third_party/joni/test'
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
     test {
         resources {
             srcDir 'src/test/resources'
         }
     }
+}
+
+configurations {
+    joniTestImplementation.extendsFrom testImplementation
+    joniTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+dependencies {
+    joniTestImplementation 'junit:junit:4.13.2'
+}
+
+tasks.register('testJoni', Test) {
+    description = 'Runs the imported upstream Joni test suite'
+    group = 'verification'
+    testClassesDirs = sourceSets.joniTest.output.classesDirs
+    classpath = sourceSets.joniTest.runtimeClasspath
+    useJUnit()
 }
 
 // Resource processing configuration
@@ -498,6 +557,8 @@ tasks.register('testUnitParallel') {
     description = 'Runs unit tests in parallel across multiple JVMs. Usage: gradle testUnitParallel --parallel'
     def shardTasks = (0..<parallelShards).collect { "testUnitShard${it}" }
     dependsOn shardTasks
+    dependsOn testJoni
+    dependsOn verifyJoniPackaging
 }
 
 // Version catalog update configuration

@@ -89,6 +89,9 @@ my $merged = {
 my @all_components;
 my @root_deps;
 
+my $joni_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
+my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
+
 # Add Java components
 if ($java_bom->{components}) {
     for my $comp (@{$java_bom->{components}}) {
@@ -96,6 +99,43 @@ if ($java_bom->{components}) {
         push @root_deps, $comp->{'bom-ref'} if $comp->{'bom-ref'};
     }
 }
+
+# Joni is compiled from the pinned source snapshot in third_party/joni rather
+# than resolved as a binary dependency, so CycloneDX cannot discover it from
+# runtimeClasspath. Record the vendored component explicitly.
+push @all_components, {
+    type        => 'library',
+    'bom-ref'   => $joni_ref,
+    group       => 'org.jruby.joni',
+    name        => 'joni',
+    version     => '2.2.7',
+    description => 'Vendored Java port of Oniguruma with PerlOnJava callout extensions',
+    licenses    => [
+        {
+            license => {
+                id => 'MIT'
+            }
+        }
+    ],
+    purl => $joni_ref,
+    externalReferences => [
+        {
+            type => 'website',
+            url  => 'https://github.com/jruby/joni'
+        },
+        {
+            type => 'vcs',
+            url  => 'https://github.com/jruby/joni.git'
+        }
+    ],
+    properties => [
+        {
+            name  => 'perlonjava:vendored',
+            value => 'true'
+        }
+    ]
+};
+push @root_deps, $joni_ref;
 
 # Add Perl components
 if ($perl_bom->{components}) {
@@ -112,6 +152,10 @@ $merged->{dependencies} = [
     {
         ref       => 'perlonjava',
         dependsOn => \@root_deps
+    },
+    {
+        ref       => $joni_ref,
+        dependsOn => [$jcodings_ref]
     }
 ];
 
