@@ -126,6 +126,12 @@ public class Main {
         try {
             PerlLanguageProvider.executePerlCode(parsedArgs, true);
 
+            int requestedThreadExit = PerlRuntime.current().threadRegistry()
+                    .requestedProcessExitOr(Integer.MIN_VALUE);
+            if (requestedThreadExit != Integer.MIN_VALUE) {
+                System.exit(requestedThreadExit);
+            }
+
             if (parsedArgs.compileOnly) {
                 // Match system perl: `perl -c` prints this line to stderr (Test::Script relies on it).
                 System.err.println(parsedArgs.fileName + " syntax OK");
@@ -143,7 +149,8 @@ public class Main {
             }
         } catch (PerlExitException e) {
             // Perl's exit() throws PerlExitException - convert to real System.exit() for CLI
-            System.exit(e.getExitCode());
+            System.exit(PerlRuntime.current().threadRegistry()
+                    .requestedProcessExitOr(e.getExitCode()));
         } catch (Throwable t) {
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack

@@ -96,6 +96,12 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         }
     }
 
+    @Override
+    public RuntimeScalar set(RuntimeScalar value) {
+        if (parent.threadShared) SharedPerlStorage.publishBlessing(value);
+        return super.set(value);
+    }
+
     /** Replace this hash slot with the scalar referenced by a refaliasing RHS. */
     public RuntimeScalar aliasToReference(RuntimeScalar reference) {
         RuntimeScalar referent = reference.scalarDeref();

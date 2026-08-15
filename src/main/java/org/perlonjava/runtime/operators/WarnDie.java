@@ -120,7 +120,9 @@ public class WarnDie {
 
     public static RuntimeException maybeInvokeUnhandledDieHandler(RuntimeException e) {
         Throwable unwrapped = unwrapException(e);
-        if (unwrapped instanceof PerlDieException || unwrapped instanceof PerlExitException) {
+        if (unwrapped instanceof PerlDieException
+                || unwrapped instanceof PerlExitException
+                || unwrapped instanceof PerlThreadExitException) {
             return e;
         }
         if (RuntimeCode.getEvalDepth() > 0) {
@@ -184,8 +186,18 @@ public class WarnDie {
         e = unwrapException(e);
         
         // exit() should never be caught by eval{} - re-throw it
-        if (e instanceof PerlExitException) {
-            throw (PerlExitException) e;
+        if (e instanceof PerlExitException exit) {
+            throw exit;
+        }
+        if (e instanceof PerlThreadExitException exit) {
+            throw exit;
+        }
+
+        RuntimeScalar pendingWarning = PerlRuntime.current().executionState()
+                .pendingThreadWarningHandler;
+        PerlRuntime.current().executionState().pendingThreadWarningHandler = null;
+        if (pendingWarning != null) {
+            RuntimeScalar.scopeExitCleanup(pendingWarning);
         }
         
         RuntimeScalar err = getGlobalVariable("main::@");
@@ -608,10 +620,26 @@ public class WarnDie {
                 DynamicVariableManager.popToLocalLevel(level);
             }
 
-            throw new PerlDieException(errVariable);
+            throw new PerlDieException(errVariable, snapshotWarningHandler());
         }
 
-        throw new PerlDieException(errVariable);
+        throw new PerlDieException(errVariable, snapshotWarningHandler());
+    }
+
+    private static RuntimeScalar snapshotWarningHandler() {
+        RuntimeScalar handler = getGlobalHash("main::SIG").get("__WARN__");
+        if (handler == null || !handler.getDefinedBoolean() || isReservedSigString(handler)) {
+            return null;
+        }
+        RuntimeScalar retained = new RuntimeScalar();
+        retained.set(handler);
+        RuntimeScalar previous = PerlRuntime.current().executionState()
+                .pendingThreadWarningHandler;
+        if (previous != null) {
+            RuntimeScalar.scopeExitCleanup(previous);
+        }
+        PerlRuntime.current().executionState().pendingThreadWarningHandler = retained;
+        return retained;
     }
 
     private static RuntimeBase dieEmptyMessage(RuntimeScalar oldErr, String fileName, int lineNumber) {

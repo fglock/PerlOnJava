@@ -1490,6 +1490,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
+        if (threadShared && value != null && RuntimeScalarType.isReference(value)) {
+            RuntimeBase assigned = SharedPerlStorage.referent(value);
+            if (assigned == null || !assigned.threadShared) {
+                throw new PerlCompilerException("Invalid value for shared scalar");
+            }
+            // Assignment into a shared scalar publishes the referent's current
+            // class. A local shared reference may be reblessed privately, but
+            // storing it in shared scalar storage is the explicit publication
+            // boundary used by threads::shared.
+            SharedPerlStorage.publishBlessing(value);
+        }
         // Perl clears pos() when assigning from another SV ($x = $y), but preserves it for
         // self-assignment ($x = $x). Hash/array element slots reuse one RuntimeScalar per key;
         // $h{k} = $str must reset pos on that slot (Data::SExpression set_input / lexer \G).
@@ -1750,7 +1761,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         boolean oldOwnedScalarReferenceContents = this.ownsScalarReferenceContents;
         RuntimeScalar oldScalarReferenceContents = scalarReferenceContentsReferent(this);
-        boolean shouldClearRescuedAfterUndefAssignment = false;
+        boolean shouldReleaseUnrootedRescuedGraph = false;
 
         // If this scalar was a weak ref, remove from weak tracking before overwriting.
         // Weak refs don't count toward refCount, so skip refCount decrement later.
@@ -1950,6 +1961,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // preserving nested metadata owners such as Sub::Quote's saved info.
         if ((oldBase instanceof RuntimeArray || oldBase instanceof RuntimeHash)
                 && !thisWasWeak
+                && !DestroyDispatch.isRescued(oldBase)
+                && !(oldBase.blessId != 0 && blessedClassHasDestroy(oldBase))
                 && WeakRefRegistry.hasWeakRefsTo(oldBase)
                 && (RuntimeCode.argsStackDepth() <= 1
                     || oldBase.clearedOwnedAggregateElement)
@@ -1959,14 +1972,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             WeakRefRegistry.clearWeakRefsTo(oldBase);
         }
 
-        if (undefAssignmentOfDestroyableRef) {
-            if (!DestroyDispatch.isInsideDestroy()) {
-                shouldClearRescuedAfterUndefAssignment = true;
-            }
-        }
-
         if (oldOwnedScalarReferenceContents) {
             releaseScalarReferenceContents(oldScalarReferenceContents);
+        }
+        if (undefAssignmentOfDestroyableRef && !DestroyDispatch.isInsideDestroy()) {
+            shouldReleaseUnrootedRescuedGraph = true;
         }
 
         // WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
@@ -2004,27 +2014,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             MortalList.popTemporaryRoot(this);
         }
 
-        // `undef($x)` can compile through this assignment path instead of
-        // RuntimeScalar.undefine(). If this exact object was rescued during its
-        // DESTROY, clear weak refs reachable from it now so DBIC-style callbacks
-        // observe that the user's schema lexical is gone. Do not drain all
-        // rescued objects here; DBIC can have other live schemas pending.
-        if (shouldClearRescuedAfterUndefAssignment
+        // An explicit undef can run DESTROY and let the object self-rescue.
+        // Preserve real Perl resurrection when another package/closure root
+        // still reaches that graph.  If the only remaining pin is the runtime's
+        // rescued-object queue, release its nested weak callbacks now: DBIC's
+        // retained DBI handle relies on its weak HandleError closure observing
+        // that the owning Schema/Storage graph has gone away.
+        if (shouldReleaseUnrootedRescuedGraph
                 && DestroyDispatch.isRescued(oldBase)
-                && !ModuleInitGuard.inModuleInit()) {
-            boolean externallyReachable =
-                    ReachabilityWalker.isReachableFromExternalRootExcludingRescued(oldBase);
-            if (System.getenv("JPERL_PHASE_D_DBG") != null) {
-                System.err.println("DBG Phase D set-undef rescued cleanup for " +
-                        (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
-                        " refCount=" + (oldBase != null ? oldBase.refCount : -1) +
-                        " externallyReachable=" + externallyReachable);
-            }
-            if (externallyReachable) {
-                DestroyDispatch.clearRescuedWeakRefsToSelfOnly(oldBase);
-            } else {
-                DestroyDispatch.clearRescuedWeakRefsTo(oldBase);
-            }
+                && !ModuleInitGuard.inModuleInit()
+                && !ReachabilityWalker.isReachableFromExternalRootExcludingRescued(oldBase)) {
+            DestroyDispatch.clearNestedWeakRefsForRescued(oldBase);
         }
 
         if (isPackageGlobalRoot && globalCodeRefFqn != null) {

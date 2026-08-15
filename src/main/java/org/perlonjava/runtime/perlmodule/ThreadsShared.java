@@ -11,6 +11,8 @@ public final class ThreadsShared extends PerlModuleBase {
         try {
             module.registerMethod("_share", null);
             module.registerMethod("_is_shared", null);
+            module.registerMethod("_shared_id", null);
+            module.registerMethod("_shared_refcnt", null);
             module.registerMethod("_shared_clone", null);
             module.registerMethod("_cond_wait", null);
             module.registerMethod("_cond_timedwait", null);
@@ -28,7 +30,22 @@ public final class ThreadsShared extends PerlModuleBase {
     }
 
     public static RuntimeList _is_shared(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(SharedPerlStorage.isShared(required(args, "is_shared")) ? 1 : 0).getList();
+        return new RuntimeScalar(SharedPerlStorage.sharedId(required(args, "is_shared"))).getList();
+    }
+
+    public static RuntimeList _shared_id(RuntimeArray args, int ctx) {
+        RuntimeScalar value = requiredReference(args, "_id");
+        return new RuntimeScalar(SharedPerlStorage.sharedId(value)).getList();
+    }
+
+    public static RuntimeList _shared_refcnt(RuntimeArray args, int ctx) {
+        RuntimeScalar value = requiredReference(args, "_refcnt");
+        if (!SharedPerlStorage.isShared(value)) {
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar(value + " is not shared"), new RuntimeScalar());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        return new RuntimeScalar(SharedPerlStorage.sharedReferenceCount(value)).getList();
     }
 
     public static RuntimeList _shared_clone(RuntimeArray args, int ctx) {
@@ -52,16 +69,18 @@ public final class ThreadsShared extends PerlModuleBase {
 
     public static RuntimeList _cond_signal(RuntimeArray args, int ctx) {
         if (!SharedPerlStorage.conditionSignal(required(args, "cond_signal"), false)) {
-            org.perlonjava.runtime.operators.WarnDie.warn(
-                    new RuntimeScalar("cond_signal() called on unlocked variable"), new RuntimeScalar());
+            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("cond_signal() called on unlocked variable"),
+                    new RuntimeScalar(), "threads");
         }
         return new RuntimeScalar(1).getList();
     }
 
     public static RuntimeList _cond_broadcast(RuntimeArray args, int ctx) {
         if (!SharedPerlStorage.conditionSignal(required(args, "cond_broadcast"), true)) {
-            org.perlonjava.runtime.operators.WarnDie.warn(
-                    new RuntimeScalar("cond_broadcast() called on unlocked variable"), new RuntimeScalar());
+            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("cond_broadcast() called on unlocked variable"),
+                    new RuntimeScalar(), "threads");
         }
         return new RuntimeScalar(1).getList();
     }
@@ -69,5 +88,13 @@ public final class ThreadsShared extends PerlModuleBase {
     private static RuntimeScalar required(RuntimeArray args, String name) {
         if (args.isEmpty()) throw new IllegalArgumentException(name + " requires a value");
         return args.get(0);
+    }
+
+    private static RuntimeScalar requiredReference(RuntimeArray args, String name) {
+        RuntimeScalar value = required(args, name);
+        if (!RuntimeScalarType.isReference(value)) {
+            throw new IllegalArgumentException("Argument to " + name + " needs to be passed as ref");
+        }
+        return value;
     }
 }

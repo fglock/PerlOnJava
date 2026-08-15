@@ -85,7 +85,10 @@ package B::SV {
         #     (In Perl 5 this source also shows > 1 because stack temps add refs)
         #   - Source with 0 selective refs (untracked):
         #     B::SV inflation → 1, REFCNT = 1 → no rescue ✓
-        Internals::SvREFCNT($_[0]->{ref});
+        # B's C implementation inspects the referent without creating a Perl
+        # owner. Ask the runtime to compensate for an independently live
+        # lexical owner that selective refcounting may not have counted.
+        Internals::SvREFCNT($_[0]->{ref}, 1);
     }
 
     sub object_2svref {

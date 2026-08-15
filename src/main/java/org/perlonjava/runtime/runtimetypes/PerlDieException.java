@@ -13,14 +13,25 @@ public class PerlDieException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     private final RuntimeBase payload;
+    private final RuntimeScalar warningHandler;
 
     public PerlDieException(RuntimeBase payload) {
+        this(payload, null);
+    }
+
+    public PerlDieException(RuntimeBase payload, RuntimeScalar warningHandler) {
         super(safeMessage(payload));
         this.payload = payload;
+        this.warningHandler = warningHandler;
     }
 
     public RuntimeBase getPayload() {
         return payload;
+    }
+
+    /** Warning handler that was live at die time, retained across scope unwind. */
+    public RuntimeScalar getWarningHandler() {
+        return warningHandler;
     }
 
     private static String safeMessage(RuntimeBase payload) {

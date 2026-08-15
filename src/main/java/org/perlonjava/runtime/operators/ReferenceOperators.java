@@ -182,6 +182,13 @@ public class ReferenceOperators {
                 MortalList.setActive(true);
             }
             DestroyDispatch.registerIfDestroyable(referent, newBlessId);
+            // A reference stored in a shared scalar publishes its class to
+            // the common slot. An ordinary argument/reference remains an
+            // ithread-local wrapper, even when its aggregate storage is shared.
+            if (runtimeScalar.threadShared
+                    || referent.sharedBlessingUnpublished()) {
+                SharedPerlStorage.publishBlessing(runtimeScalar);
+            }
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");
         }
@@ -202,6 +209,10 @@ public class ReferenceOperators {
         // Handle special variables that need to compute their value
         if (runtimeScalar instanceof ScalarSpecialVariable specialVar) {
             return ref(specialVar.getValueAsScalar());
+        }
+        if (RuntimeScalarType.isReference(runtimeScalar)
+                && runtimeScalar.value instanceof RuntimeBase referent) {
+            referent.synchronizePublishedSharedBlessing();
         }
         String str;
         int blessId;

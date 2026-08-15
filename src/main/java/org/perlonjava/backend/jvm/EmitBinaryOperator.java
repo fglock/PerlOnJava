@@ -7,7 +7,9 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.runtime.operators.OperatorHandler;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -30,6 +32,13 @@ public class EmitBinaryOperator {
     static void handleBinaryOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+        // bless mutates the scalar slot as well as its referent.  In particular,
+        // threads::shared publishes a class change only when the operand is the
+        // actual shared scalar, not a scalar-context copy of its reference.
+        EmitterVisitor leftVisitor = node.operator.equals("bless")
+                && isDirectScalarLvalue(node.left)
+                ? emitterVisitor.with(RuntimeContextType.LVALUE)
+                : scalarVisitor;
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleBinaryOperator: " + node.toString());
 
         if (isIntegerEnabled(emitterVisitor, node)
@@ -200,7 +209,7 @@ public class EmitBinaryOperator {
         }
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        node.left.accept(scalarVisitor); // left parameter
+        node.left.accept(leftVisitor); // left parameter
         int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooled = leftSlot >= 0;
         if (!pooled) {
@@ -217,6 +226,19 @@ public class EmitBinaryOperator {
         }
         // stack: [left, right]
         emitOperator(node, emitterVisitor);
+    }
+
+    private static boolean isDirectScalarLvalue(Node node) {
+        if (node instanceof OperatorNode operator) {
+            return operator.operator.equals("$");
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return switch (binary.operator) {
+                case "[", "{" -> true;
+                default -> false;
+            };
+        }
+        return false;
     }
 
     private static void emitIntegerBinaryOperator(EmitterVisitor emitterVisitor,

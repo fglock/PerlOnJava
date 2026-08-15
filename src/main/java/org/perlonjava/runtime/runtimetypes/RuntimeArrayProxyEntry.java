@@ -37,6 +37,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         vivify();
+        if (parent.threadShared) SharedPerlStorage.publishBlessing(value);
         parent.markPackageRootedValue(lvalue);
         RuntimeScalar result = super.set(value);
         if (!parent.elementsAliased) {

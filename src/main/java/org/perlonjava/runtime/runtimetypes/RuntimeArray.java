@@ -102,6 +102,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean add(RuntimeScalar value) {
+            if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(null, value);
             if (value != null) value.markContainerOwner(owner);
@@ -111,6 +112,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public void add(int index, RuntimeScalar element) {
+            if (owner.threadShared) SharedPerlStorage.publishBlessing(element);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(null, element);
             if (element != null) element.markContainerOwner(owner);
@@ -123,6 +125,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!c.isEmpty()) owner.noteIsaMutation();
             owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
+                if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
                 if (value != null) value.markContainerOwner(owner);
                 owner.markPackageRootedValue(value);
             }
@@ -134,6 +137,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!c.isEmpty()) owner.noteIsaMutation();
             owner.notePackageRootMutationIf(owner.hasRootEdge(c));
             for (RuntimeScalar value : c) {
+                if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
                 if (value != null) value.markContainerOwner(owner);
                 owner.markPackageRootedValue(value);
             }
@@ -143,6 +147,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public RuntimeScalar set(int index, RuntimeScalar element) {
             RuntimeScalar previous = super.get(index);
+            if (owner.threadShared) SharedPerlStorage.publishBlessing(element);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, element);
             if (element != null) element.markContainerOwner(owner);
@@ -1370,8 +1375,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 } else {
                     while (newSize < currentSize) {
                         currentSize--;
-                        elements.removeLast();
+                        RuntimeScalar removed = elements.removeLast();
+                        if (removed != null) {
+                            MortalList.deferDestroyForContainerClear(
+                                    java.util.Collections.singletonList(removed));
+                        }
                     }
+                    MortalList.flush();
                 }
             }
             case AUTOVIVIFY_ARRAY -> {

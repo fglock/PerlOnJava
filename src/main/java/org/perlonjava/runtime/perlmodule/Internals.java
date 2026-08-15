@@ -400,6 +400,18 @@ public class Internals extends PerlModuleBase {
             //   - for-many.t "refcount inside/after loop"
             //   - test_pl/examples.t "only one reference"/"two references"
             int extra = (base.localBindingExists ? 1 : 0) + base.foreachAliasCount;
+            if (rc == 2
+                    && args.size() > 1
+                    && args.get(1).getBoolean()
+                    && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
+                // B::SV's private hash slot is one of the two selective
+                // owners.  Ordinarily it is the temporary owner discounted
+                // below (a single live lexical therefore reports one).  If
+                // there is no independently live scalar pad, the other owner
+                // is a real aggregate slot, as in DBIx::Class Schema's source
+                // registry during DESTROY, and must remain visible to B.
+                extra++;
+            }
             // Legacy fudge: anonymous tracked container with no counted
             // owners -- still report 1 to indicate "live SV". Used by
             // Sub::Quote / Moo introspection paths that probe for liveness.

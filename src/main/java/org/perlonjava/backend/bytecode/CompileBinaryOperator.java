@@ -691,7 +691,14 @@ public class CompileBinaryOperator {
         // The repeat operator preserves list context on its left operand:
         // `(($expr) x 4)` repeats values, while scalar-context x repeats the
         // resulting string. All other ordinary binary operands are scalar.
-        int leftCtx = node.operator.equals("x") ? outerCtx : RuntimeContextType.SCALAR;
+        int leftCtx = switch (node.operator) {
+            case "x" -> outerCtx;
+            // Preserve the actual scalar slot: bless may publish metadata through
+            // a threads::shared scalar and must not operate on a temporary copy.
+            case "bless" -> isDirectScalarLvalue(node.left)
+                    ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
+            default -> RuntimeContextType.SCALAR;
+        };
         bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
 
@@ -712,10 +719,31 @@ public class CompileBinaryOperator {
         int rs2 = bytecodeCompiler.lastResultReg;
 
         // Emit opcode based on operator (delegated to helper method)
-        int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(bytecodeCompiler, node, rs1, rs2, node.getIndex());
+        // In list context, both forms are range operators.  The distinction
+        // between `..` and `...` only belongs to scalar flip-flop semantics.
+        // Keeping `...` here used to emit FLIP_FLOP even for array-slice
+        // indices such as @array[1...4], collapsing the slice to one element.
+        int rd = node.operator.equals("...") && outerCtx != RuntimeContextType.SCALAR
+                ? CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
+                        bytecodeCompiler, "..", rs1, rs2, node.getIndex())
+                : CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
+                        bytecodeCompiler, node, rs1, rs2, node.getIndex());
 
 
         bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static boolean isDirectScalarLvalue(Node node) {
+        if (node instanceof OperatorNode operator) {
+            return operator.operator.equals("$");
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return switch (binary.operator) {
+                case "[", "{" -> true;
+                default -> false;
+            };
+        }
+        return false;
     }
 
     private static void compileBinaryAsListOp(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {

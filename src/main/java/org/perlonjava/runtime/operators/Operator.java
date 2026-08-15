@@ -568,6 +568,9 @@ public class Operator {
      * list context.
      */
     public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list, int ctx) {
+        if (runtimeArray.threadShared) {
+            throw new IllegalStateException("Splice not implemented for shared arrays");
+        }
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 RuntimeList removedElements = new RuntimeList();

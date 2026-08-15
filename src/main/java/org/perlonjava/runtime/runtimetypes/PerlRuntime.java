@@ -9,6 +9,7 @@ import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.IORuntimeRegistryState;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.mro.MroRuntimeState;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.Random;
 import org.perlonjava.runtime.operators.ScalarFlipFlopOperator;
@@ -61,9 +62,7 @@ public final class PerlRuntime implements AutoCloseable {
     private final long perlThreadId;
     private volatile int perlThreadContext = RuntimeContextType.SCALAR;
     private volatile long perlThreadStackSize;
-    private volatile long defaultPerlThreadStackSize;
     private volatile boolean perlThreadExitOnly;
-    private volatile boolean defaultPerlThreadExitOnly;
 
     public ExecutionRuntimeState executionState = new ExecutionRuntimeState();
     public RuntimeRegexState regexState = new RuntimeRegexState();
@@ -279,12 +278,12 @@ public final class PerlRuntime implements AutoCloseable {
     public void setPerlThreadContext(int context) { perlThreadContext = context; }
     public long perlThreadStackSize() { return perlThreadStackSize; }
     public void setPerlThreadStackSize(long size) { perlThreadStackSize = size; }
-    public long defaultPerlThreadStackSize() { return defaultPerlThreadStackSize; }
-    public void setDefaultPerlThreadStackSize(long size) { defaultPerlThreadStackSize = size; }
+    public long defaultPerlThreadStackSize() { return threadRegistry.defaultStackSize(); }
+    public void setDefaultPerlThreadStackSize(long size) { threadRegistry.setDefaultStackSize(size); }
     public boolean perlThreadExitOnly() { return perlThreadExitOnly; }
     public void setPerlThreadExitOnly(boolean value) { perlThreadExitOnly = value; }
-    public boolean defaultPerlThreadExitOnly() { return defaultPerlThreadExitOnly; }
-    public void setDefaultPerlThreadExitOnly(boolean value) { defaultPerlThreadExitOnly = value; }
+    public boolean defaultPerlThreadExitOnly() { return threadRegistry.defaultExitOnly(); }
+    public void setDefaultPerlThreadExitOnly(boolean value) { threadRegistry.setDefaultExitOnly(value); }
 
     /** Initialize this independent interpreter's globals and runtime services. */
     public PerlRuntime initialize() {
@@ -408,25 +407,26 @@ public final class PerlRuntime implements AutoCloseable {
      * lifecycle, alarm, signal, native and I/O state starts fresh in the child.
      */
     public PerlRuntime snapshotClone() {
-        return snapshotCloneInternal(new PerlThreadRegistry(), 0).runtime();
+        return snapshotCloneInternal(new PerlThreadRegistry(), 0, java.util.List.of()).runtime();
     }
 
     /** Snapshot this runtime and clone additional non-global roots through the same graph map. */
     public RootSnapshot snapshotCloneWithRoots(java.util.List<? extends RuntimeBase> roots) {
         Objects.requireNonNull(roots, "roots");
-        ThreadSnapshot snapshot = snapshotCloneInternal(new PerlThreadRegistry(), 0);
-        return new RootSnapshot(snapshot.runtime(), snapshot.cloner().cloneRoots(roots));
+        return snapshotCloneInternal(new PerlThreadRegistry(), 0, roots);
     }
 
     public record RootSnapshot(PerlRuntime runtime, java.util.List<RuntimeBase> roots) {}
 
-    record ThreadSnapshot(PerlRuntime runtime, RuntimeGraphCloner cloner) {}
-
-    ThreadSnapshot snapshotCloneForThread(PerlThreadRegistry registry, long threadId) {
-        return snapshotCloneInternal(registry, threadId);
+    RootSnapshot snapshotCloneForThread(
+            PerlThreadRegistry registry, long threadId,
+            java.util.List<? extends RuntimeBase> roots) {
+        return snapshotCloneInternal(registry, threadId, roots);
     }
 
-    private ThreadSnapshot snapshotCloneInternal(PerlThreadRegistry registry, long threadId) {
+    private RootSnapshot snapshotCloneInternal(
+            PerlThreadRegistry registry, long threadId,
+            java.util.List<? extends RuntimeBase> roots) {
         executionLock.lock();
         try {
             if (closed) throw new IllegalStateException("PerlRuntime is closed");
@@ -445,8 +445,6 @@ public final class PerlRuntime implements AutoCloseable {
             }
 
             PerlRuntime child = new PerlRuntime(registry, threadId);
-            child.defaultPerlThreadStackSize = defaultPerlThreadStackSize;
-            child.defaultPerlThreadExitOnly = defaultPerlThreadExitOnly;
             nameNormalizerState.snapshotInto(child.nameNormalizerState);
             RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
             try (Binding ignored = bind()) {
@@ -454,13 +452,14 @@ public final class PerlRuntime implements AutoCloseable {
                 runtimeCodeState.snapshotCompiledMetadataInto(child.runtimeCodeState);
                 regexState.snapshotInto(child.regexState);
             }
+            java.util.List<RuntimeBase> clonedRoots = cloner.cloneSnapshotRoots(roots);
             cloner.finishSnapshot();
             child.currentDirectory = currentDirectory;
             child.initialized = true;
             try (Binding ignored = child.bind()) {
                 child.runCloneHooks();
             }
-            return new ThreadSnapshot(child, cloner);
+            return new RootSnapshot(child, clonedRoots);
         } finally {
             executionLock.unlock();
         }
@@ -468,11 +467,17 @@ public final class PerlRuntime implements AutoCloseable {
 
     private Set<String> preflightCloneSkip() {
         Set<String> skipped = new HashSet<>();
-        for (String fqn : new TreeSet<>(globalState.codeRefs().keySet())) {
-            if (!fqn.endsWith("::CLONE_SKIP")) continue;
-            RuntimeScalar hook = globalState.codeRefs().get(fqn);
+        // Perl calls the effective CLONE_SKIP method once for each class that
+        // has live blessed values in the snapshot. Walking every defined hook
+        // invoked callbacks long before any object of that class existed; only
+        // checking direct package hooks missed inherited CLONE_SKIP on A2/B2.
+        Set<String> liveClasses = new TreeSet<>(nameNormalizerState.blessStrCache.values());
+        liveClasses.remove("");
+        liveClasses.remove("__ANON__");
+        for (String packageName : liveClasses) {
+            RuntimeScalar hook = InheritanceResolver.findMethodInHierarchy(
+                    "CLONE_SKIP", packageName, null, 0, false);
             if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
-            String packageName = fqn.substring(0, fqn.length() - "::CLONE_SKIP".length());
             RuntimeArray args = new RuntimeArray(new RuntimeScalar(packageName));
             if (RuntimeCode.apply(hook, args, RuntimeContextType.SCALAR).scalar().getBoolean()) {
                 skipped.add(packageName);
@@ -599,9 +604,7 @@ public final class PerlRuntime implements AutoCloseable {
         currentDirectory = System.getProperty("user.dir");
         perlThreadContext = RuntimeContextType.SCALAR;
         perlThreadStackSize = 0;
-        defaultPerlThreadStackSize = 0;
         perlThreadExitOnly = false;
-        defaultPerlThreadExitOnly = false;
         resetStandardIOState();
     }
 
@@ -634,6 +637,7 @@ public final class PerlRuntime implements AutoCloseable {
 
     void sharedLockAcquired() { activeSharedLocks.incrementAndGet(); }
     void sharedLockReleased() { activeSharedLocks.decrementAndGet(); }
+    boolean hasSharedLock() { return activeSharedLocks.get() > 0; }
     void sharedWaiterEntered() { activeSharedWaiters.incrementAndGet(); }
     void sharedWaiterExited() { activeSharedWaiters.decrementAndGet(); }
 

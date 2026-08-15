@@ -61,6 +61,8 @@ public final class ExecutionRuntimeState {
     public final IdentityHashMap<Throwable, Boolean> unhandledDieHandlerSeen =
             new IdentityHashMap<>();
     public boolean insideUnhandledDieHandler;
+    /** __WARN__ snapshot retained until an uncaught die reaches the ithread boundary. */
+    public RuntimeScalar pendingThreadWarningHandler;
     ControlFlowMarker controlFlowMarker;
 
     final ArrayList<Object> myVarCleanupStack = new ArrayList<>();

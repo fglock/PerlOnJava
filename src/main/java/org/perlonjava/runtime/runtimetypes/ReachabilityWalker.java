@@ -562,6 +562,32 @@ public class ReachabilityWalker {
         return false;
     }
 
+    /**
+     * Return whether {@code target} is strongly reachable from an explicit
+     * set of roots. Runtime snapshots use this before the child entry CODE is
+     * installed on an execution stack: its captures are already real Perl
+     * owners, but the ordinary live-root queries cannot see them yet.
+     */
+    static boolean isReachableFromStrongRoots(
+            RuntimeBase target, java.util.List<? extends RuntimeBase> roots) {
+        if (target == null || roots == null || roots.isEmpty()) return false;
+        final int MAX_VISITS = 50_000;
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        for (RuntimeBase root : roots) {
+            if (root == null) continue;
+            if (root == target) return true;
+            if (seen.add(root)) todo.addLast(root);
+        }
+        int visits = 0;
+        while (!todo.isEmpty() && visits++ < MAX_VISITS) {
+            if (enqueueStrongEdges(todo.removeFirst(), target, seen, todo)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean enqueueStrongEdges(RuntimeBase cur, RuntimeBase target,
                                               Set<RuntimeBase> seen,
                                               java.util.ArrayDeque<RuntimeBase> todo) {
@@ -710,9 +736,15 @@ public class ReachabilityWalker {
     }
 
     public static boolean hasLiveStrongScalarReferent(RuntimeBase target) {
+        return hasLiveStrongScalarReferentOtherThan(target, null);
+    }
+
+    public static boolean hasLiveStrongScalarReferentOtherThan(
+            RuntimeBase target, RuntimeScalar excluded) {
         if (target == null) return false;
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
             if (liveVar instanceof RuntimeScalar sc
+                    && sc != excluded
                     && !WeakRefRegistry.isweak(sc)
                     && !sc.scopeExited
                     && sc.value == target) {
@@ -721,6 +753,7 @@ public class ReachabilityWalker {
         }
         for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
             if (sc == null) continue;
+            if (sc == excluded) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
             if (sc.scopeExited) continue;
             if (!MyVarCleanupStack.isLive(sc)) continue;

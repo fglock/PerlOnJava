@@ -8,6 +8,7 @@ use Getopt::Long;
 use JSON::PP;
 use Data::Dumper;
 use POSIX qw(WNOHANG);
+use Config ();
 
 # PerlOnJava Test Runner
 # Runs standard Perl tests against PerlOnJava and analyzes results
@@ -244,6 +245,30 @@ sub process_test_result {
 sub run_single_test {
     my ($test_file) = @_;
 
+    # Core thread distributions assume their own build-directory cwd.  In
+    # particular, threads and threads-shared resolve ../../t/test.pl when
+    # PERL_CORE is set, while Thread-Queue and Thread-Semaphore load their
+    # pure-Perl implementation from the distribution's lib directory.  Keep
+    # the upstream tests unchanged and reproduce that layout here.
+    my $thread_distribution_root;
+    my $thread_distribution_uses_core = 0;
+    if ($test_file =~ m{^(perl5/dist/(threads|threads-shared))/t/}) {
+        $thread_distribution_root = $1;
+        $thread_distribution_uses_core = 1;
+    } elsif ($test_file =~ m{^(perl5/dist/(?:Thread-Queue|Thread-Semaphore))/t/}) {
+        $thread_distribution_root = $1;
+    }
+
+    local $ENV{PERL_CORE} = $thread_distribution_uses_core ? 1 : $ENV{PERL_CORE};
+    local $ENV{PERL5LIB} = $ENV{PERL5LIB};
+    if ($thread_distribution_root && !$thread_distribution_uses_core) {
+        my $distribution_lib = File::Spec->rel2abs("$thread_distribution_root/lib");
+        my $separator = $Config::Config{path_sep} || ':';
+        $ENV{PERL5LIB} = defined($ENV{PERL5LIB}) && length($ENV{PERL5LIB})
+            ? "$distribution_lib$separator$ENV{PERL5LIB}"
+            : $distribution_lib;
+    }
+
     # A few subprocess- or CPU-heavy tests routinely use most of the default
     # deadline and can cross it when the full parallel corpus contends for CPU.
     # Give those known outliers a stable minimum wall-clock allowance while
@@ -321,7 +346,10 @@ sub run_single_test {
     # For perl5_t tests (especially Pod tests), change to the test directory
     # so they can find their test data files with relative paths
     my $local_test_dir = $test_dir;
-    if ($test_file =~ m{^perl5_t/t/}) {
+    if ($thread_distribution_root) {
+        $local_test_dir = $thread_distribution_root;
+    }
+    elsif ($test_file =~ m{^perl5_t/t/}) {
         # For core Perl 5 tests in perl5_t/t/, chdir to perl5_t/t
         # so they can find TestInit.pm via require
         $local_test_dir = 'perl5_t/t';

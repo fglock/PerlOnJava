@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.Iterator;
+import java.util.Objects;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
@@ -27,6 +28,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public volatile SharedLifecycle threadSharedLifecycle;
     /** True only for a fetch-time proxy wrapper, never for canonical storage. */
     public boolean threadSharedFetchedView;
+    /** True for one aggregate view cloned into another ithread runtime. */
+    public boolean threadSharedRuntimeView;
     /** True after this wrapper has registered one live view with the lifecycle. */
     private boolean threadSharedViewRegistered;
 
@@ -38,11 +41,46 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         final java.util.concurrent.atomic.AtomicBoolean destroyFired =
                 new java.util.concurrent.atomic.AtomicBoolean();
         volatile boolean active;
+        volatile String publishedBlessName;
+    }
+
+    /**
+     * Refresh an unchanged local shared view after another runtime explicitly
+     * publishes a class through shared scalar/aggregate storage. A view that
+     * has been reblessed locally keeps that local override until it is stored.
+     */
+    public void synchronizePublishedSharedBlessing() {
+        SharedLifecycle lifecycle = threadSharedLifecycle;
+        if (!threadShared || lifecycle == null) return;
+        String published = lifecycle.publishedBlessName;
+
+        // Canonical shared storage is one Java object across ithreads, while
+        // bless IDs belong to a particular PerlRuntime. Re-intern the shared
+        // class name in the runtime that is currently observing the value.
+        if (!threadSharedFetchedView && !threadSharedRuntimeView) {
+            threadSharedBlessName = published;
+            blessId = published == null ? 0 : NameNormalizer.getBlessId(published);
+            return;
+        }
+
+        // A runtime-local proxy can be privately reblessed. Refresh only a
+        // view whose local class still matches its last published class.
+        String localClass = blessId == 0 ? null : NameNormalizer.getBlessStr(blessId);
+        if (!Objects.equals(localClass, threadSharedBlessName)) return;
+        threadSharedBlessName = published;
+        blessId = published == null ? 0 : NameNormalizer.getBlessId(published);
+    }
+
+    /** True while shared canonical storage has not published an initial class. */
+    public boolean sharedBlessingUnpublished() {
+        return threadShared && threadSharedLifecycle != null
+                && threadSharedLifecycle.publishedBlessName == null;
     }
 
     void registerSharedFetchedView() {
         SharedLifecycle lifecycle = threadSharedLifecycle;
-        if (!threadSharedFetchedView || lifecycle == null || threadSharedViewRegistered) return;
+        if ((!threadSharedFetchedView && !threadSharedRuntimeView)
+                || lifecycle == null || threadSharedViewRegistered) return;
         synchronized (this) {
             if (!threadSharedViewRegistered) {
                 lifecycle.active = true;
@@ -59,7 +97,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         SharedLifecycle lifecycle = threadSharedLifecycle;
         if (!threadShared || lifecycle == null || !lifecycle.active) return false;
 
-        if (threadSharedFetchedView) {
+        if (threadSharedFetchedView || threadSharedRuntimeView) {
             int remaining = lifecycle.liveViews.get();
             synchronized (this) {
                 if (threadSharedViewRegistered) {
