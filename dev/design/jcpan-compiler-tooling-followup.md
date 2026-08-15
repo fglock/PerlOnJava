@@ -59,6 +59,10 @@ The following are not treated as PerlOnJava regressions because their current di
   - Opened PR #962 from `fix/jcpan-compiler-tooling-followup`.
   - GitHub Actions passed on Ubuntu and Windows; the Windows run specifically
     confirmed the platform-default newline fix in `pipe_jperl_shebang.t`.
+- [x] Phase 7: post-merge warning cleanup (2026-08-15)
+  - Replaced deprecated `Zstd.decompressedSize` calls with
+    `Zstd.getFrameContentSize` and reject unknown or invalid frame sizes before
+    allocating decoder buffers.
 
 ### Next Steps
 

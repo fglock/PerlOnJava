@@ -336,7 +336,13 @@ public class TokenDecoder {
     int len = (int) readVarint();
 
     byte[] compressedData = Arrays.copyOfRange(originalData.array, position, position + len);
-    long decompressedSize = Zstd.decompressedSize(compressedData);
+    long decompressedSize = Zstd.getFrameContentSize(compressedData);
+    if (Zstd.isError(decompressedSize)) {
+      String message = decompressedSize == -1
+          ? "Zstd frame content size is unknown"
+          : Zstd.getErrorName(decompressedSize);
+      throw new SerealException(message);
+    }
     if (decompressedSize > Integer.MAX_VALUE) {
       throw new SerealException("Decompressed size exceeds integer MAX_VALUE: " + decompressedSize);
     }
