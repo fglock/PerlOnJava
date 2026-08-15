@@ -829,6 +829,24 @@ only from captured results. Acceptance requires `make`, link checks, all thread
 gates, `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`, and green Ubuntu/Windows
 CI.
 
+Release evidence collected on 2026-08-15: the 17-file core thread-wrapper
+matrix completed without timeout; the supported anchors include `threads.t`
+30/30, `index_thr.t` 415/415, `substr_thr.t` 400/400, lexical regex debugging
+6/6, the user-property race 3/3, and `pat_psycho_thr.t` 17/17. The default
+Test2 matrix passes 13 files and 38/38 assertions, Storable passes 2/2, and the
+Net::SSLeay callback/context stress tests each pass. Ten opt-in Test2 stress
+files currently pass 560/562 assertions: `modules/Tools/AsyncSubtest.t` loses
+the cloned attach marker before detach, and `acceptance/skip.t` reaches a
+recursive Subtest send after the same missing detach event. These remain
+release blockers. The child-owned DBI connection example passes with identical
+output on system Perl, JVM, and interpreter. Documentation link validation is
+green. The required DBIx::Class gate is also green at 325 files and 42,671
+assertions with eight jobs. The broad bundled-module task remains red at
+239/391 files; its 152 failures span unrelated unported Text::CSV/YAML and
+other module behavior, while the thread-specific bundled Storable and
+Net::SSLeay gates above are green. It is recorded as a wider project baseline,
+not presented as threads release success.
+
 ## 6. Known Reference Material and Warnings
 
 - `dev/prompts/multiplicity-v2-plan.md` documents the incremental response to
@@ -1028,9 +1046,11 @@ three assertions from the adjacent-import parser fix.
    proxy release are complete. Resolve the existing preserving-`share` test
    contract explicitly before switching plain `share` to system Perl's
    destructive initialization; `shared_clone` remains preserving.
-3. Complete Phase 44's release gate. Phases 40–43's public API, fresh reset,
-   bounded pooling, concurrent PSGI, and default virtual-carrier foundations
-   are complete.
+3. Complete Phase 44's release gate. Fix the Test2 AsyncSubtest attach/detach
+   clone-lifetime gap and its skip-all recursion consequence, rerun the opt-in
+   matrix, bundled modules, DBIx::Class, and Ubuntu/Windows CI. Phases 40–43's
+   public API, fresh reset, bounded pooling, concurrent PSGI, and default
+   virtual-carrier foundations are complete.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under
