@@ -30,7 +30,7 @@ Technical reference documentation:
 - **[Bundled Modules](reference/bundled-modules.md)** - Complete list of included modules
 - **[XS Compatibility](reference/xs-compatibility.md)** - XS modules and Java implementations
 - **[CLI Options](reference/cli-options.md)** - Command-line reference
-- **[Concurrency](reference/feature-matrix.md#concurrency-and-perl-threads)** - Multiplicity, ithreads, shared storage, and limitations
+- **[Perl Threads](reference/threads.md)** - Ithreads, shared storage, carrier policy, resources, and testing
 - **[Runtime Configuration](reference/configure.md#runtime-thread-configuration)** - Thread capability flags and execution mode
 - **[Memory Management](reference/memory-management.md)** - JVM GC, deterministic destruction, weak references, and threads
 - **[Testing](reference/testing.md)** - Test suite information

@@ -49,6 +49,7 @@ Live attached children support targeted thread signals. A nonzero stack-size
 request automatically selects a platform-backed child because virtual-thread
 stacks are JVM-managed. Shared blessed aggregates use runtime-local proxy
 views over common backing; the advanced edge cases and tie-order rules are
-documented in the feature matrix. A captured PSGI runtime is not made
+documented in the [Perl threads reference](../../docs/reference/threads.md).
+A captured PSGI runtime is not made
 concurrently callable merely by enabling ithreads; use the opt-in PSGI runtime
 pool for concurrent request execution.

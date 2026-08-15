@@ -41,6 +41,11 @@ jobs:
         if: runner.os == 'Linux'
         run: make ci
 
+      - name: Run Perl thread compatibility gate
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: make test-threads
+
       - name: Generate SBOM (Linux only)
         if: runner.os == 'Linux'
         run: make sbom
@@ -59,4 +64,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}
-          path: build/reports/tests/test/
+          path: |
+            build/reports/tests/test/
+            build/reports/threads/

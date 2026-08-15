@@ -8,7 +8,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   manifest, provide a JAXP-backed `XML::LibXSLT`, and preserve descriptors for
   anonymous handles stored in container lvalues. This unblocks
   `Catmandu::CrossRef` and `AnyEvent::SMTP` without distribution preferences.
-- Add Perl interpreter multiplicity and the supported ithread tranche across
+- Add Perl interpreter multiplicity and full ithread support across
   the JVM and interpreter backends. Mutable execution state is owned by
   independent `PerlRuntime` instances; child threads receive identity-aware
   snapshots, while `threads::shared` preserves explicitly shared
@@ -22,9 +22,11 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   registrations retain their owning runtime, internal pipes have an explicit
   inherited-handle policy, and nested plain shared graphs are validated before
   publication. General resource inheritance, DBI ownership, lexical regex
-  diagnostics, blessed roots, and tied shared-value conversion are implemented;
-  exact nested shared-reference proxies remain limited;
-  see the [feature matrix](../reference/feature-matrix.md#concurrency-and-perl-threads).
+  diagnostics, blessed roots, tied shared-value conversion, nested shared
+  proxy views, and global final destruction are implemented. The unchanged
+  upstream `threads`, `threads::shared`, `Thread::Queue`, and
+  `Thread::Semaphore` distributions pass on both backends and both Java carrier
+  policies; see the [Perl threads reference](../reference/threads.md).
 - CPAN/tooling: expose tested dependency scripts through `PATH`, deduplicate
   repeated `PERL5LIB` setup, and resolve test prerequisites against tested
   `blib` trees before launching tests. Add `JSON::DWIW`, `Taint::Runtime`, and

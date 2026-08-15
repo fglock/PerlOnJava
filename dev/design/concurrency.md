@@ -1,7 +1,7 @@
 # Perl Threads Implementation Plan
 
-**Status:** Active implementation plan
-**Version:** 2.2
+**Status:** Delivered; compatibility maintenance
+**Version:** 3.0
 **Date:** 2026-08-15
 
 ## 1. Goal and Non-Negotiable Delivery Rule
@@ -222,13 +222,13 @@ direct companions.
 ## 6. Supporting Design Contracts
 
 - `dev/design/attributes.md` defines the supported `shared` attribute surface.
-- `dev/design/runtime-pooling-reset-contract.md` defines the proof required
-  before runtime pooling can be enabled.
+- `dev/design/runtime-pooling-reset-contract.md` defines the implemented
+  bounded pool reset and fresh-runtime replacement contract.
 - `dev/design/phase36-regex-parity.md` owns direct regex-language and Joni work.
 
 ## 7. Progress Tracking
 
-### Current Status: release validation in progress; Joni/regex parity is separate
+### Current Status: delivered; Joni/regex parity is separate
 
 `PerlRuntime` owns interpreter state, ithreads clone one isolated runtime graph,
 and `threads::shared` supplies explicit cross-runtime storage and synchronization.
@@ -246,19 +246,21 @@ requests.
 
 ### Next Steps
 
-1. Finish the local release gates: `make`, documentation links, all four
-   upstream distribution configurations, the thread preservation matrix,
-   and `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`.
-2. Review the final diff for temporary diagnostics, generated files, accidental
-   upstream-test edits, and any mutable runtime state lacking an ownership
-   classification.
-3. Open the pull request with the exact gate results in its commit messages and
-   description.
-4. Require green Ubuntu and Windows CI. Investigate and fix any CI failure on
-   the branch; do not merge on a rerun-only explanation.
-5. After merge, treat the four unchanged upstream distributions as permanent
-   regression gates. Continue direct regex-language work, including Joni, only
-   in the separate Phase 36 project.
+1. Keep `make test-threads` as a permanent Ubuntu pull-request gate. It runs
+   both execution backends with virtual carriers and focused platform lifecycle,
+   signal, stack, wait, timeout, and deadlock coverage.
+2. Run `make test-threads-release` before any thread/runtime release. It extends
+   the pull-request gate to the complete four-module matrix on platform carriers.
+3. Continue CPAN ecosystem hardening: opt-in Test2 stress tests, remaining Moose
+   thread-suite classification, Net::SSLeay callback suites 61/62, and permanent
+   DBI ownership plus DBIx::Class release coverage.
+4. Require every future native resource, I/O handle, and callback adapter to
+   declare its runtime ownership, snapshot, aliasing, and close policy.
+5. Monitor snapshot retention and startup cost. Runtime pooling remains bounded,
+   opt-in, and disabled by default; returned application runtimes are replaced,
+   not partially reused.
+6. Keep direct regex-language and Joni work in the separate Phase 36 project.
+   Threaded regex wrappers must preserve their same-commit direct behavior.
 
 Direct regex-language work, including Joni integration, is not part of this
 release.
@@ -278,6 +280,7 @@ relative to their same-commit direct companions.
 ## Related Documents
 
 - `dev/design/attributes.md` — current attribute behavior
-- `dev/design/runtime-pooling-reset-contract.md` — required proof before pooling
+- `dev/design/runtime-pooling-reset-contract.md` — bounded pooling and
+  fresh-runtime replacement contract
 - `dev/design/phase36-regex-parity.md` — independent regex parity project
 - `dev/design/fork_open_emulation.md` — process/fork-related alternatives

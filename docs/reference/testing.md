@@ -30,6 +30,31 @@ Runs all tests including comprehensive module tests. These tests:
 - 🎯 Identify high-priority opportunities (incomplete tests)
 - 📈 Provide feature impact analysis
 
+### Perl Thread Compatibility
+
+The permanent pull-request gate runs the complete unchanged upstream
+`threads`, `threads::shared`, `Thread::Queue`, and `Thread::Semaphore` suites on
+the JVM and interpreter backends with virtual carriers. It also runs focused
+lifecycle, signal, stack, condition, timeout, and deadlock tests with platform
+carriers:
+
+```bash
+make test-threads
+```
+
+Before a thread/runtime release, extend that gate to the complete four-mode
+matrix (both execution backends on virtual and platform carriers):
+
+```bash
+make test-threads-release
+```
+
+Both targets use eight jobs and a hard 300-second timeout for each file. JSON
+reports are written under `build/reports/threads/`. The shorter target is used
+by Ubuntu pull-request CI; Windows continues to run the Java/unit build gate.
+See the [Perl threads reference](threads.md) for the compatibility contract and
+resource policies.
+
 ## Testing Approaches
 
 ### 1. Perl-Style Testing (Default)
@@ -179,21 +204,23 @@ For long-running development work, track test results over time to monitor progr
 #### 1. Run Tests with Timestamped Logs
 
 ```bash
-# Clean up and run comprehensive tests
-killall java
-rm -rf perl5_t/t/tmp_*
-
 # Run with extended timeout and save to dated log
 perl dev/tools/perl_test_runner.pl \
+  --jobs 10 \
   --timeout 300 \
   --output out.json \
   perl5_t/t \
-  2>&1 > logs/test_$(date +%Y%m%d_%H%M%S).log
+  > logs/test_$(date +%Y%m%d_%H%M%S).log 2>&1
 ```
 
 **Workflow details:**
-- `killall java` - Stop any hung Java processes from previous runs
-- `rm -rf perl5_t/t/tmp_*` - Clean temporary test files
+- Inspect exact process command lines before and after a long run. Never use a
+  broad Java process kill: it can terminate an active build or another user's
+  test. If an abandoned PerlOnJava JVM is proven by its full command line,
+  terminate that exact PID only.
+- Do not recursively delete wildcard test directories as routine preparation.
+  Remove an exact, verified stale path only when the failing test requires it.
+- `--jobs 10` - Run ten independent test files concurrently
 - `--timeout 300` - Allow 5 minutes per test (for slower tests)
 - `logs/test_YYYYMMDD_HHMMSS.log` - Timestamped log for tracking history
 

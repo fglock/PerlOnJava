@@ -29,7 +29,8 @@ module reports the shipped runtime capabilities directly:
 Java 24 virtual threads are the launcher default. The platform executor remains
 available process-wide with `JPERL_THREAD_MODE=platform` or the JVM property
 `-Djperl.thread.mode=platform`. Unknown values are rejected. See
-[CLI Options](cli-options.md#thread-execution-mode) and the
+[CLI Options](cli-options.md#thread-execution-mode), the
+[Perl threads reference](threads.md), and the
 [feature matrix](feature-matrix.md#concurrency-and-perl-threads).
 
 Runtime pooling is independently opt-in. `JPERL_RUNTIME_POOL_SIZE=N` (or
