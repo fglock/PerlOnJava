@@ -247,6 +247,12 @@ sub process_test_result {
     print " " x (50 - length($rel_path)) if length($rel_path) < 50;
     printf " ... %s %d/%d ok (%.2fs)\n",
         $char, $result->{ok_count}, $result->{total_tests}, $duration;
+    if ($result->{status} ne 'pass' && defined $result->{failure_output}) {
+        print "----- captured output: $rel_path -----\n";
+        print $result->{failure_output};
+        print "\n" unless $result->{failure_output} =~ /\n\z/;
+        print "----- end captured output -----\n";
+    }
 }
 
 # Single, clean run_single_test function
@@ -483,6 +489,11 @@ sub run_single_test {
 
     my $result = parse_tap_output($output, $exit_code);
     $result->{raw_output_path} = $raw_output_path;
+    # Preserve a bounded diagnostic tail in the JSON report and CI log.  Raw
+    # output normally lives in /tmp on the worker and disappears before an
+    # uploaded report can be inspected.
+    $result->{failure_output} = substr($output, -32768)
+        if $result->{status} ne 'pass';
     return $result;
 }
 

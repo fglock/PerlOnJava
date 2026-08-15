@@ -62,7 +62,7 @@ sub set_stack_size {
     return ref($_[0]) ? _set_stack_size(@_) : _set_stack_size($_[1]);
 }
 sub set_thread_exit_only { return _set_thread_exit_only(@_) }
-sub yield { select undef, undef, undef, 0; return }
+sub yield { return _yield() }
 sub equal { return defined($_[0]) && defined($_[1]) && $_[0]->tid == $_[1]->tid }
 sub _stringify { return 'threads=' . $_[0]->tid }
 
