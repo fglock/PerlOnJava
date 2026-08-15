@@ -37,7 +37,7 @@ The following are not treated as PerlOnJava regressions because their current di
 
 ## Progress Tracking
 
-### Current Status: implementation complete; PR #963 validation in progress
+### Current Status: implementation complete; PR #963 CI green
 
 ### Completed Phases
 
@@ -76,12 +76,11 @@ The following are not treated as PerlOnJava regressions because their current di
     documented historical baseline, so it is not a PR #963 regression.
   - Added a four-case system-Perl oracle and verified it with both PerlOnJava
     backends; the full `make` suite passes.
+  - PR #963 CI passed on Ubuntu and Windows at commit `b48f504d8`.
 
 ### Next Steps
 
-1. Push the regression repair to PR #963.
-2. Wait for Ubuntu and Windows CI before handing the unified PR back for user
-   testing.
+1. Hand the unified PR #963 back for user testing and review.
 
 ### Open Questions
 
