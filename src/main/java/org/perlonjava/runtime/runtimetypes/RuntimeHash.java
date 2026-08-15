@@ -554,6 +554,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 && (value.containerOwner != this || elements.containsValue(value))) {
             return new RuntimeScalar(value);
         }
+        // @_ entries alias the caller's scalar. Hash assignment copies the SV
+        // value into a distinct element slot; retaining the alias lets a later
+        // weaken($hash{key}) weaken the caller itself. Test2's weak hub->{ast}
+        // backlink exposed this when an ithread captured the caller object.
+        if (RuntimeCode.isCurrentArgumentAlias(value)) {
+            return new RuntimeScalar(value);
+        }
         return value;
     }
 

@@ -847,7 +847,7 @@ than discarding the option. The mandatory unit build is green, and the focused
 core lifecycle, class, and lexical-regex matrix passes 40/40 in both default
 virtual and explicit platform modes.
 
-### Phase 44 — Release closure
+### Phase 44 — Release closure (completed 2026-08-15)
 
 Run the complete core and bundled thread matrix, DBI/DBIx, Test2 opt-in stress,
 Storable, and native callback gates. Add a DBI example where each child owns its
@@ -859,20 +859,28 @@ CI.
 Release evidence collected on 2026-08-15: the 17-file core thread-wrapper
 matrix completed without timeout; the supported anchors include `threads.t`
 30/30, `index_thr.t` 415/415, `substr_thr.t` 400/400, lexical regex debugging
-6/6, the user-property race 3/3, and `pat_psycho_thr.t` 17/17. The default
-Test2 matrix passes 13 files and 38/38 assertions, Storable passes 2/2, and the
-Net::SSLeay callback/context stress tests each pass. Ten opt-in Test2 stress
-files currently pass 560/562 assertions: `modules/Tools/AsyncSubtest.t` loses
-the cloned attach marker before detach, and `acceptance/skip.t` reaches a
-recursive Subtest send after the same missing detach event. These remain
-release blockers. The child-owned DBI connection example passes with identical
-output on system Perl, JVM, and interpreter. Documentation link validation is
-green. The required DBIx::Class gate is also green at 325 files and 42,671
-assertions with eight jobs. The broad bundled-module task remains red at
-239/391 files; its 152 failures span unrelated unported Text::CSV/YAML and
-other module behavior, while the thread-specific bundled Storable and
-Net::SSLeay gates above are green. It is recorded as a wider project baseline,
-not presented as threads release success.
+6/6, the user-property race 3/3, and `pat_psycho_thr.t` 17/17. Remaining partial
+regex totals match the shared direct-language gaps recorded in Phase 36 rather
+than thread-only failures.
+
+The default Test2 matrix passes 13 files and 38/38 assertions. All ten opt-in
+Test2 stress files now pass 562/562 assertions after preserving cloned closure
+capture ownership, rooting the active child CODE during lifecycle sweeps, and
+recovering the active method package for nested `SUPER` dispatch. Storable
+passes 2/2, and the two Net::SSLeay callback/context stress gates pass 1/1
+each. New system-Perl-valid lifetime, nested-method, and weak-assignment
+oracles pass 8/8 on both JVM and interpreter backends. The child-owned DBI
+connection example passes with identical output on system Perl, JVM, and
+interpreter.
+
+The mandatory unit build and documentation link validation are green. The
+required `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class` gate passes all 325
+files and 42,671 assertions in 1,371 seconds. The broad bundled-module task
+remains red at 239/391 files; its 152 failures span unrelated unported
+Text::CSV/YAML and other module behavior, while the thread-specific bundled
+Storable and Net::SSLeay gates above are green. It is recorded as a wider
+project baseline, not presented as threads release success. Ubuntu and Windows
+CI remain the final external PR acceptance check.
 
 ## 6. Known Reference Material and Warnings
 
@@ -888,7 +896,7 @@ not presented as threads release success.
 
 ## 7. Progress Tracking
 
-### Current Status: Phases 42 and 43 complete; Phases 36 and 39b remain open
+### Current Status: Phase 44 local release gate complete; Phases 36 and 39b remain open
 
 Hints, warnings, filters, and source maps are runtime-owned while compiler-only
 scratch remains protected by the global compile lock. The Phase 11 inventory is
@@ -1074,11 +1082,10 @@ three assertions from the adjacent-import parser fix.
    destructive initialization. Nested proxies, runtime-local blessing,
    cycles, weak views, and exactly-once cross-runtime destruction are complete;
    `shared_clone` remains preserving.
-3. Complete Phase 44's release gate. Fix the Test2 AsyncSubtest attach/detach
-   clone-lifetime gap and its skip-all recursion consequence, rerun the opt-in
-   matrix, bundled modules, DBIx::Class, and Ubuntu/Windows CI. Phases 40–43's
-   public API, fresh reset, bounded pooling, concurrent PSGI, and default
-   virtual-carrier foundations are complete.
+3. Preserve the completed Phase 44 matrix while Phase 36 and Phase 39b close:
+   core thread wrappers must finish without timeout; default and opt-in Test2,
+   Storable, Net::SSLeay, DBI, and DBIx::Class must remain green on every PR;
+   Ubuntu and Windows CI are mandatory delivery gates.
 4. Preserve the green core, Storable, Test2, Net::SSLeay, index/substr, DBI, and
    DBIx::Class anchors after every phase. The 2026-08-14 DBIx::Class gate passed
    all 325 files and 42,671 assertions under

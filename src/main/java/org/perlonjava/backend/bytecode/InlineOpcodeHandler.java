@@ -566,8 +566,7 @@ public class InlineOpcodeHandler {
         RuntimeScalar val = (valueBase instanceof RuntimeScalar)
                 ? (RuntimeScalar) valueBase : valueBase.scalar();
         RuntimeScalar element = arr.get(idx);
-        element.set(val);
-        registers[rd] = element;
+        registers[rd] = element.set(val);
         return pc;
     }
 
@@ -734,8 +733,7 @@ public class InlineOpcodeHandler {
         RuntimeBase valBase = registers[valueReg];
         RuntimeScalar val = (valBase instanceof RuntimeScalar) ? (RuntimeScalar) valBase : valBase.scalar();
         RuntimeScalar target = hash.get(key);
-        val.addToScalar(target);
-        registers[rd] = target;
+        registers[rd] = val.addToScalar(target);
         return pc;
     }
 

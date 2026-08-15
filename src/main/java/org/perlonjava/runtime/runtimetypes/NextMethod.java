@@ -413,6 +413,18 @@ public class NextMethod {
             if (mrp != null && !mrp.isEmpty()) {
                 packageName = mrp;
             }
+        } else {
+            // A lazily materialized ithread CODE can transiently lack the
+            // generated implementation's __SUB__ field even though apply()
+            // has already established its RuntimeCode frame. SUPER is lexical:
+            // recover that package from the active named method instead of
+            // restarting at the most-derived invocant and resolving the same
+            // override recursively.
+            CallerMethod active = resolveCallerMethodFromActiveCodeStack();
+            if (active != null && active.callerPackage() != null
+                    && !active.callerPackage().isEmpty()) {
+                packageName = active.callerPackage();
+            }
         }
         method = InheritanceResolver.findMethodInHierarchy(
                 methodName.substring(7),    // method name without SUPER:: prefix

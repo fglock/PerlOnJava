@@ -284,6 +284,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    /** Reconstruct capture ownership for an independent ithread snapshot. */
+    void retainThreadCloneClosureCapture() {
+        captureCount++;
+        // An owning lexical slot already protects its referent. Borrowed
+        // argument aliases do not, and the source runtime's other owners are
+        // not a lifetime guarantee in the cloned runtime.
+        if (!refCountOwned) retainClosureCaptureReferent();
+    }
+
     public void releaseClosureCapture() {
         releaseOneClosureCaptureReferent();
         if (captureCount > 0) {
