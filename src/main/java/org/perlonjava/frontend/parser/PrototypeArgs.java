@@ -341,6 +341,7 @@ public class PrototypeArgs {
                             nextToken.type == LexerTokenType.NEWLINE && !parser.getHeredocNodes().isEmpty();
                     if (!trailingCommaBeforeHeredoc
                             && !Parser.isExpressionTerminator(nextToken)
+                            && !isInfixOperatorAfterTrailingComma(nextToken)
                             && nextToken.type != LexerTokenType.EOF
                             && !nextToken.text.equals(")")) {
                         throwTooManyArgumentsError(parser);
@@ -427,6 +428,19 @@ public class PrototypeArgs {
             return new LexerToken(LexerTokenType.EOF, Lexer.EOF);
         }
         return tokens.get(i);
+    }
+
+    /**
+     * A comma after the final fixed-prototype argument may be followed by an
+     * infix operator belonging to the enclosing expression.  For example,
+     * DBM::Deep uses {@code vec $mask, $offset, 1, || vec ...}.  The comma is
+     * trailing punctuation for vec(), not the start of a fourth argument.
+     */
+    private static boolean isInfixOperatorAfterTrailingComma(LexerToken token) {
+        return switch (token.text) {
+            case "||", "&&", "or", "and", "xor" -> true;
+            default -> false;
+        };
     }
 
     private static int firstNonCodeArgIndexAfterAmpersandPrototype(String prototype, ListNode args) {

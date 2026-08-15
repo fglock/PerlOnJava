@@ -138,6 +138,7 @@ public class DBI extends PerlModuleBase {
             // value" on direct assignment. Seen in DBIC t/storage/txn.t line 382.
             dbh.put("ReadOnly", new RuntimeScalar(false));
             dbh.put("AutoCommit", new RuntimeScalar(true));
+            dbh.put("FetchHashKeyName", new RuntimeScalar("NAME"));
 
             // Handle credentials file if specified in attributes
             Properties props = new Properties();
@@ -1403,6 +1404,11 @@ public class DBI extends PerlModuleBase {
         sth.put("NAME_uc", columnNamesUpper.createReference());
         sth.put("NUM_OF_FIELDS", new RuntimeScalar(columnCount));
         sth.put("Type", new RuntimeScalar("st"));
+        // Metadata methods return an already-active result set.  DBI's Perl
+        // fetchall_arrayref/fetchall_hashref implementations gate iteration
+        // on this flag, just like ordinary SELECT statement handles do after
+        // execute().
+        sth.put("Active", new RuntimeScalar(true));
         sth.put("Executed", scalarTrue);
         sth.put("execute_result", result.createReference());
 

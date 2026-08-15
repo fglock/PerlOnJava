@@ -113,7 +113,8 @@ public class BHooksEndOfScope extends PerlModuleBase {
 
     /** Enter a parser-visible lexical scope. */
     public static void beginCompileScope() {
-        state().compileScopes.push(new ArrayDeque<>());
+        state().compileScopes.push(new CompilationRuntimeState.EndOfScopeCompileScope(
+                getCurrentLoadingFile()));
     }
 
     /**
@@ -121,11 +122,11 @@ public class BHooksEndOfScope extends PerlModuleBase {
      * in LIFO order, matching the native hook's ordering.
      */
     public static void endCompileScope() {
-        Deque<Deque<RuntimeScalar>> scopes = state().compileScopes;
+        Deque<CompilationRuntimeState.EndOfScopeCompileScope> scopes = state().compileScopes;
         if (scopes.isEmpty()) {
             return;
         }
-        Deque<RuntimeScalar> callbacks = scopes.pop();
+        Deque<RuntimeScalar> callbacks = scopes.pop().callbacks;
         while (!callbacks.isEmpty()) {
             RuntimeScalar codeRef = callbacks.pop();
             try {
@@ -166,15 +167,14 @@ public class BHooksEndOfScope extends PerlModuleBase {
         
         // Prefer the innermost parser-visible lexical scope.  This is the
         // behavior required by namespace::clean for nested blocks.
-        Deque<Deque<RuntimeScalar>> scopes = state().compileScopes;
-        if (!scopes.isEmpty()) {
-            scopes.peek().push(codeRef);
+        String currentFile = getCurrentLoadingFile();
+        Deque<CompilationRuntimeState.EndOfScopeCompileScope> scopes = state().compileScopes;
+        if (!scopes.isEmpty() && Objects.equals(scopes.peek().ownerFile, currentFile)) {
+            scopes.peek().callbacks.push(codeRef);
             return new RuntimeList();
         }
 
         // Find which file is currently being loaded
-        String currentFile = getCurrentLoadingFile();
-        
         if (currentFile != null) {
             // Register callback for end of file load
             state().endOfScopeFileCallbacks.computeIfAbsent(currentFile, k -> new ArrayDeque<>()).push(codeRef);

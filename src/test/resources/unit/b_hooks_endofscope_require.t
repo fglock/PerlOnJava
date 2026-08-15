@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 5;
+use Test::More tests => 7;
 use File::Temp qw(tempdir);
 use File::Spec;
 
@@ -60,6 +60,21 @@ RequireScopeEndInstaller::install(__PACKAGE__);
 EOPM
 close $target_fh;
 
+my $outer_pm = File::Spec->catfile($tmp, 'RequireScopeEndOuter.pm');
+open my $outer_fh, '>', $outer_pm or die "open $outer_pm: $!";
+print {$outer_fh} <<'EOPM';
+package RequireScopeEndOuter;
+use strict;
+use warnings;
+
+{
+    use RequireScopeEndTarget ();
+}
+
+1;
+EOPM
+close $outer_fh;
+
 {
     local @INC = ($tmp, @INC);
 
@@ -83,5 +98,19 @@ close $target_fh;
         RequireScopeEndTarget->generated,
         'generated',
         'runtime-installed method remains callable',
+    );
+
+    delete $INC{'RequireScopeEndTarget.pm'};
+    {
+        no strict 'refs';
+        delete ${'RequireScopeEndTarget::'}{'generated'};
+    }
+
+    my $outer_loaded = eval { require RequireScopeEndOuter; 1 };
+    ok($outer_loaded, 'required module nested inside an outer compile scope loads')
+        or diag "\$@ = $@";
+    ok(
+        RequireScopeEndTarget->can('generated'),
+        'nested require keeps end-of-scope hooks with the required file',
     );
 }

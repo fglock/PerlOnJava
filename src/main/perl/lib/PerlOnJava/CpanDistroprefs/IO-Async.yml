@@ -8,7 +8,7 @@ comment: |
   capability so fork/process/routine tests skip instead of failing after the
   runtime correctly rejects fork().
 match:
-  distribution: "^PEVANS/IO-Async-"
+  distribution: "^PEVANS/IO-Async-[0-9]"
 patches:
   - "IO-Async/NoFork.patch"
   - "IO-Async/PerlOnJava.patch"
