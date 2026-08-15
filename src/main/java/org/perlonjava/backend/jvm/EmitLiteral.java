@@ -701,44 +701,40 @@ public class EmitLiteral {
     }
 
     /**
-     * Adds an element to a RuntimeList with type-specific optimizations.
+     * Adds an element to a RuntimeList with verifier-safe specialization.
      *
-     * <p>This method uses compile-time type information to generate optimized
-     * bytecode that calls the specific addToList method for known types, avoiding
-     * the overhead of interface dispatch when possible.</p>
+     * <p>List-valued expressions can cross control-flow/context boundaries that
+     * widen their verifier type to RuntimeBase. Other statically known values
+     * retain the specialized overloads used by hot list-construction paths.</p>
      *
      * <p>Stack transformation: [RuntimeList] [element] → [RuntimeList]</p>
      *
      * @param mv          The method visitor for bytecode generation
      * @param element     The AST node representing the element being added
-     * @param contextType The context type (used for scalar context optimization)
+     * @param contextType The context in which the list element was emitted
      */
     private static void addElementToList(MethodVisitor mv, Node element, int contextType) {
-        String returnType;
         // Stack: [RuntimeList] [element]
 
-        // Determine the element's return type for optimization
-        if (contextType == RuntimeContextType.SCALAR) {
-            // In scalar context, all elements are treated as scalars
-            returnType = RuntimeDescriptorConstants.SCALAR_TYPE;
-        } else if (contextType == RuntimeContextType.RUNTIME) {
-            // In RUNTIME context, array/hash elements may have been converted to RuntimeBase
-            // via emitRuntimeContextConversion(), so we must use the generic add(RuntimeBase)
+        String returnType = ReturnTypeVisitor.getReturnType(element);
+        String methodName = "add";
+        // Memoize::_wrap exposed a list-valued expression whose verifier type had
+        // been widened while control-flow branches were merged. The addList base
+        // entry point keeps the bytecode verifier-safe while preserving the old
+        // list-flattening semantics inside RuntimeList.
+        if (RuntimeDescriptorConstants.LIST_TYPE.equals(returnType)
+                && contextType != RuntimeContextType.RUNTIME) {
+            methodName = "addList";
             returnType = RuntimeDescriptorConstants.BASE_TYPE;
-        } else {
-            // Use static analysis to determine the element's return type
-            returnType = ReturnTypeVisitor.getReturnType(element);
+        } else if (contextType == RuntimeContextType.RUNTIME) {
+            returnType = RuntimeDescriptorConstants.BASE_TYPE;
         }
 
-        // Generate type-specific method call for better performance
-        if (RuntimeDescriptorConstants.isKnownRuntimeType(returnType)) {
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                    "add", "(" + returnType + ")V", false);
-        } else {
-            // Fall back for unknown types
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
-                    "add", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
+        if (!RuntimeDescriptorConstants.isKnownRuntimeType(returnType)) {
+            returnType = RuntimeDescriptorConstants.BASE_TYPE;
         }
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
+                methodName, "(" + returnType + ")V", false);
     }
 
     /**

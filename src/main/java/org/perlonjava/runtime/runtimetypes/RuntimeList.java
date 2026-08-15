@@ -199,6 +199,15 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Verifier-safe entry point for values statically known to be RuntimeList.
+     * Control-flow merges may widen the JVM stack type to RuntimeBase even though
+     * the Perl expression contract still guarantees a list result.
+     */
+    public void addList(RuntimeBase value) {
+        add((RuntimeList) value);
+    }
+
+    /**
      * Gets the size of the list.
      *
      * @return The number of elements in the list.

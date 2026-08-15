@@ -338,6 +338,7 @@ public class StatementParser {
      * @return An IfNode representing the if/unless/elsif statement
      */
     private static Node parseIfStatementInternal(Parser parser, boolean enterNewScope) {
+        int statementStartIndex = parser.tokenIndex;
         LexerToken operator = TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "if", "unless", "elsif"
 
         // Enter a new scope for 'if' and 'unless' (but not for 'elsif' which is part of the same chain)
@@ -375,10 +376,40 @@ public class StatementParser {
         TestMoreHelper.handleSkipTest(parser, thenBranch);
 
         IfNode result = new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
+        // A lexical declaration in the condition owns the next COP in Perl, so
+        // the first standalone call reports the conditional's source line.
+        // Ordinary conditions keep the call's own line (see op/caller.t).
+        if (!thenBranch.elements.isEmpty()
+                && thenBranch.elements.get(0) instanceof BinaryOperatorNode first
+                && "(".equals(first.operator)
+                && conditionContainsLexicalDeclaration(condition)) {
+            first.setAnnotation("callerLineTokenOverride", statementStartIndex);
+        }
         if (enterNewScope) {
             result.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
         }
         return result;
+    }
+
+    private static boolean conditionContainsLexicalDeclaration(Node node) {
+        if (node instanceof OperatorNode operatorNode) {
+            if ("my".equals(operatorNode.operator) || "state".equals(operatorNode.operator)) {
+                return true;
+            }
+            return conditionContainsLexicalDeclaration(operatorNode.operand);
+        }
+        if (node instanceof BinaryOperatorNode binaryNode) {
+            return conditionContainsLexicalDeclaration(binaryNode.left)
+                    || conditionContainsLexicalDeclaration(binaryNode.right);
+        }
+        if (node instanceof ListNode listNode) {
+            for (Node element : listNode.elements) {
+                if (conditionContainsLexicalDeclaration(element)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
