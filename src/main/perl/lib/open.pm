@@ -60,7 +60,6 @@ sub import {
         }
     }
 
-    ${^OPEN} = join( "\0", defined $in ? $in : '', defined $out ? $out : '' );
     $^H{'open<'} = $in  if defined $in;
     $^H{'open>'} = $out if defined $out;
 

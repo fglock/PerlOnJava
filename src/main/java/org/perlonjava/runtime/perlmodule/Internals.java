@@ -72,6 +72,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_cv_start_location", "jperlCvStartLocation", "$");
             internals.registerMethod("jperl_cv_deparse_info", "jperlCvDeparseInfo", "$");
             internals.registerMethod("jperl_cv_is_constant", "jperlCvIsConstant", "$");
+            internals.registerMethod("jperl_mark_pseudo_constant", "jperlMarkPseudoConstant", "$$");
             internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
             internals.registerMethod("jperl_b_object_2svref", "jperlBObject2svref", "$");
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
@@ -981,5 +982,22 @@ public class Internals extends PerlModuleBase {
         }
         boolean isConst = code.constantValue != null || code.isConstantCv;
         return new RuntimeScalar(isConst ? 1 : 0).getList();
+    }
+
+    /** Preserve constant.pm's scalar-reference proxy in the stash hash view. */
+    public static RuntimeList jperlMarkPseudoConstant(RuntimeArray args, int ctx) {
+        if (args.size() >= 2) {
+            RuntimeScalar proxy = args.get(1);
+            if (proxy.type == RuntimeScalarType.REFERENCE
+                    && proxy.value instanceof RuntimeScalar target) {
+                proxy = target;
+            }
+            if (proxy.type == RuntimeScalarType.READONLY_SCALAR
+                    && proxy.value instanceof RuntimeScalar target) {
+                proxy = target;
+            }
+            GlobalVariable.setGlobalPseudoConstant(args.get(0).toString(), proxy);
+        }
+        return new RuntimeList();
     }
 }

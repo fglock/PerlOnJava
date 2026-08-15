@@ -28,6 +28,7 @@ public class DynaLoader extends PerlModuleBase {
             // and the modules fall through to their pure-Perl implementations.
             dynaLoader.registerMethod("dl_findfile", "dl_empty", null);
             dynaLoader.registerMethod("dl_load_file", "dl_empty", null);
+            dynaLoader.registerMethod("dl_load_flags", "dl_load_flags", null);
             dynaLoader.registerMethod("dl_find_symbol", "dl_empty", null);
             dynaLoader.registerMethod("dl_find_symbol_anywhere", "dl_empty", null);
             dynaLoader.registerMethod("dl_install_xsub", "dl_empty", null);
@@ -72,6 +73,10 @@ public class DynaLoader extends PerlModuleBase {
      */
     public static RuntimeList dl_empty(RuntimeArray args, int ctx) {
         return new RuntimeList();
+    }
+
+    public static RuntimeList dl_load_flags(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
     }
 
     public static RuntimeList dl_error(RuntimeArray args, int ctx) {

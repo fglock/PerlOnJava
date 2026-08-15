@@ -9,6 +9,7 @@ package org.perlonjava.runtime.runtimetypes;
  */
 
 import org.perlonjava.runtime.io.*;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.operators.IOOperator;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
@@ -720,7 +721,7 @@ public class RuntimeIO extends RuntimeScalar {
                     // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
                     fh.ioHandle = new SeekableJarHandle(is);
                     addHandle(fh.ioHandle);
-                    if (!fh.applyOpenLayers(ioLayers)) {
+                    if (!fh.applyOpenLayers(ioLayers, mode)) {
                         return null;
                     }
                     return fh;
@@ -761,7 +762,7 @@ public class RuntimeIO extends RuntimeScalar {
             }
 
             // Apply any I/O layers
-            if (!fh.applyOpenLayers(ioLayers)) {
+            if (!fh.applyOpenLayers(ioLayers, mode)) {
                 return null;
             }
 
@@ -772,7 +773,16 @@ public class RuntimeIO extends RuntimeScalar {
         return fh;
     }
 
-    private boolean applyOpenLayers(String ioLayers) {
+    private boolean applyOpenLayers(String ioLayers, String mode) {
+        if (ioLayers == null || ioLayers.isEmpty()) {
+            Map<String, String> hints = HintHashRegistry.getCurrentCallSiteHintHash();
+            String key = mode != null && mode.contains(">") ? "open>" : "open<";
+            String lexicalLayer = hints == null ? null : hints.get(key);
+            // open.pm defaults are lexical compiler hints. An unrelated
+            // package's use open must not leak through the process-global
+            // ${^OPEN} compatibility scalar into this call site.
+            ioLayers = lexicalLayer == null || lexicalLayer.isEmpty() ? ":raw" : lexicalLayer;
+        }
         RuntimeScalar status = binmode(ioLayers);
         if (status.getBoolean()) {
             return true;
@@ -879,7 +889,7 @@ public class RuntimeIO extends RuntimeScalar {
         // PerlIO::scalar is not a real OS file descriptor, so a plain scalar
         // open should not inherit the platform text layer such as Windows :crlf.
         if (!ioLayers.isEmpty()) {
-            if (!fh.applyOpenLayers(ioLayers)) {
+            if (!fh.applyOpenLayers(ioLayers, mode)) {
                 return null;
             }
         }
@@ -972,7 +982,7 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Apply any I/O layers (excluding the already-processed :noshell)
             if (!ioLayers.isEmpty()) {
-                if (!fh.applyOpenLayers(ioLayers)) {
+                if (!fh.applyOpenLayers(ioLayers, mode)) {
                     return null;
                 }
             }

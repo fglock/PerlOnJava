@@ -157,7 +157,7 @@ public class InheritanceResolver {
         
         // Build current ISA list
         List<String> currentIsa = new ArrayList<>();
-        for (RuntimeBase entity : isaArray.elements) {
+        for (RuntimeBase entity : visibleArrayElements(isaArray)) {
             String parentName = entity.toString();
             if (parentName != null && !parentName.isEmpty()) {
                 currentIsa.add(parentName);
@@ -342,7 +342,7 @@ public class InheritanceResolver {
         // Retrieve @ISA array for the given class
         RuntimeArray isaArray = getIsaArrayForClass(className);
         List<String> parents = new ArrayList<>();
-        for (RuntimeBase entity : isaArray.elements) {
+        for (RuntimeBase entity : visibleArrayElements(isaArray)) {
             String parentName = entity.toString();
             // Handle undef elements as "main" for Perl compatibility
             if (parentName == null || parentName.equals("")) {
@@ -367,6 +367,26 @@ public class InheritanceResolver {
         }
 
         currentPath.remove(className);
+    }
+
+    /**
+     * Return the Perl-visible contents of an array.
+     *
+     * <p>Most package {@code @ISA} arrays are ordinary arrays, but Perl permits
+     * them to be tied. Method lookup must honor the tie's {@code FETCHSIZE} and
+     * {@code FETCH} methods; reading {@link RuntimeArray#elements} directly sees
+     * only the empty backing list used by a tied array.</p>
+     */
+    static List<RuntimeScalar> visibleArrayElements(RuntimeArray array) {
+        if (array.type != RuntimeArray.TIED_ARRAY) {
+            return array.elements;
+        }
+        List<RuntimeScalar> visible = new ArrayList<>();
+        int size = TieArray.tiedFetchSize(array).getInt();
+        for (int i = 0; i < size; i++) {
+            visible.add(array.get(i));
+        }
+        return visible;
     }
 
     /**
