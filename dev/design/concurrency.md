@@ -214,8 +214,8 @@ gate. The same matrix runs on JVM/interpreter and platform/virtual carriers.
 `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class` must pass before a pull request
 is opened. Merge additionally requires green Ubuntu and Windows CI.
 
-Direct regex-language parity, including Joni integration, is maintained
-separately.
+The callout-enabled Joni matcher and executable callback bridge are integrated.
+Remaining direct regex-language parity is maintained separately.
 Threaded regex wrappers remain preservation gates against their same-commit
 direct companions.
 
@@ -224,11 +224,12 @@ direct companions.
 - `dev/design/attributes.md` defines the supported `shared` attribute surface.
 - `dev/design/runtime-pooling-reset-contract.md` defines the implemented
   bounded pool reset and fresh-runtime replacement contract.
-- `dev/design/phase36-regex-parity.md` owns direct regex-language and Joni work.
+- `dev/design/phase36-regex-parity.md` owns remaining direct regex-language work
+  on top of the integrated Joni callout engine.
 
 ## 7. Progress Tracking
 
-### Current Status: delivered; Joni/regex parity is separate
+### Current Status: delivered; direct regex parity is separate
 
 `PerlRuntime` owns interpreter state, ithreads clone one isolated runtime graph,
 and `threads::shared` supplies explicit cross-runtime storage and synchronization.
@@ -236,9 +237,10 @@ The unchanged upstream `threads`, `threads-shared`, `Thread-Queue`, and
 `Thread-Semaphore` distributions are the executable compatibility contract on
 both execution backends and both Java carrier policies.
 
-Direct regex-language parity, including Joni integration, is maintained in the
-separate regex project. Threaded regex wrappers remain preservation gates
-against their same-commit direct companions.
+The callout-enabled Joni matcher is part of the shipped runtime. Remaining
+direct regex-language gaps are maintained in the separate regex project.
+Threaded regex wrappers remain preservation gates against their same-commit
+direct companions.
 
 Completed implementation history, validation evidence, and superseded decisions
 are intentionally omitted here and are recoverable from commit messages and pull
@@ -251,19 +253,24 @@ requests.
    signal, stack, wait, timeout, and deadlock coverage.
 2. Run `make test-threads-release` before any thread/runtime release. It extends
    the pull-request gate to the complete four-module matrix on platform carriers.
-3. Continue CPAN ecosystem hardening: opt-in Test2 stress tests, remaining Moose
-   thread-suite classification, Net::SSLeay callback suites 61/62, and permanent
-   DBI ownership plus DBIx::Class release coverage.
-4. Require every future native resource, I/O handle, and callback adapter to
+3. Keep `make test-threads-regex` in the release matrix: lexical regex
+   debugging, user-property coordination, recursive definitions, special
+   character classes, and callback-heavy psycho patterns. Its five unchanged
+   files contain 48 assertions and pass on both backends. Partial wrappers must
+   preserve their same-commit direct result until Phase 36 closes the direct gap.
+4. Run `make test-threads-ecosystem` for native callback and ORM releases. Add
+   the opt-in Test2 stress tests and remaining Moose thread-suite cases once
+   their unchanged upstream sources are available as a pinned test corpus.
+5. Require every future native resource, I/O handle, and callback adapter to
    declare its runtime ownership, snapshot, aliasing, and close policy.
-5. Monitor snapshot retention and startup cost. Runtime pooling remains bounded,
+6. Monitor snapshot retention and startup cost. Runtime pooling remains bounded,
    opt-in, and disabled by default; returned application runtimes are replaced,
    not partially reused.
-6. Keep direct regex-language and Joni work in the separate Phase 36 project.
+7. Keep remaining direct regex-language work in the separate Phase 36 project.
    Threaded regex wrappers must preserve their same-commit direct behavior.
 
-Direct regex-language work, including Joni integration, is not part of this
-release.
+Remaining direct regex-language work is not part of this release. The Joni
+callout engine and executable callback bridge are already integrated.
 Unchanged regex thread wrappers remain preservation gates and must not regress
 relative to their same-commit direct companions.
 

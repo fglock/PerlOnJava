@@ -389,7 +389,7 @@ my @copy = @{$z};         # ERROR
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - 🟡  **Recursive Patterns**: `(?R)` and `(?0)` execute through Joni. Constant `(??{ code })` expressions fold to a pattern; runtime-dependent dynamic patterns remain unsupported.
-- ❌  **Backtracking Control Verbs and Definitions**: Features such as `(*PRUNE)`, `(*SKIP)`, and `(?(DEFINE)...)` are not supported. Atomic groups `(?>...)` are supported as noted above.
+- 🟡  **Backtracking Control Verbs and Definitions**: `(?(DEFINE)...)` and named recursive definitions execute through Joni. Control verbs such as `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` are not yet complete. Atomic groups `(?>...)` are supported as noted above.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
 - ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.
 - ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
@@ -397,7 +397,7 @@ my @copy = @{$z};         # ERROR
 - ❌  **Extended Unicode Regex Features**: Some extended Unicode regex functionalities are not supported.
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
 - 🟡  **Embedded Code in Regex**: `(?{ code })` and executable callback conditions run as lexical closures in Joni with provisional captures, `$^R`, and backtracking unwind. Runtime-dependent `(??{ code })` remains unsupported.
-- ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
+- 🟡  **Regex Debugging**: Lexical `use/no re 'debug'` and `debugcolor` state is runtime-owned and produces a stable compile/execution trace on both backends and in child threads. Exact Perl optimizer opcodes and diagnostic wording are not complete.
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
 - ❌  **Stricter named captures**
@@ -875,7 +875,7 @@ storage as their parent counterparts. Values explicitly shared through
 | Effective stack sizing | Platform-backed children honor supported `stack_size` create/import requests. A nonzero request under the default virtual policy transparently selects a platform child. |
 | Additional introspection | `threads->object` and creation-context `wantarray` are implemented. CLI shutdown reports running and finished unjoined threads; detached children are silent. |
 | Native resources and callbacks | File, socket, process, native-descriptor, scalar, layered, duplicated, borrowed, directory, and standard handles have explicit inheritance policies. Net::SSLeay handles remain runtime-owned and stored callbacks bind their registering runtime. |
-| Upstream suite coverage | The four bundled thread distributions pass 64 files and 1,891 assertions in each backend/carrier configuration. The PR gate runs two complete virtual configurations plus focused platform lifecycle coverage; the release gate runs all four complete configurations. Direct regex-language gaps remain in the separate Phase 36 project. |
+| Upstream suite coverage | The four bundled thread distributions pass 64 files and 1,891 assertions in each backend/carrier configuration. The PR gate runs two complete virtual configurations plus focused platform lifecycle coverage; the release gate runs all four complete configurations and five post-Joni regex-thread files (48 assertions) on both backends. `make test-threads-ecosystem` adds Net::SSLeay 61/62 and DBIx::Class. Remaining direct regex-language gaps stay in the separate Phase 36 project. |
 | PSGI | The default single-runtime handler advertises `psgi.multithread => \0`. A bounded opt-in pool gives every concurrent request an independent app snapshot and advertises `\1`; pool size defaults to zero. |
 
 See the [Perl threads reference](threads.md) for behavior and test commands and
