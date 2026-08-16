@@ -160,6 +160,18 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Add a value after taking a structural snapshot of its flattened list.
+     * Scalar objects are deliberately retained so foreach aliases still modify
+     * their original values; only aggregate membership is copied.
+     */
+    public void addSnapshot(RuntimeBase value) {
+        Iterator<RuntimeScalar> iterator = value.iterator();
+        while (iterator.hasNext()) {
+            this.elements.add(iterator.next());
+        }
+    }
+
+    /**
      * Adds an integer value to the list.
      *
      * @param value The integer value to add.

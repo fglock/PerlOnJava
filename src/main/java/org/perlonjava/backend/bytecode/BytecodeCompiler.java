@@ -5554,7 +5554,11 @@ public class BytecodeCompiler implements Visitor {
         int listReg = allocateRegister();
         emit(Opcodes.CREATE_LIST);
         emitReg(listReg);
-        emit(node.elements.size()); // count
+        // A negative encoded count asks CREATE_LIST to flatten aggregate
+        // membership immediately. This preserves Perl's `((), @array)` copy
+        // idiom without cloning the scalar aliases themselves.
+        boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"));
+        emit(forceListSnapshot ? -node.elements.size() - 1 : node.elements.size()); // count
 
         // Emit register numbers for each element
         for (int elemReg : elementRegs) {
@@ -6986,7 +6990,7 @@ public class BytecodeCompiler implements Visitor {
             int listReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
             emitReg(listReg);
-            emit(1); // count = 1
+            emit(Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot")) ? -2 : 1); // count = 1
             emitReg(elemReg);
             lastResultReg = listReg;
             return;

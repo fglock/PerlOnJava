@@ -1839,12 +1839,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * Inner class implementing the Iterator interface for RuntimeArray.
      */
     private class RuntimeArrayIterator implements Iterator<RuntimeScalar> {
-        private final int size = elements.size();
         private int currentIndex = 0;
 
         @Override
         public boolean hasNext() {
-            return currentIndex < size;
+            // Perl permits the iterated array to be structurally mutated.  Its
+            // foreach cursor follows the current array length instead of an
+            // original-size snapshot (which could otherwise index past the end).
+            return currentIndex < elements.size();
         }
 
         @Override

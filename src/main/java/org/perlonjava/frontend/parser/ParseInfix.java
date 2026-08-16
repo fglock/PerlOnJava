@@ -206,6 +206,9 @@ public class ParseInfix {
         switch (token.text) {
             case ",":
             case "=>":
+                boolean forceListSnapshot = token.text.equals(",")
+                        && left instanceof ListNode leftList
+                        && leftList.elements.isEmpty();
                 if (token.text.equals("=>") && left instanceof IdentifierNode) {
                     // Autoquote - Convert IdentifierNode to StringNode.
                     // Strip trailing "::" so that `Foo::Bar:: => ...` autoquotes to "Foo::Bar",
@@ -222,7 +225,15 @@ public class ParseInfix {
                     return ListNode.makeList(left);
                 }
                 right = parser.parseExpression(precedence);
-                return ListNode.makeList(left, right);
+                ListNode combined = ListNode.makeList(left, right);
+                if (forceListSnapshot) {
+                    // Perl code uses `((), @array)` to force a structural copy of
+                    // the iteration list while retaining aliases to its scalar
+                    // elements.  Do not erase that distinction when flattening
+                    // the comma expression into a ListNode.
+                    combined.setAnnotation("forceListSnapshot", true);
+                }
+                return combined;
             case "?":
                 // Handle ternary operator
                 Node middle = parser.parseExpression(0);
