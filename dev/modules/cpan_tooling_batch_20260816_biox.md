@@ -8,7 +8,7 @@ the primary fix.
 
 ## Progress Tracking
 
-### Current Status: implementation and local validation complete; CI verification in progress
+### Current Status: complete
 
 ### Completed Phases
 
@@ -56,11 +56,16 @@ the primary fix.
     system-Perl exception. Its own system-Perl suite fails, and the current
     CPAN package index no longer contains Nephia or three declared companion
     plugins. MetaCPAN identifies those releases as BackPAN-only.
+- [x] Pull request verification (2026-08-16)
+  - PR #979 contains the complete compiler, runtime, CPAN tooling, and test
+    changes.
+  - GitHub Actions passed on Windows in 18m55s.
+  - GitHub Actions passed on Ubuntu, including the pinned Perl thread
+    compatibility gate, in 23m12s.
 
 ### Next Steps
 
-1. Commit and push the feature branch.
-2. Update PR #979 and monitor GitHub Actions.
+1. Review and merge PR #979.
 
 ### Open Questions
 
