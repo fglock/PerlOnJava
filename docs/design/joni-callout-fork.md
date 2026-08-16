@@ -28,10 +28,11 @@ commit messages, not here.
 
 ## Internal callout syntax
 
-The structured Perl regex frontend emits `(?{=CALL:<id>})` only in an
-engine-facing skeleton. `<id>` is a non-negative decimal index into the callback
-table owned by that regex value. The fork parses this representation into a
-dedicated callout node; it never parses Perl source.
+The structured Perl regex frontend emits `(?{=CALL:<id>})` for plain and
+conditional callbacks and `(?{=DYNAMIC:<id>})` for dynamic subprograms only in
+an engine-facing skeleton. `<id>` is a non-negative decimal index into the
+callback table owned by that regex value. The fork parses these representations
+into dedicated callout nodes; it never parses Perl source.
 
 Runtime-interpolated pattern text must not be promoted to trusted skeleton
 syntax. The PerlOnJava frontend remains responsible for preserving source
@@ -44,8 +45,15 @@ The fork exposes a runtime-neutral API in `org.joni`:
 ```java
 interface CalloutHandler {
     CalloutResult execute(int calloutId, MatchView match);
+    default DynamicPatternResult executeDynamic(int calloutId, MatchView match);
     void unwind(Object backtrackToken);
     default void complete(Object successfulToken) { unwind(successfulToken); }
+}
+
+final class DynamicPatternResult {
+    Regex getRegex();
+    CalloutHandler getCalloutHandler();
+    Object getBacktrackToken();
 }
 
 interface MatchView {
@@ -64,6 +72,11 @@ state.
 token. The engine neither interprets that token nor depends on PerlOnJava
 runtime classes.
 
+`DynamicPatternResult` supplies a compiled nested program, its matcher-local
+handler, and the token for the dynamic expression's provisional Perl state. The
+default `executeDynamic` implementation fails fast, so handlers that only use
+plain callouts remain source compatible.
+
 ## Execution and unwind contract
 
 1. The callout opcode invokes the handler with the callout ID and a read-only
@@ -78,12 +91,20 @@ runtime classes.
    still-active token in reverse execution order.
 6. A `FAIL` result enters normal matcher backtracking after installing the frame,
    so cleanup follows the same path as later-pattern failure.
-7. Patterns without callout nodes allocate no handler state or callout frames.
+7. A dynamic callout resolves its nested program only when execution reaches
+   the opcode. The nested matcher yields one result at a time; an outer failure
+   resumes the nested matcher at its next alternative before the outer engine
+   backtracks past the dynamic frame.
+8. Nested captures remain private to the nested matcher. Its endpoint advances
+   the outer input position, while outer capture numbering and match variables
+   remain unchanged.
+9. Completing or abandoning a nested continuation propagates completion or
+   unwind to all of its active callback tokens exactly once.
+10. Patterns without callout nodes allocate no handler state or callout frames.
 
 Callback conditions use an internal conditional-callout opcode. `CONTINUE`
 selects the yes branch and `FAIL` selects the no branch without treating the
-condition itself as a failed match. Dynamic nested patterns remain outside this
-contract until their alternatives can participate in outer backtracking.
+condition itself as a failed match.
 
 ## Structured Perl frontend
 
@@ -106,10 +127,11 @@ retaining the last successful plain callback result.
 
 Every structured executable callback template selects Joni, including a
 callback whose body happens to return a constant: `(?{ 1 })` still has match-time
-side effects and unwind semantics. Constant dynamic-pattern expressions
-`(??{ ... })` may retain the existing compile-time fold path; a runtime-dependent
-dynamic-pattern closure selects Joni only after the nested-pattern backtracking
-contract is implemented.
+side effects and unwind semantics. Runtime-dependent dynamic-pattern expressions
+also select Joni and execute only when their opcode is reached. Semantically safe
+constant expressions may use the compile-time fold path; constants with captures
+or top-level alternatives remain dynamic so they cannot change outer grouping or
+capture numbers.
 
 Literal match targets have one stable scalar identity per compiled call site so
 `pos()` and `/g` survive repeated loop execution without allowing two identical
@@ -170,8 +192,9 @@ branch reset, subpattern calls, conditions, extended Unicode and graphemes,
 embedded code, regex debugging, runtime eval, lexical default flags, and named
 capture behavior. As each feature becomes executable, patterns containing it
 select Joni. The current selector routes declarative subpattern calls and every
-structured executable callback template; constant `(??{...})` expressions keep
-their established fold-to-pattern path.
+structured executable callback template, including runtime `(??{...})`.
+Semantically safe constant dynamic expressions may keep their established
+fold-to-pattern path.
 
 ## Implementation stages
 
@@ -185,8 +208,8 @@ their established fold-to-pattern path.
 6. Publish provisional match state for plain callbacks and preserve `$^R` across
    successful completion and backtracking.
 7. Add dynamic-local checkpoints and callback conditions.
-8. Add dynamic nested patterns only after focused differential tests establish
-   their outer-backtracking contract.
+8. Resolve dynamic nested programs at match time and preserve their alternatives
+   as resumable matcher continuations on the outer backtracking stack.
 
 ## Verification
 
@@ -199,8 +222,11 @@ their established fold-to-pattern path.
   both relocated trees, and includes all required notices.
 - An embedding smoke test can load stock Joni and PerlOnJava together.
 - Full `make` and the focused direct/thread regex matrix pass.
-- The executable-callback unit test passes under standard Perl and both
-  PerlOnJava execution backends.
+- The executable-callback and dynamic-pattern unit tests pass under standard
+  Perl and both PerlOnJava execution backends.
+- Dynamic-pattern tests cover delayed expression evaluation, returned strings
+  and `qr//` values, private nested captures, outer-suffix backtracking, nested
+  callback cleanup, and recursive `qr//` values.
 - `dev/tools/perl_test_runner.pl perl5_t/t/re/` is compared file-by-file with
   `../PerlOnJava/logs/test_20260815_080000_958.log`; no previously passing regex
   file may regress, and changed pass counts or blocked-test totals are reported.

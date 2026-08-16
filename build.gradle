@@ -84,7 +84,7 @@ cyclonedxBom {
     outputFormat = "all"  // Generate both JSON and XML
     componentName = "perlonjava"
     componentVersion = project.version
-    organizationalEntity { oe ->
+    organizationalEntity = { oe ->
         oe.name = "PerlOnJava Project"
         oe.urls = ["https://github.com/fglock/PerlOnJava"]
     }
@@ -260,6 +260,10 @@ tasks.withType(JavaCompile).configureEach {
 // Test execution configuration with native access and adequate heap
 tasks.withType(Test).configureEach {
     jvmArgs += '--enable-native-access=ALL-UNNAMED'
+    // Netty still uses the transitional sun.misc.Unsafe memory API. PerlOnJava
+    // requires Java 24, where explicitly allowing it suppresses the terminal
+    // deprecation banner while retaining the tested Netty allocation path.
+    jvmArgs += '--sun-misc-unsafe-memory-access=allow'
     maxHeapSize = '1g'
 }
 

@@ -4,6 +4,7 @@ import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
 import org.joni.CalloutHandler;
 import org.joni.CalloutResult;
+import org.joni.DynamicPatternResult;
 import org.joni.MatchView;
 import org.joni.NameEntry;
 import org.joni.Option;
@@ -27,9 +28,15 @@ final class JoniRegexPattern {
     private final Regex regex;
     private final String sourcePattern;
     private final Map<String, Integer> namedGroups;
+    private final RegexFlags flags;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
-        sourcePattern = translatePattern(perlPattern, flags);
+        this(perlPattern, flags, 0);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount) {
+        this.flags = flags;
+        sourcePattern = translatePattern(perlPattern, flags, trustedCalloutCount);
         byte[] bytes = sourcePattern.getBytes(StandardCharsets.UTF_8);
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags),
                 UTF8Encoding.INSTANCE, Syntax.RUBY);
@@ -37,11 +44,15 @@ final class JoniRegexPattern {
     }
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
-        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, input, callbacks);
+        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags, input, callbacks);
     }
 
     String patternDescription() {
         return sourcePattern;
+    }
+
+    Regex engineRegex() {
+        return regex;
     }
 
     private static int toJoniOptions(RegexFlags flags) {
@@ -63,6 +74,7 @@ final class JoniRegexPattern {
     static boolean requiresJoniBackend(String pattern) {
         if (pattern == null) return false;
         return pattern.contains("(?{=CALL:")
+                || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(?(?{=CALL:")
                 || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
                 || pattern.contains("(?&")
@@ -70,10 +82,11 @@ final class JoniRegexPattern {
     }
 
     static String translatePattern(String pattern) {
-        return translatePattern(pattern, RegexFlags.fromModifiers("", pattern));
+        return translatePattern(pattern, RegexFlags.fromModifiers("", pattern), 0);
     }
 
-    private static String translatePattern(String pattern, RegexFlags flags) {
+    private static String translatePattern(String pattern, RegexFlags flags,
+                                           int trustedCalloutCount) {
         pattern = translateDefineBlocks(pattern);
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
@@ -101,7 +114,7 @@ final class JoniRegexPattern {
                 continue;
             }
             if (!inClass && pattern.startsWith("(?{", i)
-                    && !pattern.startsWith("(?{=CALL:", i)) {
+                    && !isTrustedCallout(pattern, i, trustedCalloutCount)) {
                 // A callback introduced as text by runtime interpolation has
                 // no parser-created lexical closure to invoke. Preserve the
                 // historical compatibility behavior for that unsupported
@@ -174,6 +187,24 @@ final class JoniRegexPattern {
             out.append(ch);
         }
         return out.toString();
+    }
+
+    private static boolean isTrustedCallout(String pattern, int offset, int callbackCount) {
+        String prefix;
+        if (pattern.startsWith("(?{=CALL:", offset)) prefix = "(?{=CALL:";
+        else if (pattern.startsWith("(?{=DYNAMIC:", offset)) prefix = "(?{=DYNAMIC:";
+        else return false;
+
+        int idStart = offset + prefix.length();
+        int idEnd = idStart;
+        while (idEnd < pattern.length() && Character.isDigit(pattern.charAt(idEnd))) idEnd++;
+        if (idEnd == idStart || !pattern.startsWith("})", idEnd)) return false;
+        try {
+            int id = Integer.parseInt(pattern.substring(idStart, idEnd));
+            return id >= 0 && id < callbackCount;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
     }
 
     private static int findCodeBlockEnd(String pattern, int offset) {
@@ -306,6 +337,7 @@ final class JoniRegexPattern {
         private final Regex regex;
         private final String sourcePattern;
         private final Map<String, Integer> namedGroups;
+        private final RegexFlags flags;
         private final String input;
         private final byte[] bytes;
         private final int[] charToByte;
@@ -320,10 +352,11 @@ final class JoniRegexPattern {
         private PerlCalloutHandler calloutHandler;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
-                         String input, List<RuntimeRegexCallback> callbacks) {
+                         RegexFlags flags, String input, List<RuntimeRegexCallback> callbacks) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
+            this.flags = flags;
             this.input = input;
             this.callbacks = callbacks;
             this.bytes = input.getBytes(StandardCharsets.UTF_8);
@@ -340,7 +373,7 @@ final class JoniRegexPattern {
             }
             matcher = regex.matcher(bytes);
             if (!callbacks.isEmpty()) {
-                calloutHandler = new PerlCalloutHandler(input, byteToChar, callbacks);
+                calloutHandler = new PerlCalloutHandler(input, byteToChar, callbacks, flags);
                 matcher.setCalloutHandler(calloutHandler);
             }
             int result = matcher.search(charToByte[nextStart], charToByte[regionEnd], Option.NONE);
@@ -459,17 +492,65 @@ final class JoniRegexPattern {
         private final String input;
         private final int[] byteToChar;
         private final List<RuntimeRegexCallback> callbacks;
+        private final RegexFlags outerFlags;
         private RuntimeScalar completedResult;
 
-        PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks) {
+        PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
+                           RegexFlags outerFlags) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
+            this.outerFlags = outerFlags;
         }
 
         @Override
         public CalloutResult execute(int id, MatchView match) {
             RuntimeRegexCallback callback = callbacks.get(id);
+            if (callback.kind == RuntimeRegexCallback.Kind.DYNAMIC) {
+                throw new IllegalStateException("dynamic callback used as a plain callout");
+            }
+            Evaluation evaluation = evaluate(callback, match);
+            RuntimeScalar result = evaluation.result();
+            Token token = evaluation.token();
+            return callback.kind == RuntimeRegexCallback.Kind.CONDITION && !result.getBoolean()
+                    ? CalloutResult.failWith(token) : CalloutResult.continueWith(token);
+        }
+
+        @Override
+        public DynamicPatternResult executeDynamic(int id, MatchView match) {
+            RuntimeRegexCallback callback = callbacks.get(id);
+            if (callback.kind != RuntimeRegexCallback.Kind.DYNAMIC) {
+                throw new IllegalStateException("plain callback used as a dynamic callout");
+            }
+            Evaluation evaluation = evaluate(callback, match);
+            RuntimeScalar value = evaluation.result();
+            JoniRegexPattern nestedPattern;
+            List<RuntimeRegexCallback> nestedCallbacks = List.of();
+            if (value.value instanceof RuntimeRegex runtimeRegex) {
+                RegexFlags nestedFlags = runtimeRegex.getRegexFlags() == null
+                        ? outerFlags : runtimeRegex.getRegexFlags();
+                nestedPattern = new JoniRegexPattern(runtimeRegex.patternString, nestedFlags,
+                        runtimeRegex.executableCallbacks.size());
+                nestedCallbacks = runtimeRegex.executableCallbacks;
+            } else if (value.value instanceof RuntimeRegexTemplate template) {
+                nestedPattern = new JoniRegexPattern(template.pattern(), outerFlags,
+                        template.callbacks().size());
+                nestedCallbacks = template.callbacks();
+            } else {
+                nestedPattern = new JoniRegexPattern(value.toString(), outerFlags);
+            }
+            CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
+                    : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
+                            value.value instanceof RuntimeRegex runtimeRegex
+                                    && runtimeRegex.getRegexFlags() != null
+                                    ? runtimeRegex.getRegexFlags() : outerFlags);
+            return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
+                    evaluation.token());
+        }
+
+        private record Evaluation(RuntimeScalar result, Token token) {}
+
+        private Evaluation evaluate(RuntimeRegexCallback callback, MatchView match) {
             int localLevel = DynamicVariableManager.getLocalLevel();
             RegexState savedRegex = new RegexState();
             RuntimeScalar rVariable = GlobalVariable.getGlobalVariable(
@@ -482,8 +563,7 @@ final class JoniRegexPattern {
             boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
             if (block) rVariable.set(result);
             Token token = new Token(localLevel, savedRegex, previousR, result.clone(), block);
-            return callback.kind == RuntimeRegexCallback.Kind.CONDITION && !result.getBoolean()
-                    ? CalloutResult.failWith(token) : CalloutResult.continueWith(token);
+            return new Evaluation(result, token);
         }
 
         @Override

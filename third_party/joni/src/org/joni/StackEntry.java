@@ -23,6 +23,7 @@ class StackEntry {
     int type;
     private int E1, E2, E3, E4;
     private Object calloutToken;
+    private ByteCodeMachine.DynamicContinuation dynamicContinuation;
 
     // first union member
     /* byte code position */
@@ -186,6 +187,16 @@ class StackEntry {
         Object token = calloutToken;
         calloutToken = null;
         return token;
+    }
+
+    void setDynamicContinuation(ByteCodeMachine.DynamicContinuation continuation) {
+        dynamicContinuation = continuation;
+    }
+
+    ByteCodeMachine.DynamicContinuation takeDynamicContinuation() {
+        ByteCodeMachine.DynamicContinuation continuation = dynamicContinuation;
+        dynamicContinuation = null;
+        return continuation;
     }
 }
 

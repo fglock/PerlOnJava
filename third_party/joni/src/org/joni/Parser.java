@@ -721,11 +721,16 @@ class Parser extends Lexer {
     }
 
     private Node parseInternalCallout() {
-        return new CalloutNode(parseInternalCalloutId());
+        final String dynamicPrefix = "=DYNAMIC:";
+        boolean dynamic = startsWith(dynamicPrefix);
+        return new CalloutNode(parseInternalCalloutId(dynamic ? dynamicPrefix : "=CALL:"), dynamic);
     }
 
     private int parseInternalCalloutId() {
-        final String prefix = "=CALL:";
+        return parseInternalCalloutId("=CALL:");
+    }
+
+    private int parseInternalCalloutId(String prefix) {
         for (int i = 0; i < prefix.length(); i++) {
             if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
             fetch();
@@ -753,6 +758,14 @@ class Parser extends Lexer {
 
         returnCode = 0;
         return calloutId;
+    }
+
+    private boolean startsWith(String value) {
+        if (stop - p < value.length()) return false;
+        for (int i = 0; i < value.length(); i++) {
+            if (bytes[p + i] != (byte)value.charAt(i)) return false;
+        }
+        return true;
     }
 
     private Node parseEncloseNamedGroup2(boolean listCapture) {

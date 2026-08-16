@@ -8,7 +8,6 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
-import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -919,15 +918,18 @@ public abstract class StringSegmentParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
         if (isRecursive) {
-            // Preserve the existing constant (??{...}) support. Runtime-dependent
-            // nested patterns remain deferred to Stage 36.5.
+            // Keep constant folding as the zero-overhead path, but preserve a
+            // runtime-dependent expression as a lexical dynamic-program closure.
             Node folded = ConstantFoldingVisitor.foldConstants(block);
             if (folded instanceof BlockNode blockNode && blockNode.elements.size() == 1) {
                 folded = blockNode.elements.getFirst();
             }
             RuntimeScalar constant = ConstantFoldingVisitor.getConstantValue(folded);
-            segments.add(new StringNode(constant == null
-                    ? RegexMarkers.RECURSIVE_PATTERN : constant.toString(), savedTokenIndex));
+            if (constant == null || !isSafeDynamicConstantFold(constant.toString())) {
+                segments.add(regexCallback(block, "DYNAMIC", savedTokenIndex));
+            } else {
+                segments.add(new StringNode(constant.toString(), savedTokenIndex));
+            }
         } else {
             segments.add(regexCallback(block, "BLOCK", savedTokenIndex));
         }
@@ -939,6 +941,33 @@ public abstract class StringSegmentParser {
         callback.setAnnotation("regexCallbackKind", kind);
         hasExecutableRegexCallbacks = true;
         return callback;
+    }
+
+    /**
+     * Folding is safe only when textual insertion preserves the nested program's
+     * grouping and capture isolation. A top-level alternative could absorb the
+     * outer suffix, and a capturing group could consume an outer capture number.
+     */
+    private static boolean isSafeDynamicConstantFold(String pattern) {
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '[') {
+                inClass = true;
+            } else if (ch == ']' && inClass) {
+                inClass = false;
+            } else if (ch == '(' && !inClass) {
+                return false;
+            } else if (ch == '|' && !inClass) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

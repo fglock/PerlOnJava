@@ -143,6 +143,7 @@ public interface OPCode {
     int EXACTN_IC_SB                  = 99;           /* single byte,        ignore case */
     int CALLOUT                       = 100;          /* generic match-time callout */
     int CALLOUT_CONDITION             = 101;          /* callback-selected conditional */
+    int DYNAMIC_CALLOUT               = 102;          /* callback-supplied nested program */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -248,6 +249,7 @@ public interface OPCode {
         "exactn-ic-sb", /*OP_EXACTN_IC*/
         "callout", /*OP_CALLOUT*/
         "callout-condition", /*OP_CALLOUT_CONDITION*/
+        "dynamic-callout", /*OP_DYNAMIC_CALLOUT*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -354,5 +356,6 @@ public interface OPCode {
         Arguments.SPECIAL, /*OP_EXACTN_IC*/
         Arguments.MEMNUM, /*OP_CALLOUT*/
         Arguments.SPECIAL, /*OP_CALLOUT_CONDITION*/
+        Arguments.MEMNUM, /*OP_DYNAMIC_CALLOUT*/
     } : null;
 }

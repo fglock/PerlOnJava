@@ -192,6 +192,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             if (Config.DEBUG_MATCH) debugMatchLoop();
 
             sbegin = s;
+            checkInstructionPointer();
             switch (code[ip++]) {
                 case OPCode.END:    if (opEnd()) return finish();                  break;
                 case OPCode.EXACT1:                     opExact1();                break;
@@ -303,6 +304,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
+                case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
 
                 case OPCode.STATE_CHECK_ANYCHAR_STAR:   if (USE_CEC) {opStateCheckAnyCharStar(); break;}
                 case OPCode.STATE_CHECK_ANYCHAR_ML_STAR:if (USE_CEC) {opStateCheckAnyCharMLStar();break;}
@@ -334,6 +336,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             if (Config.DEBUG_MATCH) debugMatchLoop();
 
             sbegin = s;
+            checkInstructionPointer();
             switch (code[ip++]) {
                 case OPCode.END:    if (opEnd()) return finish();                  break;
                 case OPCode.EXACT1:                     opExact1();                break;
@@ -445,6 +448,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
+                case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
 
                 case OPCode.EXACT1_IC_SB:               opExact1ICSb();            break;
                 case OPCode.EXACTN_IC_SB:               opExactNICSb();            continue;
@@ -468,6 +472,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             throw INTERRUPTED_EXCEPTION;
         }
         interruptCheckEvery = Math.min(interruptCheckEvery << 1, MAX_INTERRUPT_CHECK_EVERY);
+    }
+
+    private void checkInstructionPointer() {
+        if (ip < 0 || ip >= code.length) {
+            throw new InternalException("invalid bytecode position " + ip
+                    + " for program length " + code.length + " at input position " + (s - str));
+        }
     }
 
     private boolean opEnd() {
@@ -1952,6 +1963,34 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (result.getAction() == CalloutAction.FAIL) ip += addr;
     }
 
+    private void opDynamicCallout() {
+        int calloutId = code[ip++];
+        int returnAddress = ip;
+        CalloutHandler handler = getCalloutHandler();
+        if (handler == null) throw new IllegalStateException("dynamic pattern has no handler");
+        DynamicPatternResult result = handler.executeDynamic(calloutId, this);
+        if (result == null) throw new NullPointerException("dynamic pattern result");
+        if (result.getBacktrackToken() != null) pushCallout(result.getBacktrackToken());
+
+        Matcher nestedMatcher = result.getRegex().matcher(bytes, str, end,
+                timeout == -1 ? -1 : Math.max(1, timeout - (System.nanoTime() - startTime)));
+        if (!(nestedMatcher instanceof ByteCodeMachine nested)) {
+            throw new IllegalStateException("dynamic regex requires the bytecode matcher");
+        }
+        nested.useIndependentStack();
+        nested.setCalloutHandler(result.getCalloutHandler());
+        DynamicContinuation continuation = new DynamicContinuation(nested, s, range);
+        int nestedEnd = continuation.first();
+        if (nestedEnd < 0) {
+            continuation.abort();
+            opFail();
+            return;
+        }
+        pushDynamicAlternative(returnAddress, continuation);
+        s = nestedEnd;
+        sprev = enc.prevCharHead(bytes, str, s, end);
+    }
+
     @Override
     public int currentBytePosition() {
         return s - str;
@@ -1997,18 +2036,101 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             return;
         }
 
+        while (true) {
+            StackEntry e = pop();
+            if (e.type == DYNAMIC_ALT) {
+                int returnAddress = e.getStatePCode();
+                DynamicContinuation continuation = e.takeDynamicContinuation();
+                int nestedEnd = continuation.next();
+                if (nestedEnd >= 0) {
+                    pushDynamicAlternative(returnAddress, continuation);
+                    ip = returnAddress;
+                    s = nestedEnd;
+                    sprev = enc.prevCharHead(bytes, str, s, end);
+                    return;
+                }
+                continuation.abort();
+                continue;
+            }
 
-        StackEntry e = pop();
-        ip    = e.getStatePCode();
-        s     = e.getStatePStr();
-        sprev = e.getStatePStrPrev();
-        pkeep = e.getPKeep();
+            ip    = e.getStatePCode();
+            s     = e.getStatePStr();
+            sprev = e.getStatePStrPrev();
+            pkeep = e.getPKeep();
 
-        if (USE_CEC) {
-            if (((SCStackEntry)e).getStateCheck() != 0) {
+            if (USE_CEC && ((SCStackEntry)e).getStateCheck() != 0) {
                 e.type = STATE_CHECK_MARK;
                 stk++;
             }
+            return;
+        }
+    }
+
+    /** Lazy nested matcher whose remaining alternatives belong to its caller. */
+    static final class DynamicContinuation {
+        private final ByteCodeMachine machine;
+        private final int start;
+        private final int range;
+        private boolean started;
+        private boolean closed;
+
+        DynamicContinuation(ByteCodeMachine machine, int start, int range) {
+            this.machine = machine;
+            this.start = start;
+            this.range = range;
+        }
+
+        int first() {
+            if (started) throw new IllegalStateException("dynamic continuation already started");
+            started = true;
+            machine.msaInit(Option.NONE, start, start);
+            if (Config.USE_CEC) {
+                machine.stateCheckBuffInit(machine.end - machine.str,
+                        start - machine.str, machine.regex.numCombExpCheck);
+            }
+            machine.range = range;
+            machine.sstart = start;
+            machine.sprev = machine.enc.prevCharHead(machine.bytes,
+                    machine.str, start, machine.end);
+            machine.stk = 0;
+            machine.ip = 0;
+            machine.stackInit();
+            machine.bestLen = -1;
+            machine.s = start;
+            machine.pkeep = start;
+            if (machine.timeout != -1) machine.startTime = System.nanoTime();
+            return run();
+        }
+
+        int next() {
+            if (!started || closed) return Matcher.FAILED;
+            machine.bestLen = -1;
+            machine.opFail();
+            return run();
+        }
+
+        private int run() {
+            try {
+                int matched = machine.enc.isSingleByte()
+                        || (machine.msaOptions & Option.CR_7_BIT) != 0
+                        ? machine.executeSb(false) : machine.execute(false);
+                return matched < 0 ? Matcher.FAILED : machine.s;
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return Matcher.FAILED;
+            }
+        }
+
+        void complete() {
+            if (closed) return;
+            closed = true;
+            machine.completeActiveCallouts();
+        }
+
+        void abort() {
+            if (closed) return;
+            closed = true;
+            machine.unwindActiveCallouts();
         }
     }
 
