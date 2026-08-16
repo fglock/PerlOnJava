@@ -2,6 +2,9 @@ package org.perlonjava.runtime.regex;
 
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
+import org.joni.CalloutHandler;
+import org.joni.CalloutResult;
+import org.joni.MatchView;
 import org.joni.NameEntry;
 import org.joni.Option;
 import org.joni.Regex;
@@ -12,9 +15,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
+
+import org.perlonjava.runtime.runtimetypes.*;
 
 /**
- * Stack-based regex backend for declarative recursive subpatterns.
+ * Stack-based regex backend for Perl constructs that require matcher semantics
+ * beyond the Java Pattern fast path.
  */
 final class JoniRegexPattern {
     private final Regex regex;
@@ -29,8 +36,8 @@ final class JoniRegexPattern {
         namedGroups = collectNamedGroups(regex);
     }
 
-    RegexMatcher matcher(String input) {
-        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, input);
+    RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
+        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, input, callbacks);
     }
 
     String patternDescription() {
@@ -53,9 +60,11 @@ final class JoniRegexPattern {
         return options;
     }
 
-    static boolean requiresRecursiveBackend(String pattern) {
+    static boolean requiresJoniBackend(String pattern) {
         if (pattern == null) return false;
-        return pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
+        return pattern.contains("(?{=CALL:")
+                || pattern.contains("(?(?{=CALL:")
+                || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
                 || pattern.contains("(?&")
                 || pattern.contains("(?P>");
     }
@@ -90,6 +99,20 @@ final class JoniRegexPattern {
                 inClass = false;
                 out.append(ch);
                 continue;
+            }
+            if (!inClass && pattern.startsWith("(?{", i)
+                    && !pattern.startsWith("(?{=CALL:", i)) {
+                // A callback introduced as text by runtime interpolation has
+                // no parser-created lexical closure to invoke. Preserve the
+                // historical compatibility behavior for that unsupported
+                // case: treat it as a zero-width no-op. Structured callbacks
+                // remain match-time Joni callouts and are handled below.
+                int end = findCodeBlockEnd(pattern, i);
+                if (end >= 0) {
+                    out.append("(?:)");
+                    i = end;
+                    continue;
+                }
             }
             if (!inClass && pattern.startsWith("(?[", i)) {
                 StringBuilder translatedClass = new StringBuilder();
@@ -151,6 +174,22 @@ final class JoniRegexPattern {
             out.append(ch);
         }
         return out.toString();
+    }
+
+    private static int findCodeBlockEnd(String pattern, int offset) {
+        int depth = 1;
+        for (int i = offset + 3; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (ch == '\\' && i + 1 < pattern.length()) {
+                i++;
+            } else if (ch == '{') {
+                depth++;
+            } else if (ch == '}' && --depth == 0) {
+                return i + 1 < pattern.length() && pattern.charAt(i + 1) == ')'
+                        ? i + 1 : -1;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -277,13 +316,16 @@ final class JoniRegexPattern {
         private int regionEnd;
         private int nextStart;
         private boolean matched;
+        private final List<RuntimeRegexCallback> callbacks;
+        private PerlCalloutHandler calloutHandler;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
-                         String input) {
+                         String input, List<RuntimeRegexCallback> callbacks) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
             this.input = input;
+            this.callbacks = callbacks;
             this.bytes = input.getBytes(StandardCharsets.UTF_8);
             this.charToByte = buildCharToByte(input);
             this.byteToChar = buildByteToChar(input, bytes.length, charToByte);
@@ -297,8 +339,13 @@ final class JoniRegexPattern {
                 return false;
             }
             matcher = regex.matcher(bytes);
+            if (!callbacks.isEmpty()) {
+                calloutHandler = new PerlCalloutHandler(input, byteToChar, callbacks);
+                matcher.setCalloutHandler(calloutHandler);
+            }
             int result = matcher.search(charToByte[nextStart], charToByte[regionEnd], Option.NONE);
             matched = result >= 0;
+            if (calloutHandler != null) calloutHandler.finish(matched);
             if (!matched) return false;
             captures = matcher.getEagerRegion();
             int start = start();
@@ -402,6 +449,97 @@ final class JoniRegexPattern {
                 offsets[b] = charOffset;
             }
             return offsets;
+        }
+    }
+
+    private static final class PerlCalloutHandler implements CalloutHandler {
+        private record Token(int localLevel, RegexState regexState, RuntimeScalar previousR,
+                             RuntimeScalar result, boolean block) {}
+
+        private final String input;
+        private final int[] byteToChar;
+        private final List<RuntimeRegexCallback> callbacks;
+        private RuntimeScalar completedResult;
+
+        PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks) {
+            this.input = input;
+            this.byteToChar = byteToChar;
+            this.callbacks = callbacks;
+        }
+
+        @Override
+        public CalloutResult execute(int id, MatchView match) {
+            RuntimeRegexCallback callback = callbacks.get(id);
+            int localLevel = DynamicVariableManager.getLocalLevel();
+            RegexState savedRegex = new RegexState();
+            RuntimeScalar rVariable = GlobalVariable.getGlobalVariable(
+                    GlobalContext.encodeSpecialVar("R"));
+            RuntimeScalar previousR = rVariable.clone();
+            publishProvisional(match);
+
+            RuntimeScalar result = RuntimeCode.apply(new RuntimeScalar(callback.code),
+                    new RuntimeArray(), RuntimeContextType.SCALAR).scalar();
+            boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
+            if (block) rVariable.set(result);
+            Token token = new Token(localLevel, savedRegex, previousR, result.clone(), block);
+            return callback.kind == RuntimeRegexCallback.Kind.CONDITION && !result.getBoolean()
+                    ? CalloutResult.failWith(token) : CalloutResult.continueWith(token);
+        }
+
+        @Override
+        public void unwind(Object value) {
+            restore((Token) value, false);
+        }
+
+        @Override
+        public void complete(Object value) {
+            restore((Token) value, true);
+        }
+
+        void finish(boolean matched) {
+            if (matched && completedResult != null) {
+                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
+                        .set(completedResult);
+            }
+        }
+
+        private void restore(Token token, boolean completed) {
+            DynamicVariableManager.popToLocalLevel(token.localLevel());
+            token.regexState().restore();
+            GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
+                    .set(token.previousR());
+            if (completed && token.block() && completedResult == null) {
+                completedResult = token.result();
+            }
+        }
+
+        private void publishProvisional(MatchView match) {
+            RuntimeRegexState state = PerlRuntime.current().regexState;
+            int count = match.captureCount();
+            state.globalMatchString = input;
+            state.lastMatchedString = input;
+            state.lastMatchStart = charOffset(match.captureBegin(0));
+            state.lastMatchEnd = charOffset(match.captureEnd(0));
+            state.lastCaptureGroups = new String[count];
+            state.manualCaptureStarts = new int[count];
+            state.manualCaptureEnds = new int[count];
+            for (int group = 1; group <= count; group++) {
+                int begin = charOffset(match.captureBegin(group));
+                int end = charOffset(match.captureEnd(group));
+                if (begin < 0 || end < begin) {
+                    state.manualCaptureStarts[group - 1] = -1;
+                    state.manualCaptureEnds[group - 1] = -1;
+                    state.lastCaptureGroups[group - 1] = null;
+                } else {
+                    state.manualCaptureStarts[group - 1] = begin;
+                    state.manualCaptureEnds[group - 1] = end;
+                    state.lastCaptureGroups[group - 1] = input.substring(begin, end);
+                }
+            }
+        }
+
+        private int charOffset(int byteOffset) {
+            return byteOffset < 0 || byteOffset >= byteToChar.length ? -1 : byteToChar[byteOffset];
         }
     }
 }

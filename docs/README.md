@@ -56,6 +56,7 @@ Looking to contribute? See:
 
 - **[CONTRIBUTING.md](../CONTRIBUTING.md)** - Contribution guidelines
 - **[dev/](../dev/)** - Developer documentation and internal architecture
+- **[Joni Callout Fork](design/joni-callout-fork.md)** - Vendored regex engine design and implementation contract
 
 ## Finding What You Need
 

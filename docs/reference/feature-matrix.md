@@ -390,15 +390,15 @@ my @copy = @{$z};         # ERROR
 ### Missing Regular Expression Features
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
-- ❌  **Recursive Patterns**: Features like `(?R)`, `(?0)` or `(??{ code })` for recursive matching are not supported.
+- 🟡  **Recursive Patterns**: `(?R)` and `(?0)` execute through Joni. Constant `(??{ code })` expressions fold to a pattern; runtime-dependent dynamic patterns remain unsupported.
 - ❌  **Backtracking Control Verbs and Definitions**: Features such as `(*PRUNE)`, `(*SKIP)`, and `(?(DEFINE)...)` are not supported. Atomic groups `(?>...)` are supported as noted above.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
 - ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.
-- ❌  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)`, `(?&name)` are not supported.
-- ❌  **Conditional Expressions**: Use of `(?(condition)yes|no)` for conditional matching is not supported.
+- ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
+- 🟡  **Conditional Expressions**: Executable callback conditions `(?(?{ code })yes|no)` execute through Joni; other condition forms are not yet complete.
 - ❌  **Extended Unicode Regex Features**: Some extended Unicode regex functionalities are not supported.
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
-- ❌  **Embedded Code in Regex**: Inline Perl code execution with `(?{ code })` or `(??{ code })` is not supported.
+- 🟡  **Embedded Code in Regex**: `(?{ code })` and executable callback conditions run as lexical closures in Joni with provisional captures, `$^R`, and backtracking unwind. Runtime-dependent `(??{ code })` remains unsupported.
 - ❌  **Regex Debugging**: Debugging patterns with `use re 'debug';` to inspect regex engine operations is not supported.
 - ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.

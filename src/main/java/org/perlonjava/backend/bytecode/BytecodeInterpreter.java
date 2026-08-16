@@ -1037,6 +1037,21 @@ public class BytecodeInterpreter {
                                 registers[rd] = RuntimeCode.copyDoBlockListResult(registers[rs]);
                             }
 
+                            case Opcodes.REGEX_CALLBACK -> {
+                                int rd = bytecode[pc++];
+                                int codeReg = bytecode[pc++];
+                                int kindIdx = bytecode[pc++];
+                                registers[rd] = org.perlonjava.runtime.regex.RuntimeRegexCallback.wrap(
+                                        registers[codeReg].scalar(), code.stringPool[kindIdx]);
+                            }
+
+                            case Opcodes.REGEX_TEMPLATE -> {
+                                int rd = bytecode[pc++];
+                                int partsReg = bytecode[pc++];
+                                registers[rd] = org.perlonjava.runtime.regex.RuntimeRegexTemplate.build(
+                                        (RuntimeList) registers[partsReg]);
+                            }
+
                             case Opcodes.ASSIGN_LEXICAL_SCALAR -> {
                                 int rd = bytecode[pc++];
                                 int rs = bytecode[pc++];

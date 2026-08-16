@@ -20,6 +20,25 @@ import java.util.concurrent.atomic.AtomicInteger;
  * transliteration and replacement.
  */
 public class EmitRegex {
+    static void handleRegexCallback(EmitterVisitor emitterVisitor, OperatorNode node) {
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackKind"));
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RuntimeRegexCallback", "wrap",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+    }
+
+    static void handleRegexTemplate(EmitterVisitor emitterVisitor, OperatorNode node) {
+        node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RuntimeRegexTemplate", "build",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
+        }
+    }
     // Callsite ID counter for /o modifier support (unique across all JVM compilations)
     private static final AtomicInteger nextCallsiteId = new AtomicInteger(100000);
 
@@ -359,7 +378,7 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, regexSlot);
 
         // Use default variable $_ if none specified
-        handleVariableBinding(operand, 2, scalarVisitor);
+        handleVariableBinding(operand, 2, scalarVisitor, true);
 
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, regexSlot);
         emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
@@ -421,6 +440,12 @@ public class EmitRegex {
      * @param scalarVisitor The visitor used to emit scalar context bytecode
      */
     private static void handleVariableBinding(ListNode operand, int variableIndex, EmitterVisitor scalarVisitor) {
+        handleVariableBinding(operand, variableIndex, scalarVisitor, false);
+    }
+
+    private static void handleVariableBinding(ListNode operand, int variableIndex,
+                                              EmitterVisitor scalarVisitor,
+                                              boolean stabilizeLiteral) {
         // Check if a variable was provided in the operand list
         Node variable = null;
         if (operand.elements.size() > variableIndex) {
@@ -434,5 +459,12 @@ public class EmitRegex {
 
         // Generate bytecode for the variable access
         variable.accept(scalarVisitor);
+        if (stabilizeLiteral && variable instanceof StringNode) {
+            scalarVisitor.ctx.mv.visitLdcInsn(nextCallsiteId.getAndIncrement());
+            scalarVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/regex/RuntimeRegex", "stabilizeLiteralTarget",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
     }
 }

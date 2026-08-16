@@ -323,8 +323,13 @@ public class CompileOperator {
         }
         int stringReg;
         if (args.elements.size() > 2) {
-            bc.compileNode(args.elements.get(2), -1, RuntimeContextType.SCALAR);
-            stringReg = bc.lastResultReg;
+            Node target = args.elements.get(2);
+            if (target instanceof StringNode literal) {
+                stringReg = bc.compileStableRegexLiteral(literal);
+            } else {
+                bc.compileNode(target, -1, RuntimeContextType.SCALAR);
+                stringReg = bc.lastResultReg;
+            }
         } else {
             stringReg = loadDefaultUnderscore(bc);
         }
@@ -813,6 +818,26 @@ public class CompileOperator {
             case "getppid" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex()); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
             case "open" -> visitOpen(bytecodeCompiler, node);
             case "matchRegex" -> visitMatchRegex(bytecodeCompiler, node);
+            case "regexCallback" -> {
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+                int codeReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.REGEX_CALLBACK);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(codeReg);
+                bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
+                        (String) node.getAnnotation("regexCallbackKind")));
+                bytecodeCompiler.lastResultReg = rd;
+            }
+            case "regexTemplate" -> {
+                bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
+                int partsReg = bytecodeCompiler.lastResultReg;
+                int rd = bytecodeCompiler.allocateOutputRegister();
+                bytecodeCompiler.emit(Opcodes.REGEX_TEMPLATE);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(partsReg);
+                bytecodeCompiler.lastResultReg = rd;
+            }
             case "replaceRegex" -> visitReplaceRegex(bytecodeCompiler, node);
             case "substr" -> visitSubstr(bytecodeCompiler, node);
             case "chomp" -> visitChomp(bytecodeCompiler, node);

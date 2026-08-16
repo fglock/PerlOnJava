@@ -1444,8 +1444,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Undefine FORMAT
         GlobalVariable.getGlobalFormatRef(this.globName).undefineFormat();
 
-        // Undefine SCALAR
-        GlobalVariable.getGlobalVariable(this.globName).set(new RuntimeScalar());
+        // Release a mutable scalar's current value first so tracked objects run
+        // DESTROY immediately. A typeglob scalar slot can also directly alias
+        // a read-only constant (for example after `*a = "a"`); that referent
+        // cannot and need not be cleared.
+        RuntimeScalar oldScalar = GlobalVariable.globalVariables.get(this.globName);
+        if (oldScalar != null && !(oldScalar instanceof RuntimeScalarReadOnly)) {
+            oldScalar.undefine();
+        }
+        // Replace the slot in either case. Undefining the glob severs aliases;
+        // it must not leave a read-only constant installed as the glob's SV.
+        GlobalVariable.aliasGlobalVariable(this.globName, new RuntimeScalar());
 
         // Undefine ARRAY - clear the existing array (fires DESTROY on blessed
         // elements via MortalList) before replacing with an empty one. Just

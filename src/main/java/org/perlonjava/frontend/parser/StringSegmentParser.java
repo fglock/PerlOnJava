@@ -8,12 +8,10 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
-import org.perlonjava.runtime.regex.CaptureNameEncoder;
 import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 
 import java.math.BigInteger;
@@ -51,7 +49,6 @@ public abstract class StringSegmentParser {
      * Must be static to ensure names don't collide across different patterns that share
      * the same pendingCodeBlockConstants map
      */
-    private static int codeBlockCaptureCounter = 0;
     /**
      * The emitter context for logging and error handling
      */
@@ -85,6 +82,8 @@ public abstract class StringSegmentParser {
      * List of AST nodes representing string segments (literals and interpolated expressions)
      */
     protected final List<Node> segments;
+    protected boolean hasExecutableRegexCallbacks;
+    protected boolean hasRuntimeInterpolation;
     protected final boolean interpolateVariable;
     protected final boolean parseEscapes;
     /**
@@ -253,6 +252,7 @@ public abstract class StringSegmentParser {
      */
     protected void parseVariableInterpolation(String sigil) {
         flushCurrentSegment();
+        hasRuntimeInterpolation = true;
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("str sigil");
 
@@ -641,6 +641,10 @@ public abstract class StringSegmentParser {
     protected Node buildResult() {
         flushCurrentSegment();
 
+        if (needsStructuredRegexTemplate()) {
+            return new OperatorNode("regexTemplate", new ListNode(segments, tokenIndex), tokenIndex);
+        }
+
         return switch (segments.size()) {
             case 0 -> new StringNode("", tokenIndex);
             case 1 -> {
@@ -661,6 +665,11 @@ public abstract class StringSegmentParser {
                             new ListNode(segments, tokenIndex),
                             tokenIndex);
         };
+    }
+
+    /** Preserve regex-valued interpolation so embedded callback tables are not stringified away. */
+    protected boolean needsStructuredRegexTemplate() {
+        return hasExecutableRegexCallbacks || (isRegex && hasRuntimeInterpolation);
     }
 
     /**
@@ -787,7 +796,10 @@ public abstract class StringSegmentParser {
             }
             case "(" -> {
                 // Check for (?{...}) and (??{...}) regex code blocks - only in regex context
-                if (isRegex && regexCodeBlocksAreActive() && isRegexCodeBlock()) {
+                if (isRegex && regexCodeBlocksAreActive() && isRegexCallbackCondition()) {
+                    parseRegexCallbackCondition();
+                    yield true;
+                } else if (isRegex && regexCodeBlocksAreActive() && isRegexCodeBlock()) {
                     parseRegexCodeBlock(false);  // (?{...}) - code execution
                     yield true;
                 } else if (isRegex && regexCodeBlocksAreActive() && isRegexRecursiveBlock()) {
@@ -817,6 +829,29 @@ public abstract class StringSegmentParser {
             return "?".equals(nextToken.text) && "{".equals(afterNextToken.text);
         }
         return false;
+    }
+
+    private boolean isRegexCallbackCondition() {
+        int currentPos = parser.tokenIndex;
+        return currentPos + 3 < parser.tokens.size()
+                && "?".equals(parser.tokens.get(currentPos).text)
+                && "(".equals(parser.tokens.get(currentPos + 1).text)
+                && "?".equals(parser.tokens.get(currentPos + 2).text)
+                && "{".equals(parser.tokens.get(currentPos + 3).text);
+    }
+
+    private void parseRegexCallbackCondition() {
+        flushCurrentSegment();
+        int start = tokenIndex;
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "?");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "?");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        Node block = parseBlock(parser);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        segments.add(new StringNode("(?(", start));
+        segments.add(regexCallback(block, "CONDITION", start));
     }
 
     /**
@@ -883,92 +918,27 @@ public abstract class StringSegmentParser {
         // Consume the closing ")" that completes the (?{...}) construct  
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
-        // Try to apply constant folding to the block
-        Node folded = ConstantFoldingVisitor.foldConstants(block);
-
-        // If it's a BlockNode with a single element, extract it
-        // This handles both empty blocks (BlockNode with empty ListNode) and single-expression blocks
-        if (folded instanceof BlockNode blockNode) {
-            if (blockNode.elements.size() == 1) {
-                folded = blockNode.elements.get(0);
+        if (isRecursive) {
+            // Preserve the existing constant (??{...}) support. Runtime-dependent
+            // nested patterns remain deferred to Stage 36.5.
+            Node folded = ConstantFoldingVisitor.foldConstants(block);
+            if (folded instanceof BlockNode blockNode && blockNode.elements.size() == 1) {
+                folded = blockNode.elements.getFirst();
             }
-        }
-
-        // Check if the result is a simple constant using the visitor pattern
-        RuntimeScalar constantValue =
-                ConstantFoldingVisitor.getConstantValue(folded);
-
-        if (constantValue != null) {
-            if (isRecursive) {
-                // For (??{...}), the constant becomes a pattern to match
-                // Extract the string value and insert it directly as a pattern
-                String patternString = constantValue.toString();
-                // Insert the pattern string directly - it will be compiled as a regex
-                segments.add(new StringNode(patternString, savedTokenIndex));
-            } else {
-                // For (?{...}), encode the value in a capture group for $^R
-                String captureName;
-
-                // Check if it's undef (needs special encoding)
-                if (constantValue == RuntimeScalarCache.scalarUndef) {
-                    captureName = String.format("cb%03du", codeBlockCaptureCounter++);
-                } else {
-                    // Use CaptureNameEncoder to encode the value in the capture name
-                    captureName = CaptureNameEncoder.encodeCodeBlockValue(
-                            codeBlockCaptureCounter++, constantValue
-                    );
-                }
-
-                if (captureName == null) {
-                    // Encoding failed (e.g., name too long) - use fallback
-                    segments.add(new StringNode(RegexMarkers.CODE_BLOCK, savedTokenIndex));
-                } else {
-                    // Encoding succeeded - create capture group
-                    StringNode captureNode = new StringNode("(?<" + captureName + ">)", savedTokenIndex);
-                    segments.add(captureNode);
-                }
-            }
+            RuntimeScalar constant = ConstantFoldingVisitor.getConstantValue(folded);
+            segments.add(new StringNode(constant == null
+                    ? RegexMarkers.RECURSIVE_PATTERN : constant.toString(), savedTokenIndex));
         } else {
-            if (isRecursive) {
-                segments.add(new StringNode(RegexMarkers.RECURSIVE_PATTERN, savedTokenIndex));
-            } else if (isSimpleRegexCodeBlockSideEffect(block)) {
-                List<Node> sideEffectElements = new ArrayList<>();
-                if (block instanceof BlockNode blockNode) {
-                    sideEffectElements.addAll(blockNode.elements);
-                } else {
-                    sideEffectElements.add(block);
-                }
-                sideEffectElements.add(new StringNode("", savedTokenIndex));
-                segments.add(new BlockNode(sideEffectElements, savedTokenIndex));
-            } else {
-                segments.add(new StringNode(RegexMarkers.CODE_BLOCK, savedTokenIndex));
-            }
+            segments.add(regexCallback(block, "BLOCK", savedTokenIndex));
         }
     }
 
-    private boolean isSimpleRegexCodeBlockSideEffect(Node block) {
-        if (!isRegexQuoteConstruction) {
-            return false;
-        }
-        Node node = block;
-        if (node instanceof BlockNode blockNode) {
-            if (blockNode.elements.size() != 1) {
-                return false;
-            }
-            node = blockNode.elements.get(0);
-        }
-        if (!(node instanceof OperatorNode operatorNode)) {
-            return false;
-        }
-        if (!operatorNode.operator.equals("++")
-                && !operatorNode.operator.equals("++postfix")
-                && !operatorNode.operator.equals("--")
-                && !operatorNode.operator.equals("--postfix")) {
-            return false;
-        }
-        return operatorNode.operand instanceof OperatorNode scalarOp
-                && scalarOp.operator.equals("$")
-                && scalarOp.operand instanceof IdentifierNode;
+    private Node regexCallback(Node block, String kind, int index) {
+        SubroutineNode closure = new SubroutineNode(null, null, null, block, false, index);
+        OperatorNode callback = new OperatorNode("regexCallback", closure, index);
+        callback.setAnnotation("regexCallbackKind", kind);
+        hasExecutableRegexCallbacks = true;
+        return callback;
     }
 
     /**

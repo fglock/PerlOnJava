@@ -1667,6 +1667,27 @@ public class BytecodeCompiler implements Visitor {
         return true;
     }
 
+    /** Compile a literal regex target as one stable SV for this AST occurrence. */
+    int compileStableRegexLiteral(StringNode node) {
+        RuntimeScalar literal = new RuntimeScalar(node.value);
+        boolean hasWideChars = node.value.codePoints().anyMatch(cp -> cp > 255);
+        if (node.forceByteString || isAsciiOnly(node.value)
+                || (!hasWideChars && emitterContext != null && emitterContext.symbolTable != null
+                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8))) {
+            literal.type = RuntimeScalarType.BYTE_STRING;
+        }
+        // Do not value-deduplicate this entry with ordinary read-only literals.
+        // Its identity is the pos() storage for this one regex call site.
+        int constant = constants.size();
+        constants.add(literal);
+        int register = allocateOutputRegister();
+        emit(Opcodes.LOAD_CONST);
+        emitReg(register);
+        emit(constant);
+        lastResultReg = register;
+        return register;
+    }
+
     @Override
     public void visit(IdentifierNode node) {
         // Variable reference
