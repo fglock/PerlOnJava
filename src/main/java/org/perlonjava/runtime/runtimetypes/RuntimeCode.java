@@ -256,6 +256,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return new java.util.ArrayList<>(argsStack());
     }
 
+    /**
+     * Snapshot the original arguments of active calls before @_ mutations.
+     * A method commonly shifts its invocant into a lexical; retaining these
+     * frame arguments keeps reachability sweeps from destroying that invocant
+     * while the method is still executing.
+     */
+    public static java.util.List<java.util.List<RuntimeScalar>> snapshotPristineArgsStack() {
+        java.util.List<java.util.List<RuntimeScalar>> snapshot = new java.util.ArrayList<>();
+        for (java.util.List<RuntimeScalar> args : pristineArgsStack()) {
+            snapshot.add(new java.util.ArrayList<>(args));
+        }
+        return snapshot;
+    }
+
     public static int argsStackDepth() {
         return argsStack().size();
     }
@@ -306,6 +320,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         return null;
+    }
+
+    /** True when an interpreter-owned Future::AsyncAwait frame is active. */
+    public static boolean hasActiveFutureAsyncAwaitSub() {
+        for (RuntimeCode active : activeCodeStack()) {
+            if (active instanceof InterpretedCode interpreted
+                    && interpreted.futureAsyncAwaitSub) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean hasActiveCode() {
@@ -896,6 +921,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Stash slot from which an explicit CODE reference such as `\&Pkg::name`
     // was taken. Stored on the CV so detached scalar snapshots retain it.
     public String referenceOriginFqn = null;
+    /** Last symbol-table name found for anonymous-name recovery. */
+    private volatile String registeredCodeNameCache = null;
+    /** CODE-table version for the cached name, including a cached miss. */
+    private volatile long registeredCodeNameCacheVersion = Long.MIN_VALUE;
     // An undefined named CV assigned into a different typeglob must remain a
     // live alias when the source CV is defined later. Module::Install uses
     // `*authors = \&author` before dynamically installing `author`.
@@ -1124,6 +1153,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Lexicals declared by this CV, exposed by PadWalker::peek_sub. */
     public Set<String> lexicalVariableNames;
+
+    /** Compile-time {@code our} aliases visible in this CV (name to package). */
+    public Map<String, String> ourVariableRegistry;
 
     /**
      * Attach the lexical names declared directly by an anonymous subroutine.
@@ -1367,6 +1399,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.isStatic = this.isStatic;
         clone.isDeclared = this.isDeclared;
         clone.constantValue = this.constantValue;
+        clone.lexicalVariableNames = this.lexicalVariableNames == null
+                ? null : new java.util.LinkedHashSet<>(this.lexicalVariableNames);
+        clone.ourVariableRegistry = this.ourVariableRegistry == null
+                ? null : new java.util.LinkedHashMap<>(this.ourVariableRegistry);
         clone.compilerSupplier = this.compilerSupplier;
         clone.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         clone.deferredConstAttribute = this.deferredConstAttribute;
@@ -1944,6 +1980,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.capturedScalars = codeFrom.capturedScalars;
         this.capturedAggregates = codeFrom.capturedAggregates;
         this.closedOverVariables = codeFrom.closedOverVariables;
+        this.lexicalVariableNames = codeFrom.lexicalVariableNames;
+        this.ourVariableRegistry = codeFrom.ourVariableRegistry;
         this.padConstants = codeFrom.padConstants;
     }
 
@@ -3249,7 +3287,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
         // Note: `this` (runtimeScalar) will be inserted by the RuntimeArray version
-        RuntimeArray a = new RuntimeArray();
+        RuntimeArray a = new RuntimeArray(args.length);
         for (RuntimeBase arg : args) {
             arg.setArrayOfAlias(a);
         }
@@ -3333,7 +3371,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // RuntimeCode.apply() so caller(), next::method, warnings,
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
-                                RuntimeArray a = new RuntimeArray();
+                                RuntimeArray a = new RuntimeArray(args.length + 1);
                                 a.elements.add(runtimeScalar);
                                 for (RuntimeBase arg : args) {
                                     arg.setArrayOfAlias(a);
@@ -3392,7 +3430,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             // Call the method with function-scoped mortal boundary
-                            RuntimeArray a = new RuntimeArray();
+                            RuntimeArray a = new RuntimeArray(args.length + 1);
                             a.elements.add(runtimeScalar);
                             for (RuntimeBase arg : args) {
                                 arg.setArrayOfAlias(a);
@@ -3420,7 +3458,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         
         // Fall back without nesting through call(...) — avoids double refcount hold
         // (this outer frame already holds the invocant for the inlined-cache miss path).
-        RuntimeArray aFallback = new RuntimeArray();
+        RuntimeArray aFallback = new RuntimeArray(args.length + 1);
         aFallback.elements.add(runtimeScalar);
         for (RuntimeBase arg : args) {
             arg.setArrayOfAlias(aFallback);
@@ -4206,9 +4244,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * name from the live symbol table before reporting an anonymous frame.
      */
     private static String registeredCodeName(RuntimeCode code) {
+        long codeRefVersion = GlobalVariable.codeRefVersion();
+        if (code.registeredCodeNameCacheVersion == codeRefVersion) {
+            return code.registeredCodeNameCache;
+        }
         String packagePrefix = code.packageName == null || code.packageName.isEmpty()
                 ? null : code.packageName + "::";
-        String fallback = null;
+        String fallback = verifiedRegisteredCodeName(code, code.registeredCodeNameCache);
+        if (fallback != null && (packagePrefix == null || fallback.startsWith(packagePrefix))) {
+            code.registeredCodeNameCacheVersion = codeRefVersion;
+            return fallback;
+        }
         for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.globalCodeRefs.entrySet()) {
             RuntimeScalar value = entry.getValue();
             if (value == null || value.type != RuntimeScalarType.CODE || value.value != code) {
@@ -4216,13 +4262,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             String name = entry.getKey();
             if (packagePrefix != null && name.startsWith(packagePrefix)) {
+                code.registeredCodeNameCache = name;
+                code.registeredCodeNameCacheVersion = codeRefVersion;
                 return name;
             }
             if (fallback == null) {
                 fallback = name;
             }
         }
+        code.registeredCodeNameCache = fallback;
+        code.registeredCodeNameCacheVersion = codeRefVersion;
         return fallback;
+    }
+
+    private static String verifiedRegisteredCodeName(RuntimeCode code, String name) {
+        if (name == null) return null;
+        RuntimeScalar value = GlobalVariable.globalCodeRefs.get(name);
+        if (value != null && value.type == RuntimeScalarType.CODE && value.value == code) {
+            return name;
+        }
+        code.registeredCodeNameCache = null;
+        return null;
     }
 
     private static int activeCodeFrameForCaller(int originalFrame) {
@@ -4909,7 +4969,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
 
             // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
-            RuntimeArray a = new RuntimeArray();
+            RuntimeArray a = new RuntimeArray(args.length);
             for (RuntimeBase arg : args) {
                 arg.setArrayOfAlias(a);
             }

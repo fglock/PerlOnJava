@@ -505,7 +505,7 @@ public class CompileExistsDelete {
         }
     }
 
-    private static int compileArrayForExistsDelete(BytecodeCompiler bc, BinaryOperatorNode arrayAccess, int tokenIndex) {
+    static int compileArrayForExistsDelete(BytecodeCompiler bc, BinaryOperatorNode arrayAccess, int tokenIndex) {
         if (!(arrayAccess.left instanceof OperatorNode leftOp) || !leftOp.operator.equals("$")
                 || !(leftOp.operand instanceof IdentifierNode)) {
             bc.throwCompilerException("Array exists/delete requires simple array variable");
@@ -535,7 +535,7 @@ public class CompileExistsDelete {
         }
     }
 
-    private static int compileArrayIndex(BytecodeCompiler bc, BinaryOperatorNode arrayAccess) {
+    static int compileArrayIndex(BytecodeCompiler bc, BinaryOperatorNode arrayAccess) {
         if (!(arrayAccess.right instanceof ArrayLiteralNode indexNode) || indexNode.elements.isEmpty()) {
             bc.throwCompilerException("Array exists/delete requires index");
             return -1;

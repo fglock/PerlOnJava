@@ -6,6 +6,7 @@ import org.perlonjava.frontend.astnode.*;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.Deque;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -21,6 +22,7 @@ import java.util.Set;
 public class VariableCollectorVisitor implements Visitor {
     private final Set<String> variables;
     private final Set<String> declaredVariables;
+    private final Map<String, String> declaredOurVariables;
     private boolean hasEvalString = false;
     private final Deque<Set<String>> localScopes = new ArrayDeque<>();
     private int subroutineDepth = 0;
@@ -35,8 +37,14 @@ public class VariableCollectorVisitor implements Visitor {
     }
 
     public VariableCollectorVisitor(Set<String> variables, Set<String> declaredVariables) {
+        this(variables, declaredVariables, null);
+    }
+
+    public VariableCollectorVisitor(Set<String> variables, Set<String> declaredVariables,
+            Map<String, String> declaredOurVariables) {
         this.variables = variables;
         this.declaredVariables = declaredVariables;
+        this.declaredOurVariables = declaredOurVariables;
         this.localScopes.push(new HashSet<>());
     }
 
@@ -98,6 +106,20 @@ public class VariableCollectorVisitor implements Visitor {
         }
     }
 
+    private void collectOurFrom(Node node, String packageName) {
+        if (node == null || declaredOurVariables == null || subroutineDepth != 0) return;
+        if (node instanceof OperatorNode opNode) {
+            if (isVariableOperator(opNode.operator)
+                    && opNode.operand instanceof IdentifierNode idNode) {
+                declaredOurVariables.put(opNode.operator + idNode.name, packageName);
+            } else {
+                collectOurFrom(opNode.operand, packageName);
+            }
+        } else if (node instanceof ListNode listNode && listNode.elements != null) {
+            for (Node element : listNode.elements) collectOurFrom(element, packageName);
+        }
+    }
+
     private boolean containsDeclaration(Node node) {
         if (node == null) return false;
         if (node instanceof OperatorNode opNode) {
@@ -144,6 +166,11 @@ public class VariableCollectorVisitor implements Visitor {
 
         // Check if this is a variable reference (sigil + identifier)
         if (isDeclarationOperator(op)) {
+            if (op.equals("our")) {
+                Object annotatedPackage = node.getAnnotation("ourPackage");
+                collectOurFrom(node.operand,
+                        annotatedPackage instanceof String value ? value : "main");
+            }
             declareFrom(node.operand, op);
             return;
         }

@@ -121,6 +121,17 @@ public class ReachabilityWalker {
                 PerlRuntime.current().executionState().activeCodeStack)) {
             addReachable(active, todo);
         }
+        // Active call arguments are live even after a callee shifts @_. Walk
+        // them with captures enabled: an in-flight Future commonly owns a
+        // callback closure whose captured slot array owns its child Futures.
+        // This root disappears as soon as the call frame returns.
+        for (java.util.List<RuntimeScalar> args : RuntimeCode.snapshotPristineArgsStack()) {
+            for (RuntimeScalar arg : args) {
+                if (arg == null || WeakRefRegistry.isweak(arg)) continue;
+                addReachable(arg, todo);
+                visitScalar(arg, todo);
+            }
+        }
         bfs(todo, /*walkCaptures=*/ true);
 
         // Phase 2: seed remaining roots.

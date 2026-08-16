@@ -71,6 +71,33 @@ public class CompileAssignment {
         // General fallback for any BinaryOperatorNode lvalue (matches JVM backend behavior)
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
+            // Localizing an array element replaces its slot. Saving the scalar
+            // object in place is insufficient when the slot aliases a read-only
+            // argument (for example local $_[3] where the caller passed '').
+            // Reuse delete-local's container-aware snapshot, then vivify a fresh
+            // slot for the localized value without evaluating the index twice.
+            if (binOp.operator.equals("[")
+                    && !(binOp.left instanceof OperatorNode op && op.operator.equals("@"))) {
+                int arrayReg = CompileExistsDelete.compileArrayForExistsDelete(bc, binOp, node.getIndex());
+                int indexReg = CompileExistsDelete.compileArrayIndex(bc, binOp);
+                int discardedReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_DELETE_LOCAL);
+                bc.emitReg(discardedReg);
+                bc.emitReg(arrayReg);
+                bc.emitReg(indexReg);
+                int elemReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(elemReg);
+                bc.emitReg(arrayReg);
+                bc.emitReg(indexReg);
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(elemReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = elemReg;
+                return true;
+            }
             boolean hashSlice = binOp.operator.equals("{")
                     && binOp.left instanceof OperatorNode sliceOp
                     && sliceOp.operator.equals("@");

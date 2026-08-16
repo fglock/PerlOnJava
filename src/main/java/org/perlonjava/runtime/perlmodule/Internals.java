@@ -78,6 +78,8 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("jperl_set_closed_over", "jperlSetClosedOver", null);
             internals.registerMethod("jperl_closed_over", "jperlClosedOver", null);
             internals.registerMethod("jperl_peek_sub", "jperlPeekSub", null);
+            internals.registerMethod("jperl_peek_my", "jperlPeekMy", null);
+            internals.registerMethod("jperl_peek_our", "jperlPeekOur", null);
             internals.registerMethod("jperl_var_name", "jperlVarName", null);
             internals.registerMethod("jperl_caller_cv", "jperlCallerCv", null);
         } catch (NoSuchMethodException e) {
@@ -206,6 +208,43 @@ public class Internals extends PerlModuleBase {
         RuntimeHash capturedHash = captures.scalar().hashDerefRaw();
         for (Map.Entry<String, RuntimeScalar> entry : capturedHash.elements.entrySet()) {
             result.put(entry.getKey(), entry.getValue());
+        }
+        return result.createReference().getList();
+    }
+
+    /** Return references to the live lexical cells in an active caller pad. */
+    public static RuntimeList jperlPeekMy(RuntimeArray args, int ctx) {
+        RuntimeHash result = new RuntimeHash();
+        int level = args.isEmpty() ? 0 : args.get(0).getInt();
+        RuntimeCode code = RuntimeCode.getActiveCodeAtPadWalkerFrame(level);
+        for (Map.Entry<String, RuntimeBase> entry
+                : RuntimeCode.snapshotActiveLexicals(code).entrySet()) {
+            RuntimeBase cell = entry.getValue();
+            if (cell != null) result.put(entry.getKey(), cell.createReference());
+        }
+        return result.createReference().getList();
+    }
+
+    /** Return references to package variables declared with {@code our}. */
+    public static RuntimeList jperlPeekOur(RuntimeArray args, int ctx) {
+        RuntimeHash result = new RuntimeHash();
+        int level = args.isEmpty() ? 0 : args.get(0).getInt();
+        RuntimeCode code = RuntimeCode.getActiveCodeAtPadWalkerFrame(level);
+        if (code == null || code.ourVariableRegistry == null) {
+            return result.createReference().getList();
+        }
+        for (Map.Entry<String, String> entry : code.ourVariableRegistry.entrySet()) {
+            String name = entry.getKey();
+            if (name == null || name.isEmpty()) continue;
+            String bareName = name.substring(1);
+            String packageName = entry.getValue();
+            String fullName = packageName + "::" + bareName;
+            RuntimeBase cell = switch (name.charAt(0)) {
+                case '@' -> GlobalVariable.getGlobalArray(fullName);
+                case '%' -> GlobalVariable.getGlobalHash(fullName);
+                default -> GlobalVariable.getGlobalVariable(fullName);
+            };
+            result.put(name, cell.createReference());
         }
         return result.createReference().getList();
     }

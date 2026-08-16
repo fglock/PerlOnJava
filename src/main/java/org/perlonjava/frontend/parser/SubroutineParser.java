@@ -1456,10 +1456,14 @@ public class SubroutineParser {
         {
             Set<String> usedVarSet = new HashSet<>();
             Set<String> declaredVarSet = new LinkedHashSet<>();
+            Map<String, String> declaredOurVarMap = new LinkedHashMap<>();
             VariableCollectorVisitor collector =
-                    new VariableCollectorVisitor(usedVarSet, declaredVarSet);
+                    new VariableCollectorVisitor(
+                            usedVarSet, declaredVarSet, declaredOurVarMap);
             block.accept(collector);
             placeholder.lexicalVariableNames = declaredVarSet;
+            placeholder.ourVariableRegistry = declaredOurVarMap.isEmpty()
+                    ? null : declaredOurVarMap;
             explicitlyUsedVars = usedVarSet;
             if (!collector.hasEvalString()) {
                 usedVars = usedVarSet;
@@ -1678,6 +1682,18 @@ public class SubroutineParser {
             RuntimeCode runtimeCode =
                     EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
 
+            Map<String, String> compiledOurRegistry = runtimeCode.ourVariableRegistry;
+            if (compiledOurRegistry == null || compiledOurRegistry.isEmpty()) {
+                compiledOurRegistry = newCtx.symbolTable.getVisibleOurRegistry();
+            }
+            Map<String, String> mergedOurRegistry = new LinkedHashMap<>();
+            if (compiledOurRegistry != null) mergedOurRegistry.putAll(compiledOurRegistry);
+            if (placeholder.ourVariableRegistry != null) {
+                mergedOurRegistry.putAll(placeholder.ourVariableRegistry);
+            }
+            placeholder.ourVariableRegistry = mergedOurRegistry.isEmpty()
+                    ? null : mergedOurRegistry;
+
             try {
                 if (runtimeCode instanceof CompiledCode compiledCode) {
                     // CompiledCode path - fill in the existing placeholder
@@ -1728,6 +1744,7 @@ public class SubroutineParser {
                     interpretedCode.subName = placeholder.subName;
                     interpretedCode.packageName = placeholder.packageName;
                     interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
+                    interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                     interpretedCode.lexicalAliases = placeholder.lexicalAliases;
 
                     // Set the __SUB__ field for self-reference
@@ -1772,6 +1789,7 @@ public class SubroutineParser {
                 interpretedCode.subName = placeholder.subName;
                 interpretedCode.packageName = placeholder.packageName;
                 interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
+                interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                 interpretedCode.lexicalAliases = placeholder.lexicalAliases;
                 interpretedCode.__SUB__ = codeRef;
                 placeholder.subroutine = interpretedCode;

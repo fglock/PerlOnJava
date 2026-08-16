@@ -1,8 +1,11 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
 
 /**
  * Phase B1 of {@code dev/design/refcount_alignment_52leaks_plan.md}:
@@ -24,9 +27,89 @@ import java.util.WeakHashMap;
  */
 public class ScalarRefRegistry {
 
-    // WeakHashMap uses identity-based hashing when keys don't override
-    // hashCode/equals — RuntimeScalar uses Object's defaults, so this
-    // is effectively IdentityHashMap-with-weak-keys.
+    /**
+     * Weak identity keys with batched ReferenceQueue draining. Java 24's
+     * WeakHashMap polls its queue on every put, contending with the JVM
+     * reference-handler thread in allocation-heavy weaken() workloads. This
+     * map drains every 1024 registrations and before snapshots instead.
+     */
+    static final class WeakIdentityMap<V> {
+        private final Map<IdentityWeakReference, V> entries = new HashMap<>();
+        private final ReferenceQueue<RuntimeScalar> clearedKeys = new ReferenceQueue<>();
+        private int registrations;
+
+        void put(RuntimeScalar scalar, V value) {
+            entries.put(new IdentityWeakReference(scalar, clearedKeys), value);
+            // Amortize ReferenceQueue's monitor acquisition. WeakHashMap polls
+            // on every put; this workload creates enough references for that
+            // to contend heavily with the JVM reference-handler thread.
+            if ((++registrations & 1023) == 0) drainClearedKeys();
+        }
+
+        V get(RuntimeScalar scalar) {
+            return entries.get(new IdentityWeakReference(scalar, null));
+        }
+
+        List<RuntimeScalar> snapshotKeys() {
+            drainClearedKeys();
+            List<RuntimeScalar> live = new ArrayList<>(entries.size());
+            var iterator = entries.keySet().iterator();
+            while (iterator.hasNext()) {
+                RuntimeScalar scalar = iterator.next().get();
+                if (scalar == null) {
+                    iterator.remove();
+                } else {
+                    live.add(scalar);
+                }
+            }
+            return live;
+        }
+
+        int liveSize() {
+            return snapshotKeys().size();
+        }
+
+        void clear() {
+            entries.clear();
+            while (clearedKeys.poll() != null) {
+                // Drain references whose map entries were just cleared.
+            }
+            registrations = 0;
+        }
+
+        private void drainClearedKeys() {
+            IdentityWeakReference reference;
+            while ((reference = (IdentityWeakReference) clearedKeys.poll()) != null) {
+                entries.remove(reference);
+            }
+        }
+    }
+
+    private static final class IdentityWeakReference extends WeakReference<RuntimeScalar> {
+        private final int identityHash;
+
+        IdentityWeakReference(
+                RuntimeScalar scalar, ReferenceQueue<RuntimeScalar> clearedKeys) {
+            super(scalar, clearedKeys);
+            identityHash = System.identityHashCode(scalar);
+        }
+
+        @Override
+        public int hashCode() {
+            return identityHash;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof IdentityWeakReference reference)) return false;
+            RuntimeScalar scalar = get();
+            return scalar != null && scalar == reference.get();
+        }
+    }
+
+    // IdentityWeakReference preserves Object identity while allowing scalar
+    // wrappers to be reclaimed by JVM GC.
     // Phase E: optional per-scalar registerRef call-site stacks.
     // Populated only when JPERL_REGISTER_STACKS=1 is set. Uses a
     // WeakHashMap with the same scalar as key, so entries are pruned
@@ -82,7 +165,7 @@ public class ScalarRefRegistry {
         }
         if (DEBUG) {
             System.err.println("DBG registerRef scalar=" + System.identityHashCode(scalar)
-                    + " type=" + scalar.type + " size=" + state().scalarRegistry.size());
+                    + " type=" + scalar.type + " size=" + state().scalarRegistry.liveSize());
         }
     }
 
@@ -104,7 +187,7 @@ public class ScalarRefRegistry {
      * unreachable entries first (e.g., freshly-exited lexical scopes).
      */
     public static java.util.List<RuntimeScalar> snapshot() {
-        return new java.util.ArrayList<>(state().scalarRegistry.keySet());
+        return state().scalarRegistry.snapshotKeys();
     }
 
     /**
@@ -142,7 +225,7 @@ public class ScalarRefRegistry {
      * hold? (Subject to JVM GC between calls.)
      */
     public static int approximateSize() {
-        return state().scalarRegistry.size();
+        return state().scalarRegistry.liveSize();
     }
 
     /** Drop weak-key bookkeeping belonging to the previous top-level script. */

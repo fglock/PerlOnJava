@@ -79,6 +79,14 @@ public class GlobalVariable {
         globalState().invalidateStashEnumeration();
     }
 
+    static long codeRefVersion() {
+        return globalState().codeRefVersion();
+    }
+
+    private static void invalidateCodeRefNames() {
+        globalState().invalidateCodeRefs();
+    }
+
     private static GlobalRuntimeState globalState() {
         return PerlRuntime.current().globalState;
     }
@@ -303,6 +311,9 @@ public class GlobalVariable {
             markStashEntryVisible(key);
             markPackageGlobalRoot(value);
             RuntimeScalar old = delegate().put(key, value);
+            if (old != value) {
+                invalidateCodeRefNames();
+            }
             if (newKey) {
                 invalidateStashEnumerationCache();
             }
@@ -331,6 +342,7 @@ public class GlobalVariable {
         public RuntimeScalar remove(Object key) {
             RuntimeScalar prev = delegate().remove(key);
             if (prev != null) {
+                invalidateCodeRefNames();
                 invalidateStashEnumerationCache();
                 invalidatePackageRootSnapshot();
                 prev.globalCodeRefFqn = null;
@@ -344,6 +356,7 @@ public class GlobalVariable {
         @Override
         public void clear() {
             if (!isEmpty()) {
+                invalidateCodeRefNames();
                 invalidateStashEnumerationCache();
                 for (Map.Entry<String, RuntimeScalar> entry : delegate().entrySet()) {
                     RuntimeScalar s = entry.getValue();
@@ -395,6 +408,7 @@ public class GlobalVariable {
                             String key = current.getKey();
                             RuntimeScalar value = current.getValue();
                             iterator.remove();
+                            invalidateCodeRefNames();
                             canRemove = false;
                             if (value != null) value.globalCodeRefFqn = null;
                             invalidateStashEnumerationCache();
@@ -1040,6 +1054,18 @@ public class GlobalVariable {
         clearForeachGlobalAlias(key);
         markPackageGlobalRoot(var);
         globalVariables.put(key, var);
+        invalidatePackageRootSnapshot();
+    }
+
+    public static void aliasGlobalArray(String key, RuntimeArray array) {
+        markPackageGlobalRoot(array);
+        globalArrays.put(key, array);
+        invalidatePackageRootSnapshot();
+    }
+
+    public static void aliasGlobalHash(String key, RuntimeHash hash) {
+        markPackageGlobalRoot(hash);
+        globalHashes.put(key, hash);
         invalidatePackageRootSnapshot();
     }
 

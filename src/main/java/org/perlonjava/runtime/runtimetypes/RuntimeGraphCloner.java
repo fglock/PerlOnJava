@@ -312,6 +312,8 @@ public class RuntimeGraphCloner {
         target.deparseSourceEnd = source.deparseSourceEnd;
         target.lexicalVariableNames = source.lexicalVariableNames == null
                 ? null : new java.util.LinkedHashSet<>(source.lexicalVariableNames);
+        target.ourVariableRegistry = source.ourVariableRegistry == null
+                ? null : new java.util.LinkedHashMap<>(source.ourVariableRegistry);
         target.stateVariableInitialized = new java.util.HashMap<>(source.stateVariableInitialized);
         target.stateVariable = cloneScalarMap(source.stateVariable);
         target.stateArray = cloneArrayMap(source.stateArray);

@@ -15,6 +15,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
+import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -186,6 +187,12 @@ public class CustomFileChannel implements IOHandle {
      * The underlying Java NIO FileChannel for actual I/O operations
      */
     private final FileChannel fileChannel;
+
+    /** Transfer bytes directly to another NIO channel without Perl string conversion. */
+    public long transferTo(long position, long count, WritableByteChannel target)
+            throws IOException {
+        return fileChannel.transferTo(position, count, target);
+    }
 
     private final Path filePath;
 

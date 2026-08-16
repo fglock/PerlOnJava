@@ -2,8 +2,6 @@ package org.perlonjava.runtime.operators;
 
 import java.util.Arrays;
 import java.util.Locale;
-import java.util.Map;
-import java.util.WeakHashMap;
 
 /**
  * Perl-style logical characters on top of Java {@link String} (UTF-16).
@@ -19,7 +17,17 @@ public final class PerlUtfString {
 
     public static final char MARKER_LEAD = '\uFFFD';
     private static final int INDEX_CACHE_THRESHOLD = 4096;
-    private static final Map<String, PerlIndexMap> INDEX_CACHE = new WeakHashMap<>();
+    /*
+     * String.equals()/hashCode() are linear in the string length.  A WeakHashMap
+     * therefore turns the cache lookup itself into a large-string scan and gets
+     * especially expensive while JSON parsers repeatedly replace a large buffer
+     * with near-identical strings.  Perl string operations normally ask several
+     * questions about the exact same immutable String in succession, so a
+     * per-thread identity cache captures that hot path without retaining an
+     * unbounded collection of large values.
+     */
+    private static final ThreadLocal<PerlIndexCacheEntry> INDEX_CACHE =
+            ThreadLocal.withInitial(PerlIndexCacheEntry::new);
 
     public record PerlStep(int nextJavaIndex, long codePoint) {}
     private record PerlIndexMap(int[] javaBoundaries) {
@@ -36,6 +44,11 @@ public final class PerlUtfString {
             }
             return javaBoundaries[logicalOffset];
         }
+    }
+
+    private static final class PerlIndexCacheEntry {
+        private String string;
+        private PerlIndexMap indexMap;
     }
 
     private PerlUtfString() {}
@@ -160,14 +173,12 @@ public final class PerlUtfString {
         if (s.length() < INDEX_CACHE_THRESHOLD) {
             return null;
         }
-        synchronized (INDEX_CACHE) {
-            PerlIndexMap indexMap = INDEX_CACHE.get(s);
-            if (indexMap == null) {
-                indexMap = buildIndexMap(s);
-                INDEX_CACHE.put(s, indexMap);
-            }
-            return indexMap;
+        PerlIndexCacheEntry entry = INDEX_CACHE.get();
+        if (entry.string != s) {
+            entry.string = s;
+            entry.indexMap = buildIndexMap(s);
         }
+        return entry.indexMap;
     }
 
     private static PerlIndexMap buildIndexMap(String s) {

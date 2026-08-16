@@ -142,6 +142,22 @@ public class EmitOperatorLocal {
             }
         }
 
+        // Array-element localization must replace the container slot. In
+        // particular, $_[n] may alias a read-only literal supplied by the
+        // caller, and saving/mutating that scalar object raises instead of
+        // providing Perl's writable localized value.
+        if (node.operand instanceof BinaryOperatorNode binNode
+                && binNode.operator.equals("[")
+                && binNode.left instanceof OperatorNode sigNode
+                && sigNode.operator.equals("$")
+                && sigNode.operand instanceof IdentifierNode) {
+            Dereference.handleArrayElementOperator(
+                    emitterVisitor.with(LValueVisitor.getContext(node.operand)),
+                    binNode,
+                    "localize");
+            return;
+        }
+
         // emit the lvalue
         int lvalueContext = LValueVisitor.getContext(node.operand);
 

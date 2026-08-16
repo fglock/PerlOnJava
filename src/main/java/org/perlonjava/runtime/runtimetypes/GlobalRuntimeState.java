@@ -56,6 +56,7 @@ public final class GlobalRuntimeState {
             new CustomClassLoader(GlobalVariable.class.getClassLoader());
     private int nextCompiledCodeRefId = 1;
     private long stashEnumerationVersion;
+    private long codeRefVersion;
     private long cachedStashEnumerationVersion = -1;
     private boolean coreGlobalsInitialized;
 
@@ -212,6 +213,14 @@ public final class GlobalRuntimeState {
         stashEnumerationVersion++;
     }
 
+    long codeRefVersion() {
+        return codeRefVersion;
+    }
+
+    void invalidateCodeRefs() {
+        codeRefVersion++;
+    }
+
     /** Return whether this runtime already installed its core globals. */
     public boolean coreGlobalsInitialized() {
         return coreGlobalsInitialized;
@@ -331,6 +340,7 @@ public final class GlobalRuntimeState {
                 NEXT_THREAD_COMPILED_CODE_REF_BASE.getAndAdd(
                         COMPILED_CODE_REF_RANGE_SIZE));
         target.stashEnumerationVersion = stashEnumerationVersion;
+        target.codeRefVersion = codeRefVersion;
         target.coreGlobalsInitialized = coreGlobalsInitialized;
         // Class loaders, caches, and formats are child-owned/fresh. Standard
         // handles remain the child's canonical PerlRuntime globs; named IO

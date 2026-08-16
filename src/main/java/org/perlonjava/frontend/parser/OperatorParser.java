@@ -617,6 +617,9 @@ public class OperatorParser {
         }
 
         OperatorNode decl = new OperatorNode(operator, operand, currentIndex);
+        if (operator.equals("our")) {
+            decl.setAnnotation("ourPackage", parser.ctx.symbolTable.getCurrentPackage());
+        }
         if (isDeclaredReference) {
             decl.setAnnotation("isDeclaredReference", true);
         }

@@ -194,6 +194,7 @@ capturing buffers in it's current configuration.
 sub can_capture_buffer {
     my $self    = shift;
 
+    return 1 if IS_PERLONJAVA;
     return 1 if $USE_IPC_RUN    && $self->can_use_ipc_run;
     return 1 if $USE_IPC_OPEN3  && $self->can_use_ipc_open3;
     return;
@@ -1350,8 +1351,17 @@ sub run {
         }, ALARM_CLASS } if $timeout;
         alarm $timeout || 0;
 
+        ### PerlOnJava has no fork(), so forced IPC::Run/Open3 selection must
+        ### still use the JVM ProcessBuilder backend.
+        if (IS_PERLONJAVA) {
+            $self->_debug("# Using PerlOnJava::Process. Have buffer: $have_buffer")
+                if $DEBUG;
+            $ok = $self->_perlonjava_run(
+                $cmd, $_out_handler, $_err_handler, $timeout, $verbose
+            );
+
         ### IPC::Run is first choice if $USE_IPC_RUN is set.
-        if( !IS_WIN32 and $USE_IPC_RUN and $self->can_use_ipc_run( 1 ) ) {
+        } elsif( !IS_WIN32 and $USE_IPC_RUN and $self->can_use_ipc_run( 1 ) ) {
             ### ipc::run handlers needs the command as a string or an array ref
 
             $self->_debug( "# Using IPC::Run. Have buffer: $have_buffer" )
@@ -1413,6 +1423,39 @@ sub run {
                 : $ok
 
 
+}
+
+sub _perlonjava_run {
+    my ($self, $cmd, $outhand, $errhand, $timeout, $verbose) = @_;
+
+    require Config;
+    require PerlOnJava::Process;
+    my $argv = ref($cmd) eq 'ARRAY' ? [@$cmd] : IS_WIN32
+        ? [($ENV{COMSPEC} || 'cmd.exe'), '/d', '/s', '/c', $cmd]
+        : [($Config::Config{sh} || '/bin/sh'), '-c', $cmd];
+
+    my $result = PerlOnJava::Process::run_process(
+        argv    => $argv,
+        timeout => $timeout,
+        tee     => 0,
+    );
+    $outhand->($result->{stdout}) if length($result->{stdout} // '');
+    $errhand->($result->{stderr}) if length($result->{stderr} // '');
+
+    if ($result->{timed_out}) {
+        $self->error(loc("Command '%1' timed out", ref($cmd) ? "@$cmd" : $cmd));
+        return $self->ok(0);
+    }
+    if (length($result->{error} // '')) {
+        $self->error($result->{error});
+        return $self->ok(0);
+    }
+    if (($result->{exit_code} // -1) != 0) {
+        $self->error(loc("Command '%1' exited with value %2",
+            ref($cmd) ? "@$cmd" : $cmd, $result->{exit_code}));
+        return $self->ok(0);
+    }
+    return $self->ok(1);
 }
 
 sub _open3_run_win32 {

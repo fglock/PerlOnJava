@@ -587,7 +587,7 @@ public class ParsePrimary {
             String warningMsg = "Warning: Use of \"" + operator + "-\" without parentheses is ambiguous at " +
                     parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ".\n" +
                     "syntax error at " + parser.ctx.errorUtil.getFileName() + " line " + startLineNumber + ", at EOF\n" +
-                    "Execution of " + parser.ctx.errorUtil.getFileName() + " aborted due to compilation errors.";
+                    "Execution of " + parser.ctx.errorUtil.getFileName() + " aborted due to compilation errors.\n";
             throw new PerlParserException(warningMsg);
         }
 

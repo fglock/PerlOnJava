@@ -934,6 +934,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
             @Override
             public void dynamicRestoreState() {
+                // A localized assignment beyond the old end temporarily grows
+                // the array. If that localized slot is still the tail, remove
+                // the growth as Perl does when the scope exits. Preserve later
+                // elements explicitly appended beyond it during the scope.
+                if (!existed && idx >= savedSize && self.elements.size() == idx + 1) {
+                    while (self.elements.size() > savedSize) {
+                        self.elements.removeLast();
+                    }
+                }
                 // Restore original size if needed
                 while (self.elements.size() < savedSize) {
                     self.elements.add(null);
@@ -949,6 +958,21 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         });
 
         return returnValue;
+    }
+
+    /**
+     * Replace an array element with a fresh localized slot and return its
+     * lvalue. Unlike localizing the fetched scalar in place, this also works
+     * when the old element aliases a read-only literal through {@code @_}.
+     */
+    public RuntimeScalar localize(int index) {
+        deleteLocal(index);
+        return get(index);
+    }
+
+    public RuntimeScalar localize(RuntimeScalar index) {
+        deleteLocal(index);
+        return get(index);
     }
 
     /**
