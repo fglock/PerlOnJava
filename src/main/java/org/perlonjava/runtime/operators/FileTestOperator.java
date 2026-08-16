@@ -361,6 +361,14 @@ public class FileTestOperator {
                     return scalarUndef;
                 }
                 int fd = descriptor.getInt();
+                // Scalar-backed and other descriptorless handles report -1.
+                // Passing that sentinel to isatty() turns Perl's EBADF/undef
+                // result into a defined false value and clears $!.
+                if (fd < 0) {
+                    getGlobalVariable("main::!").set(9);
+                    updateLastStat(fileHandle, false, 9);
+                    return scalarUndef;
+                }
                 try {
                     boolean isTty = FFMPosix.get().isatty(fd) != 0;
                     getGlobalVariable("main::!").set(0);

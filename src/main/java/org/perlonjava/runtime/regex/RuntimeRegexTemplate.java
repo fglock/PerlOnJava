@@ -3,6 +3,7 @@ package org.perlonjava.runtime.regex;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +35,11 @@ public final class RuntimeRegexTemplate {
         boolean tainted = false;
         for (RuntimeBase part : parts.elements) {
             RuntimeScalar scalar = part.scalar();
+            // Interpolation is one scalar read. Resolve tied magic once, then
+            // use that materialized value for type inspection, taint, and text.
+            if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                scalar = scalar.tiedFetch();
+            }
             tainted |= scalar.isTainted();
             if (scalar.value instanceof RuntimeRegexCallback callback) {
                 int id = callbacks.size();

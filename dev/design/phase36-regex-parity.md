@@ -240,6 +240,13 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ### Current Status: Stage 36.4 in progress
 
+The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
+seam. The current same-commit Stage 36.4 core baseline is `rxcode.t` 39/42 and
+`reg_eval_scope.t` 22/49, with no timeout or incomplete file. Callback
+exceptions now restore dynamic locals, provisional match state, and `$^R` on
+both execution backends even though the matcher cannot create an unwind token
+for a callout that throws.
+
 ### Completed stages
 
 - [x] Stage 36.0: Refresh differential baseline
@@ -253,18 +260,24 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ### Next steps
 
-1. Refresh direct and wrapper counts on the merged callout engine.
-2. Extend the callback semantic matrix with dynamic-local unwind, exceptions,
-   interruption, timeout, and nested matches.
-3. Complete Stage 36.4 without changing thread wrappers.
-4. Implement dynamic patterns and then the remaining declarative parity slices.
+1. Add matcher-owned mutation checkpoints so writes made by a callback on a
+   path that later backtracks are restored. This is the direct blocker for
+   `rxcode.t` assertions 26 and 34.
+2. Complete callback lexical pragma, caller-frame, and control-flow isolation
+   exposed by `reg_eval_scope.t`, without changing its thread wrapper.
+3. Extend the callback semantic matrix with interruption, timeout, and nested
+   exception paths; require identical JVM/interpreter cleanup.
+4. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
+   complete and proceed to the remaining declarative parity slices.
 
 ### Open blockers
 
 - Several callback-localization and dynamic-pattern capture rules still require
   standard-Perl differential evidence.
-- Dynamic `(??{ EXPR })`, optimistic callback execution, and several declarative
-  controls are not complete.
+- Ordinary scalar and aggregate mutations performed by a callback are not yet
+  transactionally restored when the matcher abandons that path.
+- Dynamic `(??{ EXPR })` execution is integrated, but its full Stage 36.5 CPAN
+  and unchanged-core exit matrix is not yet recorded.
 - Partial direct core tests still contain diagnostic, parser, Unicode, and
   regex-object gaps; their wrappers must not be mistaken for thread failures.
 
