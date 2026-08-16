@@ -967,6 +967,9 @@ public abstract class StringSegmentParser {
         SubroutineNode closure = new SubroutineNode(null, null, null, block, false, index);
         closure.setAnnotation("inheritsSelfReference", true);
         closure.setAnnotation("regexCallbackPseudoBlock", true);
+        closure.setAnnotation("quotedRegexCallback", isRegexQuoteConstruction);
+        closure.setAnnotation("regexCallbackPackage",
+                parser.ctx.symbolTable.getCurrentPackage());
         closure.setAnnotation("regexCallbackSourceLine", sourceLine);
         if (block instanceof AbstractNode abstractBlock) {
             // (?{ ... }) is a regex pseudo-block, not an ordinary anonymous-sub
@@ -976,6 +979,8 @@ public abstract class StringSegmentParser {
         }
         OperatorNode callback = new OperatorNode("regexCallback", closure, index);
         callback.setAnnotation("regexCallbackKind", kind);
+        callback.setAnnotation("regexCallbackPackage",
+                closure.getAnnotation("regexCallbackPackage"));
         hasExecutableRegexCallbacks = true;
         return callback;
     }

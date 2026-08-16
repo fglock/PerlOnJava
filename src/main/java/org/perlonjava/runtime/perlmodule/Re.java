@@ -10,6 +10,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimeMutationScope;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRef;
 
 /**
@@ -38,6 +39,26 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  * </ul>
  */
 public class Re extends PerlModuleBase {
+
+    private static void propagatePragmaFlags(ScopedSymbolTable source) {
+        ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
+        if (source != null && mutationScope != null && mutationScope != source) {
+            mutationScope.copyFlagsFrom(source);
+        }
+    }
+
+    private static String lexicalRegexModifiers(String option) {
+        if (option == null || option.length() < 2 || option.charAt(0) != '/') {
+            return "";
+        }
+        String flags = option.substring(1);
+        for (int i = 0; i < flags.length(); i++) {
+            if ("imsx".indexOf(flags.charAt(i)) < 0) {
+                return "";
+            }
+        }
+        return flags;
+    }
 
     /**
      * Constructor initializes the module.
@@ -184,8 +205,14 @@ public class Re extends PerlModuleBase {
                 // use re '/u' - Unicode semantics for regex
                 symbolTable.enableStrictOption(Strict.HINT_RE_UNICODE);
                 symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
+            } else {
+                String modifiers = lexicalRegexModifiers(opt);
+                if (!modifiers.isEmpty()) {
+                    symbolTable.enableLexicalRegexModifiers(modifiers);
+                }
             }
         }
+        propagatePragmaFlags(symbolTable);
         return new RuntimeList();
     }
 
@@ -215,8 +242,14 @@ public class Re extends PerlModuleBase {
                 symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
             } else if (opt.equals("/u")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_UNICODE);
+            } else {
+                String modifiers = lexicalRegexModifiers(opt);
+                if (!modifiers.isEmpty()) {
+                    symbolTable.disableLexicalRegexModifiers(modifiers);
+                }
             }
         }
+        propagatePragmaFlags(symbolTable);
         return new RuntimeList();
     }
 }

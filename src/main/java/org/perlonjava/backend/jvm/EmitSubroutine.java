@@ -376,7 +376,9 @@ public class EmitSubroutine {
             } else {
                 mv.visitInsn(Opcodes.ACONST_NULL);
             }
-            mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+            String callbackPackage = node.getAnnotation("regexCallbackPackage") instanceof String pkg
+                    ? pkg : ctx.symbolTable.getCurrentPackage();
+            mv.visitLdcInsn(callbackPackage);
             mv.visitLdcInsn(cvStartFile);
             mv.visitLdcInsn(cvStartLine);
             if (deparseSourceText != null) {
@@ -399,7 +401,9 @@ public class EmitSubroutine {
             
             // Set CvSTASH on the InterpretedCode if not already set
             if (fallback.interpretedCode.packageName == null) {
-                fallback.interpretedCode.packageName = ctx.symbolTable.getCurrentPackage();
+                fallback.interpretedCode.packageName =
+                        node.getAnnotation("regexCallbackPackage") instanceof String pkg
+                                ? pkg : ctx.symbolTable.getCurrentPackage();
             }
             
             // Store the InterpretedCode in the interpretedSubs map with a unique key
@@ -536,6 +540,18 @@ public class EmitSubroutine {
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "isRegexCallbackPseudoBlock",
                     "Z");
+        }
+        if (node.getBooleanAnnotation("quotedRegexCallback")) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "value", "Ljava/lang/Object;");
+            mv.visitTypeInsn(Opcodes.CHECKCAST,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode");
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitFieldInsn(Opcodes.PUTFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "isQuotedRegexCallback", "Z");
         }
 
         // Set isEvalBlock on the RuntimeCode so RuntimeCode.apply() propagates

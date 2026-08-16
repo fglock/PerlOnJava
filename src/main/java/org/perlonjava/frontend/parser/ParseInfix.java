@@ -189,6 +189,15 @@ public class ParseInfix {
                 validateKnownSubroutineLvalue(parser, left);
             }
 
+            if ((operator.equals("=~") || operator.equals("!~"))
+                    && !isRegexOperator(right)) {
+                String flags = StringParser.addLexicalRegexContext(parser.ctx, "");
+                right = new OperatorNode("quoteRegex",
+                        new ListNode(List.of(right,
+                                new StringNode(flags, right.getIndex())), right.getIndex()),
+                        right.getIndex());
+            }
+
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
 
             // Annotate integer-sensitive operators with the parse-time `use integer`
@@ -473,6 +482,15 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    private static boolean isRegexOperator(Node node) {
+        if (!(node instanceof OperatorNode operator)) return false;
+        return operator.operator.equals("matchRegex")
+                || operator.operator.equals("quoteRegex")
+                || operator.operator.equals("replaceRegex")
+                || operator.operator.equals("tr")
+                || operator.operator.equals("transliterate");
     }
 
     /**

@@ -89,6 +89,10 @@ public class ScopedSymbolTable {
     private final Stack<Boolean> postderefQqStack = new Stack<>();
     // Stack to manage strict options for each scope
     public final Stack<Integer> strictOptionsStack = new Stack<>();
+    // Lexical default regex modifiers installed by `use re '/flags'`.
+    // These do not fit in PerlOnJava's legacy 32-bit strict-options mask and
+    // must follow the same lexical enter/exit/snapshot rules independently.
+    private final Stack<String> regexModifierStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
@@ -129,6 +133,7 @@ public class ScopedSymbolTable {
         postderefQqStack.push(false);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
+        regexModifierStack.push("");
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -204,6 +209,7 @@ public class ScopedSymbolTable {
         postderefQqStack.push(postderefQqStack.peek());
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
+        regexModifierStack.push(regexModifierStack.peek());
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -244,6 +250,7 @@ public class ScopedSymbolTable {
             featureFlagsStack.pop();
             postderefQqStack.pop();
             strictOptionsStack.pop();
+            regexModifierStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
         // This ensures that local variable slots allocated inside conditional branches
@@ -412,6 +419,30 @@ public class ScopedSymbolTable {
      */
     public boolean isStrictOptionEnabled(int option) {
         return (strictOptionsStack.peek() & option) != 0;
+    }
+
+    public String getLexicalRegexModifiers() {
+        return regexModifierStack.peek();
+    }
+
+    public void enableLexicalRegexModifiers(String modifiers) {
+        String current = regexModifierStack.peek();
+        StringBuilder merged = new StringBuilder(current);
+        for (int i = 0; i < modifiers.length(); i++) {
+            char flag = modifiers.charAt(i);
+            if (merged.indexOf(String.valueOf(flag)) < 0) {
+                merged.append(flag);
+            }
+        }
+        regexModifierStack.set(regexModifierStack.size() - 1, merged.toString());
+    }
+
+    public void disableLexicalRegexModifiers(String modifiers) {
+        String current = regexModifierStack.peek();
+        for (int i = 0; i < modifiers.length(); i++) {
+            current = current.replace(String.valueOf(modifiers.charAt(i)), "");
+        }
+        regexModifierStack.set(regexModifierStack.size() - 1, current);
     }
 
     /**
@@ -766,6 +797,8 @@ public class ScopedSymbolTable {
         // Clone strict options
         st.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
         st.strictOptionsStack.push(this.strictOptionsStack.peek());
+        st.regexModifierStack.pop();
+        st.regexModifierStack.push(this.regexModifierStack.peek());
 
         return st;
     }
@@ -1076,6 +1109,10 @@ public class ScopedSymbolTable {
         // Copy strict options
         this.strictOptionsStack.pop();
         this.strictOptionsStack.push(source.strictOptionsStack.get(index));
+        int regexModifierIndex = Math.max(0,
+                Math.min(sourceScopeIndex, source.regexModifierStack.size() - 1));
+        this.regexModifierStack.pop();
+        this.regexModifierStack.push(source.regexModifierStack.get(regexModifierIndex));
     }
 
     public record PackageInfo(String packageName, boolean isClass, String version) {

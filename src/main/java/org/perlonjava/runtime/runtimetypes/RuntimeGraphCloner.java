@@ -294,6 +294,7 @@ public class RuntimeGraphCloner {
         }
         target.isMapGrepBlock = source.isMapGrepBlock;
         target.isRegexCallbackPseudoBlock = source.isRegexCallbackPseudoBlock;
+        target.isQuotedRegexCallback = source.isQuotedRegexCallback;
         target.isEvalBlock = source.isEvalBlock;
         target.isTryExpressionWrapper = source.isTryExpressionWrapper;
         target.inheritsSelfReference = source.inheritsSelfReference;

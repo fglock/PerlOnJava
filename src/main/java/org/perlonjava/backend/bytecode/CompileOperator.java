@@ -827,6 +827,8 @@ public class CompileOperator {
                 bytecodeCompiler.emitReg(codeReg);
                 bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
                         (String) node.getAnnotation("regexCallbackKind")));
+                bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
+                        (String) node.getAnnotation("regexCallbackPackage")));
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "regexTemplate" -> {

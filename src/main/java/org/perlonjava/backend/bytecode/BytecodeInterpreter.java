@@ -230,6 +230,13 @@ public class BytecodeInterpreter {
         int callContext = frame.callContext;
         // Track interpreter state for stack traces
         String framePackageName = code.packageName != null ? code.packageName : "main";
+        if (code.isQuotedRegexCallback) {
+            String callbackPackage = PerlRuntime.current().executionState()
+                    .activeRegexCallbackPackages.peek();
+            if (callbackPackage != null && !callbackPackage.isEmpty()) {
+                framePackageName = callbackPackage;
+            }
+        }
         // Prefer code.subName (set by set_subname) over passed subroutineName
         // This ensures caller() returns the name set by set_subname()
         String frameSubName = code.subName != null ? code.subName
@@ -968,7 +975,21 @@ public class BytecodeInterpreter {
                                 String name = code.stringPool[nameIdx];
                                 if (name.equals("__SUB__")) {
                                     // __SUB__ returns the current subroutine being executed
-                                    registers[rd] = RuntimeCode.selfReferenceMaybeNull(code.__SUB__);
+                                    RuntimeScalar selfReference = code.__SUB__;
+                                    if (code.isQuotedRegexCallback) {
+                                        // A qr// callback is compiled once but can be invoked by
+                                        // different enclosing CVs.  At execution time the active
+                                        // stack is [callback, enclosing, ...], so derive __SUB__
+                                        // from the current owner rather than retaining the owner
+                                        // from the first match.
+                                        RuntimeCode enclosing = RuntimeCode.getActiveCodeAt(1);
+                                        if (enclosing != null) {
+                                            selfReference = enclosing.__SUB__ != null
+                                                    ? enclosing.__SUB__
+                                                    : new RuntimeScalar(enclosing);
+                                        }
+                                    }
+                                    registers[rd] = RuntimeCode.selfReferenceMaybeNull(selfReference);
                                 } else {
                                     registers[rd] = GlobalVariable.getGlobalCodeRef(name);
                                 }
@@ -1041,8 +1062,19 @@ public class BytecodeInterpreter {
                                 int rd = bytecode[pc++];
                                 int codeReg = bytecode[pc++];
                                 int kindIdx = bytecode[pc++];
+                                int packageIdx = bytecode[pc++];
+                                if (DEBUG_REGEX) {
+                                    RuntimeCode callbackCode =
+                                            (RuntimeCode) registers[codeReg].scalar().value;
+                                    System.err.println("REGEX_CALLBACK package="
+                                            + code.stringPool[packageIdx]
+                                            + " codePackage=" + callbackCode.packageName
+                                            + " source=" + callbackCode.cvStartFile
+                                            + ":" + callbackCode.cvStartLine);
+                                }
                                 registers[rd] = org.perlonjava.runtime.regex.RuntimeRegexCallback.wrap(
-                                        registers[codeReg].scalar(), code.stringPool[kindIdx]);
+                                        registers[codeReg].scalar(), code.stringPool[kindIdx],
+                                        code.stringPool[packageIdx]);
                             }
 
                             case Opcodes.REGEX_TEMPLATE -> {

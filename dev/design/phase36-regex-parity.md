@@ -238,11 +238,13 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ## Progress Tracking
 
-### Current Status: Stage 36.4 in progress
+### Current Status: Stage 36.5 in progress
 
 The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
-seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 and
-`reg_eval_scope.t` 33/49, with no timeout or incomplete file. Matcher-owned
+seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 on both
+backends. `reg_eval_scope.t` is 47/49 on both backends, with no timeout or
+incomplete file; its two remaining failures are shared direct compile-warning
+diagnostics assigned to Stage 36.6. Matcher-owned
 transactions restore ordinary scalar, array, and hash mutations on total
 failure while retaining Perl's ordinary side effects from attempted paths.
 Callback dynamic locals now transfer from the implementation CV to the matcher:
@@ -252,6 +254,15 @@ also behave as pseudo-blocks for `caller`, `__SUB__`, and escaping
 `last`/`next`/`goto` on both execution backends. Named unary `scalar` now keeps a
 following match in scalar context, including callback-bearing matches. Recursive
 callback re-entry is bounded independently of the configured JVM stack.
+
+Lexical package and `use/no re '/flags'` state now reaches literal `qr//`,
+interpolated regex values, and executable runtime source admitted by
+`use re 'eval'`. Callback frames preserve construction source lines and
+enclosing `__SUB__`, and warning, nested-exception, alarm-interruption, and
+timeout-adjacent cleanup is covered by identical JVM/interpreter tests.
+Quoted callback frames also prefer their parser-captured lexical package over
+the compilation-unit source map, preventing an earlier package-scoped regex
+from renaming later `main::__ANON__` frames on the interpreter backend.
 
 The 2026-08-16 Stage 36.4 validation slice compared all 80 `perl5_t/t/re/`
 files with `../PerlOnJava/logs/test_20260815_080000_958.log`. The result is
@@ -269,7 +280,7 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
 - [x] Stage 36.1: Validate callback engine seam
 - [x] Stage 36.2: Structured frontend and callback templates
 - [x] Stage 36.3: Plain callbacks and provisional match state
-- [ ] Stage 36.4: Backtracking, dynamic scope, and conditions
+- [x] Stage 36.4: Backtracking, dynamic scope, and conditions
 - [ ] Stage 36.5: Dynamic patterns and recursive execution
 - [ ] Stage 36.6: Remaining declarative parity
 - [ ] Stage 36.7: Integration and release
@@ -282,33 +293,42 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
   - Bounded recursive callback re-entry independently of the Java stack size.
   - Restored deferred Unicode-property cache eviction and recorded a
     no-regression 80-file differential gate against PR 958.
+- [x] Lexical callback context and interpreter frame identity (2026-08-16)
+  - Preserved lexical package and `use/no re '/flags'` context for literal,
+    interpolated, and runtime-source callbacks.
+  - Preserved callback source locations, enclosing `__SUB__`, and cleanup after
+    warning, exception, alarm, and timeout-adjacent exits.
+  - Delivered an alarm owner's queued signal before cancelling the regex worker,
+    preventing the worker from consuming and discarding the owner's exception.
+  - Corrected interpreter caller metadata after a preceding package-scoped
+    callback; `reg_eval_scope.t` improved from 43/49 to 47/49 and now matches
+    the JVM backend.
+  - Added complete disassembly for callback and template bytecodes so their
+    package and callback-table operands remain inspectable.
+- [x] Tied, magical, shared, and readonly mutation policy (2026-08-16)
+  - Preserved observable tied, shared, and unrelated `pos()` side effects from
+    an executed callback path even when the matcher later abandons that path.
+  - Kept `$^R` matcher-owned so it follows the chosen path, and preserved
+    readonly failure without mutating the protected value.
 
 ### Next steps
 
-1. Preserve lexical package and `use re '/flags'` state for `qr//`, interpolated
-   regex objects, and runtime source admitted by `use re 'eval'`.
-2. Extend pseudo-block frame mapping through nested and recursive callbacks;
-   preserve exact caller source lines and enclosing `__SUB__` for interpolated
-   `qr//` values.
-3. Extend the callback semantic matrix with warning locations, interruption,
-   timeout, and nested exception paths; require identical JVM/interpreter cleanup.
-4. Define and implement the mutation policy for tied, magical, shared, and
-   readonly values; ordinary values are now transactionally covered.
-5. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
+1. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
    complete and proceed to the remaining declarative parity slices.
+2. In Stage 36.6, close the two shared direct gaps in `reg_eval_scope.t`: the
+   Unicode warning diagnostic and the legacy `qr/\\(?{` compile diagnostic.
 
 ### Open blockers
 
-- Runtime-injected callback source and lexical regex pragmata remain unsupported;
-  these account for tests 4, 5, 8, 10, 11, and 12 in `reg_eval_scope.t`.
-- Recursive/nested callback caller lines, interpolated `qr//` `__SUB__`, warning
-  locations, and the legacy `qr/\(?{` diagnostic account for the remaining
-  Stage 36.4 failures.
-- Tied, magical, shared, and readonly callback mutation rollback remains
-  intentionally outside the ordinary-value transaction until its exact Perl
-  behavior is established with differential tests.
+- The Unicode warning and legacy `qr/\\(?{` diagnostic remain shared direct
+  gaps, leaving both backends at 47/49.
 - Dynamic `(??{ EXPR })` execution is integrated, but its full Stage 36.5 CPAN
-  and unchanged-core exit matrix is not yet recorded.
+  and unchanged-core exit matrix is not yet recorded. The focused matrix is
+  12/12 on both backends, while Object::InsideOut 4.05 `t/17-dynamic.t` prints
+  its six-test plan but reaches no assertion before a 180-second hard timeout
+  on either backend. The full `--jobs 8` suite likewise made no TAP progress in
+  eight CPU-bound early files for more than seven minutes and was terminated as
+  one exact process tree.
 - Pure-pattern deep recursion still needs an engine-owned limit; callback
   re-entry is now bounded without relying on the Java stack.
 - Partial direct core tests still contain diagnostic, parser, Unicode, and

@@ -616,36 +616,34 @@ record the observed output in this document as phases proceed.
 
 ## Progress Tracking
 
-### Current Status: Phase 3 in progress
+### Current Status: Phase 5 in progress
 
 ### Completed Phases
 
 - [x] Phase 0: Differential semantics and Joni spike
 - [x] Phase 1: Structured frontend and runtime template
 - [x] Phase 2: Plain `(?{ ... })`
-- [ ] Phase 3: Backtracking and dynamic scope
+- [x] Phase 3: Backtracking and dynamic scope
 - [x] Phase 4: Callback conditions
 - [ ] Phase 5: `(??{ ... })` dynamic programs
 - [ ] Phase 6: Runtime source, hardening, and policy removal
 
 ### Next Steps
 
-1. Preserve lexical regex flags and package metadata for runtime/interpolated
-   executable source.
-2. Close nested callback caller/source-line and interpolated `qr//` `__SUB__`
-   identity gaps.
-3. Add warning-location, interruption, timeout, and nested-exception gates.
-4. Classify tied, magical, shared, and readonly mutation behavior with standard
-   Perl before extending matcher transactions.
-5. Finish dynamic-pattern recursion/caching gates and then remove only the
+1. Finish dynamic-pattern recursion/caching gates and then remove only the
    capability policies justified by unchanged-source results.
+2. Complete tied and magical coverage for callback paths that throw or recurse;
+   the executed-abandoned-alternative policy is now fixed by a differential
+   system/JVM/interpreter gate.
+3. Treat the two shared 47/49 `reg_eval_scope.t` compile diagnostics as direct
+   Phase 6 work; callback caller identity and package parity now match on both
+   backends.
 
 ### Blockers
 
-- Runtime-injected callback source still requires `use re 'eval'` propagation.
-- Recursive callback frames do not yet retain all Perl caller source lines.
-- Tied, magical, shared, and readonly rollback semantics remain intentionally
-  open pending differential tests.
+- Object::InsideOut's dynamic-pattern test reaches its plan but no assertions
+  before the hard timeout on either backend; classify that pre-assertion path
+  before using the distribution as a Stage 36.5 exit gate.
 
 ## Related Documents and Skills
 

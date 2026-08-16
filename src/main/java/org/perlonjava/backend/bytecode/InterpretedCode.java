@@ -495,6 +495,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.isTryExpressionWrapper = this.isTryExpressionWrapper;
         copy.isMapGrepBlock = this.isMapGrepBlock;
         copy.inheritsSelfReference = this.inheritsSelfReference;
+        copy.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
+        copy.isQuotedRegexCallback = this.isQuotedRegexCallback;
         copy.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         copy.deferredConstAttribute = this.deferredConstAttribute;
         copy.cvStartFile = this.cvStartFile;

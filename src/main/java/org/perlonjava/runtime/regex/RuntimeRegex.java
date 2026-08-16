@@ -1161,6 +1161,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         validateTaintedPatternSecurity(patternString);
 
+        if (modifierStr.indexOf('E') >= 0
+                && !(patternString.value instanceof RuntimeRegexTemplate)
+                && patternString.type != RuntimeScalarType.REGEX
+                && containsExecutableSource(patternString.toString())) {
+            return RuntimeRegexSourceCompiler.compile(patternString, rawModifierStr);
+        }
+
         if (patternString.value instanceof RuntimeRegexTemplate template) {
             RuntimeRegex regex = compile(template.pattern(), modifierStr, callSiteDebugMode,
                     template.callbacks().size()).cloneTracked();
@@ -1239,6 +1246,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                     return new RuntimeScalar(regex).propagateTaint(patternString, overloadedResult);
                 }
+                if (overloadedResult != null) {
+                    throw new PerlCompilerException("Overloaded qr did not return a REGEXP");
+                }
 
                 // Try fallback to string conversion
                 RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(patternString, "(\"\"");
@@ -1253,6 +1263,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // so the cached RuntimeRegex is not corrupted by refCount changes)
         return new RuntimeScalar(compile(patternString.toString(), modifierStr, callSiteDebugMode).cloneTracked())
                 .propagateTaint(patternString);
+    }
+
+    private static boolean containsExecutableSource(String pattern) {
+        return pattern != null && (pattern.contains("(?{")
+                || pattern.contains("(??{")
+                || pattern.contains("(*{")
+                || pattern.contains("(?(?{")
+                || pattern.contains("(?(*{"));
     }
 
     /** Mark a compiled value as originating from Perl's qr// constructor. */
@@ -2307,8 +2325,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             throw new PerlCompilerException("Regex matching failed: " + cause.getMessage());
         } catch (InterruptedException e) {
-            // Thread was interrupted - clean up and check signals
-            future.cancel(true);
+            // The alarm owner was interrupted after its signal was queued. Deliver
+            // that signal before cancelling the regex worker: cancellation also
+            // interrupts the worker, and a callback blocked in select/sleep could
+            // otherwise consume the owner's queued ALRM and strand its exception
+            // inside this already-cancelled Future. The finally block owns worker
+            // cancellation for both normal-returning and throwing handlers.
             PerlSignalQueue.checkPendingSignals();
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();

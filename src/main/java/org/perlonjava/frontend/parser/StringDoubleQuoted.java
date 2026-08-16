@@ -195,7 +195,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // Set base line number so __LINE__ inside @{[...]} interpolation
         // returns the correct line from the original source, not the inner token list.
         // Use rawStr.index (position of opening delimiter in outer token list).
-        parser.baseLineNumber = ctx.errorUtil.getLineNumberAccurate(rawStr.index);
+        parser.baseLineNumber = rawStr.sourceLine;
 
         // Create and run the double-quoted string parser with original token offset tracking
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement, isRegexQuoteConstruction);

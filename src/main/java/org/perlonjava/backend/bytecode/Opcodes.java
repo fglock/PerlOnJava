@@ -2461,7 +2461,10 @@ public class Opcodes {
     /** Copy a do-block scalar/list result so loose lvalues do not escape. Format: rd, rs. */
     public static final short COPY_DO_BLOCK_RESULT = 519;
 
-    /** Wrap a lexical closure as an executable regex callback. Format: rd codeReg kindStringIdx. */
+    /**
+     * Wrap a lexical closure as an executable regex callback.
+     * Format: rd codeReg kindStringIdx packageStringIdx.
+     */
     public static final short REGEX_CALLBACK = 520;
 
     /** Build an interpolated regex template while preserving callback objects. Format: rd partsReg. */

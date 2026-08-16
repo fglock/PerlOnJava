@@ -399,8 +399,8 @@ my @copy = @{$z};         # ERROR
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
 - ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Callback `local` frames follow matcher paths, and escaped loop control or `goto` stops at the callback pseudo-block boundary. `$^N` follows capture-close order independently of `$+`.
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
-- 🟡  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile, but runtime strings cannot manufacture trusted callback closures.
-- ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
+- ✅  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile. Admitted runtime source is compiled into lexical callback closures and preserves its package, visible lexical cells, and default regex modifiers.
+- ✅  **Regex Compilation Flags**: Lexically scoped default flags from `use/no re '/imsx'` are applied to literal, interpolated, and runtime-compiled regex values.
 - ✅  **Perl Named Captures**: Names may contain underscores, and duplicate named groups preserve Perl-style `%+`/`%-` and backreference behavior.
 
 
