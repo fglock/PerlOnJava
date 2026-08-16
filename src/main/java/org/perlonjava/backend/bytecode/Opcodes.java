@@ -2470,6 +2470,13 @@ public class Opcodes {
     /** Build an interpolated regex template while preserving callback objects. Format: rd partsReg. */
     public static final short REGEX_TEMPLATE = 521;
 
+    /** Conditional jumps using raw Perl truth without overload dispatch. */
+    public static final short GOTO_IF_FALSE_NO_OVERLOAD = 522;
+    public static final short GOTO_IF_TRUE_NO_OVERLOAD = 523;
+
+    /** Logical negation using raw Perl truth without overload dispatch. Format: rd rs. */
+    public static final short NOT_NO_OVERLOAD = 524;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

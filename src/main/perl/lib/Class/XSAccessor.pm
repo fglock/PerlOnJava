@@ -130,7 +130,11 @@ sub _check_hash_invocant {
 
 sub _install {
     my ($name, $code) = @_;
-    $code = Sub::Util::set_subname($name, $code);
+    # set_subname is metadata only.  During isolated CPAN compile tests the
+    # Java Sub::Util registration can be temporarily unavailable even though
+    # the pure-Perl accessor itself is fully usable.
+    $code = Sub::Util::set_subname($name, $code)
+        if defined &Sub::Util::set_subname;
     $_is_emulated_xsub{refaddr($code)} = 1;
     no strict 'refs';
     no warnings 'redefine';

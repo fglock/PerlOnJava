@@ -4,6 +4,12 @@ use warnings;
 
 our $VERSION = '1.74';
 
+# Match the public compatibility variable provided by CPAN's DBD::SQLite.
+# Consumers such as Locale::Unicode::Data inspect this before opening a
+# connection to reject SQLite engines that are too old.  Xerial sqlite-jdbc
+# 3.53.2.1 embeds SQLite 3.53.2.
+our $sqlite_version = '3.53.2';
+
 # Inherit the driver factory + handle classes from DBD::JDBC. We only
 # need to implement DSN translation. Real DBI discovers DBD::SQLite via
 # install_driver, calls SQLite->driver (inherited), gets a drh, then

@@ -42,6 +42,9 @@ public class StatementResolver {
             "pass", "fail", "require", "diag", "note", "explain",
             "skip", "warning_like", "warning_is", "warnings_like");
 
+    private static final Set<String> CORE_QUALIFIED_CONTROL_STATEMENTS = Set.of(
+            "if", "unless", "for", "foreach", "while", "until");
+
     /**
      * Parses a single statement from the parser's token stream.
      *
@@ -52,6 +55,23 @@ public class StatementResolver {
     public static Node parseStatement(Parser parser, String label) {
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
+
+        // Perl permits control-flow keywords to be explicitly qualified, e.g.
+        // CORE::for (...) { ... }. ParsePrimary handles CORE:: function-style
+        // operators, but statement keywords must be normalized before the
+        // statement switch because they have dedicated grammar.
+        if (token.type == LexerTokenType.IDENTIFIER && token.text.equals("CORE")
+                && parser.tokenIndex + 2 < parser.tokens.size()
+                && parser.tokens.get(parser.tokenIndex + 1).text.equals("::")) {
+            LexerToken coreKeyword = parser.tokens.get(parser.tokenIndex + 2);
+            if (coreKeyword.type == LexerTokenType.IDENTIFIER
+                    && CORE_QUALIFIED_CONTROL_STATEMENTS.contains(coreKeyword.text)) {
+                consume(parser, LexerTokenType.IDENTIFIER); // CORE
+                consume(parser, LexerTokenType.OPERATOR, "::");
+                currentIndex = parser.tokenIndex;
+                token = peek(parser);
+            }
+        }
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseStatement `" + token.text + "`");
 
         // Store the current source location - this will be used for stack trace generation

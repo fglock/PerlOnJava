@@ -790,7 +790,8 @@ public class CompileOperator {
             case "$", "@", "%", "*", "&", "\\" -> { bytecodeCompiler.compileVariableReference(node, op); return; }
 
             // Simple unary ops (dispatchOperator)
-            case "not", "!" -> emitSimpleUnaryScalar(bytecodeCompiler, node, Opcodes.NOT);
+            case "not", "!" -> emitSimpleUnaryScalar(bytecodeCompiler, node,
+                    bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.NOT_NO_OVERLOAD : Opcodes.NOT);
             case "~" -> {
                 Object integerAnnotation = node.getAnnotation("useInteger");
                 boolean useInteger = integerAnnotation instanceof Boolean value
@@ -1155,9 +1156,21 @@ public class CompileOperator {
                     bytecodeCompiler.emit(0);
                     bytecodeCompiler.lastResultReg = listReg;
                 } else if (node.operand instanceof ListNode list && list.elements.size() == 1) {
-                    bytecodeCompiler.compileNode(
-                            list.elements.getFirst(), -1, RuntimeContextType.RUNTIME);
+                    Node returnExpression = list.elements.getFirst();
+                    Node returnedCall = returnExpression;
+                    while (returnedCall instanceof ListNode returnedList
+                            && returnedList.elements.size() == 1) {
+                        returnedCall = returnedList.elements.getFirst();
+                    }
+                    returnedCall.setAnnotation("inheritRawCallContext", true);
+                    bytecodeCompiler.compileNode(returnExpression, -1, RuntimeContextType.RUNTIME);
                 } else {
+                    Node returnedCall = node.operand;
+                    while (returnedCall instanceof ListNode returnedList
+                            && returnedList.elements.size() == 1) {
+                        returnedCall = returnedList.elements.getFirst();
+                    }
+                    returnedCall.setAnnotation("inheritRawCallContext", true);
                     bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.RUNTIME);
                 }
                 int exprReg = bytecodeCompiler.lastResultReg;

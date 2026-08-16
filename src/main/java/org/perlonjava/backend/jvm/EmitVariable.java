@@ -1153,7 +1153,7 @@ public class EmitVariable {
         // Emit condition
         ternary.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "getBoolean", "()Z", false);
+                EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
         mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
 
         // True branch

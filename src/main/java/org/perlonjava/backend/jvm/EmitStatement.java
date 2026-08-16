@@ -489,7 +489,8 @@ public class EmitStatement {
         }
 
         // Convert the result to a boolean
-        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
 
         // Jump to the else label if the condition is false
         emitterVisitor.ctx.mv.visitJumpInsn(node.operator.equals("unless") ? Opcodes.IFNE : Opcodes.IFEQ, elseLabel);
@@ -616,7 +617,8 @@ public class EmitStatement {
                 }
 
                 // Convert the result to a boolean
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                        EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
 
                 // Jump to the end label if the condition is false (exit the loop)
                 mv.visitJumpInsn(Opcodes.IFEQ, endLabel);
@@ -836,7 +838,8 @@ public class EmitStatement {
         } else {
             // Non-constant condition — emit normal runtime evaluation
             node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
             mv.visitJumpInsn(Opcodes.IFNE, startLabel);
         }
 

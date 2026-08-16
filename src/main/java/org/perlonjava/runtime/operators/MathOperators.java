@@ -1539,6 +1539,11 @@ public class MathOperators {
         };
     }
 
+    /** Logical negation for a lexical {@code no overloading} scope. */
+    public static RuntimeScalar notNoOverload(RuntimeScalar runtimeScalar) {
+        return runtimeScalar.getBooleanNoOverload() ? scalarFalse : scalarTrue;
+    }
+
     // =====================================================================
     // NoOverload variants - used when 'no overloading' pragma is in effect.
     // These skip overload dispatch entirely and treat blessed references

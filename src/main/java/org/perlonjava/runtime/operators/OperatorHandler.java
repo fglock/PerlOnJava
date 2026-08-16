@@ -49,6 +49,8 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("%_noOverload", "modulusNoOverload", "org/perlonjava/runtime/operators/MathOperators");
         put("**_noOverload", "powNoOverload", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("unaryMinus_noOverload", "unaryMinusNoOverload", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("!_noOverload", "notNoOverload", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("not_noOverload", "notNoOverload", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
         put("^^", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("xor", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");

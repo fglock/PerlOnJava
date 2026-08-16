@@ -52,7 +52,7 @@ public class BitwiseOperators {
         // Fast path: both INTEGER - skip all checks (defined, looksLikeNumber, tied)
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
-        if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+        if (isNumericBitwiseOperand(t1) && isNumericBitwiseOperand(t2)) {
             return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
         }
@@ -210,11 +210,17 @@ public class BitwiseOperators {
         // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
         int vt1 = val1.type;
         int vt2 = val2.type;
-        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE || vt1 == RuntimeScalarType.DUALVAR ||
-                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE || vt2 == RuntimeScalarType.DUALVAR) {
+        if (isNumericBitwiseOperand(vt1) || isNumericBitwiseOperand(vt2)) {
             return bitwiseXorBinary(val1, val2);
         }
         return bitwiseXorDot(val1, val2);
+    }
+
+    private static boolean isNumericBitwiseOperand(int type) {
+        return type == RuntimeScalarType.INTEGER
+                || type == RuntimeScalarType.DOUBLE
+                || type == RuntimeScalarType.BOOLEAN
+                || type == RuntimeScalarType.DUALVAR;
     }
 
     /**

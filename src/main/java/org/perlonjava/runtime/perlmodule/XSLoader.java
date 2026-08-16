@@ -15,6 +15,20 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class XSLoader extends PerlModuleBase {
 
+    /** Reinstall a Java-backed module whose Perl stash was cleaned or reloaded. */
+    public static boolean tryInitializeJavaModule(String moduleName) {
+        if (moduleName == null || moduleName.isEmpty()) return false;
+        StringBuilder className = new StringBuilder("org.perlonjava.runtime.perlmodule.");
+        for (String part : moduleName.split("::")) className.append(part);
+        try {
+            Class<?> clazz = Class.forName(className.toString());
+            clazz.getMethod("initialize").invoke(null);
+            return true;
+        } catch (ReflectiveOperationException e) {
+            return false;
+        }
+    }
+
     /** Guard against recursive loadJarShimOverrides calls (e.g. Clone.pm evals XSLoader::load). */
     /**
      * Non-functional base classes that should be ignored when checking @ISA

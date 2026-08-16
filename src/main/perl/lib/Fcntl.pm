@@ -12,6 +12,7 @@ our @ISA = qw(Exporter);
 use constant O_RDONLY   => 0;      # Open for reading only
 use constant O_WRONLY   => 1;      # Open for writing only
 use constant O_RDWR     => 2;      # Open for reading and writing
+use constant O_ACCMODE  => 3;      # Mask for the file access mode
 
 # File creation flags
 use constant O_CREAT    => 0100;   # Create file if it doesn't exist

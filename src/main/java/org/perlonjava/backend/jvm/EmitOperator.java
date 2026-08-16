@@ -21,6 +21,16 @@ public class EmitOperator {
 
     private static final boolean ENABLE_SPILL_BINARY_LHS = true;
 
+    static String booleanConversionMethod(EmitterVisitor emitterVisitor, String defaultMethod) {
+        boolean noOverloading = "getBoolean".equals(defaultMethod)
+                && emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+        if (noOverloading) {
+            return "getBooleanNoOverload";
+        }
+        return defaultMethod;
+    }
+
     static void emitOperator(Node node, EmitterVisitor emitterVisitor) {
         // Extract operator string from the node
         String operator = null;
@@ -37,7 +47,6 @@ public class EmitOperator {
         boolean noOverloading = symbolTable != null &&
                 symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
         OperatorHandler operatorHandler = noOverloading ? OperatorHandler.getNoOverload(operator) : null;
-
         // Check if uninitialized warnings are enabled at compile time
         // Use warn variant for zero-overhead when warnings disabled
         if (operatorHandler == null) {
@@ -72,12 +81,18 @@ public class EmitOperator {
     }
 
     static void emitOperatorWithKey(String operator, Node node, EmitterVisitor emitterVisitor) {
+        boolean noOverloading = emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+        OperatorHandler operatorHandler = noOverloading
+                ? OperatorHandler.getNoOverload(operator) : null;
         // Check if uninitialized warnings are enabled at compile time
         // Use warn variant for zero-overhead when warnings disabled
-        boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
-        OperatorHandler operatorHandler = warnUninit 
-                ? OperatorHandler.getWarn(operator)
-                : OperatorHandler.get(operator);
+        if (operatorHandler == null) {
+            boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
+            operatorHandler = warnUninit
+                    ? OperatorHandler.getWarn(operator)
+                    : OperatorHandler.get(operator);
+        }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }

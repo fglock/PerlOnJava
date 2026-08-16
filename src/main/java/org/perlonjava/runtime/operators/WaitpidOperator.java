@@ -8,7 +8,9 @@ import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
@@ -114,14 +116,18 @@ public class WaitpidOperator {
         }
         if (nonBlocking) return new RuntimeScalar(0);
 
-        java.util.concurrent.CompletableFuture<?>[] exits = children.values().stream()
-                .map(Process::onExit)
-                .toArray(java.util.concurrent.CompletableFuture[]::new);
-        java.util.concurrent.CompletableFuture.anyOf(exits).join();
+        Map<Long, CompletableFuture<Process>> exits = new LinkedHashMap<>();
+        for (Map.Entry<Long, Process> entry : children.entrySet()) {
+            exits.put(entry.getKey(), entry.getValue().onExit());
+        }
+        CompletableFuture.anyOf(exits.values().toArray(CompletableFuture[]::new)).join();
 
-        for (Map.Entry<Long, Process> entry : RuntimeIO.childProcessesSnapshot().entrySet()) {
-            if (!entry.getValue().isAlive()) {
-                return waitpidJavaProcess(entry.getKey().intValue(), entry.getValue(), flags);
+        // The completed onExit future is authoritative.  On Windows,
+        // Process.isAlive() can briefly remain true after onExit completes;
+        // rechecking it here made blocking wait() incorrectly report ECHILD.
+        for (Map.Entry<Long, CompletableFuture<Process>> entry : exits.entrySet()) {
+            if (entry.getValue().isDone()) {
+                return waitpidJavaProcess(entry.getKey().intValue(), entry.getValue().join(), flags);
             }
         }
         return new RuntimeScalar(-1);

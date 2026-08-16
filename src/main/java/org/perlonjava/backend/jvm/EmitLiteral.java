@@ -692,7 +692,9 @@ public class EmitLiteral {
             return;
         }
 
-        if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS)) {
+        boolean qualifiedConstant = node.name.contains("::")
+                && node.name.matches(".*::[A-Z][A-Z0-9_]*");
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS) && !qualifiedConstant) {
             throw new PerlCompilerException(
                     node.tokenIndex,
                     "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use",

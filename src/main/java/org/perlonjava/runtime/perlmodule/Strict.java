@@ -39,17 +39,18 @@ public class Strict extends PerlModuleBase {
     // Bitmask for utf8 source code
     public static final int HINT_UTF8 = 0x00800000;
 
-    // Bitmask for `no overloading` pragma
-    public static final int HINT_NO_AMAGIC = 0x00000010;
+    // Perl's public HINT_NO_AMAGIC bit, written to $^H by overloading.pm.
+    public static final int HINT_NO_AMAGIC = 0x01000000;
 
-    // Bitmask for `use re` regex modifiers
-    public static final int HINT_RE_ASCII = 0x01000000;     // use re '/a'
-    public static final int HINT_RE_UNICODE = 0x02000000;   // use re '/u'
-    public static final int HINT_RE_ASCII_AA = 0x04000000;  // use re '/aa'
-    public static final int HINT_RE_EVAL = 0x08000000;      // use re 'eval'
-    public static final int HINT_RE_TAINT = 0x10000000;     // use re 'taint'
-    public static final int HINT_RE_DEBUG = 0x20000000;     // use re 'debug'
-    public static final int HINT_RE_DEBUGCOLOR = 0x40000000; // use re 'debugcolor'
+    // Internal bitmasks for `use re` modifiers. These must not collide with
+    // Perl's public $^H bits above.
+    public static final int HINT_RE_ASCII = 0x00000010;      // use re '/a'
+    public static final int HINT_RE_UNICODE = 0x00000100;    // use re '/u'
+    public static final int HINT_RE_ASCII_AA = 0x00000800;   // use re '/aa'
+    public static final int HINT_RE_EVAL = 0x00001000;       // use re 'eval'
+    public static final int HINT_RE_TAINT = 0x00002000;      // use re 'taint'
+    public static final int HINT_RE_DEBUG = 0x00004000;      // use re 'debug'
+    public static final int HINT_RE_DEBUGCOLOR = 0x00008000; // use re 'debugcolor'
 
     /**
      * Constructor for Strict.
@@ -218,6 +219,10 @@ public class Strict extends PerlModuleBase {
                 result.append(", ");
             }
             result.append("BYTES");
+        }
+        if ((strictOptions & HINT_NO_AMAGIC) != 0) {
+            if (!result.isEmpty()) result.append(", ");
+            result.append("NO_AMAGIC");
         }
 
         // Handle strict options

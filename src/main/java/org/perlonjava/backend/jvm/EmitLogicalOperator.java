@@ -101,6 +101,7 @@ public class EmitLogicalOperator {
      * @param getBoolean     The method name to convert the result to a boolean.
      */
     static void emitLogicalAssign(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
+        getBoolean = EmitOperator.booleanConversionMethod(emitterVisitor, getBoolean);
         MethodVisitor mv = emitterVisitor.ctx.mv;
         Label endLabel = new Label(); // Label for the end of the operation
         Node left = scalarizeSingleElementSliceLvalue(node.left);
@@ -204,6 +205,7 @@ public class EmitLogicalOperator {
      * @param getBoolean     The method name to convert the result to a boolean.
      */
     static void emitLogicalOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, int compareOpcode, String getBoolean) {
+        getBoolean = EmitOperator.booleanConversionMethod(emitterVisitor, getBoolean);
         int savedCallerLineOverride = emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride;
         if (!"getDefinedBoolean".equals(getBoolean) && savedCallerLineOverride <= 0) {
             emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride =
@@ -497,7 +499,8 @@ public class EmitLogicalOperator {
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
 
         // Convert the result to a boolean
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                EmitOperator.booleanConversionMethod(emitterVisitor, "getBoolean"), "()Z", false);
 
         // Jump to the else label if the condition is false
         mv.visitJumpInsn(Opcodes.IFEQ, elseLabel);
