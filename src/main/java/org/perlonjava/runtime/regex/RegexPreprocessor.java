@@ -2029,20 +2029,10 @@ public class RegexPreprocessor {
 
                 // Skip the (??{ part to find the code content
                 int codeStart = offset + 4;
-                int codeOffset = codeStart;
-
-                // Find the closing }
-                int braceCount = 1;
-                while (codeOffset < length && braceCount > 0) {
-                    int ch = s.codePointAt(codeOffset);
-                    if (ch == '{') {
-                        braceCount++;
-                    } else if (ch == '}') {
-                        braceCount--;
-                    }
-                    if (braceCount > 0) {
-                        codeOffset++;
-                    }
+                int codeOffset = findRegexCodeBlockClosingBrace(s, codeStart);
+                if (codeOffset < 0) {
+                    regexError(s, offset + 3,
+                            "Unmatched '{' in (??{...}) dynamic pattern");
                 }
                 // codeOffset points at the closing '}'
                 String codeBlock = s.substring(codeStart, codeOffset).trim();
@@ -3319,27 +3309,10 @@ public class RegexPreprocessor {
      */
     private static int handleCodeBlock(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
         // Find the matching closing brace
-        int braceCount = 1;
         int codeStart = offset + 3; // Skip '(?{'
-        int codeEnd = codeStart;
+        int codeEnd = findRegexCodeBlockClosingBrace(s, codeStart);
 
-        while (codeEnd < length && braceCount > 0) {
-            char c = s.charAt(codeEnd);
-            if (c == '{') {
-                braceCount++;
-            } else if (c == '}') {
-                braceCount--;
-                if (braceCount == 0) {
-                    break;
-                }
-            } else if (c == '\\' && codeEnd + 1 < length) {
-                // Skip escaped characters
-                codeEnd++;
-            }
-            codeEnd++;
-        }
-
-        if (braceCount != 0) {
+        if (codeEnd < 0) {
             regexError(s, offset + 2, "Unmatched '{' in (?{...}) code block");
         }
 
@@ -3386,6 +3359,36 @@ public class RegexPreprocessor {
             return codeEnd + 1; // Point to ')' for handleGroup to consume
         }
         return codeEnd + 1; // Just skip past '}' if no ')' found
+    }
+
+    /**
+     * Find the brace that closes a regex code block while ignoring braces in
+     * ordinary single- and double-quoted Perl strings. Runtime string patterns
+     * still pass through this compatibility parser, so values such as
+     * {@code (??{"{"})} must not make the source brace depth unbalanced.
+     */
+    private static int findRegexCodeBlockClosingBrace(String source, int codeStart) {
+        int depth = 1;
+        char quote = 0;
+        for (int i = codeStart; i < source.length(); i++) {
+            char ch = source.charAt(i);
+            if (ch == '\\' && i + 1 < source.length()) {
+                i++;
+                continue;
+            }
+            if (quote != 0) {
+                if (ch == quote) quote = 0;
+                continue;
+            }
+            if (ch == '\'' || ch == '"') {
+                quote = ch;
+            } else if (ch == '{') {
+                depth++;
+            } else if (ch == '}' && --depth == 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static boolean allowRegexCodeBlockNoop() {

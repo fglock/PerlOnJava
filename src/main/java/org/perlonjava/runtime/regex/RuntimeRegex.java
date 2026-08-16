@@ -387,8 +387,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 String warning = "Matched non-Unicode code point 0x"
                         + Long.toUnsignedString(step.codePoint(), 16).toUpperCase(java.util.Locale.ROOT)
                         + " against Unicode property; may not be portable";
-                WarnDie.warnWithCategory(
-                        new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "non_unicode");
+                // A match warning belongs to the statement executing the
+                // match, not to RuntimeRegex's Java helper frame. The JVM
+                // backend records that lexical state as call-site bits; make
+                // them the direct warning context for this synchronous call.
+                String previousRuntimeBits = WarningBitsRegistry.getRuntimeWarningBits();
+                String callSiteBits = WarningBitsRegistry.getCallSiteBits();
+                if (callSiteBits != null) {
+                    WarningBitsRegistry.setRuntimeWarningBits(callSiteBits);
+                }
+                try {
+                    WarnDie.warnWithCategory(
+                            new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString,
+                            "non_unicode");
+                } finally {
+                    WarningBitsRegistry.setRuntimeWarningBits(previousRuntimeBits);
+                }
                 return;
             }
             offset = step.nextJavaIndex();

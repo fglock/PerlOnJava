@@ -34,9 +34,11 @@ import org.joni.constants.internal.OPCode;
 import org.joni.constants.internal.OPSize;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
+import org.joni.exception.ValueException;
 
 class ByteCodeMachine extends StackMachine implements MatchView {
     private static final int MAX_INTERRUPT_CHECK_EVERY = 256 << 7; // 32768
+    private static final int MAX_SUBEXP_CALL_DEPTH = 1000;
     int interruptCheckEvery = 256;     // << 1 after each check up to  ^^^
     volatile boolean interrupted = false;
 
@@ -1948,9 +1950,21 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opCall() {
+        if (activeSubexpCallDepth() >= MAX_SUBEXP_CALL_DEPTH) {
+            throw new ValueException("subpattern recursion limit exceeded");
+        }
         int addr = code[ip++];
         pushCallFrame(ip);
         ip = addr; // absolute address
+    }
+
+    private int activeSubexpCallDepth() {
+        int depth = 0;
+        for (int i = 0; i < stk; i++) {
+            if (stack[i].type == CALL_FRAME) depth++;
+            else if (stack[i].type == RETURN) depth--;
+        }
+        return depth;
     }
 
     private void opCallout() {
