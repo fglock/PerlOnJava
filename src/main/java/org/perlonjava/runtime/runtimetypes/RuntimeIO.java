@@ -467,6 +467,15 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
+     * Returns a stable view of children launched through Java's Process API.
+     * wait()/waitpid(-1, ...) need this because the JVM's process reaper may
+     * consume the native wait status before a direct POSIX waitpid call sees it.
+     */
+    public static Map<Long, Process> childProcessesSnapshot() {
+        return new LinkedHashMap<>(registry().childProcesses);
+    }
+
+    /**
      * Sets a custom output stream as the last accessed handle.
      * This is primarily used for testing and special output redirection.
      *

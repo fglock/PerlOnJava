@@ -81,6 +81,13 @@ public class PipeOutputChannel implements IOHandle {
      */
     private BufferedReader outputReader;
 
+    /** Pumps must finish before close() returns or callers can restore STDOUT
+     * and lose the final child output. */
+    private Thread outputThread;
+    private Thread errorThread;
+    private RuntimeIO outputDestination;
+    private RuntimeIO errorDestination;
+
     /**
      * Tracks whether the pipe has been closed
      */
@@ -180,6 +187,15 @@ public class PipeOutputChannel implements IOHandle {
 
     private void setupProcess(ProcessBuilder processBuilder, Map<String, String> environmentOverrides)
             throws IOException {
+        // Capture the destinations before IOOperator installs this pipe into
+        // the target glob.  For `open STDOUT, '|-'`, looking up STDOUT from the
+        // pump thread later would find this same pipe and feed child output
+        // back into its stdin instead of forwarding it to the saved stdout.
+        outputDestination = borrowedDestination(
+                GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO());
+        errorDestination = borrowedDestination(
+                GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO());
+
         // Set working directory to current directory
         String userDir = org.perlonjava.runtime.runtimetypes.RuntimeEnvironment.currentDirectory();
         processBuilder.directory(new File(userDir));
@@ -201,13 +217,13 @@ public class PipeOutputChannel implements IOHandle {
         // Start threads to consume stdout and stderr and route through Perl handles
         // This ensures Perl-level redirections are honored
         PerlRuntime runtime = PerlRuntime.current();
-        Thread outputThread = new Thread(() -> {
+        outputThread = new Thread(() -> {
             try (PerlRuntime.Binding ignored = runtime.bind();
                  BufferedReader out = outputReader) {
                 String line;
                 while ((line = out.readLine()) != null) {
                     try {
-                        RuntimeIO perlStdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
+                        RuntimeIO perlStdout = outputDestination;
                         if (perlStdout != null) {
                             perlStdout.write(line + "\n");
                         } else {
@@ -224,13 +240,13 @@ public class PipeOutputChannel implements IOHandle {
         outputThread.setDaemon(true);
         outputThread.start();
 
-        Thread errorThread = new Thread(() -> {
+        errorThread = new Thread(() -> {
             try (PerlRuntime.Binding ignored = runtime.bind();
                  BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {
                     try {
-                        RuntimeIO perlStderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+                        RuntimeIO perlStderr = errorDestination;
                         if (perlStderr != null) {
                             perlStderr.write(line + "\n");
                         } else {
@@ -246,6 +262,13 @@ public class PipeOutputChannel implements IOHandle {
         });
         errorThread.setDaemon(true);
         errorThread.start();
+    }
+
+    private static RuntimeIO borrowedDestination(RuntimeIO destination) {
+        if (destination == null) return null;
+        RuntimeIO borrowed = new RuntimeIO(destination.ioHandle);
+        borrowed.globName = destination.globName;
+        return borrowed;
     }
 
     /**
@@ -334,12 +357,23 @@ public class PipeOutputChannel implements IOHandle {
                     exitCode = -1;
                 }
             }
+            joinPump(outputThread);
+            joinPump(errorThread);
             getGlobalVariable("main::?").set(exitCode << 8);
 
             isClosed = true;
             return exitCode == 0 ? scalarTrue : scalarFalse;
         } catch (IOException e) {
             return handleIOException(e, "close pipe failed");
+        }
+    }
+
+    private static void joinPump(Thread pump) {
+        if (pump == null || pump == Thread.currentThread()) return;
+        try {
+            pump.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

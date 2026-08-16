@@ -14,6 +14,7 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -262,6 +263,22 @@ public class EmitSubroutine {
                     EmitterMethodCreator.createClassWithMethod(
                             subCtx, node.block, node.useTryCatch
                     );
+            try {
+                // HotSpot can defer verification of a generated lazy sub until
+                // it is first invoked. If that happens after the enclosing file
+                // body has made writes, a file-level retry replays those writes.
+                // Resolve apply() now so only the invalid sub falls back.
+                generatedClass.getDeclaredMethod(
+                        "apply", RuntimeArray.class, int.class);
+            } catch (VerifyError | ClassFormatError verificationFailure) {
+                InterpretedCode interpreted = EmitterMethodCreator.compileToInterpreter(
+                        node.block, subCtx, node.useTryCatch);
+                throw new InterpreterFallbackException(interpreted, newEnv);
+            } catch (NoSuchMethodException reflectionFailure) {
+                throw new PerlCompilerException(
+                        "Failed to resolve generated subroutine: "
+                                + reflectionFailure.getMessage());
+            }
             String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));

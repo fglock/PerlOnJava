@@ -522,7 +522,17 @@ public class ParseInfix {
         // backtrack
         parser.tokenIndex = currentIndex;
 
-        return ListParser.parseList(parser, "]", 1);
+        // A subscript is an ordinary expression context even when its outer
+        // operator is delete/exists/defined (or reference-taking syntax).
+        // In particular, delete $array[&index] must invoke &index with the
+        // caller's @_, not turn it into a CODE value.
+        boolean savedParsingTakeReference = parser.parsingTakeReference;
+        parser.parsingTakeReference = false;
+        try {
+            return ListParser.parseList(parser, "]", 1);
+        } finally {
+            parser.parsingTakeReference = savedParsingTakeReference;
+        }
 
     }
 
@@ -573,7 +583,17 @@ public class ParseInfix {
         // backtrack
         parser.tokenIndex = currentIndex;
 
-        return ListParser.parseList(parser, "}", 1);
+        // The reference-taking mode used while parsing delete/exists applies
+        // to their direct operand, not to expressions inside a subscript.
+        // Getopt::EX relies on delete $hash{&CONSTANT_SUB} calling the sub and
+        // using its return value as the key.
+        boolean savedParsingTakeReference = parser.parsingTakeReference;
+        parser.parsingTakeReference = false;
+        try {
+            return ListParser.parseList(parser, "}", 1);
+        } finally {
+            parser.parsingTakeReference = savedParsingTakeReference;
+        }
     }
 
     /**

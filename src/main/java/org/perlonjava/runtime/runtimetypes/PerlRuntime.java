@@ -135,7 +135,15 @@ public final class PerlRuntime implements AutoCloseable {
                 true));
         ioStderr = new RuntimeIO(new StandardIO(System.err, false));
         ioStderr.autoFlush = true;
-        ioStdin = new RuntimeIO(new StandardIO(System.in));
+        // A no-command fork-open child replays the program up to the selected
+        // open.  Its OS stdin is already the new parent-to-child pipe, but real
+        // fork semantics do not expose that pipe until the fork point.  Mute it
+        // during replay so pre-fork input probes cannot consume the data the
+        // parent will send to the output filter.
+        ioStdin = new RuntimeIO(new StandardIO(
+                ForkOpenState.isReplayProcess()
+                        ? java.io.InputStream.nullInputStream()
+                        : System.in));
         ioSelectedHandle = ioStdout;
         ioLastWrittenHandle = ioStdout;
 
@@ -154,8 +162,11 @@ public final class PerlRuntime implements AutoCloseable {
     public void activateForkOpenChildStdout() {
         RuntimeIO muted = ioStdout;
         RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
+        RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
         replaceStandardHandle("main::STDOUT", stdout);
         replaceStandardHandle("main::stdout", stdout);
+        replaceStandardHandle("main::STDIN", stdin);
+        replaceStandardHandle("main::stdin", stdin);
         if (ioSelectedHandle == muted) ioSelectedHandle = stdout;
         if (ioLastWrittenHandle == muted) ioLastWrittenHandle = stdout;
         GlobalVariable.getGlobalVariable("main::$").set(pid);
