@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeEnvironment;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
@@ -168,6 +169,7 @@ public class ModuleTestExecutionTest extends PerlRuntimeTestBase {
         System.setOut(originalOut);
 
         // Restore original working directory
+        RuntimeEnvironment.setCurrentDirectory(originalUserDir);
         System.setProperty("user.dir", originalUserDir);
     }
 
@@ -232,6 +234,7 @@ public class ModuleTestExecutionTest extends PerlRuntimeTestBase {
             // Resolve the module directory and chdir to it
             Path moduleDir = resolveModuleDir(filename);
             System.setProperty("user.dir", moduleDir.toAbsolutePath().toString());
+            RuntimeEnvironment.setCurrentDirectory(moduleDir.toString());
 
             String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
             if (content.indexOf('\r') >= 0) {
@@ -253,6 +256,16 @@ public class ModuleTestExecutionTest extends PerlRuntimeTestBase {
             Path moduleLibPath = moduleDir.resolve("lib");
             if (Files.isDirectory(moduleLibPath)) {
                 RuntimeArray.push(options.inc, new RuntimeScalar(moduleLibPath.toAbsolutePath().toString()));
+            }
+
+            // Upstream distributions commonly keep test-only helpers under
+            // inc/. Setting user.dir above does not change the JVM process
+            // working directory, so a source-level `use lib 'inc'` alone
+            // cannot resolve that tree. Mirror the lib/ handling with an
+            // absolute include path while keeping the upstream test unchanged.
+            Path moduleIncPath = moduleDir.resolve("inc");
+            if (Files.isDirectory(moduleIncPath)) {
+                RuntimeArray.push(options.inc, new RuntimeScalar(moduleIncPath.toAbsolutePath().toString()));
             }
 
             PerlLanguageProvider.executePerlCode(options, true);

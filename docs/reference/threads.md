@@ -105,6 +105,9 @@ The clone is required only when an adjacent `perl5/` source tree is not already
 present. CI performs a sparse checkout of the four distributions and their core
 test harness at this exact compatibility-corpus commit.
 
+The release-only regex anchors also require the imported `perl5_t/t/re` corpus;
+run `perl dev/import-perl5/sync.pl` when that gitignored tree is absent.
+
 Before a thread/runtime release, run the complete four-mode matrix:
 
 ```bash
@@ -114,15 +117,23 @@ make test-threads-release
 Both targets use eight test jobs, a hard 300-second timeout per file, and write
 JSON reports under `build/reports/threads/`. Timing-sensitive join coverage is
 given an exclusive runner slot, and strict exit mode makes any non-passing file
-fail the gate. DBIx::Class is a separate long release gate:
+fail the gate. The release target also runs the post-Joni regex-thread anchors
+on both execution backends: five files and 48 assertions per backend, with a
+600-second per-file bound.
+
+Native callback and ORM compatibility form a separate slow ecosystem gate:
 
 ```bash
-timeout 3600 ./jcpan --jobs 8 -t DBIx::Class
+make test-threads-ecosystem
 ```
 
-Direct regex-language compatibility and Joni integration are maintained in the
-separate Phase 36 project. Threaded regex tests remain preservation checks
-against their same-commit direct companions.
+It runs the unchanged Net::SSLeay 61/62 thread suites and then executes
+`timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`.
+
+The callout-enabled Joni matcher and executable regex callbacks are integrated.
+Remaining direct regex-language compatibility is maintained in the separate
+Phase 36 project. Threaded regex tests remain preservation checks against their
+same-commit direct companions.
 
 See also the [feature matrix](feature-matrix.md#concurrency-and-perl-threads),
 [testing guide](testing.md), and the [thread examples](../../examples/threads/).

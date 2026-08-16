@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter check-thread-test-sources test-threads test-threads-release test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-regex-test-sources test-threads test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
 THREAD_PLATFORM_TESTS := \
@@ -21,6 +21,12 @@ THREAD_PLATFORM_TESTS := \
 	perl5/dist/Thread-Queue/t/10_timed.t \
 	perl5/dist/Thread-Semaphore/t/04_nonblocking.t \
 	perl5/dist/Thread-Semaphore/t/06_timed.t
+THREAD_REGEX_ANCHOR_TESTS := \
+	perl5_t/t/re/pat_psycho_thr.t \
+	perl5_t/t/re/pat_special_cc_thr.t \
+	perl5_t/t/re/reg_email_thr.t \
+	perl5_t/t/re/stclass_threads.t \
+	perl5_t/t/re/user_prop_race_thr.t
 
 all: build
 
@@ -121,6 +127,15 @@ check-thread-test-sources:
 		fi; \
 	done
 
+check-thread-regex-test-sources:
+	@for file in $(THREAD_REGEX_ANCHOR_TESTS); do \
+		if [ ! -f "$$file" ]; then \
+			echo "Error: $$file is missing."; \
+			echo "Import the pinned Perl core tests into ./perl5_t before running the regex-thread gate."; \
+			exit 1; \
+		fi; \
+	done
+
 # Permanent Perl ithread compatibility gate used by Ubuntu pull-request CI.
 # Full upstream distributions run on both backends with the default virtual
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
@@ -131,12 +146,31 @@ test-threads: check-java-gradle check-thread-test-sources
 	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/interpreter-virtual.json $(THREAD_DIST_DIRS)
 	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/platform-focused.json $(THREAD_PLATFORM_TESTS)
 
+# Post-Joni preservation anchors. These are unchanged Perl core tests whose
+# direct regex semantics are complete and whose threaded variants prove lexical
+# debug state, user-property coordination, recursive definitions, character
+# classes, callbacks, and snapshot ownership on both execution backends.
+test-threads-regex: check-java-gradle check-thread-regex-test-sources
+	@mkdir -p build/reports/threads
+	JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 5 --timeout 600 --output build/reports/threads/regex-jvm-virtual.json $(THREAD_REGEX_ANCHOR_TESTS)
+	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 5 --timeout 600 --output build/reports/threads/regex-interpreter-virtual.json $(THREAD_REGEX_ANCHOR_TESTS)
+
 # Thread release gate: extend the PR gate to the complete platform-carrier
 # distribution matrix. Together with test-threads this covers both backends on
 # both carrier policies without making every pull request repeat all four runs.
-test-threads-release: test-threads
+test-threads-release: test-threads test-threads-regex
 	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/jvm-platform.json $(THREAD_DIST_DIRS)
 	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/interpreter-platform.json $(THREAD_DIST_DIRS)
+
+# Slow ecosystem release gate. Net::SSLeay exercises native callbacks and
+# concurrent SSL context ownership; DBIx::Class exercises DBI handle rejection,
+# cloned package graphs, closures, and a large real-world ORM suite. This target
+# is intentionally separate from pull-request CI because jcpan needs network
+# access and the complete DBIx::Class run can take about 40 minutes.
+test-threads-ecosystem: check-java-gradle
+	JPERL_TEST_FILTER=61_threads-cb-crash $(MAKE) test-bundled-modules
+	JPERL_TEST_FILTER=62_threads-ctx_new-deadlock $(MAKE) test-bundled-modules
+	timeout 3600 ./jcpan --jobs 8 -t DBIx::Class
 
 # Bundled CPAN module tests (XML::Parser, etc.)
 # Tests live under src/test/resources/module/{ModuleName}/t/
