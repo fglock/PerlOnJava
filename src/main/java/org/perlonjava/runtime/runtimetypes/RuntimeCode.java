@@ -3776,16 +3776,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         result.firstFrameFromInterpreter() ? originalFrame : trackedOriginalFrame);
                 int trackedArgsFrame = Math.max(0, argsFrame - syntheticOwnSubFramesBefore);
                 String pkg = locationFrameInfo.get(0);
+                RuntimeCode callSiteOwner = activeCodeAtCallerFrame(trackedActiveCodeFrame + 1);
+                if (callSiteOwner != null && callSiteOwner.isQuotedRegexCallback) {
+                    // Calls made by a qr// callback are compiled from the
+                    // regex fragment's private token stream. Use the lexical
+                    // matcher package for caller() rather than a stale raw
+                    // interpreter or compiler-wrapper call-site frame.
+                    String callbackPackage = PerlRuntime.current().executionState()
+                            .activeRegexCallbackPackages.peek();
+                    if (callbackPackage != null && !callbackPackage.isEmpty()) {
+                        pkg = callbackPackage;
+                    } else if (callSiteOwner.packageName != null
+                            && !callSiteOwner.packageName.isEmpty()) {
+                        pkg = callSiteOwner.packageName;
+                    }
+                }
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
                 res.add(new RuntimeScalar(locationFrameInfo.get(1)));  // filename
                 String locationLine = locationFrameInfo.get(2);
-                RuntimeCode callSiteOwner = activeCodeAtCallerFrame(trackedActiveCodeFrame + 1);
                 if (callSiteOwner != null && callSiteOwner.isQuotedRegexCallback
                         && callSiteOwner.cvStartLine > 0) {
-                    // Calls made by a qr// callback are compiled from the
-                    // regex fragment's private token stream. Its raw JVM line
-                    // is relative to that fragment; Perl reports the callback
-                    // block's line in the enclosing source file.
                     locationLine = Integer.toString(callSiteOwner.cvStartLine);
                 }
                 res.add(new RuntimeScalar(locationLine));  // line
@@ -3856,6 +3866,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (subName == null && !activeCode.explicitlyRenamed
                             && activeCode.packageName != null && !previousFrameIsEval) {
                         subName = normalizeCallerPackage(activeCode.packageName) + "::__ANON__";
+                    }
+                }
+
+                if (activeCode != null && activeCode.isQuotedRegexCallback
+                        && !previousFrameIsEval) {
+                    // The interpreter may retain the package of an earlier qr//
+                    // compiler wrapper in its formatted frame.  The callback is
+                    // nevertheless an anonymous CV in the package where this
+                    // regex was quoted, which the matcher records for the whole
+                    // callback invocation.
+                    String callbackPackage = PerlRuntime.current().executionState()
+                            .activeRegexCallbackPackages.peek();
+                    if (callbackPackage != null && !callbackPackage.isEmpty()) {
+                        subName = normalizeCallerPackage(callbackPackage) + "::__ANON__";
                     }
                 }
                 

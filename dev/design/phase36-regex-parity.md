@@ -238,12 +238,13 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ## Progress Tracking
 
-### Current Status: Stage 36.4 in progress
+### Current Status: Stage 36.5 in progress
 
 The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
 seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 on both
 backends. `reg_eval_scope.t` is 47/49 on both backends, with no timeout or
-incomplete file. Matcher-owned
+incomplete file; its two remaining failures are shared direct compile-warning
+diagnostics assigned to Stage 36.6. Matcher-owned
 transactions restore ordinary scalar, array, and hash mutations on total
 failure while retaining Perl's ordinary side effects from attempted paths.
 Callback dynamic locals now transfer from the implementation CV to the matcher:
@@ -279,7 +280,7 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
 - [x] Stage 36.1: Validate callback engine seam
 - [x] Stage 36.2: Structured frontend and callback templates
 - [x] Stage 36.3: Plain callbacks and provisional match state
-- [ ] Stage 36.4: Backtracking, dynamic scope, and conditions
+- [x] Stage 36.4: Backtracking, dynamic scope, and conditions
 - [ ] Stage 36.5: Dynamic patterns and recursive execution
 - [ ] Stage 36.6: Remaining declarative parity
 - [ ] Stage 36.7: Integration and release
@@ -302,25 +303,30 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
     the JVM backend.
   - Added complete disassembly for callback and template bytecodes so their
     package and callback-table operands remain inspectable.
+- [x] Tied, magical, shared, and readonly mutation policy (2026-08-16)
+  - Preserved observable tied, shared, and unrelated `pos()` side effects from
+    an executed callback path even when the matcher later abandons that path.
+  - Kept `$^R` matcher-owned so it follows the chosen path, and preserved
+    readonly failure without mutating the protected value.
 
 ### Next steps
 
-1. Define and implement the mutation policy for tied, magical, shared, and
-   readonly values; ordinary values are now transactionally covered.
-2. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
+1. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
    complete and proceed to the remaining declarative parity slices.
-3. Close the two shared direct gaps in `reg_eval_scope.t`: the Unicode warning
-   diagnostic and the legacy `qr/\\(?{` compile diagnostic.
+2. In Stage 36.6, close the two shared direct gaps in `reg_eval_scope.t`: the
+   Unicode warning diagnostic and the legacy `qr/\\(?{` compile diagnostic.
 
 ### Open blockers
 
 - The Unicode warning and legacy `qr/\\(?{` diagnostic remain shared direct
   gaps, leaving both backends at 47/49.
-- Tied, magical, shared, and readonly callback mutation rollback remains
-  intentionally outside the ordinary-value transaction until its exact Perl
-  behavior is established with differential tests.
 - Dynamic `(??{ EXPR })` execution is integrated, but its full Stage 36.5 CPAN
-  and unchanged-core exit matrix is not yet recorded.
+  and unchanged-core exit matrix is not yet recorded. The focused matrix is
+  12/12 on both backends, while Object::InsideOut 4.05 `t/17-dynamic.t` prints
+  its six-test plan but reaches no assertion before a 180-second hard timeout
+  on either backend. The full `--jobs 8` suite likewise made no TAP progress in
+  eight CPU-bound early files for more than seven minutes and was terminated as
+  one exact process tree.
 - Pure-pattern deep recursion still needs an engine-owned limit; callback
   re-entry is now bounded without relying on the Java stack.
 - Partial direct core tests still contain diagnostic, parser, Unicode, and
