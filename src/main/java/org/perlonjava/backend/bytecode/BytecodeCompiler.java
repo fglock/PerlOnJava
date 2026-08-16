@@ -1756,7 +1756,14 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
                     // This is a bareword (no sigil)
-                    if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
+                    // A fully-qualified all-caps name is commonly a constant
+                    // supplied by an optional XS module.  Perl parses it even
+                    // when the guarded branch is disabled; do not reject the
+                    // source merely because that optional module is absent.
+                    boolean qualifiedConstant = varName.contains("::")
+                            && varName.matches(".*::[A-Z][A-Z0-9_]*");
+                    if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)
+                            && !qualifiedConstant) {
                         throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
                     }
                     if (currentCallContext == RuntimeContextType.VOID) {
