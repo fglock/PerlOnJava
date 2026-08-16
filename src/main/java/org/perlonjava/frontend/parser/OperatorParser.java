@@ -800,7 +800,15 @@ public class OperatorParser {
         // Named unary operators have precedence between 20 and 21 in Perl
         // This allows expressions like: values $hashref->%* or keys $hashref->%* or scalar((nil) x 3, 1)
         if (operator.equals("scalar") || operator.equals("values") || operator.equals("keys") || operator.equals("each")) {
-            operand = parser.parseExpression(parser.getPrecedence("=~")); // precedence 20
+            // parseExpression stops before an operator whose precedence is
+            // equal to the supplied floor. Named unary scalar binds across a
+            // following =~ / !~ (`scalar $s =~ /(...)/`) and must force that
+            // match into scalar context rather than letting an enclosing print
+            // put it in list context. The other named unary operators retain
+            // their existing match-level boundary.
+            int operandPrecedence = parser.getPrecedence("=~")
+                    - (operator.equals("scalar") ? 1 : 0);
+            operand = parser.parseExpression(operandPrecedence);
             // Check if operand is null (no argument provided)
             if (operand == null) {
                 throw new PerlCompilerException(currentIndex, "Not enough arguments for " + operator, parser.ctx.errorUtil);

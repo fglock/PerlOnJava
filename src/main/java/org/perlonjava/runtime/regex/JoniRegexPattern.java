@@ -392,7 +392,13 @@ final class JoniRegexPattern {
                 calloutHandler = new PerlCalloutHandler(input, byteToChar, callbacks, flags);
                 matcher.setCalloutHandler(calloutHandler);
             }
-            int result = matcher.search(charToByte[nextStart], charToByte[regionEnd], Option.NONE);
+            int result;
+            try {
+                result = matcher.search(charToByte[nextStart], charToByte[regionEnd], Option.NONE);
+            } catch (RuntimeException | Error failure) {
+                if (calloutHandler != null) calloutHandler.abort();
+                throw failure;
+            }
             matched = result >= 0;
             if (calloutHandler != null) calloutHandler.finish(matched);
             if (!matched) return false;
@@ -511,6 +517,7 @@ final class JoniRegexPattern {
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
         private final RegexCallbackMutationSnapshot mutations;
+        private final int initialLocalLevel;
         private RuntimeScalar completedResult;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
@@ -528,6 +535,7 @@ final class JoniRegexPattern {
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
             this.mutations = mutations;
+            this.initialLocalLevel = DynamicVariableManager.getLocalLevel();
             for (RuntimeRegexCallback callback : callbacks) mutations.include(callback.code);
         }
 
@@ -589,8 +597,17 @@ final class JoniRegexPattern {
             publishProvisional(match);
 
             try {
-                RuntimeScalar result = RuntimeCode.apply(new RuntimeScalar(callback.code),
-                        new RuntimeArray(), RuntimeContextType.SCALAR).scalar();
+                DynamicVariableManager.CapturedFrame<RuntimeList> frame =
+                        DynamicVariableManager.captureFrameLocals(() -> RuntimeCode.apply(
+                                new RuntimeScalar(callback.code), new RuntimeArray(),
+                                RuntimeContextType.SCALAR));
+                // Joni's complete() notification is delayed until the candidate
+                // path commits. Resume now so a later (?{ ... }) on that same
+                // path observes local() values; unwind() still owns the token's
+                // pre-callback level and rolls the frame back on backtracking.
+                DynamicVariableManager.resumeSuspended(frame.states());
+                rejectEscapedControlFlow(frame.result());
+                RuntimeScalar result = frame.result().scalar();
                 boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
                 if (block) rVariable.set(result);
                 Token token = new Token(localLevel, savedRegex, previousR,
@@ -617,15 +634,32 @@ final class JoniRegexPattern {
         }
 
         void finish(boolean matched) {
-            if (!matched) mutations.restore();
-            if (matched && completedResult != null) {
-                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
-                        .set(completedResult);
+            try {
+                if (!matched) mutations.restore();
+                if (matched && completedResult != null) {
+                    GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
+                            .set(completedResult);
+                }
+            } finally {
+                DynamicVariableManager.popToLocalLevel(initialLocalLevel);
+            }
+        }
+
+        void abort() {
+            try {
+                mutations.restore();
+            } finally {
+                DynamicVariableManager.popToLocalLevel(initialLocalLevel);
             }
         }
 
         private void restore(Token token, boolean completed) {
-            restoreCallbackScope(token.localLevel(), token.regexState(), token.previousR());
+            if (!completed) {
+                DynamicVariableManager.popToLocalLevel(token.localLevel());
+            }
+            token.regexState().restore();
+            GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
+                    .set(token.previousR());
             if (completed && token.block() && completedResult == null) {
                 completedResult = token.result();
             }
@@ -640,6 +674,21 @@ final class JoniRegexPattern {
                 GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
                         .set(previousR);
             }
+        }
+
+        private static void rejectEscapedControlFlow(RuntimeList result) {
+            if (!(result instanceof RuntimeControlFlowList flow)) return;
+            ControlFlowMarker marker = flow.marker;
+            if (marker.type == ControlFlowType.GOTO
+                    || marker.type == ControlFlowType.TAILCALL) {
+                // The runtime location is the regex pseudo-block boundary (and
+                // can differ from the marker's inner goto location), so let the
+                // exception formatter attach it.
+                throw new PerlCompilerException("Can't \"goto\" out of a pseudo block");
+            }
+            // Preserve the control op's own location. The terminating newline
+            // tells PerlCompilerException this is already fully formatted.
+            throw new PerlCompilerException(marker.buildErrorMessage() + ".\n");
         }
 
         private void publishProvisional(MatchView match) {

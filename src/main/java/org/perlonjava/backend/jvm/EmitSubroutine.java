@@ -505,6 +505,34 @@ public class EmitSubroutine {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                     false);
         }
+        if (node.getBooleanAnnotation("inheritsSelfReference")
+                && !(isMapGrepBlock != null && isMapGrepBlock)) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    ctx.javaClassInfo.javaClassName,
+                    "__SUB__",
+                    "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "inheritSelfReference",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+        }
+        if (node.getBooleanAnnotation("regexCallbackPseudoBlock")) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "value",
+                    "Ljava/lang/Object;");
+            mv.visitTypeInsn(Opcodes.CHECKCAST,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode");
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitFieldInsn(Opcodes.PUTFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "isRegexCallbackPseudoBlock",
+                    "Z");
+        }
 
         // Set isEvalBlock on the RuntimeCode so RuntimeCode.apply() propagates
         // non-local returns through eval BLOCK boundaries

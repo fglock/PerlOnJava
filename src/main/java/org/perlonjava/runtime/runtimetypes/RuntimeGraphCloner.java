@@ -293,6 +293,7 @@ public class RuntimeGraphCloner {
             };
         }
         target.isMapGrepBlock = source.isMapGrepBlock;
+        target.isRegexCallbackPseudoBlock = source.isRegexCallbackPseudoBlock;
         target.isEvalBlock = source.isEvalBlock;
         target.isTryExpressionWrapper = source.isTryExpressionWrapper;
         target.inheritsSelfReference = source.inheritsSelfReference;

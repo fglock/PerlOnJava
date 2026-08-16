@@ -2,11 +2,10 @@
 
 ## Status
 
-- **Current phase:** Phase 0 — design and differential baseline
+- **Current phase:** Phase 3 — backtracking and dynamic scope
 - **Started:** 2026-08-09
-- **Implementation status:** Not started
-- **Prerequisite:** PR #895 (`feature/cpan-workaround-cleanup`) or an equivalent
-  backend-neutral `RegexMatcher` integration
+- **Implementation status:** Callout engine and plain callback bridge integrated
+- **Prerequisite:** Satisfied by the namespaced callout-enabled Joni integration
 - **Primary targets:** `(?{ ... })`, `(?(?{ ... })yes|no)`, and `(??{ ... })`
 
 ## Decision Summary
@@ -617,46 +616,36 @@ record the observed output in this document as phases proceed.
 
 ## Progress Tracking
 
-### Current Status: Phase 0 in progress
+### Current Status: Phase 3 in progress
 
 ### Completed Phases
 
-- [ ] Phase 0: Differential semantics and Joni spike
-- [ ] Phase 1: Structured frontend and runtime template
-- [ ] Phase 2: Plain `(?{ ... })`
+- [x] Phase 0: Differential semantics and Joni spike
+- [x] Phase 1: Structured frontend and runtime template
+- [x] Phase 2: Plain `(?{ ... })`
 - [ ] Phase 3: Backtracking and dynamic scope
-- [ ] Phase 4: Callback conditions
+- [x] Phase 4: Callback conditions
 - [ ] Phase 5: `(??{ ... })` dynamic programs
 - [ ] Phase 6: Runtime source, hardening, and policy removal
 
-### Work Completed
-
-- 2026-08-09: Created this design after reviewing the current parser,
-  `RegexPreprocessor`, `RuntimeRegex`, the Joni 2.2.7 API, PR #895's matcher
-  abstraction, and the executable-regex CPAN policies.
-- 2026-08-09: Selected a structured callback template plus generic Joni callout
-  extension as the preferred architecture.
-- 2026-08-09: Corrected the older blanket-side-effect-journaling proposal: Perl
-  dynamic locals require backtracking unwind, but ordinary side effects must not
-  all be reverted.
-
 ### Next Steps
 
-1. Write and validate `regex_executable_callbacks.t` with standard Perl.
-2. Record exact standard-Perl outputs for every open semantic question reachable
-   without implementation.
-3. Create a disposable Joni 2.2.7 callout spike and measure the patch surface.
-4. Decide whether to upstream the generic callout API or publish a namespaced fork.
-5. Begin Phase 1 only after PR #895's matcher abstraction is merged or rebased into
-   the implementation branch.
+1. Preserve lexical regex flags and package metadata for runtime/interpolated
+   executable source.
+2. Close nested callback caller/source-line and interpolated `qr//` `__SUB__`
+   identity gaps.
+3. Add warning-location, interruption, timeout, and nested-exception gates.
+4. Classify tied, magical, shared, and readonly mutation behavior with standard
+   Perl before extending matcher transactions.
+5. Finish dynamic-pattern recursion/caching gates and then remove only the
+   capability policies justified by unchanged-source results.
 
 ### Blockers
 
-- PR #895 is still the integration prerequisite for the planned engine routing.
-- Joni 2.2.7 does not expose an in-match callback extension point; Phase 0 must
-  validate the maintained-fork approach.
-- Several detailed Perl semantics remain intentionally open pending differential
-  tests.
+- Runtime-injected callback source still requires `use re 'eval'` propagation.
+- Recursive callback frames do not yet retain all Perl caller source lines.
+- Tied, magical, shared, and readonly rollback semantics remain intentionally
+  open pending differential tests.
 
 ## Related Documents and Skills
 

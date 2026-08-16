@@ -22,7 +22,7 @@ public class Local {
         mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                "popToLocalLevel",
+                "teardownFrameToLocalLevel",
                 "(I)V",
                 false);
     }

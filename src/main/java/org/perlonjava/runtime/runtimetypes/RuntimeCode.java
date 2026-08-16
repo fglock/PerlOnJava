@@ -892,6 +892,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean deferredConstAttribute = false;
     // Flag to indicate this code is a map/grep block - non-local return should propagate through it
     public boolean isMapGrepBlock = false;
+    // Executable regex callbacks are Perl pseudo-blocks. They execute through
+    // an implementation CV but must not add a caller() frame.
+    public boolean isRegexCallbackPseudoBlock = false;
     // Implementation callbacks such as map/grep do not introduce a Perl
     // subroutine scope, so their __SUB__ comes from the enclosing RuntimeCode.
     public boolean inheritsSelfReference = false;
@@ -1853,6 +1856,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
         this.deferredConstAttribute = codeFrom.deferredConstAttribute;
         this.isMapGrepBlock = codeFrom.isMapGrepBlock;
+        this.isRegexCallbackPseudoBlock = codeFrom.isRegexCallbackPseudoBlock;
         this.inheritsSelfReference = codeFrom.inheritsSelfReference;
         this.isEvalBlock = codeFrom.isEvalBlock;
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
@@ -3657,6 +3661,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             frame = args.getFirst().getInt();
         }
 
+        frame = callerFrameIncludingRegexPseudoBlocks(frame);
+
         // Save the original user-supplied frame before the JVM skip adjustment.
         // This value maps directly to hasArgsStack depth: caller(0) → depth 0 (current frame),
         // caller(1) → depth 1 (caller's frame), etc. The hasArgsStack is pushed/popped in the
@@ -4156,6 +4162,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             previous = active;
         }
         return null;
+    }
+
+    /** Map a Perl-visible caller depth to the implementation stack depth. */
+    private static int callerFrameIncludingRegexPseudoBlocks(int logicalFrame) {
+        if (logicalFrame < 0) return logicalFrame;
+        RuntimeCode previous = null;
+        int physical = 0;
+        int visible = 0;
+        for (RuntimeCode active : activeCodeStack()) {
+            if (active == previous || isCompilerWrapperPair(active, previous)) {
+                continue;
+            }
+            previous = active;
+            if (active.isRegexCallbackPseudoBlock) {
+                physical++;
+                continue;
+            }
+            if (visible++ == logicalFrame) return physical;
+            physical++;
+        }
+        return logicalFrame + (physical - visible);
     }
 
     public static RuntimeCode getActiveCodeAtCallerFrame(int logicalFrame) {
