@@ -4,6 +4,14 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Regex: complete the Phase 36 Joni compatibility slice on both execution
+  backends. Closure-bearing patterns support matcher-owned callback unwind,
+  dynamic `(??{ ... })` programs, bounded recursion, variable-length
+  lookbehind, grapheme clusters, advanced Unicode properties, and Perl's
+  `ACCEPT`, `FAIL`, `PRUNE`, `SKIP`, `THEN`, and `COMMIT` control verbs. Runtime
+  source preserves lexical warning and package context. The full 80-file core
+  regex gate improves the PR 958 baseline by 729 passing assertions with no
+  per-file pass-count regressions.
 - CPAN/compiler tooling: run MakeMaker `CONFIGURE` callbacks and prefer their
   generated root modules over auxiliary metadata stubs; enforce known
   subroutine lvalue errors at compile time; preserve blessed anonymous-glob

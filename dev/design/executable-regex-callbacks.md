@@ -616,7 +616,7 @@ record the observed output in this document as phases proceed.
 
 ## Progress Tracking
 
-### Current Status: Phase 5 in progress
+### Current Status: Phase 6 delivered; residual source forms remain
 
 ### Completed Phases
 
@@ -625,25 +625,22 @@ record the observed output in this document as phases proceed.
 - [x] Phase 2: Plain `(?{ ... })`
 - [x] Phase 3: Backtracking and dynamic scope
 - [x] Phase 4: Callback conditions
-- [ ] Phase 5: `(??{ ... })` dynamic programs
-- [ ] Phase 6: Runtime source, hardening, and policy removal
+- [x] Phase 5: `(??{ ... })` dynamic programs (2026-08-16)
+- [x] Phase 6: Runtime source and hardening (2026-08-16)
 
 ### Next Steps
 
-1. Finish dynamic-pattern recursion/caching gates and then remove only the
-   capability policies justified by unchanged-source results.
-2. Complete tied and magical coverage for callback paths that throw or recurse;
-   the executed-abandoned-alternative policy is now fixed by a differential
-   system/JVM/interpreter gate.
-3. Treat the two shared 47/49 `reg_eval_scope.t` compile diagnostics as direct
-   Phase 6 work; callback caller identity and package parity now match on both
-   backends.
+1. Accept the remaining mixed literal/runtime callback source in
+   `pat_re_eval.t` while preserving lexical `use re 'eval'` admission.
+2. Remove only capability policies justified by unchanged-source suite results.
+3. Extend focused differential coverage for tied and magical callback paths
+   that throw or recurse.
 
 ### Blockers
 
-- Object::InsideOut's dynamic-pattern test reaches its plan but no assertions
-  before the hard timeout on either backend; classify that pre-assertion path
-  before using the distribution as a Stage 36.5 exit gate.
+- `pat_re_eval.t` reaches 430/555 on both backends before an unsupported mixed
+  literal/runtime source form. The focused callback and dynamic-pattern gates,
+  `reg_eval_scope.t` 49/49, and Object::InsideOut 6/6 are complete.
 
 ## Related Documents and Skills
 

@@ -2,8 +2,8 @@
 
 ## Status
 
-- **Project status:** Active parallel project
-- **Current stage:** Stage 36.6 — remaining declarative parity
+- **Project status:** Delivered compatibility slice; residual gaps remain tracked
+- **Current stage:** Stage 36.7 complete
 - **Parent plan:** `dev/design/concurrency.md`
 - **Detailed callback design:** `dev/design/executable-regex-callbacks.md`
 - **Integration rule:** Direct regex semantics are implemented first. Thread
@@ -31,7 +31,8 @@ thread wrappers and protects the Phase 44 release matrix.
 - Quoted `(?{` text inside `\Q...\E` is not parsed as executable code.
 - Literal regex expressions assembled from strings, concatenation, and
   `quotemeta` are validated when the surrounding CV is compiled.
-- `(*FAIL)` and `(*F)` have real always-failing zero-width behavior.
+- `(*FAIL)`/`(*F)`, `(*ACCEPT)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and
+  `(*COMMIT)` execute as matcher-owned control operations.
 - Runtime-owned Unicode property caches and per-runtime-family property
   coordination are implemented.
 - Phase 44 established timeout-free thread-wrapper execution and the supported
@@ -238,41 +239,31 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ## Progress Tracking
 
-### Current Status: Stage 36.6 in progress
+### Current Status: Stage 36.7 complete
 
-The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
-seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 on both
-backends. `reg_eval_scope.t` is 48/49 on the JVM and 49/49 on the interpreter,
-with no timeout or incomplete file; its remaining diagnostic work is assigned
-to Stage 36.6. Matcher-owned
-transactions restore ordinary scalar, array, and hash mutations on total
-failure while retaining Perl's ordinary side effects from attempted paths.
-Callback dynamic locals now transfer from the implementation CV to the matcher:
-they remain visible to later callbacks on the active path, unwind on
-backtracking, and restore after success, failure, or exception. Regex callbacks
-also behave as pseudo-blocks for `caller`, `__SUB__`, and escaping
-`last`/`next`/`goto` on both execution backends. Named unary `scalar` now keeps a
-following match in scalar context, including callback-bearing matches. Recursive
-callback re-entry is bounded independently of the configured JVM stack.
+Closure-bearing and advanced declarative patterns use the namespaced Joni fork
+on both execution backends. The delivered matcher owns callback unwind, dynamic
+programs, recursion limits, cut verbs, bounded variable-length lookbehind,
+grapheme clusters, and advanced Unicode-property execution. Runtime-source
+scanning ignores callback-like braces inside quoted strings, and diagnostics
+retain lexical warning masks and source locations.
 
-Lexical package and `use/no re '/flags'` state now reaches literal `qr//`,
-interpolated regex values, and executable runtime source admitted by
-`use re 'eval'`. Callback frames preserve construction source lines and
-enclosing `__SUB__`, and warning, nested-exception, alarm-interruption, and
-timeout-adjacent cleanup is covered by identical JVM/interpreter tests.
-Quoted callback frames also prefer their parser-captured lexical package over
-the compilation-unit source map, preventing an earlier package-scoped regex
-from renaming later `main::__ANON__` frames on the interpreter backend.
+The focused direct gates are `rxcode.t` 42/42, `reg_eval_scope.t` 49/49, and
+`dynamic_patterns.t` 12/12 on both backends. The unchanged Object::InsideOut
+dynamic-pattern test is 6/6 on both backends. `reg_eval.t` remains 5/8 because
+of three shared non-regex code-evaluation failures, while `pat_re_eval.t` now
+executes 430 of 555 planned assertions before reaching a mixed literal/runtime
+source form that is not yet accepted.
 
-The 2026-08-16 Stage 36.4 validation slice compared all 80 `perl5_t/t/re/`
-files with `../PerlOnJava/logs/test_20260815_080000_958.log`. The result is
-50,959/94,829 versus 50,273/94,771: 686 additional passing assertions, 58
-additional planned assertions, and no per-file pass-count regression. The
+The final 2026-08-16 differential gate compared all 80 `perl5_t/t/re/` files
+with `../PerlOnJava/logs/test_20260815_080000_958.log`. It records
+51,002/94,829 versus 50,273/94,771: 729 additional passing assertions, 58
+additional planned assertions, and zero per-file pass-count regressions. The
 resource-sensitive `pat.t`, `pat_thr.t`, `pat_advanced.t`, and
-`pat_advanced_thr.t` files ran serially because they share temporary files;
-`pat_psycho*` and `speed*` ran concurrently as isolated runner processes. This
-gate also found and fixed stale cache eviction for deferred user-defined Unicode
-properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
+`pat_advanced_thr.t` files remained in the runner's exclusive lane.
+`pat_psycho_thr.t` completed 17/17 in an isolated concurrent runner; `speed.t`
+and `speed_thr.t` each reached 58/59 with 26 passing assertions. Full `make` is
+green without warning output.
 
 ### Completed stages
 
@@ -282,8 +273,8 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
 - [x] Stage 36.3: Plain callbacks and provisional match state
 - [x] Stage 36.4: Backtracking, dynamic scope, and conditions
 - [x] Stage 36.5: Dynamic patterns and recursive execution
-- [ ] Stage 36.6: Remaining declarative parity
-- [ ] Stage 36.7: Integration and release
+- [x] Stage 36.6: Remaining declarative parity (2026-08-16)
+- [x] Stage 36.7: Integration and release (2026-08-16)
 
 ### Completed slices
 
@@ -333,23 +324,37 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
     restored HINT_NEW_RE bit and escaped pseudo-callback opener.
   - The focused oracle is 1/1 on system Perl, JVM, and interpreter;
     interpreter `reg_eval_scope.t` is now 49/49 and JVM is 48/49.
+- [x] Declarative Joni hardening (2026-08-16)
+  - Added matcher-native `PRUNE`, `SKIP`, `THEN`, and `COMMIT` semantics and
+    retained `ACCEPT`, `FAIL`, and `F` boundary behavior.
+  - Added an engine-owned depth ceiling for pure subexpression recursion.
+  - Added bounded variable-length positive and negative lookbehind, `\X`
+    grapheme clusters, `Extended_Pictographic`, and script-extension matching.
+  - Preserved quoted braces in dynamic runtime source and completed
+    `reg_eval_scope.t` at 49/49 on both backends.
+- [x] Integration and differential release gate (2026-08-16)
+  - Ran all 80 regex files with resource-sensitive fixtures serialized and
+    isolated heavy fixtures parallelized.
+  - Improved the PR 958 baseline by 729 passing assertions with zero per-file
+    regression; retained exact JSON and full-output reports outside the tree.
+  - Completed the warning-free full build and Phase 44 preservation matrix.
+  - Passed both Net::SSLeay thread ecosystem checks and the unchanged
+    DBIx::Class gate (325 files, 42,681 assertions).
 
 ### Next steps
 
-1. Add per-statement lexical warning bits to JVM top-level code so the
-   beyond-Unicode property warning also moves JVM `reg_eval_scope.t` to 48/49.
-2. Add the pure-pattern engine recursion bound, then run the direct/thread
-   regex release matrix before Stage 36.7 integration.
+1. Accept mixed literal/runtime callback source in the remaining
+   `pat_re_eval.t` cases without broadening `use re 'eval'` admission.
+2. Close the three non-regex `reg_eval.t` code-evaluation failures.
+3. Continue the remaining Unicode alias and recursion-condition cases as
+   focused post-Phase-36 compatibility slices.
 
 ### Open blockers
 
-- The JVM needs per-statement lexical warning bits for the Unicode warning,
-  leaving it at 48/49 despite the focused warning path passing 2/2. The
-  interpreter is 49/49.
-- Pure-pattern deep recursion still needs an engine-owned limit; callback
-  re-entry is now bounded without relying on the Java stack.
-- Partial direct core tests still contain diagnostic, parser, Unicode, and
-  regex-object gaps; their wrappers must not be mistaken for thread failures.
+- Some broad core files remain partial because they combine regex assertions
+  with unsupported parser, eval, Unicode-alias, and regex-object behavior.
+  Their thread wrappers remain preservation gates against the same-commit
+  direct result, not claims of complete Perl regex compatibility.
 
 ## Related Documents and Skills
 
