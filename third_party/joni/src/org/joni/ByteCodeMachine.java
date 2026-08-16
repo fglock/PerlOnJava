@@ -34,9 +34,11 @@ import org.joni.constants.internal.OPCode;
 import org.joni.constants.internal.OPSize;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
+import org.joni.exception.ValueException;
 
 class ByteCodeMachine extends StackMachine implements MatchView {
     private static final int MAX_INTERRUPT_CHECK_EVERY = 256 << 7; // 32768
+    private static final int MAX_SUBEXP_CALL_DEPTH = 1000;
     int interruptCheckEvery = 256;     // << 1 after each check up to  ^^^
     volatile boolean interrupted = false;
 
@@ -306,6 +308,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
+                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.SKIP:                       opSkip();                   continue;
+                case OPCode.THEN:                       opThen();                   continue;
+                case OPCode.COMMIT:                     opCommit();                 continue;
 
                 case OPCode.STATE_CHECK_ANYCHAR_STAR:   if (USE_CEC) {opStateCheckAnyCharStar(); break;}
                 case OPCode.STATE_CHECK_ANYCHAR_ML_STAR:if (USE_CEC) {opStateCheckAnyCharMLStar();break;}
@@ -451,6 +457,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
+                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.SKIP:                       opSkip();                   continue;
+                case OPCode.THEN:                       opThen();                   continue;
+                case OPCode.COMMIT:                     opCommit();                 continue;
 
                 case OPCode.EXACT1_IC_SB:               opExact1ICSb();            break;
                 case OPCode.EXACTN_IC_SB:               opExactNICSb();            continue;
@@ -1940,9 +1950,21 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opCall() {
+        if (activeSubexpCallDepth() >= MAX_SUBEXP_CALL_DEPTH) {
+            throw new ValueException("subpattern recursion limit exceeded");
+        }
         int addr = code[ip++];
         pushCallFrame(ip);
         ip = addr; // absolute address
+    }
+
+    private int activeSubexpCallDepth() {
+        int depth = 0;
+        for (int i = 0; i < stk; i++) {
+            if (stack[i].type == CALL_FRAME) depth++;
+            else if (stack[i].type == RETURN) depth--;
+        }
+        return depth;
     }
 
     private void opCallout() {
@@ -2037,6 +2059,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         closeOpenCaptures(-1);
         return opEnd();
+    }
+
+    private void opSkip() {
+        cutAlternatives(false);
+        requestSearchSkip(s);
+    }
+
+    private void opThen() {
+        cutAlternatives(true, s, sprev, pkeep);
+    }
+
+    private void opCommit() {
+        cutAlternatives(false);
+        requestSearchAbort();
     }
 
     private void closeOpenCaptures(int boundary) {

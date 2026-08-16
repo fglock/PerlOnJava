@@ -17,28 +17,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.joni.ast;
+package org.joni.test;
 
-/** Zero-width matcher-control verb that cannot be represented as literal text. */
-public final class ControlVerbNode extends StringNode {
-    public enum Kind { ACCEPT, FAIL, PRUNE, SKIP, THEN, COMMIT }
+import java.nio.charset.StandardCharsets;
 
-    public final Kind kind;
+import org.jcodings.specific.ASCIIEncoding;
+import org.joni.Option;
+import org.joni.Regex;
+import org.joni.Syntax;
+import org.joni.exception.ValueException;
+import org.junit.Test;
 
-    public ControlVerbNode(Kind kind) {
-        super(0);
-        this.kind = kind;
-        setRaw();
-        setDontGetOptInfo();
-    }
+public class TestSubexpRecursionLimit {
+    @Test(expected = ValueException.class)
+    public void deepPurePatternRecursionStopsInsideTheMatcher() {
+        byte[] pattern = "(?<nested>a\\g<nested>?b)".getBytes(StandardCharsets.US_ASCII);
+        String inputString = "a".repeat(1100) + "b".repeat(1100);
+        byte[] input = inputString.getBytes(StandardCharsets.US_ASCII);
+        Regex regex = new Regex(pattern, 0, pattern.length, Option.NONE,
+                ASCIIEncoding.INSTANCE, Syntax.RUBY);
 
-    @Override
-    public String getName() {
-        return "ControlVerb";
-    }
-
-    @Override
-    public String toString(int level) {
-        return "\n  kind: " + kind;
+        regex.matcher(input).search(0, input.length, Option.NONE);
     }
 }

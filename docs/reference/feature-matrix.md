@@ -387,16 +387,16 @@ my @copy = @{$z};         # ERROR
 
 ### Missing Regular Expression Features
 
-- ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
-- 🟡  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, and nested alternatives participate in outer backtracking without changing outer grouping or capture numbering. Callback re-entry has an engine-owned depth ceiling; deep pure-pattern recursion still needs a limit that does not depend on the Java call stack.
-- 🟡  **Backtracking Control Verbs**: `(*ACCEPT)` executes through Joni with top-level, subpattern-call, positive-lookahead, and dynamic-pattern boundary semantics. `(*FAIL)`/`(*F)` and atomic groups `(?>...)` are supported. `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` are not supported.
+- ✅  **Dynamically-scoped regex variables**: Provisional captures, `$^R`, `$^N`, match positions, and callback locals follow matcher paths and unwind on backtracking.
+- ✅  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, nested alternatives participate in outer backtracking without changing outer grouping or capture numbering, and callback and pure-pattern recursion have engine-owned depth ceilings.
+- ✅  **Backtracking Control Verbs**: `(*ACCEPT)`, `(*FAIL)`/`(*F)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` execute through Joni with matcher-owned cut boundaries. Atomic groups `(?>...)` are supported.
 - ✅  **Regex Definitions**: `(?(DEFINE)...)` containers and numbered or named calls to their subpatterns execute through Joni.
-- ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
+- ✅  **Lookbehind Assertions**: Fixed and bounded variable-length positive and negative lookbehind assertions execute through Joni.
 - ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
 - ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
 - 🟡  **Conditional Expressions**: Executable callback conditions `(?(?{ code })yes|no)` and optimistic predicates `(?(*{ code })yes|no)` execute through Joni; other condition forms are not yet complete.
-- ❌  **Extended Unicode Regex Features**: Some extended Unicode regex functionalities are not supported.
-- ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
+- 🟡  **Extended Unicode Regex Features**: Script extensions and properties such as `Extended_Pictographic` execute through Joni; some Perl-only property aliases and versioned `Age` forms remain incomplete.
+- ✅  **Extended Grapheme Clusters**: `\X` matches combining sequences and emoji ZWJ grapheme clusters.
 - ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Callback `local` frames follow matcher paths, and escaped loop control or `goto` stops at the callback pseudo-block boundary. `$^N` follows capture-close order independently of `$+`.
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
 - ✅  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile. Admitted runtime source is compiled into lexical callback closures and preserves its package, visible lexical cells, and default regex modifiers.

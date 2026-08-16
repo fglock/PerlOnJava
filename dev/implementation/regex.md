@@ -1,5 +1,25 @@
 # Architecture options for Perl regex in PerlOnJava
 
+## Implemented architecture
+
+PerlOnJava uses a hybrid dispatcher. Ordinary Java-compatible patterns retain
+the `java.util.regex` fast path. Patterns requiring Perl recursion, branch-reset
+groups, executable closures, dynamic programs, bounded variable-length
+lookbehind, grapheme clusters, advanced properties, or backtracking control
+verbs execute in the vendored `org.perlonjava.joni` fork.
+
+The fork is runtime-neutral: Perl closures and mutable runtime state stay in
+PerlOnJava callback tables. Matcher callouts expose provisional captures and
+exact unwind notifications, allowing `$^R`, `$^N`, callback locals, nested
+matches, and `(??{ ... })` alternatives to follow the engine's backtracking
+stack. Both callback and declarative recursion use engine-owned limits. The
+legacy preprocessor remains only for syntax normalization and dispatch that
+cannot yet be represented directly in Joni; semantic backtracking operations
+belong inside the matcher.
+
+The namespaced fork preserves upstream copyright and authorship notices and
+avoids classpath collisions with applications that depend on upstream Joni.
+
 ## 1) Hybrid delegator (quickest path)
 
 * **Idea:** Compile the pattern into a sequence of “atoms.” Route the Java-compatible subset to `java.util.regex`, and handle Perl-only constructs in your own engine.
@@ -54,5 +74,4 @@
 # Minimal milestone plan
 
 1. Parser + IR for full Perl regex features → 2) Interpreter VM with full backtracking + side-effect journaling → 3) Bytecode JIT for hot ops (literals, classes, anchors, groups) → 4) Subrule recursion & branch-reset → 5) Verbs and atomic groups → 6) `(??{ })` + cached dynamic patterns → 7) s/// integration and `/g` semantics → 8) Perf passes (frame elision, memo, guards).
-
 
