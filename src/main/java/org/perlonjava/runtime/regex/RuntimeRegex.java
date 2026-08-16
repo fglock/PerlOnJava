@@ -3066,6 +3066,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     @Override
     public String toString() {
         // Construct the Perl-like regex string with flags
+        String displayPattern = executableCallbacks.isEmpty()
+                ? patternString
+                : RuntimeRegexTemplate.displayPattern(patternString);
+        return "(?^" + regexFlags.toFlagString() + ":" + displayPattern + ")";
+    }
+
+    String toExecutableString() {
         return "(?^" + regexFlags.toFlagString() + ":" + patternString + ")";
     }
 

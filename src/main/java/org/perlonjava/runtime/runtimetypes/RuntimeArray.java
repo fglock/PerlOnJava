@@ -87,6 +87,52 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         elements = newElementList();
     }
 
+    Object snapshotRegexMutationState() {
+        if (threadShared || type == TIED_ARRAY || type == READONLY_ARRAY) return null;
+        Set<RuntimeScalar> ownedAliases = ownedAliasElements == null ? null
+                : Collections.newSetFromMap(new IdentityHashMap<>());
+        if (ownedAliases != null) ownedAliases.addAll(ownedAliasElements);
+        return new RegexMutationState(new ArrayList<>(elements), type, strictAutovivify,
+                scalarContextSize, elementsOwned, elementsAliased, ownedAliases, blessId);
+    }
+
+    void restoreRegexMutationState(Object token) {
+        if (!(token instanceof RegexMutationState state)) return;
+        deferElementsAddedSince(state.elements);
+        elements = newElementList(state.elements);
+        type = state.type;
+        strictAutovivify = state.strictAutovivify;
+        scalarContextSize = state.scalarContextSize;
+        elementsOwned = state.elementsOwned;
+        elementsAliased = state.elementsAliased;
+        ownedAliasElements = state.ownedAliasElements == null ? null
+                : Collections.newSetFromMap(new IdentityHashMap<>());
+        if (ownedAliasElements != null) ownedAliasElements.addAll(state.ownedAliasElements);
+        blessId = state.blessId;
+        markPackageRootedValues(0);
+    }
+
+    private void deferElementsAddedSince(List<RuntimeScalar> saved) {
+        IdentityHashMap<RuntimeScalar, Integer> retained = new IdentityHashMap<>();
+        for (RuntimeScalar scalar : saved) {
+            if (scalar != null) retained.merge(scalar, 1, Integer::sum);
+        }
+        List<RuntimeScalar> added = new ArrayList<>();
+        for (RuntimeScalar scalar : elements) {
+            if (scalar == null) continue;
+            Integer count = retained.get(scalar);
+            if (count == null || count == 0) added.add(scalar);
+            else if (count == 1) retained.remove(scalar);
+            else retained.put(scalar, count - 1);
+        }
+        MortalList.deferDestroyForContainerClear(added);
+    }
+
+    private record RegexMutationState(List<RuntimeScalar> elements, int type,
+                                      boolean strictAutovivify, Integer scalarContextSize,
+                                      boolean elementsOwned, boolean elementsAliased,
+                                      Set<RuntimeScalar> ownedAliasElements, int blessId) {}
+
     private static final class RuntimeArrayElementList extends ArrayList<RuntimeScalar> {
         private final RuntimeArray owner;
 

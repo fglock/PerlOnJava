@@ -83,6 +83,46 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         elements = newElementMap();
     }
 
+    Object snapshotRegexMutationState() {
+        if (threadShared || type == TIED_HASH || type == READONLY_HASH) return null;
+        return new RegexMutationState(new LinkedHashMap<>(elements),
+                byteKeys == null ? null : new HashSet<>(byteKeys), type, blessId,
+                taintEnvironmentAliasDescription);
+    }
+
+    void restoreRegexMutationState(Object token) {
+        if (!(token instanceof RegexMutationState state)) return;
+        deferValuesAddedSince(state.elements.values());
+        elements = newElementMap(state.elements);
+        byteKeys = state.byteKeys == null ? null : new HashSet<>(state.byteKeys);
+        type = state.type;
+        blessId = state.blessId;
+        taintEnvironmentAliasDescription = state.taintEnvironmentAliasDescription;
+        if (isPackageRootedHash()) {
+            for (RuntimeScalar value : elements.values()) markPackageRootedValue(value);
+        }
+    }
+
+    private void deferValuesAddedSince(Collection<RuntimeScalar> saved) {
+        IdentityHashMap<RuntimeScalar, Integer> retained = new IdentityHashMap<>();
+        for (RuntimeScalar scalar : saved) {
+            if (scalar != null) retained.merge(scalar, 1, Integer::sum);
+        }
+        List<RuntimeScalar> added = new ArrayList<>();
+        for (RuntimeScalar scalar : elements.values()) {
+            if (scalar == null) continue;
+            Integer count = retained.get(scalar);
+            if (count == null || count == 0) added.add(scalar);
+            else if (count == 1) retained.remove(scalar);
+            else retained.put(scalar, count - 1);
+        }
+        MortalList.deferDestroyForContainerClear(added);
+    }
+
+    private record RegexMutationState(Map<String, RuntimeScalar> elements,
+                                      Set<String> byteKeys, int type, int blessId,
+                                      String taintEnvironmentAliasDescription) {}
+
     private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
         private final RuntimeHash owner;
 

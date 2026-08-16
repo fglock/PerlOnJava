@@ -707,6 +707,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return new RuntimeScalar(this);
     }
 
+    /** Capture a plain scalar payload for regex callback backtracking. */
+    Object snapshotRegexMutationState() {
+        if (type < INTEGER || type > BOOLEAN) return null;
+        return new RegexMutationState(type, value, utf8UncheckedOctets, tainted,
+                numericLiteralText, numericContextSeen, firstClassRegexScalar,
+                formatPictureTainted);
+    }
+
+    void restoreRegexMutationState(Object token) {
+        if (!(token instanceof RegexMutationState state)) return;
+        type = state.type;
+        value = state.value;
+        utf8UncheckedOctets = state.utf8UncheckedOctets;
+        tainted = state.tainted;
+        numericLiteralText = state.numericLiteralText;
+        numericContextSeen = state.numericContextSeen;
+        firstClassRegexScalar = state.firstClassRegexScalar;
+        formatPictureTainted = state.formatPictureTainted;
+        RuntimePosLvalue.invalidatePos(this);
+        refreshSubstrLvalues();
+    }
+
+    private record RegexMutationState(int type, Object value,
+                                      boolean utf8UncheckedOctets, boolean tainted,
+                                      String numericLiteralText, boolean numericContextSeen,
+                                      boolean firstClassRegexScalar,
+                                      boolean formatPictureTainted) {}
+
     public int countElements() {
         return 1;
     }

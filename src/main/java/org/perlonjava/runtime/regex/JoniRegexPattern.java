@@ -494,14 +494,25 @@ final class JoniRegexPattern {
         private final int[] byteToChar;
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
+        private final RegexCallbackMutationSnapshot mutations;
         private RuntimeScalar completedResult;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                            RegexFlags outerFlags) {
+            this(input, byteToChar, callbacks, outerFlags,
+                    RegexCallbackMutationSnapshot.capture());
+        }
+
+        private PerlCalloutHandler(String input, int[] byteToChar,
+                                   List<RuntimeRegexCallback> callbacks,
+                                   RegexFlags outerFlags,
+                                   RegexCallbackMutationSnapshot mutations) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
+            this.mutations = mutations;
+            for (RuntimeRegexCallback callback : callbacks) mutations.include(callback.code);
         }
 
         @Override
@@ -544,7 +555,8 @@ final class JoniRegexPattern {
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
                             value.value instanceof RuntimeRegex runtimeRegex
                                     && runtimeRegex.getRegexFlags() != null
-                                    ? runtimeRegex.getRegexFlags() : outerFlags);
+                                    ? runtimeRegex.getRegexFlags() : outerFlags,
+                            mutations);
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
                     evaluation.token());
         }
@@ -557,6 +569,7 @@ final class JoniRegexPattern {
             RuntimeScalar rVariable = GlobalVariable.getGlobalVariable(
                     GlobalContext.encodeSpecialVar("R"));
             RuntimeScalar previousR = rVariable.clone();
+            mutations.include(callback.code);
             publishProvisional(match);
 
             try {
@@ -564,12 +577,14 @@ final class JoniRegexPattern {
                         new RuntimeArray(), RuntimeContextType.SCALAR).scalar();
                 boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
                 if (block) rVariable.set(result);
-                Token token = new Token(localLevel, savedRegex, previousR, result.clone(), block);
+                Token token = new Token(localLevel, savedRegex, previousR,
+                        result.clone(), block);
                 return new Evaluation(result, token);
             } catch (RuntimeException | Error failure) {
                 // The matcher cannot register an unwind token when the callout
                 // itself throws. Restore the provisional match and dynamic
                 // scope here before the exception crosses an eval boundary.
+                mutations.restore();
                 restoreCallbackScope(localLevel, savedRegex, previousR);
                 throw failure;
             }
@@ -586,6 +601,7 @@ final class JoniRegexPattern {
         }
 
         void finish(boolean matched) {
+            if (!matched) mutations.restore();
             if (matched && completedResult != null) {
                 GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
                         .set(completedResult);
