@@ -37,7 +37,7 @@ The following are not treated as PerlOnJava regressions because their current di
 
 ## Progress Tracking
 
-### Current Status: implementation complete; PR ready for review
+### Current Status: unified into PR #964; combined CI passing
 
 ### Completed Phases
 
@@ -59,11 +59,34 @@ The following are not treated as PerlOnJava regressions because their current di
   - Opened PR #962 from `fix/jcpan-compiler-tooling-followup`.
   - GitHub Actions passed on Ubuntu and Windows; the Windows run specifically
     confirmed the platform-default newline fix in `pipe_jperl_shebang.t`.
+- [x] Phase 7: post-merge warning cleanup (2026-08-15)
+  - Replaced deprecated `Zstd.decompressedSize` calls with
+    `Zstd.getFrameContentSize` and reject unknown or invalid frame sizes before
+    allocating decoder buffers.
+- [x] Phase 8: core-suite regression audit (2026-08-15)
+  - Compared the reported core files against isolated current-master and
+    historical baseline builds instead of treating aggregate TAP counts as
+    deterministic.
+  - Fixed PVLV filehandle handling so `-t` follows the glob's IO slot without
+    stringification and `close` warnings retain ASCII and Unicode glob names.
+  - Restored `op/gv.t` from 253/304 to 255/304 and `uni/gv.t` from 176/206 to
+    178/206. `re/pat_advanced.t`, `re/pat_advanced_thr.t`, and
+    `test_pl/examples.t` reproduce their higher reported counts. The remaining
+    `japh/abigail.t` 109/130 result matches both current master and the
+    documented historical baseline, so it is not a PR #963 regression.
+  - Added a four-case system-Perl oracle and verified it with both PerlOnJava
+    backends; the full `make` suite passes.
+  - PR #963 CI passed on Ubuntu and Windows at commit `b48f504d8`.
+- [x] Phase 9: unified review branch (2026-08-15)
+  - Merged all five PR #963 commits into PR #964 so the compiler, runtime,
+    CPAN-tooling, and Java-module changes can be tested and approved together.
+  - The combined full `make` suite passed before the unified branch was pushed.
+  - Unified PR #964 CI passed on Ubuntu in 14m35s and Windows in 17m27s.
 
 ### Next Steps
 
-1. Review PR #962.
-2. Merge after approval.
+1. Mark PR #963 as superseded by PR #964.
+2. Hand PR #964 back for user testing and review.
 
 ### Open Questions
 

@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 31;
+use Test::More tests => 33;
 use File::Spec;
 
 {
@@ -197,6 +197,16 @@ sub _io_compress_eval_proto_regression ($) { 1 }
 
 my $deflater = Compress::Zlib::deflateInit();
 ok(defined $deflater && !defined $deflater->msg, 'Compress::Zlib stream objects provide msg method');
+
+my $compressed = Compress::Zlib::compress('stream payload');
+my $compressed_for_list = $compressed;
+my $scalar_inflater = Compress::Zlib::inflateInit();
+is($scalar_inflater->inflate($compressed), 'stream payload',
+   'Compress::Zlib inflate returns data in scalar context');
+my $list_inflater = Compress::Zlib::inflateInit();
+my ($inflated, $inflate_status) = $list_inflater->inflate($compressed_for_list);
+is("$inflated:$inflate_status:" . (0 + $inflate_status), 'stream payload:stream end:1',
+   'Compress::Zlib inflate returns data and dual-valued status in list context');
 
 SKIP: {
     require Compress::Raw::Zlib;

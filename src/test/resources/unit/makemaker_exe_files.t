@@ -35,7 +35,7 @@ else {
         or die "create script/demo: $!";
     print {$script} "#!perl -w\nprint qq(ok\\n);\n";
     close $script or die "close script/demo: $!";
-    chmod 0755, 'script/demo' or die "chmod script/demo: $!";
+    chmod 0555, 'script/demo' or die "chmod read-only script/demo: $!";
 
     open my $makefile_pl, '>', 'Makefile.PL'
         or die "create Makefile.PL: $!";
@@ -52,7 +52,7 @@ else {
 
     my $make = $Config::Config{make} || 'make';
     my $status = system($make, 'pure_all');
-    is($status, 0, 'pure_all target succeeds');
+    is($status, 0, 'pure_all target succeeds for a read-only source script');
 
     my @staged_candidates = (
         'blib/script/demo',

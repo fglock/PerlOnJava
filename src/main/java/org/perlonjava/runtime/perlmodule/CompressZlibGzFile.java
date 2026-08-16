@@ -22,6 +22,7 @@ public class CompressZlibGzFile extends PerlModuleBase {
     private static final String EOF_KEY = "_eof";
     private static final String PUSHBACK_KEY = "_pushback";
     private static final String POS_KEY = "_pos";
+    private static final String ERROR_KEY = "_error";
 
     public CompressZlibGzFile() {
         super("Compress::Zlib::gzFile", false);
@@ -71,6 +72,7 @@ public class CompressZlibGzFile extends PerlModuleBase {
                 int n = is.read(buf, totalRead, nbytes - totalRead);
                 if (n == -1) {
                     self.put(EOF_KEY, new RuntimeScalar(1));
+                    self.put(ERROR_KEY, new RuntimeScalar(1)); // Z_STREAM_END
                     break;
                 }
                 totalRead += n;
@@ -91,12 +93,14 @@ public class CompressZlibGzFile extends PerlModuleBase {
                 int next = pushback.read();
                 if (next == -1) {
                     self.put(EOF_KEY, new RuntimeScalar(1));
+                    self.put(ERROR_KEY, new RuntimeScalar(1)); // Z_STREAM_END
                 } else {
                     pushback.unread(next);
                 }
             }
             return new RuntimeScalar(totalRead).getList();
         } catch (IOException e) {
+            self.put(ERROR_KEY, new RuntimeScalar(-1)); // Z_ERRNO
             return new RuntimeScalar(-1).getList();
         }
     }
@@ -167,6 +171,7 @@ public class CompressZlibGzFile extends PerlModuleBase {
 
             if (line.isEmpty()) {
                 self.put(EOF_KEY, new RuntimeScalar(1));
+                self.put(ERROR_KEY, new RuntimeScalar(1)); // Z_STREAM_END
                 args.get(1).set("");
                 return new RuntimeScalar(0).getList();
             }
@@ -177,16 +182,19 @@ public class CompressZlibGzFile extends PerlModuleBase {
             addPosition(self, result.length());
             if (c == -1) {
                 self.put(EOF_KEY, new RuntimeScalar(1));
+                self.put(ERROR_KEY, new RuntimeScalar(1)); // Z_STREAM_END
             } else if (c == '\n' && is instanceof PushbackInputStream pushback) {
                 int next = pushback.read();
                 if (next == -1) {
                     self.put(EOF_KEY, new RuntimeScalar(1));
+                    self.put(ERROR_KEY, new RuntimeScalar(1)); // Z_STREAM_END
                 } else {
                     pushback.unread(next);
                 }
             }
             return new RuntimeScalar(result.length()).getList();
         } catch (IOException e) {
+            self.put(ERROR_KEY, new RuntimeScalar(-1)); // Z_ERRNO
             return new RuntimeScalar(-1).getList();
         }
     }
@@ -356,14 +364,16 @@ public class CompressZlibGzFile extends PerlModuleBase {
      * In list context, returns (message, errno).
      */
     public static RuntimeList gzerror(RuntimeArray args, int ctx) {
-        // No error tracking in this implementation — always return success
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar error = self.get(ERROR_KEY);
+        int status = error != null ? error.getInt() : 0;
         if (ctx == org.perlonjava.runtime.runtimetypes.RuntimeContextType.LIST) {
             RuntimeList result = new RuntimeList();
-            result.add(new RuntimeScalar(""));
-            result.add(new RuntimeScalar(0)); // Z_OK
+            result.add(new RuntimeScalar(status == -1 ? "I/O error" : ""));
+            result.add(new RuntimeScalar(status));
             return result;
         }
-        return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(status).getList();
     }
 
     private static void addPosition(RuntimeHash self, long amount) {

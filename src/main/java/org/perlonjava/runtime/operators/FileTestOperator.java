@@ -26,8 +26,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  * 1. -R, -W, -X, -O (for real uid/gid) are not implemented due to lack of
  * straightforward Java equivalents.
  * <p>
- * 2. -t (tty check) is not implemented as it's specific to file handles
- * rather than file paths.
+ * 2. -t (tty check) is implemented for open file handles through their
+ * native or synthetic descriptor; path operands still return undef.
  * <p>
  * 3. -p, -S, -b, and -c are approximated using file names or paths, as Java
  * doesn't provide direct equivalents.
@@ -349,37 +349,27 @@ public class FileTestOperator {
                     return fileTest(operator, new RuntimeScalar(dirPath.toString()));
                 }
             }
-            // Special handling for -t on standard streams (STDIN, STDOUT, STDERR)
+            // -t operates on the handle's IO slot, not on the name of the glob
+            // which happens to contain it.  This matters for PVLVs and detached
+            // globs such as `$_ = *name; *$_ = *STDOUT{IO}`: stringifying or
+            // resolving the outer glob loses the real descriptor.
             if (operator.equals("-t")) {
-                String globName = null;
-                if (fileHandle.value instanceof RuntimeGlob rg) {
-                    globName = rg.globName;
-                } else if (fileHandle.value instanceof RuntimeIO rio) {
-                    globName = rio.globName;
+                RuntimeScalar descriptor = fh.fileno();
+                if (!descriptor.getDefinedBoolean()) {
+                    getGlobalVariable("main::!").set(9);
+                    updateLastStat(fileHandle, false, 9);
+                    return scalarUndef;
                 }
-                if (globName != null) {
-                    int fd = -1;
-                    if (globName.endsWith("::STDIN") || globName.equals("STDIN")) {
-                        fd = 0;
-                    } else if (globName.endsWith("::STDOUT") || globName.equals("STDOUT")) {
-                        fd = 1;
-                    } else if (globName.endsWith("::STDERR") || globName.equals("STDERR")) {
-                        fd = 2;
-                    }
-                    if (fd >= 0) {
-                        try {
-                            boolean isTty = FFMPosix.get().isatty(fd) != 0;
-                            getGlobalVariable("main::!").set(0);
-                            return getScalarBoolean(isTty);
-                        } catch (Exception e) {
-                            // Fall back to System.console() check for fd 0
-                            if (fd == 0) {
-                                boolean isTty = System.console() != null;
-                                getGlobalVariable("main::!").set(0);
-                                return getScalarBoolean(isTty);
-                            }
-                        }
-                    }
+                int fd = descriptor.getInt();
+                try {
+                    boolean isTty = FFMPosix.get().isatty(fd) != 0;
+                    getGlobalVariable("main::!").set(0);
+                    return getScalarBoolean(isTty);
+                } catch (Exception e) {
+                    // Preserve a defined false result for an open, non-terminal
+                    // handle when the platform cannot perform isatty().
+                    getGlobalVariable("main::!").set(0);
+                    return scalarFalse;
                 }
             }
             // Fallback for non-file handles (pipes, sockets, etc.)

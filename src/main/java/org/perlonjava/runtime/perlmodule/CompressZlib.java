@@ -617,7 +617,15 @@ public class CompressZlib extends PerlModuleBase {
         RuntimeScalar outputScalar = new RuntimeScalar(outputStr);
         outputScalar.type = RuntimeScalarType.BYTE_STRING;
         result.add(outputScalar);
-        result.add(new RuntimeScalar(status));
+        if (ctx != RuntimeContextType.LIST) {
+            return result;
+        }
+        RuntimeScalar statusScalar = new RuntimeScalar();
+        statusScalar.type = RuntimeScalarType.DUALVAR;
+        statusScalar.value = new DualVar(
+                new RuntimeScalar(status),
+                new RuntimeScalar(status == 1 ? "stream end" : ""));
+        result.add(statusScalar);
         return result;
     }
 
@@ -832,6 +840,7 @@ public class CompressZlib extends PerlModuleBase {
             self.put("_mode", new RuntimeScalar(mode));
             self.put("_eof", new RuntimeScalar(0));
             self.put("_pos", new RuntimeScalar(0));
+            self.put("_error", new RuntimeScalar(0));
             GlobalVariable.getGlobalVariable("Compress::Zlib::gzerrno").set(new RuntimeScalar(0));
 
             if (mode.startsWith("r")) {

@@ -48,6 +48,15 @@ sub Dump {
     ($YPP ||= __PACKAGE__->new)->dump_string(@_);
 }
 
+# YAML::PP's object API exposes both dump() and dump_string().  The Java
+# backend implements the string-producing operation directly; keep the
+# standard convenience method in Perl so callers do not need to know which
+# backend supplies the dumper.
+sub dump {
+    my ($self, @data) = @_;
+    return $self->dump_string(@data);
+}
+
 sub LoadFile {
     my ($file) = @_;
     my $ypp = ($YPP ||= __PACKAGE__->new);
