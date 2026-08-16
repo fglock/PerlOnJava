@@ -8,7 +8,9 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
@@ -184,6 +186,7 @@ public class ParseInfix {
             // Validate that state variables are not initialized in list context
             if (operator.equals("=")) {
                 validateNoStateInListAssignment(parser, left);
+                validateKnownSubroutineLvalue(parser, left);
             }
 
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
@@ -470,6 +473,36 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    /**
+     * Perl rejects assignment to a known non-lvalue subroutine while compiling
+     * the assignment, even when it follows an unreachable {@code return} in a
+     * string eval.  Class::Method::Modifiers relies on this behavior to probe a
+     * localized coderef with {@code eval 'return 1; &_sub = 1'}.
+     */
+    private static void validateKnownSubroutineLvalue(Parser parser, Node left) {
+        if (!(left instanceof BinaryOperatorNode call) || !"(".equals(call.operator)
+                || !(call.left instanceof OperatorNode ampersand)
+                || !"&".equals(ampersand.operator)) {
+            return;
+        }
+
+        Object annotated = ampersand.getAnnotation("parseTimeCodeRef");
+        if (!(annotated instanceof RuntimeScalar codeRef)
+                || !(codeRef.value instanceof RuntimeCode code)
+                || RuntimeCode.isLvalueCode(code)) {
+            return;
+        }
+
+        String name = "__ANON__";
+        if (ampersand.operand instanceof IdentifierNode identifier) {
+            name = NameNormalizer.normalizeVariableName(
+                    identifier.name,
+                    parser.ctx.symbolTable.getCurrentPackage());
+        }
+        parser.throwError("Can't modify non-lvalue subroutine call of &" + name
+                + " in scalar assignment");
     }
 
     private static List<Node> parseArraySubscript(Parser parser) {

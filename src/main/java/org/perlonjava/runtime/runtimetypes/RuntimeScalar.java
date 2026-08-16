@@ -2979,6 +2979,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().globDeref();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).globDeref();
+            case REFERENCE -> {
+                // `\do { local *FH }` is represented as a generic scalar
+                // reference whose referent is a RuntimeGlob.  It is still a
+                // single Perl glob reference and remains dereferenceable after
+                // blessing (the IO::Scalar construction idiom).  Do not unwrap
+                // GLOBREFERENCE here: that is a true reference-to-reference.
+                if (value instanceof RuntimeScalar scalar && scalar.type == GLOB) {
+                    yield scalar.globDeref();
+                }
+                throw new PerlCompilerException("Not a GLOB reference");
+            }
             case UNDEF -> throw new PerlCompilerException("Can't use an undefined value as a GLOB reference");
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
@@ -3048,6 +3059,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().globDerefNonStrict(packageName);
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).globDerefNonStrict(packageName);
+            case REFERENCE -> {
+                if (value instanceof RuntimeScalar scalar && scalar.type == GLOB) {
+                    yield scalar.globDerefNonStrict(packageName);
+                }
+                throw new PerlCompilerException("Not a GLOB reference");
+            }
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {

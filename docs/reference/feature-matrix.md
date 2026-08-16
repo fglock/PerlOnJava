@@ -779,6 +779,9 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   scalar taint inspection.
 - ✅  **String::Similarity**: Java XS replacement for Unicode-aware string
   similarity scoring.
+- 🟡 **Authen::PAM**: the generated CPAN Perl API loads through a Java XS
+  compatibility bridge and exposes PAM constants; native conversations are
+  not yet implemented and return `PAM_SYSTEM_ERR`.
 - ✅  **Crypt::Blowfish**: Java XS replacement backed by the bundled
   BouncyCastle engine, including the variable key sizes and 8-byte block API
   required by `Crypt::CBC`.

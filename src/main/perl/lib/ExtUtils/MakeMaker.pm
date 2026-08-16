@@ -76,6 +76,21 @@ sub WriteMakefile {
         $args{$key} = $cli{$key};
     }
 
+    # ExtUtils::MakeMaker's CONFIGURE hook runs while WriteMakefile is
+    # processing its arguments.  Older XS distributions use it for much more
+    # than compiler flags: Authen::PAM, for example, generates its real PAM.pm
+    # here and returns additional MakeMaker options.  Skipping the hook made
+    # PerlOnJava stage that distribution's deliberately-false CPAN metadata
+    # stub instead of the generated module.
+    if (exists $args{CONFIGURE}) {
+        my $configure = $args{CONFIGURE};
+        die "CONFIGURE must be a code reference\n" unless ref($configure) eq 'CODE';
+        my $extra = $configure->();
+        die "CONFIGURE must return a hash reference\n"
+            unless ref($extra) eq 'HASH';
+        @args{keys %$extra} = values %$extra;
+    }
+
     my $name = $args{NAME} or die "NAME is required\n";
     my $version = $args{VERSION} || ($args{VERSION_FROM} && _extract_version($args{VERSION_FROM})) || '0';
 
@@ -488,8 +503,21 @@ sub _install_pure_perl {
                                 if ($line =~ /^\s*package\s+([A-Za-z_]\w*(?:::\w+)*)\s*[,;]/
                                     && ($1 eq $name || index($1, "${name}::") == 0)) {
                                     (my $rel = $1) =~ s{::}{/}g;
-                                    $pm{$src} = _install_dest($INSTALL_BASE, "$rel.pm")
-                                        unless exists $pm{$src};
+                                    my $dest = _install_dest($INSTALL_BASE, "$rel.pm");
+                                    # A configured root module or lib/ source
+                                    # is authoritative over auxiliary copies in
+                                    # distribution-support directories.  Old
+                                    # Authen::PAM tarballs contain d/PAM.pm as
+                                    # a deliberately false metadata stub while
+                                    # CONFIGURE generates the loadable PAM.pm
+                                    # at the root; staging both to the same
+                                    # destination let the stub win by copy
+                                    # order.
+                                    my $destination_already_mapped
+                                        = grep { $_ eq $dest } values %pm;
+                                    $pm{$src} = $dest
+                                        unless exists $pm{$src}
+                                            || $destination_already_mapped;
                                     last;
                                 }
                             }

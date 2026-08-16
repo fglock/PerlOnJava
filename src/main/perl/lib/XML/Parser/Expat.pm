@@ -483,6 +483,12 @@ sub parse {
                 if ( ref $arg eq 'GLOB' ) {
                     $ioref = *{$arg}{IO};
                 }
+                elsif ( UNIVERSAL::isa( $arg, 'GLOB' ) ) {
+                    # IO::Zlib and similar classes bless a glob reference.
+                    # Preserve the original object so tied READ/READLINE
+                    # dispatch remains available to the Java stream bridge.
+                    $ioref = $arg;
+                }
                 elsif ( ref \$arg eq 'GLOB' ) {
                     $ioref = *{$arg}{IO};
                 }
