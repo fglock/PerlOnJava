@@ -632,8 +632,6 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return value;
             case INTEGER:
             case DOUBLE:
-            case STRING:
-            case BYTE_STRING:
             case BOOLEAN:
             case VSTRING:
             case DUALVAR:
@@ -659,6 +657,27 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // that look up by name see the override regardless of whether
                 // they reached the lvalue before or after `local` swapped the
                 // glob. See dev/modules/anon_sub_naming.md.
+                if (this.globName != null) {
+                    RuntimeGlob currentGlob = GlobalVariable.peekGlobalIO(this.globName);
+                    if (currentGlob == null) currentGlob = this;
+                    currentGlob.nameOverride = value.toString();
+                }
+                return value;
+            case STRING:
+            case BYTE_STRING:
+                // A string assigned to a typeglob names another typeglob; it is
+                // not a scalar-slot value.  This is the dynamic form of
+                // `*foo = *bar` used by modules such as Getopt::EX::Module to
+                // borrow a package's DATA handle with
+                // `local *data = "$mod\::DATA"`.
+                String aliasName = NameNormalizer.normalizeVariableName(
+                        value.toString(), RuntimeCode.getCurrentPackage());
+                this.set(GlobalVariable.getGlobalIO(aliasName));
+
+                // Perl also uses `local *PKG::__ANON__ = 'name'` to provide a
+                // dynamic display name for anonymous subs.  Keep that metadata
+                // on the localized destination glob while applying the normal
+                // all-slot typeglob alias semantics above.
                 if (this.globName != null) {
                     RuntimeGlob currentGlob = GlobalVariable.peekGlobalIO(this.globName);
                     if (currentGlob == null) currentGlob = this;

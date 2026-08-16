@@ -76,6 +76,8 @@ final class JoniRegexPattern {
         return pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(?(?{=CALL:")
+                || pattern.contains("(?(<")
+                || pattern.contains("(?('")
                 || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
                 || pattern.contains("(?&")
                 || pattern.contains("(?P>");
@@ -99,6 +101,19 @@ final class JoniRegexPattern {
                 continue;
             }
             if (ch == '\\') {
+                // In Perl, \g{name} is a backreference.  Ruby/Oniguruma uses
+                // \g<name> for a subexpression call and \k<name> for the
+                // backreference, so passing the brace form through makes Joni
+                // diagnose it as an invalid subexpression call.  Numeric and
+                // relative brace forms follow the same translation.
+                if (!inClass && pattern.startsWith("\\g{", i)) {
+                    int end = pattern.indexOf('}', i + 3);
+                    if (end > i + 3) {
+                        out.append("\\k<").append(pattern, i + 3, end).append('>');
+                        i = end;
+                        continue;
+                    }
+                }
                 out.append(ch);
                 escaped = true;
                 continue;

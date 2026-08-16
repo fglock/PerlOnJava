@@ -67,6 +67,11 @@ public class WaitpidOperator {
             if (javaProcess != null) {
                 return waitpidJavaProcess(pid, javaProcess, flags);
             }
+        } else {
+            RuntimeScalar javaChildResult = waitForAnyJavaProcess(flags);
+            if (javaChildResult != null) {
+                return javaChildResult;
+            }
         }
         try {
             int[] status = new int[1];
@@ -88,6 +93,38 @@ public class WaitpidOperator {
         } catch (Exception e) {
             return new RuntimeScalar(-1);
         }
+    }
+
+    /**
+     * Wait for a child created by pipe open or another Java ProcessBuilder path.
+     * On POSIX the JDK has its own native reaper, so calling libc waitpid(-1)
+     * after reading a pipe can report ECHILD even though PerlOnJava still owns
+     * an unreaped logical child.  Prefer the registered Process objects before
+     * falling through to native children.
+     */
+    private static RuntimeScalar waitForAnyJavaProcess(int flags) {
+        Map<Long, Process> children = RuntimeIO.childProcessesSnapshot();
+        if (children.isEmpty()) return null;
+
+        boolean nonBlocking = (flags & WNOHANG) != 0;
+        for (Map.Entry<Long, Process> entry : children.entrySet()) {
+            if (!entry.getValue().isAlive()) {
+                return waitpidJavaProcess(entry.getKey().intValue(), entry.getValue(), flags);
+            }
+        }
+        if (nonBlocking) return new RuntimeScalar(0);
+
+        java.util.concurrent.CompletableFuture<?>[] exits = children.values().stream()
+                .map(Process::onExit)
+                .toArray(java.util.concurrent.CompletableFuture[]::new);
+        java.util.concurrent.CompletableFuture.anyOf(exits).join();
+
+        for (Map.Entry<Long, Process> entry : RuntimeIO.childProcessesSnapshot().entrySet()) {
+            if (!entry.getValue().isAlive()) {
+                return waitpidJavaProcess(entry.getKey().intValue(), entry.getValue(), flags);
+            }
+        }
+        return new RuntimeScalar(-1);
     }
 
     private static RuntimeScalar waitpidJavaProcess(int pid, Process process, int flags) {

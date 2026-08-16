@@ -443,9 +443,10 @@ public class Mro extends PerlModuleBase {
      * @param packageName The name of the package.
      */
     public static void incrementPackageGeneration(String packageName) {
-        Map<String, Integer> packageGenerations =
-                PerlRuntime.current().mroState().packageGenerations();
+        var state = PerlRuntime.current().mroState();
+        Map<String, Integer> packageGenerations = state.packageGenerations();
         Integer current = packageGenerations.getOrDefault(packageName, 1);
         packageGenerations.put(packageName, current + 1);
+        state.incrementSubGeneration();
     }
 }

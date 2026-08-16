@@ -31,6 +31,7 @@ public final class MroRuntimeState {
     private InheritanceResolver.MROAlgorithm defaultMro = InheritanceResolver.MROAlgorithm.DFS;
     private boolean autoloadEnabled = true;
     private long isaGeneration;
+    private long subGeneration = 1;
     private long isaRevGeneration = -1;
     private long observedSymbolMutationEpoch;
     private long observedIsaMutationEpoch;
@@ -85,6 +86,14 @@ public final class MroRuntimeState {
 
     public long isaGeneration() {
         return isaGeneration;
+    }
+
+    public long subGeneration() {
+        return subGeneration;
+    }
+
+    public void incrementSubGeneration() {
+        subGeneration++;
     }
 
     public long isaRevGeneration() {
