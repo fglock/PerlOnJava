@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 
 /** Compiles executable source introduced by runtime regex interpolation. */
 final class RuntimeRegexSourceCompiler {
@@ -80,6 +81,12 @@ final class RuntimeRegexSourceCompiler {
 
             CompilerOptions options = new CompilerOptions();
             options.fileName = sourceName;
+            if (pattern.type == BYTE_STRING) {
+                options.isByteStringSource = true;
+            } else {
+                options.isUnicodeSource = pattern.toString().codePoints()
+                        .anyMatch(codePoint -> codePoint > 127);
+            }
             ErrorMessageUtil errors = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext context = new EmitterContext(
                     new JavaClassInfo(), symbolTable, null, null,

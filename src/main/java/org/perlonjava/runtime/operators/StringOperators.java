@@ -6,6 +6,7 @@ import com.ibm.icu.text.CaseMap;
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.regex.RuntimeRegexTemplate;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -927,6 +928,10 @@ public class StringOperators {
 
         // Join the elements
         StringBuilder sb = new StringBuilder();
+        java.util.List<RuntimeScalar> resolvedElements = isStringInterpolation
+                ? new java.util.ArrayList<>() : null;
+        boolean hasExecutableValue = isStringInterpolation
+                && RuntimeRegexTemplate.hasExecutableValue(separatorResolved);
         boolean start = true;
         for (RuntimeScalar scalar : elements) {
             if (start) {
@@ -942,11 +947,19 @@ public class StringOperators {
             }
 
             RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
+            if (isStringInterpolation) {
+                resolvedElements.add(resolved);
+                hasExecutableValue |= RuntimeRegexTemplate.hasExecutableValue(resolved);
+            }
             if (resolved.type == RuntimeScalarType.STRING) {
                 hasUtf8 = true;
             }
             tainted |= resolved.isTainted();
             sb.append(resolved);
+        }
+        if (hasExecutableValue) {
+            return recordJoinTaint(RuntimeRegexTemplate.buildJoined(
+                    separatorResolved, resolvedElements));
         }
         RuntimeScalar res = new RuntimeScalar(sb.toString());
         if (!hasUtf8) {

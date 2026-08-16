@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 11;
+use Test::More tests => 16;
 
 {
     my $seen = 0;
@@ -69,6 +69,40 @@ use Test::More tests => 11;
     $error = $@;
     like($error, qr/Eval-group not allowed at runtime/,
         'mixed runtime source still requires use re eval');
+}
+
+{
+    my $runtime = '(??{"R"})';
+    my $error = '';
+    eval { "R" =~ $runtime };
+    $error = $@;
+    like($error, qr/Eval-group not allowed at runtime/,
+        'plain runtime source still requires use re eval');
+}
+
+{
+    my $comment = '(?# (??{"not executable"})R';
+    ok("R" =~ /$comment/, 'eval-group text inside a regex comment is inert');
+
+    my $extended = "# (??{\"not executable\"})\nR";
+    ok("R" =~ /$extended/x, 'eval-group text inside an extended comment is inert');
+}
+
+{
+    my $value = 'B';
+    my @parts = ('A', qr/(??{$value})/, 'C');
+    {
+        my $value = 'X';
+        ok("A B C" =~ /@parts/,
+            'array interpolation preserves trusted qr callbacks');
+    }
+}
+
+{
+    my $runtime = "(??{qw(\x{100})})";
+    use re 'eval';
+    ok("\x{100}" =~ /^$runtime$/,
+        'runtime callback source retains Unicode characters');
 }
 
 {

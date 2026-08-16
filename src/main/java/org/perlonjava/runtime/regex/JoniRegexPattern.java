@@ -579,7 +579,8 @@ final class JoniRegexPattern {
                 nestedCallbacks = template.callbacks();
             } else {
                 String dynamicSource = value.toString();
-                if (RuntimeRegex.containsExecutableSource(dynamicSource)) {
+                if (RuntimeRegex.containsExecutableSource(
+                        dynamicSource, outerFlags.isExtended())) {
                     if (!outerFlags.allowEvalGroup()) {
                         throw new PerlCompilerException(
                                 "Eval-group not allowed at runtime, use re 'eval'");

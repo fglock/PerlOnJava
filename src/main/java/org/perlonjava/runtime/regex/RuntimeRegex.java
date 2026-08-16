@@ -1202,15 +1202,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         validateTaintedPatternSecurity(patternString);
 
-        if (modifierStr.indexOf('E') >= 0
-                && !(patternString.value instanceof RuntimeRegexTemplate)
+        if (!(patternString.value instanceof RuntimeRegexTemplate)
                 && patternString.type != RuntimeScalarType.REGEX
-                && containsExecutableSource(patternString.toString())) {
+                && containsExecutableSource(patternString.toString(), modifierStr.indexOf('x') >= 0)) {
+            if (modifierStr.indexOf('E') < 0) {
+                throw new PerlCompilerException(
+                        "Eval-group not allowed at runtime, use re 'eval'");
+            }
             return RuntimeRegexSourceCompiler.compile(patternString, rawModifierStr);
         }
 
         if (patternString.value instanceof RuntimeRegexTemplate template
-                && template.containsRuntimeExecutableSource()) {
+                && template.containsRuntimeExecutableSource(modifierStr)) {
             if (modifierStr.indexOf('E') < 0) {
                 throw new PerlCompilerException(
                         "Eval-group not allowed at runtime, use re 'eval'");
@@ -1317,11 +1320,65 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     static boolean containsExecutableSource(String pattern) {
-        return pattern != null && (pattern.contains("(?{")
-                || pattern.contains("(??{")
-                || pattern.contains("(*{")
-                || pattern.contains("(?(?{")
-                || pattern.contains("(?(*{"));
+        return containsExecutableSource(pattern, false);
+    }
+
+    static boolean containsExecutableSource(String pattern, boolean extended) {
+        if (pattern == null || pattern.isEmpty()) return false;
+        boolean escaped = false;
+        boolean characterClass = false;
+        boolean lineComment = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char current = pattern.charAt(i);
+            if (lineComment) {
+                if (current == '\n') lineComment = false;
+                continue;
+            }
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (characterClass) {
+                if (current == ']') characterClass = false;
+                continue;
+            }
+            if (current == '[') {
+                characterClass = true;
+                continue;
+            }
+            if (pattern.startsWith("(?#", i)) {
+                i += 3;
+                boolean commentEscape = false;
+                while (i < pattern.length()) {
+                    char commentChar = pattern.charAt(i);
+                    if (commentEscape) {
+                        commentEscape = false;
+                    } else if (commentChar == '\\') {
+                        commentEscape = true;
+                    } else if (commentChar == ')') {
+                        break;
+                    }
+                    i++;
+                }
+                continue;
+            }
+            if (extended && current == '#') {
+                lineComment = true;
+                continue;
+            }
+            if (pattern.startsWith("(?{", i)
+                    || pattern.startsWith("(??{", i)
+                    || pattern.startsWith("(*{", i)
+                    || pattern.startsWith("(?(?{", i)
+                    || pattern.startsWith("(?(*{", i)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static RuntimeScalar compileExecutableTemplate(

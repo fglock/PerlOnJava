@@ -78,6 +78,23 @@ public final class RuntimeRegexTemplate {
         return result;
     }
 
+    /** Preserve callback-bearing qr values while an array is joined for interpolation. */
+    public static RuntimeScalar buildJoined(RuntimeScalar separator,
+                                            List<RuntimeScalar> elements) {
+        RuntimeList parts = new RuntimeList();
+        for (int i = 0; i < elements.size(); i++) {
+            if (i > 0) parts.add(separator);
+            parts.add(elements.get(i));
+        }
+        return build(parts);
+    }
+
+    public static boolean hasExecutableValue(RuntimeScalar scalar) {
+        return scalar != null && (scalar.value instanceof RuntimeRegexTemplate
+                || scalar.value instanceof RuntimeRegex regex
+                && !regex.executableCallbacks.isEmpty());
+    }
+
     private static void appendEmbeddedRegex(StringBuilder pattern,
                                             List<RuntimeRegexCallback> callbacks,
                                             String embeddedPattern,
@@ -136,8 +153,9 @@ public final class RuntimeRegexTemplate {
         return new MaskedCallouts(masked.toString(), placeholders, markers);
     }
 
-    boolean containsRuntimeExecutableSource() {
-        return RuntimeRegex.containsExecutableSource(maskCallouts().pattern());
+    boolean containsRuntimeExecutableSource(String modifiers) {
+        return RuntimeRegex.containsExecutableSource(
+                maskCallouts().pattern(), modifiers.indexOf('x') >= 0);
     }
 
     static String offsetCalloutIds(String executablePattern, int offset,

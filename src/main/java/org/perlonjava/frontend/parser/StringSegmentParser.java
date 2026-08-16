@@ -383,7 +383,7 @@ public abstract class StringSegmentParser {
 
         // For arrays, join elements with the list separator ($")
         if (isArray || isArrayPostderef) {
-            operand = new BinaryOperatorNode("join",
+            operand = new BinaryOperatorNode("join_interpolation",
                     new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex),
                     operand,
                     tokenIndex);
@@ -652,14 +652,14 @@ public abstract class StringSegmentParser {
                     yield result;
                 }
                 // Single non-string segment needs to be converted to string
-                yield new BinaryOperatorNode("join",
+                yield new BinaryOperatorNode("join_interpolation",
                         new StringNode("", tokenIndex),
                         new ListNode(segments, tokenIndex),
                         tokenIndex);
             }
             default ->
                 // Multiple segments: join them all together
-                    new BinaryOperatorNode("join",
+                    new BinaryOperatorNode("join_interpolation",
                             new StringNode("", tokenIndex),
                             new ListNode(segments, tokenIndex),
                             tokenIndex);

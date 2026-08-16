@@ -111,7 +111,7 @@ public class CompileBinaryOperator {
             case "tell":
                 compileTellBinaryOp(bytecodeCompiler, node);
                 return;
-            case "join":
+            case "join", "join_interpolation":
                 compileJoinBinaryOp(bytecodeCompiler, node);
                 return;
             default:
@@ -427,7 +427,7 @@ public class CompileBinaryOperator {
 
         // Handle "join" operator specially to ensure proper context
         // Left operand (separator) needs SCALAR context, right operand (list) needs LIST context
-        if (node.operator.equals("join")) {
+        if (node.operator.equals("join") || node.operator.equals("join_interpolation")) {
             bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
 
