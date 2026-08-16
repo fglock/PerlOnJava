@@ -559,12 +559,20 @@ final class JoniRegexPattern {
             RuntimeScalar previousR = rVariable.clone();
             publishProvisional(match);
 
-            RuntimeScalar result = RuntimeCode.apply(new RuntimeScalar(callback.code),
-                    new RuntimeArray(), RuntimeContextType.SCALAR).scalar();
-            boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
-            if (block) rVariable.set(result);
-            Token token = new Token(localLevel, savedRegex, previousR, result.clone(), block);
-            return new Evaluation(result, token);
+            try {
+                RuntimeScalar result = RuntimeCode.apply(new RuntimeScalar(callback.code),
+                        new RuntimeArray(), RuntimeContextType.SCALAR).scalar();
+                boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
+                if (block) rVariable.set(result);
+                Token token = new Token(localLevel, savedRegex, previousR, result.clone(), block);
+                return new Evaluation(result, token);
+            } catch (RuntimeException | Error failure) {
+                // The matcher cannot register an unwind token when the callout
+                // itself throws. Restore the provisional match and dynamic
+                // scope here before the exception crosses an eval boundary.
+                restoreCallbackScope(localLevel, savedRegex, previousR);
+                throw failure;
+            }
         }
 
         @Override
@@ -585,12 +593,20 @@ final class JoniRegexPattern {
         }
 
         private void restore(Token token, boolean completed) {
-            DynamicVariableManager.popToLocalLevel(token.localLevel());
-            token.regexState().restore();
-            GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
-                    .set(token.previousR());
+            restoreCallbackScope(token.localLevel(), token.regexState(), token.previousR());
             if (completed && token.block() && completedResult == null) {
                 completedResult = token.result();
+            }
+        }
+
+        private static void restoreCallbackScope(int localLevel, RegexState regexState,
+                                                 RuntimeScalar previousR) {
+            try {
+                DynamicVariableManager.popToLocalLevel(localLevel);
+            } finally {
+                regexState.restore();
+                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
+                        .set(previousR);
             }
         }
 

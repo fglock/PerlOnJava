@@ -11,6 +11,19 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class ListOperators {
     /**
+     * Perl evaluates the input list before entering a map/grep-style block.
+     * Keep the scalar objects (and therefore their aliasing) but detach the
+     * iteration order from a source array that the block may mutate.
+     */
+    private static List<RuntimeScalar> snapshotElements(RuntimeList runtimeList) {
+        List<RuntimeScalar> snapshot = new ArrayList<>();
+        for (RuntimeScalar element : runtimeList) {
+            snapshot.add(element);
+        }
+        return snapshot;
+    }
+
+    /**
      * Eagerly release captured variable references from an ephemeral grep/map/all/any
      * block closure. Like eval BLOCK closures, these blocks execute and are immediately
      * discarded. Without this, captureCount stays elevated on captured variables,
@@ -55,8 +68,8 @@ public class ListOperators {
             // This allows $_[0], $_[1], etc. to work inside map blocks
             RuntimeArray mapArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
-            // Iterate over each element in the current RuntimeArray
-            for (RuntimeScalar element : runtimeList) {
+            // Iterate over the list value captured before the block starts.
+            for (RuntimeScalar element : snapshotElements(runtimeList)) {
                 // Create $_ argument for the map subroutine
                 GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
 
@@ -244,8 +257,8 @@ public class ListOperators {
             // Use the outer @_ instead of an empty array
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
-            // Iterate over each element in the current RuntimeArray
-            for (RuntimeScalar element : runtimeList) {
+            // Iterate over the list value captured before the block starts.
+            for (RuntimeScalar element : snapshotElements(runtimeList)) {
                 try {
                     // Create $_ argument for the filter subroutine
                     GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
@@ -320,8 +333,8 @@ public class ListOperators {
         try {
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
-            // Iterate over each element in the current RuntimeArray
-            for (RuntimeScalar element : runtimeList) {
+            // Iterate over the list value captured before the block starts.
+            for (RuntimeScalar element : snapshotElements(runtimeList)) {
                 try {
                     // Create $_ argument for the filter subroutine
                     GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
@@ -380,8 +393,8 @@ public class ListOperators {
         try {
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
 
-            // Iterate over each element in the current RuntimeArray
-            for (RuntimeScalar element : runtimeList) {
+            // Iterate over the list value captured before the block starts.
+            for (RuntimeScalar element : snapshotElements(runtimeList)) {
                 try {
                     // Create $_ argument for the filter subroutine
                     GlobalVariable.aliasTemporaryGlobalVariable("main::_", element);
