@@ -199,6 +199,15 @@ public class ExceptionFormatter {
                         if (tokenIndex != null && frame.code().sourceName != null) {
                             pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
                         }
+                        if (frame.code().isQuotedRegexCallback
+                                && frame.packageName() != null
+                                && !frame.packageName().isEmpty()) {
+                            // Regex callbacks have a parser-captured lexical package.
+                            // The source mapper is shared by the complete compilation
+                            // unit and may retain a preceding package block at the
+                            // callback's private token offset.
+                            pkg = frame.packageName();
+                        }
                         if (pkg == null) {
                             // Fallback: runtime package for innermost frame, compile-time for others
                             pkg = (interpreterFrameIndex == 0)

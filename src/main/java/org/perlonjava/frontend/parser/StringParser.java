@@ -308,7 +308,15 @@ public class StringParser {
             }
             tokens.get(tokPos).text = remainStr;  // Put the remaining string back in the tokens list
         }
-        return new ParsedString(index, tokPos, buffers, startDelim, endDelim, secondBufferStartDelim, secondBufferEndDelim);
+        ParsedString parsed = new ParsedString(index, tokPos, buffers, startDelim, endDelim,
+                secondBufferStartDelim, secondBufferEndDelim);
+        int sourceLine = parser != null && parser.baseLineNumber > 0
+                ? parser.baseLineNumber : 1;
+        for (int i = 0; i < Math.min(index, tokens.size()); i++) {
+            if (tokens.get(i).type == LexerTokenType.NEWLINE) sourceLine++;
+        }
+        parsed.sourceLine = sourceLine;
+        return parsed;
     }
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
@@ -374,9 +382,11 @@ public class StringParser {
                 // Create a modified ParsedString with comments stripped
                 ArrayList<String> modifiedBuffers = new ArrayList<>(rawStr.buffers);
                 modifiedBuffers.set(0, patternStr);
+                int sourceLine = rawStr.sourceLine;
                 rawStr = new ParsedString(rawStr.index, rawStr.next, modifiedBuffers,
                         rawStr.startDelim, rawStr.endDelim,
                         rawStr.secondBufferStartDelim, rawStr.secondBufferEndDelim);
+                rawStr.sourceLine = sourceLine;
             }
             
             // interpolate variables, but ignore the escapes, keep `\$` if present
@@ -548,12 +558,7 @@ public class StringParser {
         String operator = "replaceRegex";
         String replaceStr = rawStr.buffers.get(1);
         String modifierStr = rawStr.buffers.get(2);
-        if (ctx.symbolTable != null
-                && ctx.symbolTable.isStrictOptionEnabled(HINT_RE_TAINT)
-                && !modifierStr.contains("T")) {
-            modifierStr = "T" + modifierStr;
-        }
-        modifierStr = addLexicalRegexDebugMarker(ctx, modifierStr);
+        modifierStr = addLexicalRegexContext(ctx, modifierStr);
         Node parsed = parseRegexString(ctx, rawStr, parser, modifierStr);
 
         Node replace;
@@ -604,34 +609,7 @@ public class StringParser {
         boolean isQuoteRegex = operator.equals("qr");
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
         String modStr = rawStr.buffers.get(1);
-        
-        // Add default modifiers from `use re` pragma if not already present
-        if (ctx.symbolTable != null) {
-            if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII)) {
-                if (!modStr.contains("a") && !modStr.contains("u")) {
-                    modStr = "a" + modStr;
-                }
-            } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)) {
-                if (!modStr.contains("u") && !modStr.contains("a")) {
-                    modStr = "u" + modStr;
-                }
-            } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_LOCALE)) {
-                // Java has no POSIX-regex locale mode. Its Unicode character
-                // classes provide the expected LC_CTYPE behavior for letters
-                // such as German umlauts, which is the important distinction
-                // from Perl's default byte-string ASCII semantics here.
-                if (!modStr.contains("u") && !modStr.contains("a") && !modStr.contains("l")) {
-                    modStr = "u" + modStr;
-                }
-            }
-            if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_EVAL) && !modStr.contains("E")) {
-                modStr = "E" + modStr;
-            }
-            if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_TAINT) && !modStr.contains("T")) {
-                modStr = "T" + modStr;
-            }
-        }
-        modStr = addLexicalRegexDebugMarker(ctx, modStr);
+        modStr = addLexicalRegexContext(ctx, modStr);
         
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
         if (rawStr.startDelim == '?') {
@@ -665,6 +643,37 @@ public class StringParser {
         return modifiers + (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_DEBUGCOLOR)
                 ? RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER
                 : RuntimeRegex.INTERNAL_DEBUG_MARKER);
+    }
+
+    static String addLexicalRegexContext(EmitterContext ctx, String modifiers) {
+        if (ctx.symbolTable == null) return modifiers;
+        StringBuilder merged = new StringBuilder(modifiers);
+        String lexical = ctx.symbolTable.getLexicalRegexModifiers();
+        for (int i = 0; i < lexical.length(); i++) {
+            char flag = lexical.charAt(i);
+            if (merged.indexOf(String.valueOf(flag)) < 0) {
+                merged.append(flag);
+            }
+        }
+        String result = merged.toString();
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII)
+                && !result.contains("a") && !result.contains("u")) {
+            result = "a" + result;
+        } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)
+                && !result.contains("u") && !result.contains("a")) {
+            result = "u" + result;
+        } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_LOCALE)
+                && !result.contains("u") && !result.contains("a")
+                && !result.contains("l")) {
+            result = "u" + result;
+        }
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_EVAL) && !result.contains("E")) {
+            result = "E" + result;
+        }
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_TAINT) && !result.contains("T")) {
+            result = "T" + result;
+        }
+        return addLexicalRegexDebugMarker(ctx, result);
     }
 
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {
@@ -888,6 +897,7 @@ public class StringParser {
         public char endDelim;
         public char secondBufferStartDelim;  // Start delimiter of the second buffer
         public char secondBufferEndDelim;    // End delimiter of the second buffer
+        public int sourceLine = 1;
 
         public ParsedString(int index, int next, ArrayList<String> buffers, char startDelim, char endDelim, char secondBufferStartDelim, char secondBufferEndDelim) {
             this.index = index;

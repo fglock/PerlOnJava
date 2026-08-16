@@ -895,6 +895,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Executable regex callbacks are Perl pseudo-blocks. They execute through
     // an implementation CV but must not add a caller() frame.
     public boolean isRegexCallbackPseudoBlock = false;
+    // A callback compiled as part of qr// contributes Perl's anonymous-regex
+    // frame to caller(), unlike an inline m// callback pseudo-block.
+    public boolean isQuotedRegexCallback = false;
     // Implementation callbacks such as map/grep do not introduce a Perl
     // subroutine scope, so their __SUB__ comes from the enclosing RuntimeCode.
     public boolean inheritsSelfReference = false;
@@ -1121,6 +1124,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
             return code.resolveLexicalAlias(variableName, defaultValue);
         }
+        // Top-level code has no Perl-visible __SUB__, but it still owns a real
+        // active lexical frame. Runtime regex source admitted by `use re eval`
+        // must capture those live cells just like eval STRING does.
+        RuntimeCode active = getActiveCodeAt(0);
+        if (active != null) {
+            return active.resolveLexicalAlias(variableName, defaultValue);
+        }
         return defaultValue;
     }
 
@@ -1313,6 +1323,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.installedViaAnonGlobAssign = this.installedViaAnonGlobAssign;
         clone.cvStartFile = this.cvStartFile;
         clone.cvStartLine = this.cvStartLine;
+        clone.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
+        clone.isQuotedRegexCallback = this.isQuotedRegexCallback;
         clone.deparseSourceText = this.deparseSourceText;
         clone.deparseFlags = this.deparseFlags;
         clone.deparseSourceOffset = this.deparseSourceOffset;
@@ -1866,6 +1878,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.deferredConstAttribute = codeFrom.deferredConstAttribute;
         this.isMapGrepBlock = codeFrom.isMapGrepBlock;
         this.isRegexCallbackPseudoBlock = codeFrom.isRegexCallbackPseudoBlock;
+        this.isQuotedRegexCallback = codeFrom.isQuotedRegexCallback;
         this.inheritsSelfReference = codeFrom.inheritsSelfReference;
         this.isEvalBlock = codeFrom.isEvalBlock;
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
@@ -3765,7 +3778,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String pkg = locationFrameInfo.get(0);
                 res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
                 res.add(new RuntimeScalar(locationFrameInfo.get(1)));  // filename
-                res.add(new RuntimeScalar(locationFrameInfo.get(2)));  // line
+                String locationLine = locationFrameInfo.get(2);
+                RuntimeCode callSiteOwner = activeCodeAtCallerFrame(trackedActiveCodeFrame + 1);
+                if (callSiteOwner != null && callSiteOwner.isQuotedRegexCallback
+                        && callSiteOwner.cvStartLine > 0) {
+                    // Calls made by a qr// callback are compiled from the
+                    // regex fragment's private token stream. Its raw JVM line
+                    // is relative to that fragment; Perl reports the callback
+                    // block's line in the enclosing source file.
+                    locationLine = Integer.toString(callSiteOwner.cvStartLine);
+                }
+                res.add(new RuntimeScalar(locationLine));  // line
 
                 // Perl's caller() without EXPR returns only 3 elements: (package, filename, line).
                 // caller(EXPR) returns 11 elements including subroutine name, hasargs, etc.
@@ -4184,7 +4207,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 continue;
             }
             previous = active;
-            if (active.isRegexCallbackPseudoBlock) {
+            if (active.isRegexCallbackPseudoBlock && !active.isQuotedRegexCallback) {
                 physical++;
                 continue;
             }

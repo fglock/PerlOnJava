@@ -47,6 +47,9 @@ public final class ExecutionRuntimeState {
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
+    /** Match-time callback locations, preserved through builtin wrapper frames. */
+    public final Deque<String> activeRegexCallbackLocations = new ArrayDeque<>();
+    public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();

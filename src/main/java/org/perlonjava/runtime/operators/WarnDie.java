@@ -314,6 +314,11 @@ public class WarnDie {
                 String out = messageStr;
                 if (!out.endsWith("\n")) {
                     String whereStr = where.toString();
+                    String callbackLocation = PerlRuntime.current().executionState()
+                            .activeRegexCallbackLocations.peek();
+                    if (callbackLocation != null && !callbackLocation.isEmpty()) {
+                        whereStr = callbackLocation;
+                    }
                     // If no explicit location provided, derive from Perl call stack
                     if (whereStr.isEmpty() && (fileName == null || fileName.isEmpty())) {
                         whereStr = getPerlLocationFromStack();
@@ -485,7 +490,29 @@ public class WarnDie {
      *
      * @return A location string like " at script.pl line 42", or empty string if not found
      */
-    static String getPerlLocationFromStack() {
+    public static String getPerlLocationFromStack() {
+        // Regex callbacks are compiled from an inner token stream. Its local
+        // token line starts at one, but Perl diagnostics name the source line
+        // containing the original match/qr expression. The callback CV carries
+        // that mapped location explicitly for both execution backends.
+        String callbackLocation = PerlRuntime.current().executionState()
+                .activeRegexCallbackLocations.peek();
+        if (callbackLocation != null && !callbackLocation.isEmpty()) {
+            return callbackLocation;
+        }
+        for (int depth = 0; ; depth++) {
+            RuntimeCode activeCode = RuntimeCode.getActiveCodeAt(depth);
+            if (activeCode == null) break;
+            // A generated CORE::warn wrapper may sit above the callback.
+            // Prefer the first callback owner before consulting either backend's
+            // local token map.
+            if (activeCode.isRegexCallbackPseudoBlock
+                    && activeCode.cvStartFile != null && !activeCode.cvStartFile.isEmpty()
+                    && activeCode.cvStartLine > 0) {
+                return " at " + activeCode.cvStartFile + " line " + activeCode.cvStartLine;
+            }
+        }
+
         // Check interpreter state first - interpreter frames don't create
         // org.perlonjava.anon* JVM stack entries, so JVM stack scanning
         // would skip them and find the wrong (calling Java code) location.

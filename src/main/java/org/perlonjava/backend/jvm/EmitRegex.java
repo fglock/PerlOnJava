@@ -23,9 +23,10 @@ public class EmitRegex {
     static void handleRegexCallback(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackKind"));
+        emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackPackage"));
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegexCallback", "wrap",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
     }
 

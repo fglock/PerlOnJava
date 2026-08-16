@@ -5906,7 +5906,8 @@ public class BytecodeCompiler implements Visitor {
         subCode.lexicalVariableNames = declaredLexicalNames;
         subCode.prototype = node.prototype;
         subCode.attributes = node.attributes;
-        subCode.packageName = getCurrentPackage();
+        subCode.packageName = node.getAnnotation("regexCallbackPackage") instanceof String pkg
+                ? pkg : getCurrentPackage();
         subCode.isTryExpressionWrapper = node.getBooleanAnnotation("tryExpressionWrapper");
         Object callbackSourceLine = node.getAnnotation("regexCallbackSourceLine");
         if (callbackSourceLine instanceof Number number) {
@@ -5925,6 +5926,16 @@ public class BytecodeCompiler implements Visitor {
         }
         if (node.getBooleanAnnotation("regexCallbackPseudoBlock")) {
             subCode.isRegexCallbackPseudoBlock = true;
+        }
+        if (node.getBooleanAnnotation("quotedRegexCallback")) {
+            subCode.isQuotedRegexCallback = true;
+            // Perl exposes callbacks compiled into qr// as anonymous caller frames.
+            // Keep this metadata on the interpreter body just as the JVM emitter
+            // names its generated callback CV.
+            subCode.subName = "__ANON__";
+        }
+        if (node.getAnnotation("regexCallbackSourceLine") instanceof Integer line) {
+            subCode.cvStartLine = line;
         }
 
         if (RuntimeCode.isDisassemble()) {

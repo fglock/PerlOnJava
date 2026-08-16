@@ -1219,6 +1219,25 @@ public class Disassemble {
                         sb.append("COPY_DO_BLOCK_RESULT r").append(rd)
                                 .append(" = copy_do(r").append(rs).append(")\n");
                         break;
+                    case Opcodes.REGEX_CALLBACK:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        int callbackKindIdx = interpretedCode.bytecode[pc++];
+                        int callbackPackageIdx = interpretedCode.bytecode[pc++];
+                        sb.append("REGEX_CALLBACK r").append(rd)
+                                .append(" = callback(r").append(rs)
+                                .append(", kind=")
+                                .append(interpretedCode.stringPool[callbackKindIdx])
+                                .append(", package=")
+                                .append(interpretedCode.stringPool[callbackPackageIdx])
+                                .append(")\n");
+                        break;
+                    case Opcodes.REGEX_TEMPLATE:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("REGEX_TEMPLATE r").append(rd)
+                                .append(" = template(r").append(rs).append(")\n");
+                        break;
                     case Opcodes.NOT:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];

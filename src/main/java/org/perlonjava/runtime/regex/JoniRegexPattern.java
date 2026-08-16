@@ -588,13 +588,34 @@ final class JoniRegexPattern {
         private record Evaluation(RuntimeScalar result, Token token) {}
 
         private Evaluation evaluate(RuntimeRegexCallback callback, MatchView match) {
+            if (System.getenv("DEBUG_REGEX") != null) {
+                System.err.println("REGEX_CALLOUT package=" + callback.lexicalPackage
+                        + " codePackage=" + callback.code.packageName
+                        + " source=" + callback.sourceLocation);
+            }
             int localLevel = DynamicVariableManager.getLocalLevel();
             RegexState savedRegex = new RegexState();
             RuntimeScalar rVariable = GlobalVariable.getGlobalVariable(
                     GlobalContext.encodeSpecialVar("R"));
             RuntimeScalar previousR = rVariable.clone();
+            RuntimeScalar previousSelf = callback.code.__SUB__;
+            if (callback.code.isQuotedRegexCallback) {
+                RuntimeCode enclosing = RuntimeCode.getActiveCodeAt(0);
+                if (enclosing != null) {
+                    RuntimeScalar enclosingSelf = enclosing.__SUB__ != null
+                            ? enclosing.__SUB__ : new RuntimeScalar(enclosing);
+                    RuntimeCode.inheritSelfReference(
+                            new RuntimeScalar(callback.code), enclosingSelf);
+                }
+            }
             mutations.include(callback.code);
             publishProvisional(match);
+            var callbackLocations = PerlRuntime.current().executionState()
+                    .activeRegexCallbackLocations;
+            callbackLocations.push(callback.sourceLocation == null ? "" : callback.sourceLocation);
+            var callbackPackages = PerlRuntime.current().executionState()
+                    .activeRegexCallbackPackages;
+            callbackPackages.push(callback.lexicalPackage == null ? "main" : callback.lexicalPackage);
 
             try {
                 DynamicVariableManager.CapturedFrame<RuntimeList> frame =
@@ -620,6 +641,13 @@ final class JoniRegexPattern {
                 mutations.restore();
                 restoreCallbackScope(localLevel, savedRegex, previousR);
                 throw failure;
+            } finally {
+                if (!callbackLocations.isEmpty()) callbackLocations.pop();
+                if (!callbackPackages.isEmpty()) callbackPackages.pop();
+                if (callback.code.isQuotedRegexCallback) {
+                    RuntimeCode.inheritSelfReference(
+                            new RuntimeScalar(callback.code), previousSelf);
+                }
             }
         }
 
