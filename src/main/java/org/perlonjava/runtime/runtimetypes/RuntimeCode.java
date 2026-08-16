@@ -398,6 +398,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         callContextStack().push(callContext);
     }
 
+    public static int currentRawCallContext() {
+        Integer context = getCallContextAtCallerFrame(0);
+        return context != null ? context : RuntimeContextType.SCALAR;
+    }
+
     /**
      * Pop @_ and hasargs flag from their respective stacks when exiting a subroutine.
      * Both stacks are pushed in the instance apply() methods and must be popped together.
@@ -510,6 +515,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /**
+     * Return the outermost raw context for one logical Perl call frame.
+     * Interpreter execution can add an adjacent compiler-wrapper frame with
+     * effective scalar context; parent-op consumers need the outer raw frame.
+     */
+    public static Integer getCallContextAtCallerFrame(int logicalFrame) {
+        if (logicalFrame < 0) return null;
+        java.util.List<RuntimeCode> codes = new java.util.ArrayList<>(activeCodeStack());
+        java.util.List<Integer> contexts = new java.util.ArrayList<>(callContextStack());
+        int size = Math.min(codes.size(), contexts.size());
+        int logicalIndex = 0;
+        for (int i = 0; i < size; ) {
+            RuntimeCode previous = codes.get(i);
+            Integer outermostContext = contexts.get(i);
+            int j = i + 1;
+            while (j < size) {
+                RuntimeCode next = codes.get(j);
+                if (next != previous && !isCompilerWrapperPair(next, previous)) break;
+                outermostContext = contexts.get(j);
+                previous = next;
+                j++;
+            }
+            if (logicalIndex++ == logicalFrame) return outermostContext;
+            i = j;
+        }
+        return null;
+    }
+
     private static RuntimeScalar callerWantarrayScalar(Integer callContext) {
         if (callContext == null) {
             return RuntimeScalarCache.scalarUndef;
@@ -517,7 +550,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (RuntimeContextType.isListLike(callContext)) {
             return RuntimeScalarCache.scalarTrue;
         }
-        if (callContext == RuntimeContextType.SCALAR || callContext == RuntimeContextType.LVALUE) {
+        if (callContext == RuntimeContextType.SCALAR || callContext == RuntimeContextType.LVALUE
+                || callContext == RuntimeContextType.OBJECT) {
             return RuntimeScalarCache.scalarFalse;
         }
         return RuntimeScalarCache.scalarUndef;
@@ -562,7 +596,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static int effectiveCallContext(int callContext) {
-        return callContext == RuntimeContextType.LVALUE
+        return callContext == RuntimeContextType.LVALUE || callContext == RuntimeContextType.OBJECT
                 ? RuntimeContextType.SCALAR
                 : callContext;
     }
@@ -3387,6 +3421,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // forbidden lvalue method assignment into an ordinary scalar call.
             return code.apply(args, callContext);
         } catch (PerlNonLocalReturnException e) {
+            if (e.targetCode != null && e.targetCode != code) {
+                throw e;
+            }
             if (code.isMapGrepBlock) {
                 throw e;
             }
@@ -4163,6 +4200,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Return the outermost runtime frame implementing one logical Perl caller.
+     * Lvalue/interpreted subs can have an adjacent body + compiler-wrapper pair;
+     * non-local returns must cross both before they have left the Perl sub.
+     */
+    public static RuntimeCode getOutermostActiveCodeAtCallerFrame(int logicalFrame) {
+        if (logicalFrame < 0) return null;
+        RuntimeCode previous = null;
+        RuntimeCode candidate = null;
+        int logicalIndex = -1;
+        for (RuntimeCode active : activeCodeStack()) {
+            boolean sameFrame = previous != null
+                    && (active == previous || isCompilerWrapperPair(active, previous));
+            if (!sameFrame) {
+                logicalIndex++;
+                if (logicalIndex > logicalFrame) break;
+            }
+            if (logicalIndex == logicalFrame) candidate = active;
+            previous = active;
+        }
+        return candidate;
+    }
+
+    /**
      * Resolve a PadWalker caller level from inside its Perl wrapper.
      * Java builtins and map/grep block CVs are runtime implementation frames,
      * not Perl subroutine levels, and therefore must not shift LEVEL.
@@ -4505,7 +4565,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray argsForCall = curArgs;
             try {
                 // Cast the value to RuntimeCode and call apply()
-                RuntimeList result = code.apply(argsForCall, effectiveContext);
+                RuntimeList result = code.apply(argsForCall, callContext);
                 // Handle tail calls (goto &func).
                 // JVM-generated bytecode has its own trampoline; this handles calls from Java code.
                 if (result instanceof RuntimeControlFlowList cfList
@@ -4539,6 +4599,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 }
             } catch (PerlNonLocalReturnException e) {
+                if (e.targetCode != null && e.targetCode != code) {
+                    throw e;
+                }
                 // Non-local return from map/grep block
                 if (code.isMapGrepBlock) {
                     throw e;  // Propagate through nested map/grep blocks
@@ -4841,7 +4904,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 MortalList.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
-                    RuntimeList result = code.apply(subroutineName, a, effectiveContext);
+                    RuntimeList result = code.apply(subroutineName, a, callContext);
                     // Flush deferred DESTROY decrements for void-context calls.
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
@@ -4850,6 +4913,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     return result;
                 } catch (PerlNonLocalReturnException e) {
+                    if (e.targetCode != null && e.targetCode != code) {
+                        throw e;
+                    }
                     // Non-local return from map/grep block
                     if (code.isMapGrepBlock) {
                         throw e;  // Propagate through nested map/grep blocks
@@ -5099,7 +5165,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 MortalList.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
-                    RuntimeList result = code.apply(subroutineName, a, effectiveContext);
+                    RuntimeList result = code.apply(subroutineName, a, callContext);
                     // Flush deferred DESTROY decrements for void-context calls.
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
@@ -5108,6 +5174,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     return result;
                 } catch (PerlNonLocalReturnException e) {
+                    if (e.targetCode != null && e.targetCode != code) {
+                        throw e;
+                    }
                     // Non-local return from map/grep block
                     if (code.isMapGrepBlock) {
                         throw e;  // Propagate through nested map/grep blocks

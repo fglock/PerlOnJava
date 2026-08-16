@@ -879,6 +879,15 @@ public class Dereference {
                 object = new StringNode(className, ((IdentifierNode) object).tokenIndex);
             }
 
+            // Wanted reports OBJECT when a method result is immediately used
+            // as the invocant of another method call ($obj->first->second).
+            if (object instanceof BinaryOperatorNode innerArrow
+                    && "->".equals(innerArrow.operator)
+                    && innerArrow.right instanceof BinaryOperatorNode innerCall
+                    && "(".equals(innerCall.operator)) {
+                innerArrow.setAnnotation("wantedObjectContext", true);
+            }
+
             // Convert method to StringNode if needed
             if (method instanceof OperatorNode op) {
                 // &method is introduced by the parser if the method is predeclared
@@ -1000,7 +1009,18 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-            emitterVisitor.pushCallContext();   // push call context
+            if (node.getBooleanAnnotation("wantedObjectContext")) {
+                mv.visitLdcInsn(RuntimeContextType.OBJECT);
+            } else if (node.getBooleanAnnotation("inheritRawCallContext")) {
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "currentRawCallContext",
+                        "()I",
+                        false);
+            } else {
+                emitterVisitor.pushCallContext();
+            }
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1082,7 +1102,18 @@ public class Dereference {
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
                 mv.visitLdcInsn("tailcall");
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
-                emitterVisitor.pushCallContext();  // context of the original call site
+                if (node.getBooleanAnnotation("wantedObjectContext")) {
+                    mv.visitLdcInsn(RuntimeContextType.OBJECT);
+                } else if (node.getBooleanAnnotation("inheritRawCallContext")) {
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "currentRawCallContext",
+                            "()I",
+                            false);
+                } else {
+                    emitterVisitor.pushCallContext();
+                }
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "apply",

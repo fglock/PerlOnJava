@@ -45,9 +45,7 @@ public class OverloadingPragma extends PerlModuleBase {
      */
     public static RuntimeList useOverloading(RuntimeArray args, int ctx) {
         ScopedSymbolTable currentScope = getCurrentScope();
-        if (currentScope != null) {
-            currentScope.disableStrictOption(Strict.HINT_NO_AMAGIC);
-        }
+        if (currentScope != null) currentScope.disableStrictOption(Strict.HINT_NO_AMAGIC);
         return new RuntimeList();
     }
 
@@ -61,9 +59,7 @@ public class OverloadingPragma extends PerlModuleBase {
      */
     public static RuntimeList noOverloading(RuntimeArray args, int ctx) {
         ScopedSymbolTable currentScope = getCurrentScope();
-        if (currentScope != null) {
-            currentScope.enableStrictOption(Strict.HINT_NO_AMAGIC);
-        }
+        if (currentScope != null) currentScope.enableStrictOption(Strict.HINT_NO_AMAGIC);
         return new RuntimeList();
     }
 }

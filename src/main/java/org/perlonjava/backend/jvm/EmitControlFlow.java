@@ -328,8 +328,21 @@ public class EmitControlFlow {
                     "()V",
                     false);
         } else if (node.operand instanceof ListNode list && list.elements.size() == 1) {
-            list.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
+            Node returnExpression = list.elements.getFirst();
+            Node returnedCall = returnExpression;
+            while (returnedCall instanceof ListNode returnedList
+                    && returnedList.elements.size() == 1) {
+                returnedCall = returnedList.elements.getFirst();
+            }
+            returnedCall.setAnnotation("inheritRawCallContext", true);
+            returnExpression.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         } else {
+            Node returnedCall = node.operand;
+            while (returnedCall instanceof ListNode returnedList
+                    && returnedList.elements.size() == 1) {
+                returnedCall = returnedList.elements.getFirst();
+            }
+            returnedCall.setAnnotation("inheritRawCallContext", true);
             node.operand.accept(emitterVisitor.with(RuntimeContextType.RUNTIME));
         }
 

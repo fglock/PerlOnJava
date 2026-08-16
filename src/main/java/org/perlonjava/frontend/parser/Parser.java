@@ -209,6 +209,18 @@ public class Parser {
             // Peek at the next token to determine what to do next.
             LexerToken token = peek(this);
 
+            // Perl permits infix operators to be explicitly qualified through
+            // CORE, for example `$a CORE::eq $b`. Collapse the three-token
+            // spelling in infix position so normal precedence handling applies.
+            if ("CORE".equals(token.text) && tokenIndex + 2 < tokens.size()
+                    && "::".equals(tokens.get(tokenIndex + 1).text)
+                    && ParserTables.INFIX_OP.contains(tokens.get(tokenIndex + 2).text)) {
+                token.text = tokens.get(tokenIndex + 2).text;
+                token.type = LexerTokenType.OPERATOR;
+                tokens.remove(tokenIndex + 2);
+                tokens.remove(tokenIndex + 1);
+            }
+
             // Check if we have reached the end of the input (EOF) or a terminator (like `;`).
             if (isExpressionTerminator(token)) {
                 break; // Exit the loop if we're done parsing.

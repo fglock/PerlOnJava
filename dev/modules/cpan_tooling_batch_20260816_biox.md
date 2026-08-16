@@ -8,7 +8,7 @@ the primary fix.
 
 ## Progress Tracking
 
-### Current Status: implementation complete; PR verification in progress
+### Current Status: implementation and local validation complete; CI verification in progress
 
 ### Completed Phases
 
@@ -25,39 +25,47 @@ the primary fix.
 - [x] Reusable compiler/runtime fixes
   - Preserve overloaded object results for compound string concatenation.
   - Treat boolean scalars as numeric operands for `^`.
+  - Implement `no overloading` dispatch for arithmetic and boolean contexts.
   - Permit guarded fully-qualified optional constant names under `strict subs`.
+  - Compile fully-qualified `CORE::` control-flow and infix operations.
+  - Preserve caller context, including `OBJECT`, across JVM and interpreter
+    wrapper frames and non-local returns.
+  - Apply case folding to POSIX regex character classes.
 - [x] CPAN tooling compatibility
-  - Make `Sub::Util::set_subname` optional for generated XS-style accessors.
-  - Add the pure-Perl `Wanted` context compatibility surface and export `want`.
+  - Reinitialize Java-backed XS modules when an isolated CPAN worker has stale
+    `%INC` state but an undefined stash entry.
+  - Snapshot named coderefs at compile time instead of retaining mutable stash
+    scalars, fixing generated `Eval::TypeTiny` callbacks.
+  - Add reusable Java-module loading and the `Wanted` context compatibility
+    surface.
+  - Expose the bundled SQLite JDBC implementation through DBD::SQLite metadata
+    and constants instead of introducing another native dependency.
+  - Complete reusable Fcntl and POSIX constants/functions required by the
+    dependency graph.
 - [x] Unit validation
-  - Final `make` passed after the optional-constant parser guard and the
-    isolated Sub::Util compatibility changes.
+  - All ten new compatibility tests were validated with system Perl: eight
+    passed and two correctly skipped when their optional modules were absent.
+  - Final `make` passed in 3m43s after all compiler and tooling changes.
 - [x] Target verification
-  - `BioX::Seq`: passes.
-  - `Math::Aronson`: passes.
-  - `Template::Plugin::Markdown`: passes.
-  - `Changes`: reaches its locale data dependency, which requires a usable
-    DBD::SQLite driver; the local system Perl has no DBD::SQLite installation.
-  - `Catmandu::Importer::Parltrack`: its dependency stack still captures a
-    stale `Sub::Util::set_subname` callback inside `Eval::TypeTiny` in the
-    isolated CPAN test worker; this is recorded for follow-up rather than
-    hiding it with a distribution preference.
-  - `Nephia::Plugin::FormValidator::Lite`: unsupported because both
-    `Nephia::Plugin` and `Plack::Test` are absent from the local system Perl.
+  - `BioX::Seq`: 7 files, 127 tests, PASS.
+  - `Changes`: 26 files, 375 tests, PASS.
+  - `Math::Aronson`: 4 files, 55 tests, PASS.
+  - `Catmandu::Importer::Parltrack`: 3 tests, PASS.
+  - `Template::Plugin::Markdown`: 2 files, 3 tests, PASS.
+  - `Nephia::Plugin::FormValidator::Lite`: unsupported under the requested
+    system-Perl exception. Its own system-Perl suite fails, and the current
+    CPAN package index no longer contains Nephia or three declared companion
+    plugins. MetaCPAN identifies those releases as BackPAN-only.
 
 ### Next Steps
 
 1. Commit and push the feature branch.
-2. Open a PR and monitor GitHub Actions.
-3. Follow up on the isolated `Eval::TypeTiny` callback and DBD::SQLite port.
+2. Update PR #979 and monitor GitHub Actions.
 
 ### Open Questions
 
-- `Changes` depends on a broad locale/data stack; any remaining failure must
-  be checked against system Perl before being classified as an implementation
-  defect.
-- `Catmandu::Importer::Parltrack` may expose additional optional XS constants
-  after its first compile blocker is removed.
+- Whether PerlOnJava should eventually add an opt-in BackPAN resolver for
+  distributions whose live CPAN metadata still declares withdrawn modules.
 
 ## Related References
 

@@ -21,10 +21,16 @@ public class PerlNonLocalReturnException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     public final RuntimeBase returnValue;
+    public final RuntimeCode targetCode;
 
     public PerlNonLocalReturnException(RuntimeBase returnValue) {
+        this(returnValue, null);
+    }
+
+    public PerlNonLocalReturnException(RuntimeBase returnValue, RuntimeCode targetCode) {
         // Suppress stack trace for performance - this is control flow, not an error
         super(null, null, true, false);
         this.returnValue = returnValue;
+        this.targetCode = targetCode;
     }
 }

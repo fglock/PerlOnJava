@@ -101,6 +101,18 @@ public class Disassemble {
                         pc += 1;
                         sb.append("GOTO_IF_TRUE r").append(condReg).append(" -> ").append(target).append("\n");
                         break;
+                    case Opcodes.GOTO_IF_FALSE_NO_OVERLOAD:
+                        condReg = interpretedCode.bytecode[pc++];
+                        target = InterpretedCode.readInt(interpretedCode.bytecode, pc);
+                        pc += 1;
+                        sb.append("GOTO_IF_FALSE_NO_OVERLOAD r").append(condReg).append(" -> ").append(target).append("\n");
+                        break;
+                    case Opcodes.GOTO_IF_TRUE_NO_OVERLOAD:
+                        condReg = interpretedCode.bytecode[pc++];
+                        target = InterpretedCode.readInt(interpretedCode.bytecode, pc);
+                        pc += 1;
+                        sb.append("GOTO_IF_TRUE_NO_OVERLOAD r").append(condReg).append(" -> ").append(target).append("\n");
+                        break;
                     case Opcodes.ALIAS:
                         int dest = interpretedCode.bytecode[pc++];
                         int src = interpretedCode.bytecode[pc++];
@@ -411,6 +423,12 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int rsNegNo = interpretedCode.bytecode[pc++];
                         sb.append("NEG_NO_OVERLOAD r").append(rd).append(" = -r").append(rsNegNo).append("\n");
+                        break;
+                    }
+                    case Opcodes.NOT_NO_OVERLOAD: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int rsNotNo = interpretedCode.bytecode[pc++];
+                        sb.append("NOT_NO_OVERLOAD r").append(rd).append(" = !r").append(rsNotNo).append("\n");
                         break;
                     }
                     case Opcodes.ADD_SCALAR_INT:

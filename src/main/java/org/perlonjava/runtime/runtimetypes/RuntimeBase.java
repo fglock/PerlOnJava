@@ -573,6 +573,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public abstract boolean getBoolean();
 
     /**
+     * Boolean conversion with lexical operator overloading disabled.
+     * Aggregate runtime values have no overload dispatch of their own, so the
+     * default implementation is identical to ordinary boolean conversion.
+     */
+    public boolean getBooleanNoOverload() {
+        return getBoolean();
+    }
+
+    /**
      * Retrieves the defined boolean value of the object.
      *
      * @return a boolean indicating whether the object is defined

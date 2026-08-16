@@ -14,6 +14,7 @@ import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.VersionHelper;
 import org.perlonjava.runtime.perlmodule.FilterUtilCall;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -1037,6 +1038,18 @@ public class StatementParser {
                                     res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
                                 } else {
                                     break;
+                                }
+                            }
+
+                            // overloading.pm stores HINT_NO_AMAGIC in $^H. Its
+                            // pure-Perl import method executes in a synthetic
+                            // BEGIN wrapper, so apply the public hint directly
+                            // to the enclosing compiler scope as Perl does.
+                            if ("overloading".equals(packageName)) {
+                                if (isNoDeclaration) {
+                                    parser.ctx.symbolTable.enableStrictOption(Strict.HINT_NO_AMAGIC);
+                                } else {
+                                    parser.ctx.symbolTable.disableStrictOption(Strict.HINT_NO_AMAGIC);
                                 }
                             }
 

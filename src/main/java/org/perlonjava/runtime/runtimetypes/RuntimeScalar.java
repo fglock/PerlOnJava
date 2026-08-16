@@ -1163,6 +1163,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return getBooleanLarge();
     }
 
+    /** Perl truth without invoking a blessed value's bool/0+/"" overload. */
+    @Override
+    public boolean getBooleanNoOverload() {
+        return switch (type) {
+            case INTEGER -> ((Number) value).longValue() != 0;
+            case DOUBLE -> (double) value != 0.0;
+            case STRING, BYTE_STRING -> {
+                String s = (String) value;
+                yield !s.isEmpty() && !s.equals("0");
+            }
+            case UNDEF -> false;
+            case BOOLEAN -> (boolean) value;
+            case JAVAOBJECT -> value != null;
+            case TIED_SCALAR -> this.tiedFetch().getBooleanNoOverload();
+            case READONLY_SCALAR -> ((RuntimeScalar) value).getBooleanNoOverload();
+            case DUALVAR -> ((DualVar) value).stringValue().getBooleanNoOverload();
+            case CODE -> value != null && (((RuntimeCode) value).packageName != null
+                    || ((RuntimeCode) value).subName != null || ((RuntimeCode) value).defined());
+            default -> true;
+        };
+    }
+
     // Slow path for getBoolean()
     private boolean getBooleanLarge() {
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch

@@ -13,6 +13,7 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.perlmodule.XSLoader;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -687,6 +688,14 @@ public class BytecodeCompiler implements Visitor {
 
     boolean isNoOverloadingEnabled() {
         return getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+    }
+
+    short gotoIfFalseOpcode() {
+        return isNoOverloadingEnabled() ? Opcodes.GOTO_IF_FALSE_NO_OVERLOAD : Opcodes.GOTO_IF_FALSE;
+    }
+
+    short gotoIfTrueOpcode() {
+        return isNoOverloadingEnabled() ? Opcodes.GOTO_IF_TRUE_NO_OVERLOAD : Opcodes.GOTO_IF_TRUE;
     }
 
     boolean shouldBlockGlobalUnderStrictVars(String varName) {
@@ -2584,19 +2593,19 @@ public class BytecodeCompiler implements Visitor {
             emitReg(condReg);
             emitReg(targetReg);
             jumpPos = bytecode.size();
-            emit(Opcodes.GOTO_IF_TRUE);
+            emit(gotoIfTrueOpcode());
             emitReg(condReg);
             emitInt(0); // placeholder for end target
         } else if (op.equals("||=")) {
             // For ||=, skip RHS if LHS is truthy
             jumpPos = bytecode.size();
-            emit(Opcodes.GOTO_IF_TRUE);
+            emit(gotoIfTrueOpcode());
             emitReg(targetReg);
             emitInt(0); // placeholder for end target
         } else {
             // For &&=, skip RHS if LHS is falsy
             jumpPos = bytecode.size();
-            emit(Opcodes.GOTO_IF_FALSE);
+            emit(gotoIfFalseOpcode());
             emitReg(targetReg);
             emitInt(0); // placeholder for end target
         }
@@ -4983,6 +4992,23 @@ public class BytecodeCompiler implements Visitor {
                 if (codeRef == null) {
                     codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                 }
+                if (codeRef.type == RuntimeScalarType.CODE
+                        && codeRef.value instanceof RuntimeCode unresolved
+                        && !unresolved.defined()) {
+                    int separator = subName.lastIndexOf("::");
+                    if (separator > 0
+                            && XSLoader.tryInitializeJavaModule(subName.substring(0, separator))) {
+                        codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                    }
+                }
+
+                // A compiled reference captures the current CV, not the mutable
+                // stash slot that points at it.  namespace::clean can remove the
+                // glob later while existing \&name references remain callable.
+                RuntimeScalar codeSnapshot = new RuntimeScalar();
+                codeSnapshot.type = codeRef.type;
+                codeSnapshot.value = codeRef.value;
+                codeRef = codeSnapshot;
 
                 // Allocate register and load from constant pool
                 int rd = allocateOutputRegister();
@@ -6594,7 +6620,7 @@ public class BytecodeCompiler implements Visitor {
                 }
 
                 // Step 8: If condition is true, jump back to start
-                emit(Opcodes.GOTO_IF_TRUE);
+                emit(gotoIfTrueOpcode());
                 emitReg(condReg);
                 emitInt(loopStartPc);
             }
@@ -6617,7 +6643,7 @@ public class BytecodeCompiler implements Visitor {
             }
 
             // Step 4: If condition is false, jump to end
-            emit(Opcodes.GOTO_IF_FALSE);
+            emit(gotoIfFalseOpcode());
             emitReg(condReg);
             loopEndJumpPc = bytecode.size();
             emitInt(0);  // Placeholder for jump target (will be patched)
@@ -6721,9 +6747,9 @@ public class BytecodeCompiler implements Visitor {
         int ifFalsePos = bytecode.size();
         // Invert condition for 'unless'
         if ("unless".equals(node.operator)) {
-            emit(Opcodes.GOTO_IF_TRUE);
+            emit(gotoIfTrueOpcode());
         } else {
-            emit(Opcodes.GOTO_IF_FALSE);
+            emit(gotoIfFalseOpcode());
         }
         emitReg(condReg);
         emitInt(0); // Placeholder for else/end target
@@ -6784,7 +6810,7 @@ public class BytecodeCompiler implements Visitor {
         int condReg = lastResultReg;
 
         int ifFalsePos = bytecode.size();
-        emit(Opcodes.GOTO_IF_FALSE);
+        emit(gotoIfFalseOpcode());
         emitReg(condReg);
         emitInt(0);
 

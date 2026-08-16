@@ -57,6 +57,16 @@ public class RuntimeContextType {
      */
     public static final int LVALUE_LIST = 5;
 
+    /**
+     * Scalar context where the returned value is immediately used as a method
+     * invocant. Wanted distinguishes this parent-op context as OBJECT while
+     * ordinary Perl wantarray semantics remain scalar.
+     */
+    public static final int OBJECT = 6;
+
+    /** Preserve the enclosing Perl subroutine's raw parent-op context. */
+    public static final int INHERITED = 7;
+
     public static boolean isListLike(int context) {
         return context == LIST || context == LVALUE_LIST;
     }

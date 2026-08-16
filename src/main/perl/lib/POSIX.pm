@@ -60,6 +60,42 @@ sub strtod {
     return (0 + $1, $2);
 }
 
+# C99 floating-point helpers exposed by current core POSIX releases.
+sub cbrt {
+    my ($number) = @_;
+    return $number < 0 ? -((-$number) ** (1 / 3)) : $number ** (1 / 3);
+}
+
+sub isnan {
+    my ($number) = @_;
+    return defined($number) && $number != $number ? 1 : 0;
+}
+
+sub isinf {
+    my ($number) = @_;
+    return 0 unless defined $number;
+    return ($number == HUGE_VAL || $number == -HUGE_VAL) ? 1 : 0;
+}
+
+sub isfinite {
+    my ($number) = @_;
+    return defined($number) && $number == $number && !isinf($number) ? 1 : 0;
+}
+
+sub isnormal {
+    my ($number) = @_;
+    return 0 unless isfinite($number) && $number != 0;
+    return abs($number) >= 2.2250738585072014e-308 ? 1 : 0;
+}
+
+sub signbit {
+    my ($number) = @_;
+    return 0 unless defined $number;
+    return 1 if $number < 0;
+    return 0 if $number > 0;
+    return sprintf('%g', $number) =~ /^-/ ? 1 : 0;
+}
+
 # Export tags for different groups of functions/constants
 # Native Perl's POSIX exports its commonly used constants and math helpers by
 # default.  Only export names that are actually implemented in this module.
@@ -91,7 +127,8 @@ our @EXPORT_OK = qw(
     getgrent setgrent endgrent
 
     # Math functions
-    abs acos asin atan atan2 ceil cos cosh exp fabs floor fmod frexp
+    abs acos asin atan atan2 cbrt ceil cos cosh exp fabs floor fmod frexp
+    isfinite isinf isnan isnormal signbit
     ldexp log log10 log2 modf pow sin sinh sqrt tan tanh strtod
     HUGE_VAL
 

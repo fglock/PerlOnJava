@@ -243,6 +243,13 @@ public class CompileBinaryOperator {
                         invocantNode = new StringNode(className, invocantNode.getIndex());
                     }
 
+                    if (invocantNode instanceof BinaryOperatorNode innerArrow
+                            && "->".equals(innerArrow.operator)
+                            && innerArrow.right instanceof BinaryOperatorNode innerCall
+                            && "(".equals(innerCall.operator)) {
+                        innerArrow.setAnnotation("wantedObjectContext", true);
+                    }
+
                     // Convert method name to string if needed
                     if (methodNode instanceof OperatorNode methodOp) {
                         // &method is introduced by parser if method is predeclared
@@ -293,7 +300,11 @@ public class CompileBinaryOperator {
                     bytecodeCompiler.emitReg(methodReg);
                     bytecodeCompiler.emitReg(currentSubReg);
                     bytecodeCompiler.emitReg(argsReg);
-                    bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                    bytecodeCompiler.emit(node.getBooleanAnnotation("wantedObjectContext")
+                            ? RuntimeContextType.OBJECT
+                            : node.getBooleanAnnotation("inheritRawCallContext")
+                            ? RuntimeContextType.INHERITED
+                            : bytecodeCompiler.currentCallContext);
 
                     bytecodeCompiler.lastResultReg = rd;
                     return;
@@ -503,7 +514,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitAliasWithTarget(rd, rs1);
 
             int skipRightPos = bytecodeCompiler.bytecode.size();
-            bytecodeCompiler.emit(Opcodes.GOTO_IF_FALSE);
+            bytecodeCompiler.emit(bytecodeCompiler.gotoIfFalseOpcode());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
 
@@ -530,7 +541,7 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitAliasWithTarget(rd, rs1);
 
             int skipRightPos = bytecodeCompiler.bytecode.size();
-            bytecodeCompiler.emit(Opcodes.GOTO_IF_TRUE);
+            bytecodeCompiler.emit(bytecodeCompiler.gotoIfTrueOpcode());
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
 

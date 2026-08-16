@@ -700,6 +700,32 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.GOTO_IF_FALSE_NO_OVERLOAD -> {
+                                int condReg = bytecode[pc++];
+                                int target = readInt(bytecode, pc);
+                                pc += 1;
+                                RuntimeBase condBase = registers[condReg];
+                                RuntimeScalar cond = (condBase instanceof RuntimeScalar)
+                                        ? (RuntimeScalar) condBase
+                                        : condBase.scalar();
+                                if (!cond.getBooleanNoOverload()) {
+                                    pc = target;
+                                }
+                            }
+
+                            case Opcodes.GOTO_IF_TRUE_NO_OVERLOAD -> {
+                                int condReg = bytecode[pc++];
+                                int target = readInt(bytecode, pc);
+                                pc += 1;
+                                RuntimeBase condBase = registers[condReg];
+                                RuntimeScalar cond = (condBase instanceof RuntimeScalar)
+                                        ? (RuntimeScalar) condBase
+                                        : condBase.scalar();
+                                if (cond.getBooleanNoOverload()) {
+                                    pc = target;
+                                }
+                            }
+
                             // =================================================================
                             // REGISTER OPERATIONS
                             // =================================================================
@@ -1191,7 +1217,7 @@ public class BytecodeInterpreter {
 
                             case Opcodes.COMPARE_NUM, Opcodes.COMPARE_STR, Opcodes.EQ_NUM, Opcodes.NE_NUM,
                                  Opcodes.LT_NUM, Opcodes.GT_NUM, Opcodes.LE_NUM, Opcodes.GE_NUM, Opcodes.EQ_STR,
-                                 Opcodes.NE_STR, Opcodes.NOT -> {
+                                 Opcodes.NE_STR, Opcodes.NOT, Opcodes.NOT_NO_OVERLOAD -> {
                                 pc = executeComparisons(opcode, bytecode, pc, registers);
                             }
 
@@ -1504,6 +1530,8 @@ public class BytecodeInterpreter {
                                 // resolve it from the actual calling context in register 2.
                                 if (context == RuntimeContextType.RUNTIME) {
                                     context = ((RuntimeScalar) registers[2]).getInt();
+                                } else if (context == RuntimeContextType.INHERITED) {
+                                    context = RuntimeCode.currentRawCallContext();
                                 }
 
                                 // Auto-convert coderef to scalar if needed
@@ -1574,10 +1602,13 @@ public class BytecodeInterpreter {
                                     CallerStack.pop();
                                 }
 
-                                // Convert to scalar if called in scalar or lvalue context
-                                if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
+                                // OBJECT is a raw Wanted parent-op context, but its
+                                // value semantics are the same as scalar context.
+                                if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE
+                                        || context == RuntimeContextType.OBJECT) {
                                     RuntimeBase scalarResult = result.scalar();
-                                    registers[rd] = context == RuntimeContextType.SCALAR && isImmutableProxy(scalarResult)
+                                    registers[rd] = (context == RuntimeContextType.SCALAR
+                                            || context == RuntimeContextType.OBJECT) && isImmutableProxy(scalarResult)
                                             ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {
                                     registers[rd] = result;
@@ -1652,6 +1683,8 @@ public class BytecodeInterpreter {
                                 // Resolve RUNTIME context from register 2 (wantarray)
                                 if (context == RuntimeContextType.RUNTIME) {
                                     context = ((RuntimeScalar) registers[2]).getInt();
+                                } else if (context == RuntimeContextType.INHERITED) {
+                                    context = RuntimeCode.currentRawCallContext();
                                 }
 
                                 RuntimeScalar invocant = (RuntimeScalar) registers[invocantReg];
@@ -1696,10 +1729,13 @@ public class BytecodeInterpreter {
                                     CallerStack.pop();
                                 }
 
-                                // Convert to scalar if called in scalar or lvalue context
-                                if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
+                                // OBJECT is a raw Wanted parent-op context, but its
+                                // value semantics are the same as scalar context.
+                                if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE
+                                        || context == RuntimeContextType.OBJECT) {
                                     RuntimeBase scalarResult = result.scalar();
-                                    registers[rd] = context == RuntimeContextType.SCALAR && isImmutableProxy(scalarResult)
+                                    registers[rd] = (context == RuntimeContextType.SCALAR
+                                            || context == RuntimeContextType.OBJECT) && isImmutableProxy(scalarResult)
                                             ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {
                                     registers[rd] = result;
@@ -3168,6 +3204,15 @@ public class BytecodeInterpreter {
                         : registers[rs].scalar();
                 registers[rd] = val.getBoolean() ?
                         RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
+                return pc;
+            }
+            case Opcodes.NOT_NO_OVERLOAD -> {
+                int rd = bytecode[pc++];
+                int rs = bytecode[pc++];
+                RuntimeScalar val = (registers[rs] instanceof RuntimeScalar)
+                        ? (RuntimeScalar) registers[rs] : registers[rs].scalar();
+                registers[rd] = val.getBooleanNoOverload()
+                        ? RuntimeScalarCache.scalarFalse : RuntimeScalarCache.scalarTrue;
                 return pc;
             }
 

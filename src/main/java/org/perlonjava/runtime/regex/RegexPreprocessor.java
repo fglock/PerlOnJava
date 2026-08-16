@@ -649,6 +649,23 @@ public class RegexPreprocessor {
                 escaped = true;
                 continue;
             }
+            // A POSIX character class such as [[:blank:]] has its own
+            // bracket pair inside the surrounding regular class. Do not
+            // mistake the POSIX closing bracket for the end of the outer
+            // class; otherwise /i preprocessing case-folds syntax letters
+            // (notably the k in "blank") as literal class contents.
+            if (ch == '[' && i + 1 < pattern.length()
+                    && (pattern.charAt(i + 1) == ':'
+                        || pattern.charAt(i + 1) == '.'
+                        || pattern.charAt(i + 1) == '=')) {
+                char delimiter = pattern.charAt(i + 1);
+                String terminator = String.valueOf(delimiter) + ']';
+                int nestedEnd = pattern.indexOf(terminator, i + 2);
+                if (nestedEnd >= 0) {
+                    i = nestedEnd + 1;
+                    continue;
+                }
+            }
             if (ch == ']') {
                 return i;
             }
@@ -1135,6 +1152,23 @@ public class RegexPreprocessor {
                 result.append(pattern, i, j + 2);
                 i = j + 2;
                 continue;
+            }
+
+            // POSIX/collating/equivalence-class tokens nested inside a
+            // regular character class are regex syntax, not literal class
+            // contents. Preserve the complete token before considering
+            // Unicode case-fold expansion of individual characters.
+            if (!escaped && inCharClass && ch == '[' && i + 1 < len
+                    && (pattern.charAt(i + 1) == ':'
+                        || pattern.charAt(i + 1) == '.'
+                        || pattern.charAt(i + 1) == '=')) {
+                char delimiter = pattern.charAt(i + 1);
+                int nestedEnd = pattern.indexOf(String.valueOf(delimiter) + ']', i + 2);
+                if (nestedEnd >= 0) {
+                    result.append(pattern, i, nestedEnd + 2);
+                    i = nestedEnd + 2;
+                    continue;
+                }
             }
 
             // Track if we're inside a character class [...]
