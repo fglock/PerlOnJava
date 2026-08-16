@@ -37,6 +37,13 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
+      - name: Run focused Perl thread gate (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: make test-threads-windows
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
       - name: Build with Make (Linux)
         if: runner.os == 'Linux'
         run: make ci
@@ -81,3 +88,4 @@ jobs:
           path: |
             build/reports/tests/test/
             build/reports/threads/
+            build/test-results/testThreadsWindows/

@@ -1,8 +1,8 @@
 # Perl Threads Implementation Plan
 
-**Status:** Delivered; compatibility maintenance
-**Version:** 3.0
-**Date:** 2026-08-15
+**Status:** Public thread modules delivered; complete core-wrapper milestone active
+**Version:** 3.1
+**Date:** 2026-08-16
 
 ## 1. Goal and Non-Negotiable Delivery Rule
 
@@ -193,6 +193,13 @@ alone.
 
 ## 5. Current Release Contract
 
+Thread delivery has two explicit milestones. The first is complete: the public
+thread runtime and unchanged module distributions pass their authoritative
+matrix. The second remains active: every applicable Perl core thread wrapper
+must complete its plan after its same-commit direct companion does. A direct
+parser, operator, or regex failure is not relabelled as a thread failure, and a
+wrapper is never patched to manufacture parity.
+
 The supported implementation includes:
 
 - the Perl `threads` 2.43 lifecycle, context, stack, object, join/detach, error,
@@ -229,13 +236,16 @@ direct companions.
 
 ## 7. Progress Tracking
 
-### Current Status: delivered; direct regex parity is separate
+### Current Status: module compatibility delivered; core wrappers active
 
 `PerlRuntime` owns interpreter state, ithreads clone one isolated runtime graph,
 and `threads::shared` supplies explicit cross-runtime storage and synchronization.
 The unchanged upstream `threads`, `threads-shared`, `Thread-Queue`, and
-`Thread-Semaphore` distributions are the executable compatibility contract on
-both execution backends and both Java carrier policies.
+`Thread-Semaphore` distributions are the delivered public compatibility
+contract on both execution backends and both Java carrier policies. Complete
+Perl-core wrapper compatibility is a separate release milestone. Regex
+companions depend on Phase 36 direct-language completion; the concurrency
+project owns only snapshot, runtime-isolation, and direct/thread deltas.
 
 The callout-enabled Joni matcher is part of the shipped runtime. Remaining
 direct regex-language gaps are maintained in the separate regex project.
@@ -251,22 +261,31 @@ requests.
 1. Keep `make test-threads` as a permanent Ubuntu pull-request gate. It runs
    both execution backends with virtual carriers and focused platform lifecycle,
    signal, stack, wait, timeout, and deadlock coverage.
-2. Run `make test-threads-release` before any thread/runtime release. It extends
-   the pull-request gate to the complete four-module matrix on platform carriers.
-3. Keep `make test-threads-regex` in the release matrix: lexical regex
+2. The five non-regex core thread files are complete at 849/849 on JVM and
+   interpreter with both virtual and platform carriers. Close the remaining
+   twelve regex wrappers through `make test-threads-core`; direct companions
+   always run first and resource-sensitive families run serially.
+3. Run `make test-threads-release` before any thread/runtime release. It extends
+   the pull-request gate to the complete public-module and core-wrapper matrices
+   on platform carriers.
+4. Keep `make test-threads-regex` in the release matrix: lexical regex
    debugging, user-property coordination, recursive definitions, special
    character classes, and callback-heavy psycho patterns. Its five unchanged
    files contain 48 assertions and pass on both backends. Partial wrappers must
    preserve their same-commit direct result until Phase 36 closes the direct gap.
-4. Run `make test-threads-ecosystem` for native callback and ORM releases. Add
-   the opt-in Test2 stress tests and remaining Moose thread-suite cases once
-   their unchanged upstream sources are available as a pinned test corpus.
-5. Require every future native resource, I/O handle, and callback adapter to
+5. Run `make test-threads-ecosystem` for native callback and ORM releases. It
+   first runs pinned Test2 and Storable thread tests on both backends, then proves the DBI
+   ownership contract under system Perl and all four PerlOnJava backend/carrier
+   modes before Net::SSLeay and DBIx::Class. Pin Moose 2.4000's upstream TODO
+   thread case before adding it; preserve its upstream TODO status exactly.
+6. Run `make test-threads-windows` on Windows CI. This shell-independent JUnit
+   gate covers lifecycle, shared storage, graph cloning, resources, and DBI.
+7. Require every future native resource, I/O handle, and callback adapter to
    declare its runtime ownership, snapshot, aliasing, and close policy.
-6. Monitor snapshot retention and startup cost. Runtime pooling remains bounded,
+8. Monitor snapshot retention and startup cost. Runtime pooling remains bounded,
    opt-in, and disabled by default; returned application runtimes are replaced,
    not partially reused.
-7. Keep remaining direct regex-language work in the separate Phase 36 project.
+9. Keep remaining direct regex-language work in the separate Phase 36 project.
    Threaded regex wrappers must preserve their same-commit direct behavior.
 
 Remaining direct regex-language work is not part of this release. The Joni

@@ -193,7 +193,7 @@ sub process_test_result {
         close $fh;
         unlink $result_path;
         eval {
-            $result_data = JSON::PP->new->decode($json_data);
+            $result_data = JSON::PP->new->utf8->decode($json_data);
             1;
         };
         $result_data = undef unless $result_data;
@@ -556,7 +556,7 @@ sub start_test_job {
         # reads the matching JSON — never scan shared /tmp/perl_test_* blobs.
         my $result_path = "/tmp/perl_test_runner_result_$$";
         if (open my $fh, '>', $result_path) {
-            print $fh JSON::PP->new->encode({
+            print $fh JSON::PP->new->utf8->encode({
                 test_file => $test_file,
                 test_index => $test_index,
                 result => $result
@@ -823,7 +823,11 @@ sub save_results {
     };
 
     open my $fh, '>', $filename or die "Cannot write to $filename: $!\n";
-    print $fh JSON::PP->new->pretty->encode($report);
+    # Reports are byte streams. Without utf8(), an unflagged diagnostic byte
+    # (for example from a raw regex fixture) is written verbatim and can make
+    # the nominal JSON file invalid UTF-8. Preserve raw test output separately,
+    # but always emit standards-compliant UTF-8 JSON for CI/report consumers.
+    print $fh JSON::PP->new->utf8->pretty->encode($report);
     close $fh;
 
     print "\nDetailed results saved to: $filename\n";
