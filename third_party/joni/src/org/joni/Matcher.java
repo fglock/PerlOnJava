@@ -54,6 +54,21 @@ public abstract class Matcher extends IntHolder {
 
     protected long timeout;  // nanoseconds
     private CalloutHandler calloutHandler;
+    private boolean abortSearch;
+    private int skipSearchTo = -1;
+
+    private static final class SkipSearch extends RuntimeException {
+        final int target;
+        SkipSearch(int target) {
+            super(null, null, false, false);
+            this.target = target;
+        }
+    }
+
+    private static final class AbortSearch extends RuntimeException {
+        static final AbortSearch INSTANCE = new AbortSearch();
+        private AbortSearch() { super(null, null, false, false); }
+    }
 
     // nanoseconds since entering searchCommon (underlying machines will check during interrupt checks
     // which will cheapen how often we look but also it should be granular enough to not matter).
@@ -109,6 +124,14 @@ public abstract class Matcher extends IntHolder {
         msaStart = start;
         msaGpos = gpos;
         if (Config.USE_FIND_LONGEST_SEARCH_ALL_OF_RANGE) msaBestLen = -1;
+    }
+
+    protected final void requestSearchSkip(int target) {
+        if (target > skipSearchTo) skipSearchTo = target;
+    }
+
+    protected final void requestSearchAbort() {
+        abortSearch = true;
     }
 
     public final int match(int at, int range, int option) {
@@ -317,31 +340,61 @@ public abstract class Matcher extends IntHolder {
                 if (matchAt(end, s, prev, interrupt) != -1) return true;
             }
         }
+        if (abortSearch) throw AbortSearch.INSTANCE;
+        if (skipSearchTo >= 0) throw new SkipSearch(skipSearchTo);
         return false;
     }
 
     public final int search(int start, int range, int option) {
-        try {
-            return searchCommon(start, start, range, option, false);
-        } catch (InterruptedException ex) {
-            return INTERRUPTED;
+        int next = start;
+        while (true) {
+            abortSearch = false;
+            skipSearchTo = -1;
+            try {
+                return searchCommon(next, next, range, option, false);
+            } catch (SkipSearch skip) {
+                if (skip.target <= next || skip.target > range) return FAILED;
+                next = skip.target;
+            } catch (AbortSearch abort) {
+                return FAILED;
+            } catch (InterruptedException ex) {
+                return INTERRUPTED;
+            }
         }
     }
 
     public final int search(int gpos, int start, int range, int option) {
         try {
             return searchCommon(gpos, start, range, option, false);
+        } catch (SkipSearch | AbortSearch control) {
+            return FAILED;
         } catch (InterruptedException ex) {
             return INTERRUPTED;
         }
     }
 
     public final int searchInterruptible(int start, int range, int option) throws InterruptedException {
-        return searchCommon(start, start, range, option, true);
+        int next = start;
+        while (true) {
+            abortSearch = false;
+            skipSearchTo = -1;
+            try {
+                return searchCommon(next, next, range, option, true);
+            } catch (SkipSearch skip) {
+                if (skip.target <= next || skip.target > range) return FAILED;
+                next = skip.target;
+            } catch (AbortSearch abort) {
+                return FAILED;
+            }
+        }
     }
 
     public final int searchInterruptible(int gpos, int start, int range, int option) throws InterruptedException {
-        return searchCommon(gpos, start, range, option, true);
+        try {
+            return searchCommon(gpos, start, range, option, true);
+        } catch (SkipSearch | AbortSearch control) {
+            return FAILED;
+        }
     }
 
     private final int searchCommon(int gpos, int start, int range, int option, boolean interrupt) throws InterruptedException {

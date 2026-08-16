@@ -733,12 +733,37 @@ class Parser extends Lexer {
     }
 
     private Node parseControlVerb() {
-        final String accept = "ACCEPT)";
-        if (!startsWith(accept)) newSyntaxException(UNDEFINED_GROUP_OPTION);
-        p += accept.length();
+        final ControlVerbNode.Kind kind;
+        final String suffix;
+        if (startsWith("ACCEPT)")) {
+            kind = ControlVerbNode.Kind.ACCEPT;
+            suffix = "ACCEPT)";
+        } else if (startsWith("FAIL)")) {
+            kind = ControlVerbNode.Kind.FAIL;
+            suffix = "FAIL)";
+        } else if (startsWith("F)")) {
+            kind = ControlVerbNode.Kind.FAIL;
+            suffix = "F)";
+        } else if (startsWith("PRUNE)")) {
+            kind = ControlVerbNode.Kind.PRUNE;
+            suffix = "PRUNE)";
+        } else if (startsWith("SKIP)")) {
+            kind = ControlVerbNode.Kind.SKIP;
+            suffix = "SKIP)";
+        } else if (startsWith("THEN)")) {
+            kind = ControlVerbNode.Kind.THEN;
+            suffix = "THEN)";
+        } else if (startsWith("COMMIT)")) {
+            kind = ControlVerbNode.Kind.COMMIT;
+            suffix = "COMMIT)";
+        } else {
+            newSyntaxException(UNDEFINED_GROUP_OPTION);
+            return null;
+        }
+        p += suffix.length();
         returnCode = 0;
         env.hasControlVerb = true;
-        return new ControlVerbNode(ControlVerbNode.Kind.ACCEPT);
+        return new ControlVerbNode(kind);
     }
 
     private int parseInternalCalloutId() {

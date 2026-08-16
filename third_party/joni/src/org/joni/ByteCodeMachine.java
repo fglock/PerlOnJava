@@ -306,6 +306,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
+                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.SKIP:                       opSkip();                   continue;
+                case OPCode.THEN:                       opThen();                   continue;
+                case OPCode.COMMIT:                     opCommit();                 continue;
 
                 case OPCode.STATE_CHECK_ANYCHAR_STAR:   if (USE_CEC) {opStateCheckAnyCharStar(); break;}
                 case OPCode.STATE_CHECK_ANYCHAR_ML_STAR:if (USE_CEC) {opStateCheckAnyCharMLStar();break;}
@@ -451,6 +455,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
+                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.SKIP:                       opSkip();                   continue;
+                case OPCode.THEN:                       opThen();                   continue;
+                case OPCode.COMMIT:                     opCommit();                 continue;
 
                 case OPCode.EXACT1_IC_SB:               opExact1ICSb();            break;
                 case OPCode.EXACTN_IC_SB:               opExactNICSb();            continue;
@@ -2037,6 +2045,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         closeOpenCaptures(-1);
         return opEnd();
+    }
+
+    private void opSkip() {
+        cutAlternatives(false);
+        requestSearchSkip(s);
+    }
+
+    private void opThen() {
+        cutAlternatives(true, s, sprev, pkeep);
+    }
+
+    private void opCommit() {
+        cutAlternatives(false);
+        requestSearchAbort();
     }
 
     private void closeOpenCaptures(int boundary) {

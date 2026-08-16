@@ -145,6 +145,10 @@ public interface OPCode {
     int CALLOUT_CONDITION             = 101;          /* callback-selected conditional */
     int DYNAMIC_CALLOUT               = 102;          /* callback-supplied nested program */
     int ACCEPT                        = 103;          /* accept current matcher boundary */
+    int PRUNE                         = 104;          /* discard alternatives at this boundary */
+    int SKIP                          = 105;          /* prune and resume search at current position */
+    int THEN                          = 106;          /* prune through the nearest alternative */
+    int COMMIT                        = 107;          /* prune and prevent another search start */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -252,6 +256,10 @@ public interface OPCode {
         "callout-condition", /*OP_CALLOUT_CONDITION*/
         "dynamic-callout", /*OP_DYNAMIC_CALLOUT*/
         "accept", /*OP_ACCEPT*/
+        "prune", /*OP_PRUNE*/
+        "skip", /*OP_SKIP*/
+        "then", /*OP_THEN*/
+        "commit", /*OP_COMMIT*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -360,5 +368,9 @@ public interface OPCode {
         Arguments.SPECIAL, /*OP_CALLOUT_CONDITION*/
         Arguments.MEMNUM, /*OP_DYNAMIC_CALLOUT*/
         Arguments.NON, /*OP_ACCEPT*/
+        Arguments.NON, /*OP_PRUNE*/
+        Arguments.NON, /*OP_SKIP*/
+        Arguments.NON, /*OP_THEN*/
+        Arguments.NON, /*OP_COMMIT*/
     } : null;
 }

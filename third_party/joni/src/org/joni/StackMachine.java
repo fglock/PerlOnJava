@@ -425,6 +425,54 @@ abstract class StackMachine extends Matcher implements StackType {
         }
     }
 
+    /**
+     * Remove resumable alternatives above the nearest matcher-program boundary.
+     * THEN preserves the nearest alternation itself so a later failure enters
+     * that branch; PRUNE, SKIP, and COMMIT remove it as well.
+     */
+    protected final void cutAlternatives(boolean preserveNearest) {
+        cutAlternatives(preserveNearest, -1, -1, -1);
+    }
+
+    protected final void cutAlternatives(boolean preserveNearest,
+                                         int current, int currentPrev, int currentKeep) {
+        if (stack == null) return;
+        boolean preserved = false;
+        int callDepth = 0;
+        // stack[0] is the matcher failure sentinel and must remain available
+        // so the next failure exits matchAt normally.
+        for (int i = stk - 1; i > 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == RETURN) {
+                callDepth++;
+                continue;
+            }
+            if (entry.type == CALL_FRAME) {
+                if (callDepth > 0) {
+                    callDepth--;
+                    continue;
+                }
+                break;
+            }
+            if (callDepth == 0 && (entry.type == POS || entry.type == POS_NOT
+                    || entry.type == LOOK_BEHIND_NOT)) {
+                break;
+            }
+            if (entry.type != ALT && entry.type != DYNAMIC_ALT) continue;
+            if (preserveNearest && !preserved) {
+                preserved = true;
+                if (current >= 0) {
+                    entry.setStatePStr(current);
+                    entry.setStatePStrPrev(currentPrev);
+                    entry.setPKeep(currentKeep);
+                }
+                continue;
+            }
+            if (entry.type == DYNAMIC_ALT) abortDynamic(entry);
+            entry.type = VOID;
+        }
+    }
+
     private void completeCallout(StackEntry entry) {
         Object token = entry.takeCalloutToken();
         if (token != null) getCalloutHandler().complete(token);

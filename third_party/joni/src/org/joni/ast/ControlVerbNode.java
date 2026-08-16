@@ -21,7 +21,7 @@ package org.joni.ast;
 
 /** Zero-width matcher-control verb that cannot be represented as literal text. */
 public final class ControlVerbNode extends StringNode {
-    public enum Kind { ACCEPT }
+    public enum Kind { ACCEPT, FAIL, PRUNE, SKIP, THEN, COMMIT }
 
     public final Kind kind;
 

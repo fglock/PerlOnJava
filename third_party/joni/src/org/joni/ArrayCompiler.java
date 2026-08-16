@@ -94,6 +94,26 @@ final class ArrayCompiler extends Compiler {
             regex.requireStack = true;
             addOpcode(OPCode.ACCEPT);
             break;
+        case FAIL:
+            regex.requireStack = true;
+            addOpcode(OPCode.FAIL);
+            break;
+        case PRUNE:
+            regex.requireStack = true;
+            addOpcode(OPCode.PRUNE);
+            break;
+        case SKIP:
+            regex.requireStack = true;
+            addOpcode(OPCode.SKIP);
+            break;
+        case THEN:
+            regex.requireStack = true;
+            addOpcode(OPCode.THEN);
+            break;
+        case COMMIT:
+            regex.requireStack = true;
+            addOpcode(OPCode.COMMIT);
+            break;
         default:
             newInternalException(PARSER_BUG);
         }
@@ -1164,7 +1184,16 @@ final class ArrayCompiler extends Compiler {
         if (node instanceof CalloutNode callout) {
             return callout.dynamic ? OPSize.DYNAMIC_CALLOUT : OPSize.CALLOUT;
         }
-        if (node instanceof ControlVerbNode) return OPSize.ACCEPT;
+        if (node instanceof ControlVerbNode control) {
+            return switch (control.kind) {
+                case ACCEPT -> OPSize.ACCEPT;
+                case FAIL -> OPSize.FAIL;
+                case PRUNE -> OPSize.PRUNE;
+                case SKIP -> OPSize.SKIP;
+                case THEN -> OPSize.THEN;
+                case COMMIT -> OPSize.COMMIT;
+            };
+        }
         int len = 0;
 
         switch (node.getType()) {
