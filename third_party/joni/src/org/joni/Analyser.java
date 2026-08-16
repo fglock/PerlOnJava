@@ -44,6 +44,7 @@ import org.joni.ast.CClassNode;
 import org.joni.ast.CTypeNode;
 import org.joni.ast.CallNode;
 import org.joni.ast.CalloutNode;
+import org.joni.ast.ControlVerbNode;
 import org.joni.ast.EncloseNode;
 import org.joni.ast.ListNode;
 import org.joni.ast.Node;
@@ -115,6 +116,11 @@ final class Analyser extends Parser {
 
         regex.captureHistory = env.captureHistory;
         regex.btMemStart = env.btMemStart;
+        if (env.hasControlVerb) {
+            // ACCEPT needs stack markers to distinguish captures opened inside
+            // its nearest assertion or call boundary from captures outside it.
+            regex.btMemStart = bsAll();
+        }
 
         if (isFindCondition(regex.options)) {
             regex.btMemEnd = bsAll();
@@ -146,7 +152,11 @@ final class Analyser extends Parser {
 
         regex.clearOptimizeInfo();
 
-        if (Config.OPTIMIZE) setOptimizedInfoFromTree(root);
+        // A control verb can make the remainder of its current matcher program
+        // unreachable. The ordinary optimizer assumes every concatenated node
+        // remains mandatory, so its minimum-length and literal-search filters
+        // are not sound for these programs.
+        if (Config.OPTIMIZE && !env.hasControlVerb) setOptimizedInfoFromTree(root);
 
         env.memNodes = null;
 
@@ -1898,7 +1908,9 @@ final class Analyser extends Parser {
             target = setupTree(target, state);
 
             /* expand string */
-            if (target.getType() == NodeType.STR && !(target instanceof CalloutNode)) {
+            if (target.getType() == NodeType.STR
+                    && !(target instanceof CalloutNode)
+                    && !(target instanceof ControlVerbNode)) {
                 StringNode sn = (StringNode)target;
                 if (qn.lower > 1) {
                     StringNode str = new StringNode(sn.bytes, sn.p, sn.end);

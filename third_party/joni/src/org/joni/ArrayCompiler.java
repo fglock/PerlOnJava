@@ -32,6 +32,7 @@ import org.joni.ast.CClassNode;
 import org.joni.ast.CTypeNode;
 import org.joni.ast.CallNode;
 import org.joni.ast.CalloutNode;
+import org.joni.ast.ControlVerbNode;
 import org.joni.ast.ListNode;
 import org.joni.ast.EncloseNode;
 import org.joni.ast.Node;
@@ -84,6 +85,18 @@ final class ArrayCompiler extends Compiler {
         regex.requireStack = true;
         addOpcode(node.dynamic ? OPCode.DYNAMIC_CALLOUT : OPCode.CALLOUT);
         addInt(node.calloutId);
+    }
+
+    @Override
+    protected void compileControlVerbNode(ControlVerbNode node) {
+        switch (node.kind) {
+        case ACCEPT:
+            regex.requireStack = true;
+            addOpcode(OPCode.ACCEPT);
+            break;
+        default:
+            newInternalException(PARSER_BUG);
+        }
     }
 
     @Override
@@ -1101,7 +1114,8 @@ final class ArrayCompiler extends Compiler {
 
         case AnchorType.PREC_READ:
             regex.requireStack = true;
-            addOpcode(OPCode.PUSH_POS);
+            len = compileLengthTree(node.target);
+            addOpcodeRelAddr(OPCode.PUSH_POS, len + OPSize.POP_POS);
             compileTree(node.target);
             addOpcode(OPCode.POP_POS);
             break;
@@ -1150,6 +1164,7 @@ final class ArrayCompiler extends Compiler {
         if (node instanceof CalloutNode callout) {
             return callout.dynamic ? OPSize.DYNAMIC_CALLOUT : OPSize.CALLOUT;
         }
+        if (node instanceof ControlVerbNode) return OPSize.ACCEPT;
         int len = 0;
 
         switch (node.getType()) {

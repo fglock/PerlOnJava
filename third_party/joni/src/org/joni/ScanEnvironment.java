@@ -51,6 +51,7 @@ public final class ScanEnvironment {
     int combExpMaxRegNum;
     int currMaxRegNum;
     boolean hasRecursion;
+    boolean hasControlVerb;
     private int warningsFlag;
 
     int numPrecReadNotNodes;

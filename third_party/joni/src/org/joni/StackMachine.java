@@ -212,8 +212,8 @@ abstract class StackMachine extends Matcher implements StackType {
         push(ALT, pat, s, prev, pkeep);
     }
 
-    protected final void pushPos(int s, int prev, int pkeep) {
-        push(POS, -1 /*NULL_UCHARP*/, s, prev, pkeep);
+    protected final void pushPos(int target, int s, int prev, int pkeep) {
+        push(POS, target, s, prev, pkeep);
     }
 
     protected final void pushPosNot(int pat, int s, int prev, int pkeep) {
@@ -486,6 +486,14 @@ abstract class StackMachine extends Matcher implements StackType {
             }
         }
         return k;
+    }
+
+    protected final void cutAcceptBacktrackingAbove(int boundary) {
+        for (int i = boundary + 1; i < stk; i++) {
+            StackEntry entry = stack[i];
+            if (entry.type == DYNAMIC_ALT) completeDynamic(entry);
+            if ((entry.type & MASK_POP_USED) != 0) entry.type = VOID;
+        }
     }
 
     protected final void stopBtEnd() {

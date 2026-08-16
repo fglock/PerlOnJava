@@ -43,6 +43,7 @@ import org.joni.ast.CClassNode.CCVALTYPE;
 import org.joni.ast.CTypeNode;
 import org.joni.ast.CallNode;
 import org.joni.ast.CalloutNode;
+import org.joni.ast.ControlVerbNode;
 import org.joni.ast.EncloseNode;
 import org.joni.ast.ListNode;
 import org.joni.ast.Node;
@@ -427,6 +428,11 @@ class Parser extends Lexer {
 
         int option = env.option;
 
+        if (peekIs('*')) {
+            inc();
+            return parseControlVerb();
+        }
+
         if (peekIs('?') && syntax.op2QMarkGroupEffect()) {
             inc();
             if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
@@ -724,6 +730,15 @@ class Parser extends Lexer {
         final String dynamicPrefix = "=DYNAMIC:";
         boolean dynamic = startsWith(dynamicPrefix);
         return new CalloutNode(parseInternalCalloutId(dynamic ? dynamicPrefix : "=CALL:"), dynamic);
+    }
+
+    private Node parseControlVerb() {
+        final String accept = "ACCEPT)";
+        if (!startsWith(accept)) newSyntaxException(UNDEFINED_GROUP_OPTION);
+        p += accept.length();
+        returnCode = 0;
+        env.hasControlVerb = true;
+        return new ControlVerbNode(ControlVerbNode.Kind.ACCEPT);
     }
 
     private int parseInternalCalloutId() {

@@ -26,6 +26,7 @@ import org.joni.ast.CClassNode;
 import org.joni.ast.CTypeNode;
 import org.joni.ast.CallNode;
 import org.joni.ast.CalloutNode;
+import org.joni.ast.ControlVerbNode;
 import org.joni.ast.ListNode;
 import org.joni.ast.EncloseNode;
 import org.joni.ast.Node;
@@ -99,6 +100,7 @@ abstract class Compiler implements ErrorMessages {
     protected abstract void compileAnyCharNode();
     protected abstract void compileCallNode(CallNode node);
     protected abstract void compileCalloutNode(CalloutNode node);
+    protected abstract void compileControlVerbNode(ControlVerbNode node);
     protected abstract void compileBackrefNode(BackRefNode node);
     protected abstract void compileCECQuantifierNode(QuantifierNode node);
     protected abstract void compileNonCECQuantifierNode(QuantifierNode node);
@@ -109,6 +111,10 @@ abstract class Compiler implements ErrorMessages {
     protected final void compileTree(Node node) {
         if (node instanceof CalloutNode) {
             compileCalloutNode((CalloutNode)node);
+            return;
+        }
+        if (node instanceof ControlVerbNode) {
+            compileControlVerbNode((ControlVerbNode)node);
             return;
         }
         switch (node.getType()) {

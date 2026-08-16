@@ -144,6 +144,7 @@ public interface OPCode {
     int CALLOUT                       = 100;          /* generic match-time callout */
     int CALLOUT_CONDITION             = 101;          /* callback-selected conditional */
     int DYNAMIC_CALLOUT               = 102;          /* callback-supplied nested program */
+    int ACCEPT                        = 103;          /* accept current matcher boundary */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -250,6 +251,7 @@ public interface OPCode {
         "callout", /*OP_CALLOUT*/
         "callout-condition", /*OP_CALLOUT_CONDITION*/
         "dynamic-callout", /*OP_DYNAMIC_CALLOUT*/
+        "accept", /*OP_ACCEPT*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -357,5 +359,6 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_CALLOUT*/
         Arguments.SPECIAL, /*OP_CALLOUT_CONDITION*/
         Arguments.MEMNUM, /*OP_DYNAMIC_CALLOUT*/
+        Arguments.NON, /*OP_ACCEPT*/
     } : null;
 }

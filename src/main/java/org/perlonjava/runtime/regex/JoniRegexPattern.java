@@ -75,6 +75,7 @@ final class JoniRegexPattern {
         if (pattern == null) return false;
         return pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
+                || pattern.contains("(*ACCEPT)")
                 || pattern.contains("(?(?{=CALL:")
                 || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
                 || pattern.contains("(?&")
