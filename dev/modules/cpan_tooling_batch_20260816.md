@@ -37,7 +37,7 @@ system-Perl rule.
 
 ## Progress Tracking
 
-### Current Status: Implementation and local validation complete
+### Current Status: PR open and CI green
 
 ### Completed Phases
 
@@ -78,11 +78,14 @@ system-Perl rule.
     DateTime setup, and reachability work between those points; disabling
     auto-GC alone does not remove the delay. Runtime clock semantics and the
     upstream test were intentionally left unchanged.
-- [ ] PR and CI validation
+- [x] PR and CI validation (2026-08-16)
+  - Opened [PR #976](https://github.com/fglock/PerlOnJava/pull/976).
+  - GitHub Actions passed on Ubuntu (21m13s) and Windows (18m34s) for
+    implementation commit `c9dcfb1e4`.
 
 ### Next Steps
 
-1. Open the PR and monitor CI to completion.
+1. Review and merge PR #976.
 2. Follow up upstream on Search::Sitemap's speed-sensitive `'now'` assertion;
    it should compare within a tolerance or capture the clock at coercion time.
 3. Implement native PAM conversations only after an FFM ownership design is
