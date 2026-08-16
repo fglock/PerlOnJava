@@ -53,7 +53,7 @@ public final class RuntimeRegexTemplate {
                 }
             } else if (scalar.value instanceof RuntimeRegex regex
                     && !regex.executableCallbacks.isEmpty()) {
-                appendEmbeddedRegex(pattern, callbacks, regex.toString(), regex.executableCallbacks);
+                appendEmbeddedRegex(pattern, callbacks, regex.toExecutableString(), regex.executableCallbacks);
             } else if (scalar.value instanceof RuntimeRegexTemplate template) {
                 appendEmbeddedRegex(pattern, callbacks, template.pattern, template.callbacks);
             } else {
@@ -94,6 +94,20 @@ public final class RuntimeRegexTemplate {
 
     List<RuntimeRegexCallback> callbacks() {
         return callbacks;
+    }
+
+    static String displayPattern(String executablePattern) {
+        if (executablePattern == null || executablePattern.isEmpty()) {
+            return executablePattern;
+        }
+        Matcher matcher = CALLOUT_ID.matcher(executablePattern);
+        StringBuilder display = new StringBuilder();
+        while (matcher.find()) {
+            String replacement = "DYNAMIC".equals(matcher.group(1)) ? "(??{})" : "(?{})";
+            matcher.appendReplacement(display, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(display);
+        return display.toString();
     }
 
     @Override
