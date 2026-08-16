@@ -305,6 +305,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
+                case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
 
                 case OPCode.STATE_CHECK_ANYCHAR_STAR:   if (USE_CEC) {opStateCheckAnyCharStar(); break;}
                 case OPCode.STATE_CHECK_ANYCHAR_ML_STAR:if (USE_CEC) {opStateCheckAnyCharMLStar();break;}
@@ -449,6 +450,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
+                case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
 
                 case OPCode.EXACT1_IC_SB:               opExact1ICSb();            break;
                 case OPCode.EXACTN_IC_SB:               opExactNICSb();            continue;
@@ -1830,7 +1832,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opPushPos() {
-        pushPos(s, sprev, pkeep);
+        int addr = code[ip++];
+        pushPos(ip + addr, s, sprev, pkeep);
     }
 
     private void opPopPos() {
@@ -1989,6 +1992,71 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         pushDynamicAlternative(returnAddress, continuation);
         s = nestedEnd;
         sprev = enc.prevCharHead(bytes, str, s, end);
+    }
+
+    /**
+     * Accept the nearest matcher-program boundary. Ordinary groups and repeats
+     * are not boundaries; calls and assertions are, matching Perl's behavior.
+     */
+    private boolean opAccept() {
+        int callDepth = 0;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == RETURN) {
+                callDepth++;
+            } else if (entry.type == CALL_FRAME) {
+                if (callDepth > 0) {
+                    callDepth--;
+                } else {
+                    closeOpenCaptures(i);
+                    cutAcceptBacktrackingAbove(i);
+                    opReturn();
+                    return false;
+                }
+            } else if (entry.type == POS) {
+                closeOpenCaptures(i);
+                int target = entry.getStatePCode();
+                StackEntry position = stack[posEnd()];
+                s = position.getStatePStr();
+                sprev = position.getStatePStrPrev();
+                pkeep = position.getPKeep();
+                ip = target;
+                return false;
+            } else if (entry.type == POS_NOT) {
+                closeOpenCaptures(i);
+                popTilPosNot();
+                opFail();
+                return false;
+            } else if (entry.type == LOOK_BEHIND_NOT) {
+                closeOpenCaptures(i);
+                popTilLookBehindNot();
+                opFail();
+                return false;
+            }
+        }
+
+        closeOpenCaptures(-1);
+        return opEnd();
+    }
+
+    private void closeOpenCaptures(int boundary) {
+        for (int mem = 1; mem <= regex.numMem; mem++) {
+            if (repeatStk[memStartStk + mem] == INVALID_INDEX
+                    || repeatStk[memEndStk + mem] != INVALID_INDEX) {
+                continue;
+            }
+            if (boundary >= 0 && !hasMemoryStartAbove(mem, boundary)) continue;
+            if (bsAt(regex.btMemEnd, mem)) pushMemEnd(mem, s);
+            else repeatStk[memEndStk + mem] = s;
+        }
+    }
+
+    private boolean hasMemoryStartAbove(int mem, int boundary) {
+        for (int i = stk - 1; i > boundary; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == MEM_START && entry.getMemNum() == mem) return true;
+        }
+        return false;
     }
 
     @Override

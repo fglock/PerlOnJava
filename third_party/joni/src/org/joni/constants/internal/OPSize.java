@@ -45,7 +45,7 @@ public interface OPSize {
     int PUSH_IF_PEEK_NEXT             = (OPCODE + RELADDR + 1);
     int REPEAT_INC                    = (OPCODE + MEMNUM);
     int REPEAT_INC_NG                 = (OPCODE + MEMNUM);
-    int PUSH_POS                      = OPCODE;
+    int PUSH_POS                      = (OPCODE + RELADDR);
     int PUSH_POS_NOT                  = (OPCODE + RELADDR);
     int POP_POS                       = OPCODE;
     int FAIL_POS                      = OPCODE;
@@ -74,6 +74,7 @@ public interface OPSize {
     int CALLOUT                      = (OPCODE + MEMNUM);
     int CALLOUT_CONDITION            = (OPCODE + MEMNUM + RELADDR);
     int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM);
+    int ACCEPT                       = OPCODE;
 
     // #ifdef USE_COMBINATION_EXPLOSION_CHECK
     int STATE_CHECK                   = (OPCODE + STATE_CHECK_NUM);

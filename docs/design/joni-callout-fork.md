@@ -106,6 +106,28 @@ Callback conditions use an internal conditional-callout opcode. `CONTINUE`
 selects the yes branch and `FAIL` selects the no branch without treating the
 condition itself as a failed match.
 
+## Matcher-control boundaries
+
+`(*ACCEPT)` is represented as a dedicated AST node and bytecode opcode; it is
+not rewritten into an assertion or callback. At execution it accepts the
+nearest matcher-program boundary:
+
+- At the top level, it completes the whole match at the current input position
+  and skips the remaining pattern.
+- In a subpattern call, it completes that call and resumes the caller after the
+  call site.
+- In a positive lookahead, it completes the assertion, restores its zero-width
+  input position, and resumes the enclosing program.
+- In a dynamic `(??{...})` program, it completes the nested matcher while the
+  enclosing matcher continues with its suffix.
+
+Captures opened inside the accepted boundary close at the current input
+position. Captures outside that boundary remain active. Backtracking and
+dynamic-continuation frames abandoned by acceptance are completed exactly once.
+Because suffixes after a control verb are not necessarily reachable, programs
+containing matcher-control opcodes bypass Joni's ordinary mandatory-literal and
+minimum-length optimizer unless that optimizer becomes control-flow aware.
+
 ## Structured Perl frontend
 
 Literal callback bodies are represented as lexical `SubroutineNode` closures.
@@ -193,8 +215,8 @@ embedded code, regex debugging, runtime eval, lexical default flags, and named
 capture behavior. As each feature becomes executable, patterns containing it
 select Joni. The current selector routes declarative subpattern calls and every
 structured executable callback template, including runtime `(??{...})`.
-Semantically safe constant dynamic expressions may keep their established
-fold-to-pattern path.
+It also routes `(*ACCEPT)`. Semantically safe constant dynamic expressions may
+keep their established fold-to-pattern path.
 
 ## Implementation stages
 
@@ -210,6 +232,8 @@ fold-to-pattern path.
 7. Add dynamic-local checkpoints and callback conditions.
 8. Resolve dynamic nested programs at match time and preserve their alternatives
    as resumable matcher continuations on the outer backtracking stack.
+9. Implement matcher-control opcodes with explicit lookahead, call, dynamic,
+   capture, and backtracking-boundary semantics.
 
 ## Verification
 
@@ -227,6 +251,9 @@ fold-to-pattern path.
 - Dynamic-pattern tests cover delayed expression evaluation, returned strings
   and `qr//` values, private nested captures, outer-suffix backtracking, nested
   callback cleanup, and recursive `qr//` values.
+- Matcher-control tests cover top-level, empty, subpattern-call, positive
+  lookahead, and dynamic-program acceptance, including capture endpoints and
+  skipped callbacks.
 - `dev/tools/perl_test_runner.pl perl5_t/t/re/` is compared file-by-file with
   `../PerlOnJava/logs/test_20260815_080000_958.log`; no previously passing regex
   file may regress, and changed pass counts or blocked-test totals are reported.

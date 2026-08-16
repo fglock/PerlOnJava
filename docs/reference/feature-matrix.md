@@ -389,7 +389,7 @@ my @copy = @{$z};         # ERROR
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
 - 🟡  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, and nested alternatives participate in outer backtracking without changing outer grouping or capture numbering. Deep dynamic recursion still needs an engine-owned depth limit that does not depend on the Java call stack.
-- ❌  **Backtracking Control Verbs**: `(*ACCEPT)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` are not supported. `(*FAIL)`/`(*F)` and atomic groups `(?>...)` are supported.
+- 🟡  **Backtracking Control Verbs**: `(*ACCEPT)` executes through Joni with top-level, subpattern-call, positive-lookahead, and dynamic-pattern boundary semantics. `(*FAIL)`/`(*F)` and atomic groups `(?>...)` are supported. `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` are not supported.
 - ✅  **Regex Definitions**: `(?(DEFINE)...)` containers and numbered or named calls to their subpatterns execute through Joni.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
 - ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
