@@ -616,7 +616,7 @@ record the observed output in this document as phases proceed.
 
 ## Progress Tracking
 
-### Current Status: Phase 6 delivered; residual source forms remain
+### Current Status: Phase 6 delivered; mixed source composition complete
 
 ### Completed Phases
 
@@ -630,17 +630,18 @@ record the observed output in this document as phases proceed.
 
 ### Next Steps
 
-1. Accept the remaining mixed literal/runtime callback source in
-   `pat_re_eval.t` while preserving lexical `use re 'eval'` admission.
+1. Resolve the remaining runtime-source escaping, embedded-Unicode, and exact
+   diagnostic differences exposed by the complete `pat_re_eval.t` run.
 2. Remove only capability policies justified by unchanged-source suite results.
 3. Extend focused differential coverage for tied and magical callback paths
    that throw or recurse.
 
 ### Blockers
 
-- `pat_re_eval.t` reaches 430/555 on both backends before an unsupported mixed
-  literal/runtime source form. The focused callback and dynamic-pattern gates,
-  `reg_eval_scope.t` 49/49, and Object::InsideOut 6/6 are complete.
+- `pat_re_eval.t` executes all 555 planned assertions on both backends, with
+  334 passing and 221 remaining semantic or diagnostic failures. The focused
+  mixed-source gate is 11/11, `reg_eval_scope.t` is 49/49, and Object::InsideOut
+  is 6/6 on both backends.
 
 ## Related Documents and Skills
 

@@ -17,6 +17,17 @@ public final class RuntimeRegexTemplate {
     private final String pattern;
     private final List<RuntimeRegexCallback> callbacks;
 
+    record MaskedCallouts(String pattern, List<String> placeholders,
+                          List<String> markers) {
+        String restore(String compiledPattern) {
+            String restored = compiledPattern;
+            for (int i = 0; i < placeholders.size(); i++) {
+                restored = restored.replace(placeholders.get(i), markers.get(i));
+            }
+            return restored;
+        }
+    }
+
     private RuntimeRegexTemplate(String pattern, List<RuntimeRegexCallback> callbacks) {
         this.pattern = pattern;
         this.callbacks = List.copyOf(callbacks);
@@ -94,6 +105,56 @@ public final class RuntimeRegexTemplate {
 
     List<RuntimeRegexCallback> callbacks() {
         return callbacks;
+    }
+
+    /**
+     * Hide parser-created callout markers while runtime-interpolated Perl
+     * source is compiled. The source parser must see raw {@code (?{...})} and
+     * {@code (??{...})} groups, but must not reinterpret trusted marker IDs as
+     * Perl expressions.
+     */
+    MaskedCallouts maskCallouts() {
+        Matcher matcher = CALLOUT_ID.matcher(pattern);
+        StringBuilder masked = new StringBuilder();
+        List<String> placeholders = new ArrayList<>();
+        List<String> markers = new ArrayList<>();
+        int id = 0;
+        while (matcher.find()) {
+            String token = "POJ_INTERNAL_CALLOUT_PLACEHOLDER_" + id++ + "_END";
+            while (pattern.contains(token)) token += "_";
+            // In (?(?{...})yes|no), the marker itself is the condition.
+            // Leave a syntactically valid assertion condition around the
+            // token so the runtime parser preserves the surrounding branches.
+            boolean callbackCondition = matcher.start() >= 2
+                    && pattern.startsWith("(?", matcher.start() - 2);
+            String placeholder = callbackCondition ? "(?=" + token + ")" : token;
+            placeholders.add(placeholder);
+            markers.add(matcher.group());
+            matcher.appendReplacement(masked, Matcher.quoteReplacement(placeholder));
+        }
+        matcher.appendTail(masked);
+        return new MaskedCallouts(masked.toString(), placeholders, markers);
+    }
+
+    boolean containsRuntimeExecutableSource() {
+        return RuntimeRegex.containsExecutableSource(maskCallouts().pattern());
+    }
+
+    static String offsetCalloutIds(String executablePattern, int offset,
+                                   int callbackCount) {
+        if (offset == 0 || callbackCount == 0) return executablePattern;
+        Matcher matcher = CALLOUT_ID.matcher(executablePattern);
+        StringBuilder remapped = new StringBuilder();
+        while (matcher.find()) {
+            int oldId = Integer.parseInt(matcher.group(2));
+            if (oldId < 0 || oldId >= callbackCount) {
+                throw new IllegalArgumentException("Invalid runtime regex callout ID " + oldId);
+            }
+            matcher.appendReplacement(remapped, Matcher.quoteReplacement(
+                    "(?{=" + matcher.group(1) + ":" + (offset + oldId) + "})"));
+        }
+        matcher.appendTail(remapped);
+        return remapped.toString();
     }
 
     static String displayPattern(String executablePattern) {

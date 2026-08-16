@@ -1209,6 +1209,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return RuntimeRegexSourceCompiler.compile(patternString, rawModifierStr);
         }
 
+        if (patternString.value instanceof RuntimeRegexTemplate template
+                && template.containsRuntimeExecutableSource()) {
+            if (modifierStr.indexOf('E') < 0) {
+                throw new PerlCompilerException(
+                        "Eval-group not allowed at runtime, use re 'eval'");
+            }
+            return RuntimeRegexSourceCompiler.compileTemplate(
+                    patternString, template, rawModifierStr);
+        }
+
         if (patternString.value instanceof RuntimeRegexTemplate template) {
             RuntimeRegex regex = compile(template.pattern(), modifierStr, callSiteDebugMode,
                     template.callbacks().size()).cloneTracked();
@@ -1306,12 +1316,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 .propagateTaint(patternString);
     }
 
-    private static boolean containsExecutableSource(String pattern) {
+    static boolean containsExecutableSource(String pattern) {
         return pattern != null && (pattern.contains("(?{")
                 || pattern.contains("(??{")
                 || pattern.contains("(*{")
                 || pattern.contains("(?(?{")
                 || pattern.contains("(?(*{"));
+    }
+
+    static RuntimeScalar compileExecutableTemplate(
+            String executablePattern, String modifiers,
+            List<RuntimeRegexCallback> callbacks, RuntimeScalar original) {
+        int lexicalDebugMode = debugMode(modifiers);
+        RuntimeRegex regex = compile(executablePattern, stripDebugMarkers(modifiers),
+                lexicalDebugMode, callbacks.size()).cloneTracked();
+        regex.executableCallbacks = List.copyOf(callbacks);
+        return new RuntimeScalar(regex).propagateTaint(original);
     }
 
     /** Mark a compiled value as originating from Perl's qr// constructor. */

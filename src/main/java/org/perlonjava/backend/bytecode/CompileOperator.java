@@ -292,17 +292,18 @@ public class CompileOperator {
             bc.throwCompilerException("matchRegex requires pattern and flags");
             return;
         }
-        boolean hasOModifier = false;
+        boolean needsCallsiteCache = false;
         Node flagsNode = args.elements.get(1);
         if (flagsNode instanceof StringNode) {
-            hasOModifier = ((StringNode) flagsNode).value.contains("o");
+            String flags = ((StringNode) flagsNode).value;
+            needsCallsiteCache = flags.contains("o") || flags.contains("?");
         }
         args.elements.get(0).accept(bc);
         int patternReg = bc.lastResultReg;
         flagsNode.accept(bc);
         int flagsReg = bc.lastResultReg;
         int regexReg = bc.allocateRegister();
-        if (hasOModifier) {
+        if (needsCallsiteCache) {
             int callsiteId = bc.allocateCallsiteId();
             bc.emit(Opcodes.QUOTE_REGEX_O);
             bc.emitReg(regexReg);
@@ -1107,17 +1108,18 @@ public class CompileOperator {
                     }
                     RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers);
                 }
-                boolean hasOModifier = false;
+                boolean needsCallsiteCache = false;
                 Node flagsNode = operand.elements.get(1);
                 if (flagsNode instanceof StringNode) {
-                    hasOModifier = ((StringNode) flagsNode).value.contains("o");
+                    String flags = ((StringNode) flagsNode).value;
+                    needsCallsiteCache = flags.contains("o") || flags.contains("?");
                 }
                 operand.elements.get(0).accept(bytecodeCompiler);
                 int patternReg = bytecodeCompiler.lastResultReg;
                 flagsNode.accept(bytecodeCompiler);
                 int flagsReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                if (hasOModifier) {
+                if (needsCallsiteCache) {
                     int callsiteId = bytecodeCompiler.allocateCallsiteId();
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX_O);
                     bytecodeCompiler.emitReg(rd);

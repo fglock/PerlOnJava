@@ -251,9 +251,9 @@ retain lexical warning masks and source locations.
 The focused direct gates are `rxcode.t` 42/42, `reg_eval_scope.t` 49/49, and
 `dynamic_patterns.t` 12/12 on both backends. The unchanged Object::InsideOut
 dynamic-pattern test is 6/6 on both backends. `reg_eval.t` remains 5/8 because
-of three shared non-regex code-evaluation failures, while `pat_re_eval.t` now
-executes 430 of 555 planned assertions before reaching a mixed literal/runtime
-source form that is not yet accepted.
+of three shared non-regex code-evaluation failures. `pat_re_eval.t` now executes
+all 555 planned assertions on both backends; 334 pass and 221 remain as focused
+semantic and diagnostic gaps.
 
 The final 2026-08-16 differential gate compared all 80 `perl5_t/t/re/` files
 with `../PerlOnJava/logs/test_20260815_080000_958.log`. It records
@@ -340,11 +340,20 @@ green without warning output.
   - Completed the warning-free full build and Phase 44 preservation matrix.
   - Passed both Net::SSLeay thread ecosystem checks and the unchanged
     DBIx::Class gate (325 files, 42,681 assertions).
+- [x] Mixed literal and runtime callback source (2026-08-16)
+  - Recompiled raw runtime eval groups inside an existing structured callback
+    template while preserving trusted callback identities and lexical cells.
+  - Propagated `use re 'eval'` through nested dynamic patterns and retained
+    match-once callsite state on both compiler backends.
+  - Kept standalone `(?(DEFINE)...)` containers on Joni when combined with
+    runtime callback source.
+  - Added an 11-case standard-Perl differential gate; JVM and interpreter both
+    pass 11/11, and `pat_re_eval.t` now reaches its complete 555-test plan.
 
 ### Next steps
 
-1. Accept mixed literal/runtime callback source in the remaining
-   `pat_re_eval.t` cases without broadening `use re 'eval'` admission.
+1. Fix the `pat_re_eval.t` runtime-source escaping and embedded-Unicode family,
+   then address array interpolation and exact diagnostic parity.
 2. Close the three non-regex `reg_eval.t` code-evaluation failures.
 3. Continue the remaining Unicode alias and recursion-condition cases as
    focused post-Phase-36 compatibility slices.

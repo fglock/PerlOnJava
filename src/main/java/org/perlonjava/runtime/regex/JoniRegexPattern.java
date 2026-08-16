@@ -80,6 +80,7 @@ final class JoniRegexPattern {
                 || pattern.contains("(*SKIP)")
                 || pattern.contains("(*THEN)")
                 || pattern.contains("(*COMMIT)")
+                || pattern.contains("(?(DEFINE)")
                 || pattern.contains("(?(?{=CALL:")
                 || pattern.contains("(?(<")
                 || pattern.contains("(?('")
@@ -577,7 +578,23 @@ final class JoniRegexPattern {
                         template.callbacks().size());
                 nestedCallbacks = template.callbacks();
             } else {
-                nestedPattern = new JoniRegexPattern(value.toString(), outerFlags);
+                String dynamicSource = value.toString();
+                if (RuntimeRegex.containsExecutableSource(dynamicSource)) {
+                    if (!outerFlags.allowEvalGroup()) {
+                        throw new PerlCompilerException(
+                                "Eval-group not allowed at runtime, use re 'eval'");
+                    }
+                    String modifiers = outerFlags.toFlagString() + "E";
+                    RuntimeScalar compiled = RuntimeRegex.getQuotedRegex(
+                            value, new RuntimeScalar(modifiers));
+                    RuntimeRegex runtimeRegex = (RuntimeRegex) compiled.value;
+                    nestedPattern = new JoniRegexPattern(runtimeRegex.patternString,
+                            runtimeRegex.getRegexFlags(),
+                            runtimeRegex.executableCallbacks.size());
+                    nestedCallbacks = runtimeRegex.executableCallbacks;
+                } else {
+                    nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags);
+                }
             }
             CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
