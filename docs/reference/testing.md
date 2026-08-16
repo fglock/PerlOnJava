@@ -47,19 +47,33 @@ make test-threads
 Skip the clone when the gitignored `perl5/` source tree is already present. CI
 uses a sparse checkout containing the four required distributions and the core
 test harness at the same pinned commit.
+The release-only regex anchors use the imported `perl5_t/t/re` tree; populate it
+with `perl dev/import-perl5/sync.pl` when necessary.
 
 Before a thread/runtime release, extend that gate to the complete four-mode
-matrix (both execution backends on virtual and platform carriers):
+matrix (both execution backends on virtual and platform carriers) and the
+post-Joni regex-thread anchors:
 
 ```bash
 make test-threads-release
 ```
 
-Both targets use eight jobs and a hard 300-second timeout for each file. JSON
-reports are written under `build/reports/threads/`. The shorter target is used
-by Ubuntu pull-request CI and uses the runner's strict exit mode, so any failed,
-errored, timed-out, or incomplete file fails the Make target. Windows continues
-to run the Java/unit build gate.
+The distribution matrix uses eight jobs and a hard 300-second timeout for each
+file. The five regex anchors contain 48 assertions per backend and use a
+600-second bound. JSON reports are written under
+`build/reports/threads/`. The shorter target is used by Ubuntu pull-request CI
+and uses the runner's strict exit mode, so any failed, errored, timed-out, or
+incomplete file fails the Make target. Windows continues to run the Java/unit
+build gate.
+
+For a native callback or ORM release, run the slow ecosystem gate as well:
+
+```bash
+make test-threads-ecosystem
+```
+
+It runs unchanged Net::SSLeay thread tests 61/62 and DBIx::Class through
+`jcpan --jobs 8`, with a hard one-hour outer bound.
 See the [Perl threads reference](threads.md) for the compatibility contract and
 resource policies.
 

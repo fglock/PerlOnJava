@@ -2,8 +2,8 @@
 
 ## Status
 
-- **Project status:** Planned as a parallel project
-- **Current stage:** Baseline refresh and architecture validation
+- **Project status:** Active parallel project
+- **Current stage:** Stage 36.4 — callback scope and remaining direct parity
 - **Parent plan:** `dev/design/concurrency.md`
 - **Detailed callback design:** `dev/design/executable-regex-callbacks.md`
 - **Integration rule:** Direct regex semantics are implemented first. Thread
@@ -37,21 +37,25 @@ thread wrappers and protects the Phase 44 release matrix.
 - Phase 44 established timeout-free thread-wrapper execution and the supported
   regex anchors, including lexical debugging 6/6, user-property race 3/3, and
   `pat_psycho_thr.t` 17/17.
+- A namespaced callout-enabled Joni fork is vendored and packaged. JVM and
+  interpreter templates execute `(?{ code })` and callback conditions with
+  provisional captures, `$^R`, and matcher-driven backtracking unwind.
 
 ## Remaining Workstreams
 
-### A. Executable regex callbacks
+### A. Complete executable regex callback semantics
 
-Implement match-time `(?{ BLOCK })`, callback conditions `(?(?{ BLOCK })yes|no)`,
-optimistic evaluation `(*{ BLOCK })`, and dynamic patterns `(??{ EXPR })`.
+Finish the semantic matrix around the integrated match-time `(?{ BLOCK })` and
+callback-condition bridge, then implement optimistic evaluation `(*{ BLOCK })`
+and dynamic patterns `(??{ EXPR })`.
 Callbacks must run while the matcher owns its provisional captures and
 backtracking stack. Post-match callbacks and construction-time execution are not
 acceptable approximations.
 
-The architecture, semantic matrix, Joni callout proposal, and callback-specific
-risks live in `dev/design/executable-regex-callbacks.md`. Revalidate that
-document's historical prerequisites and library-version assumptions before
-implementation.
+The architecture, semantic matrix, and callback-specific risks live in
+`dev/design/executable-regex-callbacks.md`. The matcher seam is now delivered;
+keep that document aligned with the vendored fork rather than treating the
+callout API as a proposal.
 
 ### B. Conditionals and control verbs
 
@@ -102,11 +106,11 @@ the baseline has no orphaned JVMs or unexplained timeout-only zero-TAP results.
 
 ### Stage 36.1 — Validate the callback engine seam
 
-1. Refresh the Joni callout spike against the currently shipped matcher layer.
-2. Prove a runtime-neutral callout can observe provisional captures, repeat after
-   backtracking, and receive an exact unwind notification.
-3. Decide whether to publish a namespaced fork or propose the generic callout API
-   upstream.
+1. Keep the namespaced callout-enabled Joni fork isolated under `third_party/`.
+2. Preserve matcher tests proving that runtime-neutral callouts observe
+   provisional captures, repeat after backtracking, and receive exact unwind
+   notifications.
+3. Keep PerlOnJava runtime dependencies outside the regex-engine fork.
 
 **Exit criteria:** The spike demonstrates forward execution and backtracking
 unwind without PerlOnJava dependencies inside the regex engine.
@@ -234,14 +238,14 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ## Progress Tracking
 
-### Current Status: Stage 36.0 ready
+### Current Status: Stage 36.4 in progress
 
 ### Completed stages
 
-- [ ] Stage 36.0: Refresh differential baseline
-- [ ] Stage 36.1: Validate callback engine seam
-- [ ] Stage 36.2: Structured frontend and callback templates
-- [ ] Stage 36.3: Plain callbacks and provisional match state
+- [x] Stage 36.0: Refresh differential baseline
+- [x] Stage 36.1: Validate callback engine seam
+- [x] Stage 36.2: Structured frontend and callback templates
+- [x] Stage 36.3: Plain callbacks and provisional match state
 - [ ] Stage 36.4: Backtracking, dynamic scope, and conditions
 - [ ] Stage 36.5: Dynamic patterns and recursive execution
 - [ ] Stage 36.6: Remaining declarative parity
@@ -249,19 +253,20 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ### Next steps
 
-1. Refresh direct and wrapper counts on the Phase 36 checkout.
-2. Create and validate the callback semantic matrix with system Perl.
-3. Revalidate the Joni callout spike against the current matcher abstraction.
-4. Record the fork/upstream decision before starting structured frontend work.
+1. Refresh direct and wrapper counts on the merged callout engine.
+2. Extend the callback semantic matrix with dynamic-local unwind, exceptions,
+   interruption, timeout, and nested matches.
+3. Complete Stage 36.4 without changing thread wrappers.
+4. Implement dynamic patterns and then the remaining declarative parity slices.
 
 ### Open blockers
 
-- The current Java/Joni matcher paths do not expose Perl callouts during
-  backtracking.
 - Several callback-localization and dynamic-pattern capture rules still require
   standard-Perl differential evidence.
-- The detailed callback design contains historical PR and library assumptions
-  that must be refreshed during Stage 36.0.
+- Dynamic `(??{ EXPR })`, optimistic callback execution, and several declarative
+  controls are not complete.
+- Partial direct core tests still contain diagnostic, parser, Unicode, and
+  regex-object gaps; their wrappers must not be mistaken for thread failures.
 
 ## Related Documents and Skills
 
