@@ -2,6 +2,7 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -65,6 +66,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final int DOTALL = Pattern.DOTALL;
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:[Ii][sS]|[Ii][nN])[A-Za-z0-9_]*)}");
+    private static final Pattern UNICODE_PROPERTY_PATTERN =
+            Pattern.compile("\\\\[pP]\\{");
     // Maximum size for each runtime's regex cache.
     private static final int MAX_REGEX_CACHE_SIZE = RuntimeRegexState.MAX_REGEX_CACHE_SIZE;
     // Literal CVs are shared by ithreads. A child runtime may populate its own
@@ -365,6 +368,30 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         for (String warning : warningsOnUse) {
             WarnDie.warnWithCategory(new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "regexp");
+        }
+    }
+
+    /**
+     * Perl accepts scalar values above Unicode's maximum code point. Applying
+     * a Unicode property to one emits a use-site {@code non_unicode} warning,
+     * even though the value is carried internally as a Java-safe marker.
+     */
+    private void emitNonUnicodePropertyWarning(String input) {
+        if (patternString == null || input == null
+                || !UNICODE_PROPERTY_PATTERN.matcher(patternString).find()) {
+            return;
+        }
+        for (int offset = 0; offset < input.length(); ) {
+            PerlUtfString.PerlStep step = PerlUtfString.readOnePerlLogical(input, offset);
+            if (Long.compareUnsigned(step.codePoint(), 0x10FFFFL) > 0) {
+                String warning = "Matched non-Unicode code point 0x"
+                        + Long.toUnsignedString(step.codePoint(), 16).toUpperCase(java.util.Locale.ROOT)
+                        + " against Unicode property; may not be portable";
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "non_unicode");
+                return;
+            }
+            offset = step.nextJavaIndex();
         }
     }
 
@@ -1661,6 +1688,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         String inputStr = string.toString();
+        regex.emitNonUnicodePropertyWarning(inputStr);
         regex.emitExecutionDebugTrace(inputStr);
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         RegexMatcher matcher;

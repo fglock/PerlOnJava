@@ -242,9 +242,9 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
 seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 on both
-backends. `reg_eval_scope.t` is 47/49 on both backends, with no timeout or
-incomplete file; its two remaining failures are shared direct compile-warning
-diagnostics assigned to Stage 36.6. Matcher-owned
+backends. `reg_eval_scope.t` is 47/49 on the JVM and 48/49 on the interpreter,
+with no timeout or incomplete file; its remaining diagnostic work is assigned
+to Stage 36.6. Matcher-owned
 transactions restore ordinary scalar, array, and hash mutations on total
 failure while retaining Perl's ordinary side effects from attempted paths.
 Callback dynamic locals now transfer from the implementation CV to the matcher:
@@ -322,18 +322,26 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
     emitted and 851 passed. The 25 remaining assertion failures are confined to
     shared-object, lvalue, overload, and readonly tests and are not regex or
     timeout failures.
+- [x] Beyond-Unicode property warning (2026-08-16)
+  - Detected Perl's internal beyond-Unicode scalar markers at regex use time
+    and emitted the `non_unicode` warning with the match-site source line.
+  - Preserved lexical `no warnings 'non_unicode'` suppression.
+  - The focused oracle is 2/2 on system Perl and both execution backends;
+    `reg_eval_scope.t` improves to 48/49 on the interpreter backend.
 
 ### Next steps
 
-1. In Stage 36.6, close the two shared direct gaps in `reg_eval_scope.t`: the
-   Unicode warning diagnostic and the legacy `qr/\\(?{` compile diagnostic.
-2. Add the pure-pattern engine recursion bound, then run the direct/thread
+1. Add per-statement lexical warning bits to JVM top-level code so the
+   beyond-Unicode property warning also moves JVM `reg_eval_scope.t` to 48/49.
+2. Close the legacy `qr/\\(?{` HINT_NEW_RE compile diagnostic.
+3. Add the pure-pattern engine recursion bound, then run the direct/thread
    regex release matrix before Stage 36.7 integration.
 
 ### Open blockers
 
-- The Unicode warning and legacy `qr/\\(?{` diagnostic remain shared direct
-  gaps, leaving both backends at 47/49.
+- The legacy `qr/\\(?{` diagnostic leaves the interpreter at 48/49. The JVM
+  additionally needs per-statement lexical warning bits for the Unicode
+  warning, leaving it at 47/49 despite the focused warning path passing 2/2.
 - Pure-pattern deep recursion still needs an engine-owned limit; callback
   re-entry is now bounded without relying on the Java stack.
 - Partial direct core tests still contain diagnostic, parser, Unicode, and
