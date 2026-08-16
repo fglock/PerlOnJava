@@ -133,7 +133,8 @@ public class GlobalContext {
         // Only set $0 if it hasn't been set yet - prevents overwriting during re-entrant calls
         // (e.g., when require() is called during module initialization)
         if (!GlobalVariable.globalVariables.containsKey("main::0")) {
-            GlobalVariable.getGlobalVariable("main::0").set(compilerOptions.fileName);
+            GlobalVariable.globalVariables.put("main::0",
+                    new ProgramNameVariable().initialize(compilerOptions.fileName));
         }
         if (compilerOptions.taintMode) {
             GlobalVariable.getGlobalVariable("main::0").tainted = true;

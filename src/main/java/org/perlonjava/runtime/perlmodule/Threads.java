@@ -22,6 +22,7 @@ public final class Threads extends PerlModuleBase {
         try {
             module.registerMethod("_create", null);
             module.registerMethod("_self", null);
+            module.registerMethod("_yield", null);
             module.registerMethod("_list", null);
             module.registerMethod("_join", null);
             module.registerMethod("_detach", null);
@@ -132,6 +133,11 @@ public final class Threads extends PerlModuleBase {
 
     public static RuntimeList _self(RuntimeArray args, int ctx) {
         return threadObject(PerlRuntime.current().perlThreadId(), null).getList();
+    }
+
+    public static RuntimeList _yield(RuntimeArray args, int ctx) {
+        Thread.yield();
+        return RuntimeScalarCache.scalarUndef.getList();
     }
 
     public static RuntimeList _list(RuntimeArray args, int ctx) {

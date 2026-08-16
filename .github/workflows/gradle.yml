@@ -41,6 +41,25 @@ jobs:
         if: runner.os == 'Linux'
         run: make ci
 
+      - name: Checkout pinned Perl thread compatibility corpus
+        if: runner.os == 'Linux'
+        uses: actions/checkout@v4
+        with:
+          repository: Perl/perl5
+          ref: de80c8ecd40c6d5b677847699e5482b44bc748c6
+          path: perl5
+          sparse-checkout: |
+            t
+            dist/threads
+            dist/threads-shared
+            dist/Thread-Queue
+            dist/Thread-Semaphore
+
+      - name: Run Perl thread compatibility gate
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: make test-threads
+
       - name: Generate SBOM (Linux only)
         if: runner.os == 'Linux'
         run: make sbom
@@ -59,4 +78,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}
-          path: build/reports/tests/test/
+          path: |
+            build/reports/tests/test/
+            build/reports/threads/

@@ -46,10 +46,10 @@ These capabilities are implemented and available in the current release:
 - **I/O Subsystem** — Sockets, I/O layers (`:raw`, `:utf8`, `:crlf`, `:encoding()`), in-memory files, pipes, file descriptor duplication, `flock`, tied handles.
 - **Multiplicity and Perl ithreads** — Mutable interpreter state is owned by
   `PerlRuntime`; `Config` advertises `useithreads`, `usethreads`, and
-  `usemultiplicity`. The supported `threads` and `threads::shared` tranche
-  includes isolated create/join, shared scalar/array/hash storage, recursive
-  locks, and condition variables on both backends. See the
-  [feature matrix](../reference/feature-matrix.md#concurrency-and-perl-threads).
+  `usemultiplicity`. The bundled `threads`, `threads::shared`, `Thread::Queue`,
+  and `Thread::Semaphore` distributions pass unchanged on both backends and
+  both Java carrier policies. See the
+  [Perl threads reference](../reference/threads.md).
 - **Pack/Unpack** — Full template support for binary data manipulation. See `dev/design/pack_unpack_architecture.md`.
 - **Subroutine Prototypes and Signatures** — All prototype characters supported; formal parameter signatures implemented.
 - **`format`/`write`** — Report generation with `formline` and `$^A` accumulator.
@@ -259,17 +259,17 @@ Introduce a normalization pass between parsing and code generation to eliminate 
 
 ## Objective 6: Concurrency & Runtime Isolation
 
-*Priority: Long-term — Major architectural work required.*
+*Priority: Maintenance and ecosystem hardening.*
 
 See `dev/design/concurrency.md` for the comprehensive design covering multiplicity, fork emulation, and threads.
 
 ### Multiplicity
 
-Multiple independent `PerlRuntime` instances and snapshot cloning are now
-implemented. Remaining work is compatibility hardening: close the applicable
-core/CPAN thread-suite gaps, prove native callback isolation, and define a
-reset contract before considering runtime pooling. Multiplicity alone does not
-make one JSR-223 engine or one captured PSGI app concurrently callable.
+Multiple independent `PerlRuntime` instances and snapshot cloning are
+implemented. The bounded PSGI runtime pool is opt-in and replaces returned app
+snapshots from an authoritative template; it does not partially reset and reuse
+an entered runtime. Multiplicity alone does not make one JSR-223 engine or one
+captured PSGI app concurrently callable.
 
 ### Fork Emulation
 
@@ -281,18 +281,18 @@ Implement `fork()` via runtime cloning + thread. Currently returns `undef`.
 
 ### Threads (ithreads)
 
-The supported ithread tranche is shipped: snapshot-based variable isolation,
-create/join/detach and lifecycle inspection, nested threads and child exit,
-`threads::shared` storage, recursive locks, and condition variables. Java 24
-virtual threads are the default; platform carriers remain selectable.
+Perl ithreads are shipped: snapshot-based variable isolation, lifecycle and
+signals, nested threads and child exit, `threads::shared` graphs and proxies,
+locks and conditions, `Thread::Queue`, and `Thread::Semaphore`. Java 24 virtual
+threads are the default; platform carriers remain selectable.
 
 Remaining work:
 
-- Complete the currently partial applicable core and regex suites.
-- Finish exact nested-reference proxy identity and global `DESTROY` ownership
-  for blessed values fetched through `threads::shared` aggregates. Root
-  blessed storage and the system-Perl tied conversion rules are implemented.
-- Keep runtime pooling disabled until the reset-equivalence contract is proven.
+- Keep the permanent PR and release matrices green.
+- Broaden CPAN/native ecosystem coverage, including opt-in Test2 and Moose
+  thread suites and Net::SSLeay callback stress.
+- Keep direct regex-language/Joni work in the separate Phase 36 project while
+  thread wrappers preserve the behavior of their direct companions.
 
 ---
 

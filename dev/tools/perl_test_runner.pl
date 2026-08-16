@@ -18,12 +18,14 @@ my $timeout = 300; # Default to 300 seconds
 my $jobs = 5;     # Default to 5 parallel jobs
 my $output_file;
 my $help;
+my $strict_exit = 0;
 
 GetOptions(
     'jperl=s'   => \$jperl_path,
     'timeout=f' => \$timeout,
     'jobs|j=i'  => \$jobs,
     'output=s'  => \$output_file,
+    'strict-exit!' => \$strict_exit,
     'help'      => \$help,
 ) or die "Error in command line arguments\n";
 
@@ -111,6 +113,12 @@ print_feature_impact();
 
 if ($output_file) {
     save_results($output_file);
+}
+
+if ($strict_exit
+        && ($summary{fail} || $summary{error} || $summary{timeout}
+            || $summary{incomplete})) {
+    exit 1;
 }
 
 # Subroutines
@@ -239,6 +247,12 @@ sub process_test_result {
     print " " x (50 - length($rel_path)) if length($rel_path) < 50;
     printf " ... %s %d/%d ok (%.2fs)\n",
         $char, $result->{ok_count}, $result->{total_tests}, $duration;
+    if ($result->{status} ne 'pass' && defined $result->{failure_output}) {
+        print "----- captured output: $rel_path -----\n";
+        print $result->{failure_output};
+        print "\n" unless $result->{failure_output} =~ /\n\z/;
+        print "----- end captured output -----\n";
+    }
 }
 
 # Single, clean run_single_test function
@@ -475,6 +489,11 @@ sub run_single_test {
 
     my $result = parse_tap_output($output, $exit_code);
     $result->{raw_output_path} = $raw_output_path;
+    # Preserve a bounded diagnostic tail in the JSON report and CI log.  Raw
+    # output normally lives in /tmp on the worker and disappears before an
+    # uploaded report can be inspected.
+    $result->{failure_output} = substr($output, -32768)
+        if $result->{status} ne 'pass';
     return $result;
 }
 
@@ -504,6 +523,8 @@ sub timeout_for_test {
 sub requires_exclusive_slot {
     my ($test_file) = @_;
     return $test_file =~ m{
+          (?:^|/)perl5/dist/threads/t/join\.t$
+        |
           (?:^|/)perl5_t/t/op/gv\.t$
         | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
@@ -820,6 +841,7 @@ Options:
                    subprocess-heavy tests have a documented minimum)
   --jobs|-j NUM    Number of parallel jobs (default: 5)
   --output FILE    Save detailed results to JSON file
+  --strict-exit    Exit nonzero if any file fails, errors, times out, or is incomplete
   --help           Show this help message
 
 Examples:

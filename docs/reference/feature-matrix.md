@@ -48,6 +48,7 @@ PerlOnJava implements most core Perl features with some key differences:
 - Tied variables
 - Taint mode (`-T`)
 - Method Resolution Order
+- Perl ithreads, `threads::shared`, `Thread::Queue`, and `Thread::Semaphore`
 
 🚧 Partially Supported:
 - Warnings and strict pragma
@@ -59,9 +60,6 @@ PerlOnJava implements most core Perl features with some key differences:
 ❌ Not Supported:
 - XS modules and C integration
 - `fork`
-
-🟡 Supported with limitations:
-- Perl ithreads and `threads::shared` (see [Concurrency and Perl Threads](#concurrency-and-perl-threads))
 
 ---
 
@@ -689,12 +687,16 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Benchmark** use the same version as Perl.
 - ✅  **Carp**: `carp`, `cluck`, `croak`, `confess`, `longmess`, `shortmess` are implemented.
 - ✅  **Config** module.
-- 🟡  **threads** module: isolated create/join, identity, listing, detach,
+- ✅  **threads** module: isolated create/join, identity, listing, detach,
   state inspection, child exit, errors, `async`, `yield`, and supported import
-  options. See [Concurrency and Perl Threads](#concurrency-and-perl-threads).
-- 🟡  **threads::shared** module: shared scalar/array/hash storage, including
+  options. See the [Perl threads reference](threads.md).
+- ✅  **threads::shared** module: shared scalar/array/hash storage, including
   blessed aggregate roots and supported tied-value conversions, recursive
   lexical locks, condition variables, and supported graph cloning.
+- ✅  **Thread::Queue** module: blocking, timed, nonblocking, force, limit,
+  insert, extract, and error behavior.
+- ✅  **Thread::Semaphore** module: blocking, timed, nonblocking, force, and
+  error behavior.
 - ✅  **Cwd** module
 - ✅  **Data::Dumper**: use the same version as Perl.
 - ✅  **DirHandle** module.
@@ -840,8 +842,10 @@ The DBI module provides seamless integration with JDBC drivers:
 
 ## Concurrency and Perl Threads
 
-PerlOnJava implements interpreter multiplicity and a measured subset of Perl
-ithreads on both the JVM compiler and bytecode interpreter backends.
+PerlOnJava implements Perl interpreter multiplicity and ithreads on both the JVM
+compiler and bytecode interpreter backends. The complete unchanged upstream
+test distributions for `threads`, `threads::shared`, `Thread::Queue`, and
+`Thread::Semaphore` pass on virtual and platform Java carriers.
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -849,7 +853,8 @@ ithreads on both the JVM compiler and bytecode interpreter backends.
 | Runtime isolation | ✅ | Mutable globals, dynamic state, hints, warnings, regex state, lifecycle queues, signals, alarms, and I/O registries are runtime-owned. |
 | `threads->create`, `async`, `join`, `detach` | ✅ | A child receives a snapshot; ordinary parent and child values then evolve independently. Join results are cloned back to the caller. |
 | Identity and state | ✅ | `self`, `tid`, `list`, equality, running/joinable/detached checks, errors, nested threads, and child-only `threads->exit` are supported. |
-| `threads::shared` | 🟡 | `share`, `is_shared`, `shared_clone`, and `:shared` support scalar/array/hash graphs. Blessed aggregate roots use runtime-local class views over common backing; tied scalars clone callback state and tied arrays/hashes convert to native shared storage when shared. |
+| `threads::shared` | ✅ | `share`, `is_shared`, `shared_clone`, and `:shared` support scalar/array/hash graphs. Nested fetches use runtime-local proxy views over common backing; blessing, ties, weak views, cycles, and final destruction follow the classified shared-storage policies. |
+| `Thread::Queue` and `Thread::Semaphore` | ✅ | The unchanged upstream distributions pass their blocking, timed, nonblocking, force, limit, insert/extract, and error tests. |
 | Locks and conditions | ✅ | Recursive lexical `lock`, `cond_wait`, absolute `cond_timedwait`, `cond_signal`, and `cond_broadcast` are supported. |
 | Platform threads | ✅ | Explicit compatibility mode and automatic fallback for a nonzero stack-size request. |
 | Virtual threads | ✅ | Java 24 launcher default; snapshot, lifecycle, shared-storage, native-callback, DBI, and Test2 gates retain platform parity. |
@@ -859,20 +864,20 @@ aliasing and cycles preserved inside the child graph, but they are not the same
 storage as their parent counterparts. Values explicitly shared through
 `threads::shared` retain common backing storage.
 
-### Current limitations
+### JVM execution and resource policies
 
-| Limitation | Effect |
+| Policy | Effect |
 |---|---|
 | Thread signals | `threads->kill` targets live attached children and resolves the handler inside the child runtime. Completed and detached targets are not signalable. |
 | Effective stack sizing | Platform-backed children honor supported `stack_size` create/import requests. A nonzero request under the default virtual policy transparently selects a platform child. |
 | Additional introspection | `threads->object` and creation-context `wantarray` are implemented. CLI shutdown reports running and finished unjoined threads; detached children are silent. |
-| Nested shared-object proxy identity | Root blessed/tied policies are implemented. Exact fresh proxy identity for nested references fetched from shared aggregates, and one global `DESTROY` owner across those views, remain follow-up work. |
 | Native resources and callbacks | File, socket, process, native-descriptor, scalar, layered, duplicated, borrowed, directory, and standard handles have explicit inheritance policies. Net::SSLeay handles remain runtime-owned and stored callbacks bind their registering runtime. |
-| Upstream suite coverage | Core thread/lvalue coverage includes `op/index_thr.t` 415/415 and `op/substr_thr.t` 400/400 on both backends. `class/threads.t`, Storable's thread test, `threads-dirh.t`, Test2's default thread IPC acceptance, and `user_prop_race_thr.t` complete. Lexical `re 'debug'` is runtime-owned; remaining regex-language gaps are tracked against direct companion tests. |
+| Upstream suite coverage | The four bundled thread distributions pass 64 files and 1,891 assertions in each backend/carrier configuration. The PR gate runs two complete virtual configurations plus focused platform lifecycle coverage; the release gate runs all four complete configurations. Direct regex-language gaps remain in the separate Phase 36 project. |
 | PSGI | The default single-runtime handler advertises `psgi.multithread => \0`. A bounded opt-in pool gives every concurrent request an independent app snapshot and advertises `\1`; pool size defaults to zero. |
 
-The complete design and measured validation record is in
-[Concurrency and runtime isolation](../../dev/design/concurrency.md).
+See the [Perl threads reference](threads.md) for behavior and test commands and
+[Concurrency and runtime isolation](../../dev/design/concurrency.md) for the
+maintenance contract.
 
 ---
 

@@ -227,6 +227,7 @@ JPERL_OPTS='-Djperl.thread.mode=platform' ./jperl threaded.pl
 The carrier selection does not change Perl snapshot or shared-storage
 semantics. A nonzero per-thread stack request automatically selects a platform
 carrier because virtual-thread stacks are JVM-managed. See the
+[Perl threads reference](threads.md) and
 [concurrency feature matrix](feature-matrix.md#concurrency-and-perl-threads).
 
 ### Runtime pooling

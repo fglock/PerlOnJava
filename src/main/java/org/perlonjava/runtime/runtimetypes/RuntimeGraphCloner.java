@@ -392,6 +392,13 @@ public class RuntimeGraphCloner {
     }
 
     private RuntimeScalar cloneScalar(RuntimeScalar source) {
+        if (source instanceof ProgramNameVariable) {
+            ProgramNameVariable target = new ProgramNameVariable();
+            clones.put(source, target);
+            copyBase(source, target);
+            copyScalarMetadata(source, target);
+            return target;
+        }
         if (source instanceof ScalarSpecialVariable special) {
             ScalarSpecialVariable target = new ScalarSpecialVariable(
                     special.variableId, special.position);
