@@ -955,6 +955,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Depth threshold for the "Deep recursion on subroutine" warning.
     // Matches Perl's default PERL_SUB_DEPTH_WARN value.
     public static final int DEEP_RECURSION_WARN_DEPTH = 100;
+    private static final int REGEX_CALLBACK_RECURSION_LIMIT = 1024;
 
     // When the tail-call trampoline in the static apply() re-enters a sub,
     // we want to skip the "Deep recursion" tracking for that entry.
@@ -984,6 +985,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ExecutionRuntimeState.CallDepthState callState =
                 executionState.callDepth(this);
         int depth = ++callState.depth;
+        if (isRegexCallbackPseudoBlock && depth > REGEX_CALLBACK_RECURSION_LIMIT) {
+            // Joni callback recursion consumes Java stack outside the matcher's
+            // own backtracking stack. Bound it independently of -Xss so a
+            // recursive callback cannot monopolize the process until the JVM
+            // eventually exhausts a large configured stack.
+            callState.depth--;
+            throw new StackOverflowError("Regex callback recursion limit exceeded");
+        }
         if (depth > DEEP_RECURSION_WARN_DEPTH && !callState.warned) {
             callState.warned = true;
             String name = (packageName != null && subName != null)

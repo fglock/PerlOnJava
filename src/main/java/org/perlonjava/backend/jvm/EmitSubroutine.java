@@ -296,6 +296,10 @@ public class EmitSubroutine {
             } else if (ctx.compilerOptions != null && ctx.compilerOptions.fileName != null) {
                 cvStartFile = ctx.compilerOptions.fileName;
             }
+            Object callbackSourceLine = node.getAnnotation("regexCallbackSourceLine");
+            if (callbackSourceLine instanceof Number number) {
+                cvStartLine = number.intValue();
+            }
             int deparseSourceOffset = -1;
             int deparseSourceEnd = -1;
             if (ctx.errorUtil != null) {

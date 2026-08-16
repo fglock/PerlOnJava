@@ -846,6 +846,7 @@ public abstract class StringSegmentParser {
     private void parseRegexCallbackCondition() {
         flushCurrentSegment();
         int start = tokenIndex;
+        int sourceLine = regexCallbackSourceLine();
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "?");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
         LexerToken callbackType = TokenUtils.consume(parser);
@@ -857,7 +858,7 @@ public abstract class StringSegmentParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         segments.add(new StringNode("(?(", start));
-        segments.add(regexCallback(block, "CONDITION", start));
+        segments.add(regexCallback(block, "CONDITION", start, sourceLine));
     }
 
     private boolean isRegexOptimisticBlock() {
@@ -870,12 +871,13 @@ public abstract class StringSegmentParser {
     private void parseRegexOptimisticBlock() {
         flushCurrentSegment();
         int start = tokenIndex;
+        int sourceLine = regexCallbackSourceLine();
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "*");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node block = parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
-        segments.add(regexCallback(block, "BLOCK", start));
+        segments.add(regexCallback(block, "BLOCK", start, sourceLine));
     }
 
     /**
@@ -923,6 +925,7 @@ public abstract class StringSegmentParser {
         flushCurrentSegment();
 
         int savedTokenIndex = tokenIndex;
+        int sourceLine = regexCallbackSourceLine();
 
         // Consume the "?" token(s)
         TokenUtils.consume(parser); // consume first "?"
@@ -951,19 +954,20 @@ public abstract class StringSegmentParser {
             }
             RuntimeScalar constant = ConstantFoldingVisitor.getConstantValue(folded);
             if (constant == null || !isSafeDynamicConstantFold(constant.toString())) {
-                segments.add(regexCallback(block, "DYNAMIC", savedTokenIndex));
+                segments.add(regexCallback(block, "DYNAMIC", savedTokenIndex, sourceLine));
             } else {
                 segments.add(new StringNode(constant.toString(), savedTokenIndex));
             }
         } else {
-            segments.add(regexCallback(block, "BLOCK", savedTokenIndex));
+            segments.add(regexCallback(block, "BLOCK", savedTokenIndex, sourceLine));
         }
     }
 
-    private Node regexCallback(Node block, String kind, int index) {
+    private Node regexCallback(Node block, String kind, int index, int sourceLine) {
         SubroutineNode closure = new SubroutineNode(null, null, null, block, false, index);
         closure.setAnnotation("inheritsSelfReference", true);
         closure.setAnnotation("regexCallbackPseudoBlock", true);
+        closure.setAnnotation("regexCallbackSourceLine", sourceLine);
         if (block instanceof AbstractNode abstractBlock) {
             // (?{ ... }) is a regex pseudo-block, not an ordinary anonymous-sub
             // scope. Its top-level local() frames belong to the matcher path and
@@ -974,6 +978,19 @@ public abstract class StringSegmentParser {
         callback.setAnnotation("regexCallbackKind", kind);
         hasExecutableRegexCallbacks = true;
         return callback;
+    }
+
+    private int regexCallbackSourceLine() {
+        int line = parser.baseLineNumber;
+        if (line <= 0) {
+            line = ctx.errorUtil.getLineNumberAccurate(originalTokenOffset);
+        }
+        for (int i = 0; i < parser.tokenIndex && i < parser.tokens.size(); i++) {
+            if (parser.tokens.get(i).type == LexerTokenType.NEWLINE) {
+                line++;
+            }
+        }
+        return line;
     }
 
     /**

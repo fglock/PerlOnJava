@@ -749,7 +749,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Evict the old cached entry so compile() will actually recompile
         // instead of returning the stale regex with deferred placeholders.
         String cacheKey = regex.patternString + "/" + (regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
-        state().compiledRegexCache.remove(cacheKey + "#debug=" + regex.lexicalDebugMode);
+        // Deferred Unicode properties cannot contain executable callouts, so
+        // this is the same zero-callout key used by compile(). Keep the suffix
+        // in sync with compileSynchronized(): leaving the placeholder cached
+        // makes a later qr/\\p{Property}/ reuse its match-any stand-in.
+        state().compiledRegexCache.remove(cacheKey + "#debug=" + regex.lexicalDebugMode
+                + "#callouts=0");
 
         // User property subs can execute arbitrary Perl and block. Resolve them
         // before compile() takes its process-wide monitor; only simultaneous

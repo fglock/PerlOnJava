@@ -250,7 +250,18 @@ they remain visible to later callbacks on the active path, unwind on
 backtracking, and restore after success, failure, or exception. Regex callbacks
 also behave as pseudo-blocks for `caller`, `__SUB__`, and escaping
 `last`/`next`/`goto` on both execution backends. Named unary `scalar` now keeps a
-following match in scalar context, including callback-bearing matches.
+following match in scalar context, including callback-bearing matches. Recursive
+callback re-entry is bounded independently of the configured JVM stack.
+
+The 2026-08-16 Stage 36.4 validation slice compared all 80 `perl5_t/t/re/`
+files with `../PerlOnJava/logs/test_20260815_080000_958.log`. The result is
+50,959/94,829 versus 50,273/94,771: 686 additional passing assertions, 58
+additional planned assertions, and no per-file pass-count regression. The
+resource-sensitive `pat.t`, `pat_thr.t`, `pat_advanced.t`, and
+`pat_advanced_thr.t` files ran serially because they share temporary files;
+`pat_psycho*` and `speed*` ran concurrently as isolated runner processes. This
+gate also found and fixed stale cache eviction for deferred user-defined Unicode
+properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
 
 ### Completed stages
 
@@ -262,6 +273,15 @@ following match in scalar context, including callback-bearing matches.
 - [ ] Stage 36.5: Dynamic patterns and recursive execution
 - [ ] Stage 36.6: Remaining declarative parity
 - [ ] Stage 36.7: Integration and release
+
+### Completed slices
+
+- [x] Callback pseudo-block scope and diagnostics (2026-08-16)
+  - Preserved matcher-owned dynamic locals and callback source locations on the
+    JVM and interpreter backends.
+  - Bounded recursive callback re-entry independently of the Java stack size.
+  - Restored deferred Unicode-property cache eviction and recorded a
+    no-regression 80-file differential gate against PR 958.
 
 ### Next steps
 
@@ -289,6 +309,8 @@ following match in scalar context, including callback-bearing matches.
   behavior is established with differential tests.
 - Dynamic `(??{ EXPR })` execution is integrated, but its full Stage 36.5 CPAN
   and unchanged-core exit matrix is not yet recorded.
+- Pure-pattern deep recursion still needs an engine-owned limit; callback
+  re-entry is now bounded without relying on the Java stack.
 - Partial direct core tests still contain diagnostic, parser, Unicode, and
   regex-object gaps; their wrappers must not be mistaken for thread failures.
 

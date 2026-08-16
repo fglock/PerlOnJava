@@ -152,7 +152,18 @@ At execution, the bridge publishes provisional numbered captures and offsets,
 runs the closure in scalar context, and updates `$^R` for plain callbacks only.
 Each token checkpoints regex state, `$^R`, and the dynamic-local stack. Backtrack
 unwind restores all three; successful completion restores dynamic scope while
-retaining the last successful plain callback result.
+retaining the last successful plain callback result. Dynamic locals created by
+one callback remain active along the matcher's forward path, including later
+callbacks, until that path is unwound or the match completes. The ordinary
+closure epilogue therefore does not tear down a callback's local frame; the
+matcher token owns it.
+
+Callback closures are Perl pseudo blocks, not ordinary subroutine or loop
+boundaries. An unhandled `last`, `next`, `redo`, or `goto` cannot target a loop
+or label outside the callback. The bridge converts escaped control flow to the
+corresponding pseudo-block diagnostic before it can reach surrounding Perl
+frames. Recursive callback re-entry has an engine-owned depth ceiling independent
+of the JVM's configured native stack size.
 
 Every structured executable callback template selects Joni, including a
 callback whose body happens to return a constant: `(?{ 1 })` still has match-time

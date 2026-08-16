@@ -160,7 +160,19 @@ public class WaitpidOperator {
         boolean nonBlocking = (flags & WNOHANG) != 0;
 
         if (pid <= 0) {
+            // Pipe-open children use RuntimeIO's cross-platform Java Process
+            // registry. Perl wait() reaches this method as waitpid(-1, 0), so
+            // consult that registry before reporting that no child exists.
+            RuntimeScalar javaChildResult = waitForAnyJavaProcess(flags);
+            if (javaChildResult != null) {
+                return javaChildResult;
+            }
             return new RuntimeScalar(-1);
+        }
+
+        Process javaProcess = RuntimeIO.getChildProcess(pid);
+        if (javaProcess != null) {
+            return waitpidJavaProcess(pid, javaProcess, flags);
         }
 
         Process childProcess = windowsChildProcesses().get((long) pid);
