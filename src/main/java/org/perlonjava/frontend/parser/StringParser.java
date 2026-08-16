@@ -38,6 +38,9 @@ import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
  */
 public class StringParser {
 
+    /** Historical HINT_NEW_RE bit used by old regex interpolation parsing. */
+    private static final int HINT_NEW_RE = 0x00010000;
+
     // States for the finite state machine (FSM)
     private static final int START = 0;
     private static final int STRING = 1;
@@ -607,6 +610,16 @@ public class StringParser {
 
     public static OperatorNode parseRegexMatch(EmitterContext ctx, String operator, ParsedString rawStr, Parser parser) {
         boolean isQuoteRegex = operator.equals("qr");
+        if (isQuoteRegex
+                && ctx.symbolTable != null
+                && (ctx.symbolTable.getStrictOptions() & HINT_NEW_RE) != 0
+                && "\\(?{".equals(rawStr.buffers.getFirst())) {
+            // Perl retains this legacy diagnostic for a manually restored
+            // HINT_NEW_RE scope (RT #133879). In that mode the quote parser
+            // interprets the escaped opener as an unknown qq constant rather
+            // than accepting it as an ordinary literal regex.
+            throw new PerlCompilerException("Constant(qq) unknown");
+        }
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
         String modStr = rawStr.buffers.get(1);
         modStr = addLexicalRegexContext(ctx, modStr);

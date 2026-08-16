@@ -242,7 +242,7 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
 seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 on both
-backends. `reg_eval_scope.t` is 47/49 on the JVM and 48/49 on the interpreter,
+backends. `reg_eval_scope.t` is 48/49 on the JVM and 49/49 on the interpreter,
 with no timeout or incomplete file; its remaining diagnostic work is assigned
 to Stage 36.6. Matcher-owned
 transactions restore ordinary scalar, array, and hash mutations on total
@@ -328,20 +328,24 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
   - Preserved lexical `no warnings 'non_unicode'` suppression.
   - The focused oracle is 2/2 on system Perl and both execution backends;
     `reg_eval_scope.t` improves to 48/49 on the interpreter backend.
+- [x] Legacy HINT_NEW_RE diagnostic (2026-08-16)
+  - Preserved Perl's `Constant(qq) unknown` compile error for the manually
+    restored HINT_NEW_RE bit and escaped pseudo-callback opener.
+  - The focused oracle is 1/1 on system Perl, JVM, and interpreter;
+    interpreter `reg_eval_scope.t` is now 49/49 and JVM is 48/49.
 
 ### Next steps
 
 1. Add per-statement lexical warning bits to JVM top-level code so the
    beyond-Unicode property warning also moves JVM `reg_eval_scope.t` to 48/49.
-2. Close the legacy `qr/\\(?{` HINT_NEW_RE compile diagnostic.
-3. Add the pure-pattern engine recursion bound, then run the direct/thread
+2. Add the pure-pattern engine recursion bound, then run the direct/thread
    regex release matrix before Stage 36.7 integration.
 
 ### Open blockers
 
-- The legacy `qr/\\(?{` diagnostic leaves the interpreter at 48/49. The JVM
-  additionally needs per-statement lexical warning bits for the Unicode
-  warning, leaving it at 47/49 despite the focused warning path passing 2/2.
+- The JVM needs per-statement lexical warning bits for the Unicode warning,
+  leaving it at 48/49 despite the focused warning path passing 2/2. The
+  interpreter is 49/49.
 - Pure-pattern deep recursion still needs an engine-owned limit; callback
   re-entry is now bounded without relying on the Java stack.
 - Partial direct core tests still contain diagnostic, parser, Unicode, and
