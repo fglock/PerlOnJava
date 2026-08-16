@@ -99,6 +99,11 @@ public abstract class Matcher extends IntHolder {
         return msaEnd;
     }
 
+    /** Most recently closed active capture; engines without this view return -1. */
+    public int lastClosedCapture() {
+        return -1;
+    }
+
     protected final void msaInit(int option, int start, int gpos) {
         msaOptions = option;
         msaStart = start;

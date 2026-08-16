@@ -122,7 +122,7 @@ final class Analyser extends Parser {
             regex.btMemStart = bsAll();
         }
 
-        if (isFindCondition(regex.options)) {
+        if (isFindCondition(regex.options) || env.hasCallout) {
             regex.btMemEnd = bsAll();
         } else {
             regex.btMemEnd = env.btMemEnd;

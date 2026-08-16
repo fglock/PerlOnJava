@@ -1543,6 +1543,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regexState.manualCaptureStarts = null;
         regexState.manualCaptureEnds = null;
         int captureCount = matcher.groupCount();
+        int lastClosedCapture = matcher.lastClosedCapture();
+        regexState.lastClosedCapture = lastClosedCapture > 0
+                && lastClosedCapture <= captureCount ? matcher.group(lastClosedCapture) : null;
         if (captureCount == 0) {
             regexState.lastCaptureGroups = null;
             return;

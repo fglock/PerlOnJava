@@ -2087,6 +2087,17 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return (bsAt(regex.btMemEnd, capture) ? stack[value].getMemPStr() : value) - str;
     }
 
+    @Override
+    public int lastClosedCapture() {
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type != MEM_END) continue;
+            int mem = entry.getMemNum();
+            if (repeatStk[memEndStk + mem] == i) return mem;
+        }
+        return -1;
+    }
+
     private void checkCapture(int capture) {
         if (capture < 0 || capture > regex.numMem) {
             throw new IndexOutOfBoundsException("capture " + capture);

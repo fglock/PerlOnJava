@@ -135,6 +135,13 @@ The parser emits a `regexTemplate` operation whose ordered parts contain normal
 interpolation values and explicit `regexCallback` wrappers. Runtime template
 construction assigns callback IDs and produces the engine-facing skeleton.
 
+Optimistic callbacks use the same structured path. Standalone `(*{ code })`
+callbacks execute as zero-width BLOCK callouts and publish their result through
+`$^R`; `(?(*{ code })yes|no)` predicates execute as CONDITION callouts, select
+their branch from the result's truth, and leave `$^R` unchanged. The matcher
+publishes `$^N` from capture-close order rather than deriving it from `$+`, whose
+meaning is the highest-numbered defined capture.
+
 An interpolated coderef remains ordinary interpolation because only the parser
 can create a callback wrapper. Runtime strings containing Perl eval groups never
 become trusted callback skeletons. They retain the existing security checks and,
@@ -242,6 +249,8 @@ keep their established fold-to-pattern path.
 - Focused tests cover provisional captures, repeated execution after
   backtracking, `FAIL`, nested frames, handler exceptions, interruption, and
   exact-once reverse-order unwind.
+- Optimistic-callback tests cover standalone execution, conditional truth,
+  `$^R`, exact `$^N` capture-close order, `$+`, and alternative reachability.
 - The standalone JAR contains no `org/joni` or `org/jcodings` classes, contains
   both relocated trees, and includes all required notices.
 - An embedding smoke test can load stock Joni and PerlOnJava together.
