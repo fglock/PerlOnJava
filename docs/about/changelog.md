@@ -4,6 +4,16 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- CPAN/compiler tooling: run MakeMaker `CONFIGURE` callbacks and prefer their
+  generated root modules over auxiliary metadata stubs; enforce known
+  subroutine lvalue errors at compile time; preserve blessed anonymous-glob
+  dereferencing and `isa('GLOB')`; and route XML parsing through tied-handle
+  `READ`. Add an honest `Authen::PAM` Java boundary that reports
+  `PAM_SYSTEM_ERR` until native conversations are implemented. This unblocks
+  Types::Namespace, Catalyst::Plugin::Unicode, Search::Sitemap's compressed
+  input, Authen::SimplePam, and Text::RecordParser without distribution
+  preferences. Search::Sitemap retains one upstream speed-sensitive `'now'`
+  assertion on the slower JVM runtime.
 - CPAN/compiler tooling: restore YAML::PP's object `dump` API, recognize
   TAP-indented missing prerequisites, report gzip stream completion for CPAN
   single-file distributions, and route Object::Pad's core syntax through the

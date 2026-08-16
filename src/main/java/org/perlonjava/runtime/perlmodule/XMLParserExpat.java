@@ -769,17 +769,23 @@ public class XMLParserExpat extends PerlModuleBase {
                 }
             } else {
                 // No delimiter - read entire stream in chunks
-                byte[] buffer = new byte[8192];
                 while (true) {
-                    RuntimeScalar result = fh.ioHandle.read(buffer.length);
-                    if (result.type == RuntimeScalarType.UNDEF) {
+                    // read() expects a scalar-reference argument because the compiler
+                    // normally supplies one for its lvalue buffer operand.  Starting
+                    // with undef here lets Readline.read() autovivify that reference;
+                    // the tied READ method then updates its referent through @_.
+                    RuntimeScalar bufferReference = new RuntimeScalar();
+                    RuntimeScalar count = Readline.read(new RuntimeList(
+                            ioref, bufferReference, new RuntimeScalar(8192)));
+                    if (count.type == RuntimeScalarType.UNDEF || count.getInt() <= 0) {
                         break;
                     }
-                    String chunk = result.toString();
+                    RuntimeScalar buffer = bufferReference.scalarDeref();
+                    String chunk = buffer.toString();
                     if (chunk.isEmpty()) {
                         break;
                     }
-                    java.nio.charset.Charset cs = (result.type == RuntimeScalarType.BYTE_STRING)
+                    java.nio.charset.Charset cs = (buffer.type == RuntimeScalarType.BYTE_STRING)
                             ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
                     baos.write(chunk.getBytes(cs));
                 }
