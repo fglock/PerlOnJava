@@ -804,6 +804,9 @@ public abstract class StringSegmentParser {
                 } else if (isRegex && regexCodeBlocksAreActive() && isRegexRecursiveBlock()) {
                     parseRegexCodeBlock(true);   // (??{...}) - recursive pattern
                     yield true;
+                } else if (isRegex && regexCodeBlocksAreActive() && isRegexOptimisticBlock()) {
+                    parseRegexOptimisticBlock(); // (*{...}) - optimization-preserving callback
+                    yield true;
                 }
                 yield false;
             }
@@ -835,7 +838,8 @@ public abstract class StringSegmentParser {
         return currentPos + 3 < parser.tokens.size()
                 && "?".equals(parser.tokens.get(currentPos).text)
                 && "(".equals(parser.tokens.get(currentPos + 1).text)
-                && "?".equals(parser.tokens.get(currentPos + 2).text)
+                && ("?".equals(parser.tokens.get(currentPos + 2).text)
+                    || "*".equals(parser.tokens.get(currentPos + 2).text))
                 && "{".equals(parser.tokens.get(currentPos + 3).text);
     }
 
@@ -844,13 +848,34 @@ public abstract class StringSegmentParser {
         int start = tokenIndex;
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "?");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "?");
+        LexerToken callbackType = TokenUtils.consume(parser);
+        if (!"?".equals(callbackType.text) && !"*".equals(callbackType.text)) {
+            throw new IllegalStateException("invalid regex callback condition marker");
+        }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node block = parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         segments.add(new StringNode("(?(", start));
         segments.add(regexCallback(block, "CONDITION", start));
+    }
+
+    private boolean isRegexOptimisticBlock() {
+        int currentPos = parser.tokenIndex;
+        return currentPos + 1 < parser.tokens.size()
+                && "*".equals(parser.tokens.get(currentPos).text)
+                && "{".equals(parser.tokens.get(currentPos + 1).text);
+    }
+
+    private void parseRegexOptimisticBlock() {
+        flushCurrentSegment();
+        int start = tokenIndex;
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "*");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        Node block = parseBlock(parser);
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        segments.add(regexCallback(block, "BLOCK", start));
     }
 
     /**

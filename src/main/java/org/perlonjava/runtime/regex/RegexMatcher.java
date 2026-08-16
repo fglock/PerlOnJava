@@ -32,6 +32,21 @@ public interface RegexMatcher {
 
     int groupCount();
 
+    /** Most recently closed capture number, or -1 when the backend cannot provide it. */
+    default int lastClosedCapture() {
+        int selected = -1;
+        int selectedEnd = -1;
+        for (int group = 1; group <= groupCount(); group++) {
+            int end = end(group);
+            if (end > selectedEnd || (end == selectedEnd && end >= 0
+                    && (selected < 0 || group < selected))) {
+                selected = group;
+                selectedEnd = end;
+            }
+        }
+        return selected;
+    }
+
     Map<String, Integer> namedGroups();
 
     String patternDescription();

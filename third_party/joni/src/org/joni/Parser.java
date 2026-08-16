@@ -746,6 +746,7 @@ class Parser extends Lexer {
     }
 
     private int parseInternalCalloutId(String prefix) {
+        env.hasCallout = true;
         for (int i = 0; i < prefix.length(); i++) {
             if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
             fetch();

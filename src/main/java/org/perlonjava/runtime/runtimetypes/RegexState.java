@@ -22,6 +22,7 @@ public class RegexState implements DynamicState {
     private final boolean lastMatchUsedPFlag;
     private final boolean lastMatchUsedBackslashK;
     private final String[] lastCaptureGroups;
+    private final String lastClosedCapture;
     private final Map<String, List<String>> lastNamedCaptureGroups;
     private final boolean lastMatchWasByteString;
     private final boolean lastMatchResultsTainted;
@@ -44,6 +45,7 @@ public class RegexState implements DynamicState {
         lastMatchUsedPFlag = state.lastMatchUsedPFlag;
         lastMatchUsedBackslashK = state.lastMatchUsedBackslashK;
         lastCaptureGroups = state.lastCaptureGroups;
+        lastClosedCapture = state.lastClosedCapture;
         lastNamedCaptureGroups = state.lastNamedCaptureGroups;
         lastMatchWasByteString = state.lastMatchWasByteString;
         lastMatchResultsTainted = state.lastMatchResultsTainted;
@@ -82,6 +84,7 @@ public class RegexState implements DynamicState {
         state.lastMatchUsedPFlag = lastMatchUsedPFlag;
         state.lastMatchUsedBackslashK = lastMatchUsedBackslashK;
         state.lastCaptureGroups = lastCaptureGroups;
+        state.lastClosedCapture = lastClosedCapture;
         state.lastNamedCaptureGroups = lastNamedCaptureGroups;
         state.lastMatchWasByteString = lastMatchWasByteString;
         state.lastMatchResultsTainted = lastMatchResultsTainted;

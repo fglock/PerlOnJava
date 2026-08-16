@@ -28,4 +28,7 @@ public interface MatchView {
     int captureBegin(int capture);
 
     int captureEnd(int capture);
+
+    /** Number of the most recently closed active capture, or -1 if none. */
+    int lastClosedCapture();
 }

@@ -394,10 +394,10 @@ my @copy = @{$z};         # ERROR
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
 - ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
 - ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
-- 🟡  **Conditional Expressions**: Executable callback conditions `(?(?{ code })yes|no)` execute through Joni; other condition forms are not yet complete.
+- 🟡  **Conditional Expressions**: Executable callback conditions `(?(?{ code })yes|no)` and optimistic predicates `(?(*{ code })yes|no)` execute through Joni; other condition forms are not yet complete.
 - ❌  **Extended Unicode Regex Features**: Some extended Unicode regex functionalities are not supported.
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
-- 🟡  **Embedded Code in Regex**: `(?{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Optimistic callbacks `(*{ code })` are not supported.
+- ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. `$^N` follows capture-close order independently of `$+`.
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
 - 🟡  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile, but runtime strings cannot manufacture trusted callback closures.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.

@@ -75,8 +75,8 @@ public class GlobalContext {
             String varName = "main::" + Character.toString(c - 'A' + 1);
             GlobalVariable.getGlobalVariable(varName);
         }
-        // $^N - last capture group closed (not yet implemented, but must be read-only)
-        GlobalVariable.globalVariables.put(encodeSpecialVar("N"), new RuntimeScalarReadOnly());
+        GlobalVariable.globalVariables.put(encodeSpecialVar("N"),
+                new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_CLOSED_PAREN_MATCH));
         // $^S - current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
         GlobalVariable.globalVariables.put("main::" + Character.toString('S' - 'A' + 1),
                 new ScalarSpecialVariable(ScalarSpecialVariable.Id.EVAL_STATE));

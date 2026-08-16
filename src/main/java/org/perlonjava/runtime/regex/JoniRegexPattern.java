@@ -421,6 +421,7 @@ final class JoniRegexPattern {
         }
 
         @Override public int groupCount() { return regex.numberOfCaptures(); }
+        @Override public int lastClosedCapture() { return matcher.lastClosedCapture(); }
         @Override public Map<String, Integer> namedGroups() { return namedGroups; }
         @Override public String patternDescription() { return sourcePattern; }
 
@@ -633,6 +634,9 @@ final class JoniRegexPattern {
                     state.lastCaptureGroups[group - 1] = input.substring(begin, end);
                 }
             }
+            int lastClosed = match.lastClosedCapture();
+            state.lastClosedCapture = lastClosed > 0 && lastClosed <= count
+                    ? state.lastCaptureGroups[lastClosed - 1] : null;
         }
 
         private int charOffset(int byteOffset) {

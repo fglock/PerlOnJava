@@ -52,6 +52,7 @@ public final class ScanEnvironment {
     int currMaxRegNum;
     boolean hasRecursion;
     boolean hasControlVerb;
+    boolean hasCallout;
     private int warningsFlag;
 
     int numPrecReadNotNodes;

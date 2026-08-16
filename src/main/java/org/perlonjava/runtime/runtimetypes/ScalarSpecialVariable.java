@@ -227,6 +227,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     String lastCapture = RuntimeRegex.lastCaptureString();
                     yield lastCapture != null ? makeRegexResultScalar(lastCapture) : scalarUndef;
                 }
+                case LAST_CLOSED_PAREN_MATCH -> {
+                    String lastCapture = PerlRuntime.current().regexState.lastClosedCapture;
+                    yield lastCapture != null ? makeRegexResultScalar(lastCapture) : scalarUndef;
+                }
                 case LAST_SUCCESSFUL_PATTERN -> PerlRuntime.current().regexState.lastSuccessfulPattern != null
                         ? new RuntimeScalar(PerlRuntime.current().regexState.lastSuccessfulPattern) : scalarUndef;
                 case LAST_REGEXP_CODE_RESULT -> {
@@ -527,6 +531,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         LAST_FH,    // Represents the last filehandle used in an input operation.
         INPUT_LINE_NUMBER, // Represents the current line number in an input operation.
         LAST_PAREN_MATCH, // The highest capture variable ($1, $2, ...) which has a defined value.
+        LAST_CLOSED_PAREN_MATCH, // $^N - most recently closed capture in the current match.
         LAST_SUCCESSFUL_PATTERN, // ${^LAST_SUCCESSFUL_PATTERN}
         LAST_REGEXP_CODE_RESULT, // $^R - Result of last (?{...}) code block in regex
         HINTS, // $^H - Compile-time hints (strict, etc.)

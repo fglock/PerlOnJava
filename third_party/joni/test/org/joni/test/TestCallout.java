@@ -79,6 +79,28 @@ public class TestCallout {
     }
 
     @Test
+    public void exposesMostRecentlyClosedCaptureIndependentlyOfHighestNumber() {
+        List<String> events = new ArrayList<>();
+        Regex regex = regex("((a)b)(?{=CALL:3})");
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                events.add(id + ":" + match.lastClosedCapture() + ":"
+                        + match.captureBegin(1) + "-" + match.captureEnd(1) + ":"
+                        + match.captureBegin(2) + "-" + match.captureEnd(2));
+                return CalloutResult.CONTINUE;
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        };
+
+        assertEquals(0, search(regex, "ab", handler));
+        assertEquals(Arrays.asList("3:1:0-2:0-1"), events);
+    }
+
+    @Test
     public void unwindsBacktrackedAndSuccessfulPathsExactlyOnce() {
         List<String> events = new ArrayList<>();
         Regex regex = regex("(a(?{=CALL:1})b|a(?{=CALL:2})c)");

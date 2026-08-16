@@ -32,6 +32,7 @@ public final class RuntimeRegexState {
     public boolean lastMatchUsedPFlag;
     public boolean lastMatchUsedBackslashK;
     public String[] lastCaptureGroups;
+    public String lastClosedCapture;
     public Map<String, List<String>> lastNamedCaptureGroups;
     public boolean lastMatchWasByteString;
     public boolean lastMatchResultsTainted;
@@ -85,6 +86,7 @@ public final class RuntimeRegexState {
         lastMatchUsedPFlag = false;
         lastMatchUsedBackslashK = false;
         lastCaptureGroups = null;
+        lastClosedCapture = null;
         lastNamedCaptureGroups = null;
         lastMatchWasByteString = false;
         lastMatchResultsTainted = false;
