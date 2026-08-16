@@ -630,8 +630,8 @@ record the observed output in this document as phases proceed.
 
 ### Next Steps
 
-1. Preserve callback identity in the remaining package-global array
-   interpolation variants and resolve exact diagnostic differences.
+1. Resolve exact runtime-eval source names, warning locations, and diagnostic
+   differences.
 2. Remove only capability policies justified by unchanged-source suite results.
 3. Extend focused differential coverage for tied and magical callback paths
    that throw or recurse.
@@ -639,7 +639,7 @@ record the observed output in this document as phases proceed.
 ### Blockers
 
 - `pat_re_eval.t` executes all 555 planned assertions on both backends, with
-  414 passing and 141 remaining semantic or diagnostic failures. The focused
+  420 passing and 135 remaining semantic or diagnostic failures. The focused
   mixed-source gate is 16/16, `reg_eval_scope.t` is 49/49, and Object::InsideOut
   is 6/6 on both backends.
 

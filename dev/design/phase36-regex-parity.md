@@ -252,7 +252,7 @@ The focused direct gates are `rxcode.t` 42/42, `reg_eval_scope.t` 49/49, and
 `dynamic_patterns.t` 12/12 on both backends. The unchanged Object::InsideOut
 dynamic-pattern test is 6/6 on both backends. `reg_eval.t` remains 5/8 because
 of three shared non-regex code-evaluation failures. `pat_re_eval.t` now executes
-all 555 planned assertions on both backends; 414 pass and 141 remain as focused
+all 555 planned assertions on both backends; 420 pass and 135 remain as focused
 semantic and diagnostic gaps.
 
 The final 2026-08-16 differential gate compared all 80 `perl5_t/t/re/` files
@@ -359,11 +359,18 @@ green without warning output.
     runtime compiler.
   - Expanded the standard-Perl differential gate to 16/16 on both backends;
     `pat_re_eval.t` improves from 334/555 to 414/555.
+- [x] Localized package-array callback preservation (2026-08-16)
+  - Refreshed cached interpreter registers after plain `our` variables are
+    localized, so assignments target the active scalar, array, or hash slot.
+  - Added a six-case standard-Perl localization/restoration gate that passes on
+    both backends.
+  - Closed all six remaining package-global array interpolation variants;
+    `pat_re_eval.t` improves to 420/555 on both backends.
 
 ### Next steps
 
-1. Preserve callback identity in the six remaining package-global array
-   interpolation variants, then address exact diagnostic parity.
+1. Address exact runtime-eval source names, warning locations, and diagnostic
+   parity in `pat_re_eval.t`.
 2. Close the three non-regex `reg_eval.t` code-evaluation failures.
 3. Continue the remaining Unicode alias and recursion-condition cases as
    focused post-Phase-36 compatibility slices.
