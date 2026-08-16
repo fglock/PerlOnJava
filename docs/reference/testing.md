@@ -83,9 +83,9 @@ For a native callback or ORM release, run the slow ecosystem gate as well:
 make test-threads-ecosystem
 ```
 
-It runs pinned Test2/Storable thread tests, unchanged Net::SSLeay thread tests
-61/62, and DBIx::Class through `jcpan --jobs 8`, with a hard one-hour outer
-bound.
+It runs pinned Test2, Storable, and Moose thread tests, unchanged Net::SSLeay
+thread tests 61/62, and DBIx::Class through `jcpan --jobs 8`, with a hard
+one-hour outer bound.
 See the [Perl threads reference](threads.md) for the compatibility contract and
 resource policies.
 

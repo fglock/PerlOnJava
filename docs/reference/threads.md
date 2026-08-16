@@ -141,8 +141,8 @@ Native callback and ORM compatibility form a separate slow ecosystem gate:
 make test-threads-ecosystem
 ```
 
-It runs pinned Storable and Test2 thread-bearing tests on both execution
-backends, the unchanged
+It runs pinned Storable, Test2, and Moose thread-bearing tests on both execution
+backends, preserving Moose's upstream TODO, followed by the unchanged
 Net::SSLeay 61/62 thread suites, and then executes
 `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`. Before those slow suites it
 compares the DBI thread-ownership contract with system Perl and runs it under

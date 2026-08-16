@@ -276,8 +276,8 @@ requests.
 5. Run `make test-threads-ecosystem` for native callback and ORM releases. It
    first runs pinned Test2 and Storable thread tests on both backends, then proves the DBI
    ownership contract under system Perl and all four PerlOnJava backend/carrier
-   modes before Net::SSLeay and DBIx::Class. Pin Moose 2.4000's upstream TODO
-   thread case before adding it; preserve its upstream TODO status exactly.
+   modes before Net::SSLeay and DBIx::Class. Moose 2.4000's unchanged upstream
+   thread stub is pinned and must retain its one-test TODO status exactly.
 6. Run `make test-threads-windows` on Windows CI. This shell-independent JUnit
    gate covers lifecycle, shared storage, graph cloning, resources, and DBI.
 7. Require every future native resource, I/O handle, and callback adapter to

@@ -76,7 +76,8 @@ THREAD_ECOSYSTEM_UPSTREAM_TESTS := \
 	perl5/cpan/Test-Simple/t/Legacy/threads.t \
 	perl5/cpan/Test-Simple/t/Legacy_And_Test2/thread_init_warning.t \
 	perl5/cpan/Test-Simple/t/Test2/acceptance/try_it_threads.t \
-	perl5/cpan/Test-Simple/t/modules/Require/Threads.t
+	perl5/cpan/Test-Simple/t/modules/Require/Threads.t \
+	dev/test-corpora/Moose-2.4000/t/todo_tests/moose_and_threads.t
 
 all: build
 
@@ -203,6 +204,10 @@ check-thread-ecosystem-test-sources:
 			exit 1; \
 		fi; \
 	done
+	@printf '%s  %s\n' \
+		4c7b58942d4c95f274be4bcc631981071688b5a11cae3bf132eb80e16c856a0e \
+		dev/test-corpora/Moose-2.4000/t/todo_tests/moose_and_threads.t \
+		| shasum -a 256 -c -
 
 # Permanent Perl ithread compatibility gate used by Ubuntu pull-request CI.
 # Full upstream distributions run on both backends with the default virtual
