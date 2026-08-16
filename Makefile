@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
 THREAD_PLATFORM_TESTS := \
@@ -46,12 +46,13 @@ THREAD_CORE_DIRECT_SERIAL := \
 	perl5_t/t/re/pat_advanced.t \
 	perl5_t/t/re/pat_psycho.t \
 	perl5_t/t/re/regexp_qr_embed.t
-THREAD_CORE_WRAPPER_PARALLEL := \
+THREAD_CORE_NONREGEX_WRAPPERS := \
 	perl5_t/t/class/threads.t \
 	perl5_t/t/op/index_thr.t \
 	perl5_t/t/op/substr_thr.t \
 	perl5_t/t/op/threads-dirh.t \
-	perl5_t/t/op/threads.t \
+	perl5_t/t/op/threads.t
+THREAD_CORE_REGEX_WRAPPER_PARALLEL := \
 	perl5_t/t/re/pat_re_eval_thr.t \
 	perl5_t/t/re/pat_rt_report_thr.t \
 	perl5_t/t/re/pat_special_cc_thr.t \
@@ -65,7 +66,7 @@ THREAD_CORE_WRAPPER_SERIAL := \
 	perl5_t/t/re/pat_advanced_thr.t \
 	perl5_t/t/re/pat_psycho_thr.t \
 	perl5_t/t/re/regexp_qr_embed_thr.t
-THREAD_CORE_TESTS := $(THREAD_CORE_DIRECT_PARALLEL) $(THREAD_CORE_DIRECT_SERIAL) $(THREAD_CORE_WRAPPER_PARALLEL) $(THREAD_CORE_WRAPPER_SERIAL)
+THREAD_CORE_TESTS := $(THREAD_CORE_DIRECT_PARALLEL) $(THREAD_CORE_DIRECT_SERIAL) $(THREAD_CORE_NONREGEX_WRAPPERS) $(THREAD_CORE_REGEX_WRAPPER_PARALLEL) $(THREAD_CORE_WRAPPER_SERIAL)
 THREAD_ECOSYSTEM_UPSTREAM_TESTS := \
 	perl5/dist/Storable/t/threads.t \
 	perl5/cpan/Test-Simple/t/Legacy/Regression/683_thread_todo.t \
@@ -213,15 +214,19 @@ check-thread-ecosystem-test-sources:
 # Full upstream distributions run on both backends with the default virtual
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
 # runs on the platform carrier. Reports are retained under build/reports/threads.
-test-threads: check-java-gradle check-thread-test-sources
+test-thread-tooling:
+	timeout 30 prove dev/tools/tests/*.t
+
+test-threads: check-java-gradle check-thread-test-sources test-thread-tooling
 	@mkdir -p build/reports/threads
 	JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/jvm-virtual.json $(THREAD_DIST_DIRS)
 	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/interpreter-virtual.json $(THREAD_DIST_DIRS)
 	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/platform-focused.json $(THREAD_PLATFORM_TESTS)
 
-# Full same-commit direct/thread Perl-core matrix. This target is deliberately
-# strict: partial TAP, TODO-free failures, timeouts, and incomplete files block
-# claiming complete core-wrapper compatibility.
+# Full same-commit direct/thread Perl-core matrix. Non-regex thread files and
+# supported regex anchors remain strict. Partial direct regex files are owned by
+# Phase 36; their unchanged wrappers must emit at least the same TAP and may not
+# add failures, incompleteness, timeouts, or errors.
 test-threads-core: check-java-gradle check-thread-core-test-sources
 	@status=0; \
 	JPERL_THREAD_MODE=virtual $(MAKE) test-threads-core-mode THREAD_CORE_REPORT_PREFIX=core-jvm-virtual || status=1; \
@@ -237,16 +242,18 @@ test-threads-core-platform: check-java-gradle check-thread-core-test-sources
 test-threads-core-mode:
 	@mkdir -p build/reports/threads/core; \
 	status=0; \
-	perl dev/tools/perl_test_runner.pl --strict-exit --jobs 4 --timeout 600 --output build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-direct.json $(THREAD_CORE_DIRECT_PARALLEL) || status=1; \
+	perl dev/tools/perl_test_runner.pl --jobs 4 --timeout 600 --output build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-direct.json $(THREAD_CORE_DIRECT_PARALLEL) || status=1; \
 	for file in $(THREAD_CORE_DIRECT_SERIAL); do \
 		name=$$(basename "$$file" .t); \
-		perl dev/tools/perl_test_runner.pl --strict-exit --jobs 1 --timeout 900 --output "build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-direct-$$name.json" "$$file" || status=1; \
+		perl dev/tools/perl_test_runner.pl --jobs 1 --timeout 900 --output "build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-direct-$$name.json" "$$file" || status=1; \
 	done; \
-	perl dev/tools/perl_test_runner.pl --strict-exit --jobs 4 --timeout 600 --output build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-wrappers.json $(THREAD_CORE_WRAPPER_PARALLEL) || status=1; \
+	perl dev/tools/perl_test_runner.pl --strict-exit --jobs 4 --timeout 600 --output build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-nonregex.json $(THREAD_CORE_NONREGEX_WRAPPERS) || status=1; \
+	perl dev/tools/perl_test_runner.pl --jobs 4 --timeout 600 --output build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-wrappers.json $(THREAD_CORE_REGEX_WRAPPER_PARALLEL) || status=1; \
 	for file in $(THREAD_CORE_WRAPPER_SERIAL); do \
 		name=$$(basename "$$file" .t); \
-		perl dev/tools/perl_test_runner.pl --strict-exit --jobs 1 --timeout 900 --output "build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-wrapper-$$name.json" "$$file" || status=1; \
+		perl dev/tools/perl_test_runner.pl --jobs 1 --timeout 900 --output "build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-wrapper-$$name.json" "$$file" || status=1; \
 	done; \
+	perl dev/tools/check_thread_core_parity.pl build/reports/threads/core $(THREAD_CORE_REPORT_PREFIX) || status=1; \
 	exit $$status
 
 # Shell-independent focused gate for windows-latest. It exercises the runtime

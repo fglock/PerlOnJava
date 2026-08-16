@@ -65,6 +65,23 @@ public class DBI extends PerlModuleBase {
             dbi.registerMethod("data_sources", null);
             dbi.registerMethod("get_info", null);
             dbi.registerMethod("_handle_owned_by_current_runtime", null);
+
+            // Keep stable private entry points for the Perl wrappers in DBI.pm.
+            // Capturing \&DBI::finish (and the other public names) while the
+            // same file replaces those globs is sensitive to compiler/backend
+            // materialization order.  Private aliases make the Java-to-Perl
+            // handoff explicit and identical for JVM and interpreter code.
+            dbi.registerMethod("_jdbc_connect", "connect", null);
+            dbi.registerMethod("_jdbc_prepare", "prepare", null);
+            dbi.registerMethod("_jdbc_execute", "execute", null);
+            dbi.registerMethod("_jdbc_finish", "finish", null);
+            dbi.registerMethod("_jdbc_disconnect", "disconnect", null);
+            dbi.registerMethod("_jdbc_ping", "ping", null);
+            dbi.registerMethod("_jdbc_begin_work", "begin_work", null);
+            dbi.registerMethod("_jdbc_commit", "commit", null);
+            dbi.registerMethod("_jdbc_rollback", "rollback", null);
+            dbi.registerMethod("_jdbc_fetchrow_arrayref", "fetchrow_arrayref", null);
+            dbi.registerMethod("_jdbc_fetchrow_hashref", "fetchrow_hashref", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }

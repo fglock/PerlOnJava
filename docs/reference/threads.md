@@ -17,9 +17,11 @@ The bundled compatibility surface is:
 The unchanged upstream test distributions for these four modules contain 64
 files and 1,891 assertions. They pass on the JVM compiler and bytecode
 interpreter with Java virtual and platform carriers. This is the delivered
-public-module milestone. In the second milestone, all five non-regex Perl core
-thread files pass 849/849 on both backends and carriers; the remaining work is
-the twelve regex wrappers and their Phase 36 direct companions.
+public-module milestone. The source-first core-wrapper gate is implemented: all
+five non-regex Perl core thread files pass 849/849 on both backends and
+carriers, and the twelve regex wrappers are compared with their same-commit
+direct companions. Final four-mode activation waits for a direct interpreter
+executable-regex timeout in the independent Phase 36/Joni project.
 
 ## Snapshot and Shared Storage
 
@@ -106,7 +108,9 @@ make test-threads
 
 The clone is required only when an adjacent `perl5/` source tree is not already
 present. CI performs a sparse checkout of the four distributions and their core
-test harness at this exact compatibility-corpus commit.
+test harness at this exact compatibility-corpus commit. The gate also proves
+that a timed-out test cannot leave a nested `fresh_perl` JVM running after its
+parent exits.
 
 The release-only regex anchors also require the imported `perl5_t/t/re` corpus;
 run `perl dev/import-perl5/sync.pl` when that gitignored tree is absent.
@@ -124,16 +128,19 @@ make test-threads-core
 make test-threads-core-platform
 ```
 
-Direct companions run before `_thr.t` wrappers on the same commit. Partial TAP,
-timeouts, and incomplete files fail the target. Resource-sensitive regex
-families run serially so their upstream temporary files cannot collide.
+Direct companions run before `_thr.t` wrappers on the same commit. The
+non-regex thread files remain strict. For partial direct regex files, the parity
+checker rejects lost TAP, added failures or incompleteness, timeouts, and
+execution errors in the wrapper; an independently tracked direct Phase 36 gap
+does not become a thread failure. Resource-sensitive regex families run
+serially so their upstream temporary files cannot collide.
 
-Both targets use eight test jobs, a hard 300-second timeout per file, and write
-JSON reports under `build/reports/threads/`. Timing-sensitive join coverage is
-given an exclusive runner slot, and strict exit mode makes any non-passing file
-fail the gate. The release target also runs the post-Joni regex-thread anchors
-on both execution backends: five files and 48 assertions per backend, with a
-600-second per-file bound.
+The core targets use four parallel jobs with a hard 600-second bound, and a
+900-second serialized bound for resource-sensitive families. JSON reports are
+written under `build/reports/threads/core/`. The public-module target uses eight
+jobs and a 300-second bound. The release target also runs the post-Joni
+regex-thread anchors on both execution backends: five files and 48 assertions
+per backend, with a 600-second per-file bound.
 
 Native callback and ORM compatibility form a separate slow ecosystem gate:
 
@@ -147,6 +154,12 @@ Net::SSLeay 61/62 thread suites, and then executes
 `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`. Before those slow suites it
 compares the DBI thread-ownership contract with system Perl and runs it under
 both PerlOnJava backends with virtual and platform carriers.
+
+JDBC primitives are retained under private DBI entry points before the public
+Perl methods are wrapped. This makes `prepare`, `execute`, `finish`, transaction,
+fetch, and disconnect dispatch identical on the JVM and interpreter backends;
+the wrappers do not depend on when a compiler materializes a replaced public
+CODE glob.
 
 The callout-enabled Joni matcher and executable regex callbacks are integrated.
 Remaining direct regex-language compatibility is maintained in the separate
