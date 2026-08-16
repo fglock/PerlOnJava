@@ -7,7 +7,10 @@ BEGIN {
     use constant IS_VMS         => $^O eq 'VMS'                       ? 1 : 0;
     use constant IS_WIN32       => $^O eq 'MSWin32'                   ? 1 : 0;
     use constant IS_HPUX        => $^O eq 'hpux'                      ? 1 : 0;
-    use constant IS_WIN98       => (IS_WIN32 and !Win32::IsWinNT())   ? 1 : 0;
+    use constant IS_WIN98       => (IS_WIN32 and do {
+        require Win32;
+        !Win32::IsWinNT();
+    }) ? 1 : 0;
     use constant IS_PERLONJAVA  => do {
         require Config;
         $Config::Config{perlonjava} ? 1 : 0;

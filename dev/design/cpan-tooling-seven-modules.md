@@ -93,11 +93,15 @@ network/socket tests are run with loopback access where required.
   - `SQL::Translator::Producer::GoogleBigQuery`: 5 files, 8 tests passed.
   - `IO::AsyncX::Sendfile`: 4 files, 177 tests passed, including parallel
     Unix-domain-socket transfers.
+- [x] Address Windows CI compatibility (2026-08-16)
+  - Added the standard `Win32::IsWinNT` predicate to the bundled Win32 shim so
+    IPC::Cmd can select its modern Windows process backend during compilation,
+    and load the shim before performing that capability check.
 
 ### Next Steps
 
-1. Open the pull request.
-2. Verify all CI checks.
+1. Verify the follow-up CI run on pull request #985.
+2. Merge after review.
 
 ### Open Questions
 
