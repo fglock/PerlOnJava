@@ -298,6 +298,8 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
     interpolated, and runtime-source callbacks.
   - Preserved callback source locations, enclosing `__SUB__`, and cleanup after
     warning, exception, alarm, and timeout-adjacent exits.
+  - Delivered an alarm owner's queued signal before cancelling the regex worker,
+    preventing the worker from consuming and discarding the owner's exception.
   - Corrected interpreter caller metadata after a preceding package-scoped
     callback; `reg_eval_scope.t` improved from 43/49 to 47/49 and now matches
     the JVM backend.

@@ -2325,8 +2325,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             throw new PerlCompilerException("Regex matching failed: " + cause.getMessage());
         } catch (InterruptedException e) {
-            // Thread was interrupted - clean up and check signals
-            future.cancel(true);
+            // The alarm owner was interrupted after its signal was queued. Deliver
+            // that signal before cancelling the regex worker: cancellation also
+            // interrupts the worker, and a callback blocked in select/sleep could
+            // otherwise consume the owner's queued ALRM and strand its exception
+            // inside this already-cancelled Future. The finally block owns worker
+            // cancellation for both normal-returning and throwing handlers.
             PerlSignalQueue.checkPendingSignals();
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();
