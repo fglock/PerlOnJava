@@ -3,7 +3,7 @@
 ## Status
 
 - **Project status:** Active parallel project
-- **Current stage:** Stage 36.4 — callback scope and remaining direct parity
+- **Current stage:** Stage 36.6 — remaining declarative parity
 - **Parent plan:** `dev/design/concurrency.md`
 - **Detailed callback design:** `dev/design/executable-regex-callbacks.md`
 - **Integration rule:** Direct regex semantics are implemented first. Thread
@@ -238,7 +238,7 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 ## Progress Tracking
 
-### Current Status: Stage 36.5 in progress
+### Current Status: Stage 36.6 in progress
 
 The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
 seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 on both
@@ -281,7 +281,7 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
 - [x] Stage 36.2: Structured frontend and callback templates
 - [x] Stage 36.3: Plain callbacks and provisional match state
 - [x] Stage 36.4: Backtracking, dynamic scope, and conditions
-- [ ] Stage 36.5: Dynamic patterns and recursive execution
+- [x] Stage 36.5: Dynamic patterns and recursive execution
 - [ ] Stage 36.6: Remaining declarative parity
 - [ ] Stage 36.7: Integration and release
 
@@ -310,25 +310,30 @@ properties, restoring `regexp_unicode_prop.t` to its 1,031/1,110 baseline.
     an executed callback path even when the matcher later abandons that path.
   - Kept `$^R` matcher-owned so it follows the chosen path, and preserved
     readonly failure without mutating the protected value.
+- [x] Object::InsideOut dynamic-pattern gate (2026-08-16)
+  - Corrected named-sub redefinition when the existing CV is an
+    `InterpretedCode` wrapper; the parser now uses the polymorphic `defined()`
+    contract instead of inspecting only JVM implementation fields.
+  - Preserved saved references to the old CV while publishing the replacement
+    into the named slot, including runtime typeglob wrappers and `do FILE`.
+  - Restored pristine Object::InsideOut 4.05 `t/17-dynamic.t` from a 180-second
+    zero-assertion timeout to 6/6 on both JVM and interpreter backends.
+  - Ran the unchanged 67-file distribution in 51 seconds: 876 assertions were
+    emitted and 851 passed. The 25 remaining assertion failures are confined to
+    shared-object, lvalue, overload, and readonly tests and are not regex or
+    timeout failures.
 
 ### Next steps
 
-1. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
-   complete and proceed to the remaining declarative parity slices.
-2. In Stage 36.6, close the two shared direct gaps in `reg_eval_scope.t`: the
+1. In Stage 36.6, close the two shared direct gaps in `reg_eval_scope.t`: the
    Unicode warning diagnostic and the legacy `qr/\\(?{` compile diagnostic.
+2. Add the pure-pattern engine recursion bound, then run the direct/thread
+   regex release matrix before Stage 36.7 integration.
 
 ### Open blockers
 
 - The Unicode warning and legacy `qr/\\(?{` diagnostic remain shared direct
   gaps, leaving both backends at 47/49.
-- Dynamic `(??{ EXPR })` execution is integrated, but its full Stage 36.5 CPAN
-  and unchanged-core exit matrix is not yet recorded. The focused matrix is
-  12/12 on both backends, while Object::InsideOut 4.05 `t/17-dynamic.t` prints
-  its six-test plan but reaches no assertion before a 180-second hard timeout
-  on either backend. The full `--jobs 8` suite likewise made no TAP progress in
-  eight CPU-bound early files for more than seven minutes and was terminated as
-  one exact process tree.
 - Pure-pattern deep recursion still needs an engine-owned limit; callback
   re-entry is now bounded without relying on the Java stack.
 - Partial direct core tests still contain diagnostic, parser, Unicode, and

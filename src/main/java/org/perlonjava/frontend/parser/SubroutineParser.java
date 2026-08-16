@@ -1299,10 +1299,11 @@ public class SubroutineParser {
         if (codeRef.value instanceof RuntimeCode existingCode) {
             // Check if the existing code has actual implementation OR pending compilation
             // compilerSupplier != null means there's a lazy definition waiting to be compiled
-            isRedefinition = existingCode.subroutine != null 
-                    || existingCode.methodHandle != null
-                    || existingCode.codeObject != null
-                    || existingCode.compilerSupplier != null;
+            // InterpretedCode stores its executable body outside the base
+            // RuntimeCode implementation fields and overrides defined().  Use
+            // that polymorphic contract so a later named declaration replaces
+            // an interpreted wrapper just as it replaces a JVM-compiled CV.
+            isRedefinition = existingCode.defined() || existingCode.codeObject != null;
             if (isRedefinition) {
                 oldPrototype = existingCode.prototype;
                 // Previous sub was compile-time constant iff prototype is "()". (Perl stores "()", not "")
