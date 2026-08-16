@@ -5908,6 +5908,11 @@ public class BytecodeCompiler implements Visitor {
         subCode.attributes = node.attributes;
         subCode.packageName = getCurrentPackage();
         subCode.isTryExpressionWrapper = node.getBooleanAnnotation("tryExpressionWrapper");
+        Object callbackSourceLine = node.getAnnotation("regexCallbackSourceLine");
+        if (callbackSourceLine instanceof Number number) {
+            subCode.cvStartLine = number.intValue();
+            subCode.cvStartFile = sourceName;
+        }
 
         // Copy the isMapGrepBlock flag to the runtime code object so that
         // ListOperators.map/grep and RuntimeCode.apply() can detect non-local returns

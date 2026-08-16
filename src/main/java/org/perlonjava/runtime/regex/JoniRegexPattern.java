@@ -606,7 +606,7 @@ final class JoniRegexPattern {
                 // path observes local() values; unwind() still owns the token's
                 // pre-callback level and rolls the frame back on backtracking.
                 DynamicVariableManager.resumeSuspended(frame.states());
-                rejectEscapedControlFlow(frame.result());
+                rejectEscapedControlFlow(callback, frame.result());
                 RuntimeScalar result = frame.result().scalar();
                 boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
                 if (block) rVariable.set(result);
@@ -676,15 +676,18 @@ final class JoniRegexPattern {
             }
         }
 
-        private static void rejectEscapedControlFlow(RuntimeList result) {
+        private static void rejectEscapedControlFlow(RuntimeRegexCallback callback,
+                                                     RuntimeList result) {
             if (!(result instanceof RuntimeControlFlowList flow)) return;
             ControlFlowMarker marker = flow.marker;
             if (marker.type == ControlFlowType.GOTO
                     || marker.type == ControlFlowType.TAILCALL) {
-                // The runtime location is the regex pseudo-block boundary (and
-                // can differ from the marker's inner goto location), so let the
-                // exception formatter attach it.
-                throw new PerlCompilerException("Can't \"goto\" out of a pseudo block");
+                String file = callback.code.cvStartFile != null
+                        ? callback.code.cvStartFile : marker.fileName;
+                int line = callback.code.cvStartLine > 0
+                        ? callback.code.cvStartLine : marker.lineNumber;
+                throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
+                        + file + " line " + line + ".\n");
             }
             // Preserve the control op's own location. The terminating newline
             // tells PerlCompilerException this is already fully formatted.

@@ -388,7 +388,7 @@ my @copy = @{$z};         # ERROR
 ### Missing Regular Expression Features
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
-- 🟡  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, and nested alternatives participate in outer backtracking without changing outer grouping or capture numbering. Deep dynamic recursion still needs an engine-owned depth limit that does not depend on the Java call stack.
+- 🟡  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, and nested alternatives participate in outer backtracking without changing outer grouping or capture numbering. Callback re-entry has an engine-owned depth ceiling; deep pure-pattern recursion still needs a limit that does not depend on the Java call stack.
 - 🟡  **Backtracking Control Verbs**: `(*ACCEPT)` executes through Joni with top-level, subpattern-call, positive-lookahead, and dynamic-pattern boundary semantics. `(*FAIL)`/`(*F)` and atomic groups `(?>...)` are supported. `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` are not supported.
 - ✅  **Regex Definitions**: `(?(DEFINE)...)` containers and numbered or named calls to their subpatterns execute through Joni.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
@@ -397,7 +397,7 @@ my @copy = @{$z};         # ERROR
 - 🟡  **Conditional Expressions**: Executable callback conditions `(?(?{ code })yes|no)` and optimistic predicates `(?(*{ code })yes|no)` execute through Joni; other condition forms are not yet complete.
 - ❌  **Extended Unicode Regex Features**: Some extended Unicode regex functionalities are not supported.
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
-- ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. `$^N` follows capture-close order independently of `$+`.
+- ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Callback `local` frames follow matcher paths, and escaped loop control or `goto` stops at the callback pseudo-block boundary. `$^N` follows capture-close order independently of `$+`.
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
 - 🟡  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile, but runtime strings cannot manufacture trusted callback closures.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
