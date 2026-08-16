@@ -381,6 +381,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode) {
+        return compile(patternString, modifiers, lexicalDebugMode, 0);
+    }
+
+    private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
+                                        int trustedCalloutCount) {
         modifiers = stripDebugMarkers(modifiers);
         // Dynamic/interpolated qr// compilation can begin during ordinary
         // execution, outside the Perl compiler lock. User-defined Unicode
@@ -390,7 +395,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexFlags preloadFlags = fromModifiers(modifiers, patternString);
         UnicodeResolver.preloadUserDefinedProperties(
                 patternString, preloadFlags.isCaseInsensitive());
-        return compileSynchronized(patternString, modifiers, lexicalDebugMode);
+        return compileSynchronized(patternString, modifiers, lexicalDebugMode, trustedCalloutCount);
     }
 
     /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
@@ -411,7 +416,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static void validateLiteralSyntax(String patternString, String modifiers) {
         try {
-            compileSynchronized(patternString, stripDebugMarkers(modifiers), debugMode(modifiers));
+            compileSynchronized(patternString, stripDebugMarkers(modifiers), debugMode(modifiers), 0);
         } catch (PerlJavaUnimplementedException unsupported) {
             String message = unsupported.getMessage();
             if (message != null && (message.contains("Unclosed character class")
@@ -425,7 +430,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private static synchronized RuntimeRegex compileSynchronized(
-            String patternString, String modifiers, int lexicalDebugMode) {
+            String patternString, String modifiers, int lexicalDebugMode,
+            int trustedCalloutCount) {
         // Debug logging
         if (DEBUG_REGEX) {
             System.err.println("RuntimeRegex.compile: pattern=" + patternString + " modifiers=" + modifiers);
@@ -463,6 +469,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // regex debugging also changes the compiled representation.
         String cacheKey = originalPatternString + "/" + modifiers
                 + "#debug=" + lexicalDebugMode
+                + "#callouts=" + trustedCalloutCount
                 + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
 
         // Check if the regex is already cached
@@ -524,7 +531,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             "(??{...}) recursive/dynamic regex patterns not implemented\n");
                 }
                 if (usesRecursiveBackend) {
-                    regex.recursivePattern = new JoniRegexPattern(compilePatternString, regex.regexFlags);
+                    regex.recursivePattern = new JoniRegexPattern(compilePatternString,
+                            regex.regexFlags, trustedCalloutCount);
                     regex.deferredUserDefinedUnicodeProperties = false;
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch();
                     regex.hasBranchReset = false;
@@ -1149,7 +1157,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         validateTaintedPatternSecurity(patternString);
 
         if (patternString.value instanceof RuntimeRegexTemplate template) {
-            RuntimeRegex regex = compile(template.pattern(), modifierStr, callSiteDebugMode).cloneTracked();
+            RuntimeRegex regex = compile(template.pattern(), modifierStr, callSiteDebugMode,
+                    template.callbacks().size()).cloneTracked();
             regex.executableCallbacks = template.callbacks();
             return new RuntimeScalar(regex).propagateTaint(patternString);
         }

@@ -5,7 +5,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 /** A parser-created executable segment in a regex template. */
 public final class RuntimeRegexCallback {
-    public enum Kind { BLOCK, CONDITION }
+    public enum Kind { BLOCK, CONDITION, DYNAMIC }
 
     final RuntimeCode code;
     final Kind kind;

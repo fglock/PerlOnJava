@@ -23,6 +23,14 @@ package org.joni;
 public interface CalloutHandler {
     CalloutResult execute(int calloutId, MatchView match);
 
+    /**
+     * Resolve a match-time dynamic subprogram. Implementations that do not
+     * support dynamic programs retain the fail-fast default.
+     */
+    default DynamicPatternResult executeDynamic(int calloutId, MatchView match) {
+        throw new UnsupportedOperationException("dynamic regex callouts are not supported");
+    }
+
     void unwind(Object backtrackToken);
 
     /** Complete a token on a successful path. The default preserves the original cleanup contract. */

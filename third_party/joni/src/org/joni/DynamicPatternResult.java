@@ -17,32 +17,22 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.joni.ast;
+package org.joni;
 
-/** Zero-width internal node carrying an engine callout-table index. */
-public final class CalloutNode extends StringNode {
-    public final int calloutId;
-    public final boolean dynamic;
+/** Runtime-neutral result of resolving a dynamic regex callout. */
+public final class DynamicPatternResult {
+    private final Regex regex;
+    private final CalloutHandler calloutHandler;
+    private final Object backtrackToken;
 
-    public CalloutNode(int calloutId) {
-        this(calloutId, false);
+    public DynamicPatternResult(Regex regex, CalloutHandler calloutHandler, Object backtrackToken) {
+        if (regex == null) throw new NullPointerException("regex");
+        this.regex = regex;
+        this.calloutHandler = calloutHandler;
+        this.backtrackToken = backtrackToken;
     }
 
-    public CalloutNode(int calloutId, boolean dynamic) {
-        super(0);
-        this.calloutId = calloutId;
-        this.dynamic = dynamic;
-        setRaw();
-        setDontGetOptInfo();
-    }
-
-    @Override
-    public String getName() {
-        return dynamic ? "DynamicCallout" : "Callout";
-    }
-
-    @Override
-    public String toString(int level) {
-        return "\n  id: " + calloutId;
-    }
+    public Regex getRegex() { return regex; }
+    public CalloutHandler getCalloutHandler() { return calloutHandler; }
+    public Object getBacktrackToken() { return backtrackToken; }
 }

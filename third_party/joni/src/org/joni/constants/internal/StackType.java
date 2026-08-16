@@ -46,6 +46,7 @@ public interface StackType {
     int ABSENT_POS                    = 0x0b00;  /* for absent */
     int ABSENT                        = 0x0c00;  /* absent inner loop marker */
     int CALLOUT                       = 0x0d00;  /* match-time callback unwind token */
+    int DYNAMIC_ALT                   = 0x0004;  /* resumable nested-program alternative */
 
     /* stack type check mask */
     int MASK_POP_USED                 = 0x00ff;

@@ -73,6 +73,7 @@ public interface OPSize {
     int ABSENT_END                    = OPCODE;
     int CALLOUT                      = (OPCODE + MEMNUM);
     int CALLOUT_CONDITION            = (OPCODE + MEMNUM + RELADDR);
+    int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM);
 
     // #ifdef USE_COMBINATION_EXPLOSION_CHECK
     int STATE_CHECK                   = (OPCODE + STATE_CHECK_NUM);

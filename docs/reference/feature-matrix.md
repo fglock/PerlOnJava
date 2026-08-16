@@ -388,21 +388,20 @@ my @copy = @{$z};         # ERROR
 ### Missing Regular Expression Features
 
 - ❌  **Dynamically-scoped regex variables**: Regex variables are not dynamically-scoped.
-- 🟡  **Recursive Patterns**: `(?R)` and `(?0)` execute through Joni. Constant `(??{ code })` expressions fold to a pattern; runtime-dependent dynamic patterns remain unsupported.
-- 🟡  **Backtracking Control Verbs and Definitions**: `(?(DEFINE)...)` and named recursive definitions execute through Joni. Control verbs such as `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` are not yet complete. Atomic groups `(?>...)` are supported as noted above.
+- 🟡  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, and nested alternatives participate in outer backtracking without changing outer grouping or capture numbering. Deep dynamic recursion still needs an engine-owned depth limit that does not depend on the Java call stack.
+- ❌  **Backtracking Control Verbs**: `(*ACCEPT)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` are not supported. `(*FAIL)`/`(*F)` and atomic groups `(?>...)` are supported.
+- ✅  **Regex Definitions**: `(?(DEFINE)...)` containers and numbered or named calls to their subpatterns execute through Joni.
 - ❌  **Lookbehind Assertions**: Variable-length negative or positive lookbehind assertions, e.g., `(?<=...)` or `(?<!...)`, are not supported.
-- ❌  **Branch Reset Groups**: Use of `(?|...)` to reset group numbering across branches is not supported.
+- ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
 - ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
 - 🟡  **Conditional Expressions**: Executable callback conditions `(?(?{ code })yes|no)` execute through Joni; other condition forms are not yet complete.
 - ❌  **Extended Unicode Regex Features**: Some extended Unicode regex functionalities are not supported.
 - ❌  **Extended Grapheme Clusters**: Matching with `\X` for extended grapheme clusters is not supported.
-- 🟡  **Embedded Code in Regex**: `(?{ code })` and executable callback conditions run as lexical closures in Joni with provisional captures, `$^R`, and backtracking unwind. Runtime-dependent `(??{ code })` remains unsupported.
-- 🟡  **Regex Debugging**: Lexical `use/no re 'debug'` and `debugcolor` state is runtime-owned and produces a stable compile/execution trace on both backends and in child threads. Exact Perl optimizer opcodes and diagnostic wording are not complete.
-- ❌  **Regex Optimizations**: Using `use re 'eval';` for runtime regex compilation is not supported.
+- 🟡  **Embedded Code in Regex**: `(?{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Optimistic callbacks `(*{ code })` are not supported.
+- ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
+- 🟡  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile, but runtime strings cannot manufacture trusted callback closures.
 - ❌  **Regex Compilation Flags**: Setting default regex flags with `use re '/flags';` is not supported.
-- ❌  **Stricter named captures**
-  - ❌  **No underscore in named captures** `(?<test_field>test)` the name in named captures cannot have underscores.
-  - ❌  **No duplicate named capture groups**: In Java regular expression engine, each named capturing group must have a unique name within a regular expression.
+- ✅  **Perl Named Captures**: Names may contain underscores, and duplicate named groups preserve Perl-style `%+`/`%-` and backreference behavior.
 
 
 ## Statements and Special Operators

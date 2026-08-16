@@ -146,7 +146,7 @@ final class Analyser extends Parser {
 
         regex.clearOptimizeInfo();
 
-        if (!Config.DONT_OPTIMIZE) setOptimizedInfoFromTree(root);
+        if (Config.OPTIMIZE) setOptimizedInfoFromTree(root);
 
         env.memNodes = null;
 
@@ -474,7 +474,8 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.STR:
-            min = ((StringNode)node).length();
+            min = node instanceof CalloutNode callout && callout.dynamic
+                    ? 0 : ((StringNode)node).length();
             break;
 
         case NodeType.CTYPE:
@@ -552,7 +553,8 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.STR:
-            max = ((StringNode)node).length();
+            max = node instanceof CalloutNode callout && callout.dynamic
+                    ? MinMaxLen.INFINITE_DISTANCE : ((StringNode)node).length();
             break;
 
         case NodeType.CTYPE:
@@ -2058,6 +2060,11 @@ final class Analyser extends Parser {
 
         case NodeType.STR: {
             StringNode sn = (StringNode)node;
+
+            if (sn instanceof CalloutNode callout && callout.dynamic) {
+                opt.length.set(0, MinMaxLen.INFINITE_DISTANCE);
+                break;
+            }
 
             int slen = sn.length();
 

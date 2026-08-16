@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
 
 /** Runtime interpolation result that keeps executable regex callbacks out of strings. */
 public final class RuntimeRegexTemplate {
-    private static final Pattern CALLOUT_ID = Pattern.compile("\\(\\?\\{=CALL:(\\d+)\\}\\)");
+    private static final Pattern CALLOUT_ID = Pattern.compile(
+            "\\(\\?\\{=(CALL|DYNAMIC):(\\d+)\\}\\)");
     private final String pattern;
     private final List<RuntimeRegexCallback> callbacks;
 
@@ -39,6 +40,8 @@ public final class RuntimeRegexTemplate {
                 callbacks.add(callback);
                 if (callback.kind == RuntimeRegexCallback.Kind.CONDITION) {
                     pattern.append("?{=CALL:").append(id).append("})");
+                } else if (callback.kind == RuntimeRegexCallback.Kind.DYNAMIC) {
+                    pattern.append("(?{=DYNAMIC:").append(id).append("})");
                 } else {
                     pattern.append("(?{=CALL:").append(id).append("})");
                 }
@@ -66,11 +69,13 @@ public final class RuntimeRegexTemplate {
         Matcher matcher = CALLOUT_ID.matcher(embeddedPattern);
         StringBuilder remapped = new StringBuilder();
         while (matcher.find()) {
-            int oldId = Integer.parseInt(matcher.group(1));
+            String kind = matcher.group(1);
+            int oldId = Integer.parseInt(matcher.group(2));
             if (oldId < 0 || oldId >= embeddedCallbacks.size()) {
                 throw new IllegalArgumentException("Invalid embedded regex callout ID " + oldId);
             }
-            matcher.appendReplacement(remapped, "(?{=CALL:" + (offset + oldId) + "})");
+            matcher.appendReplacement(remapped,
+                    "(?{=" + kind + ":" + (offset + oldId) + "})");
         }
         matcher.appendTail(remapped);
         pattern.append(remapped);

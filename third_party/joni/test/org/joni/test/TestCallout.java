@@ -30,6 +30,7 @@ import java.util.List;
 import org.jcodings.specific.ASCIIEncoding;
 import org.joni.CalloutHandler;
 import org.joni.CalloutResult;
+import org.joni.DynamicPatternResult;
 import org.joni.MatchView;
 import org.joni.Matcher;
 import org.joni.Option;
@@ -226,6 +227,35 @@ public class TestCallout {
         assertThrows(TimeoutException.class,
                 () -> matcher.searchInterruptible(0, input.length, Option.NONE));
         assertEquals(Arrays.asList("execute:1", "unwind:1"), events);
+    }
+
+    @Test
+    public void dynamicProgramAlternativesBacktrackIntoTheOuterSuffix() {
+        List<String> events = new ArrayList<>();
+        Regex outer = regex("\\A(?{=DYNAMIC:1})b\\z");
+        Regex nested = regex("ab(?{=CALL:2})|a");
+        CalloutHandler nestedHandler = recordingHandler(events, false);
+        CalloutHandler outerHandler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callback not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                events.add("dynamic:" + id + ":" + match.currentBytePosition());
+                return new DynamicPatternResult(nested, nestedHandler, "dynamic-token");
+            }
+
+            @Override
+            public void unwind(Object token) {
+                events.add("outer-unwind:" + token);
+            }
+        };
+
+        assertEquals(events.toString(), 0, search(outer, "ab", outerHandler));
+        assertEquals(Arrays.asList("dynamic:1:0", "execute:2", "unwind:2",
+                "outer-unwind:dynamic-token"), events);
     }
 
     private static CalloutHandler recordingHandler(List<String> events, boolean fail) {

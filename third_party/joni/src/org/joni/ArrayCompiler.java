@@ -82,7 +82,7 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileCalloutNode(CalloutNode node) {
         regex.requireStack = true;
-        addOpcode(OPCode.CALLOUT);
+        addOpcode(node.dynamic ? OPCode.DYNAMIC_CALLOUT : OPCode.CALLOUT);
         addInt(node.calloutId);
     }
 
@@ -1147,7 +1147,9 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileLengthTree(Node node) {
-        if (node instanceof CalloutNode) return OPSize.CALLOUT;
+        if (node instanceof CalloutNode callout) {
+            return callout.dynamic ? OPSize.DYNAMIC_CALLOUT : OPSize.CALLOUT;
+        }
         int len = 0;
 
         switch (node.getType()) {

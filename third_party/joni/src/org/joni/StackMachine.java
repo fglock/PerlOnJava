@@ -71,6 +71,11 @@ abstract class StackMachine extends Matcher implements StackType {
         return stack;
     }
 
+    /** Nested matchers on the same thread must not overwrite their caller's stack. */
+    protected final void useIndependentStack() {
+        if (stack != null) stack = allocateStack();
+    }
+
     private void doubleStack() {
         StackEntry[] newStack = new StackEntry[stack.length << 1];
         System.arraycopy(stack, 0, newStack, 0, stack.length);
@@ -335,6 +340,15 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
+    protected final void pushDynamicAlternative(int returnAddress,
+                                                ByteCodeMachine.DynamicContinuation continuation) {
+        StackEntry e = ensure1();
+        e.type = DYNAMIC_ALT;
+        e.setStatePCode(returnAddress);
+        e.setDynamicContinuation(continuation);
+        stk++;
+    }
+
     protected final void popOne() {
         stk--;
     }
@@ -399,6 +413,7 @@ abstract class StackMachine extends Matcher implements StackType {
         if (stack == null) return;
         for (int i = stk - 1; i >= 0; i--) {
             if (stack[i].type == CALLOUT) unwindCallout(stack[i]);
+            else if (stack[i].type == DYNAMIC_ALT) abortDynamic(stack[i]);
         }
     }
 
@@ -406,6 +421,7 @@ abstract class StackMachine extends Matcher implements StackType {
         if (stack == null) return;
         for (int i = stk - 1; i >= 0; i--) {
             if (stack[i].type == CALLOUT) completeCallout(stack[i]);
+            else if (stack[i].type == DYNAMIC_ALT) completeDynamic(stack[i]);
         }
     }
 
@@ -417,6 +433,16 @@ abstract class StackMachine extends Matcher implements StackType {
     private void unwindCallout(StackEntry entry) {
         Object token = entry.takeCalloutToken();
         if (token != null) getCalloutHandler().unwind(token);
+    }
+
+    private void completeDynamic(StackEntry entry) {
+        ByteCodeMachine.DynamicContinuation continuation = entry.takeDynamicContinuation();
+        if (continuation != null) continuation.complete();
+    }
+
+    private void abortDynamic(StackEntry entry) {
+        ByteCodeMachine.DynamicContinuation continuation = entry.takeDynamicContinuation();
+        if (continuation != null) continuation.abort();
     }
 
     private StackEntry popDefault() {
