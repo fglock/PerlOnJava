@@ -56,7 +56,14 @@ public class GlobalDestruction {
             if (hash == null) continue;  // defensive
             // Skip tied hashes — iterating them dispatches through FIRSTKEY/
             // NEXTKEY/FETCH which may fail if the tie object is already gone.
-            if (hash.type == RuntimeHash.TIED_HASH) continue;
+            // The tie handler itself is still owned by the global hash, though,
+            // and must be released so its DESTROY method runs at process exit.
+            if (hash.type == RuntimeHash.TIED_HASH) {
+                if (hash.elements instanceof TieHash tieHash) {
+                    tieHash.releaseTiedObject();
+                }
+                continue;
+            }
             for (RuntimeScalar elem : new ArrayList<>(hash.elements.values())) {
                 destroyIfTracked(elem, visited);
             }

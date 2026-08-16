@@ -1224,6 +1224,22 @@ public class MortalList {
                 // RuntimeCode.clearPadConstantWeakRefs() clears it when the
                 // sub's glob is replaced, matching Perl optree reaping.
                 base.refCount = 1;
+            } else if (hasWeakRefs && restoreReachableOwnerCount(base)) {
+                // A counted owner that is still reachable through a real
+                // Perl root is authoritative, including for classes with
+                // DESTROY.  Pure-Perl tied containers expose this shape:
+                // Test::Spec stores a context in Tie::IxHash and weakens the
+                // child's parent link. Method/argument temporaries can make
+                // the selective count dip to zero, but the tied handler's
+                // array slot remains a strong owner.  Destroying here clears
+                // that weak parent and corrupts the context tree.
+            } else if (hasWeakRefs
+                    && ReachabilityWalker.isReachableThroughTiedHash(base)) {
+                // The active-owner set starts recording at the first weaken,
+                // so a handler slot populated just before weaken can be absent
+                // from it. Confirm the missing ownership through the narrower
+                // tied-handler root walk before protecting DESTROY objects.
+                base.refCount = 1;
             } else if (base.blessId == 0
                     && hasWeakRefs
                     && (ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
@@ -1295,6 +1311,13 @@ public class MortalList {
     private static boolean blessedClassHasDestroy(RuntimeBase base) {
         String className = NameNormalizer.getBlessStr(base.blessId);
         return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
+    }
+
+    private static boolean restoreReachableOwnerCount(RuntimeBase base) {
+        int ownerCount = base.reachableOwnerCount();
+        if (ownerCount == 0) return false;
+        base.refCount = ownerCount;
+        return true;
     }
 
     public static void flush() {

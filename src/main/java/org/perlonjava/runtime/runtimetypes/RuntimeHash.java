@@ -1651,7 +1651,22 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
          * Constructs a RuntimeHashIterator for iterating over hash elements.
          */
         public RuntimeHashIterator() {
-            this.entryIterator = elements.entrySet().iterator();
+            // Perl's each() iterator remains usable when the current entry is
+            // deleted.  Java map iterators are fail-fast, so exposing the live
+            // entrySet iterator leaks ConcurrentModificationException into
+            // otherwise valid Perl such as:
+            //
+            //   while (my ($key, $value) = each %hash) { delete $hash{$key} }
+            //
+            // Snapshot the key/value pairs at iterator creation.  Hash
+            // iteration order is intentionally unspecified by Perl, while the
+            // returned scalar values must retain their original identity.
+            List<Map.Entry<String, RuntimeScalar>> entries = new ArrayList<>(elements.size());
+            for (Map.Entry<String, RuntimeScalar> entry : elements.entrySet()) {
+                entries.add(new AbstractMap.SimpleImmutableEntry<>(
+                        entry.getKey(), entry.getValue()));
+            }
+            this.entryIterator = entries.iterator();
             this.returnKey = true;
         }
 

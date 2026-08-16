@@ -343,6 +343,7 @@ These are loaded automatically or via `use`:
 | Module | Implementation | Notes |
 |--------|---------------|-------|
 | `Time::HiRes` | Java | `System.nanoTime()` |
+| `Time::UTC::Now` | Java + Perl | `java.time.Instant`; reports no trusted accuracy bound |
 | `Time::Piece` | Java + Perl | |
 | `Time::Local` | Perl | |
 | `DateTime` | Java + Perl | Java backend bundled; install `DateTime` from CPAN with `jcpan -i DateTime` (timezone data gets frequent updates) |

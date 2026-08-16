@@ -1345,6 +1345,14 @@ public class StatementResolver {
             // Example: %{ {map { $_ => 1 } @_} } — inner {} is a hashref.
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - inside braced dereference context");
             return true;
+        } else if (parser.insideBlockOperatorArgument) {
+            // A map/grep/sort block begins in term context.
+            // Thus `map { { expression_returning_pairs() } } @items` treats
+            // the inner braces as an anonymous hash constructor. Semicolons,
+            // assignments, and control statements were already classified as
+            // block indicators above, so this only resolves the ambiguous case.
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - block operator term context");
+            return true;
         } else {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
             return false; // Default: assume block when we can't determine
