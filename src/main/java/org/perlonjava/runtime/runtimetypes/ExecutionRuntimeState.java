@@ -13,6 +13,7 @@ import java.util.Stack;
 public final class ExecutionRuntimeState {
     final List<Object> callerStack = new ArrayList<>();
     final Deque<DynamicState> dynamicVariableStack = new ArrayDeque<>();
+    final Deque<DynamicVariableManager.FrameCapture> dynamicFrameCaptures = new ArrayDeque<>();
 
     final Stack<RuntimeScalar> scalarDynamicStates = new Stack<>();
     final Stack<RuntimeArray> arrayDynamicStates = new Stack<>();

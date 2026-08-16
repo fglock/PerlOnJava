@@ -261,7 +261,9 @@ public class EmitBlock {
         }
 
         // Setup 'local' environment if needed
-        Local.localRecord localRecord = Local.localSetup(emitterVisitor.ctx, node, mv, true);
+        Local.localRecord localRecord = node.getBooleanAnnotation("regexCallbackBody")
+                ? new Local.localRecord(false, -1)
+                : Local.localSetup(emitterVisitor.ctx, node, mv, true);
 
         int regexStateLocal = -1;
         if (!node.getBooleanAnnotation("blockIsSubroutine")

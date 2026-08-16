@@ -19,6 +19,7 @@ public final class RuntimeRegexCallback {
         if (!(codeRef.value instanceof RuntimeCode code)) {
             throw new IllegalArgumentException("regex callback is not a code reference");
         }
+        code.isRegexCallbackPseudoBlock = true;
         return new RuntimeScalar(new RuntimeRegexCallback(code, Kind.valueOf(kindName)));
     }
 }

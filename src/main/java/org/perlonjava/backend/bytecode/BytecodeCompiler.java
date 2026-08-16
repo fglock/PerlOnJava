@@ -5915,6 +5915,12 @@ public class BytecodeCompiler implements Visitor {
             subCode.isMapGrepBlock = true;
             subCode.inheritsSelfReference = true;
         }
+        if (node.getBooleanAnnotation("inheritsSelfReference")) {
+            subCode.inheritsSelfReference = true;
+        }
+        if (node.getBooleanAnnotation("regexCallbackPseudoBlock")) {
+            subCode.isRegexCallbackPseudoBlock = true;
+        }
 
         if (RuntimeCode.isDisassemble()) {
             System.out.println(Disassemble.disassemble(subCode));

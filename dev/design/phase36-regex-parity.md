@@ -242,12 +242,15 @@ timing delta is a regression only after a serialized same-commit reproduction.
 
 The merged Joni dynamic-pattern engine establishes the Stage 36.5 execution
 seam. The current Stage 36.4 core baseline is `rxcode.t` 42/42 and
-`reg_eval_scope.t` 22/49, with no timeout or incomplete file. Matcher-owned
-transactions now restore ordinary scalar, array, and hash mutations when the
-overall match fails, retain mutations from abandoned alternatives when another
-alternative succeeds, and commit successful matches. Callback exceptions also
-restore dynamic locals, provisional match state, and `$^R` on both execution
-backends. Regex stringification no longer exposes private callback IDs.
+`reg_eval_scope.t` 33/49, with no timeout or incomplete file. Matcher-owned
+transactions restore ordinary scalar, array, and hash mutations on total
+failure while retaining Perl's ordinary side effects from attempted paths.
+Callback dynamic locals now transfer from the implementation CV to the matcher:
+they remain visible to later callbacks on the active path, unwind on
+backtracking, and restore after success, failure, or exception. Regex callbacks
+also behave as pseudo-blocks for `caller`, `__SUB__`, and escaping
+`last`/`next`/`goto` on both execution backends. Named unary `scalar` now keeps a
+following match in scalar context, including callback-bearing matches.
 
 ### Completed stages
 
@@ -262,19 +265,25 @@ backends. Regex stringification no longer exposes private callback IDs.
 
 ### Next steps
 
-1. Complete callback lexical pragma, caller-frame, and control-flow isolation
-   exposed by `reg_eval_scope.t`, without changing its thread wrapper.
-2. Extend the callback semantic matrix with interruption, timeout, nested
-   exception paths; require identical JVM/interpreter cleanup.
-3. Define and implement the mutation policy for tied, magical, shared, and
+1. Preserve lexical package and `use re '/flags'` state for `qr//`, interpolated
+   regex objects, and runtime source admitted by `use re 'eval'`.
+2. Extend pseudo-block frame mapping through nested and recursive callbacks;
+   preserve exact caller source lines and enclosing `__SUB__` for interpolated
+   `qr//` values.
+3. Extend the callback semantic matrix with warning locations, interruption,
+   timeout, and nested exception paths; require identical JVM/interpreter cleanup.
+4. Define and implement the mutation policy for tied, magical, shared, and
    readonly values; ordinary values are now transactionally covered.
-4. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
+5. Complete the merged dynamic-pattern validation gates, then mark Stage 36.5
    complete and proceed to the remaining declarative parity slices.
 
 ### Open blockers
 
-- Callback lexical pragmata, caller frames, and non-local control-flow
-  boundaries still differ from Perl in `reg_eval_scope.t`.
+- Runtime-injected callback source and lexical regex pragmata remain unsupported;
+  these account for tests 4, 5, 8, 10, 11, and 12 in `reg_eval_scope.t`.
+- Recursive/nested callback caller lines, interpolated `qr//` `__SUB__`, warning
+  locations, and the legacy `qr/\(?{` diagnostic account for the remaining
+  Stage 36.4 failures.
 - Tied, magical, shared, and readonly callback mutation rollback remains
   intentionally outside the ordinary-value transaction until its exact Perl
   behavior is established with differential tests.

@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * The DynamicVariableManager class is responsible for managing a stack of dynamic variables.
@@ -13,10 +14,24 @@ import java.util.List;
  */
 public class DynamicVariableManager {
     public record SuspendedState(DynamicState state, Object token) {}
+    public record CapturedFrame<T>(T result, List<SuspendedState> states) {}
+
+    static final class FrameCapture {
+        final int localLevel;
+        List<SuspendedState> states;
+
+        FrameCapture(int localLevel) {
+            this.localLevel = localLevel;
+        }
+    }
     // A stack to hold the dynamic states of variables.
     // Using ArrayDeque instead of Stack for better performance (no synchronization overhead).
     private static Deque<DynamicState> variableStack() {
         return PerlRuntime.current().executionState().dynamicVariableStack;
+    }
+
+    private static Deque<FrameCapture> frameCaptures() {
+        return PerlRuntime.current().executionState().dynamicFrameCaptures;
     }
 
     /**
@@ -117,6 +132,44 @@ public class DynamicVariableManager {
                 throw e;
             } else {
                 throw new RuntimeException(pendingException);
+            }
+        }
+    }
+
+    /**
+     * Performs an outer subroutine-frame teardown.  Regex executable callbacks
+     * may temporarily take ownership of the dynamic states that survive the
+     * callback body, so Joni can commit or abandon them with the match path.
+     * Ordinary calls retain the normal pop-and-restore behavior.
+     */
+    public static void teardownFrameToLocalLevel(int targetLocalLevel) {
+        FrameCapture capture = frameCaptures().peekLast();
+        if (capture != null && capture.localLevel == targetLocalLevel
+                && capture.states == null) {
+            capture.states = suspendAbove(targetLocalLevel);
+            return;
+        }
+        popToLocalLevel(targetLocalLevel);
+    }
+
+    /** Execute one subroutine call while retaining its surviving local() states. */
+    public static <T> CapturedFrame<T> captureFrameLocals(Supplier<T> action) {
+        FrameCapture capture = new FrameCapture(getLocalLevel());
+        Deque<FrameCapture> captures = frameCaptures();
+        captures.addLast(capture);
+        boolean completed = false;
+        try {
+            T result = action.get();
+            completed = true;
+            return new CapturedFrame<>(result,
+                    capture.states == null ? List.of() : capture.states);
+        } finally {
+            if (captures.peekLast() != capture) {
+                throw new IllegalStateException("Dynamic frame capture closed out of order");
+            }
+            captures.removeLast();
+            if (!completed && getLocalLevel() > capture.localLevel) {
+                popToLocalLevel(capture.localLevel);
             }
         }
     }

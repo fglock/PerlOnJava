@@ -3003,7 +3003,7 @@ public class BytecodeInterpreter {
                 frame.suspendedDynamicStates =
                         DynamicVariableManager.suspendAbove(savedLocalLevel);
             } else {
-                DynamicVariableManager.popToLocalLevel(savedLocalLevel);
+                DynamicVariableManager.teardownFrameToLocalLevel(savedLocalLevel);
             }
             currentPackageScalar.set(savedPackage);
             if (frame.suspended && !frame.evalCatchStack.isEmpty()) {

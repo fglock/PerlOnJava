@@ -962,6 +962,14 @@ public abstract class StringSegmentParser {
 
     private Node regexCallback(Node block, String kind, int index) {
         SubroutineNode closure = new SubroutineNode(null, null, null, block, false, index);
+        closure.setAnnotation("inheritsSelfReference", true);
+        closure.setAnnotation("regexCallbackPseudoBlock", true);
+        if (block instanceof AbstractNode abstractBlock) {
+            // (?{ ... }) is a regex pseudo-block, not an ordinary anonymous-sub
+            // scope. Its top-level local() frames belong to the matcher path and
+            // must survive the Java callback return until Joni commits/unwinds it.
+            abstractBlock.setAnnotation("regexCallbackBody", true);
+        }
         OperatorNode callback = new OperatorNode("regexCallback", closure, index);
         callback.setAnnotation("regexCallbackKind", kind);
         hasExecutableRegexCallbacks = true;
