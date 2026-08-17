@@ -491,10 +491,13 @@ public class IdentifierParser {
                     token = parser.tokens.get(parser.tokenIndex);
                     nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
-                    // After ::, only identifiers or another :: are allowed (or ' as package separator)
+                    // After ::, identifiers and numeric package segments are allowed,
+                    // along with another separator.
                     // Note: Keywords CAN be valid identifier parts after :: (e.g., $Foo::and, &UNIVERSAL::isa)
                     // — but only when they are flush against ::, with no intervening whitespace.
-                    if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::") && !token.text.equals("'")) {
+                    if (token.type != LexerTokenType.IDENTIFIER
+                            && token.type != LexerTokenType.NUMBER
+                            && !token.text.equals("::") && !token.text.equals("'")) {
                         // Nothing valid follows ::, so return what we have
                         return variableName.toString();
                     }
