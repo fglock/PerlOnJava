@@ -377,9 +377,11 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Remediate the seven reduced forced-Joni failure causes, starting with the
-   catastrophic `regexp*` cluster and the now-profiled `pat_psycho*` matcher
-   reconstruction path; keep per-child hard limits throughout.
+1. Remediate the remaining forced-Joni failure causes, starting with the
+   catastrophic `regexp*` cluster and absent generated Unicode fixtures; keep
+   per-child hard limits throughout. PR #1008 has removed the release-blocking
+   `pat_psycho*` offset-map reconstruction and bounded profiling confirms that
+   matcher-wrapper reuse is no longer on the critical path.
 2. Integrate the stacked Joni offset-map, regex-set property, and CEC timeout
    slices, then rerun the forced-Joni corpus from the new combined head.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
