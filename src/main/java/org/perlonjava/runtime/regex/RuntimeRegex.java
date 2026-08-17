@@ -595,7 +595,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (usesRecursiveBackend) {
                     regex.recursivePattern = new JoniRegexPattern(compilePatternString,
                             regex.regexFlags, trustedCalloutCount);
-                    regex.deferredUserDefinedUnicodeProperties = false;
+                    regex.deferredUserDefinedUnicodeProperties =
+                            regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty();
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch();
                     regex.hasBranchReset = false;
                     regex.hasBackslashK = false;

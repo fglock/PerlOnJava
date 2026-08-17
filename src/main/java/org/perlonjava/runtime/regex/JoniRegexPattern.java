@@ -45,6 +45,7 @@ final class JoniRegexPattern {
     private final Map<String, Integer> namedGroups;
     private final RegexFlags flags;
     private final boolean hasControlVerbState;
+    private final boolean hasDeferredUserDefinedUnicodeProperty;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0);
@@ -53,7 +54,9 @@ final class JoniRegexPattern {
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount) {
         this.flags = flags;
         hasControlVerbState = hasControlVerbState(perlPattern);
-        sourcePattern = translatePattern(perlPattern, flags, trustedCalloutCount);
+        UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
+        hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
+        sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
         byte[] bytes = sourcePattern.getBytes(StandardCharsets.UTF_8);
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags),
                 UTF8Encoding.INSTANCE, PERLONJAVA_SYNTAX);
@@ -71,6 +74,57 @@ final class JoniRegexPattern {
 
     Regex engineRegex() {
         return regex;
+    }
+
+    boolean hasDeferredUserDefinedUnicodeProperty() {
+        return hasDeferredUserDefinedUnicodeProperty;
+    }
+
+    private record UserPropertyTranslation(String pattern, boolean deferred) {}
+
+    private static UserPropertyTranslation translateUserDefinedProperties(
+            String pattern, RegexFlags flags) {
+        StringBuilder translated = new StringBuilder(pattern.length());
+        boolean deferred = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (ch == '\\' && i + 1 < pattern.length() && pattern.charAt(i + 1) == '\\') {
+                translated.append("\\\\");
+                i++;
+                continue;
+            }
+            if (ch != '\\' || i + 3 >= pattern.length()
+                    || (pattern.charAt(i + 1) != 'p' && pattern.charAt(i + 1) != 'P')
+                    || pattern.charAt(i + 2) != '{') {
+                translated.append(ch);
+                continue;
+            }
+            int end = pattern.indexOf('}', i + 3);
+            if (end < 0) {
+                translated.append(ch);
+                continue;
+            }
+            String property = pattern.substring(i + 3, end).trim();
+            String unnegated = property.startsWith("^")
+                    ? property.substring(1).trim() : property;
+            if (!unnegated.matches("^(.*::)?([Ii][sSNn]).+")) {
+                translated.append(pattern, i, end + 1);
+                i = end;
+                continue;
+            }
+            try {
+                String propertyClass = UnicodeResolver.translateUnicodeProperty(
+                        property, pattern.charAt(i + 1) == 'P', flags.isCaseInsensitive());
+                translated.append("(?-i:").append(propertyClass).append(')');
+            } catch (IllegalArgumentException error) {
+                String message = error.getMessage();
+                if (message != null && message.contains("in expansion of")) throw error;
+                translated.append("[\\s\\S]");
+                deferred = true;
+            }
+            i = end;
+        }
+        return new UserPropertyTranslation(translated.toString(), deferred);
     }
 
     private static int toJoniOptions(RegexFlags flags) {
