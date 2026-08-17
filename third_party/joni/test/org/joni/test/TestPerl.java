@@ -58,6 +58,11 @@ public class TestPerl extends Test {
         x2s("\\o{141}", "a", 0, 1);
         x2s("\\o{ 141 }", "a", 0, 1);
         ns("\\o{789}", "");
+        xerrs("\\x{X", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE);
+        xerrs("[\\x{X]", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE);
+        x2s("\\x{61}", "a", 0, 1);
+        ns("\\x{}", "");
+        ns("\\x{X}", "");
     }
 
     @org.junit.Test(timeout = 5000)
