@@ -224,6 +224,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield getScalarInt(RuntimeIO.getLastAccessedHandle().currentLineNumber);
                 }
                 case LAST_PAREN_MATCH -> {
+                    if (PerlRuntime.current().regexState.lastParenMatchOverrideActive) {
+                        String override = PerlRuntime.current().regexState.lastParenMatchOverride;
+                        yield override != null ? makeRegexResultScalar(override) : scalarUndef;
+                    }
                     String lastCapture = RuntimeRegex.lastCaptureString();
                     yield lastCapture != null ? makeRegexResultScalar(lastCapture) : scalarUndef;
                 }

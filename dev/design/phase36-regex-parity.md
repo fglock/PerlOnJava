@@ -222,40 +222,88 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phase 4 source preservation at 423/555
+### Current Status: Joni default; Phase 4 semantic gate complete at 550/555
 
 Executable callback source and literal trailing `/x` comments survive canonical
-regex-object stringification on both execution backends. The focused
-`pat_re_eval.t` gate currently executes all 555 assertions with 423 passing.
+regex-object stringification on both execution backends. Recursive Joni call
+frames now preserve the Perl-visible caller capture view for optimistic
+callbacks and committed matches, including `$1`, `$^N`, and `$+`. Tied scalar
+values returned by dynamic callbacks are materialized before callee regex state
+teardown. Joni invalid-backreference errors use Perl's nonexistent-group
+diagnostic. Reopened repeated groups expose their preceding closed capture to
+dynamic callbacks without altering matching registers. Nested dynamic matcher
+completion preserves the last successful block result in `$^R`, including a
+runtime `qr` returned by an outer `(??{...})`. Executable-looking groups inside
+double-quote case modifiers are deferred until after interpolation and obey
+runtime `re 'eval'` permission. Foreach aliases refresh the active lexical-cell
+registry on both execution backends, so runtime-compiled callbacks capture each
+iteration's cell and retain it after scope exit. Executable runtime pattern
+compilation uses independent `(eval N)` source identities for diagnostics.
+Runtime source now inherits exact lexical warning masks and reports Unicode
+parser names and undefined match operands at the original call site. Failed
+callback branches preserve the preceding successful `$&`, `$1`, and related
+match state. Dynamic regex-state restoration releases discarded temporary
+callback patterns, so captured values stay alive through the enclosing scope
+and are destroyed when that scope exits. Recursive callback unwind preserves
+the failed nested `$^N` and `$+` state without clobbering numbered captures or
+one-level failed callback state. The focused `pat_re_eval.t` gate executes all
+555 assertions with 550 semantic assertions passing on both execution backends;
+the remaining five inspect Perl's optimizer/debug transcript.
 
 ### Completed Phases
 
-- [ ] Phase 0: Reproducible differential baseline
-- [ ] Phase 1: Joni ordinary-pattern parity
-- [ ] Phase 2: Conditions and backtracking-visible state
-- [ ] Phase 3: Unicode and pattern syntax completion
-- [ ] Phase 4: Runtime source and diagnostics
+- [x] Phase 0: Reproducible differential baseline (2026-08-17)
+  - Captured the 80-file regex differential with complete output and JSON.
+  - Compared every file with the PR 958 baseline at
+    `../PerlOnJava/logs/test_20260815_080000_958.log`.
+  - Recorded 51,002/94,829 passing assertions, a net gain of 729 passing and
+    58 planned assertions, with no per-file pass-count regressions.
+  - Added separate parallel handling for CPU-heavy `pat_psycho*` and `speed*`
+    tests while retaining per-child timeouts.
+- [ ] Phase 1: Joni ordinary-pattern parity (implementation substantially
+  complete; forced Java/Joni corpus comparison remains)
+  - [x] Added the temporary backend selector and made Joni the default.
+  - [x] Routed ordinary matching, substitution, and split through the selected
+    backend without per-operation fallback.
+  - [ ] Re-run the complete forced-backend matrix and prove the exit criterion.
+- [ ] Phase 2: Conditions and backtracking-visible state (in progress)
+  - [x] Implemented executable callback conditions, control verbs including
+    `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
+  - [x] Closed runtime callback capture ownership at final scope teardown.
+  - [x] Closed failed-path `$^N` and `$+` restoration through recursive
+    callback unwind.
+- [ ] Phase 3: Unicode and pattern syntax completion (in progress)
+  - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
+    folds, possessive intervals, and bounded lookbehind support to Joni.
+  - [ ] Complete the remaining Unicode aliases and diagnostic parity inventory.
+- [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
+  complete at 550/555)
+  - [x] Preserved mixed executable-source provenance, nested dynamic callback
+    values, foreach lexical cells, and independent `(eval N)` source names.
+  - [x] Restored lexical warning masks, Unicode source diagnostics, undefined
+    operand warnings, and prior successful match state across failed callbacks.
+  - [x] Released callback captures when temporary match state is discarded and
+    the final owning regex scope exits (test 307).
+  - [x] Resolved failed-path `$^N`/`$+` tests 85-86 on JVM and interpreter.
+  - [x] Classified tests 444-448 as optimizer/debug-transcript exclusions.
 - [ ] Phase 5: Remove the Java matching backend
 - [ ] Phase 6: Integration and release
 
 ### Next Steps
 
-1. Correct recursion-visible capture restoration so `$^N` and `$+` expose the
-   selected Perl capture state after optimistic callbacks and nested dynamic
-   programs; use the first failing `pat_re_eval.t` block as the focused oracle.
-2. Capture forced-Java and forced-Joni results for the full 80-file direct regex
+1. Capture forced-Java and forced-Joni results for the full 80-file direct regex
    corpus, compare both against PR 958, and classify any newly exposed gaps.
-3. Run the applicable `pat_advanced.t` control-verb and condition sections,
+2. Run the applicable `pat_advanced.t` control-verb and condition sections,
    then close Phase 2 if their direct and interpreter results agree.
-4. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
+3. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
    closes, remove its hunk and rerun the targeted importer so validation uses
    the original Perl 5.44 assertions.
-5. Capture the clean-branch JVM and interpreter 80-file baselines and compare
+4. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-6. Inventory the remaining uncommon Unicode aliases and invalid-property
+5. Inventory the remaining uncommon Unicode aliases and invalid-property
    diagnostics against Perl 5.44's bundled tables, then move the next
    matcher-semantic preprocessor slice into Joni.
-7. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+6. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 

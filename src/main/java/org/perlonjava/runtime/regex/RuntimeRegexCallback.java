@@ -13,6 +13,7 @@ public final class RuntimeRegexCallback {
     final String sourceLocation;
     final String lexicalPackage;
     final String source;
+    private int ownerCount;
 
     private RuntimeRegexCallback(
             RuntimeCode code, Kind kind, String sourceLocation, String lexicalPackage,
@@ -22,6 +23,24 @@ public final class RuntimeRegexCallback {
         this.sourceLocation = sourceLocation;
         this.lexicalPackage = lexicalPackage;
         this.source = source;
+    }
+
+    synchronized void retainOwner() {
+        if (code.refCount < 0) return;
+        if (ownerCount++ == 0) {
+            code.refCount++;
+        }
+    }
+
+    synchronized void releaseOwner() {
+        if (code.refCount < 0) return;
+        if (ownerCount <= 0) return;
+        ownerCount--;
+        if (ownerCount != 0) return;
+        if (code.refCount > 0) code.refCount--;
+        if (code.refCount == 0 && code.stashRefCount <= 0) {
+            code.releaseCaptures();
+        }
     }
 
     public static RuntimeScalar wrap(RuntimeScalar codeRef, String kindName) {

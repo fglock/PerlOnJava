@@ -839,6 +839,13 @@ public class BytecodeInterpreter {
                                         code.stringPool[nameIdx], registers[reg]);
                             }
 
+                            case Opcodes.BIND_ACTIVE_LEXICAL -> {
+                                int reg = bytecode[pc++];
+                                int nameIdx = bytecode[pc++];
+                                registers[reg] = code.bindActiveLexical(
+                                        code.stringPool[nameIdx], registers[reg]);
+                            }
+
                             // =================================================================
                             // VARIABLE ACCESS - GLOBAL
                             // =================================================================
@@ -2089,8 +2096,8 @@ public class BytecodeInterpreter {
 
                             case Opcodes.MATCH_REGEX -> {
                                 // Match regex
-                                // Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode
-                                pc = OpcodeHandlerExtended.executeMatchRegex(bytecode, pc, registers);
+                                // Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode targetNameIndex
+                                pc = OpcodeHandlerExtended.executeMatchRegex(bytecode, pc, registers, code);
                             }
 
                             case Opcodes.MATCH_REGEX_NOT -> {
@@ -3377,12 +3384,15 @@ public class BytecodeInterpreter {
                 int flagsReg = bytecode[pc++];
                 int implicitU = bytecode[pc++];
                 int warningState = bytecode[pc++];
+                int warningBitsIndex = bytecode[pc++];
                 int quoteConstruction = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
+                RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
+                        ? code.stringPool[warningBitsIndex] : null);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
                 if (quoteConstruction != 0) {
                     registers[rd] = RuntimeRegex.markQuoteConstruction(registers[rd].scalar());
@@ -3396,12 +3406,15 @@ public class BytecodeInterpreter {
                 int callsiteId = bytecode[pc++];
                 int implicitU = bytecode[pc++];
                 int warningState = bytecode[pc++];
+                int warningBitsIndex = bytecode[pc++];
                 int quoteConstruction = bytecode[pc++];
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
                 }
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
+                RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
+                        ? code.stringPool[warningBitsIndex] : null);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
                 if (quoteConstruction != 0) {
                     registers[rd] = RuntimeRegex.markQuoteConstruction(registers[rd].scalar());

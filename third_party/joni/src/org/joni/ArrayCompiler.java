@@ -417,7 +417,9 @@ final class ArrayCompiler extends Compiler {
         addOpcode(OPCode.CALL);
         node.unsetAddrList.add(codeLength, node.target);
         addAbsAddr(0); /*dummy addr.*/
-        addMemNum(node.groupNum);
+        // Preserve analyser recursion knowledge for the matcher without adding
+        // an opcode operand. -1 remains reserved for compiler-internal calls.
+        addMemNum(node.isRecursion() ? -(node.groupNum + 1) : node.groupNum);
     }
 
     @Override

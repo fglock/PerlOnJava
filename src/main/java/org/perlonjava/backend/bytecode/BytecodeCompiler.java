@@ -6339,6 +6339,16 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 7: Body start (redo jumps here)
         int bodyStartPc = bytecode.size();
+        if (lexicalLoopVarName != null) {
+            emit(Opcodes.BIND_ACTIVE_LEXICAL);
+            emitReg(varReg);
+            emit(addToStringPool(lexicalLoopVarName));
+        }
+        for (int i = 0; i < lexicalLoopVarNames.size(); i++) {
+            emit(Opcodes.BIND_ACTIVE_LEXICAL);
+            emitReg(multiVarRegs.get(i));
+            emit(addToStringPool(lexicalLoopVarNames.get(i)));
+        }
         LoopInfo loopInfo = new LoopInfo(node.labelName, bodyStartPc, true);
         loopStack.push(loopInfo);
         loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;

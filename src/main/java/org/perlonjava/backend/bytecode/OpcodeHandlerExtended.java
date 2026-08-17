@@ -908,14 +908,20 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute match regex operation.
-     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode
+     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode targetNameIndex
      */
-    public static int executeMatchRegex(int[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMatchRegex(int[] bytecode, int pc, RuntimeBase[] registers,
+                                        InterpretedCode code) {
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
         boolean bytesMode = bytecode[pc++] != 0;
+        int targetNameIndex = bytecode[pc++];
+
+        RegexQuoteMeta.setMatchTargetName(targetNameIndex >= 0
+                && targetNameIndex < code.stringPool.length
+                ? code.stringPool[targetNameIndex] : null);
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeScalar regex = registers[regexReg].scalar();
@@ -944,6 +950,7 @@ public class OpcodeHandlerExtended {
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
 
+        RegexQuoteMeta.setMatchTargetName(null);
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeBase matchResult = RuntimeRegex.matchRegex(
                 (RuntimeScalar) registers[regexReg],

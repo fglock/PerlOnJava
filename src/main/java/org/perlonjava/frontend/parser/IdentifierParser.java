@@ -694,7 +694,9 @@ public class IdentifierParser {
                         token.type != LexerTokenType.NEWLINE && token.type != LexerTokenType.WHITESPACE &&
                         !(token.type == LexerTokenType.OPERATOR && (token.text.equals("(") || token.text.equals("}") || token.text.equals(";") || token.text.equals("=") || token.text.equals(")") || token.text.equals(",") || token.text.equals("]")))) {
                     // Bad name after ::
-                    parser.throwCleanError("Bad name after " + variableName + "::");
+                    // The separator was appended before validation.  Reusing it
+                    // here avoids reporting Foo:::: for the source Foo::$bar.
+                    parser.throwCleanError("Bad name after " + variableName);
                 }
                 continue;
             }

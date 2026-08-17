@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 16;
+use Test::More tests => 23;
 
 {
     my $seen = 0;
@@ -106,10 +106,66 @@ use Test::More tests => 16;
 }
 
 {
+    use re 'eval';
+    use utf8;
+    my $runtime = '(?{Ｆｏｏ::$bar})';
+    eval { "a" =~ /^a$runtime/ };
+    like($@, qr/Bad name after Ｆｏｏ:: at \(eval \d+\) line \d+/,
+        'runtime source preserves Unicode parser diagnostics');
+}
+
+{
+    use warnings;
+    my ($source, $target, $warning) = ('s');
+    local $SIG{__WARN__} = sub { $warning .= "@_" };
+    eval q[
+        use re 'eval';
+        my $runtime = '(?{$target=$source+1})';
+        "a" =~ /a$runtime/;
+        1;
+    ];
+    like($warning, qr/ at \(eval \d+\) line 1/,
+        'runtime source inherits lexical warning bits');
+}
+
+{
+    use warnings;
+    my ($target, $returned);
+    my $warning = '';
+    local $SIG{__WARN__} = sub { $warning .= $_[0] };
+    $target =~ /(??{$returned})/ or die;
+    like($warning,
+        qr/value \$target in pattern match.*\n.*uninitialized value at/s,
+        'undefined match target and dynamic source retain warning context');
+}
+
+{
+    use re 'eval';
+    "foo" =~ /f(o)o/;
+    "bar" =~ /(?{})baz/;
+    is($&, 'foo', 'failed callback branch preserves the prior whole match');
+    is($1, 'o', 'failed callback branch preserves the prior capture');
+}
+
+{
     my $depth = 2;
     my $embedded = qr/(??{"Q$depth"})/;
     my $runtime = '(??{"R$depth"})';
     use re 'eval';
     ok("AQ2R2" =~ /^A$embedded$runtime$/,
         'runtime callbacks retain lexical cells');
+}
+
+{
+    use re 'eval';
+    my (@immediate, @patterns);
+    for my $value (qw(a b c)) {
+        my $runtime = '(??{$value})';
+        push @immediate, $value if $value =~ /^$runtime$/;
+        push @patterns, qr/^$runtime$/;
+    }
+    is(join('', @immediate), 'abc',
+        'runtime callbacks see the active foreach lexical alias');
+    ok('a' =~ $patterns[0] && 'b' =~ $patterns[1] && 'c' =~ $patterns[2],
+        'runtime callbacks retain distinct foreach iteration cells');
 }

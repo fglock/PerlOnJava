@@ -570,6 +570,18 @@ public class EmitForeach {
                     loopVarIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 single var name:" + varName + " index:" + loopVarIndex);
                     mv.visitVarInsn(Opcodes.ASTORE, loopVarIndex);
+                    mv.visitVarInsn(Opcodes.ALOAD, loopVarIndex);
+                    Node codeRef = new OperatorNode("__SUB__", null, operatorNode.tokenIndex);
+                    codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    mv.visitLdcInsn(varName);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "bindActiveLexical",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                            false);
+                    mv.visitTypeInsn(Opcodes.CHECKCAST,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                    mv.visitVarInsn(Opcodes.ASTORE, loopVarIndex);
                 }
             }
         }

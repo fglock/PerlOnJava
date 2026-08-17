@@ -306,12 +306,21 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
-    protected final void pushCallFrame(int pat, int groupNum) {
+    protected final void pushCallFrame(int pat, int groupNum, boolean recursive) {
         StackEntry e = ensure1();
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
         e.setCallFrameNum(groupNum);
+        e.setCallFrameCaptureSnapshot(recursive ? captureSnapshot() : null);
         stk++;
+    }
+
+    private int[] captureSnapshot() {
+        int count = regex.numMem + 1;
+        int[] snapshot = new int[count << 1];
+        System.arraycopy(repeatStk, memStartStk, snapshot, 0, count);
+        System.arraycopy(repeatStk, memEndStk, snapshot, count, count);
+        return snapshot;
     }
 
     protected final boolean isInsideSubexpCall(int groupNum) {
@@ -778,6 +787,10 @@ abstract class StackMachine extends Matcher implements StackType {
     }
 
     protected final int sreturn() {
+        return returnFrame().getCallFrameRetAddr();
+    }
+
+    protected final StackEntry returnFrame() {
         int level = 0;
         int k = stk;
         while (true) {
@@ -786,7 +799,7 @@ abstract class StackMachine extends Matcher implements StackType {
 
             if (e.type == CALL_FRAME) {
                 if (level == 0) {
-                    return e.getCallFrameRetAddr();
+                    return e;
                 } else {
                     level--;
                 }

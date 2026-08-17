@@ -26,6 +26,7 @@ class StackEntry {
     private ByteCodeMachine.DynamicContinuation dynamicContinuation;
     private String previousControlMarkName;
     private String controlMarkLabel;
+    private int[] callFrameCaptureSnapshot;
 
     // first union member
     /* byte code position */
@@ -164,6 +165,12 @@ class StackEntry {
     }
     int getCallFramePStr() {
         return E3;
+    }
+    void setCallFrameCaptureSnapshot(int[] snapshot) {
+        callFrameCaptureSnapshot = snapshot;
+    }
+    int[] getCallFrameCaptureSnapshot() {
+        return callFrameCaptureSnapshot;
     }
 
     /* absent position */

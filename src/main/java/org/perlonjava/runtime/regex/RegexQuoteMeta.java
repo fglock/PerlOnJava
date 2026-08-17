@@ -9,9 +9,27 @@ import java.util.List;
 public class RegexQuoteMeta {
     private static final ThreadLocal<List<String>> WARNINGS_ON_USE = ThreadLocal.withInitial(ArrayList::new);
     private static final ThreadLocal<Integer> CALL_SITE_WARNING_STATE = new ThreadLocal<>();
+    private static final ThreadLocal<String> CALL_SITE_WARNING_BITS = new ThreadLocal<>();
+    private static final ThreadLocal<String> MATCH_TARGET_NAME = new ThreadLocal<>();
 
     public static void setCallSiteWarningState(int state) {
         CALL_SITE_WARNING_STATE.set(state);
+    }
+
+    public static void setCallSiteWarningBits(String bits) {
+        CALL_SITE_WARNING_BITS.set(bits);
+    }
+
+    public static String getCallSiteWarningBits() {
+        return CALL_SITE_WARNING_BITS.get();
+    }
+
+    public static void setMatchTargetName(String name) {
+        MATCH_TARGET_NAME.set(name);
+    }
+
+    public static String getMatchTargetName() {
+        return MATCH_TARGET_NAME.get();
     }
 
     public static String escapeQ(String s) {

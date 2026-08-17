@@ -19,6 +19,8 @@
  */
 package org.joni;
 
+import java.util.ArrayDeque;
+
 import static org.joni.BitStatus.bsAt;
 import static org.joni.Config.USE_CEC;
 import static org.joni.Option.isFindCondition;
@@ -2013,8 +2015,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             throw new ValueException("subpattern recursion limit exceeded");
         }
         int addr = code[ip++];
-        int groupNum = code[ip++];
-        pushCallFrame(ip, groupNum);
+        int encodedGroupNum = code[ip++];
+        boolean recursive = encodedGroupNum <= -2;
+        int groupNum = recursive ? -encodedGroupNum - 1 : encodedGroupNum;
+        recursive |= isInsideSubexpCall(groupNum);
+        pushCallFrame(ip, groupNum, recursive);
         ip = addr; // absolute address
     }
 
@@ -2063,8 +2068,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             throw new IllegalStateException("dynamic regex requires the bytecode matcher");
         }
         nested.useIndependentStack();
-        nested.setCalloutHandler(result.getCalloutHandler());
-        DynamicContinuation continuation = new DynamicContinuation(nested, s, range);
+        CalloutHandler nestedHandler = result.getCalloutHandler();
+        nested.setCalloutHandler(nestedHandler);
+        DynamicContinuation continuation = new DynamicContinuation(
+                nested, nestedHandler, s, range);
         int nestedEnd = continuation.first();
         if (nestedEnd < 0) {
             continuation.abort();
@@ -2204,7 +2211,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     public int captureBegin(int capture) {
         checkCapture(capture);
         if (capture == 0) return sstart - str;
-        int value = repeatStk[memStartStk + capture];
+        int value = visibleCapturePointer(capture, true);
         if (value == INVALID_INDEX) return Region.REGION_NOTPOS;
         return (bsAt(regex.btMemStart, capture) ? stack[value].getMemPStr() : value) - str;
     }
@@ -2213,20 +2220,138 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     public int captureEnd(int capture) {
         checkCapture(capture);
         if (capture == 0) return s - str;
-        int value = repeatStk[memEndStk + capture];
+        int value = visibleCapturePointer(capture, false);
         if (value == INVALID_INDEX) return Region.REGION_NOTPOS;
         return (bsAt(regex.btMemEnd, capture) ? stack[value].getMemPStr() : value) - str;
     }
 
     @Override
     public int lastClosedCapture() {
+        CompletedRecursiveCall completed = completedRecursiveCall();
         for (int i = stk - 1; i >= 0; i--) {
             StackEntry entry = stack[i];
-            if (entry.type != MEM_END) continue;
+            if (entry.type != MEM_END && entry.type != MEM_END_MARK) continue;
             int mem = entry.getMemNum();
-            if (repeatStk[memEndStk + mem] == i) return mem;
+            boolean active = entry.type == MEM_END
+                    ? repeatStk[memEndStk + mem] == i
+                    : repeatStk[memEndStk + mem] != INVALID_INDEX;
+            if (!active && entry.type == MEM_END
+                    && repeatStk[memEndStk + mem] == INVALID_INDEX
+                    && repeatStk[memStartStk + mem] != INVALID_INDEX) {
+                active = true;
+            }
+            if (active && (completed == null || i > completed.returnIndex)) return mem;
         }
-        return -1;
+        if (completed != null) {
+            int[] snapshot = completed.frame.getCallFrameCaptureSnapshot();
+            int count = regex.numMem + 1;
+            int latest = INVALID_INDEX;
+            int latestCapture = -1;
+            for (int mem = 1; mem <= regex.numMem; mem++) {
+                int end = snapshot[count + mem];
+                if (end > latest) {
+                    latest = end;
+                    latestCapture = mem;
+                }
+            }
+            return latestCapture;
+        }
+        // Recursive memory-end opcodes may retain only direct offsets after a
+        // successful candidate commits. In that representation there is no
+        // active MEM_END stack entry to identify, so recover Perl's outermost
+        // last close from the visible capture ends. Ties keep the lower-numbered
+        // (and therefore enclosing) capture, which closes after its child.
+        int latestEnd = Region.REGION_NOTPOS;
+        int latestCapture = -1;
+        for (int mem = 1; mem <= regex.numMem; mem++) {
+            int end = captureEnd(mem);
+            if (end > latestEnd) {
+                latestEnd = end;
+                latestCapture = mem;
+            }
+        }
+        return latestCapture;
+    }
+
+    private int visibleCapturePointer(int capture, boolean begin) {
+        int current = repeatStk[(begin ? memStartStk : memEndStk) + capture];
+        CompletedRecursiveCall completed = completedRecursiveCall();
+        if (completed == null) {
+            int previous = previousClosedCapturePointer(capture, begin);
+            return previous != INVALID_INDEX ? previous : current;
+        }
+        int[] snapshot = completed.frame.getCallFrameCaptureSnapshot();
+        int count = regex.numMem + 1;
+        int currentEnd = repeatStk[memEndStk + capture];
+        if (currentEnd != INVALID_INDEX && captureClosedAfterReturn(
+                capture, completed.returnIndex)) {
+            if (begin && snapshot[capture] != INVALID_INDEX
+                    && snapshot[count + capture] == INVALID_INDEX) {
+                // The caller had opened this enclosing capture before making
+                // the recursive call and closed it after return. Its start is
+                // from the caller snapshot; its end is the committed current end.
+                return snapshot[capture];
+            }
+            return current;
+        }
+        return snapshot[(begin ? 0 : count) + capture];
+    }
+
+    private int previousClosedCapturePointer(int capture, boolean begin) {
+        if (repeatStk[memEndStk + capture] != INVALID_INDEX
+                || repeatStk[memStartStk + capture] == INVALID_INDEX) {
+            return INVALID_INDEX;
+        }
+        int endPointer = INVALID_INDEX;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (endPointer == INVALID_INDEX) {
+                if (entry.type == MEM_END && entry.getMemNum() == capture) {
+                    if (!begin) return i;
+                    endPointer = i;
+                }
+            } else if (entry.type == MEM_START && entry.getMemNum() == capture) {
+                return i;
+            }
+        }
+        return INVALID_INDEX;
+    }
+
+    private boolean captureClosedAfterReturn(int capture, int returnIndex) {
+        for (int i = stk - 1; i > returnIndex; i--) {
+            StackEntry entry = stack[i];
+            if ((entry.type == MEM_END || entry.type == MEM_END_MARK)
+                    && entry.getMemNum() == capture) return true;
+        }
+        return false;
+    }
+
+    private CompletedRecursiveCall completedRecursiveCall() {
+        ArrayDeque<Integer> returns = new ArrayDeque<>();
+        CompletedRecursiveCall visible = null;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == RETURN) {
+                returns.push(i);
+            } else if (entry.type == CALL_FRAME && !returns.isEmpty()) {
+                int returnIndex = returns.pop();
+                if (entry.getCallFrameCaptureSnapshot() != null
+                        && (visible == null || returnIndex > visible.returnIndex)) {
+                    visible = new CompletedRecursiveCall(entry, returnIndex);
+                }
+            }
+        }
+        return visible;
+    }
+
+    private static final class CompletedRecursiveCall {
+        final StackEntry frame;
+        final int returnIndex;
+
+        CompletedRecursiveCall(StackEntry frame, int returnIndex) {
+            this.frame = frame;
+            this.returnIndex = returnIndex;
+        }
     }
 
     @Override
@@ -2241,7 +2366,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opReturn() {
-        ip = sreturn();
+        StackEntry frame = returnFrame();
+        ip = frame.getCallFrameRetAddr();
         pushReturn();
     }
 
@@ -2284,13 +2410,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     /** Lazy nested matcher whose remaining alternatives belong to its caller. */
     static final class DynamicContinuation {
         private final ByteCodeMachine machine;
+        private final CalloutHandler handler;
         private final int start;
         private final int range;
         private boolean started;
         private boolean closed;
 
-        DynamicContinuation(ByteCodeMachine machine, int start, int range) {
+        DynamicContinuation(ByteCodeMachine machine, CalloutHandler handler,
+                int start, int range) {
             this.machine = machine;
+            this.handler = handler;
             this.start = start;
             this.range = range;
         }
@@ -2340,12 +2469,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             if (closed) return;
             closed = true;
             machine.completeActiveCallouts();
+            if (handler != null) handler.finish(true);
         }
 
         void abort() {
             if (closed) return;
             closed = true;
             machine.unwindActiveCallouts();
+            if (handler != null) handler.finish(false);
         }
     }
 

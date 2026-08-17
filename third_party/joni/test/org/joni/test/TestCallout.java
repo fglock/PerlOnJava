@@ -101,6 +101,27 @@ public class TestCallout {
     }
 
     @Test
+    public void recursiveSubpatternReturnRestoresCallerCaptures() {
+        List<String> events = new ArrayList<>();
+        Regex regex = regex("(?<r>(?<letter>a)(?:\\g<r>)?(?{=CALL:4}))");
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                events.add(id + ":" + match.lastClosedCapture() + ":"
+                        + match.captureBegin(2) + "-" + match.captureEnd(2));
+                return CalloutResult.CONTINUE;
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        };
+
+        assertEquals(0, search(regex, "aa", handler));
+        assertEquals(Arrays.asList("4:2:1-2", "4:2:0-1"), events);
+    }
+
+    @Test
     public void unwindsBacktrackedAndSuccessfulPathsExactlyOnce() {
         List<String> events = new ArrayList<>();
         Regex regex = regex("(a(?{=CALL:1})b|a(?{=CALL:2})c)");
@@ -278,6 +299,70 @@ public class TestCallout {
         assertEquals(events.toString(), 0, search(outer, "ab", outerHandler));
         assertEquals(Arrays.asList("dynamic:1:0", "execute:2", "unwind:2",
                 "outer-unwind:dynamic-token"), events);
+    }
+
+    @Test
+    public void enclosingCaptureClosesAfterDynamicProgram() {
+        Regex outer = regex("(a)((?{=DYNAMIC:1}))");
+        Regex nested = regex("b");
+        byte[] input = "aab".getBytes(StandardCharsets.US_ASCII);
+        Matcher matcher = outer.matcher(input);
+        matcher.setCalloutHandler(new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callback not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                return new DynamicPatternResult(nested, null, null);
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        });
+
+        assertEquals(1, matcher.search(0, input.length, Option.NONE));
+        assertEquals(1, matcher.captureBegin(1));
+        assertEquals(2, matcher.captureEnd(1));
+        assertEquals(2, matcher.captureBegin(2));
+        assertEquals(3, matcher.captureEnd(2));
+    }
+
+    @Test
+    public void repeatedDynamicProgramSeesPreviouslyClosedCapture() {
+        List<String> events = new ArrayList<>();
+        Regex outer = regex("\\A(?<digit>\\d)(?<repeat>(?<step>(?{=DYNAMIC:1})))+\\z");
+        byte[] input = "123".getBytes(StandardCharsets.US_ASCII);
+        Matcher matcher = outer.matcher(input);
+        matcher.setCalloutHandler(new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callback not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                int capture = match.lastClosedCapture();
+                int begin = match.captureBegin(capture);
+                int end = match.captureEnd(capture);
+                events.add(begin + "-" + end);
+                char next = (char) (input[end - 1] + 1);
+                return new DynamicPatternResult(regex(String.valueOf(next)), null, null);
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        });
+
+        assertEquals(0, matcher.search(0, input.length, Option.NONE));
+        assertEquals(Arrays.asList("0-1", "1-2", "2-3"), events);
+        assertEquals(2, matcher.captureBegin(2));
+        assertEquals(3, matcher.captureEnd(2));
+        assertEquals(2, matcher.captureBegin(3));
+        assertEquals(3, matcher.captureEnd(3));
     }
 
     private static CalloutHandler recordingHandler(List<String> events, boolean fail) {

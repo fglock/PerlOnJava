@@ -381,6 +381,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** Find the Perl lexical name for a live cell, for value-specific diagnostics. */
+    public static String findActiveLexicalName(RuntimeBase cell) {
+        if (cell == null) return null;
+        PerlRuntime runtime = PerlRuntime.current();
+        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
+                if (entry.getValue() == cell) return entry.getKey();
+            }
+        }
+        return null;
+    }
+
     /** Return a stable snapshot of the live lexical cells for an active CV. */
     public static Map<String, RuntimeBase> snapshotActiveLexicals(RuntimeCode code) {
         if (code == null) return Collections.emptyMap();
@@ -1193,6 +1206,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         registerActiveLexical(this, variableName, cell);
         return cell;
+    }
+
+    /** Refresh a live lexical binding after foreach replaces its alias cell. */
+    public RuntimeBase bindActiveLexical(String variableName, RuntimeBase cell) {
+        registerActiveLexical(this, variableName, cell);
+        return cell;
+    }
+
+    public static RuntimeBase bindActiveLexical(
+            RuntimeBase cell, RuntimeScalar codeRef, String variableName) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            return code.bindActiveLexical(variableName, cell);
+        }
+        RuntimeCode active = getActiveCodeAt(0);
+        return active == null ? cell : active.bindActiveLexical(variableName, cell);
     }
 
     public static RuntimeBase resolveLexicalAlias(
@@ -2761,7 +2789,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // reconstruct this state later, so seed the parser scope from
                 // the saved caller frame before BEGIN blocks are compiled.
                 String callerWarningBits = WarningBitsRegistry.getCallerBitsAtFrame(0);
-                if (callerWarningBits != null) {
+                if (callerWarningBits == null || callerWarningBits.isEmpty()) {
+                    callerWarningBits = WarningBitsRegistry.getCallSiteBits();
+                }
+                if (callerWarningBits == null || callerWarningBits.isEmpty()) {
+                    callerWarningBits = WarningBitsRegistry.getCurrent();
+                }
+                // An empty caller-stack entry means the interpreter had no
+                // more precise runtime value.  Do not let that erase the
+                // compile-time warning mask already present in the eval
+                // call site's captured symbol table.
+                if (callerWarningBits != null && !callerWarningBits.isEmpty()) {
                     WarningFlags.setWarningBitsFromString(parseSymbolTable, callerWarningBits);
                 }
                 // BEGIN blocks execute while the eval string is being parsed.
@@ -5632,6 +5670,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (elem instanceof ScalarSpecialVariable ssv) {
                 RuntimeScalar resolved = ssv.getValueAsScalar();
                 elems.set(i, new RuntimeScalar(resolved));
+            } else if (callContext != RuntimeContextType.LVALUE
+                    && callContext != RuntimeContextType.LVALUE_LIST
+                    && elem instanceof RuntimeScalar scalar
+                    && scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                // FETCH before RegexState/local teardown. A tied return can
+                // depend on captures produced inside the callee; deferring its
+                // magic until the caller consumes the value exposes the
+                // restored caller capture state instead.
+                elems.set(i, new RuntimeScalar(scalar));
             } else if (!preserveAggregateLvalues && elem instanceof RuntimeArray arr) {
                 // Copy array elements to ensure independence from local restoration.
                 // For tied arrays, use getList() which dispatches through FETCHSIZE/FETCH,
