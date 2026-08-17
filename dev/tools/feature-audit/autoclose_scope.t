@@ -20,6 +20,6 @@ my $got = <$in> // '';
 close $in or die "close read: $!";
 unlink $path or die "unlink $path: $!";
 
-print "bytes=" . length($got) . "\n";
+diag('bytes=' . length($got));
 is(length($got), 18, 'scope-exit file contents are readable');
 is($got, 'scope-exit-payload', 'lexical filehandle flushes at scope exit');
