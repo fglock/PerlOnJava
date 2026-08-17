@@ -58,7 +58,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
     @Override
     protected boolean regexCodeBlocksAreActive() {
-        return caseModifiers.stream().noneMatch(modifier -> "Q".equals(modifier.type));
+        // Text inside \Q, \U, \L, and the other interpolation modifiers is
+        // transformed before it becomes regex source. Perl therefore treats an
+        // executable-looking group there as runtime-generated source, not as a
+        // literal callback visible to the quote lexer.
+        return caseModifiers.isEmpty();
     }
 
     /**
