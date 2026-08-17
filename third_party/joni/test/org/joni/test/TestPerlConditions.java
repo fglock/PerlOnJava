@@ -30,42 +30,47 @@ import org.joni.Regex;
 import org.joni.Syntax;
 import org.junit.Test;
 
-public class TestPerlVariableLookBehind {
+public class TestPerlConditions {
     private static Matcher matcher(String pattern, String input) {
         byte[] patternBytes = pattern.getBytes(StandardCharsets.UTF_8);
         byte[] inputBytes = input.getBytes(StandardCharsets.UTF_8);
         Regex regex = new Regex(patternBytes, 0, patternBytes.length, Option.NONE,
-                UTF8Encoding.INSTANCE, Syntax.Perl);
+                UTF8Encoding.INSTANCE, Syntax.RUBY);
         return regex.matcher(inputBytes);
     }
 
     @Test
-    public void boundedPositiveLookBehindTriesEveryLength() {
-        assertEquals(3, matcher("(?<=a{1,3})b", "aaab").search(0, 4, Option.NONE));
+    public void positiveAssertionSelectsTheMatchingBranch() {
+        assertEquals(0, matcher("(?(?=a)a|b)", "a").search(0, 1, Option.NONE));
+        assertEquals(0, matcher("(?(?=a)a|b)", "b").search(0, 1, Option.NONE));
     }
 
     @Test
-    public void boundedNegativeLookBehindRejectsEveryLength() {
-        assertEquals(-1, matcher("(?<!a{1,3})b", "zaab").search(0, 4, Option.NONE));
+    public void negativeAssertionSelectsTheMatchingBranch() {
+        assertEquals(0, matcher("(?(?!a)b|a)", "a").search(0, 1, Option.NONE));
+        assertEquals(0, matcher("(?(?!a)b|a)", "b").search(0, 1, Option.NONE));
     }
 
     @Test
-    public void compoundBoundedLookBehindRequiresTheOriginalEndpoint() {
-        Matcher matcher = matcher("(?<=(a{1,3}b))c", "aaabc");
-        assertEquals(4, matcher.search(0, 5, Option.NONE));
+    public void assertionCapturesRemainVisibleToTheSelectedBranch() {
+        Matcher matcher = matcher("(?(?=(a))\\1|b)", "a");
+        assertEquals(0, matcher.search(0, 1, Option.NONE));
         assertEquals(0, matcher.getRegion().getBeg(1));
-        assertEquals(4, matcher.getRegion().getEnd(1));
+        assertEquals(1, matcher.getRegion().getEnd(1));
     }
 
     @Test
-    public void compoundNegativeLookBehindChecksEveryFiniteLength() {
-        assertEquals(-1, matcher("(?<!a{1,3}b)c", "aaabc").search(0, 5, Option.NONE));
-        assertEquals(1, matcher("(?<!a{1,3}b)c", "zc").search(0, 2, Option.NONE));
+    public void recursionConditionDistinguishesSubpatternCalls() {
+        assertEquals(0, matcher("(?<A>foo(?(R)bar))?\\g<A>", "foofoobar")
+                .search(0, 9, Option.NONE));
+        assertEquals(0, matcher("(?(R)bad|ok)", "ok").search(0, 2, Option.NONE));
     }
 
     @Test
-    public void nestedFiniteAlternationSupportsCompoundLengths() {
-        assertEquals(5, matcher("(?<=x(?:a|bc){1,2})z", "xbcbcz")
-                .search(0, 6, Option.NONE));
+    public void numberedAndNamedRecursionConditionsSelectTheirGroup() {
+        assertEquals(0, matcher("(?<A>foo(?(R1)bar))?\\g<A>", "foofoobar")
+                .search(0, 9, Option.NONE));
+        assertEquals(0, matcher("(x)(?<A>foo(?(R&A)bar))?\\g<A>", "xfoofoobar")
+                .search(0, 10, Option.NONE));
     }
 }
