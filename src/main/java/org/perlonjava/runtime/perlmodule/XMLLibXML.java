@@ -65,6 +65,7 @@ public class XMLLibXML extends PerlModuleBase {
         boolean keepBlanks      = true;
         boolean recover         = false;
         boolean expandEntities  = false; // XML_PARSE_NOENT; false = keep EntityReference nodes
+        boolean loadExternalDtd = false; // XML_PARSE_DTDLOAD
     }
 
     static class XPathContextState {
@@ -980,6 +981,7 @@ public class XMLLibXML extends PerlModuleBase {
             int flags = flagsScalar.getInt();
             if ((flags & XML_PARSE_NOBLANKS) != 0) opts.keepBlanks = false;
             opts.expandEntities = (flags & 2) != 0; // XML_PARSE_NOENT = 2
+            opts.loadExternalDtd = (flags & 4) != 0; // XML_PARSE_DTDLOAD = 4
         }
         return opts;
     }
@@ -991,6 +993,11 @@ public class XMLLibXML extends PerlModuleBase {
             if (!opts.keepBlanks) f.setIgnoringElementContentWhitespace(true);
             // When expand_entities is false, keep EntityReference nodes in the tree
             f.setExpandEntityReferences(opts.expandEntities);
+            // JAXP loads external DTDs by default, unlike libxml2 without
+            // XML_PARSE_DTDLOAD. Apart from changing compatibility, that makes
+            // parse_string() unexpectedly resolve relative files from cwd.
+            f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd",
+                opts.loadExternalDtd);
             DocumentBuilder db = f.newDocumentBuilder();
             db.setErrorHandler(new ErrorHandler() {
                 public void warning(SAXParseException e) {}
@@ -1070,7 +1077,11 @@ public class XMLLibXML extends PerlModuleBase {
             Document doc;
             // Detect binary XML (UTF-16/UTF-32 BOM) and parse as byte stream
             // so the parser can auto-detect the encoding from the BOM/declaration
-            doc = db.parse(xmlInputSource(xmlStr));
+            InputSource source = xmlInputSource(xmlStr);
+            if (args.size() > 2 && args.get(2).type != RuntimeScalarType.UNDEF) {
+                source.setSystemId(args.get(2).toString());
+            }
+            doc = db.parse(source);
             if (!opts.keepBlanks) stripBlankTextNodes(doc);
             // Store detected encoding in user data for getEncoding() calls
             String declEnc = doc.getXmlEncoding();
