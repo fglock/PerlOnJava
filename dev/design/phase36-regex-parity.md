@@ -243,8 +243,16 @@ validation found that all 123,411 generated records
 in chunks 05–10 retain literal UTF-8 boundary markers in both subjects and
 patterns. Their 122,620 apparent passing assertions are therefore vacuous,
 not evidence of boundary or folding parity. Chunks 01–04 contain the genuine
-property failures; raw eval/source UTF-8 tagging must be fixed before chunks
-05–10 can become an authoritative boundary gate.
+property and hand-written boundary evidence. An exact upstream-stage reducer
+shows that lexical `use bytes` fails to replace the upgraded marker regex in a
+byte subject (system Perl 4/4, JVM/interpreter 2/4); that byte-mode substitution
+gap must be fixed before chunks 05–10 can become an authoritative boundary gate.
+
+Explicit `Is_*` property/value assignments now normalize before built-in
+routing, including Perl's colon delimiter. The focused 12-assertion oracle
+passes on system Perl, JVM, and interpreter. The generated corpus rises by
+exactly 44,944 assertions to 220,712/290,912 on both execution backends, with
+identical per-file counts and zero errors, timeouts, or incomplete files.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -413,9 +421,13 @@ matcher-specific timeouts on both execution backends.
   - [x] Classified all 115,144 failures newly exposed by the lossless generated
     `uniprops*.t` corpus, including the cross-cutting invalid boundary-harness
     evidence in chunks 05–10.
-  - [ ] Fix raw eval/source UTF-8 tagging so chunks 05–10 exercise real boundary
-    subjects, then close the property and boundary failures with exact
-    JVM/interpreter plan and semantic parity before marking Phase 3 complete.
+  - [x] Normalized explicit `Is_*` property/value assignments and the colon
+    delimiter (PR #1019), gaining exactly 44,944 generated assertions on both
+    execution backends without changing any plan.
+  - [ ] Fix byte-mode substitution of upgraded marker regexes so chunks 05–10
+    exercise real boundary subjects, then close the property and boundary
+    failures with exact JVM/interpreter plan and semantic parity before marking
+    Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -431,14 +443,15 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Complete and publish the current explicit `Is_*` property/value
-   normalization slice, measuring its exact chunks 01–04 gain on JVM and
-   interpreter. Integrate the independent fatal-Joni-syntax diagnostic slice
-   after its focused regressions and warning-free `make` pass.
-2. Fix raw-loaded eval/source UTF-8 tagging without patching generated fixtures.
-   Regenerate the lossless corpus and prove that chunks 05–10 no longer match
-   literal boundary markers before treating any boundary or folding result as
-   evidence.
+1. Finalize PR #1019 after its tracker correction, then integrate the validated
+   fatal-Joni-syntax commit `d2fd88096` (+259 raw `reg_mesg.t` passes; warning-
+   free `make`) and publish it as the next stacked slice.
+2. Fix lexical `use bytes` substitution when an upgraded marker regex matches a
+   byte subject, without patching generated fixtures. Regenerate the lossless
+   corpus and prove that chunks 05–10 no longer match literal boundary markers
+   before treating any boundary or folding result as evidence. Keep the
+   separately reduced eval byte-source UTF-8 decoding fix as an independent
+   runtime parity slice.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
    break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
