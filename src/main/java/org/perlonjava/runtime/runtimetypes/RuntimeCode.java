@@ -5632,6 +5632,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (elem instanceof ScalarSpecialVariable ssv) {
                 RuntimeScalar resolved = ssv.getValueAsScalar();
                 elems.set(i, new RuntimeScalar(resolved));
+            } else if (callContext != RuntimeContextType.LVALUE
+                    && callContext != RuntimeContextType.LVALUE_LIST
+                    && elem instanceof RuntimeScalar scalar
+                    && scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                // FETCH before RegexState/local teardown. A tied return can
+                // depend on captures produced inside the callee; deferring its
+                // magic until the caller consumes the value exposes the
+                // restored caller capture state instead.
+                elems.set(i, new RuntimeScalar(scalar));
             } else if (!preserveAggregateLvalues && elem instanceof RuntimeArray arr) {
                 // Copy array elements to ensure independence from local restoration.
                 // For tied arrays, use getList() which dispatches through FETCHSIZE/FETCH,

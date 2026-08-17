@@ -301,6 +301,35 @@ public class TestCallout {
                 "outer-unwind:dynamic-token"), events);
     }
 
+    @Test
+    public void enclosingCaptureClosesAfterDynamicProgram() {
+        Regex outer = regex("(a)((?{=DYNAMIC:1}))");
+        Regex nested = regex("b");
+        byte[] input = "aab".getBytes(StandardCharsets.US_ASCII);
+        Matcher matcher = outer.matcher(input);
+        matcher.setCalloutHandler(new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callback not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                return new DynamicPatternResult(nested, null, null);
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        });
+
+        assertEquals(1, matcher.search(0, input.length, Option.NONE));
+        assertEquals(1, matcher.captureBegin(1));
+        assertEquals(2, matcher.captureEnd(1));
+        assertEquals(2, matcher.captureBegin(2));
+        assertEquals(3, matcher.captureEnd(2));
+    }
+
     private static CalloutHandler recordingHandler(List<String> events, boolean fail) {
         return new CalloutHandler() {
             @Override
