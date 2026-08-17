@@ -394,8 +394,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Lookbehind Assertions**: Fixed and bounded variable-length positive and negative lookbehind assertions execute through Joni.
 - ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
 - ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
-- 🟡  **Conditional Expressions**: Executable callback conditions `(?(?{ code })yes|no)` and optimistic predicates `(?(*{ code })yes|no)` execute through Joni; other condition forms are not yet complete.
-- 🟡  **Extended Unicode Regex Features**: Script extensions and properties such as `Extended_Pictographic` execute through Joni; some Perl-only property aliases and versioned `Age` forms remain incomplete.
+- ✅  **Conditional Expressions**: Numbered and named capture conditions, positive and negative assertion conditions, recursion conditions `(?(R))`, `(?(R1))`, and `(?(R&name))`, executable callback conditions, and optimistic predicates execute through Joni.
+- 🟡  **Extended Unicode Regex Features**: Script and block values, script extensions, `Extended_Pictographic`, exact `Age`, and cumulative `In`/`Present_In` properties execute through Joni; remaining work is limited to uncommon Perl-only aliases and exact invalid-property diagnostics.
 - ✅  **Extended Grapheme Clusters**: `\X` matches combining sequences and emoji ZWJ grapheme clusters.
 - ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Callback `local` frames follow matcher paths, and escaped loop control or `goto` stops at the callback pseudo-block boundary. `$^N` follows capture-close order independently of `$+`.
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.

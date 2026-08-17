@@ -191,7 +191,7 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Phases 0-2 in progress
+### Current Status: Phases 0-3 in progress
 
 ### Completed Phases
 
@@ -207,12 +207,16 @@ compatibility contract.
 
 1. Capture forced-Java and forced-Joni results for the full 80-file direct regex
    corpus, compare both against PR 958, and classify any newly exposed gaps.
-2. Inventory compound variable-lookbehind forms beyond direct finite
-   quantifiers, then complete the expanded MARK/named-SKIP and callback-unwind
-   gates and run the applicable `pat_advanced.t` control-verb sections.
+2. Run the applicable `pat_advanced.t` control-verb and condition sections,
+   then close Phase 2 if their direct and interpreter results agree.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-4. Inventory and move the next matcher-semantic preprocessor slice into Joni.
+4. Inventory the remaining uncommon Unicode aliases and invalid-property
+   diagnostics against Perl 5.44's bundled tables, then move the next
+   matcher-semantic preprocessor slice into Joni.
+5. Close the whole-suite Joni-default blockers in split/list-context behavior,
+   branch-reset routing outside the regex unit directory, and `Script=` Unicode
+   property translation before repeating the default-backend flip.
 
 ### Open Questions and Blockers
 

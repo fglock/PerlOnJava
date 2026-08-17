@@ -785,12 +785,10 @@ public class UnicodeResolver {
             String agePattern = translatePerlAgeProperty(property, negated);
             if (agePattern != null) return agePattern;
 
-            // Remove prefixes (Blk= is Perl's short form for Block=)
-            for (String prefix : new String[]{"Script=", "Block=", "Blk=", "In=", "Is="}) {
-                if (property.startsWith(prefix)) {
-                    property = property.substring(prefix.length());
-                    break;
-                }
+            // Is= is Perl shorthand for a property value. Keep Script=,
+            // Block=/Blk=, and the age aliases as property/value pairs for ICU.
+            if (property.startsWith("Is=")) {
+                property = property.substring("Is=".length());
             }
 
             // Strip 'Is'/'is' prefix for Perl compatibility (e.g., IsPrint -> Print, isAlpha -> Alpha)

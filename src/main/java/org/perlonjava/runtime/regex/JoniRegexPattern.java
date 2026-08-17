@@ -110,7 +110,9 @@ final class JoniRegexPattern {
             boolean userDefined = unnegated.matches("^(.*::)?([Ii][sSNn]).+");
             boolean scriptExtensions = unnegated.matches(
                     "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
-            if (!userDefined && !scriptExtensions) {
+            boolean frontendProperty = unnegated.matches(
+                    "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*=.*");
+            if (!userDefined && !scriptExtensions && !frontendProperty) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
