@@ -330,6 +330,41 @@ public class TestCallout {
         assertEquals(3, matcher.captureEnd(2));
     }
 
+    @Test
+    public void repeatedDynamicProgramSeesPreviouslyClosedCapture() {
+        List<String> events = new ArrayList<>();
+        Regex outer = regex("\\A(?<digit>\\d)(?<repeat>(?<step>(?{=DYNAMIC:1})))+\\z");
+        byte[] input = "123".getBytes(StandardCharsets.US_ASCII);
+        Matcher matcher = outer.matcher(input);
+        matcher.setCalloutHandler(new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callback not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                int capture = match.lastClosedCapture();
+                int begin = match.captureBegin(capture);
+                int end = match.captureEnd(capture);
+                events.add(begin + "-" + end);
+                char next = (char) (input[end - 1] + 1);
+                return new DynamicPatternResult(regex(String.valueOf(next)), null, null);
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        });
+
+        assertEquals(0, matcher.search(0, input.length, Option.NONE));
+        assertEquals(Arrays.asList("0-1", "1-2", "2-3"), events);
+        assertEquals(2, matcher.captureBegin(2));
+        assertEquals(3, matcher.captureEnd(2));
+        assertEquals(2, matcher.captureBegin(3));
+        assertEquals(3, matcher.captureEnd(3));
+    }
+
     private static CalloutHandler recordingHandler(List<String> events, boolean fail) {
         return new CalloutHandler() {
             @Override

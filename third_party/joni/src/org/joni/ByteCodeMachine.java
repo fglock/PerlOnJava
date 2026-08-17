@@ -2233,6 +2233,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             boolean active = entry.type == MEM_END
                     ? repeatStk[memEndStk + mem] == i
                     : repeatStk[memEndStk + mem] != INVALID_INDEX;
+            if (!active && entry.type == MEM_END
+                    && repeatStk[memEndStk + mem] == INVALID_INDEX
+                    && repeatStk[memStartStk + mem] != INVALID_INDEX) {
+                active = true;
+            }
             if (active && (completed == null || i > completed.returnIndex)) return mem;
         }
         if (completed != null) {
@@ -2269,7 +2274,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int visibleCapturePointer(int capture, boolean begin) {
         int current = repeatStk[(begin ? memStartStk : memEndStk) + capture];
         CompletedRecursiveCall completed = completedRecursiveCall();
-        if (completed == null) return current;
+        if (completed == null) {
+            int previous = previousClosedCapturePointer(capture, begin);
+            return previous != INVALID_INDEX ? previous : current;
+        }
         int[] snapshot = completed.frame.getCallFrameCaptureSnapshot();
         int count = regex.numMem + 1;
         int currentEnd = repeatStk[memEndStk + capture];
@@ -2285,6 +2293,26 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             return current;
         }
         return snapshot[(begin ? 0 : count) + capture];
+    }
+
+    private int previousClosedCapturePointer(int capture, boolean begin) {
+        if (repeatStk[memEndStk + capture] != INVALID_INDEX
+                || repeatStk[memStartStk + capture] == INVALID_INDEX) {
+            return INVALID_INDEX;
+        }
+        int endPointer = INVALID_INDEX;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (endPointer == INVALID_INDEX) {
+                if (entry.type == MEM_END && entry.getMemNum() == capture) {
+                    if (!begin) return i;
+                    endPointer = i;
+                }
+            } else if (entry.type == MEM_START && entry.getMemNum() == capture) {
+                return i;
+            }
+        }
+        return INVALID_INDEX;
     }
 
     private boolean captureClosedAfterReturn(int capture, int returnIndex) {
