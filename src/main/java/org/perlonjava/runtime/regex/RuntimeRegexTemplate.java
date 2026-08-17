@@ -17,10 +17,13 @@ public final class RuntimeRegexTemplate {
     private final String pattern;
     private final List<RuntimeRegexCallback> callbacks;
 
-    record MaskedCallouts(String pattern, List<String> placeholders,
-                          List<String> markers) {
+    record MaskedCallouts(String pattern, String syntheticPrefix,
+                          List<String> placeholders, List<String> markers) {
         String restore(String compiledPattern) {
             String restored = compiledPattern;
+            if (!syntheticPrefix.isEmpty() && restored.startsWith(syntheticPrefix)) {
+                restored = restored.substring(syntheticPrefix.length());
+            }
             for (int i = 0; i < placeholders.size(); i++) {
                 restored = restored.replace(placeholders.get(i), markers.get(i));
             }
@@ -133,24 +136,33 @@ public final class RuntimeRegexTemplate {
     MaskedCallouts maskCallouts() {
         Matcher matcher = CALLOUT_ID.matcher(pattern);
         StringBuilder masked = new StringBuilder();
+        StringBuilder syntheticPrefix = new StringBuilder();
         List<String> placeholders = new ArrayList<>();
         List<String> markers = new ArrayList<>();
         int id = 0;
         while (matcher.find()) {
             String token = "POJ_INTERNAL_CALLOUT_PLACEHOLDER_" + id++ + "_END";
             while (pattern.contains(token)) token += "_";
-            // In (?(?{...})yes|no), the marker itself is the condition.
-            // Leave a syntactically valid assertion condition around the
-            // token so the runtime parser preserves the surrounding branches.
+            // In (?(?{...})yes|no), the marker itself is the condition. Use a
+            // temporary named-capture condition so the runtime regex parser
+            // preserves the branches without interpreting the trusted marker
+            // as Perl source. The empty capture is removed by restore().
             boolean callbackCondition = matcher.start() >= 2
                     && pattern.startsWith("(?", matcher.start() - 2);
-            String placeholder = callbackCondition ? "(?=" + token + ")" : token;
+            String placeholder = token;
+            if (callbackCondition) {
+                String name = "POJ_INTERNAL_CALLOUT_CONDITION_" + id;
+                while (pattern.contains(name)) name += "_";
+                syntheticPrefix.append("(?<").append(name).append(">)");
+                placeholder = "(<" + name + ">)";
+            }
             placeholders.add(placeholder);
             markers.add(matcher.group());
             matcher.appendReplacement(masked, Matcher.quoteReplacement(placeholder));
         }
         matcher.appendTail(masked);
-        return new MaskedCallouts(masked.toString(), placeholders, markers);
+        return new MaskedCallouts(syntheticPrefix + masked.toString(),
+                syntheticPrefix.toString(), placeholders, markers);
     }
 
     boolean containsRuntimeExecutableSource(String modifiers) {
