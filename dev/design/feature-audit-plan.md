@@ -12,6 +12,29 @@ The canonical status source is
 Other documentation must either agree with it or link to a more specific,
 current design or module note.
 
+## Initial Evidence
+
+The first rerunnable probes are under
+[`dev/tools/feature-audit/`](../tools/feature-audit/). Native Perl was run
+first for every probe, followed by the JVM and interpreter backends. Captured
+logs are in `/tmp/feature-audit-*` and are not committed by default.
+
+| Feature | Native Perl | JVM backend | Interpreter backend | Finding |
+|---|---|---|---|---|
+| Lexical buffered file auto-close | pass | pass | pass | Basic flush behavior passes everywhere. |
+| File descriptor closure at lexical scope exit | `reopen=no` | `reopen=no` | `reopen=yes` | Partial support; interpreter backend retains the fd. |
+| Smartmatch / `given` / `when` | pass | pass | pass | Matrix claim was stale; promoted to supported. |
+| Restricted hashes | enforced | not enforced | not enforced | Still unsupported on both backends. |
+| DBM round trip | pass | explicit `dbmopen` not implemented | explicit `dbmopen` not implemented | Still unsupported. |
+| `fork` returns a child PID | pass | not defined | not defined | Still unsupported; true OS fork remains unavailable. |
+| `ops` module loads | pass | module missing | module missing | Still unsupported. |
+| Minimal extended `caller` tuple count | pass | pass | pass | Basic shape passes; field-by-field validation remains. |
+| Basic multibyte `seek`/`tell` | pass | pass | pass | Only the basic case is covered; full positioning semantics remain open. |
+
+The exact commands and test names are documented in the probe README. A
+passing probe does not promote a broad feature automatically: semantic and
+edge-case coverage must be sufficient for the documented claim.
+
 ## Audit Method
 
 ### 1. Build the inventory
@@ -166,7 +189,7 @@ documentation-only planning change.
 
 ## Progress Tracking
 
-### Current Status: Plan created; audit not started
+### Current Status: Initial probe batch complete; broader audit in progress
 
 ### Completed Phases
 
@@ -175,14 +198,22 @@ documentation-only planning change.
 - [x] Documentation synchronization rules defined.
 - [x] CPAN compatibility reports identified as dated snapshots rather than
   feature-level proof.
+- [x] Created rerunnable `Test::More` TAP probes under `dev/tools/feature-audit/`.
+- [x] Audited initial file lifecycle, operator, pragma, process, DBM, and
+  multibyte I/O cases with native Perl and both backends.
+- [x] Corrected the stale smartmatch and auto-close matrix claims from the
+  initial evidence.
 
 ### Next Steps
 
-1. Build the feature-to-probe inventory from the feature matrix.
-2. Reconcile stale and duplicate documentation claims.
-3. Add and validate minimal probes with system Perl.
-4. Run the probes on both PerlOnJava backends.
-5. Update the matrix and related documentation from the evidence.
+1. Add probes for the remaining language, pragma, overload, regex, debugger,
+   module, XS, and JSR-223 gaps.
+2. Validate full `caller` fields and multibyte `seek`/`tell`/`truncate`
+   semantics rather than only their basic cases.
+3. Reconcile remaining stale and duplicate documentation claims.
+4. Update related module and design pages from confirmed evidence.
+5. Route genuine backend regressions, such as interpreter fd retention, to
+   implementation-specific follow-up work.
 
 ### Open Questions and Blockers
 
