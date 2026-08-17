@@ -10,7 +10,7 @@ dependencies. Targets that fail under system Perl may be excluded.
 
 ## Progress Tracking
 
-### Current Status: implementation and local validation complete
+### Current Status: complete; PR #997 open with passing CI
 
 ### Completed Phases
 
@@ -45,11 +45,15 @@ dependencies. Targets that fail under system Perl may be excluded.
     fails before running any assertions.
   - The upstream Want behavior regression was validated with system Perl, and
     the full project `make` passes all unit shards and packaging checks.
+- [x] Phase 4: publication and CI (2026-08-17)
+  - Opened PR #997 from `fix/jcpan-tooling-six-modules-20260817`.
+  - GitHub Actions run 32033100182 passes both required jobs: Ubuntu's full
+    build and Perl thread compatibility gate, and Windows' full build and
+    focused thread gate.
 
 ### Next Steps
 
-1. Run final post-documentation validation and commit with attribution.
-2. Publish the pull request and monitor Linux and Windows CI.
+1. Wait for review and merge of PR #997.
 
 ### Open Questions
 
