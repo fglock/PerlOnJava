@@ -28,7 +28,7 @@ logs are in `/tmp/feature-audit-*` and are not committed by default.
 | DBM round trip | pass | explicit `dbmopen` not implemented | explicit `dbmopen` not implemented | Still unsupported. |
 | `fork` returns a child PID | pass | not defined | not defined | Still unsupported; true OS fork remains unavailable. |
 | `ops` module loads | pass | module missing | module missing | Still unsupported. |
-| Minimal extended `caller` tuple count | pass | pass | pass | Basic shape passes; field-by-field validation remains. |
+| Full 11-field `caller` tuple | pass | pass | pass | Key package, filename, line, and subroutine fields pass; exact hint values remain context-dependent. |
 | Basic multibyte `seek`/`tell` | pass | pass | pass | Only the basic case is covered; full positioning semantics remain open. |
 | Executable regex conditionals | pass | pass | pass | Tested true and false callback branches; other conditional forms remain open. |
 | `\X` and `Extended_Pictographic` | pass | pass | pass | Tested representative grapheme and emoji cases; broader Unicode aliases remain open. |
@@ -210,6 +210,8 @@ documentation-only planning change.
   initial evidence.
 - [x] Revalidated existing unit coverage for `postderef_qq`, `unicode_eval`,
   and container `refaliasing`; corrected their stale matrix status.
+- [x] Validated the full 11-field `caller()` tuple and key subroutine metadata
+  with a dedicated native/JVM/interpreter probe.
 
 ### Next Steps
 

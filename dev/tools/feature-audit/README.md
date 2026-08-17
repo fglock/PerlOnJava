@@ -37,6 +37,7 @@ Perl version and platform when behavior is version- or platform-dependent.
 | `autoclose_fd.t` | Whether an fd can be reopened after the lexical handle exits |
 | `remaining_semantics.t` | Focused checks for smartmatch, restricted hashes, overload, `caller`, `ops`, DBM, `fork`, `dump`, and multibyte file positioning |
 | `regex_remaining.t` | Executable conditional expressions, grapheme clusters, and `Extended_Pictographic` |
+| `caller_fields.t` | Full 11-field `caller()` tuple and subroutine metadata |
 
 ## Interpreting results
 

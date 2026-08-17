@@ -606,9 +606,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Runtime-owned `@_`, `$_`, and regex state**: Each ithread receives an isolated runtime snapshot.
 - ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
-  - ❌  **Extended call stack information**: extra debug information like `(caller($level))[9]` is not implemented.<br>
-    This means we don't include subroutine names in error messages yet.<br>
-    Extra debug information: `($package, $filename, $line, $subroutine, $hasargs, $wantarray, $evaltext, $is_require, $hints, $bitmask, $hinthash)`
+  - ✅  **Extended call stack information**: the full 11-field `caller($level)` tuple and key subroutine metadata are supported on both backends. See the [caller audit probe](../../dev/tools/feature-audit/caller_fields.t).<br>
+    Exact hint and bitmask values remain runtime- and pragma-dependent.
 
 ---
 
