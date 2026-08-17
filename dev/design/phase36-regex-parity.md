@@ -250,6 +250,12 @@ before interpolation, so `\c@` cannot be mistaken for `@-`; the focused
 4-assertion oracle passes on all three runtimes and unchanged `subst.t` reaches
 250/281 on JVM and interpreter.
 
+The matcher adapter now carries Joni's search start and Perl `\G` position as
+independent cursors, including Unicode offset conversion. The focused
+12-assertion oracle passes on system Perl, JVM, and interpreter; unchanged
+`subst.t` reaches 275/281 on both execution backends with tests 165-188
+restored. The temporary Java backend retains its start-at-`pos` approximation.
+
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
 frames now preserve the Perl-visible caller capture view for optimistic
@@ -322,6 +328,10 @@ matcher-specific timeouts on both execution backends.
     `/g` hot loop. The focused million-match oracle completes in 1.07 seconds
     on JVM and 1.41 seconds on interpreter (PR #1008), with exact map and
     supplementary-character capture-boundary coverage.
+  - [x] Separated Joni's search-start and `\G` cursors for ordinary matching
+    and substitution, including Unicode subjects and code replacements. The
+    focused oracle passes 12/12 and unchanged `subst.t` passes 275/281 on JVM
+    and interpreter.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -358,7 +368,7 @@ matcher-specific timeouts on both execution backends.
     system Perl, JVM, and interpreter.
   - [x] Removed the final `pat.t.patch` hunk, deleted the patch and its importer
     configuration, and resynchronized the unmodified Perl 5.44 `pat.t`.
-- [ ] Phase 3: Unicode and pattern syntax completion (in progress)
+- [x] Phase 3: Unicode and pattern syntax completion (2026-08-17)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
   - [x] Converted public regex `pos` values between Perl logical-character
@@ -384,7 +394,10 @@ matcher-specific timeouts on both execution backends.
   - [x] Preserved `\c` control operands through regex source interpolation.
     The focused oracle passes 4/4 and unchanged `subst.t` gains test 154 on
     both execution backends.
-  - [ ] Complete the remaining built-in Unicode aliases.
+  - [x] Completed Perl-compatible built-in Unicode alias normalization while
+    preserving deferred user-property precedence. The focused alias oracle
+    passes 16/16 on system Perl, JVM, and interpreter; unchanged
+    `regexp_unicode_prop.t` passes 1,110/1,110 on both execution backends.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -400,26 +413,16 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Remediate the remaining forced-Joni failure causes, starting with the
-   catastrophic `regexp*` cluster and absent generated Unicode fixtures; keep
-   per-child hard limits throughout. PR #1008 has removed the release-blocking
-   `pat_psycho*` offset-map reconstruction and bounded profiling confirms that
-   matcher-wrapper reuse is no longer on the critical path.
-2. Integrate the stacked Joni offset-map, regex-set property, and CEC timeout
-   slices, then rerun the forced-Joni corpus from the new combined head.
-3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
-   both to PR 958 with the regression exit gate.
-4. Integrate PR #1011, the deferred-property provenance slice, inline-`p`
-   syntax, and control-escape source handling. Finish PerlOnJava4's built-in
-   Unicode aliases against the 1,065/1,110 diagnostics baseline. Fixing the 29
-   executed alias failures also unlocks 16 gated match assertions, so the
-   alias-complete target is 1,110/1,110.
-5. Give the matcher adapter an independent Joni `gpos` cursor. Substitution
-   must search before `pos` when pattern atoms precede `\G`; the current
-   start-at-`pos` shortcut causes `subst.t` tests 165-188 to miss every match.
-   Keep Java's temporary approximation isolated and use Joni's existing
-   `Matcher.search(gpos, start, range, option)` API for final semantics.
-6. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+1. Complete the combined offset-map, regex-set, Joni safeguard, property
+   diagnostics/provenance, Unicode-alias, inline-`p`, and control-escape
+   integration while retaining each validated prerequisite head.
+2. Integrate the lossless generated Unicode fixtures, then rerun the
+   forced-Joni corpus from the combined head with every child hard-bounded.
+3. Capture clean JVM and interpreter 80-file baselines and compare every file
+   with PR 958 under the no-regression gate.
+4. Classify residual engine-introspection exclusions, then queue the largest
+   remaining semantic cluster as a focused slice.
+5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 
