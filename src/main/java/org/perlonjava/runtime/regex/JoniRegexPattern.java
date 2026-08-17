@@ -37,7 +37,9 @@ final class JoniRegexPattern {
             "PERLONJAVA", Syntax.RUBY.op,
             (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL | OP2_PLUS_POSSESSIVE_INTERVAL,
             Syntax.RUBY.op3,
-            Syntax.RUBY.behavior, Syntax.RUBY.options & ~Option.ASCII_RANGE,
+            Syntax.RUBY.behavior,
+            Syntax.RUBY.options & ~(Option.ASCII_RANGE
+                    | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable);
 
     private final Regex regex;
@@ -48,17 +50,22 @@ final class JoniRegexPattern {
     private final boolean hasDeferredUserDefinedUnicodeProperty;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
-        this(perlPattern, flags, 0);
+        this(perlPattern, flags, 0, false);
     }
 
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount) {
+        this(perlPattern, flags, trustedCalloutCount, false);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses) {
         this.flags = flags;
         hasControlVerbState = hasControlVerbState(perlPattern);
         UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
         hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
         sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
         byte[] bytes = sourcePattern.getBytes(StandardCharsets.UTF_8);
-        regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags),
+        regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
                 UTF8Encoding.INSTANCE, PERLONJAVA_SYNTAX);
         namedGroups = collectNamedGroups(regex);
     }
@@ -162,14 +169,14 @@ final class JoniRegexPattern {
         return normalized.toString();
     }
 
-    private static int toJoniOptions(RegexFlags flags) {
+    private static int toJoniOptions(RegexFlags flags, boolean forceAsciiClasses) {
         int options = Option.NONE;
         if (flags.isCaseInsensitive()) options |= Option.IGNORECASE;
         if (flags.isExtended()) options |= Option.EXTEND;
         // Oniguruma's MULTILINE option controls whether dot matches newline.
         if (flags.isDotAll()) options |= Option.MULTILINE;
         if (!flags.isMultiLine()) options |= Option.SINGLELINE;
-        if (flags.isAscii()) options |= Option.ASCII_RANGE;
+        if (flags.isAscii() || forceAsciiClasses) options |= Option.ASCII_RANGE;
         if (flags.isAsciiStrict()) options |= Option.PERL_ASCII_STRICT;
         // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
         // when a pattern also contains named groups. Perl keeps both kinds of
@@ -218,6 +225,9 @@ final class JoniRegexPattern {
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
+        boolean atClassStart = false;
+        boolean classAllowsLeadingClose = false;
+        int posixClassDepth = 0;
         boolean wrapsInternalScalarMarker = false;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
@@ -227,6 +237,10 @@ final class JoniRegexPattern {
                 continue;
             }
             if (ch == '\\') {
+                if (inClass) {
+                    atClassStart = false;
+                    classAllowsLeadingClose = false;
+                }
                 if (!inClass && flags.isAsciiStrict() && pattern.startsWith("\\x{", i)) {
                     int end = pattern.indexOf('}', i + 3);
                     if (end > i + 3) {
@@ -275,8 +289,16 @@ final class JoniRegexPattern {
                             && (pattern.charAt(i + 1) == ':'
                                     || pattern.charAt(i + 1) == '.'
                                     || pattern.charAt(i + 1) == '=');
-                    if (!posixClass) {
+                    if (posixClass) {
+                        posixClassDepth++;
+                        atClassStart = false;
+                        classAllowsLeadingClose = false;
+                        out.append(ch);
+                        continue;
+                    } else {
                         out.append("\\[");
+                        atClassStart = false;
+                        classAllowsLeadingClose = false;
                         continue;
                     }
                 }
@@ -289,20 +311,43 @@ final class JoniRegexPattern {
                     wrapsInternalScalarMarker = true;
                 }
                 inClass = true;
+                atClassStart = true;
+                classAllowsLeadingClose = true;
                 out.append(ch);
                 continue;
             }
             if (inClass && flags.isExtendedWhitespace() && Character.isWhitespace(ch)) {
                 continue;
             }
-            if (ch == ']' && inClass) {
-                inClass = false;
+            if (inClass && atClassStart && ch == '^') {
                 out.append(ch);
+                atClassStart = false;
+                continue;
+            }
+            if (inClass && classAllowsLeadingClose && ch == ']') {
+                out.append(ch);
+                atClassStart = false;
+                classAllowsLeadingClose = false;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                out.append(ch);
+                if (posixClassDepth > 0) {
+                    posixClassDepth--;
+                    continue;
+                }
+                inClass = false;
+                atClassStart = false;
+                classAllowsLeadingClose = false;
                 if (wrapsInternalScalarMarker) {
                     out.append(')');
                     wrapsInternalScalarMarker = false;
                 }
                 continue;
+            }
+            if (inClass) {
+                atClassStart = false;
+                classAllowsLeadingClose = false;
             }
             if (!inClass && pattern.startsWith("(?{", i)
                     && !isTrustedCallout(pattern, i, trustedCalloutCount)) {

@@ -44,8 +44,9 @@ baseline, with no per-file pass-count regressions.
 A temporary developer-only backend selector supports separate Java and Joni
 corpus runs. It must never run both matchers for one operation because callbacks,
 tied variables, `pos()`, and substitutions may have observable side effects.
-Joni becomes the default as soon as ordinary-pattern parity is established. The
-selector and Java matching fields are removed at the end of the migration.
+Joni is the default matcher; explicit Java mode remains only for differential
+measurement. The selector and Java matching fields are removed at the end of the
+migration.
 
 ### Preprocessing boundary
 
@@ -191,7 +192,7 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Phases 0-3 in progress
+### Current Status: Joni default; Phases 0-4 in progress
 
 ### Completed Phases
 
@@ -214,9 +215,9 @@ compatibility contract.
 4. Inventory the remaining uncommon Unicode aliases and invalid-property
    diagnostics against Perl 5.44's bundled tables, then move the next
    matcher-semantic preprocessor slice into Joni.
-5. Repeat the whole-suite Joni-default flip now that split/list-context,
-   branch-reset routing, and `Script=` property translation use the Joni path;
-   classify and close each remaining blocker before making the flip permanent.
+5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+   use explicit Java mode only to classify corpus regressions before Phase 5
+   removes the legacy backend and selector.
 
 ### Open Questions and Blockers
 
