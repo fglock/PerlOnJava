@@ -126,6 +126,8 @@ These represent major architectural directions for the project.
 
 Also notable for performance work:
 
+- **weighted-test-scheduler.md** - Resource-budget scheduling for semantic TAP
+  validation, including long-running-first admission and tuning constraints
 - **dbixclass-timeout-jit-analysis.md** - Root-cause analysis of the DBIx::Class JIT timeout (C1 register-allocator failure under CPU pressure); feeds into **reduce-apply-bytecode.md**
 - **reduce-apply-bytecode.md** - Three-phase plan to shrink generated `apply()` bytecode (Phase 1: fix `TempLocalCountVisitor`; Phases 2–3: extract trampoline/eval helpers)
 - **perf-dbic-safe-port.md** - DBIx::Class safe-porting performance analysis
