@@ -224,35 +224,30 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The combined integration stack now includes immutable Joni offset-map reuse,
-regex-set property preservation, bounded catastrophic-backtracking safeguards,
-user-property diagnostics and provenance, and focused built-in Unicode alias
-normalization. The focused property gates pass 39/39, 12/12, 8/8, and 16/16;
-unchanged `regexp_unicode_prop.t` passes 1,110/1,110 on JVM and interpreter.
-Draft PR #1016 preserves each validated prerequisite head and passed a
-warning-free full `make` on its corrected integration history.
+The current integration stack is preserved through draft PR #1023. It includes
+the completed callback/runtime slices, lossless generated Unicode fixtures,
+explicit `Is_*` property/value normalization, fatal Joni syntax diagnostics,
+and the first 524 lines of retired Java-only preprocessor code. Every published
+slice has a warning-free combined `make` checkpoint.
 
-The lossless generated `TestProp.pl` fixture now exposes ten previously gated
-`uniprops*.t` files. The exact-history JVM run executes all 290,912 planned
-assertions with zero timeouts or incomplete files, at 175,768 passing and
-115,144 failing. PR 958 recorded zero plan for all ten files, so this is new
-coverage rather than a regression, but it reopens Phase 3's full-corpus exit
-gate. The interpreter produces the exact same 175,768/290,912 split, with
-identical per-file plans and no timeout or incomplete file. Semantic-key
-validation found that all 123,411 generated records
-in chunks 05–10 retain literal UTF-8 boundary markers in both subjects and
-patterns. Their 122,620 apparent passing assertions are therefore vacuous,
-not evidence of boundary or folding parity. Chunks 01–04 contain the genuine
-property and hand-written boundary evidence. An exact upstream-stage reducer
-shows that lexical `use bytes` fails to replace the upgraded marker regex in a
-byte subject (system Perl 4/4, JVM/interpreter 2/4); that byte-mode substitution
-gap must be fixed before chunks 05–10 can become an authoritative boundary gate.
+Lexical `use bytes` now compiles non-ASCII substitution patterns with a
+single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
+`qr//` source provenance. The focused oracle passes 12/12 on system Perl, JVM,
+and interpreter, and the exact upstream marker-stage reducer improves from 2/4
+to 4/4 on both execution backends. Generated chunks 05–10 consequently execute
+239,843 genuine boundary assertions rather than matching literal UTF-8 marker
+text. JVM and interpreter have exact per-file parity at 2,192/239,843 with every
+plan complete, exit 0, and no child timeout; all current passes are in the GCB
+chunk (2,192/14,953), while the line, sentence, and word boundary chunks expose
+zero passing assertions. The runner classifies zero-pass files as `error`, but
+their recorded plans, actual counts, and process exits are complete.
 
-Explicit `Is_*` property/value assignments now normalize before built-in
-routing, including Perl's colon delimiter. The focused 12-assertion oracle
-passes on system Perl, JVM, and interpreter. The generated corpus rises by
-exactly 44,944 assertions to 220,712/290,912 on both execution backends, with
-identical per-file counts and zero errors, timeouts, or incomplete files.
+The most recent exact property chunks 01–04 remain 98,092/167,501 on both
+execution backends. Combined with the newly authoritative boundary chunks, the
+current generated evidence is 100,284/407,344. A current-head refresh of chunks
+01–04 is running in a reduced resource lane because an oversubscribed first
+attempt reached the runner's no-output deadline; retain the prior exact counts
+until that refresh completes.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -346,6 +341,10 @@ matcher-specific timeouts on both execution backends.
     and substitution, including Unicode subjects and code replacements. The
     focused oracle passes 12/12 and unchanged `subst.t` passes 275/281 on JVM
     and interpreter.
+  - [x] Added a provenance-aware single-byte Joni pattern/input path for
+    non-ASCII substitutions under lexical `use bytes`. Upgraded, byte-backed,
+    and compiled byte-backed patterns pass 12/12 on all runtimes, and the
+    generated Unicode marker stage passes 4/4 on JVM and interpreter.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -427,9 +426,10 @@ matcher-specific timeouts on both execution backends.
   - [x] Rejected 40 invalid Perl inline option/group-name forms in forked Joni
     with exact JVM/interpreter `reg_mesg.t` parity, reducing residual Joni-only
     acceptance differences from 198 to 158 (`028602adc`).
-  - [ ] Fix byte-mode substitution of upgraded marker regexes so chunks 05–10
-    exercise real boundary subjects, then close the property and boundary
-    failures with exact JVM/interpreter plan and semantic parity before marking
+  - [x] Fixed byte-mode substitution of upgraded marker regexes so chunks 05–10
+    exercise real boundary subjects with exact JVM/interpreter plans.
+  - [ ] Implement native Joni GCB, line, sentence, and word boundary algorithms,
+    then close the remaining property and boundary failures before marking
     Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -457,20 +457,23 @@ matcher-specific timeouts on both execution backends.
   - [x] Removed the disabled invalid-brace pass and its exclusive helpers
     (`4be6a48e3`; 208 preprocessor lines removed), retaining active Perl/Joni
     quantifier diagnostics as explicit focused hard/TODO gates.
+  - [x] Removed the Java-only terminated-whitespace possessification pass
+    (`c5343aca2`; 80 preprocessor lines removed) after greedy backtracking and
+    20,000-character gates passed default and forced-Java policy on both
+    execution backends.
 - [ ] Phase 6: Integration and release
 
 ### Next Steps
 
-1. Publish the integrated PRUNE and dead invalid-brace preprocessor retirement
-   slice after its warning-free combined `make`, then integrate the validated
-   forked-Joni braced-octal diagnostics/tokenization slice. Continue retiring
-   independently proven Java-only preprocessor rewrites as they complete.
-2. Fix lexical `use bytes` substitution when an upgraded marker regex matches a
-   byte subject, without patching generated fixtures. Regenerate the lossless
-   corpus and prove that chunks 05–10 no longer match literal boundary markers
-   before treating any boundary or folding result as evidence. Retain the now-
-   completed eval byte-source UTF-8 oracle as an independent runtime regression
-   gate; it is not the generated-corpus marker fix.
+1. Publish the byte-mode Joni pattern slice after its warning-free `make` and
+   authoritative boundary-corpus measurement. Then integrate the validated
+   braced-octal, braced-hex, and terminated-whitespace slices as focused
+   stacked PRs; add lazy-negated-class retirement after its validation completes.
+2. Implement boundary semantics natively in Joni in measured order: GCB first
+   (2,192/14,953 currently pass), followed by line, sentence, and word breaks
+   (currently 0/224,890). Use bundled Perl 5.44 Unicode data and the generated
+   chunks as the release oracle; remove the simplified Java boundary rewrites
+   only after native parity.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
    break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44

@@ -371,7 +371,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Inline comments**: `(?#comment)` in regex is implemented.
 - ✅  **caret modifier**: `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
 - ✅  **\b inside character class**: `[\b]` is supported in regex.
-- 🟡  **Unicode boundary assertions**: `\b{gcb}`, `\B{gcb}`, and the `wb`/`lb`/`sb` forms are recognized, but the genuine hand-written generated-corpus preamble still has 25 semantic failures; comprehensive generated coverage is blocked by byte-mode marker normalization.
+- 🟡  **Unicode boundary assertions**: `\b{gcb}`, `\B{gcb}`, and the `wb`/`lb`/`sb` forms are recognized. Byte-mode marker normalization is fixed, so the generated boundary corpus is authoritative: GCB passes 2,192/14,953, while line, sentence, and word boundary chunks currently pass 0/224,890 on both execution backends.
 - ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
 - ✅  **Non-capturing groups**: `(?:...)` is implemented.
 - ✅  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is supported.
@@ -386,7 +386,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
 - ❌  **Python-style named groups**: `(?P<name>...)` and `(?P=name)` are accepted by Perl but are not yet parsed by Joni.
 - ❌  **Alpha assertion aliases**: `(*pla:...)`, `(*plb:...)`, `(*nla:...)`, `(*nlb:...)`, and `(*atomic:...)` are not yet parsed by Joni.
-- ❌  **Underscored numeric regex escapes**: Perl spellings such as `\x{0_0_4_1}` and `\o{0_0_1_0_1}` are not yet parsed by Joni; braced octal syntax also needs complete validation and diagnostics.
+- ❌  **Underscored numeric regex escapes**: Perl spellings such as `\x{0_0_4_1}` and `\o{0_0_1_0_1}` are not yet parsed by Joni. Valid braced octal and unconditional missing-close/empty diagnostics are implemented in the pending parser stack; three `use re 'strict'` non-octal cases remain deferred.
 
 - ✅  **Dynamically-scoped regex variables**: Provisional captures, `$^R`, `$^N`, match positions, and callback locals follow matcher paths and unwind on backtracking.
 - ✅  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, nested alternatives participate in outer backtracking without changing outer grouping or capture numbering, and callback and pure-pattern recursion have engine-owned depth ceilings.
@@ -397,8 +397,8 @@ my @copy = @{$z};         # ERROR
 - ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
 - ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
 - ✅  **Conditional Expressions**: Numbered and named capture conditions, positive and negative assertion conditions, recursion conditions `(?(R))`, `(?(R1))`, and `(?(R&name))`, executable callback conditions, and optimistic predicates execute through Joni.
-- 🟡  **Extended Unicode Regex Features**: Focused Script, Block, Script Extensions, `Extended_Pictographic`, `Age`, `In`/`Present_In`, and invalid-property gates execute through Joni, and `regexp_unicode_prop.t` passes 1,110/1,110. The lossless generated `uniprops*.t` matrix currently passes 220,712/290,912 identically on JVM and interpreter, but chunks 01–04 still expose broad loose property/value alias gaps and chunks 05–10 are not yet valid boundary evidence because byte-mode substitution does not normalize upgraded boundary-marker regexes against byte subjects.
-- 🟡  **Extended Grapheme Clusters**: Focused `\X` combining-sequence and emoji-ZWJ cases pass, but comprehensive generated UAX verification remains blocked by byte-mode boundary-marker normalization.
+- 🟡  **Extended Unicode Regex Features**: Focused Script, Block, Script Extensions, `Extended_Pictographic`, `Age`, `In`/`Present_In`, and invalid-property gates execute through Joni, and `regexp_unicode_prop.t` passes 1,110/1,110. Current generated evidence is 100,284/407,344 identically on JVM and interpreter: chunks 01–04 expose property/value alias gaps, and authoritative chunks 05–10 expose native boundary-algorithm gaps.
+- 🟡  **Extended Grapheme Clusters**: Focused `\X` combining-sequence and emoji-ZWJ cases pass. The authoritative generated GCB matrix now passes 2,192/14,953 identically on JVM and interpreter; full native GCB boundary rules remain incomplete.
 - ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Callback `local` frames follow matcher paths, and escaped loop control or `goto` stops at the callback pseudo-block boundary. `$^N` follows capture-close order independently of `$+`.
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
 - ✅  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile. Admitted runtime source is compiled into lexical callback closures and preserves its package, visible lexical cells, Unicode or byte source type, default regex modifiers, and match-once state. Literal callbacks, interpolated `qr//` values (including local, referenced, and tied arrays), raw runtime eval groups, callback conditions, and standalone `(?(DEFINE)...)` containers may be composed in one Joni pattern; dynamic callbacks may return further admitted executable source.
