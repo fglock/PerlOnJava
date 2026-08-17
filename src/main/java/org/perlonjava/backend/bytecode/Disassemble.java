@@ -209,6 +209,12 @@ public class Disassemble {
                         sb.append("APPLY_LEXICAL_ALIAS r").append(rd)
                                 .append(" ").append(interpretedCode.stringPool[aliasNameIdx]).append("\n");
                         break;
+                    case Opcodes.BIND_ACTIVE_LEXICAL:
+                        rd = interpretedCode.bytecode[pc++];
+                        int bindingNameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("BIND_ACTIVE_LEXICAL r").append(rd)
+                                .append(" ").append(interpretedCode.stringPool[bindingNameIdx]).append("\n");
+                        break;
                     case Opcodes.ALIAS_LVALUE_REFERENCE:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];

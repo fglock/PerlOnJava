@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 16;
+use Test::More tests => 18;
 
 {
     my $seen = 0;
@@ -112,4 +112,18 @@ use Test::More tests => 16;
     use re 'eval';
     ok("AQ2R2" =~ /^A$embedded$runtime$/,
         'runtime callbacks retain lexical cells');
+}
+
+{
+    use re 'eval';
+    my (@immediate, @patterns);
+    for my $value (qw(a b c)) {
+        my $runtime = '(??{$value})';
+        push @immediate, $value if $value =~ /^$runtime$/;
+        push @patterns, qr/^$runtime$/;
+    }
+    is(join('', @immediate), 'abc',
+        'runtime callbacks see the active foreach lexical alias');
+    ok('a' =~ $patterns[0] && 'b' =~ $patterns[1] && 'c' =~ $patterns[2],
+        'runtime callbacks retain distinct foreach iteration cells');
 }

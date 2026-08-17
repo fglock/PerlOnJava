@@ -2477,6 +2477,9 @@ public class Opcodes {
     /** Logical negation using raw Perl truth without overload dispatch. Format: rd rs. */
     public static final short NOT_NO_OVERLOAD = 524;
 
+    /** Refresh an active foreach lexical alias. Format: reg nameStringIdx. */
+    public static final short BIND_ACTIVE_LEXICAL = 525;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

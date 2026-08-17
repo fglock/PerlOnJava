@@ -839,6 +839,13 @@ public class BytecodeInterpreter {
                                         code.stringPool[nameIdx], registers[reg]);
                             }
 
+                            case Opcodes.BIND_ACTIVE_LEXICAL -> {
+                                int reg = bytecode[pc++];
+                                int nameIdx = bytecode[pc++];
+                                registers[reg] = code.bindActiveLexical(
+                                        code.stringPool[nameIdx], registers[reg]);
+                            }
+
                             // =================================================================
                             // VARIABLE ACCESS - GLOBAL
                             // =================================================================

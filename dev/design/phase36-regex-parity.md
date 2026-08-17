@@ -222,7 +222,7 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phase 4 callback values at 483/555
+### Current Status: Joni default; Phase 4 callback values at 540/555
 
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
@@ -235,8 +235,10 @@ dynamic callbacks without altering matching registers. Nested dynamic matcher
 completion preserves the last successful block result in `$^R`, including a
 runtime `qr` returned by an outer `(??{...})`. Executable-looking groups inside
 double-quote case modifiers are deferred until after interpolation and obey
-runtime `re 'eval'` permission. The focused `pat_re_eval.t` gate executes all
-555 assertions with 483 passing.
+runtime `re 'eval'` permission. Foreach aliases refresh the active lexical-cell
+registry on both execution backends, so runtime-compiled callbacks capture each
+iteration's cell and retain it after scope exit. The focused `pat_re_eval.t`
+gate executes all 555 assertions with 540 passing.
 
 ### Completed Phases
 
@@ -250,8 +252,9 @@ runtime `re 'eval'` permission. The focused `pat_re_eval.t` gate executes all
 
 ### Next Steps
 
-1. Complete the failed-path terminal capture view (tests 85-86), then the
-   runtime-source closure matrix beginning at test 159.
+1. Complete failed-path capture restoration (tests 85-86 and 441-442), callback
+   scope teardown (test 306), and runtime warning/source diagnostics (tests 412,
+   428-430, and 434).
 2. Capture forced-Java and forced-Joni results for the full 80-file direct regex
    corpus, compare both against PR 958, and classify any newly exposed gaps.
 3. Run the applicable `pat_advanced.t` control-verb and condition sections,
