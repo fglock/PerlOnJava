@@ -68,4 +68,30 @@ class JoniRegexPatternTest {
         assertEquals(null, matcher.group("x"));
         assertEquals("b", matcher.group("x" + CaptureNameEncoder.DUPLICATE_MARKER + "0"));
     }
+
+    @Test
+    void acceptsPerlBarePropertiesAndWideOctalEscapes() {
+        assertTrue(new JoniRegexPattern("\\pC", FLAGS)
+                .matcher("\u0080", java.util.List.of()).find());
+        assertFalse(new JoniRegexPattern("\\PC", FLAGS)
+                .matcher("\u0080", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\400", FLAGS)
+                .matcher("\u0100", java.util.List.of()).find());
+    }
+
+    @Test
+    void acceptsPerlNumericGBackrefsAndHexCodePoints() {
+        assertTrue(new JoniRegexPattern("(a)(b)(c)\\g1\\g2\\g3", FLAGS)
+                .matcher("abcabc", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("([[:ascii:]]+)\\x81", FLAGS)
+                .matcher("b\u0081", java.util.List.of()).find());
+    }
+
+    @Test
+    void acceptsWhitespaceInsidePerlIntervals() {
+        assertTrue(new JoniRegexPattern("^a{ , 2 }$", FLAGS)
+                .matcher("aa", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\p{Latin}{ , 2 }", FLAGS)
+                .matcher("a", java.util.List.of()).find());
+    }
 }

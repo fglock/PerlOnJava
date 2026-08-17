@@ -1352,7 +1352,10 @@ class Parser extends Lexer {
             break;
 
         default:
-            newInternalException(PARSER_BUG);
+            CClassNode propertyClass = new CClassNode();
+            propertyClass.addCType(token.getPropCType(), false, false, env, this);
+            if (token.getPropNot()) propertyClass.setNot();
+            node = propertyClass;
         } // inner switch
         return node;
     }

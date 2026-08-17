@@ -205,11 +205,11 @@ compatibility contract.
 
 ### Next Steps
 
-1. Finish the expanded MARK/named-SKIP JVM and interpreter gate, then run the
-   applicable `pat_advanced.t` control-verb section.
-2. Fix the remaining forced-Joni ordinary corpus failures, beginning with bare
-   Unicode properties, octal escapes, possessive quantifiers and runtime-source
-   grouping, before making Joni the default.
+1. Run the forced-Joni ordinary corpus and close the remaining possessive-
+   quantifier, runtime-source grouping, deferred-property, lookbehind, and
+   diagnostic failures before making Joni the default.
+2. Complete the expanded MARK/named-SKIP and callback-unwind gates, then run the
+   applicable `pat_advanced.t` control-verb and condition sections.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
 4. Inventory and move the next matcher-semantic preprocessor slice into Joni.

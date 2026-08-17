@@ -56,6 +56,8 @@ class Lexer extends ScannerSupport {
         mark();
         boolean synAllow = syntax.allowInvalidInterval();
 
+        skipPerlIntervalWhitespace();
+
         if (!left()) {
             if (synAllow) {
                 return 1; /* "....{" : OK! */
@@ -71,12 +73,13 @@ class Lexer extends ScannerSupport {
             }
         }
 
+        int lowStart = p;
         int low = scanUnsignedNumber();
         if (low < 0) newSyntaxException(ErrorMessages.TOO_BIG_NUMBER_FOR_REPEAT_RANGE);
         if (low > Config.MAX_REPEAT_NUM) newSyntaxException(ErrorMessages.TOO_BIG_NUMBER_FOR_REPEAT_RANGE);
 
         boolean nonLow = false;
-        if (p == _p) { /* can't read low */
+        if (p == lowStart) { /* can't read low */
             if (syntax.allowIntervalLowAbbrev()) {
                 low = 0;
                 nonLow = true;
@@ -85,12 +88,14 @@ class Lexer extends ScannerSupport {
             }
         }
 
+        skipPerlIntervalWhitespace();
         if (!left()) return invalidRangeQuantifier(synAllow);
 
         fetch();
         int up;
         int ret = 0;
         if (c == ',') {
+            skipPerlIntervalWhitespace();
             int prev = p; // ??? last
             up = scanUnsignedNumber();
             if (up < 0) newValueException(TOO_BIG_NUMBER_FOR_REPEAT_RANGE);
@@ -100,11 +105,13 @@ class Lexer extends ScannerSupport {
                 if (nonLow) return invalidRangeQuantifier(synAllow);
                 up = QuantifierNode.REPEAT_INFINITE; /* {n,} : {n,infinite} */
             }
+            skipPerlIntervalWhitespace();
         } else {
             if (nonLow) return invalidRangeQuantifier(synAllow);
             unfetch();
             up = low; /* {n} : exact n times */
             ret = 2; /* fixed */
+            skipPerlIntervalWhitespace();
         }
 
         if (!left()) return invalidRangeQuantifier(synAllow);
@@ -127,6 +134,15 @@ class Lexer extends ScannerSupport {
         token.setRepeatUpper(up);
 
         return ret; /* 0: normal {n,m}, 2: fixed {n} */
+    }
+
+    private void skipPerlIntervalWhitespace() {
+        if (!syntax.op2OptionPerl()) return;
+        while (left()) {
+            int next = peek();
+            if (next != ' ' && next != '\t' && next != '\n' && next != '\r' && next != '\f') return;
+            inc();
+        }
     }
 
     private int invalidRangeQuantifier(boolean synAllow) {
@@ -545,6 +561,10 @@ class Lexer extends ScannerSupport {
                     unfetch();
                 }
             }
+        } else if (syntax.op2OptionPerl() && isAsciiLetter(c2)) {
+            int nameStart = p;
+            inc();
+            fetchTokenInCCFor_charType(c == 'P', enc.propertyNameToCType(bytes, nameStart, p));
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
         }
@@ -578,9 +598,14 @@ class Lexer extends ScannerSupport {
             if (p == last) { /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }
-            token.type = TokenType.RAW_BYTE;
-            token.base = 16;
-            token.setC(num);
+            if (syntax.op2OptionPerl()) {
+                token.type = TokenType.CODE_POINT;
+                token.setCode(num);
+            } else {
+                token.type = TokenType.RAW_BYTE;
+                token.base = 16;
+                token.setC(num);
+            }
         }
     }
 
@@ -606,13 +631,19 @@ class Lexer extends ScannerSupport {
             unfetch();
             int last = p;
             int num = scanUnsignedOctalNumber(3);
-            if (num < 0 || num > 0xff) newValueException(TOO_BIG_NUMBER);
+            if (num < 0) newValueException(TOO_BIG_NUMBER);
             if (p == last) {  /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }
-            token.type = TokenType.RAW_BYTE;
-            token.base = 8;
-            token.setC(num);
+            if (num > 0xff && syntax.op2OptionPerl()) {
+                token.type = TokenType.CODE_POINT;
+                token.setCode(num);
+            } else {
+                if (num > 0xff) newValueException(TOO_BIG_NUMBER);
+                token.type = TokenType.RAW_BYTE;
+                token.base = 8;
+                token.setC(num);
+            }
         }
     }
 
@@ -793,9 +824,14 @@ class Lexer extends ScannerSupport {
             if (p == last) { /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }
-            token.type = TokenType.RAW_BYTE;
-            token.base = 16;
-            token.setC(num);
+            if (syntax.op2OptionPerl()) {
+                token.type = TokenType.CODE_POINT;
+                token.setCode(num);
+            } else {
+                token.type = TokenType.RAW_BYTE;
+                token.base = 16;
+                token.setC(num);
+            }
         }
     }
 
@@ -847,13 +883,19 @@ class Lexer extends ScannerSupport {
         if (syntax.opEscOctal3()) {
             int last = p;
             int num = scanUnsignedOctalNumber(c == '0' ? 2 : 3);
-            if (num < 0 || num > 0xff) newValueException(TOO_BIG_NUMBER);
+            if (num < 0) newValueException(TOO_BIG_NUMBER);
             if (p == last) { /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }
-            token.type = TokenType.RAW_BYTE;
-            token.base = 8;
-            token.setC(num);
+            if (num > 0xff && syntax.op2OptionPerl()) {
+                token.type = TokenType.CODE_POINT;
+                token.setCode(num);
+            } else {
+                if (num > 0xff) newValueException(TOO_BIG_NUMBER);
+                token.type = TokenType.RAW_BYTE;
+                token.base = 8;
+                token.setC(num);
+            }
         } else if (c != '0') {
             inc();
         }
@@ -874,6 +916,16 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenFor_subexpCall() {
+        if (syntax.op2OptionPerl() && left() && peek() >= '0' && peek() <= '9') {
+            int backref = scanUnsignedNumber();
+            if (backref <= 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
+            token.type = TokenType.BACKREF;
+            token.setBackrefByName(false);
+            token.setBackrefNum(1);
+            token.setBackrefRef1(backref);
+            if (Config.USE_BACKREF_WITH_LEVEL) token.setBackrefExistLevel(false);
+            return;
+        }
         if (Config.USE_NAMED_GROUP) {
             if (syntax.op2EscGBraceBackref() && left()) {
                 fetch();
@@ -993,9 +1045,19 @@ class Lexer extends ScannerSupport {
                     unfetch();
                 }
             }
+        } else if (syntax.op2OptionPerl() && isAsciiLetter(peek())) {
+            int nameStart = p;
+            inc();
+            token.type = TokenType.CHAR_TYPE;
+            token.setPropCType(enc.propertyNameToCType(bytes, nameStart, p));
+            token.setPropNot(c == 'P');
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
         }
+    }
+
+    private static boolean isAsciiLetter(int codePoint) {
+        return codePoint >= 'A' && codePoint <= 'Z' || codePoint >= 'a' && codePoint <= 'z';
     }
 
     private void fetchTokenFor_metaChars() {
