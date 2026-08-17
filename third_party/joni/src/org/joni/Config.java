@@ -44,7 +44,7 @@ public interface Config extends org.jcodings.Config {
     boolean USE_WORD_BEGIN_END = ConfigSupport.getBoolean("joni.use_word_begin_end", true); /* "\<": word-begin, "\>": word-end */
     boolean USE_FIND_LONGEST_SEARCH_ALL_OF_RANGE = ConfigSupport.getBoolean("joni.use_find_longest_search_all_of_range", true);
     boolean USE_SUNDAY_QUICK_SEARCH = ConfigSupport.getBoolean("joni.use_sunday_quick_search", true);
-    boolean USE_CEC = ConfigSupport.getBoolean("joni.use_cec", false);
+    boolean USE_CEC = ConfigSupport.getBoolean("joni.use_cec", true);
     boolean USE_DYNAMIC_OPTION = ConfigSupport.getBoolean("joni.use_dynamic_option", false);
     boolean USE_BYTE_MAP = ConfigSupport.getBoolean("joni.use_byte_map", OptExactInfo.OPT_EXACT_MAXLEN <= CHAR_TABLE_SIZE);
     boolean USE_INT_MAP_BACKWARD = ConfigSupport.getBoolean("joni.use_int_map_backward", false);
