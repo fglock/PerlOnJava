@@ -113,9 +113,14 @@ When adding new design documents:
 
 For the most important architectural decisions and current work, check:
 
-- **multiplicity.md** - Multiple independent Perl runtimes (enables fork/threads/web concurrency)
-- **jsr223-perlonjava-web.md** - JSR-223 compliance and web server integration
-- **fork.md** / **threads.md** - Concurrency model and limitations
+- [Concurrency and runtime isolation](concurrency.md) - Multiple independent
+  runtimes, ithread snapshots, shared storage, and resource ownership
+- [JSR-223 and web integration](jsr223-perlonjava-web.md) - Script-engine
+  compliance, runtime pooling, and web server integration
+- [Fork-open emulation](fork_open_emulation.md) - Supported pipe-open patterns
+  despite the absence of a general `fork` operator
+- [Public thread reference](../../docs/reference/threads.md) - Supported ithread
+  behavior, limitations, and test gates
 
 These represent major architectural directions for the project.
 

@@ -178,16 +178,15 @@ public class TestPerl {
         // Execute Perl code
         engine.eval("print 'Hello from Java!\\n'");
 
-        // Pass variables
-        engine.put("name", "World");
-        engine.eval("say \"Hello, $name!\"");
-
         // Get results
         Object result = engine.eval("2 + 2");
         System.out.println("Result: " + result);
     }
 }
 ```
+
+Java `Bindings` are not yet exposed as Perl globals; return values from Perl
+source as shown above. See the full guide for the supported embedding surface.
 
 **Full guide:** **[Java Integration Guide](docs/guides/java-integration.md)**
 

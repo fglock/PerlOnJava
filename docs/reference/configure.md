@@ -178,7 +178,7 @@ When you add a dependency with `--search` or `--direct`:
    - Adds `<dependency>` entry with groupId, artifactId, version
 
 3. **Requires rebuild**:
-   - Run `make` or `./gradlew build` to download and bundle the dependency
+   - Run `make` to download, bundle, and test the dependency
 
 ### Search Ranking
 

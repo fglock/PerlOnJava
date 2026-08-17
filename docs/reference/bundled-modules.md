@@ -447,8 +447,8 @@ These are loaded automatically or via `use`:
 | `Sys::Hostname` | Java | |
 | `I18N::Langinfo` | Java | |
 | `Benchmark` | Perl | |
-| `Filter::Simple` | Perl | |
-| `Filter::Util::Call` | Java | |
+| `Filter::Simple` | Perl | `FILTER` and `FILTER_ONLY` closure filters; method filters and true incremental streaming remain unsupported |
+| `Filter::Util::Call` | Java | Closure-based `filter_add`/`filter_read`/`filter_del`; buffered line-oriented emulation, without object/method filters |
 | `Tie::Hash` / `Tie::Array` / `Tie::Scalar` | Perl | |
 | `Tie::RefHash` | Perl | |
 | `Tie::Hash::Indexed` | Java XS bridge | Ordered tied-hash and object APIs, iterators, arithmetic helpers, and Storable hooks; no native C compiler required |

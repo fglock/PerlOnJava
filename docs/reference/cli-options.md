@@ -110,6 +110,13 @@ jperl [options] [program | -e 'command'] [arguments]
 
 ### Warnings and Strictness
 
+- **`-T`** - Enable taint mode. External input is marked tainted, taint is
+  propagated, and security-sensitive operations reject unsafe values on both
+  execution backends.
+
+- **`-t`** - Accepted for compatibility, but warning-mode taint semantics are
+  not yet implemented.
+
 - **`-w`** - Enable warnings
   ```bash
   ./jperl -w script.pl

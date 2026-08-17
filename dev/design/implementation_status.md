@@ -1,4 +1,11 @@
-Here are some effective strategies to make the implementation status visible:
+# Historical Implementation-Status Proposal
+
+> **Historical document (superseded).** The public
+> [feature matrix](../../docs/reference/feature-matrix.md),
+> [roadmap](../../docs/about/roadmap.md), and
+> [changelog](../../docs/about/changelog.md) are the maintained status sources.
+
+Here are some effective strategies that were considered for making implementation status visible:
 1. Documentation
 
 Feature Matrix:
@@ -98,4 +105,3 @@ Here's an example of how you might structure a feature matrix in your documentat
 ## Regular Expressions
 - [x] Basic Matching
 - [ ] Advanced Features (Buggy)
-

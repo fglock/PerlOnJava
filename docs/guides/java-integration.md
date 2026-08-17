@@ -23,46 +23,29 @@ public class PerlExample {
 }
 ```
 
-### Passing Variables
-
-```java
-ScriptEngine engine = manager.getEngineByName("perl");
-
-// Set variables
-engine.put("name", "World");
-engine.put("count", 42);
-
-// Access in Perl
-engine.eval("say \"Hello, $name! Count: $count\"");
-```
-
 ### Getting Results
 
 ```java
 // Evaluate and get result
 Object result = engine.eval("2 + 2");
 System.out.println("Result: " + result);  // Output: Result: 4
-
-// Use variables
-engine.put("x", 10);
-engine.put("y", 20);
-Object sum = engine.eval("$x + $y");
-System.out.println("Sum: " + sum);  // Output: Sum: 30
 ```
 
-### Using Perl Subroutines
+`ScriptEngine.put()` and other Java `Bindings` are not yet bridged to Perl
+globals. Put values into the Perl source explicitly (with appropriate quoting
+or serialization), or expose a purpose-built Java-backed Perl module through
+the documented `XSLoader` integration. Binding bridging is tracked as remaining
+JSR-223 work in the [roadmap](../about/roadmap.md#jsr-223-compliance-improvements).
+
+### Compiling Once and Running Repeatedly
 
 ```java
-ScriptEngine engine = manager.getEngineByName("perl");
+import javax.script.Compilable;
+import javax.script.CompiledScript;
 
-// Define subroutine
-engine.eval("sub multiply { my ($a, $b) = @_; return $a * $b; }");
-
-// Call it
-engine.put("x", 5);
-engine.put("y", 7);
-Object result = engine.eval("multiply($x, $y)");
-System.out.println("Result: " + result);  // Output: Result: 35
+CompiledScript script = ((Compilable) engine).compile("40 + 2");
+System.out.println(script.eval());  // Output: 42
+System.out.println(script.eval());  // Reuses the compiled script
 ```
 
 ### Error Handling
@@ -123,58 +106,17 @@ try {
 }
 ```
 
-## Using PerlOnJava Directly
-
-For more control, you can use PerlOnJava's internal API directly.
-
-### Compiling Perl Code
-
-```java
-import org.perlonjava.runtime.runtimetypes.PerlCompiler;
-
-public class DirectExample {
-    public static void main(String[] args) {
-        PerlCompiler compiler = new PerlCompiler();
-        compiler.compile("say 'Hello World';");
-        compiler.run();
-    }
-}
-```
-
 ## Building with PerlOnJava
 
 PerlOnJava is not yet published to Maven Central. You can use the runnable JAR
-directly, or install the artifact into your local Maven repository:
+directly. When embedding a source checkout, build and test it with the project
+Makefile:
 
 ```bash
-mvn clean install
+make
 ```
 
-### Maven
-
-After installing it locally, add PerlOnJava as a dependency:
-
-```xml
-<dependency>
-    <groupId>org.perlonjava</groupId>
-    <artifactId>perlonjava</artifactId>
-    <version>5.44.0</version>
-</dependency>
-```
-
-### Gradle
-
-```gradle
-repositories {
-    mavenLocal()
-}
-
-dependencies {
-    implementation 'org.perlonjava:perlonjava:5.44.0'
-}
-```
-
-### Manual JAR
+### Runnable JAR from a source build
 
 1. Build PerlOnJava:
    ```bash
@@ -197,9 +139,11 @@ Use Perl for flexible configuration:
 
 ```java
 ScriptEngine engine = manager.getEngineByName("perl");
-engine.eval(Files.readString(Path.of("config.pl")));
-Object config = engine.get("config");
+Object configText = engine.eval(Files.readString(Path.of("config.pl")));
 ```
+
+Have the script return a string value (for example JSON) and decode it in Java;
+`engine.get()` does not currently read Perl globals.
 
 ### Data Processing
 

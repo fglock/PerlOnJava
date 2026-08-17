@@ -1,4 +1,9 @@
-The current documentation structure can be enhanced by:
+# Historical Documentation Restructure Proposal
+
+> **Historical document (superseded).** This proposal predates the current
+> `docs/` hierarchy. Start with the [documentation index](../../docs/README.md).
+
+The documentation structure was proposed to be enhanced by:
 
 Creating topic-specific guides:
 

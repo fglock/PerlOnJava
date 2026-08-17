@@ -1,3 +1,8 @@
+# State Variables Implementation Notes
+
+> **Historical document (completed).** Retained as implementation history;
+> `state` variables are implemented on both execution backends and their current
+> status is tracked in the [feature matrix](../../docs/reference/feature-matrix.md).
 
 Store state variables as instance fields within the dynamically generated classes in EmitterMethodCreator.java. This ensures that each instance of a subroutine has its own copy of the state variables, while still allowing these variables to persist across calls to the same instance.
 

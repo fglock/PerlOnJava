@@ -1,5 +1,9 @@
 # Test Pass Rate Improvement Plan
 
+> **Historical document (superseded).** Counts and priorities below are a
+> point-in-time planning snapshot. Use the current test reports, roadmap, and
+> feature matrix when choosing new compatibility work.
+
 **Date:** 2025-03-31
 **Branch:** fix/sregex-args-propagation
 **Baseline:** PR #410 test run — 93.4% individual test pass rate, 256/620 files fully passing
