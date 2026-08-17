@@ -38,6 +38,11 @@ Perl version and platform when behavior is version- or platform-dependent.
 | `remaining_semantics.t` | Focused checks for smartmatch, restricted hashes, overload, `caller`, `ops`, DBM, `fork`, `dump`, and multibyte file positioning |
 | `regex_remaining.t` | Executable conditional expressions, grapheme clusters, and `Extended_Pictographic` |
 | `caller_fields.t` | Full 11-field `caller()` tuple and subroutine metadata |
+| `numeric_bigint.t` | BigInt precision behavior |
+| `numeric_bignum.t` | BigNum arbitrary-precision division |
+| `numeric_bigrat.t` | BigRat rational arithmetic |
+| `unicode_strings.t` | Unicode case mapping for non-UTF-8 byte strings |
+| `multibyte_io.t` | Representative encoded-handle `seek`, `tell`, and `truncate` behavior |
 
 ## Interpreting results
 

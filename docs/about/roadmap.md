@@ -69,7 +69,7 @@ Work currently in progress:
 
 - **Warnings Subsystem** — Improving lexical `warnings` pragma scope handling and warning message formatting for Perl5 compatibility. See `dev/design/warnings-scope.md`.
 - **Regex Improvements** — Ongoing compatibility fixes for regex edge cases, POSIX character classes, and Unicode properties.
-- **Overload Completeness** — Adding missing overload operators: `++`, `--`, `=` (copy constructor), bitwise, string repeat, concatenation. See [Feature Matrix — overload](../reference/feature-matrix.md#pragmas).
+- **Overload Completeness** — Adding remaining overload operators: `--`, bitwise, string repeat, and their compound forms. `++`, copy-constructor `=`, and concatenation are verified. See [Feature Matrix — overload](../reference/feature-matrix.md#pragmas).
 - **`caller` Extended Information** — Implementing `(caller($level))[3..11]` for subroutine names, `wantarray`, `evaltext`, hints. Required for better error messages and Carp compatibility.
 - **Compiler Hardening** — Automatic fallback to interpreter mode when JVM "Method too large" errors occur. Fix remaining global variable aliasing edge cases in `for` loops.
 - **perl5 Test Suite** — Expanding pass rates across `perl5_t/t/` categories (op, re, uni, mro, io, lib).
