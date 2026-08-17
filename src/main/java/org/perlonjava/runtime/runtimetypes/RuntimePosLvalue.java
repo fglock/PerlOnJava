@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
+
 import java.util.Map;
 
 /**
@@ -44,6 +46,24 @@ public class RuntimePosLvalue {
             position = cachedEntry.regexPosition;
         }
         return position;
+    }
+
+    /** Convert a public Perl pos() value to the matcher's Java UTF-16 offset. */
+    public static int toMatcherOffset(RuntimeScalar perlVariable,
+                                      String stringValue, int perlPosition) {
+        if (perlVariable.type == RuntimeScalarType.BYTE_STRING) {
+            return Math.max(0, Math.min(perlPosition, stringValue.length()));
+        }
+        return PerlUtfString.offsetByPerlCodePoints(stringValue, 0, perlPosition);
+    }
+
+    /** Convert a matcher Java UTF-16 offset to the public Perl pos() value. */
+    public static int fromMatcherOffset(RuntimeScalar perlVariable,
+                                        String stringValue, int matcherOffset) {
+        if (perlVariable.type == RuntimeScalarType.BYTE_STRING) {
+            return Math.max(0, Math.min(matcherOffset, stringValue.length()));
+        }
+        return PerlUtfString.perlOffsetForJavaIndex(stringValue, matcherOffset);
     }
 
     /** Copy pos() and zero-length /g bookkeeping between equivalent scalar views. */

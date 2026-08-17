@@ -335,6 +335,10 @@ matcher-specific timeouts on both execution backends.
 - [ ] Phase 3: Unicode and pattern syntax completion (in progress)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
+  - [x] Converted public regex `pos` values between Perl logical-character
+    offsets and Java matcher offsets for scalar `/g`, `\G`, fast scanners, and
+    substitution callbacks. The 11-assertion supplementary-character oracle
+    passes on system Perl, JVM, and interpreter.
   - [ ] Complete the remaining Unicode aliases and diagnostic parity inventory.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -354,8 +358,8 @@ matcher-specific timeouts on both execution backends.
 1. Remediate the seven reduced forced-Joni failure causes, starting with the
    catastrophic `regexp*` cluster and the now-profiled `pat_psycho*` matcher
    reconstruction path; keep per-child hard limits throughout.
-2. Convert global regex `pos` consistently between Perl logical offsets and
-   Java matcher offsets, including supplementary characters and `\G` reuse.
+2. Integrate the stacked Joni offset-map, regex-set property, and CEC timeout
+   slices, then rerun the forced-Joni corpus from the new combined head.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
 4. Inventory the remaining uncommon Unicode aliases and invalid-property
@@ -377,9 +381,10 @@ matcher-specific timeouts on both execution backends.
   or scanned from dormant globals.
 - Shared parser or `eval` failures are fixed in focused slices when they block a
   regex semantic test, rather than being approximated inside the matcher.
-- Supplementary-character scalar `/g` currently publishes final `pos` in Java
-  UTF-16 code units (8000 for the shared oracle) instead of Perl code points
-  (6000). PerlOnJava2 owns this active `RuntimeRegex` follow-up.
+- Starting a forced-Joni global match exactly on a supplementary character
+  also requires PR #1008's high-surrogate offset-map correction. The public
+  `pos` conversion is independently complete; add that exact-start assertion
+  when #1008 integrates.
 
 ## Related Documents and Skills
 

@@ -161,6 +161,28 @@ public final class PerlUtfString {
         return scanOffsetByPerlCodePoints(s, startJava, perlOffset);
     }
 
+    /** Convert a Java UTF-16 boundary to its Perl logical-character offset. */
+    public static int perlOffsetForJavaIndex(String s, int javaIndex) {
+        int bounded = Math.max(0, Math.min(javaIndex, s.length()));
+        PerlIndexMap indexMap = cachedIndexMap(s);
+        if (indexMap != null) {
+            int index = Arrays.binarySearch(indexMap.javaBoundaries, bounded);
+            if (index >= 0) return index;
+            // Matcher offsets should be logical boundaries. If an adapter
+            // supplies an interior UTF-16 index, use the preceding boundary.
+            return Math.max(0, -index - 2);
+        }
+        int logical = 0;
+        int current = 0;
+        while (current < bounded) {
+            int next = readOnePerlLogical(s, current).nextJavaIndex();
+            if (next > bounded) break;
+            current = next;
+            logical++;
+        }
+        return logical;
+    }
+
     private static int scanOffsetByPerlCodePoints(String s, int startJava, int perlOffset) {
         int j = startJava;
         for (int k = 0; k < perlOffset && j < s.length(); k++) {
