@@ -149,8 +149,9 @@ public final class Option {
     }
 
     public static boolean isDynamic(int option) {
-        // ignore-case and multibyte status are included in compiled code
-        // return (option & (MULTILINE | IGNORECASE)) != 0;
-        return false;
+        // Ignore-case and multibyte status are included in compiled code.
+        // Perl ASCII-strict folding also needs a match-time option because it
+        // can be scoped independently inside an ignore-case group.
+        return (option & PERL_ASCII_STRICT) != 0;
     }
 }

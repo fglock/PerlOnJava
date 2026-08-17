@@ -66,6 +66,12 @@ public final class ScanEnvironment {
         enc = regex.enc;
     }
 
+    int caseFoldFlagFor(int option) {
+        return Option.isPerlAsciiStrict(option)
+                ? caseFoldFlag & ~Config.INTERNAL_ENC_CASE_FOLD_MULTI_CHAR
+                : caseFoldFlag;
+    }
+
     int addMemEntry() {
         if (numMem >= Config.MAX_CAPTURE_GROUP_NUM) throw new InternalException(ErrorMessages.TOO_MANY_CAPTURE_GROUPS);
         if (numMem++ == 0) {

@@ -390,6 +390,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Dynamically-scoped regex variables**: Provisional captures, `$^R`, `$^N`, match positions, and callback locals follow matcher paths and unwind on backtracking.
 - ✅  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, nested alternatives participate in outer backtracking without changing outer grouping or capture numbering, and callback and pure-pattern recursion have engine-owned depth ceilings.
 - ✅  **Backtracking Control Verbs**: `(*ACCEPT)`, `(*FAIL)`/`(*F)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` execute through Joni with matcher-owned cut boundaries. Atomic groups `(?>...)` are supported.
+- ✅  **Marks and named skip targets**: `(*MARK:NAME)` and its `(*:NAME)` shorthand, named `(*SKIP:NAME)`, `$REGMARK`, and `$REGERROR` execute through Joni and follow the selected backtracking path.
 - ✅  **Regex Definitions**: `(?(DEFINE)...)` containers and numbered or named calls to their subpatterns execute through Joni.
 - ✅  **Lookbehind Assertions**: Fixed and bounded variable-length positive and negative lookbehind assertions execute through Joni.
 - ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
@@ -401,6 +402,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
 - ✅  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile. Admitted runtime source is compiled into lexical callback closures and preserves its package, visible lexical cells, Unicode or byte source type, default regex modifiers, and match-once state. Literal callbacks, interpolated `qr//` values (including local, referenced, and tied arrays), raw runtime eval groups, callback conditions, and standalone `(?(DEFINE)...)` containers may be composed in one Joni pattern; dynamic callbacks may return further admitted executable source.
 - ✅  **Regex Compilation Flags**: Lexically scoped default flags from `use/no re '/imsx'` are applied to literal, interpolated, and runtime-compiled regex values.
+- ✅  **Perl capture and ASCII fold modifiers**: Top-level and scoped `/n` suppress unnamed captures, while `/a` and `/aa` apply Perl ASCII class and ASCII-strict case-fold semantics inside Joni, including restoration across nested modifier groups.
 - ✅  **Perl Named Captures**: Names may contain underscores, and duplicate named groups preserve Perl-style `%+`/`%-` and backreference behavior.
 
 

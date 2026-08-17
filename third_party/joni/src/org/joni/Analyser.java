@@ -156,7 +156,9 @@ final class Analyser extends Parser {
         // unreachable. The ordinary optimizer assumes every concatenated node
         // remains mandatory, so its minimum-length and literal-search filters
         // are not sound for these programs.
-        if (Config.OPTIMIZE && !env.hasControlVerb) setOptimizedInfoFromTree(root);
+        if (Config.OPTIMIZE && !env.hasControlVerb && !regex.hasDynamicOptions) {
+            setOptimizedInfoFromTree(root);
+        }
 
         env.memNodes = null;
 
@@ -1620,7 +1622,7 @@ final class Analyser extends Parser {
 
         while (value < end) {
             int ovalue = value;
-            int len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, buf);
+            int len = enc.mbcCaseFold(regex.caseFoldFlagFor(regex.options), bytes, this, end, buf);
 
             for (int i = 0; i < len; i++) {
                 if (bytes[ovalue + i] != buf[i]) {
@@ -1629,7 +1631,7 @@ final class Analyser extends Parser {
                     System.arraycopy(bytes, sn.p, sbuf, 0, ovalue - sn.p);
                     value = ovalue;
                     while (value < end) {
-                        len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, buf);
+                        len = enc.mbcCaseFold(regex.caseFoldFlagFor(regex.options), bytes, this, end, buf);
                         for (i = 0; i < len; i++) {
                             if (sp >= sbuf.length) {
                                 byte[]tmp = new byte[sbuf.length << 1];
@@ -1728,6 +1730,47 @@ final class Analyser extends Parser {
     }
 
     private static final int THRESHOLD_CASE_FOLD_ALT_FOR_EXPANSION = 8;
+
+    private Node protectPerlAsciiStrictCrossings(StringNode source, int state) {
+        byte[] bytes = source.bytes;
+        int segmentStart = source.p;
+        int p = source.p;
+        ListNode root = null;
+        ListNode tail = null;
+
+        while (p < source.end) {
+            int codePoint = enc.mbcToCode(bytes, p, source.end);
+            int next = p + enc.length(bytes, p, source.end);
+            if (codePoint == 0x017f || codePoint == 0x212a) {
+                if (segmentStart < p) {
+                    ListNode segment = ListNode.newList(
+                            new StringNode(bytes, segmentStart, p), null);
+                    if (root == null) root = segment;
+                    else tail.setTail(segment);
+                    tail = segment;
+                }
+
+                StringNode exact = new StringNode(bytes, p, next);
+                exact.setRaw();
+                ListNode segment = ListNode.newList(exact, null);
+                if (root == null) root = segment;
+                else tail.setTail(segment);
+                tail = segment;
+                segmentStart = next;
+            }
+            p = next;
+        }
+
+        if (root == null) return source;
+        if (segmentStart < source.end) {
+            tail.setTail(ListNode.newList(
+                    new StringNode(bytes, segmentStart, source.end), null));
+        }
+        source.replaceWith(root);
+        setupTree(root, state);
+        return root;
+    }
+
     private Node expandCaseFoldString(Node node) {
         StringNode sn = (StringNode)node;
 
@@ -1743,7 +1786,8 @@ final class Analyser extends Parser {
         StringNode stringNode = null;
 
         while (p < end) {
-            CaseFoldCodeItem[]items = enc.caseFoldCodesByString(regex.caseFoldFlag, bytes, p, end);
+            CaseFoldCodeItem[]items = enc.caseFoldCodesByString(
+                    regex.caseFoldFlagFor(regex.options), bytes, p, end);
             int len = enc.length(bytes, p, end);
 
             if (items.length == 0 || !isCaseFoldVariableLength(items.length, items, len)) {
@@ -1974,7 +2018,14 @@ final class Analyser extends Parser {
 
         case NodeType.STR:
             if (isIgnoreCase(regex.options) && !((StringNode)node).isRaw()) {
-                node = expandCaseFoldString(node);
+                if (Option.isPerlAsciiStrict(regex.options)) {
+                    Node protectedNode = protectPerlAsciiStrictCrossings(
+                            (StringNode)node, state);
+                    node = protectedNode == node
+                            ? expandCaseFoldString(node) : protectedNode;
+                } else {
+                    node = expandCaseFoldString(node);
+                }
             }
             break;
 
@@ -2364,9 +2415,12 @@ final class Analyser extends Parser {
                     opt.length.set(0, MinMaxLen.INFINITE_DISTANCE);
                 } else {
                     int safe = oenv.options;
+                    int safeCaseFoldFlag = oenv.caseFoldFlag;
                     oenv.options = cn.target.option;
+                    oenv.caseFoldFlag = regex.caseFoldFlagFor(cn.target.option);
                     optimizeNodeLeft(cn.target, opt, oenv);
                     oenv.options = safe;
+                    oenv.caseFoldFlag = safeCaseFoldFlag;
                 }
             } // USE_SUBEXP_CALL
             break;
@@ -2424,9 +2478,12 @@ final class Analyser extends Parser {
             switch (en.type) {
             case EncloseType.OPTION:
                 int save = oenv.options;
+                int saveCaseFoldFlag = oenv.caseFoldFlag;
                 oenv.options = en.option;
+                oenv.caseFoldFlag = regex.caseFoldFlagFor(en.option);
                 optimizeNodeLeft(en.target, opt, oenv);
                 oenv.options = save;
+                oenv.caseFoldFlag = saveCaseFoldFlag;
                 break;
 
             case EncloseType.MEMORY:
@@ -2469,7 +2526,7 @@ final class Analyser extends Parser {
 
         oenv.enc = regex.enc;
         oenv.options = regex.options;
-        oenv.caseFoldFlag = regex.caseFoldFlag;
+        oenv.caseFoldFlag = regex.caseFoldFlagFor(regex.options);
         oenv.scanEnv = env;
         oenv.mmd.clear(); // ??
 

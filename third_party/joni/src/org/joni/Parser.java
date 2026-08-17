@@ -623,6 +623,7 @@ class Parser extends Lexer {
                     option = bsOnOff(option, Option.EXTEND, true);
                     option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, true);
                     option = bsOnOff(option, Option.CAPTURE_GROUP, false);
+                    option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                     fetch();
                 } else {
                     newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -640,6 +641,7 @@ class Parser extends Lexer {
             case 'l':
             case 'u':
                 boolean neg = false;
+                int asciiModifierCount = 0;
                 while (true) {
                     switch(c) {
                     case ':':
@@ -684,9 +686,13 @@ class Parser extends Lexer {
 
                     case 'a':     /* limits \d, \s, \w and POSIX brackets to ASCII range */
                         if ((syntax.op2OptionPerl() || syntax.op2OptionRuby()) && !neg) {
+                            asciiModifierCount++;
                             option = bsOnOff(option, Option.ASCII_RANGE, false);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT,
+                                    syntax.op2OptionPerl() && asciiModifierCount >= 2
+                                            ? false : true);
                             break;
                         } else {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -696,6 +702,7 @@ class Parser extends Lexer {
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                             break;
                         } else {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -704,6 +711,7 @@ class Parser extends Lexer {
                     case 'd':
                         if (syntax.op2OptionPerl() && !neg) {
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                         } else if (syntax.op2OptionRuby() && !neg) {
                             option = bsOnOff(option, Option.ASCII_RANGE, false);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, false);
@@ -716,6 +724,7 @@ class Parser extends Lexer {
                     case 'l':
                         if (syntax.op2OptionPerl() && !neg) {
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                         } else {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
                         }
@@ -725,11 +734,17 @@ class Parser extends Lexer {
                     } // switch
 
                     if (c == ')') {
+                        if (Option.isDynamic(env.option ^ option)) {
+                            regex.hasDynamicOptions = true;
+                        }
                         node = EncloseNode.newOption(option);
                         returnCode = 2; /* option only */
                         return node;
                     } else if (c == ':') {
                         int prev = env.option;
+                        if (Option.isDynamic(prev ^ option)) {
+                            regex.hasDynamicOptions = true;
+                        }
                         env.option = option;
                         fetchToken();
                         Node target = parseSubExp(term);
@@ -1422,7 +1437,7 @@ class Parser extends Lexer {
 
     private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc) {
         ApplyCaseFoldArg arg = new ApplyCaseFoldArg(env, cc, ascCc);
-        enc.applyAllCaseFold(env.caseFoldFlag, ApplyCaseFold.INSTANCE, arg);
+        enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
         if (arg.altRoot != null) {
             node = ListNode.newAlt(node, arg.altRoot);
         }

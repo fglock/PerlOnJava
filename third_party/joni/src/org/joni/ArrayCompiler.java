@@ -856,7 +856,7 @@ final class ArrayCompiler extends Compiler {
         int tlen = compileLengthTree(node.target);
         regex.options = prev;
 
-        if (Config.USE_DYNAMIC_OPTION && isDynamic(prev ^ node.option)) {
+        if (isDynamic(prev ^ node.option)) {
             return OPSize.SET_OPTION_PUSH + OPSize.SET_OPTION + OPSize.FAIL + tlen + OPSize.SET_OPTION;
         } else {
             return tlen;
@@ -867,7 +867,8 @@ final class ArrayCompiler extends Compiler {
     protected void compileOptionNode(EncloseNode node) {
         int prev = regex.options;
 
-        if (Config.USE_DYNAMIC_OPTION && isDynamic(prev ^ node.option)) {
+        if (isDynamic(prev ^ node.option)) {
+            regex.requireStack = true;
             addOpcodeOption(OPCode.SET_OPTION_PUSH, node.option);
             addOpcodeOption(OPCode.SET_OPTION, prev);
             addOpcode(OPCode.FAIL);
@@ -877,7 +878,7 @@ final class ArrayCompiler extends Compiler {
         compileTree(node.target);
         regex.options = prev;
 
-        if (Config.USE_DYNAMIC_OPTION && isDynamic(prev ^ node.option)) {
+        if (isDynamic(prev ^ node.option)) {
             addOpcodeOption(OPCode.SET_OPTION, prev);
         }
     }

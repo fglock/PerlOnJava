@@ -241,21 +241,6 @@ final class JoniRegexPattern {
                     atClassStart = false;
                     classAllowsLeadingClose = false;
                 }
-                if (!inClass && flags.isAsciiStrict() && pattern.startsWith("\\x{", i)) {
-                    int end = pattern.indexOf('}', i + 3);
-                    if (end > i + 3) {
-                        try {
-                            int codePoint = Integer.parseInt(pattern.substring(i + 3, end), 16);
-                            if (hasAsciiCrossingFold(codePoint)) {
-                                appendCaseSensitiveCodePoint(out, codePoint);
-                                i = end;
-                                continue;
-                            }
-                        } catch (NumberFormatException ignored) {
-                            // Leave malformed escapes to Joni's normal diagnostic.
-                        }
-                    }
-                }
                 if (pattern.startsWith("\\N{", i)) {
                     int end = pattern.indexOf('}', i + 3);
                     if (end > i + 3) {
@@ -408,10 +393,6 @@ final class JoniRegexPattern {
                     continue;
                 }
             }
-            if (!inClass && flags.isAsciiStrict() && hasAsciiCrossingFold(ch)) {
-                appendCaseSensitiveCodePoint(out, ch);
-                continue;
-            }
             out.append(ch);
         }
         return out.toString();
@@ -419,10 +400,6 @@ final class JoniRegexPattern {
 
     private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,
                                                       RegexFlags flags) {
-        if (flags.isAsciiStrict() && hasAsciiCrossingFold(codePoint)) {
-            appendCaseSensitiveCodePoint(out, codePoint);
-            return;
-        }
         boolean extendedSyntax = flags.isExtended()
                 && (codePoint == '#' || Character.isWhitespace(codePoint));
         boolean regexSyntax = codePoint == '\\' || codePoint == '.' || codePoint == '^'
@@ -438,17 +415,6 @@ final class JoniRegexPattern {
             out.appendCodePoint(codePoint);
         }
     }
-
-    private static boolean hasAsciiCrossingFold(int codePoint) {
-        return codePoint == 0x017F || codePoint == 0x212A;
-    }
-
-    private static void appendCaseSensitiveCodePoint(StringBuilder out, int codePoint) {
-        out.append("(?-i:\\x{")
-                .append(Integer.toHexString(codePoint).toUpperCase(java.util.Locale.ROOT))
-                .append("})");
-    }
-
 
     private static boolean isTrustedCallout(String pattern, int offset, int callbackCount) {
         String prefix;

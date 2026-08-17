@@ -192,7 +192,7 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phases 0-4 in progress
+### Current Status: Joni default with native scoped `/aa`; Phases 0-4 in progress
 
 ### Completed Phases
 
