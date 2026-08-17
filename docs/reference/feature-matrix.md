@@ -746,6 +746,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Tie::Hash::Indexed** module, with a Java replacement for its XS backend.
 - ✅  **Tie::Scalar** module.
 - ✅  **Time::HiRes** module.
+- ✅  **Time::UTC::Now** module, backed by `java.time.Instant`; unbounded clocks return an undefined accuracy bound as documented.
 - ✅  **Time::Local** module.
 - ✅  **UNIVERSAL**: `isa`, `can`, `DOES`, `VERSION` are implemented. `isa` operator is implemented.
 - ✅  **URI::Escape** module.

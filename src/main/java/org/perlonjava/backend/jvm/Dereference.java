@@ -896,7 +896,16 @@ public class Dereference {
                 }
             }
             if (method instanceof IdentifierNode) {
-                method = new StringNode(((IdentifierNode) method).name, ((IdentifierNode) method).tokenIndex);
+                String methodName = ((IdentifierNode) method).name;
+                if (methodName.startsWith("SUPER::") && method.getIndex() > 0) {
+                    String lexicalPackage = ByteCodeSourceMapper.getPackageAtLocation(
+                            emitterVisitor.ctx.compilerOptions.fileName, method.getIndex());
+                    if (lexicalPackage == null || lexicalPackage.isEmpty()) {
+                        lexicalPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
+                    }
+                    methodName = lexicalPackage + "::" + methodName;
+                }
+                method = new StringNode(methodName, method.getIndex());
             }
 
             object.accept(scalarVisitor);

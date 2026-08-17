@@ -12,6 +12,14 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   source preserves lexical warning and package context. The full 80-file core
   regex gate improves the PR 958 baseline by 729 passing assertions with no
   per-file pass-count regressions.
+- CPAN/compiler tooling: preserve tied-container ownership through weak
+  references, make plain-hash `each` tolerant of deleting the current key,
+  release global tie handlers during final destruction, and resolve top-level
+  `SUPER::method` calls in dynamically required modules from their lexical
+  package. Also distinguish anonymous hashes at the start of `map` blocks. Add
+  a Java-backed `Time::UTC::Now` clock using `java.time.Instant`. This unblocks
+  Ceph::RadosGW::Admin, Tie::Config, DBIx::Class::Sims::REST, and Time::TAI::Now
+  without distribution preferences.
 - CPAN/compiler tooling: run MakeMaker `CONFIGURE` callbacks and prefer their
   generated root modules over auxiliary metadata stubs; enforce known
   subroutine lvalue errors at compile time; preserve blessed anonymous-glob

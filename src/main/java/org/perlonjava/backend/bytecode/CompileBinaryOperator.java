@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -259,6 +260,14 @@ public class CompileBinaryOperator {
                     }
                     if (methodNode instanceof IdentifierNode) {
                         String methodName = ((IdentifierNode) methodNode).name;
+                        if (methodName.startsWith("SUPER::") && methodNode.getIndex() > 0) {
+                            String lexicalPackage = ByteCodeSourceMapper.getPackageAtLocation(
+                                    bytecodeCompiler.sourceName, methodNode.getIndex());
+                            if (lexicalPackage == null || lexicalPackage.isEmpty()) {
+                                lexicalPackage = bytecodeCompiler.getCurrentPackage();
+                            }
+                            methodName = lexicalPackage + "::" + methodName;
+                        }
                         methodNode = new StringNode(methodName, methodNode.getIndex());
                     }
 

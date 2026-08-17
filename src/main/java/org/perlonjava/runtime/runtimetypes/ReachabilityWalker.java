@@ -809,6 +809,10 @@ public class ReachabilityWalker {
             if (cur == target) return true;
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof TieHash tieHash
+                        && followScalar(tieHash.getSelf(), target, seen, todo)) {
+                    return true;
+                }
                 for (RuntimeScalar v : h.elements.values()) {
                     if (followScalar(v, target, seen, todo)) return true;
                 }
@@ -921,6 +925,20 @@ public class ReachabilityWalker {
                 continue;
             } else if (cur instanceof RuntimeHash hash) {
                 if (hash.elements instanceof HashSpecialVariable) continue;
+                // A tied hash's Java Map facade does not expose the values
+                // retained by its pure-Perl handler.  Follow the handler
+                // object, then its arrays/hashes, so an owner scalar stored by
+                // implementations such as Tie::IxHash is recognized as a real
+                // strong path.  Without this edge, undefining a different
+                // strong scalar can clear weak back-references prematurely.
+                if (hash.elements instanceof TieHash tieHash) {
+                    RuntimeScalar self = tieHash.getSelf();
+                    if (self == target) return true;
+                    if (self != null && !WeakRefRegistry.isweak(self)
+                            && seen.add(self)) {
+                        todo.addLast(self);
+                    }
+                }
                 for (RuntimeScalar val : hash.elements.values()) {
                     if (val == null) continue;
                     // Skip weak refs — they don't keep their referent alive.
@@ -1100,6 +1118,10 @@ public class ReachabilityWalker {
             // Phase D-W2 (perf): skip RuntimeStash — see bfs().
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof TieHash tieHash
+                        && followScalar(tieHash.getSelf(), target, seen, todo)) {
+                    return true;
+                }
                 for (RuntimeScalar v : h.elements.values()) {
                     if (followScalar(v, target, seen, todo)) return true;
                 }
@@ -1147,6 +1169,92 @@ public class ReachabilityWalker {
         walker.bfs(todo, true);
         return walker.reachable.contains(target);
     }
+
+    /**
+     * Return true when a strong path from a package or live lexical root to
+     * {@code target} crosses a tied hash handler.  This is intentionally more
+     * specific than the ordinary root queries: objects with DESTROY normally
+     * use strict selective-refcount handling, but a pure-Perl tie handler can
+     * hold a real owner that the count temporarily misses.
+     */
+    public static boolean isReachableThroughTiedHash(RuntimeBase target) {
+        if (target == null) return false;
+        final int maxVisits = 50_000;
+        Set<RuntimeBase> seenPlain = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> seenTied = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<TiedPathStep> todo = new java.util.ArrayDeque<>();
+
+        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefs.values()) {
+            addTiedPathScalar(scalar, false, seenPlain, seenTied, todo);
+        }
+        for (RuntimeScalar scalar : GlobalVariable.globalVariables.values()) {
+            addTiedPathScalar(scalar, false, seenPlain, seenTied, todo);
+        }
+        for (RuntimeArray array : GlobalVariable.globalArrays.values()) {
+            addTiedPath(array, false, seenPlain, seenTied, todo);
+        }
+        for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
+            addTiedPath(hash, false, seenPlain, seenTied, todo);
+        }
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar instanceof RuntimeBase base) {
+                addTiedPath(base, false, seenPlain, seenTied, todo);
+            }
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits++ < maxVisits) {
+            TiedPathStep step = todo.removeFirst();
+            RuntimeBase cur = step.base;
+            if (cur == target && step.crossedTie) return true;
+            if (cur instanceof RuntimeStash) continue;
+            if (cur instanceof RuntimeHash hash) {
+                if (hash.elements instanceof HashSpecialVariable) continue;
+                if (hash.elements instanceof TieHash tieHash) {
+                    addTiedPathScalar(tieHash.getSelf(), true,
+                            seenPlain, seenTied, todo);
+                }
+                for (RuntimeScalar value : hash.elements.values()) {
+                    addTiedPathScalar(value, step.crossedTie,
+                            seenPlain, seenTied, todo);
+                }
+            } else if (cur instanceof RuntimeArray array) {
+                for (RuntimeScalar value : array.elements) {
+                    addTiedPathScalar(value, step.crossedTie,
+                            seenPlain, seenTied, todo);
+                }
+            } else if (cur instanceof RuntimeScalar scalar) {
+                addTiedPathScalar(scalar, step.crossedTie,
+                        seenPlain, seenTied, todo);
+            }
+        }
+        return false;
+    }
+
+    private static void addTiedPathScalar(
+            RuntimeScalar scalar, boolean crossedTie,
+            Set<RuntimeBase> seenPlain, Set<RuntimeBase> seenTied,
+            java.util.ArrayDeque<TiedPathStep> todo) {
+        if (scalar == null || WeakRefRegistry.isweak(scalar)) return;
+        addTiedPath(scalar, crossedTie, seenPlain, seenTied, todo);
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base) {
+            addTiedPath(base, crossedTie, seenPlain, seenTied, todo);
+        }
+    }
+
+    private static void addTiedPath(
+            RuntimeBase base, boolean crossedTie,
+            Set<RuntimeBase> seenPlain, Set<RuntimeBase> seenTied,
+            java.util.ArrayDeque<TiedPathStep> todo) {
+        if (base == null) return;
+        Set<RuntimeBase> seen = crossedTie ? seenTied : seenPlain;
+        if (seen.add(base)) {
+            todo.addLast(new TiedPathStep(base, crossedTie));
+        }
+    }
+
+    private record TiedPathStep(RuntimeBase base, boolean crossedTie) {}
 
     /**
      * Target-specific reachability query for scope-exit cleanup of a named
@@ -1211,6 +1319,10 @@ public class ReachabilityWalker {
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
                 if (h.elements instanceof HashSpecialVariable) continue;
+                if (h.elements instanceof TieHash tieHash
+                        && followScalar(tieHash.getSelf(), target, seen, todo)) {
+                    return true;
+                }
                 for (RuntimeScalar v : h.elements.values()) {
                     if (followScalar(v, target, seen, todo)) return true;
                 }
@@ -1291,6 +1403,9 @@ public class ReachabilityWalker {
             if (cur instanceof RuntimeStash) return;
             if (cur instanceof RuntimeHash h) {
                 if (h.elements instanceof HashSpecialVariable) return;
+                if (h.elements instanceof TieHash tieHash) {
+                    seedNonLexicalScalar(tieHash.getSelf(), nonLexicalTodo);
+                }
                 for (RuntimeScalar v : h.elements.values()) {
                     seedNonLexicalScalar(v, nonLexicalTodo);
                 }
@@ -1404,6 +1519,9 @@ public class ReachabilityWalker {
             if (cur instanceof RuntimeStash) return;
             if (cur instanceof RuntimeHash h) {
                 if (h.elements instanceof HashSpecialVariable) return;
+                if (h.elements instanceof TieHash tieHash) {
+                    seedDirectScalar(tieHash.getSelf(), origin, todo);
+                }
                 for (RuntimeScalar v : h.elements.values()) {
                     seedDirectScalar(v, origin, todo);
                 }

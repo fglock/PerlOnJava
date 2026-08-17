@@ -64,6 +64,9 @@ public class Parser {
     // Are we parsing inside a braced dereference like %{...} or @{...}?
     // When true, inner {} should default to hash constructor, not block.
     public boolean insideBracedDereference = false;
+    // map/grep/sort blocks start in term context. An ambiguous leading inner
+    // brace is therefore an anonymous hashref, not a nested block.
+    public boolean insideBlockOperatorArgument = false;
     // List to store ADJUST blocks for the current class
     public List<Node> classAdjustBlocks = new ArrayList<>();
     // List to store heredoc nodes encountered during parsing.
