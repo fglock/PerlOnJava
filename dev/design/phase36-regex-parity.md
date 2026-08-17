@@ -205,11 +205,11 @@ compatibility contract.
 
 ### Next Steps
 
-1. Run the forced-Joni ordinary corpus and close the remaining diagnostics;
-   inventory compound variable-lookbehind forms beyond direct finite
-   quantifiers before making Joni the default.
-2. Complete the expanded MARK/named-SKIP and callback-unwind gates, then run the
-   applicable `pat_advanced.t` control-verb and condition sections.
+1. Capture forced-Java and forced-Joni results for the full 80-file direct regex
+   corpus, compare both against PR 958, and classify any newly exposed gaps.
+2. Inventory compound variable-lookbehind forms beyond direct finite
+   quantifiers, then complete the expanded MARK/named-SKIP and callback-unwind
+   gates and run the applicable `pat_advanced.t` control-verb sections.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
 4. Inventory and move the next matcher-semantic preprocessor slice into Joni.

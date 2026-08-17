@@ -648,6 +648,11 @@ sub parse_tap_output {
 
     # Parse TAP output
     for my $line (@lines) {
+        # Lexical re 'debugcolor' can leave an ANSI reset immediately before a
+        # top-level TAP result. Remove terminal control sequences before
+        # deciding whether the line is TAP or indented subtest output.
+        $line =~ s/\e\[[0-?]*[ -\/]*[@-~]//g;
+
         # Skip indented lines (subtest output) - check BEFORE trimming
         next if $line =~ /^\s+/;
         
