@@ -365,6 +365,37 @@ public class TestCallout {
         assertEquals(3, matcher.captureEnd(3));
     }
 
+    @Test
+    public void dynamicControlVerbsPropagateToTheOuterMatcher() {
+        String[] verbs = {"PRUNE", "SKIP", "COMMIT", "THEN"};
+        int[] expectedCalls = {3, 1, 1, 3};
+
+        for (int index = 0; index < verbs.length; index++) {
+            Regex outer = regex("a+b?(?{=DYNAMIC:1})(?{=CALL:2})(*FAIL)");
+            Regex nested = regex("(*" + verbs[index] + ")");
+            int[] calls = {0};
+            CalloutHandler handler = new CalloutHandler() {
+                @Override
+                public CalloutResult execute(int id, MatchView match) {
+                    calls[0]++;
+                    return CalloutResult.CONTINUE;
+                }
+
+                @Override
+                public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                    return new DynamicPatternResult(nested, null, null);
+                }
+
+                @Override
+                public void unwind(Object token) {
+                }
+            };
+
+            assertEquals(-1, search(outer, "aaab", handler));
+            assertEquals(verbs[index], expectedCalls[index], calls[0]);
+        }
+    }
+
     private static CalloutHandler recordingHandler(List<String> events, boolean fail) {
         return new CalloutHandler() {
             @Override

@@ -41,6 +41,11 @@ import org.joni.exception.ValueException;
 class ByteCodeMachine extends StackMachine implements MatchView {
     private static final int MAX_INTERRUPT_CHECK_EVERY = 256 << 7; // 32768
     private static final int MAX_SUBEXP_CALL_DEPTH = 1000;
+    private static final int CONTROL_NONE = 0;
+    private static final int CONTROL_PRUNE = 1;
+    private static final int CONTROL_SKIP = 2;
+    private static final int CONTROL_THEN = 3;
+    private static final int CONTROL_COMMIT = 4;
     int interruptCheckEvery = 256;     // << 1 after each check up to  ^^^
     volatile boolean interrupted = false;
 
@@ -53,6 +58,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int sbegin;
     private int pkeep;
     private int currentRegexOptions;
+    private int pendingControlAction;
 
     private final int[]code;        // byte code
     private int ip;                 // instruction pointer
@@ -2073,6 +2079,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         DynamicContinuation continuation = new DynamicContinuation(
                 nested, nestedHandler, s, range);
         int nestedEnd = continuation.first();
+        continuation.propagateControlTo(this);
         if (nestedEnd < 0) {
             continuation.abort();
             opFail();
@@ -2129,12 +2136,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opPrune() {
+        controlVerbEncountered = true;
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(false);
+        pendingControlAction = CONTROL_PRUNE;
     }
 
     private void opSkip() {
+        controlVerbEncountered = true;
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         if (name != null) {
@@ -2142,26 +2152,33 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             if (target < 0) return;
             cutAlternatives(false);
             requestSearchSkip(target);
+            pendingControlAction = CONTROL_SKIP;
             return;
         }
         cutAlternatives(false);
         requestSearchSkip(s);
+        pendingControlAction = CONTROL_SKIP;
     }
 
     private void opThen() {
+        controlVerbEncountered = true;
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(true, s, sprev, pkeep);
+        pendingControlAction = CONTROL_THEN;
     }
 
     private void opCommit() {
+        controlVerbEncountered = true;
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(false);
         requestSearchAbort();
+        pendingControlAction = CONTROL_COMMIT;
     }
 
     private void opMark() {
+        controlVerbEncountered = true;
         String next = controlVerbName(code[ip++]);
         pushControlMark(controlMark, next, s);
         controlMark = next;
@@ -2383,6 +2400,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 int returnAddress = e.getStatePCode();
                 DynamicContinuation continuation = e.takeDynamicContinuation();
                 int nestedEnd = continuation.next();
+                continuation.propagateControlTo(this);
                 if (nestedEnd >= 0) {
                     pushDynamicAlternative(returnAddress, continuation);
                     ip = returnAddress;
@@ -2462,6 +2480,35 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 return Matcher.FAILED;
+            }
+        }
+
+        void propagateControlTo(ByteCodeMachine outer) {
+            int action = machine.pendingControlAction;
+            machine.pendingControlAction = CONTROL_NONE;
+            if (machine.controlVerbEncountered) outer.controlVerbEncountered = true;
+            if (machine.controlError != null) outer.controlError = machine.controlError;
+            switch (action) {
+            case CONTROL_PRUNE:
+                outer.cutAlternatives(false);
+                break;
+            case CONTROL_SKIP:
+                outer.cutAlternatives(false);
+                int target = machine.takeSearchSkipRequest();
+                if (target >= 0) outer.requestSearchSkip(target);
+                break;
+            case CONTROL_THEN:
+                // A dynamic program is an alternation boundary in Perl. THEN
+                // cannot enter an enclosing branch, so crossing this boundary
+                // has the same outer-stack effect as PRUNE.
+                outer.cutAlternatives(false);
+                break;
+            case CONTROL_COMMIT:
+                outer.cutAlternatives(false);
+                if (machine.takeSearchAbortRequest()) outer.requestSearchAbort();
+                break;
+            default:
+                break;
             }
         }
 

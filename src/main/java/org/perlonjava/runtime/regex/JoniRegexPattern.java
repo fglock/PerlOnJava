@@ -620,7 +620,8 @@ final class JoniRegexPattern {
             }
             matcher = regex.matcher(bytes);
             if (!callbacks.isEmpty()) {
-                calloutHandler = new PerlCalloutHandler(input, byteToChar, callbacks, flags);
+                calloutHandler = new PerlCalloutHandler(
+                        input, byteToChar, callbacks, flags, hasControlVerbState);
                 matcher.setCalloutHandler(calloutHandler);
             }
             int result;
@@ -633,7 +634,7 @@ final class JoniRegexPattern {
                 throw failure;
             }
             matched = result >= 0;
-            if (hasControlVerbState) {
+            if (hasControlVerbState || matcher.hasEncounteredControlVerb()) {
                 RuntimeRegex.updateControlVerbVariables(
                         matcher.getControlMark(), matcher.getControlError());
             }
@@ -805,6 +806,7 @@ final class JoniRegexPattern {
         private final int[] byteToChar;
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
+        private final boolean publishesControlVerbState;
         private final int initialLocalLevel;
         private final RegexState initialRegexState;
         private final PerlCalloutHandler parent;
@@ -817,17 +819,19 @@ final class JoniRegexPattern {
         private String failedNestedLastParenMatch;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
-                           RegexFlags outerFlags) {
-            this(input, byteToChar, callbacks, outerFlags, null);
+                           RegexFlags outerFlags, boolean publishesControlVerbState) {
+            this(input, byteToChar, callbacks, outerFlags, publishesControlVerbState, null);
         }
 
         private PerlCalloutHandler(
                 String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
-                RegexFlags outerFlags, PerlCalloutHandler parent) {
+                RegexFlags outerFlags, boolean publishesControlVerbState,
+                PerlCalloutHandler parent) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
+            this.publishesControlVerbState = publishesControlVerbState;
             this.parent = parent;
             this.nestedDepth = parent == null ? 0 : parent.nestedDepth + 1;
             this.initialLocalLevel = DynamicVariableManager.getLocalLevel();
@@ -897,6 +901,7 @@ final class JoniRegexPattern {
                             value.value instanceof RuntimeRegex runtimeRegex
                                     && runtimeRegex.getRegexFlags() != null
                                     ? runtimeRegex.getRegexFlags() : outerFlags,
+                            nestedPattern.hasControlVerbState,
                             this);
             if (nestedHandler != null) executedNestedCallbackPattern = true;
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
@@ -1113,7 +1118,9 @@ final class JoniRegexPattern {
             int lastClosed = match.lastClosedCapture();
             state.lastClosedCapture = lastClosed > 0 && lastClosed <= count
                     ? state.lastCaptureGroups[lastClosed - 1] : null;
-            RuntimeRegex.updateControlVerbVariables(match.controlMark(), null);
+            if (publishesControlVerbState || match.controlMark() != null) {
+                RuntimeRegex.updateControlVerbVariables(match.controlMark(), null);
+            }
         }
 
         private int charOffset(int byteOffset) {
