@@ -120,7 +120,9 @@ final class JoniRegexPattern {
             try {
                 String propertyClass = UnicodeResolver.translateUnicodeProperty(
                         property, pattern.charAt(i + 1) == 'P', flags.isCaseInsensitive());
-                translated.append("(?-i:").append(propertyClass).append(')');
+                translated.append("(?-i:")
+                        .append(normalizeGeneratedPropertyClassForJoni(propertyClass))
+                        .append(')');
             } catch (IllegalArgumentException error) {
                 String message = error.getMessage();
                 if (!userDefined || message != null && message.contains("in expansion of")) {
@@ -132,6 +134,32 @@ final class JoniRegexPattern {
             i = end;
         }
         return new UserPropertyTranslation(translated.toString(), deferred);
+    }
+
+    /**
+     * UnicodeResolver emits Java-property spellings inside composite classes.
+     * Joni accepts the equivalent Unicode aliases without Java's {@code Is}
+     * and {@code gc=} prefixes.
+     */
+    private static String normalizeGeneratedPropertyClassForJoni(String propertyClass) {
+        StringBuilder normalized = new StringBuilder(propertyClass.length());
+        for (int i = 0; i < propertyClass.length(); i++) {
+            if (propertyClass.charAt(i) == '\\' && i + 3 < propertyClass.length()
+                    && (propertyClass.charAt(i + 1) == 'p' || propertyClass.charAt(i + 1) == 'P')
+                    && propertyClass.charAt(i + 2) == '{') {
+                int end = propertyClass.indexOf('}', i + 3);
+                if (end > i + 3) {
+                    String name = propertyClass.substring(i + 3, end);
+                    if (name.startsWith("gc=")) name = name.substring(3);
+                    else if (name.startsWith("Is")) name = name.substring(2);
+                    normalized.append(propertyClass, i, i + 3).append(name).append('}');
+                    i = end;
+                    continue;
+                }
+            }
+            normalized.append(propertyClass.charAt(i));
+        }
+        return normalized.toString();
     }
 
     private static int toJoniOptions(RegexFlags flags) {
