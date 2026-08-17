@@ -165,12 +165,13 @@ final class JoniRegexPattern {
                     "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*=.*");
+            boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
             if (frontendProperty && extendedClassBracketDepth > 0) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
             }
-            if (!userDefined && !scriptExtensions && !frontendProperty) {
+            if (!userDefined && !scriptExtensions && !frontendProperty && !perlBuiltInAlias) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
