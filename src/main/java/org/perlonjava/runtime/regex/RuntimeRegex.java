@@ -301,7 +301,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public RegexMatcher matcher(RuntimeScalar string, String input) {
         if (recursivePattern != null) {
-            return selectRecursivePattern(string).matcher(input, executableCallbacks);
+            return selectRecursivePattern(string).matcher(input, executableCallbacks, string);
         }
         Pattern selected = selectPattern(string, input);
         return new JavaRegexMatcher(
@@ -1599,7 +1599,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Only recompile if flags actually changed (this is needed for /x preprocessing)
             if (flagsChanged && !resolved.fromCompiledRegex()) {
                 RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString,
-                        newFlags.toFlagString(), regex.lexicalDebugMode);
+                        newFlags.toFlagString(), regex.lexicalDebugMode,
+                        resolvedRegex.executableCallbacks.size());
                 regex.pattern = recompiledRegex.pattern;
                 regex.patternUnicode = recompiledRegex.patternUnicode;
                 regex.recursivePattern = recompiledRegex.recursivePattern;
@@ -1885,7 +1886,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexMatcher matcher;
         if (regex.recursivePattern != null) {
             matcher = regex.selectRecursivePattern(string)
-                    .matcher(inputStr, regex.executableCallbacks);
+                    .matcher(inputStr, regex.executableCallbacks, string);
         } else {
             Pattern pattern = regex.selectPattern(string, inputStr);
 
@@ -2727,7 +2728,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexMatcher matcher;
         if (regex.recursivePattern != null) {
             matcher = regex.selectRecursivePattern(inputValue)
-                    .matcher(inputStr, regex.executableCallbacks);
+                    .matcher(inputStr, regex.executableCallbacks, inputValue);
         } else {
             pattern = regex.selectPattern(inputValue, inputStr);
             if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
@@ -2859,7 +2860,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             ? new JavaRegexMatcher(nonEmptySubstitutionPattern.matcher(matchInput),
                                     regex.branchResetCaptureMap)
                             : regex.selectRecursivePattern(inputValue)
-                                    .matcher(inputStr, regex.executableCallbacks);
+                                    .matcher(inputStr, regex.executableCallbacks, inputValue);
                     // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                     // so a zero-length match at the region start is rejected.
                     setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);

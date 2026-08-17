@@ -261,8 +261,11 @@ largest completed losses against forced Java are `reg_posixcc.t` (-508),
 `alpha_assertions.t` (-89), and `regex_sets.t` (-84). The completed
 forced-Java/interpreter leg covers all 80 files at 50,021/94,823 with no runner
 timeouts, 98 more passing assertions than forced-Java/JVM, and an identical
-plan. The forced-Joni/interpreter leg and final same-binary classification
-report are still running.
+plan. The completed forced-Joni/interpreter leg is 32,483/77,612 with the same
+ten timeouts and planned count as Joni/JVM. The final same-binary report is
+complete in `dev/design/phase36-regex-differential-20260817.md`; Phase 1's exit
+criterion is not met because Joni loses Java-passing assertions and introduces
+matcher-specific timeouts on both execution backends.
 
 ### Completed Phases
 
@@ -281,7 +284,9 @@ report are still running.
     backend without per-operation fallback.
   - [x] Completed the forced-Java/JVM 80-file leg and identified the
     `pat{,_thr}.t` test-239 source-policy abort as the leading regression.
-  - [ ] Re-run the complete forced-backend matrix and prove the exit criterion.
+  - [x] Completed the four-leg forced-backend matrix and published its
+    classification. The exit criterion is explicitly not met; timeout and
+    semantic remediation remain Phase 1 work.
 - [ ] Phase 2: Conditions and backtracking-visible state (in progress)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -299,6 +304,15 @@ report are still running.
     later declaration changes package. The focused package oracle passes on
     system Perl, JVM, and interpreter, and `pat_advanced.t` tests 922-933 pass
     on both execution backends without a regex-adapter workaround.
+  - [x] Exposed the actual match subject as callback `$_`, the provisional
+    callout offset through `pos`, and the in-progress match span through `$&`
+    plus the pre-match and post-match variables. Callback-bearing substitution
+    recompilation now preserves trusted callout markers. The 24-assertion
+    upstream `pos inside (?{})` block
+    passes on system Perl, JVM, and interpreter; `subst_amp.t` remains 13/13
+    on both execution backends.
+  - [x] Removed the obsolete nested `(*ACCEPT)` and callback-`pos` workarounds
+    from `pat.t.patch` and resynchronized those original Perl 5.44 assertions.
 - [ ] Phase 3: Unicode and pattern syntax completion (in progress)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
@@ -318,8 +332,9 @@ report are still running.
 
 ### Next Steps
 
-1. Finish the forced-Joni/interpreter leg, publish the same-binary 80-file
-   report, and classify every timeout and zero-TAP file.
+1. Reduce the ten Joni matcher-specific timeout files and 29 zero-TAP files to
+   shared causes, starting with the `regexp*`, `pat_psycho*`, and `speed*`
+   clusters; keep per-child hard limits throughout.
 2. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
    closes, remove its hunk and rerun the targeted importer so validation uses
    the original Perl 5.44 assertions.

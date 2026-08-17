@@ -72,8 +72,13 @@ final class JoniRegexPattern {
     }
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
+        return matcher(input, callbacks, new RuntimeScalar(input));
+    }
+
+    RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
+                         RuntimeScalar subject) {
         return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags,
-                hasControlVerbState, input, callbacks);
+                hasControlVerbState, input, callbacks, subject);
     }
 
     String patternDescription() {
@@ -583,11 +588,12 @@ final class JoniRegexPattern {
         private int committedLastClosedCapture = -1;
         private final boolean hasControlVerbState;
         private final List<RuntimeRegexCallback> callbacks;
+        private final RuntimeScalar subject;
         private PerlCalloutHandler calloutHandler;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
                          RegexFlags flags, boolean hasControlVerbState, String input,
-                         List<RuntimeRegexCallback> callbacks) {
+                         List<RuntimeRegexCallback> callbacks, RuntimeScalar subject) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
@@ -595,6 +601,7 @@ final class JoniRegexPattern {
             this.hasControlVerbState = hasControlVerbState;
             this.input = input;
             this.callbacks = callbacks;
+            this.subject = subject;
             this.bytes = input.getBytes(StandardCharsets.UTF_8);
             this.charToByte = buildCharToByte(input);
             this.byteToChar = buildByteToChar(input, bytes.length, charToByte);
@@ -621,7 +628,7 @@ final class JoniRegexPattern {
             matcher = regex.matcher(bytes);
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
-                        input, byteToChar, callbacks, flags, hasControlVerbState);
+                        input, byteToChar, callbacks, flags, hasControlVerbState, subject);
                 matcher.setCalloutHandler(calloutHandler);
             }
             int result;
@@ -807,6 +814,7 @@ final class JoniRegexPattern {
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
         private final boolean publishesControlVerbState;
+        private final RuntimeScalar subject;
         private final int initialLocalLevel;
         private final RegexState initialRegexState;
         private final PerlCalloutHandler parent;
@@ -819,19 +827,22 @@ final class JoniRegexPattern {
         private String failedNestedLastParenMatch;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
-                           RegexFlags outerFlags, boolean publishesControlVerbState) {
-            this(input, byteToChar, callbacks, outerFlags, publishesControlVerbState, null);
+                           RegexFlags outerFlags, boolean publishesControlVerbState,
+                           RuntimeScalar subject) {
+            this(input, byteToChar, callbacks, outerFlags, publishesControlVerbState,
+                    subject, null);
         }
 
         private PerlCalloutHandler(
                 String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                 RegexFlags outerFlags, boolean publishesControlVerbState,
-                PerlCalloutHandler parent) {
+                RuntimeScalar subject, PerlCalloutHandler parent) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
             this.publishesControlVerbState = publishesControlVerbState;
+            this.subject = subject;
             this.parent = parent;
             this.nestedDepth = parent == null ? 0 : parent.nestedDepth + 1;
             this.initialLocalLevel = DynamicVariableManager.getLocalLevel();
@@ -902,6 +913,7 @@ final class JoniRegexPattern {
                                     && runtimeRegex.getRegexFlags() != null
                                     ? runtimeRegex.getRegexFlags() : outerFlags,
                             nestedPattern.hasControlVerbState,
+                            subject,
                             this);
             if (nestedHandler != null) executedNestedCallbackPattern = true;
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
@@ -944,6 +956,18 @@ final class JoniRegexPattern {
             var callbackPackages = PerlRuntime.current().executionState()
                     .activeRegexCallbackPackages;
             callbackPackages.push(callback.lexicalPackage == null ? "main" : callback.lexicalPackage);
+            RuntimeScalar previousTopic = GlobalVariable.getGlobalVariable("main::_");
+            boolean previousTopicWasTemporary =
+                    GlobalVariable.isTemporaryGlobalAlias("main::_");
+            RuntimeScalar callbackPosition = RuntimePosLvalue.pos(subject);
+            int previousPositionType = callbackPosition.type;
+            Object previousPositionValue = callbackPosition.value;
+            GlobalVariable.aliasTemporaryGlobalVariable("main::_", subject);
+            // Exposing the provisional offset is not an assignment to pos().
+            // Preserve zero-length /g bookkeeping unless callback code itself
+            // explicitly changes pos().
+            callbackPosition.type = RuntimeScalarType.INTEGER;
+            callbackPosition.value = charOffset(match.currentBytePosition());
 
             try {
                 DynamicVariableManager.CapturedFrame<RuntimeList> frame =
@@ -972,6 +996,10 @@ final class JoniRegexPattern {
                 previousDynamicView = priorDynamicView;
                 throw failure;
             } finally {
+                callbackPosition.type = previousPositionType;
+                callbackPosition.value = previousPositionValue;
+                GlobalVariable.restoreTemporaryGlobalVariable(
+                        "main::_", previousTopic, previousTopicWasTemporary);
                 if (!callbackLocations.isEmpty()) callbackLocations.pop();
                 if (!callbackPackages.isEmpty()) callbackPackages.pop();
                 if (callback.code.isQuotedRegexCallback) {
@@ -1096,9 +1124,15 @@ final class JoniRegexPattern {
             state.lastParenMatchOverride = null;
             int count = match.captureCount();
             state.globalMatchString = input;
-            state.lastMatchedString = input;
-            state.lastMatchStart = charOffset(match.captureBegin(0));
-            state.lastMatchEnd = charOffset(match.captureEnd(0));
+            int provisionalStart = charOffset(match.captureBegin(0));
+            int provisionalEnd = charOffset(match.captureEnd(0));
+            provisionalEnd = provisionalEnd >= 0
+                    ? provisionalEnd : charOffset(match.currentBytePosition());
+            state.lastMatchStart = provisionalStart;
+            state.lastMatchEnd = provisionalEnd;
+            state.lastMatchedString = provisionalStart >= 0
+                    && provisionalEnd >= provisionalStart
+                    ? input.substring(provisionalStart, provisionalEnd) : null;
             state.lastCaptureGroups = new String[count];
             state.manualCaptureStarts = new int[count];
             state.manualCaptureEnds = new int[count];
