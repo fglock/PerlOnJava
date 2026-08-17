@@ -189,6 +189,7 @@ final class JoniRegexPattern {
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
+        boolean wrapsInternalScalarMarker = false;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (escaped) {
@@ -202,7 +203,7 @@ final class JoniRegexPattern {
                     if (end > i + 3) {
                         int codePoint = UnicodeResolver.getCodePointFromName(
                                 pattern.substring(i + 3, end));
-                        out.appendCodePoint(codePoint);
+                        appendResolvedNamedCharacter(out, codePoint, flags);
                         i = end;
                         continue;
                     }
@@ -225,6 +226,14 @@ final class JoniRegexPattern {
                 continue;
             }
             if (ch == '[') {
+                if (!inClass && i + 1 < pattern.length() && pattern.charAt(i + 1) == '^') {
+                    // Surrogate and beyond-Unicode Perl scalars use one
+                    // Java-safe marker string internally. A negated class
+                    // accepts those scalars, but must consume the complete
+                    // marker as one Perl character.
+                    out.append("(?:\\x{FFFD}<[0-9A-F]+>|");
+                    wrapsInternalScalarMarker = true;
+                }
                 inClass = true;
                 out.append(ch);
                 continue;
@@ -235,6 +244,10 @@ final class JoniRegexPattern {
             if (ch == ']' && inClass) {
                 inClass = false;
                 out.append(ch);
+                if (wrapsInternalScalarMarker) {
+                    out.append(')');
+                    wrapsInternalScalarMarker = false;
+                }
                 continue;
             }
             if (!inClass && pattern.startsWith("(?{", i)
@@ -299,6 +312,24 @@ final class JoniRegexPattern {
             out.append(ch);
         }
         return out.toString();
+    }
+
+    private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,
+                                                      RegexFlags flags) {
+        boolean extendedSyntax = flags.isExtended()
+                && (codePoint == '#' || Character.isWhitespace(codePoint));
+        boolean regexSyntax = codePoint == '\\' || codePoint == '.' || codePoint == '^'
+                || codePoint == '$' || codePoint == '|' || codePoint == '?'
+                || codePoint == '*' || codePoint == '+' || codePoint == '('
+                || codePoint == ')' || codePoint == '[' || codePoint == ']'
+                || codePoint == '{' || codePoint == '}';
+        if (extendedSyntax || regexSyntax || Character.isISOControl(codePoint)) {
+            out.append("\\x{")
+                    .append(Integer.toHexString(codePoint).toUpperCase(java.util.Locale.ROOT))
+                    .append('}');
+        } else {
+            out.appendCodePoint(codePoint);
+        }
     }
 
 
@@ -487,6 +518,15 @@ final class JoniRegexPattern {
 
         @Override
         public boolean find() {
+            return find(Option.NONE, false);
+        }
+
+        @Override
+        public boolean findNotEmpty() {
+            return find(Option.FIND_NOT_EMPTY, true);
+        }
+
+        private boolean find(int option, boolean anchored) {
             if (nextStart > regionEnd) {
                 matched = false;
                 if (hasControlVerbState) RuntimeRegex.updateControlVerbVariables(null, null);
@@ -499,7 +539,9 @@ final class JoniRegexPattern {
             }
             int result;
             try {
-                result = matcher.search(charToByte[nextStart], charToByte[regionEnd], Option.NONE);
+                result = anchored
+                        ? matcher.match(charToByte[nextStart], charToByte[regionEnd], option)
+                        : matcher.search(charToByte[nextStart], charToByte[regionEnd], option);
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
                 throw failure;

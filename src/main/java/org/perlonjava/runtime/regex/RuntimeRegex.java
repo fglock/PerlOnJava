@@ -2794,13 +2794,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 int zeroLengthOffset = matcher.end();
                 boolean consumedNonEmptyRetry = false;
-                if (nonEmptySubstitutionPattern != null && zeroLengthOffset <= inputStr.length()) {
-                    RegexMatcher retryMatcher = new JavaRegexMatcher(
-                            nonEmptySubstitutionPattern.matcher(matchInput), regex.branchResetCaptureMap);
+                if ((nonEmptySubstitutionPattern != null || regex.recursivePattern != null)
+                        && zeroLengthOffset <= inputStr.length()) {
+                    RegexMatcher retryMatcher = nonEmptySubstitutionPattern != null
+                            ? new JavaRegexMatcher(nonEmptySubstitutionPattern.matcher(matchInput),
+                                    regex.branchResetCaptureMap)
+                            : regex.recursivePattern.matcher(inputStr, regex.executableCallbacks);
                     // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                     // so a zero-length match at the region start is rejected.
                     setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
-                    if (retryMatcher.find()
+                    boolean retryFound = nonEmptySubstitutionPattern != null
+                            ? retryMatcher.find() : retryMatcher.findNotEmpty();
+                    if (retryFound
                             && retryMatcher.start() == zeroLengthOffset
                             && retryMatcher.end() > zeroLengthOffset) {
                         found++;

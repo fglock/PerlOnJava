@@ -8,6 +8,11 @@ import java.util.Map;
 public interface RegexMatcher {
     boolean find();
 
+    /** Find the next match while rejecting zero-length alternatives. */
+    default boolean findNotEmpty() {
+        return find() && end() > start();
+    }
+
     void region(int start, int end);
 
     void useAnchoringBounds(boolean enabled);

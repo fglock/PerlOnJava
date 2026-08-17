@@ -515,7 +515,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         if (n > bestLen) {
             if (Config.USE_FIND_LONGEST_SEARCH_ALL_OF_RANGE) {
-                if (isFindLongest(regex.options)) {
+                if (isFindLongest(regex.options | msaOptions)) {
                     if (n > msaBestLen) {
                         msaBestLen = n;
                         msaBestS = sstart;
@@ -563,12 +563,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean endBestLength() {
-        if (isFindCondition(regex.options)) {
-            if (isFindNotEmpty(regex.options) && s == sstart) {
+        int effectiveOptions = regex.options | msaOptions;
+        if (isFindCondition(effectiveOptions)) {
+            if (isFindNotEmpty(effectiveOptions) && s == sstart) {
                 bestLen = -1;
                 {opFail(); return false;} /* for retry */
             }
-            if (isFindLongest(regex.options) && s < range) {
+            if (isFindLongest(effectiveOptions) && s < range) {
                 {opFail(); return false;} /* for retry */
             }
         }
