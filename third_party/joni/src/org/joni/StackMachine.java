@@ -583,6 +583,13 @@ abstract class StackMachine extends Matcher implements StackType {
         return k;
     }
 
+    protected final int savedPosition(int markerType) {
+        for (int i = stk - 1; i >= 0; i--) {
+            if (stack[i].type == markerType) return stack[i].getStatePStr();
+        }
+        return -1;
+    }
+
     protected final int posNotEnd() {
         int k = stk;
         while (true) {

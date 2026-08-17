@@ -1450,20 +1450,99 @@ final class Analyser extends Parser {
     }
 
     private boolean setupBoundedQuantifierLookBehind(AnchorNode node) {
-        if (!syntax.op2OptionPerl() || !(node.target instanceof QuantifierNode quantifier)
-                || isRepeatInfinite(quantifier.upper)) {
+        if (!syntax.op2OptionPerl()) {
             return false;
         }
-        int targetLength = getCharLengthTree(quantifier.target);
-        if (returnCode != 0 || targetLength < 0
-                || MinMaxLen.distanceMultiply(targetLength, quantifier.upper) > 255) {
+        if (node.target instanceof QuantifierNode quantifier && !isRepeatInfinite(quantifier.upper)) {
+            int targetLength = getCharLengthTree(quantifier.target);
+            if (returnCode == 0 && targetLength >= 0
+                    && MinMaxLen.distanceMultiply(targetLength, quantifier.upper) <= 255) {
+                node.variableLookBehindMin = quantifier.lower;
+                node.variableLookBehindMax = quantifier.upper;
+                node.variableLookBehindTargetLength = targetLength;
+                returnCode = 0;
+                return true;
+            }
+        }
+
+        CharLengthRange range = getCharLengthRange(node.target);
+        if (range == null || range.max > 255 || range.min == range.max) {
             return false;
         }
-        node.variableLookBehindMin = quantifier.lower;
-        node.variableLookBehindMax = quantifier.upper;
-        node.variableLookBehindTargetLength = targetLength;
+        node.variableLookBehindMin = range.min;
+        node.variableLookBehindMax = range.max;
+        node.variableLookBehindTargetLength = -1;
         returnCode = 0;
         return true;
+    }
+
+    private static final class CharLengthRange {
+        final int min;
+        final int max;
+
+        CharLengthRange(int min, int max) {
+            this.min = min;
+            this.max = max;
+        }
+    }
+
+    private CharLengthRange getCharLengthRange(Node node) {
+        switch (node.getType()) {
+        case NodeType.LIST: {
+            int min = 0;
+            int max = 0;
+            ListNode list = (ListNode)node;
+            do {
+                CharLengthRange item = getCharLengthRange(list.value);
+                if (item == null) return null;
+                min = MinMaxLen.distanceAdd(min, item.min);
+                max = MinMaxLen.distanceAdd(max, item.max);
+            } while ((list = list.tail) != null);
+            return new CharLengthRange(min, max);
+        }
+        case NodeType.ALT: {
+            int min = MinMaxLen.INFINITE_DISTANCE;
+            int max = 0;
+            ListNode alt = (ListNode)node;
+            do {
+                CharLengthRange branch = getCharLengthRange(alt.value);
+                if (branch == null) return null;
+                min = Math.min(min, branch.min);
+                max = Math.max(max, branch.max);
+            } while ((alt = alt.tail) != null);
+            return new CharLengthRange(min, max);
+        }
+        case NodeType.STR: {
+            int length = ((StringNode)node).length(enc);
+            return new CharLengthRange(length, length);
+        }
+        case NodeType.CTYPE:
+        case NodeType.CCLASS:
+        case NodeType.CANY:
+            return new CharLengthRange(1, 1);
+        case NodeType.QTFR: {
+            QuantifierNode quantifier = (QuantifierNode)node;
+            if (isRepeatInfinite(quantifier.upper)) return null;
+            CharLengthRange target = getCharLengthRange(quantifier.target);
+            if (target == null) return null;
+            return new CharLengthRange(
+                    MinMaxLen.distanceMultiply(target.min, quantifier.lower),
+                    MinMaxLen.distanceMultiply(target.max, quantifier.upper));
+        }
+        case NodeType.ENCLOSE: {
+            EncloseNode enclose = (EncloseNode)node;
+            if (enclose.type == EncloseType.ABSENT) return null;
+            return getCharLengthRange(enclose.target);
+        }
+        case NodeType.ANCHOR:
+            return new CharLengthRange(0, 0);
+        case NodeType.CALL: {
+            CallNode call = (CallNode)node;
+            return call.isRecursion() ? null : getCharLengthRange(call.target);
+        }
+        default:
+            return null;
+        }
     }
 
     private void nextSetup(Node node, Node nextNode) {

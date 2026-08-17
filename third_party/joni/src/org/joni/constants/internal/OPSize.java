@@ -82,6 +82,8 @@ public interface OPSize {
     int MARK                         = (OPCODE + INDEX);
     int POP_POS_NOT                  = OPCODE;
     int RECURSION_CONDITION          = (OPCODE + MEMNUM + RELADDR);
+    int CHECK_POS_END                = OPCODE;
+    int CHECK_LOOK_BEHIND_END        = OPCODE;
 
     // #ifdef USE_COMBINATION_EXPLOSION_CHECK
     int STATE_CHECK                   = (OPCODE + STATE_CHECK_NUM);

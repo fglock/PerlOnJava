@@ -311,6 +311,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.RETURN:                     opReturn();                continue;
                 case OPCode.CONDITION:                  opCondition();             continue;
                 case OPCode.RECURSION_CONDITION:        opRecursionCondition();    continue;
+                case OPCode.CHECK_POS_END:              opCheckPosEnd();           continue;
+                case OPCode.CHECK_LOOK_BEHIND_END:      opCheckLookBehindEnd();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
@@ -463,6 +465,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.RETURN:                     opReturn();                continue;
                 case OPCode.CONDITION:                  opCondition();             continue;
                 case OPCode.RECURSION_CONDITION:        opRecursionCondition();    continue;
+                case OPCode.CHECK_POS_END:              opCheckPosEnd();           continue;
+                case OPCode.CHECK_LOOK_BEHIND_END:      opCheckLookBehindEnd();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
@@ -824,6 +828,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int groupNum = code[ip++];
         int addr = code[ip++];
         if (!isInsideSubexpCall(groupNum)) ip += addr;
+    }
+
+    private void opCheckPosEnd() {
+        if (s != savedPosition(POS)) opFail();
+    }
+
+    private void opCheckLookBehindEnd() {
+        if (s != savedPosition(LOOK_BEHIND_NOT)) opFail();
     }
 
     private boolean isInBitSet() {
