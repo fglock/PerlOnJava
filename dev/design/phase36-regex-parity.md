@@ -394,7 +394,8 @@ matcher-specific timeouts on both execution backends.
    both to PR 958 with the regression exit gate.
 4. Integrate PR #1011 and the deferred-property provenance slice, then finish
    PerlOnJava4's built-in Unicode aliases against the 1,065/1,110 diagnostics
-   baseline; its alias-complete target is 1,094/1,110.
+   baseline. Fixing the 29 executed alias failures also unlocks 16 gated match
+   assertions, so the alias-complete target is 1,110/1,110.
 5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
