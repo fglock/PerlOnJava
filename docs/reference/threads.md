@@ -16,7 +16,10 @@ The bundled compatibility surface is:
 
 The unchanged upstream test distributions for these four modules contain 64
 files and 1,891 assertions. They pass on the JVM compiler and bytecode
-interpreter with Java virtual and platform carriers.
+interpreter with Java virtual and platform carriers. This is the delivered
+public-module milestone. In the second milestone, all five non-regex Perl core
+thread files pass 849/849 on both backends and carriers; the remaining work is
+the twelve regex wrappers and their Phase 36 direct companions.
 
 ## Snapshot and Shared Storage
 
@@ -114,6 +117,17 @@ Before a thread/runtime release, run the complete four-mode matrix:
 make test-threads-release
 ```
 
+The complete Perl core-wrapper matrix can also be run independently:
+
+```bash
+make test-threads-core
+make test-threads-core-platform
+```
+
+Direct companions run before `_thr.t` wrappers on the same commit. Partial TAP,
+timeouts, and incomplete files fail the target. Resource-sensitive regex
+families run serially so their upstream temporary files cannot collide.
+
 Both targets use eight test jobs, a hard 300-second timeout per file, and write
 JSON reports under `build/reports/threads/`. Timing-sensitive join coverage is
 given an exclusive runner slot, and strict exit mode makes any non-passing file
@@ -127,8 +141,12 @@ Native callback and ORM compatibility form a separate slow ecosystem gate:
 make test-threads-ecosystem
 ```
 
-It runs the unchanged Net::SSLeay 61/62 thread suites and then executes
-`timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`.
+It runs pinned Storable, Test2, and Moose thread-bearing tests on both execution
+backends, preserving Moose's upstream TODO, followed by the unchanged
+Net::SSLeay 61/62 thread suites, and then executes
+`timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`. Before those slow suites it
+compares the DBI thread-ownership contract with system Perl and runs it under
+both PerlOnJava backends with virtual and platform carriers.
 
 The callout-enabled Joni matcher and executable regex callbacks are integrated.
 Remaining direct regex-language compatibility is maintained in the separate

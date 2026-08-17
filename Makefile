@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-regex-test-sources test-threads test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
 THREAD_PLATFORM_TESTS := \
@@ -27,6 +27,57 @@ THREAD_REGEX_ANCHOR_TESTS := \
 	perl5_t/t/re/reg_email_thr.t \
 	perl5_t/t/re/stclass_threads.t \
 	perl5_t/t/re/user_prop_race_thr.t
+
+# Complete Perl-core ithread compatibility matrix. Direct companions are run
+# first so a language/regex failure cannot be misclassified as a snapshot bug.
+# The four resource-sensitive regex families run serially because the upstream
+# fixtures use shared temporary paths.
+THREAD_CORE_DIRECT_PARALLEL := \
+	perl5_t/t/op/index.t \
+	perl5_t/t/op/substr.t \
+	perl5_t/t/re/pat_re_eval.t \
+	perl5_t/t/re/pat_rt_report.t \
+	perl5_t/t/re/pat_special_cc.t \
+	perl5_t/t/re/reg_email.t \
+	perl5_t/t/re/regexp_unicode_prop.t \
+	perl5_t/t/re/speed.t
+THREAD_CORE_DIRECT_SERIAL := \
+	perl5_t/t/re/pat.t \
+	perl5_t/t/re/pat_advanced.t \
+	perl5_t/t/re/pat_psycho.t \
+	perl5_t/t/re/regexp_qr_embed.t
+THREAD_CORE_WRAPPER_PARALLEL := \
+	perl5_t/t/class/threads.t \
+	perl5_t/t/op/index_thr.t \
+	perl5_t/t/op/substr_thr.t \
+	perl5_t/t/op/threads-dirh.t \
+	perl5_t/t/op/threads.t \
+	perl5_t/t/re/pat_re_eval_thr.t \
+	perl5_t/t/re/pat_rt_report_thr.t \
+	perl5_t/t/re/pat_special_cc_thr.t \
+	perl5_t/t/re/reg_email_thr.t \
+	perl5_t/t/re/regexp_unicode_prop_thr.t \
+	perl5_t/t/re/speed_thr.t \
+	perl5_t/t/re/stclass_threads.t \
+	perl5_t/t/re/user_prop_race_thr.t
+THREAD_CORE_WRAPPER_SERIAL := \
+	perl5_t/t/re/pat_thr.t \
+	perl5_t/t/re/pat_advanced_thr.t \
+	perl5_t/t/re/pat_psycho_thr.t \
+	perl5_t/t/re/regexp_qr_embed_thr.t
+THREAD_CORE_TESTS := $(THREAD_CORE_DIRECT_PARALLEL) $(THREAD_CORE_DIRECT_SERIAL) $(THREAD_CORE_WRAPPER_PARALLEL) $(THREAD_CORE_WRAPPER_SERIAL)
+THREAD_ECOSYSTEM_UPSTREAM_TESTS := \
+	perl5/dist/Storable/t/threads.t \
+	perl5/cpan/Test-Simple/t/Legacy/Regression/683_thread_todo.t \
+	perl5/cpan/Test-Simple/t/Legacy/is_deeply_with_threads.t \
+	perl5/cpan/Test-Simple/t/Legacy/overload_threads.t \
+	perl5/cpan/Test-Simple/t/Legacy/subtest/threads.t \
+	perl5/cpan/Test-Simple/t/Legacy/thread_taint.t \
+	perl5/cpan/Test-Simple/t/Legacy/threads.t \
+	perl5/cpan/Test-Simple/t/Legacy_And_Test2/thread_init_warning.t \
+	perl5/cpan/Test-Simple/t/Test2/acceptance/try_it_threads.t \
+	perl5/cpan/Test-Simple/t/modules/Require/Threads.t \
+	dev/test-corpora/Moose-2.4000/t/todo_tests/moose_and_threads.t
 
 all: build
 
@@ -136,6 +187,28 @@ check-thread-regex-test-sources:
 		fi; \
 	done
 
+check-thread-core-test-sources:
+	@for file in $(THREAD_CORE_TESTS); do \
+		if [ ! -f "$$file" ]; then \
+			echo "Error: $$file is missing."; \
+			echo "Import the pinned Perl core tests into ./perl5_t before running the complete thread gate."; \
+			exit 1; \
+		fi; \
+	done
+	@perl dev/tools/check_test_manifest.pl dev/test-manifests/threads-core.sha256
+
+check-thread-ecosystem-test-sources:
+	@for file in $(THREAD_ECOSYSTEM_UPSTREAM_TESTS); do \
+		if [ ! -f "$$file" ]; then \
+			echo "Error: $$file is missing from the pinned Perl compatibility corpus."; \
+			exit 1; \
+		fi; \
+	done
+	@printf '%s  %s\n' \
+		4c7b58942d4c95f274be4bcc631981071688b5a11cae3bf132eb80e16c856a0e \
+		dev/test-corpora/Moose-2.4000/t/todo_tests/moose_and_threads.t \
+		| shasum -a 256 -c -
+
 # Permanent Perl ithread compatibility gate used by Ubuntu pull-request CI.
 # Full upstream distributions run on both backends with the default virtual
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
@@ -145,6 +218,46 @@ test-threads: check-java-gradle check-thread-test-sources
 	JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/jvm-virtual.json $(THREAD_DIST_DIRS)
 	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/interpreter-virtual.json $(THREAD_DIST_DIRS)
 	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/platform-focused.json $(THREAD_PLATFORM_TESTS)
+
+# Full same-commit direct/thread Perl-core matrix. This target is deliberately
+# strict: partial TAP, TODO-free failures, timeouts, and incomplete files block
+# claiming complete core-wrapper compatibility.
+test-threads-core: check-java-gradle check-thread-core-test-sources
+	@status=0; \
+	JPERL_THREAD_MODE=virtual $(MAKE) test-threads-core-mode THREAD_CORE_REPORT_PREFIX=core-jvm-virtual || status=1; \
+	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual $(MAKE) test-threads-core-mode THREAD_CORE_REPORT_PREFIX=core-interpreter-virtual || status=1; \
+	exit $$status
+
+test-threads-core-platform: check-java-gradle check-thread-core-test-sources
+	@status=0; \
+	JPERL_THREAD_MODE=platform $(MAKE) test-threads-core-mode THREAD_CORE_REPORT_PREFIX=core-jvm-platform || status=1; \
+	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=platform $(MAKE) test-threads-core-mode THREAD_CORE_REPORT_PREFIX=core-interpreter-platform || status=1; \
+	exit $$status
+
+test-threads-core-mode:
+	@mkdir -p build/reports/threads/core; \
+	status=0; \
+	perl dev/tools/perl_test_runner.pl --strict-exit --jobs 4 --timeout 600 --output build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-direct.json $(THREAD_CORE_DIRECT_PARALLEL) || status=1; \
+	for file in $(THREAD_CORE_DIRECT_SERIAL); do \
+		name=$$(basename "$$file" .t); \
+		perl dev/tools/perl_test_runner.pl --strict-exit --jobs 1 --timeout 900 --output "build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-direct-$$name.json" "$$file" || status=1; \
+	done; \
+	perl dev/tools/perl_test_runner.pl --strict-exit --jobs 4 --timeout 600 --output build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-wrappers.json $(THREAD_CORE_WRAPPER_PARALLEL) || status=1; \
+	for file in $(THREAD_CORE_WRAPPER_SERIAL); do \
+		name=$$(basename "$$file" .t); \
+		perl dev/tools/perl_test_runner.pl --strict-exit --jobs 1 --timeout 900 --output "build/reports/threads/core/$(THREAD_CORE_REPORT_PREFIX)-wrapper-$$name.json" "$$file" || status=1; \
+	done; \
+	exit $$status
+
+# Shell-independent focused gate for windows-latest. It exercises the runtime
+# and shared-storage thread suites directly through JUnit, without requiring a
+# system Perl installation or fork-capable TAP harness.
+test-threads-windows: check-java-gradle
+ifeq ($(OS),Windows_NT)
+	gradlew.bat testThreadsWindows --rerun-tasks --no-daemon
+else
+	./gradlew testThreadsWindows --rerun-tasks --no-daemon
+endif
 
 # Post-Joni preservation anchors. These are unchanged Perl core tests whose
 # direct regex semantics are complete and whose threaded variants prove lexical
@@ -158,7 +271,7 @@ test-threads-regex: check-java-gradle check-thread-regex-test-sources
 # Thread release gate: extend the PR gate to the complete platform-carrier
 # distribution matrix. Together with test-threads this covers both backends on
 # both carrier policies without making every pull request repeat all four runs.
-test-threads-release: test-threads test-threads-regex
+test-threads-release: test-threads test-threads-core test-threads-core-platform test-threads-regex
 	JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/jvm-platform.json $(THREAD_DIST_DIRS)
 	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=platform perl dev/tools/perl_test_runner.pl --strict-exit --jobs 8 --timeout 300 --output build/reports/threads/interpreter-platform.json $(THREAD_DIST_DIRS)
 
@@ -167,7 +280,17 @@ test-threads-release: test-threads test-threads-regex
 # cloned package graphs, closures, and a large real-world ORM suite. This target
 # is intentionally separate from pull-request CI because jcpan needs network
 # access and the complete DBIx::Class run can take about 40 minutes.
-test-threads-ecosystem: check-java-gradle
+test-threads-ecosystem: check-java-gradle check-thread-ecosystem-test-sources
+	@mkdir -p build/reports/threads; \
+	status=0; \
+	JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 4 --timeout 300 --output build/reports/threads/ecosystem-upstream-jvm.json $(THREAD_ECOSYSTEM_UPSTREAM_TESTS) || status=1; \
+	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=virtual perl dev/tools/perl_test_runner.pl --strict-exit --jobs 4 --timeout 300 --output build/reports/threads/ecosystem-upstream-interpreter.json $(THREAD_ECOSYSTEM_UPSTREAM_TESTS) || status=1; \
+	exit $$status
+	timeout 120 prove src/test/resources/unit/dbi_threads_runtime_ownership.t
+	timeout 180 ./jperl src/test/resources/unit/dbi_threads_runtime_ownership.t
+	timeout 180 ./jperl --interpreter src/test/resources/unit/dbi_threads_runtime_ownership.t
+	JPERL_THREAD_MODE=platform timeout 180 ./jperl src/test/resources/unit/dbi_threads_runtime_ownership.t
+	JPERL_INTERPRETER=1 JPERL_THREAD_MODE=platform timeout 180 ./jperl --interpreter src/test/resources/unit/dbi_threads_runtime_ownership.t
 	JPERL_TEST_FILTER=61_threads-cb-crash $(MAKE) test-bundled-modules
 	JPERL_TEST_FILTER=62_threads-ctx_new-deadlock $(MAKE) test-bundled-modules
 	timeout 3600 ./jcpan --jobs 8 -t DBIx::Class

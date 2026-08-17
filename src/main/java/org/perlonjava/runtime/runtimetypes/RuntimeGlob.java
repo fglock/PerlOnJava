@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.WarnDie;
 
@@ -1195,6 +1196,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 && this.IO.value instanceof RuntimeIO existingIO
                 && existingIO != io) {
             RuntimeIO oldSelected = existingIO == RuntimeIO.getSelectedHandle() ? existingIO : null;
+            // Scalar filehandles use anonymous globs. Reopening the same scalar
+            // preserves its PVIO identity for aliases, but Perl closes the old
+            // open file description before installing the replacement. Release
+            // it here so descriptor state and advisory locks do not leak. Named
+            // globs keep their established redirection path: fork-open and
+            // standard-handle routing transfer that state separately.
+            if (this.globName == null
+                    && existingIO.ioHandle != null
+                    && !(existingIO.ioHandle instanceof ClosedIOHandle)) {
+                existingIO.close();
+            }
             existingIO.replaceStateFrom(io);
             existingIO.globName = this.globName;
             Integer standardFd = standardFdForGlobName(this.globName);

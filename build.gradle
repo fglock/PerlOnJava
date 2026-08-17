@@ -318,6 +318,29 @@ tasks.register('testAll', Test) {
     shouldRunAfter testUnit
 }
 
+// Focused shell-independent thread gate for Windows CI. The Linux release
+// matrix additionally runs the unchanged upstream Perl distributions.
+tasks.register('testThreadsWindows', Test) {
+    description = 'Runs deterministic Perl thread/runtime tests on Windows CI'
+    group = 'verification'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform {
+        includeTags 'unit'
+        excludeTags 'full'
+    }
+
+    include '**/PerlThread*Test.class'
+    include '**/ThreadCompiledCodeIdRangeTest.class'
+    include '**/SharedPerlStorage*Test.class'
+    include '**/PerlRuntimeSnapshotTest.class'
+    include '**/PerlRuntimeStashSnapshotTest.class'
+    include '**/RuntimeGraphCloner*Test.class'
+    include '**/DBIHandleResourceThreadTest.class'
+}
+
 // Bundled module tests (XML::Parser, etc.)
 // Tests live under src/test/resources/module/{ModuleName}/t/
 tasks.register('testModule', Test) {

@@ -49,7 +49,10 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   proxy views, and global final destruction are implemented. The unchanged
   upstream `threads`, `threads::shared`, `Thread::Queue`, and
   `Thread::Semaphore` distributions pass on both backends and both Java carrier
-  policies; see the [Perl threads reference](../reference/threads.md).
+  policies. The five non-regex Perl core thread files additionally pass 849/849
+  in all four backend/carrier modes. Add strict core-wrapper and focused Windows
+  gates, plus system-Perl differential coverage for DBI thread ownership; see
+  the [Perl threads reference](../reference/threads.md).
 - CPAN/tooling: expose tested dependency scripts through `PATH`, deduplicate
   repeated `PERL5LIB` setup, and resolve test prerequisites against tested
   `blib` trees before launching tests. Add `JSON::DWIW`, `Taint::Runtime`, and
