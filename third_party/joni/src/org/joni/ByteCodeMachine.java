@@ -163,6 +163,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         sprev = _sprev;
         stk = 0;
         ip = 0;
+        controlMark = null;
 
         if (Config.DEBUG_MATCH) debugMatchBegin();
         stackInit();
@@ -176,8 +177,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                     ? executeSb(interrupt) : execute(interrupt);
             return result;
         } finally {
-            if (result >= 0) completeActiveCallouts();
-            else unwindActiveCallouts();
+            if (result >= 0) {
+                controlError = null;
+                completeActiveCallouts();
+            } else {
+                if (controlMark != null) controlError = controlMark;
+                controlMark = null;
+                unwindActiveCallouts();
+            }
         }
     }
 
@@ -308,10 +315,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
-                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.PRUNE:                      opPrune();                  continue;
                 case OPCode.SKIP:                       opSkip();                   continue;
                 case OPCode.THEN:                       opThen();                   continue;
                 case OPCode.COMMIT:                     opCommit();                 continue;
+                case OPCode.MARK:                       opMark();                   continue;
 
                 case OPCode.STATE_CHECK_ANYCHAR_STAR:   if (USE_CEC) {opStateCheckAnyCharStar(); break;}
                 case OPCode.STATE_CHECK_ANYCHAR_ML_STAR:if (USE_CEC) {opStateCheckAnyCharMLStar();break;}
@@ -457,10 +465,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
-                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.PRUNE:                      opPrune();                  continue;
                 case OPCode.SKIP:                       opSkip();                   continue;
                 case OPCode.THEN:                       opThen();                   continue;
                 case OPCode.COMMIT:                     opCommit();                 continue;
+                case OPCode.MARK:                       opMark();                   continue;
 
                 case OPCode.EXACT1_IC_SB:               opExact1ICSb();            break;
                 case OPCode.EXACTN_IC_SB:               opExactNICSb();            continue;
@@ -2061,18 +2070,53 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return opEnd();
     }
 
+    private void opPrune() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
+        cutAlternatives(false);
+    }
+
     private void opSkip() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
+        if (name != null) {
+            int target = findControlMarkPosition(name);
+            if (target < 0) return;
+            cutAlternatives(false);
+            requestSearchSkip(target);
+            return;
+        }
         cutAlternatives(false);
         requestSearchSkip(s);
     }
 
     private void opThen() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
         cutAlternatives(true, s, sprev, pkeep);
     }
 
     private void opCommit() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
         cutAlternatives(false);
         requestSearchAbort();
+    }
+
+    private void opMark() {
+        String next = controlVerbName(code[ip++]);
+        pushControlMark(controlMark, next, s);
+        controlMark = next;
+    }
+
+    @Override
+    protected void restoreControlMark(String name) {
+        if (controlMark != null) controlError = controlMark;
+        controlMark = name;
+    }
+
+    private String controlVerbName(int labelId) {
+        return labelId < 0 ? null : regex.controlVerbLabels[labelId];
     }
 
     private void closeOpenCaptures(int boundary) {
@@ -2132,6 +2176,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             if (repeatStk[memEndStk + mem] == i) return mem;
         }
         return -1;
+    }
+
+    @Override
+    public String controlMark() {
+        return controlMark;
     }
 
     private void checkCapture(int capture) {

@@ -49,5 +49,9 @@ public interface RegexMatcher {
 
     Map<String, Integer> namedGroups();
 
+    default String controlMark() { return null; }
+
+    default String controlError() { return null; }
+
     String patternDescription();
 }

@@ -26,6 +26,8 @@ import static org.joni.Option.isDontCaptureGroup;
 import static org.joni.Option.isIgnoreCase;
 import static org.joni.Option.isPosixBracketAllRange;
 
+import java.nio.charset.StandardCharsets;
+
 import org.jcodings.Encoding;
 import org.jcodings.ObjPtr;
 import org.jcodings.Ptr;
@@ -734,36 +736,49 @@ class Parser extends Lexer {
 
     private Node parseControlVerb() {
         final ControlVerbNode.Kind kind;
-        final String suffix;
+        final String verb;
         if (startsWith("ACCEPT)")) {
             kind = ControlVerbNode.Kind.ACCEPT;
-            suffix = "ACCEPT)";
+            verb = "ACCEPT";
         } else if (startsWith("FAIL)")) {
             kind = ControlVerbNode.Kind.FAIL;
-            suffix = "FAIL)";
+            verb = "FAIL";
         } else if (startsWith("F)")) {
             kind = ControlVerbNode.Kind.FAIL;
-            suffix = "F)";
-        } else if (startsWith("PRUNE)")) {
+            verb = "F";
+        } else if (startsWith("PRUNE)") || startsWith("PRUNE:")) {
             kind = ControlVerbNode.Kind.PRUNE;
-            suffix = "PRUNE)";
-        } else if (startsWith("SKIP)")) {
+            verb = "PRUNE";
+        } else if (startsWith("SKIP)") || startsWith("SKIP:")) {
             kind = ControlVerbNode.Kind.SKIP;
-            suffix = "SKIP)";
-        } else if (startsWith("THEN)")) {
+            verb = "SKIP";
+        } else if (startsWith("THEN)") || startsWith("THEN:")) {
             kind = ControlVerbNode.Kind.THEN;
-            suffix = "THEN)";
-        } else if (startsWith("COMMIT)")) {
+            verb = "THEN";
+        } else if (startsWith("COMMIT)") || startsWith("COMMIT:")) {
             kind = ControlVerbNode.Kind.COMMIT;
-            suffix = "COMMIT)";
+            verb = "COMMIT";
+        } else if (startsWith("MARK)") || startsWith("MARK:")) {
+            kind = ControlVerbNode.Kind.MARK;
+            verb = "MARK";
         } else {
             newSyntaxException(UNDEFINED_GROUP_OPTION);
             return null;
         }
-        p += suffix.length();
+        p += verb.length();
+        String name = null;
+        if (left() && peekIs(':')) {
+            inc();
+            int nameStart = p;
+            while (left() && !peekIs(')')) inc();
+            if (!left() || p == nameStart) newSyntaxException(UNDEFINED_GROUP_OPTION);
+            name = new String(bytes, nameStart, p - nameStart, StandardCharsets.UTF_8);
+        }
+        if (!left() || !peekIs(')')) newSyntaxException(END_PATTERN_IN_GROUP);
+        inc();
         returnCode = 0;
         env.hasControlVerb = true;
-        return new ControlVerbNode(kind);
+        return new ControlVerbNode(kind, name);
     }
 
     private int parseInternalCalloutId() {

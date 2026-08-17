@@ -21,13 +21,19 @@ package org.joni.ast;
 
 /** Zero-width matcher-control verb that cannot be represented as literal text. */
 public final class ControlVerbNode extends StringNode {
-    public enum Kind { ACCEPT, FAIL, PRUNE, SKIP, THEN, COMMIT }
+    public enum Kind { ACCEPT, FAIL, PRUNE, SKIP, THEN, COMMIT, MARK }
 
     public final Kind kind;
+    public final String name;
 
     public ControlVerbNode(Kind kind) {
+        this(kind, null);
+    }
+
+    public ControlVerbNode(Kind kind, String name) {
         super(0);
         this.kind = kind;
+        this.name = name;
         setRaw();
         setDontGetOptInfo();
     }
@@ -39,6 +45,6 @@ public final class ControlVerbNode extends StringNode {
 
     @Override
     public String toString(int level) {
-        return "\n  kind: " + kind;
+        return "\n  kind: " + kind + (name == null ? "" : "\n  name: " + name);
     }
 }

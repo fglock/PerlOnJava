@@ -75,10 +75,11 @@ public interface OPSize {
     int CALLOUT_CONDITION            = (OPCODE + MEMNUM + RELADDR);
     int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM);
     int ACCEPT                       = OPCODE;
-    int PRUNE                        = OPCODE;
-    int SKIP                         = OPCODE;
-    int THEN                         = OPCODE;
-    int COMMIT                       = OPCODE;
+    int PRUNE                        = (OPCODE + INDEX);
+    int SKIP                         = (OPCODE + INDEX);
+    int THEN                         = (OPCODE + INDEX);
+    int COMMIT                       = (OPCODE + INDEX);
+    int MARK                         = (OPCODE + INDEX);
 
     // #ifdef USE_COMBINATION_EXPLOSION_CHECK
     int STATE_CHECK                   = (OPCODE + STATE_CHECK_NUM);

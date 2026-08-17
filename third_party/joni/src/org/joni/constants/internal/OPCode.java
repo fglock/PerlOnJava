@@ -149,6 +149,7 @@ public interface OPCode {
     int SKIP                          = 105;          /* prune and resume search at current position */
     int THEN                          = 106;          /* prune through the nearest alternative */
     int COMMIT                        = 107;          /* prune and prevent another search start */
+    int MARK                          = 108;          /* record a named Perl backtracking mark */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -260,6 +261,7 @@ public interface OPCode {
         "skip", /*OP_SKIP*/
         "then", /*OP_THEN*/
         "commit", /*OP_COMMIT*/
+        "mark", /*OP_MARK*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -368,9 +370,10 @@ public interface OPCode {
         Arguments.SPECIAL, /*OP_CALLOUT_CONDITION*/
         Arguments.MEMNUM, /*OP_DYNAMIC_CALLOUT*/
         Arguments.NON, /*OP_ACCEPT*/
-        Arguments.NON, /*OP_PRUNE*/
-        Arguments.NON, /*OP_SKIP*/
-        Arguments.NON, /*OP_THEN*/
-        Arguments.NON, /*OP_COMMIT*/
+        Arguments.MEMNUM, /*OP_PRUNE*/
+        Arguments.MEMNUM, /*OP_SKIP*/
+        Arguments.MEMNUM, /*OP_THEN*/
+        Arguments.MEMNUM, /*OP_COMMIT*/
+        Arguments.MEMNUM, /*OP_MARK*/
     } : null;
 }

@@ -89,6 +89,7 @@ public final class Regex {
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
+    String[] controlVerbLabels;
 
     private static final Encoding DEFAULT_ENCODING;
     static {

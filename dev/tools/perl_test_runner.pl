@@ -16,6 +16,7 @@ use Config ();
 my $jperl_path = './jperl';
 my $timeout = 300; # Default to 300 seconds
 my $jobs = 5;     # Default to 5 parallel jobs
+my $cpu_heavy_jobs = 2; # pat_psycho*/speed* can use separate cores safely
 my $output_file;
 my $help;
 my $strict_exit = 0;
@@ -24,6 +25,7 @@ GetOptions(
     'jperl=s'   => \$jperl_path,
     'timeout=f' => \$timeout,
     'jobs|j=i'  => \$jobs,
+    'cpu-heavy-jobs=i' => \$cpu_heavy_jobs,
     'output=s'  => \$output_file,
     'strict-exit!' => \$strict_exit,
     'help'      => \$help,
@@ -53,6 +55,8 @@ for my $test_path (@ARGV) {
 }
 
 die "Error: No test files found\n" unless @test_files;
+die "Error: --jobs must be at least 1\n" unless $jobs >= 1;
+die "Error: --cpu-heavy-jobs must be at least 1\n" unless $cpu_heavy_jobs >= 1;
 
 unless (-x $jperl_path) {
     die "Error: jperl not found or not executable at '$jperl_path'\n";
@@ -90,22 +94,29 @@ my $total_files = @test_files;
 my @indexed_tests = map {
     +{ test_file => $test_files[$_], test_index => $_ + 1 }
 } 0 .. $#test_files;
-my (@parallel_tests, @exclusive_tests);
+my (@parallel_tests, @cpu_heavy_tests, @exclusive_tests);
 for my $test (@indexed_tests) {
-    push @{ requires_exclusive_slot($test->{test_file})
-        ? \@exclusive_tests : \@parallel_tests }, $test;
+    if (requires_exclusive_slot($test->{test_file})) {
+        push @exclusive_tests, $test;
+    } elsif (requires_cpu_heavy_slot($test->{test_file})) {
+        push @cpu_heavy_tests, $test;
+    } else {
+        push @parallel_tests, $test;
+    }
 }
 
 print "Found $total_files test files\n";
 print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout; "
-    . scalar(@exclusive_tests) . " resource-sensitive tests run serially)\n";
+    . scalar(@exclusive_tests) . " memory-sensitive tests run serially; "
+    . scalar(@cpu_heavy_tests) . " CPU-heavy tests use ${cpu_heavy_jobs} jobs)\n";
 print "-" x 60, "\n";
 
-# Run the normal corpus in parallel, then give known CPU-heavy tests an
-# exclusive slot. Their upstream watchdogs and TAP totals are load-sensitive,
-# so merely increasing the outer timeout is not sufficient under contention.
+# Run the normal corpus first. Keep memory-sensitive fixtures isolated, then
+# allow the CPU-heavy direct/thread pairs to use separate cores without making
+# them contend with the normal corpus or the high-memory regex fixtures.
 run_tests_parallel(\@parallel_tests, $test_dir, $jobs, $total_files);
 run_tests_parallel(\@exclusive_tests, $test_dir, 1, $total_files);
+run_tests_parallel(\@cpu_heavy_tests, $test_dir, $cpu_heavy_jobs, $total_files);
 
 print "-" x 60, "\n";
 print_summary();
@@ -567,12 +578,18 @@ sub requires_exclusive_slot {
         |
           (?:^|/)perl5_t/t/op/gv\.t$
         | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
-        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$
+    }x;
+}
+
+sub requires_cpu_heavy_slot {
+    my ($test_file) = @_;
+    return $test_file =~ m{
+          (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
     }x;
 }
 
@@ -884,6 +901,9 @@ Options:
   --timeout SEC    Base timeout per test in seconds (default: 300; selected
                    subprocess-heavy tests have a documented minimum)
   --jobs|-j NUM    Number of parallel jobs (default: 5)
+  --cpu-heavy-jobs NUM
+                   Parallel jobs for pat_psycho* and speed* after isolated
+                   fixtures complete (default: 2)
   --output FILE    Save detailed results to JSON file
   --strict-exit    Exit nonzero if any file fails, errors, times out, or is incomplete
   --help           Show this help message

@@ -12,6 +12,9 @@ import org.joni.Regex;
 import org.joni.Region;
 import org.joni.Syntax;
 
+import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
+import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -25,10 +28,22 @@ import org.perlonjava.runtime.runtimetypes.*;
  * beyond the Java Pattern fast path.
  */
 final class JoniRegexPattern {
+    // Ruby syntax defaults \w to ASCII even for a Unicode encoding. Perl's
+    // default and /u modes use Unicode character classes; /a adds ASCII_RANGE
+    // explicitly in toJoniOptions(). Keep the richer Ruby parser surface used
+    // by callouts and control verbs while changing only that default policy.
+    private static final Syntax PERLONJAVA_SYNTAX = new Syntax(
+            "PERLONJAVA", Syntax.RUBY.op,
+            (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL,
+            Syntax.RUBY.op3,
+            Syntax.RUBY.behavior, Syntax.RUBY.options & ~Option.ASCII_RANGE,
+            Syntax.RUBY.metaCharTable);
+
     private final Regex regex;
     private final String sourcePattern;
     private final Map<String, Integer> namedGroups;
     private final RegexFlags flags;
+    private final boolean hasControlVerbState;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0);
@@ -36,15 +51,17 @@ final class JoniRegexPattern {
 
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount) {
         this.flags = flags;
+        hasControlVerbState = hasControlVerbState(perlPattern);
         sourcePattern = translatePattern(perlPattern, flags, trustedCalloutCount);
         byte[] bytes = sourcePattern.getBytes(StandardCharsets.UTF_8);
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags),
-                UTF8Encoding.INSTANCE, Syntax.RUBY);
+                UTF8Encoding.INSTANCE, PERLONJAVA_SYNTAX);
         namedGroups = collectNamedGroups(regex);
     }
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
-        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags, input, callbacks);
+        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags,
+                hasControlVerbState, input, callbacks);
     }
 
     String patternDescription() {
@@ -61,6 +78,7 @@ final class JoniRegexPattern {
         if (flags.isExtended()) options |= Option.EXTEND;
         // Oniguruma's MULTILINE option controls whether dot matches newline.
         if (flags.isDotAll()) options |= Option.MULTILINE;
+        if (!flags.isMultiLine()) options |= Option.SINGLELINE;
         if (flags.isAscii()) options |= Option.ASCII_RANGE;
         // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
         // when a pattern also contains named groups. Perl keeps both kinds of
@@ -76,10 +94,11 @@ final class JoniRegexPattern {
         return pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(*ACCEPT)")
-                || pattern.contains("(*PRUNE)")
-                || pattern.contains("(*SKIP)")
-                || pattern.contains("(*THEN)")
-                || pattern.contains("(*COMMIT)")
+                || pattern.contains("(*PRUNE")
+                || pattern.contains("(*SKIP")
+                || pattern.contains("(*THEN")
+                || pattern.contains("(*COMMIT")
+                || pattern.contains("(*MARK")
                 || pattern.contains("(?(DEFINE)")
                 || pattern.contains("(?(?{=CALL:")
                 || pattern.contains("(?(<")
@@ -87,6 +106,12 @@ final class JoniRegexPattern {
                 || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
                 || pattern.contains("(?&")
                 || pattern.contains("(?P>");
+    }
+
+    private static boolean hasControlVerbState(String pattern) {
+        return pattern.contains("(*MARK") || pattern.contains("(*PRUNE")
+                || pattern.contains("(*SKIP") || pattern.contains("(*THEN")
+                || pattern.contains("(*COMMIT");
     }
 
     static String translatePattern(String pattern) {
@@ -107,6 +132,16 @@ final class JoniRegexPattern {
                 continue;
             }
             if (ch == '\\') {
+                if (pattern.startsWith("\\N{", i)) {
+                    int end = pattern.indexOf('}', i + 3);
+                    if (end > i + 3) {
+                        int codePoint = UnicodeResolver.getCodePointFromName(
+                                pattern.substring(i + 3, end));
+                        out.appendCodePoint(codePoint);
+                        i = end;
+                        continue;
+                    }
+                }
                 // In Perl, \g{name} is a backreference.  Ruby/Oniguruma uses
                 // \g<name> for a subexpression call and \k<name> for the
                 // backreference, so passing the brace form through makes Joni
@@ -127,6 +162,9 @@ final class JoniRegexPattern {
             if (ch == '[') {
                 inClass = true;
                 out.append(ch);
+                continue;
+            }
+            if (inClass && flags.isExtendedWhitespace() && Character.isWhitespace(ch)) {
                 continue;
             }
             if (ch == ']' && inClass) {
@@ -161,22 +199,10 @@ final class JoniRegexPattern {
                 i = end;
                 continue;
             }
-            if (!inClass && pattern.startsWith("(?^", i)) {
-                int colon = pattern.indexOf(':', i + 3);
-                if (colon > i) {
-                    out.append("(?");
-                    for (int p = i + 3; p < colon; p++) {
-                        char modifier = pattern.charAt(p);
-                        if (modifier == 'i' || modifier == 'm'
-                                || modifier == 's' || modifier == 'x'
-                                || modifier == '-') {
-                            out.append(modifier);
-                        }
-                    }
-                    out.append(':');
-                    i = colon;
-                    continue;
-                }
+            if (!inClass && pattern.startsWith("(?)", i)) {
+                out.append("(?:)");
+                i += 2;
+                continue;
             }
             if (!inClass && pattern.startsWith("(?&", i)) {
                 int end = pattern.indexOf(')', i + 3);
@@ -209,6 +235,7 @@ final class JoniRegexPattern {
         }
         return out.toString();
     }
+
 
     private static boolean isTrustedCallout(String pattern, int offset, int callbackCount) {
         String prefix;
@@ -369,15 +396,18 @@ final class JoniRegexPattern {
         private int regionEnd;
         private int nextStart;
         private boolean matched;
+        private final boolean hasControlVerbState;
         private final List<RuntimeRegexCallback> callbacks;
         private PerlCalloutHandler calloutHandler;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
-                         RegexFlags flags, String input, List<RuntimeRegexCallback> callbacks) {
+                         RegexFlags flags, boolean hasControlVerbState, String input,
+                         List<RuntimeRegexCallback> callbacks) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
             this.flags = flags;
+            this.hasControlVerbState = hasControlVerbState;
             this.input = input;
             this.callbacks = callbacks;
             this.bytes = input.getBytes(StandardCharsets.UTF_8);
@@ -390,6 +420,7 @@ final class JoniRegexPattern {
         public boolean find() {
             if (nextStart > regionEnd) {
                 matched = false;
+                if (hasControlVerbState) RuntimeRegex.updateControlVerbVariables(null, null);
                 return false;
             }
             matcher = regex.matcher(bytes);
@@ -405,6 +436,10 @@ final class JoniRegexPattern {
                 throw failure;
             }
             matched = result >= 0;
+            if (hasControlVerbState) {
+                RuntimeRegex.updateControlVerbVariables(
+                        matcher.getControlMark(), matcher.getControlError());
+            }
             if (calloutHandler != null) calloutHandler.finish(matched);
             if (!matched) return false;
             captures = matcher.getEagerRegion();
@@ -448,6 +483,8 @@ final class JoniRegexPattern {
 
         @Override public int groupCount() { return regex.numberOfCaptures(); }
         @Override public int lastClosedCapture() { return matcher.lastClosedCapture(); }
+        @Override public String controlMark() { return matcher.getControlMark(); }
+        @Override public String controlError() { return matcher.getControlError(); }
         @Override public Map<String, Integer> namedGroups() { return namedGroups; }
         @Override public String patternDescription() { return sourcePattern; }
 
@@ -770,6 +807,7 @@ final class JoniRegexPattern {
             int lastClosed = match.lastClosedCapture();
             state.lastClosedCapture = lastClosed > 0 && lastClosed <= count
                     ? state.lastCaptureGroups[lastClosed - 1] : null;
+            RuntimeRegex.updateControlVerbVariables(match.controlMark(), null);
         }
 
         private int charOffset(int byteOffset) {

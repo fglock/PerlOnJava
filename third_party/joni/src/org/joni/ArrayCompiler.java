@@ -25,6 +25,9 @@ import static org.joni.Option.isIgnoreCase;
 import static org.joni.Option.isMultiline;
 import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.jcodings.constants.CharacterType;
 import org.joni.ast.AnchorNode;
 import org.joni.ast.BackRefNode;
@@ -51,6 +54,7 @@ final class ArrayCompiler extends Compiler {
 
     private byte[][]templates;
     private int templateNum;
+    private final Map<String, Integer> controlVerbLabelIds = new LinkedHashMap<>();
 
     ArrayCompiler(Analyser analyser) {
         super(analyser);
@@ -72,6 +76,7 @@ final class ArrayCompiler extends Compiler {
         regex.codeLength = codeLength;
         regex.templates = templates;
         regex.templateNum = templateNum;
+        regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
         regex.factory = MatcherFactory.DEFAULT;
 
         if (Config.USE_SUBEXP_CALL && analyser.env.unsetAddrList != null) {
@@ -101,22 +106,36 @@ final class ArrayCompiler extends Compiler {
         case PRUNE:
             regex.requireStack = true;
             addOpcode(OPCode.PRUNE);
+            addInt(controlVerbLabelId(node.name));
             break;
         case SKIP:
             regex.requireStack = true;
             addOpcode(OPCode.SKIP);
+            addInt(controlVerbLabelId(node.name));
             break;
         case THEN:
             regex.requireStack = true;
             addOpcode(OPCode.THEN);
+            addInt(controlVerbLabelId(node.name));
             break;
         case COMMIT:
             regex.requireStack = true;
             addOpcode(OPCode.COMMIT);
+            addInt(controlVerbLabelId(node.name));
+            break;
+        case MARK:
+            regex.requireStack = true;
+            addOpcode(OPCode.MARK);
+            addInt(controlVerbLabelId(node.name));
             break;
         default:
             newInternalException(PARSER_BUG);
         }
+    }
+
+    private int controlVerbLabelId(String name) {
+        if (name == null) return -1;
+        return controlVerbLabelIds.computeIfAbsent(name, ignored -> controlVerbLabelIds.size());
     }
 
     @Override
@@ -1192,6 +1211,7 @@ final class ArrayCompiler extends Compiler {
                 case SKIP -> OPSize.SKIP;
                 case THEN -> OPSize.THEN;
                 case COMMIT -> OPSize.COMMIT;
+                case MARK -> OPSize.MARK;
             };
         }
         int len = 0;

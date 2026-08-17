@@ -146,6 +146,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RuntimeRegexState state() {
         return PerlRuntime.current().regexState;
     }
+
+    static void updateControlVerbVariables(String mark, String error) {
+        RuntimeScalar markValue = mark == null
+                ? RuntimeScalarCache.scalarEmptyString : new RuntimeScalar(mark);
+        RuntimeScalar errorValue = error == null
+                ? RuntimeScalarCache.scalarEmptyString : new RuntimeScalar(error);
+        // Perl activates these otherwise ordinary package variables through
+        // local(). The interpreter does not keep its runtime current-package
+        // facade synchronized with every lexical package statement, so use the
+        // localized scalar identities rather than guessing one package name.
+        for (Map.Entry<String, RuntimeScalar> entry
+                : new ArrayList<>(GlobalVariable.globalVariables.entrySet())) {
+            if (!(entry.getValue() instanceof GlobalRuntimeScalar)) continue;
+            if (entry.getKey().endsWith("::REGMARK")) {
+                entry.getValue().set(markValue);
+            } else if (entry.getKey().endsWith("::REGERROR")) {
+                entry.getValue().set(errorValue);
+            }
+        }
+    }
     // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
     public Pattern pattern;
     // Compiled regex pattern for Unicode strings (Unicode \w, \d)
@@ -511,6 +531,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String cacheKey = originalPatternString + "/" + modifiers
                 + "#debug=" + lexicalDebugMode
                 + "#callouts=" + trustedCalloutCount
+                + "#backend=" + RegexBackendPolicy.cacheTag()
                 + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
 
         // Check if the regex is already cached
@@ -541,7 +562,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             String javaPattern = null;
             try {
-                boolean usesRecursiveBackend = JoniRegexPattern.requiresJoniBackend(compilePatternString);
+                boolean usesRecursiveBackend = RegexBackendPolicy.useJoni(compilePatternString);
                 if (usesRecursiveBackend
                         && compilePatternString.contains("(?&")
                         && (compilePatternString.contains("(?<=")
@@ -795,7 +816,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // in sync with compileSynchronized(): leaving the placeholder cached
         // makes a later qr/\\p{Property}/ reuse its match-any stand-in.
         state().compiledRegexCache.remove(cacheKey + "#debug=" + regex.lexicalDebugMode
-                + "#callouts=0");
+                + "#callouts=0#backend=" + RegexBackendPolicy.cacheTag());
 
         // User property subs can execute arbitrary Perl and block. Resolve them
         // before compile() takes its process-wide monitor; only simultaneous

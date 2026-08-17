@@ -340,6 +340,13 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
+    protected final void pushControlMark(String previousName, String label, int position) {
+        StackEntry e = ensure1();
+        e.type = CONTROL_MARK;
+        e.setControlMark(previousName, label, position);
+        stk++;
+    }
+
     protected final void pushDynamicAlternative(int returnAddress,
                                                 ByteCodeMachine.DynamicContinuation continuation) {
         StackEntry e = ensure1();
@@ -371,6 +378,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 return e;
             } else if (e.type == CALLOUT) {
                 unwindCallout(e);
+            } else if (e.type == CONTROL_MARK) {
+                restoreControlMark(e.getPreviousControlMarkName());
             } else if (USE_CEC) {
                 if (e.type == STATE_CHECK_MARK) stateCheckMark();
             }
@@ -384,6 +393,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 return e;
             } else if (e.type == CALLOUT) {
                 unwindCallout(e);
+            } else if (e.type == CONTROL_MARK) {
+                restoreControlMark(e.getPreviousControlMarkName());
             } else if (e.type == MEM_START) {
                 repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
                 repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -396,6 +407,8 @@ abstract class StackMachine extends Matcher implements StackType {
     private void popRewrite(StackEntry e) {
         if (e.type == CALLOUT) {
             unwindCallout(e);
+        } else if (e.type == CONTROL_MARK) {
+            restoreControlMark(e.getPreviousControlMarkName());
         } else if (e.type == MEM_START) {
             repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -407,6 +420,20 @@ abstract class StackMachine extends Matcher implements StackType {
         } else if (USE_CEC) {
             if (e.type == STATE_CHECK_MARK) stateCheckMark();
         }
+    }
+
+    protected void restoreControlMark(String name) {
+    }
+
+    protected final int findControlMarkPosition(String name) {
+        if (stack == null) return -1;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == CONTROL_MARK && name.equals(entry.getControlMarkLabel())) {
+                return entry.getControlMarkPosition();
+            }
+        }
+        return -1;
     }
 
     protected final void unwindActiveCallouts() {
