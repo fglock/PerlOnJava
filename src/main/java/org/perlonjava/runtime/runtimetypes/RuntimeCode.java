@@ -381,6 +381,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /** Find the Perl lexical name for a live cell, for value-specific diagnostics. */
+    public static String findActiveLexicalName(RuntimeBase cell) {
+        if (cell == null) return null;
+        PerlRuntime runtime = PerlRuntime.current();
+        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
+                if (entry.getValue() == cell) return entry.getKey();
+            }
+        }
+        return null;
+    }
+
     /** Return a stable snapshot of the live lexical cells for an active CV. */
     public static Map<String, RuntimeBase> snapshotActiveLexicals(RuntimeCode code) {
         if (code == null) return Collections.emptyMap();
@@ -2776,7 +2789,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // reconstruct this state later, so seed the parser scope from
                 // the saved caller frame before BEGIN blocks are compiled.
                 String callerWarningBits = WarningBitsRegistry.getCallerBitsAtFrame(0);
-                if (callerWarningBits != null) {
+                if (callerWarningBits == null || callerWarningBits.isEmpty()) {
+                    callerWarningBits = WarningBitsRegistry.getCallSiteBits();
+                }
+                if (callerWarningBits == null || callerWarningBits.isEmpty()) {
+                    callerWarningBits = WarningBitsRegistry.getCurrent();
+                }
+                // An empty caller-stack entry means the interpreter had no
+                // more precise runtime value.  Do not let that erase the
+                // compile-time warning mask already present in the eval
+                // call site's captured symbol table.
+                if (callerWarningBits != null && !callerWarningBits.isEmpty()) {
                     WarningFlags.setWarningBitsFromString(parseSymbolTable, callerWarningBits);
                 }
                 // BEGIN blocks execute while the eval string is being parsed.

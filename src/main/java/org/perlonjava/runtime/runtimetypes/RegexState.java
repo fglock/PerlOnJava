@@ -23,6 +23,8 @@ public class RegexState implements DynamicState {
     private final boolean lastMatchUsedBackslashK;
     private final String[] lastCaptureGroups;
     private final String lastClosedCapture;
+    private final boolean lastParenMatchOverrideActive;
+    private final String lastParenMatchOverride;
     private final Map<String, List<String>> lastNamedCaptureGroups;
     private final boolean lastMatchWasByteString;
     private final boolean lastMatchResultsTainted;
@@ -46,6 +48,8 @@ public class RegexState implements DynamicState {
         lastMatchUsedBackslashK = state.lastMatchUsedBackslashK;
         lastCaptureGroups = state.lastCaptureGroups;
         lastClosedCapture = state.lastClosedCapture;
+        lastParenMatchOverrideActive = state.lastParenMatchOverrideActive;
+        lastParenMatchOverride = state.lastParenMatchOverride;
         lastNamedCaptureGroups = state.lastNamedCaptureGroups;
         lastMatchWasByteString = state.lastMatchWasByteString;
         lastMatchResultsTainted = state.lastMatchResultsTainted;
@@ -71,6 +75,12 @@ public class RegexState implements DynamicState {
             throw new IllegalStateException("Regex state must be restored in its owning PerlRuntime");
         }
         RuntimeRegexState state = owner.regexState;
+        RuntimeRegex discardedPattern = state.lastSuccessfulPattern;
+        if (discardedPattern != null
+                && discardedPattern != lastSuccessfulPattern
+                && discardedPattern.refCount <= 0) {
+            discardedPattern.releaseExecutableCallbacks();
+        }
         state.globalMatcher = globalMatcher;
         state.globalMatchString = globalMatchString;
         state.lastMatchedString = lastMatchedString;
@@ -85,6 +95,8 @@ public class RegexState implements DynamicState {
         state.lastMatchUsedBackslashK = lastMatchUsedBackslashK;
         state.lastCaptureGroups = lastCaptureGroups;
         state.lastClosedCapture = lastClosedCapture;
+        state.lastParenMatchOverrideActive = lastParenMatchOverrideActive;
+        state.lastParenMatchOverride = lastParenMatchOverride;
         state.lastNamedCaptureGroups = lastNamedCaptureGroups;
         state.lastMatchWasByteString = lastMatchWasByteString;
         state.lastMatchResultsTainted = lastMatchResultsTainted;

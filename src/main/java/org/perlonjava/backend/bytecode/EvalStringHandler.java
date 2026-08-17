@@ -159,7 +159,8 @@ public class EvalStringHandler {
                                              int siteFeatureFlags,
                                              boolean isEvalbytes) {
         return evalStringList(perlCode, RuntimeScalarType.STRING, currentCode, registers,
-                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, isEvalbytes);
+                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
+                siteFeatureFlags, isEvalbytes, null);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -189,7 +190,25 @@ public class EvalStringHandler {
         // Let an enclosing eval block handle it, matching the JVM backend and Perl.
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
-                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, isEvalbytes);
+                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
+                siteFeatureFlags, isEvalbytes, null);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes,
+                                             String siteWarningBits) {
+        RuntimeCode.rejectTaintedEval(codeScalar);
+        return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
+                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
+                siteFeatureFlags, isEvalbytes, siteWarningBits);
     }
 
     private static RuntimeList evalStringList(String perlCode,
@@ -202,7 +221,8 @@ public class EvalStringHandler {
                                              Map<String, Integer> siteRegistry,
                                              int siteStrictOptions,
                                              int siteFeatureFlags,
-                                             boolean isEvalbytes) {
+                                             boolean isEvalbytes,
+                                             String siteWarningBits) {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
@@ -383,6 +403,7 @@ public class EvalStringHandler {
                 symbolTable.featureFlagsStack.push(featFlags);
                 symbolTable.warningFlagsStack.pop();
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
+                WarningFlags.setWarningBitsFromString(symbolTable, siteWarningBits);
             }
 
             // Use runtime package (maintained by PUSH_PACKAGE/SET_PACKAGE opcodes).

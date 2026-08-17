@@ -268,6 +268,8 @@ public class DestroyDispatch {
                 }
                 code.releaseCaptures();
             }
+        } else if (referent instanceof org.perlonjava.runtime.regex.RuntimeRegex regex) {
+            regex.releaseExecutableCallbacks();
         }
 
         String className = NameNormalizer.getBlessStr(referent.blessId);

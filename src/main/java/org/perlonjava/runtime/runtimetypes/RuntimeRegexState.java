@@ -33,6 +33,8 @@ public final class RuntimeRegexState {
     public boolean lastMatchUsedBackslashK;
     public String[] lastCaptureGroups;
     public String lastClosedCapture;
+    public boolean lastParenMatchOverrideActive;
+    public String lastParenMatchOverride;
     public Map<String, List<String>> lastNamedCaptureGroups;
     public boolean lastMatchWasByteString;
     public boolean lastMatchResultsTainted;
@@ -87,6 +89,8 @@ public final class RuntimeRegexState {
         lastMatchUsedBackslashK = false;
         lastCaptureGroups = null;
         lastClosedCapture = null;
+        lastParenMatchOverrideActive = false;
+        lastParenMatchOverride = null;
         lastNamedCaptureGroups = null;
         lastMatchWasByteString = false;
         lastMatchResultsTainted = false;

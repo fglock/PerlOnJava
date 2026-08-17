@@ -287,6 +287,20 @@ public class CompileOperator {
         return Boolean.TRUE.equals(node.getAnnotation("regexWarningsEnabled")) ? 1 : 0;
     }
 
+    private static int regexWarningBitsIndex(BytecodeCompiler bc, OperatorNode node) {
+        Object bits = node.getAnnotation("regexWarningBits");
+        return bits instanceof String string ? bc.addToStringPool(string) : -1;
+    }
+
+    private static int regexTargetNameIndex(BytecodeCompiler bc, Node node) {
+        if (node instanceof OperatorNode operator
+                && operator.operator.equals("$")
+                && operator.operand instanceof IdentifierNode identifier) {
+            return bc.addToStringPool("$" + identifier.name);
+        }
+        return -1;
+    }
+
     private static void visitMatchRegex(BytecodeCompiler bc, OperatorNode node) {
         if (node.operand == null || !(node.operand instanceof ListNode args) || args.elements.size() < 2) {
             bc.throwCompilerException("matchRegex requires pattern and flags");
@@ -312,6 +326,7 @@ public class CompileOperator {
             bc.emitReg(callsiteId);
             bc.emit(unicodeStringsImplicitUFlag(bc));
             bc.emit(regexWarningState(node));
+            bc.emit(regexWarningBitsIndex(bc, node));
             bc.emit(0);
         } else {
             bc.emit(Opcodes.QUOTE_REGEX);
@@ -320,6 +335,7 @@ public class CompileOperator {
             bc.emitReg(flagsReg);
             bc.emit(unicodeStringsImplicitUFlag(bc));
             bc.emit(regexWarningState(node));
+            bc.emit(regexWarningBitsIndex(bc, node));
             bc.emit(0);
         }
         int stringReg;
@@ -341,6 +357,8 @@ public class CompileOperator {
         bc.emitReg(regexReg);
         bc.emit(bc.currentCallContext);
         bc.emit(bc.isBytesEnabled() ? 1 : 0);
+        bc.emit(regexTargetNameIndex(bc,
+                args.elements.size() > 2 ? args.elements.get(2) : null));
         bc.lastResultReg = rd;
     }
 
@@ -382,6 +400,8 @@ public class CompileOperator {
         bc.emitReg(regexReg);
         bc.emit(bc.currentCallContext);
         bc.emit(bc.isBytesEnabled() ? 1 : 0);
+        bc.emit(regexTargetNameIndex(bc,
+                args.elements.size() > 3 ? args.elements.get(3) : null));
         bc.lastResultReg = rd;
     }
 
@@ -1130,6 +1150,7 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(callsiteId);
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                     bytecodeCompiler.emit(regexWarningState(node));
+                    bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
                     bytecodeCompiler.emit(1);
                 } else {
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
@@ -1138,6 +1159,7 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(flagsReg);
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                     bytecodeCompiler.emit(regexWarningState(node));
+                    bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
                     bytecodeCompiler.emit(1);
                 }
                 bytecodeCompiler.lastResultReg = rd;
@@ -1356,7 +1378,9 @@ public class CompileOperator {
                     bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
                             bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
                             bytecodeCompiler.symbolTable.featureFlagsStack.peek(),
-                            op.equals("evalbytes") ? 1 : 0
+                            op.equals("evalbytes") ? 1 : 0,
+                            bytecodeCompiler.addToStringPool(
+                                    bytecodeCompiler.symbolTable.getWarningBitsString())
                     });
                     bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                     bytecodeCompiler.emitReg(rd);

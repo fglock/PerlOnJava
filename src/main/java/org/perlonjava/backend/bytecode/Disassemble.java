@@ -844,7 +844,8 @@ public class Disassemble {
                         int regReg = interpretedCode.bytecode[pc++];
                         int matchCtx = interpretedCode.bytecode[pc++];
                         int bytesMode = interpretedCode.bytecode[pc++];
-                        sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(", bytes=").append(bytesMode).append(")\n");
+                        int targetNameIndex = interpretedCode.bytecode[pc++];
+                        sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(", bytes=").append(bytesMode).append(", targetName=").append(targetNameIndex).append(")\n");
                         break;
                     case Opcodes.MATCH_REGEX_NOT:
                         rd = interpretedCode.bytecode[pc++];
@@ -1331,10 +1332,12 @@ public class Disassemble {
                         int flagsReg = interpretedCode.bytecode[pc++];
                         int implicitU = interpretedCode.bytecode[pc++];
                         int warningState = interpretedCode.bytecode[pc++];
+                        int warningBitsIndex = interpretedCode.bytecode[pc++];
                         int quoteConstruction = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" implicitU=").append(implicitU)
                                 .append(" warningState=").append(warningState)
+                                .append(" warningBits=").append(warningBitsIndex)
                                 .append(" quoteConstruction=").append(quoteConstruction).append("\n");
                         break;
                     case Opcodes.QUOTE_REGEX_O:
@@ -1344,11 +1347,13 @@ public class Disassemble {
                         int callsiteId = interpretedCode.bytecode[pc++];
                         implicitU = interpretedCode.bytecode[pc++];
                         warningState = interpretedCode.bytecode[pc++];
+                        warningBitsIndex = interpretedCode.bytecode[pc++];
                         quoteConstruction = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX_O r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" callsite=").append(callsiteId)
                                 .append(" implicitU=").append(implicitU)
                                 .append(" warningState=").append(warningState)
+                                .append(" warningBits=").append(warningBitsIndex)
                                 .append(" quoteConstruction=").append(quoteConstruction).append("\n");
                         break;
                     case Opcodes.ITERATOR_CREATE:

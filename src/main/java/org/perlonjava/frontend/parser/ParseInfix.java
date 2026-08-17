@@ -167,12 +167,14 @@ public class ParseInfix {
                     OperatorNode quoted = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
                     quoted.setAnnotation("regexWarningsEnabled", operatorNode.getAnnotation("regexWarningsEnabled"));
                     quoted.setAnnotation("regexWarningsFatal", operatorNode.getAnnotation("regexWarningsFatal"));
+                    quoted.setAnnotation("regexWarningBits", operatorNode.getAnnotation("regexWarningBits"));
                     left = quoted;
                 }
                 if (right instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
                     OperatorNode quoted = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
                     quoted.setAnnotation("regexWarningsEnabled", operatorNode.getAnnotation("regexWarningsEnabled"));
                     quoted.setAnnotation("regexWarningsFatal", operatorNode.getAnnotation("regexWarningsFatal"));
+                    quoted.setAnnotation("regexWarningBits", operatorNode.getAnnotation("regexWarningBits"));
                     right = quoted;
                 }
             }

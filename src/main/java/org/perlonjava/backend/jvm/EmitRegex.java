@@ -69,6 +69,15 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RegexQuoteMeta",
                 "setCallSiteWarningState", "(I)V", false);
+        Object warningBits = node.getAnnotation("regexWarningBits");
+        if (warningBits instanceof String bits) {
+            emitterVisitor.ctx.mv.visitLdcInsn(bits);
+        } else {
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+        }
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RegexQuoteMeta",
+                "setCallSiteWarningBits", "(Ljava/lang/String;)V", false);
     }
 
     /**
@@ -461,6 +470,15 @@ public class EmitRegex {
 
         // Generate bytecode for the variable access
         variable.accept(scalarVisitor);
+        String targetName = regexTargetName(variable);
+        if (targetName == null) {
+            scalarVisitor.ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+        } else {
+            scalarVisitor.ctx.mv.visitLdcInsn(targetName);
+        }
+        scalarVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RegexQuoteMeta", "setMatchTargetName",
+                "(Ljava/lang/String;)V", false);
         if (stabilizeLiteral && variable instanceof StringNode) {
             scalarVisitor.ctx.mv.visitLdcInsn(nextCallsiteId.getAndIncrement());
             scalarVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -468,5 +486,14 @@ public class EmitRegex {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
+    }
+
+    private static String regexTargetName(Node node) {
+        if (node instanceof OperatorNode operator
+                && operator.operator.equals("$")
+                && operator.operand instanceof IdentifierNode identifier) {
+            return "$" + identifier.name;
+        }
+        return null;
     }
 }

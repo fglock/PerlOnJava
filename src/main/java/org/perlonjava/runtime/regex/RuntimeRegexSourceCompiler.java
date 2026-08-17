@@ -2,6 +2,7 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
@@ -20,6 +21,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -75,6 +77,17 @@ final class RuntimeRegexSourceCompiler {
             symbolTable.enableStrictOption(HINT_RE_EVAL);
             symbolTable.enableLexicalRegexModifiers(
                     publicModifiers.replaceAll("[^imsx]", ""));
+            String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
+            if (warningBits == null) {
+                warningBits = WarningBitsRegistry.getCallSiteBits();
+            }
+            if (warningBits == null) {
+                warningBits = WarningBitsRegistry.getCurrent();
+            }
+            if (warningBits == null && owner != null) {
+                warningBits = RuntimeCode.getWarningBitsForCode(owner);
+            }
+            WarningFlags.setWarningBitsFromString(symbolTable, warningBits);
             symbolTable.setCurrentPackage(
                     InterpreterState.currentPackage.get().toString(), false);
 
@@ -112,8 +125,13 @@ final class RuntimeRegexSourceCompiler {
             RuntimeList result = code.apply(new RuntimeArray(), RuntimeContextType.SCALAR);
             RuntimeScalar compiled = result.scalar().propagateTaint(pattern);
             if (compiled.value instanceof RuntimeRegex && !modifiers.isEmpty()) {
+                RuntimeScalar unmodified = compiled;
                 compiled = RuntimeRegex.getQuotedRegex(
-                        compiled, new RuntimeScalar(modifiers)).propagateTaint(pattern);
+                        unmodified, new RuntimeScalar(modifiers)).propagateTaint(pattern);
+                if (compiled.value != unmodified.value
+                        && unmodified.value instanceof RuntimeRegex temporary) {
+                    temporary.releaseExecutableCallbacks();
+                }
             }
             return compiled;
         } finally {
@@ -137,7 +155,11 @@ final class RuntimeRegexSourceCompiler {
 
         List<RuntimeRegexCallback> callbacks = new ArrayList<>(template.callbacks());
         callbacks.addAll(sourceRegex.executableCallbacks);
-        return RuntimeRegex.compileExecutableTemplate(executablePattern, modifiers,
-                callbacks, original);
+        RuntimeScalar result = RuntimeRegex.compileExecutableTemplate(
+                executablePattern, modifiers, callbacks, original);
+        if (result.value != sourceRegex) {
+            sourceRegex.releaseExecutableCallbacks();
+        }
+        return result;
     }
 }

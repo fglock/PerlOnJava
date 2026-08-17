@@ -185,6 +185,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     JoniRegexPattern recursivePattern;
     JoniRegexPattern recursivePatternUnicode;
     List<RuntimeRegexCallback> executableCallbacks = List.of();
+    private boolean executableCallbacksReleased;
     int[] branchResetCaptureMap;
     int patternFlags;
     int patternFlagsUnicode;
@@ -238,7 +239,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.notemptyPatternUnicode = this.notemptyPatternUnicode;
         copy.recursivePattern = this.recursivePattern;
         copy.recursivePatternUnicode = this.recursivePatternUnicode;
-        copy.executableCallbacks = this.executableCallbacks;
+        copy.setExecutableCallbacks(this.executableCallbacks);
         copy.branchResetCaptureMap = this.branchResetCaptureMap;
         copy.patternFlags = this.patternFlags;
         copy.patternFlagsUnicode = this.patternFlagsUnicode;
@@ -264,6 +265,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     /** Returns the regex flags for this compiled pattern. */
     public RegexFlags getRegexFlags() {
         return regexFlags;
+    }
+
+    private void setExecutableCallbacks(List<RuntimeRegexCallback> callbacks) {
+        List<RuntimeRegexCallback> retained = List.copyOf(callbacks);
+        for (RuntimeRegexCallback callback : retained) callback.retainOwner();
+        executableCallbacks = retained;
+        executableCallbacksReleased = false;
+    }
+
+    /** Release closure captures owned by this tracked qr// value. */
+    public void releaseExecutableCallbacks() {
+        if (executableCallbacksReleased || executableCallbacks.isEmpty()) return;
+        executableCallbacksReleased = true;
+        for (RuntimeRegexCallback callback : executableCallbacks) callback.releaseOwner();
     }
 
     /** Select the byte or Unicode compiled pattern for a particular target scalar. */
@@ -1292,7 +1307,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (patternString.value instanceof RuntimeRegexTemplate template) {
             RuntimeRegex regex = compile(template.pattern(), modifierStr, callSiteDebugMode,
                     template.callbacks().size()).cloneTracked();
-            regex.executableCallbacks = template.callbacks();
+            regex.setExecutableCallbacks(template.callbacks());
             return new RuntimeScalar(regex).propagateTaint(patternString);
         }
 
@@ -1311,7 +1326,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternUnicode = originalRegex.patternUnicode;
             regex.recursivePattern = originalRegex.recursivePattern;
             regex.recursivePatternUnicode = originalRegex.recursivePatternUnicode;
-            regex.executableCallbacks = originalRegex.executableCallbacks;
+            regex.setExecutableCallbacks(originalRegex.executableCallbacks);
             regex.branchResetCaptureMap = originalRegex.branchResetCaptureMap;
             regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
             regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
@@ -1351,7 +1366,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternUnicode = originalRegex.patternUnicode;
                     regex.recursivePattern = originalRegex.recursivePattern;
                     regex.recursivePatternUnicode = originalRegex.recursivePatternUnicode;
-                    regex.executableCallbacks = originalRegex.executableCallbacks;
+                    regex.setExecutableCallbacks(originalRegex.executableCallbacks);
                     regex.branchResetCaptureMap = originalRegex.branchResetCaptureMap;
                     regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
                     regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
@@ -1456,7 +1471,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int lexicalDebugMode = debugMode(modifiers);
         RuntimeRegex regex = compile(executablePattern, stripDebugMarkers(modifiers),
                 lexicalDebugMode, callbacks.size()).cloneTracked();
-        regex.executableCallbacks = List.copyOf(callbacks);
+        regex.setExecutableCallbacks(callbacks);
         return new RuntimeScalar(regex).propagateTaint(original);
     }
 
@@ -1656,6 +1671,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return A RuntimeScalar or RuntimeList.
      */
     public static RuntimeBase matchRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+        if (string.type == RuntimeScalarType.UNDEF) {
+            String lexicalName = RegexQuoteMeta.getMatchTargetName();
+            if (lexicalName == null) {
+                lexicalName = RuntimeCode.findActiveLexicalName(string);
+            }
+            String message = "Use of uninitialized value"
+                    + (lexicalName == null ? "" : " " + lexicalName)
+                    + " in pattern match (m//)";
+            WarnDie.warnWithCategory(new RuntimeScalar(message),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+        }
         RuntimeRegex regex = resolveRegex(quotedRegex);
         regex = ensureCompiledForRuntime(regex);
         if (regex.replacement != null) {
@@ -1752,6 +1778,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     /** Populate Perl's numbered capture state from the backend-neutral view. */
     private static void updateNumberedCaptureGroups(RuntimeRegex regex, RegexMatcher matcher) {
         RuntimeRegexState regexState = state();
+        regexState.lastParenMatchOverrideActive = false;
+        regexState.lastParenMatchOverride = null;
         regexState.manualCaptureStarts = null;
         regexState.manualCaptureEnds = null;
         int captureCount = matcher.groupCount();
@@ -2131,16 +2159,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             System.err.println("  match result: found=" + found);
         }
 
-        if (!found) {
-            // No match: scalar match vars ($`, $&, $') should become undef.
-            // Keep lastSuccessful* and the previous regexState.globalMatcher intact so @-/@+ do not get clobbered
-            // by internal regex checks that fail (e.g. in test libraries).
-            regexState.globalMatchString = null;
-            regexState.lastMatchedString = null;
-            regexState.lastMatchStart = -1;
-            regexState.lastMatchEnd = -1;
-            // Don't clear regexState.lastCaptureGroups - Perl preserves $1 across failed matches
-        }
+        // A failed match preserves all match variables from the preceding
+        // successful match, including $&, $`, $', and numbered captures.
 
         if (found) {
             fixPerl16894AlternateCaptureInLookahead(regex, inputStr);
@@ -2259,6 +2279,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         state().lastMatchUsedBackslashK = false;
         state().lastNamedCaptureGroups = new LinkedHashMap<>();
         state().lastCaptureGroups = new String[]{group1, group2, group3, group4};
+        state().lastParenMatchOverrideActive = false;
+        state().lastParenMatchOverride = null;
         state().manualCaptureStarts = new int[]{
                 closing ? tagStart + 1 : literalStart,
                 nameEnd,
@@ -2339,6 +2361,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         state().lastMatchUsedBackslashK = false;
         state().lastNamedCaptureGroups = new LinkedHashMap<>();
         state().lastCaptureGroups = new String[]{group1, group2, group3};
+        state().lastParenMatchOverrideActive = false;
+        state().lastParenMatchOverride = null;
         state().manualCaptureStarts = new int[]{match.group1Start, match.group2Start, match.group3Start};
         state().manualCaptureEnds = new int[]{match.group1End, match.group2End, match.group3End};
         state().lastMatchedString = inputStr.substring(match.matchStart, match.matchEnd);
