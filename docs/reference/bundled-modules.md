@@ -31,6 +31,7 @@ Recent CPAN compatibility additions include:
 | `Data::Util` | Java XS bridge plus upstream pure-Perl fallback | Scalar classification preserves XS non-vivifying behavior; the remaining API uses `Data::Util::PurePerl` |
 | `YAML::Syck` | Pure Perl over bundled `YAML::PP` | Compatibility loader/dumper for distributions that use the legacy Syck API |
 | `Authen::PAM` | Java XS compatibility bridge | Constants and load-time API for PAM consumers; native conversations currently return `PAM_SYSTEM_ERR` rather than authenticating |
+| `Text::Markdown::Hoedown` | Perl + Java XS bridge over commonmark-java | Hoedown-compatible HTML, table-of-contents, extension flags, and callback rendering without the native C library |
 
 ---
 

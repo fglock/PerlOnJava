@@ -1305,28 +1305,35 @@ public class SystemOperator {
         // instead of failing. This allows test harnesses to report fork-dependent
         // tests as "skipped" rather than "failed" on the JVM platform.
         //
-        // BUT only if no tests have been emitted yet. Tests that have already
-        // produced ok/not-ok output can't be retroactively skipped — emitting
-        // "1..0 # SKIP" after N tests produces a "Bad plan" parse error in
-        // prove (seen in DBIC t/storage/txn.t, global_destruction.t which call
-        // fork after running tests, then fall back to skip_all on failure).
-        //
-        // For those cases, fork() just returns undef like a normal failure;
-        // the calling test code is responsible for handling the failure
-        // (typically via its own skip_all path).
+        // A whole-file skip is valid only before any assertions are emitted.
+        // If a fixed plan is already underway, retain its portable prefix and
+        // complete the remaining assertion numbers with explicit skips. Tests
+        // without a fixed plan receive undef and may handle the failure.
         try {
             RuntimeHash incHash = GlobalVariable.getGlobalHash("main::INC");
-            if (incHash.elements.containsKey("Test/More.pm") && !testsAlreadyEmitted()) {
-                // Output TAP skip directive and exit cleanly
-                RuntimeIO stdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
-                if (stdout != null) {
-                    stdout.write("1..0 # SKIP fork() not supported on this platform (Java/JVM)\n");
-                    stdout.flush();
-                } else {
-                    System.out.println("1..0 # SKIP fork() not supported on this platform (Java/JVM)");
-                    System.out.flush();
+            if (incHash.elements.containsKey("Test/More.pm")) {
+                int current = testBuilderCount("current_test");
+                if (current == 0) {
+                    // Output TAP skip directive and exit cleanly
+                    RuntimeIO stdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
+                    if (stdout != null) {
+                        stdout.write("1..0 # SKIP fork() not supported on this platform (Java/JVM)\n");
+                        stdout.flush();
+                    } else {
+                        System.out.println("1..0 # SKIP fork() not supported on this platform (Java/JVM)");
+                        System.out.flush();
+                    }
+                    throw new PerlExitException(0);
                 }
-                throw new PerlExitException(0);
+
+                // A fixed-plan test may discover the unsupported operation only
+                // after portable assertions have run. Complete that plan with
+                // explicit skips so the useful prefix remains tested instead of
+                // turning the whole file into a bad-plan failure.
+                int expected = testBuilderCount("expected_tests");
+                if (expected > current && skipRemainingForkTests(expected - current)) {
+                    throw new PerlExitException(0);
+                }
             }
         } catch (PerlExitException e) {
             throw e; // Re-throw exit exceptions
@@ -1374,38 +1381,48 @@ public class SystemOperator {
         return scalarUndef;
     }
 
-    /**
-     * Check whether any tests have already been emitted through Test::Builder.
-     * Used by {@link #fork} to decide whether it's still safe to emit
-     * {@code 1..0 # SKIP} (only at the start of a test) versus returning undef
-     * so the test can handle the fork failure itself.
-     * <p>
-     * Looks up the {@code $Test::Builder::Test} singleton and calls its
-     * {@code current_test} method. Returns true if the call succeeds and the
-     * result is > 0. Any error is treated as "can't tell" and returns false
-     * (preserving the pre-existing behavior of emitting SKIP).
-     */
-    private static boolean testsAlreadyEmitted() {
+    /** Read a numeric Test::Builder property from its active singleton. */
+    private static int testBuilderCount(String methodName) {
         try {
             RuntimeScalar tbSingleton =
                     GlobalVariable.getGlobalVariable("Test::Builder::Test");
             if (tbSingleton == null
                     || !tbSingleton.defined().getBoolean()
                     || !RuntimeScalarType.isReference(tbSingleton)) {
-                return false;
+                return 0;
             }
             RuntimeScalar method =
                     InheritanceResolver.findMethodInHierarchy(
-                            "current_test", "Test::Builder", null, 0);
+                            methodName, "Test::Builder", null, 0);
             if (method == null || method.type != RuntimeScalarType.CODE) {
-                return false;
+                return 0;
             }
             RuntimeArray callArgs = new RuntimeArray();
             RuntimeArray.push(callArgs, tbSingleton);
             RuntimeList result =
                     RuntimeCode.apply(method, callArgs, RuntimeContextType.SCALAR);
-            if (result == null || result.isEmpty()) return false;
-            return result.scalar().getInt() > 0;
+            if (result == null || result.isEmpty()) return 0;
+            return result.scalar().getInt();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static boolean skipRemainingForkTests(int count) {
+        try {
+            RuntimeScalar tbSingleton =
+                    GlobalVariable.getGlobalVariable("Test::Builder::Test");
+            RuntimeScalar skip = InheritanceResolver.findMethodInHierarchy(
+                    "skip", "Test::Builder", null, 0);
+            if (skip == null || skip.type != RuntimeScalarType.CODE) return false;
+            for (int i = 0; i < count; i++) {
+                RuntimeArray callArgs = new RuntimeArray();
+                RuntimeArray.push(callArgs, tbSingleton);
+                RuntimeArray.push(callArgs,
+                        new RuntimeScalar("fork() not supported on this platform (Java/JVM)"));
+                RuntimeCode.apply(skip, callArgs, RuntimeContextType.VOID);
+            }
+            return true;
         } catch (Exception e) {
             return false;
         }
