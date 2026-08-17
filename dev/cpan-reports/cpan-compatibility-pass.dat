@@ -828,6 +828,7 @@ Catalyst::Plugin::Authentication::LDAP	PASS	1	1		2026-08-15		d5aec7092
 Catalyst::Plugin::AutoSession	PASS	1	1		2026-08-14		d5aec7092
 Catalyst::Plugin::BootstrapAlert	PASS	1	1		2026-08-13		cc69cbb4c
 Catalyst::Plugin::CodeEval	PASS	1	1		2026-08-11		19f3fff98
+Catalyst::Plugin::Digress	PASS	6	6		2026-08-17		6c5545d16
 Catalyst::Plugin::ENV	PASS	4	4		2026-08-14		424ad3c8f
 Catalyst::Plugin::Facebook	PASS	1	1		2026-05-10		a0cb33710
 Catalyst::Plugin::FormValidator	PASS	5	5		2026-08-14		424ad3c8f
@@ -2461,6 +2462,7 @@ Indent	PASS	145	145		2026-08-15		d5aec7092
 InfluxDB::HTTP	PASS				2026-08-17		06656bfa2
 InfluxDB::LineProtocol	PASS	167	167		2026-05-11		1e95a0902
 InfoBrief	PASS	2	2		2026-05-10		1e95a0902
+InfoSys::FreeDB	PASS	55	55		2026-08-17		6c5545d16
 Ingres::Utility::IIMonitor	PASS	1	1		2026-08-13		cc69cbb4c
 Inline	PASS	33	33		2026-06-15		cc8aa9561
 Inline::Module	PASS	1	1		2026-08-14		424ad3c8f
@@ -2705,6 +2707,7 @@ Lingua::VIE::Num2Word	PASS	3	3		2026-08-14		424ad3c8f
 Lingua::VIE::Word2Num	PASS	3	3		2026-08-15		570876923
 Lingua::ZH::MMSEG	PASS	15	15		2026-05-07		9bda7d2ed
 Lingua::ZHO::Numbers	PASS	13	13		2026-08-14		424ad3c8f
+Lingua::ZHO::Word2Num	PASS	5	5		2026-08-17		6c5545d16
 Lingua::Zompist::Kebreni	PASS	2539	2539		2026-08-16		ebd367ec5
 Lingua::famibeib	PASS	10	10		2026-08-16		570876923
 Linux::APT	PASS	1	1		2026-08-13		cc69cbb4c

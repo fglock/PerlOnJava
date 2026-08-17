@@ -956,6 +956,7 @@ BeamerReveal::Log::Win32	FAIL	1	1	Syntax error	2026-05-09
 BeePack	FAIL	1	0	1/1 subtests failed; 3/4 test programs failed	2026-08-14		
 Beekeeper	FAIL			18 subtests failed in test files	2026-08-13		
 BeerDB::Style	FAIL	17	0	22/17 subtests failed	2026-05-15		
+Bencher::Backend	FAIL			TIMEOUT (runtime >300s; last output 23s ago)	2026-08-17		
 Bencher::Scenario::Accessors::ClassStartup	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-08-17		
 Bencher::Scenario::Array::Set::diff	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-08-13		
 Bencher::Scenario::CPANInstallers::cpanm_local	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-08-13		
@@ -3181,7 +3182,7 @@ ExtUtils::Builder	FAIL	30	24	6/30 subtests failed; 11/11 test programs failed	20
 ExtUtils::Builder::Compiler	FAIL	43		3 subtests failed in test files	2026-08-13		
 ExtUtils::Command	FAIL	994	512	482/994 subtests failed	2026-05-17		
 ExtUtils::Constant	FAIL	2		5 subtests failed in test files	2026-08-16		
-ExtUtils::CppGuess	FAIL	2	1	1/2 subtests failed; 20/22 test programs failed	2026-08-12		
+ExtUtils::CppGuess	FAIL	5	0	5/5 subtests failed; 5/5 test programs failed	2026-08-17		
 ExtUtils::Embed	FAIL	55	0	91/55 subtests failed	2026-05-07		
 ExtUtils::F77	FAIL	3	1	2/3 subtests failed; 1/1 test programs failed	2026-06-11		
 ExtUtils::H2PM	FAIL	16	8	8/16 subtests failed	2026-05-10		
@@ -4093,7 +4094,7 @@ HTTP::XSHeaders	FAIL	1	0	3/1 subtests failed	2026-05-10
 HTTPD::GroupAdmin	FAIL	23	21	2/23 subtests failed; 2/4 test programs failed	2026-06-14		
 HTTPD::GroupAdmin::Text::cern	FAIL	23	6	17/23 subtests failed	2026-05-11		
 HTTPEx::Declare	FAIL	1	0	1/1 subtests failed	2026-05-11		
-HTTPRequest	FAIL				2026-05-16		
+HTTPRequest	FAIL			Unknown test outcome	2026-08-17		
 HTTPx::Dispatcher	FAIL	1	0	2/1 subtests failed	2026-05-12		
 HTTunnel::Client	FAIL			Missing: Apache/Test.pm	2026-05-15		
 Hades::Realm::OO	FAIL	1		1 subtests failed in test files	2026-08-13		
@@ -4144,6 +4145,7 @@ Howdy	FAIL			Unknown test outcome	2026-05-13
 HtDig::Config	FAIL			Unknown test outcome	2026-05-13		
 Huawei::Info::Ipaddr	FAIL	1		1 subtests failed in test files	2026-08-13		
 HubSpot::Client	FAIL			No parseable output	2026-05-21		
+Hubot	FAIL	16	13	3/16 subtests failed; 6/6 test programs failed	2026-08-17		
 Hubot::Adapter::Mypeople	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-14		
 Hydrogen	FAIL	618	617	1/618 subtests failed; 2/33 test programs failed	2026-08-17		
 I18N::Collate	FAIL			Unknown test outcome	2026-05-10		
@@ -4638,6 +4640,7 @@ Lembas	FAIL	18	18		2026-05-14
 Lemonldap::NG::Cli	FAIL			No parseable output	2026-08-13		
 Lemonldap::NG::Handler::Lib::Status	FAIL	112	75	37/112 subtests failed; 22/25 test programs failed	2026-08-15		
 Lemonldap::NG::Portal	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 98s)	2026-08-11		
+Lemonldap::NG::Portal::2F::Register::U2F	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-08-17		
 LendingClub::API	FAIL	3	2	1/3 subtests failed	2026-05-16		
 Letter	FAIL				2026-08-12		
 Lexical::SealRequireHints	FAIL			Build failed	2026-08-11		
@@ -4705,6 +4708,7 @@ Linux::Event::Timer	FAIL			4/5 test programs failed; 0/0 subtests failed	2026-08
 Linux::Ext2::Attributes	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-13		
 Linux::FD	FAIL				2026-05-15		
 Linux::PipeMagic	FAIL	1	0	1/1 subtests failed	2026-05-18		
+Linux::Setns	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-17		
 Linux::USBKeyboard	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-08-15		
 LinuxRealTime	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-15		
 Liquid	FAIL	172	135	37/172 subtests failed	2026-05-13		
@@ -6204,6 +6208,7 @@ POE::Component::MessageQueue::Storage::Structure::DLList	FAIL	81	80	1/81 subtest
 POE::Component::Metabase::Relay::Server	FAIL			Unknown test outcome	2026-08-16		
 POE::Component::Net::FTP	FAIL	9	9		2026-05-09		
 POE::Component::NetSNMP::agent	FAIL	1		1 subtests failed in test files	2026-08-14		
+POE::Component::Player::Mpg123	FAIL				2026-08-17		
 POE::Component::PluginManager	FAIL			TIMEOUT (soft limit 1200s exceeded; no output for 600s)	2026-06-14		
 POE::Component::Pool::Thread	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-08-13		
 POE::Component::PreforkDispatch	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-08-15		
@@ -6316,6 +6321,7 @@ PPR	FAIL	3	2	1/3 subtests failed; 72/75 test programs failed	2026-06-18
 PPerl	FAIL	269	15	254/269 subtests failed; 20/21 test programs failed	2026-08-13		
 PQLOGIN	FAIL			Unknown test outcome	2026-06-18		
 PRANG	FAIL	58	35	23/58 subtests failed	2026-05-12		
+PRIMERVIEW	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-08-17		
 PRSG	FAIL				2026-05-11		
 PSGI	FAIL			Unknown test outcome	2026-05-11		
 PSGI::Hector	FAIL	34	32	2/34 subtests failed	2026-05-18		
@@ -7142,6 +7148,7 @@ SPVM::Regex::Pattern	FAIL				2026-05-11
 SPVM::Resource::Eigen	FAIL			No parseable output	2026-06-15		
 SPVM::Resource::Re2::V2022_06_01	FAIL				2026-05-11		
 SPVM::Resource::SocketUtil	FAIL				2026-05-12		
+SPVM::Resource::Utf8proc	FAIL	1		21/22 test programs failed; 0/1 subtests failed	2026-08-17		
 SPVM::Resource::Zlib	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-15		
 SPVM::Resource::Zlib::V1_2_11	FAIL				2026-05-10		
 SPVM::Sys	FAIL	1	1		2026-05-17		
@@ -7775,6 +7782,7 @@ Test::Moose	FAIL			Configure failed	2026-04-26
 Test::Moose::More	FAIL	29	28	1/29 subtests failed	2026-05-20		
 Test::More	FAIL			Configure failed	2026-05-01		
 Test::More::YAMLScript	FAIL			Syntax error	2026-05-10		
+Test::Mountebank	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-08-17		
 Test::MultiProcess	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-15		
 Test::Net::LDAP	FAIL	1	0	1/1 subtests failed	2026-05-11		
 Test::Net::RabbitMQ	FAIL	2	1	1/2 subtests failed	2026-05-18		
@@ -7832,6 +7840,7 @@ Test::Warnings	FAIL	89	88	1/89 subtests failed	2026-05-20
 Test::Weaken	FAIL	132	71	61/132 subtests failed; 15/18 test programs failed	2026-08-14		
 Test::Without::Module	FAIL	27	27		2026-05-20		
 Test::XML::Compare	FAIL	67	66	1/67 subtests failed; 1/13 test programs failed	2026-08-14		
+Test::XML::Loy	FAIL			Unknown test outcome	2026-08-17		
 Test::XML::Ordered	FAIL	1	0	3/1 subtests failed	2026-05-07		
 Test::XPath	FAIL	5	0	115/5 subtests failed	2026-05-20		
 Test::Zapp	FAIL			Unknown test outcome	2026-08-14		
@@ -8097,6 +8106,7 @@ UDPServersAndClients	FAIL			Syntax error	2026-05-17
 UDT::Simple	FAIL			Unknown test outcome	2026-05-10		
 UI::Dialog	FAIL			Unknown test outcome	2026-08-17		
 UI::Various	FAIL				2026-05-12		
+UID	FAIL	47	42	5/47 subtests failed; 2/2 test programs failed	2026-08-17		
 UID2::Client	FAIL			No parseable output	2026-06-15		
 UID2::Client::Decryption	FAIL	28		2 subtests failed in test files	2026-08-11		
 UID2::Client::XS	FAIL	6	5	1/6 subtests failed	2026-05-11		
@@ -8837,6 +8847,7 @@ WordNet::QueryData	FAIL			Configure failed	2026-05-17
 WordNet::SenseKey	FAIL	2	0	8/2 subtests failed	2026-05-17		
 WordNet::SenseRelate::Algorithm::Global	FAIL			Missing: WordNet/QueryData.pm	2026-05-11		
 WordNet::SenseRelate::AllWords	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-08-13		
+WordNet::SenseRelate::WordToSet	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-08-17		
 WordNet::Similarity	FAIL	113	0	2038/113 subtests failed	2026-05-11		
 WordNet::get_wn_info	FAIL	113	0	2038/113 subtests failed	2026-05-12		
 WorePAN	FAIL	1	0	1/1 subtests failed	2026-05-16		
@@ -9161,6 +9172,7 @@ YamlTime::Command::commit	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	202
 Yancy	FAIL	27	6	21/27 subtests failed	2026-05-17		
 Yancy::Backend::Static	FAIL			Unknown test outcome	2026-08-14		
 Yars	FAIL			Unknown test outcome	2026-08-11		
+Yeb::Plugin::Session	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-08-17		
 Yote::ArrayGatekeeper	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-15		
 Yote::Locker	FAIL			No parseable output	2026-08-13		
 YourBrainForOnceDude	FAIL			Missing: Acme/Buffy.pm	2026-05-11		
