@@ -284,9 +284,13 @@ public class ListParser {
         return token;
     }
 
-    // Keywords that can be autoquoted as hash keys when followed by =>
+    // Keywords and comparison operators that can be autoquoted as hash keys
+    // when followed by =>.  The comparison operators are tokenized as infix
+    // operators, so this check must happen before the list parser decides that
+    // a call has no arguments (for example, token(eq => value)).
     private static final Set<String> AUTOQUOTABLE_KEYWORDS = Set.of(
-            "and", "or", "xor", "when", "if", "unless", "while", "until", "for", "foreach"
+            "and", "or", "xor", "when", "if", "unless", "while", "until", "for", "foreach",
+            "eq", "ne", "lt", "gt", "le", "ge", "cmp"
     );
 
     /**
@@ -409,7 +413,13 @@ public class ListParser {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like bareword " + token.text);
         } else if (ParserTables.INFIX_OP.contains(token.text) || token.text.equals(",")) {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList infix `" + token.text + "` followed by `" + nextToken.text + "`");
-            if (token.text.equals("<") || token.text.equals("<<")) {
+            // Comparison operators are valid bareword hash keys before a fat
+            // comma.  They look like infix operators here because there is no
+            // left operand yet, but they must be parsed as the first call
+            // argument instead of making the call appear argument-less.
+            if (AUTOQUOTABLE_KEYWORDS.contains(token.text) && nextToken.text.equals("=>")) {
+                // Leave isEmptyList false.
+            } else if (token.text.equals("<") || token.text.equals("<<")) {
                 // Looks like diamond operator
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like <>");
             } else if (token.text.equals("+")) {

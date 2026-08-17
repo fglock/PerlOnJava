@@ -57,6 +57,18 @@ public class ParsePrimary {
         String operator = token.text;
         Node operand;
 
+        // Infix keyword operators are also legal bareword keys before a fat
+        // comma (for example C<eq => '(==)'>). Handle this before dispatching
+        // the operator token through the infix parser.
+        if (token.type == LexerTokenType.OPERATOR
+                && java.util.Set.of("eq", "ne", "lt", "gt", "le", "ge", "cmp")
+                    .contains(operator)) {
+            int nextIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+            if (parser.tokens.get(nextIndex).text.equals("=>")) {
+                return new StringNode(operator, parser.tokenIndex);
+            }
+        }
+
         switch (token.type) {
             case IDENTIFIER:
                 // Handle identifiers: variables, subroutines, keywords, etc.
@@ -284,9 +296,14 @@ public class ParsePrimary {
      */
     static Node parseOperator(Parser parser, LexerToken token, String operator) {
         // Check for autoquoting: keyword operators before => should be treated as barewords
-        // This handles cases like: and => {...}, or => {...}, xor => {...}
-        if (operator.equals("and") || operator.equals("or") || operator.equals("xor")) {
-            String peekTokenText = peek(parser).text;
+        // This handles keyword operators used as ordinary hash/list keys.
+        if (operator.equals("and") || operator.equals("or") || operator.equals("xor")
+                || operator.equals("eq") || operator.equals("ne")
+                || operator.equals("lt") || operator.equals("gt")
+                || operator.equals("le") || operator.equals("ge")
+                || operator.equals("cmp")) {
+            int nextIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+            String peekTokenText = parser.tokens.get(nextIndex).text;
             if (peekTokenText.equals("=>")) {
                 // Autoquote: convert operator keyword to string literal
                 return new StringNode(token.text, parser.tokenIndex);
