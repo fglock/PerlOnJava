@@ -749,9 +749,7 @@ public class Internals extends PerlModuleBase {
                             && effectiveScalar.value instanceof RuntimeScalar targetScalar) {
                         if (targetScalar.type != RuntimeScalarType.READONLY_SCALAR
                                 && !(targetScalar instanceof RuntimeScalarReadOnly)) {
-                            RuntimeScalar inner = new RuntimeScalar();
-                            inner.type = targetScalar.type;
-                            inner.value = targetScalar.value;
+                            RuntimeScalar inner = new RuntimeScalar(targetScalar);
                             targetScalar.type = RuntimeScalarType.READONLY_SCALAR;
                             targetScalar.value = inner;
                         }
@@ -760,9 +758,7 @@ public class Internals extends PerlModuleBase {
                     // mark it directly.
                     else if (scalar.type != RuntimeScalarType.READONLY_SCALAR
                             && !(scalar instanceof RuntimeScalarReadOnly)) {
-                        RuntimeScalar inner = new RuntimeScalar();
-                        inner.type = scalar.type;
-                        inner.value = scalar.value;
+                        RuntimeScalar inner = new RuntimeScalar(scalar);
                         scalar.type = RuntimeScalarType.READONLY_SCALAR;
                         scalar.value = inner;
                     }
