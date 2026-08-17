@@ -214,9 +214,9 @@ compatibility contract.
 4. Inventory the remaining uncommon Unicode aliases and invalid-property
    diagnostics against Perl 5.44's bundled tables, then move the next
    matcher-semantic preprocessor slice into Joni.
-5. Close the whole-suite Joni-default blockers in split/list-context behavior,
-   branch-reset routing outside the regex unit directory, and `Script=` Unicode
-   property translation before repeating the default-backend flip.
+5. Repeat the whole-suite Joni-default flip now that split/list-context,
+   branch-reset routing, and `Script=` property translation use the Joni path;
+   classify and close each remaining blocker before making the flip permanent.
 
 ### Open Questions and Blockers
 

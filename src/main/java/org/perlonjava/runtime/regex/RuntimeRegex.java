@@ -279,6 +279,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return selected;
     }
 
+    /**
+     * Create a backend-neutral matcher for callers that implement Perl
+     * operations around regex matches (for example {@code split}).
+     */
+    public RegexMatcher matcher(RuntimeScalar string, String input) {
+        if (recursivePattern != null) {
+            return recursivePattern.matcher(input, executableCallbacks);
+        }
+        Pattern selected = selectPattern(string, input);
+        return new JavaRegexMatcher(
+                selected.matcher(new RegexTimeoutCharSequence(input)),
+                branchResetCaptureMap);
+    }
+
+    /** The Perl source pattern, before backend-specific translation. */
+    public String sourcePattern() {
+        return patternString;
+    }
+
     private Pattern selectPattern(RuntimeScalar string, String inputStr) {
         Pattern selected = selectPattern(string);
         if (!couldContainInternalScalarMarker(inputStr)) {
