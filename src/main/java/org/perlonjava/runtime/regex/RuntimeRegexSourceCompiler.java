@@ -57,9 +57,10 @@ final class RuntimeRegexSourceCompiler {
         String sourceModifiers = publicModifiers.replaceAll("[gcr?op]", "");
         String source = "qr~" + pattern.toString().replace("~", "\\~")
                 + "~" + sourceModifiers;
-        String sourceName = owner != null && owner.cvStartFile != null
-                ? owner.cvStartFile : "(runtime regex)";
-        int sourceLine = owner != null && owner.cvStartLine > 0 ? owner.cvStartLine : 1;
+        // Perl compiles each executable runtime pattern as a distinct eval,
+        // so diagnostics and warnings use an independent (eval N) filename.
+        String sourceName = RuntimeCode.getNextEvalFilename();
+        int sourceLine = 1;
 
         ScopedSymbolTable savedScope = SpecialBlockParser.getCurrentScope();
         try (PerlLanguageProvider.CompilationLockGuard ignored =
