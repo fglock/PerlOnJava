@@ -417,6 +417,7 @@ final class ArrayCompiler extends Compiler {
         addOpcode(OPCode.CALL);
         node.unsetAddrList.add(codeLength, node.target);
         addAbsAddr(0); /*dummy addr.*/
+        addMemNum(node.groupNum);
     }
 
     @Override
@@ -927,7 +928,13 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case EncloseType.CONDITION:
-            len = node.calloutConditionId >= 0 ? OPSize.CALLOUT_CONDITION : OPSize.CONDITION;
+            if (node.assertionCondition != null) {
+                len = OPSize.PUSH_POS_NOT + compileLengthTree(node.assertionCondition.target) + OPSize.POP_POS_NOT;
+            } else if (node.recursionConditionGroup >= 0) {
+                len = OPSize.RECURSION_CONDITION;
+            } else {
+                len = node.calloutConditionId >= 0 ? OPSize.CALLOUT_CONDITION : OPSize.CONDITION;
+            }
             if (node.target.getType() == NodeType.ALT) {
                 ListNode x = (ListNode)node.target;
                 tlen = compileLengthTree(x.value); /* yes-node */
@@ -959,9 +966,12 @@ final class ArrayCompiler extends Compiler {
             if (Config.USE_SUBEXP_CALL && node.isCalled()) {
                 regex.requireStack = true;
                 addOpcode(OPCode.CALL);
-                node.callAddr = codeLength + OPSize.ABSADDR + OPSize.JUMP;
+                node.callAddr = codeLength + OPSize.ABSADDR + OPSize.MEMNUM + OPSize.JUMP;
                 node.setAddrFixed();
                 addAbsAddr(node.callAddr);
+                // This CALL is a compiler implementation detail for a group's
+                // ordinary occurrence, not a Perl recursive subpattern call.
+                addMemNum(-1);
                 len = compileLengthTree(node.target);
                 len += OPSize.MEMORY_START_PUSH + OPSize.RETURN;
                 if (bsAt(regex.btMemEnd, node.regNum)) {
@@ -1027,11 +1037,8 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case EncloseType.CONDITION:
-            if (node.calloutConditionId >= 0) regex.requireStack = true;
-            addOpcode(node.calloutConditionId >= 0
-                    ? OPCode.CALLOUT_CONDITION : OPCode.CONDITION);
-            addMemNum(node.calloutConditionId >= 0
-                    ? node.calloutConditionId : node.regNum);
+            if (node.calloutConditionId >= 0 || node.assertionCondition != null
+                    || node.recursionConditionGroup >= 0) regex.requireStack = true;
             if (node.target.getType() == NodeType.ALT) {
                 ListNode x = (ListNode)node.target;
                 len = compileLengthTree(x.value); /* yes-node */
@@ -1040,7 +1047,32 @@ final class ArrayCompiler extends Compiler {
                 int len2 = compileLengthTree(x.value); /* no-node */
                 if (x.tail != null) newSyntaxException(INVALID_CONDITION_PATTERN);
                 x = (ListNode)node.target;
-                addRelAddr(len + OPSize.JUMP);
+                if (node.assertionCondition != null) {
+                    boolean positive = node.assertionCondition.type == AnchorType.PREC_READ;
+                    ListNode yes = x;
+                    ListNode no = x.tail;
+                    ListNode first = positive ? yes : no;
+                    ListNode second = positive ? no : yes;
+                    int firstLength = compileLengthTree(first.value);
+                    int secondLength = compileLengthTree(second.value);
+                    int conditionLength = compileLengthTree(node.assertionCondition.target);
+                    addOpcodeRelAddr(OPCode.PUSH_POS_NOT,
+                            conditionLength + OPSize.POP_POS_NOT + firstLength + OPSize.JUMP);
+                    compileTree(node.assertionCondition.target);
+                    addOpcode(OPCode.POP_POS_NOT);
+                    compileTree(first.value);
+                    addOpcodeRelAddr(OPCode.JUMP, secondLength);
+                    compileTree(second.value);
+                    break;
+                } else {
+                    addOpcode(node.calloutConditionId >= 0 ? OPCode.CALLOUT_CONDITION
+                            : node.recursionConditionGroup >= 0 ? OPCode.RECURSION_CONDITION
+                            : OPCode.CONDITION);
+                    addMemNum(node.calloutConditionId >= 0 ? node.calloutConditionId
+                            : node.recursionConditionGroup >= 0 ? node.recursionConditionGroup
+                            : node.regNum);
+                    addRelAddr(len + OPSize.JUMP);
+                }
                 compileTree(x.value); /* yes-node */
                 addOpcodeRelAddr(OPCode.JUMP, len2);
                 x = x.tail;

@@ -358,11 +358,20 @@ class ByteCodePrinter {
                 break;
 
             case OPCode.CONDITION:
+            case OPCode.RECURSION_CONDITION:
                 mem = code[bp];
                 bp += OPSize.MEMNUM;
                 addr = code[bp];
                 bp += OPSize.RELADDR;
                 sb.append(':').append(mem).append(":").append(addr);
+                break;
+
+            case OPCode.CALL:
+                addr = code[bp];
+                bp += OPSize.ABSADDR;
+                mem = code[bp];
+                bp += OPSize.MEMNUM;
+                sb.append(':').append(addr).append(':').append(mem);
                 break;
 
             default:

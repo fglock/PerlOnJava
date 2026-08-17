@@ -532,10 +532,45 @@ class Parser extends Lexer {
                     int num = -1;
                     int name = -1;
                     int calloutConditionId = -1;
+                    AnchorNode assertionCondition = null;
+                    int recursionConditionGroup = -1;
+                    int recursionConditionNameP = -1;
+                    int recursionConditionNameEnd = -1;
                     fetch();
                     if (c == '?' && left() && peekIs('{')) {
                         fetch();
                         calloutConditionId = parseInternalCalloutId();
+                    } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
+                        fetch();
+                        assertionCondition = new AnchorNode(c == '='
+                                ? AnchorType.PREC_READ : AnchorType.PREC_READ_NOT);
+                        fetchToken();
+                        assertionCondition.setTarget(parseSubExp(term));
+                    } else if (c == 'R') {
+                        recursionConditionGroup = 0;
+                        if (!left()) newSyntaxException(INVALID_CONDITION_PATTERN);
+                        if (peekIs('&')) {
+                            inc();
+                            recursionConditionNameP = p;
+                            while (left() && !peekIs(')')) inc();
+                            recursionConditionNameEnd = p;
+                            if (recursionConditionNameEnd == recursionConditionNameP || !left()) {
+                                newSyntaxException(INVALID_CONDITION_PATTERN);
+                            }
+                            inc();
+                        } else if (enc.isDigit(peek())) {
+                            recursionConditionGroup = 0;
+                            while (left() && enc.isDigit(peek())) {
+                                recursionConditionGroup = recursionConditionGroup * 10 + peek() - '0';
+                                inc();
+                            }
+                            if (!left() || !peekIs(')')) newSyntaxException(INVALID_CONDITION_PATTERN);
+                            inc();
+                        } else if (peekIs(')')) {
+                            inc();
+                        } else {
+                            newSyntaxException(INVALID_CONDITION_PATTERN);
+                        }
                     } else if (enc.isDigit(c)) { /* (n) */
                         unfetch();
                         num = fetchName('(', true);
@@ -557,6 +592,10 @@ class Parser extends Lexer {
                     EncloseNode en = new EncloseNode(EncloseType.CONDITION);
                     en.regNum = num;
                     en.calloutConditionId = calloutConditionId;
+                    en.assertionCondition = assertionCondition;
+                    en.recursionConditionGroup = recursionConditionGroup;
+                    en.recursionConditionNameP = recursionConditionNameP;
+                    en.recursionConditionNameEnd = recursionConditionNameEnd;
                     if (name != -1) en.setNameRef();
                     node = en;
                 } else {

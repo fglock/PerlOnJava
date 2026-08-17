@@ -287,9 +287,14 @@ final class Analyser extends Parser {
 
         case NodeType.ENCLOSE:
             EncloseNode en = (EncloseNode)node;
-            if (en.type == EncloseType.CONDITION && en.calloutConditionId < 0) {
+            if (en.type == EncloseType.CONDITION && en.calloutConditionId < 0
+                    && en.assertionCondition == null && en.recursionConditionGroup < 0) {
                 en.regNum = map[en.regNum];
             }
+            if (en.recursionConditionGroup > 0) {
+                en.recursionConditionGroup = map[en.recursionConditionGroup];
+            }
+            if (en.assertionCondition != null) renumberByMap(en.assertionCondition, map);
             renumberByMap(en.target, map);
             break;
 
@@ -1321,7 +1326,23 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.ENCLOSE:
-            setupSubExpCall(((EncloseNode)node).target);
+            EncloseNode en = (EncloseNode)node;
+            if (en.recursionConditionNameP >= 0) {
+                NameEntry ne = regex.nameToGroupNumbers(bytes,
+                        en.recursionConditionNameP, en.recursionConditionNameEnd);
+                if (ne == null) {
+                    newValueException(UNDEFINED_NAME_REFERENCE,
+                            en.recursionConditionNameP, en.recursionConditionNameEnd);
+                }
+                int[] refs = ne.getBackRefs();
+                if (refs.length != 1) {
+                    newValueException(MULTIPLEX_DEFINITION_NAME_CALL,
+                            en.recursionConditionNameP, en.recursionConditionNameEnd);
+                }
+                en.recursionConditionGroup = refs[0];
+            }
+            if (en.assertionCondition != null) setupSubExpCall(en.assertionCondition);
+            setupSubExpCall(en.target);
             break;
 
         case NodeType.CALL:
@@ -2007,12 +2028,18 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseNode.CONDITION:
-                if (Config.USE_NAMED_GROUP) {
+                if (Config.USE_NAMED_GROUP && en.assertionCondition == null
+                        && en.calloutConditionId < 0 && en.recursionConditionGroup < 0) {
                     if (!en.isNameRef() && env.numNamed > 0 && syntax.captureOnlyNamedGroup() && !isCaptureGroup(env.option)) {
                         newValueException(NUMBERED_BACKREF_OR_CALL_NOT_ALLOWED);
                     }
                 }
-                if (en.regNum > env.numMem) newValueException(INVALID_BACKREF);
+                if (en.assertionCondition == null && en.calloutConditionId < 0
+                        && en.recursionConditionGroup < 0 && en.regNum > env.numMem) {
+                    newValueException(INVALID_BACKREF);
+                }
+                if (en.recursionConditionGroup > env.numMem) newValueException(INVALID_BACKREF);
+                if (en.assertionCondition != null) setupTree(en.assertionCondition, state);
                 setupTree(en.target, state);
                 break;
 

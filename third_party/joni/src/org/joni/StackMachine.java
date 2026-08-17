@@ -306,11 +306,30 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
-    protected final void pushCallFrame(int pat) {
+    protected final void pushCallFrame(int pat, int groupNum) {
         StackEntry e = ensure1();
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
+        e.setCallFrameNum(groupNum);
         stk++;
+    }
+
+    protected final boolean isInsideSubexpCall(int groupNum) {
+        int returned = 0;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry e = stack[i];
+            if (e.type == RETURN) {
+                returned++;
+            } else if (e.type == CALL_FRAME) {
+                if (returned > 0) {
+                    returned--;
+                } else if (e.getCallFrameNum() >= 0
+                        && (groupNum == 0 || e.getCallFrameNum() == groupNum)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     protected final void pushReturn() {
@@ -527,10 +546,11 @@ abstract class StackMachine extends Matcher implements StackType {
         }
     }
 
-    protected final void popTilPosNot() {
+    protected final StackEntry popTilPosNot() {
         while (true) {
             StackEntry e = stack[--stk];
-            if (e.type == POS_NOT) break; else popRewrite(e);
+            if (e.type == POS_NOT) return e;
+            popRewrite(e);
         }
     }
 
@@ -558,6 +578,21 @@ abstract class StackMachine extends Matcher implements StackType {
             } else if (e.type == POS) {
                 e.type = VOID;
                 break;
+            }
+        }
+        return k;
+    }
+
+    protected final int posNotEnd() {
+        int k = stk;
+        while (true) {
+            k--;
+            StackEntry e = stack[k];
+            if (e.type == POS_NOT) {
+                e.type = VOID;
+                break;
+            } else if ((e.type & MASK_TO_VOID_TARGET) != 0) {
+                e.type = VOID;
             }
         }
         return k;

@@ -150,6 +150,8 @@ public interface OPCode {
     int THEN                          = 106;          /* prune through the nearest alternative */
     int COMMIT                        = 107;          /* prune and prevent another search start */
     int MARK                          = 108;          /* record a named Perl backtracking mark */
+    int POP_POS_NOT                   = 109;          /* successful conditional assertion end */
+    int RECURSION_CONDITION           = 110;          /* active subpattern call conditional */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -262,6 +264,8 @@ public interface OPCode {
         "then", /*OP_THEN*/
         "commit", /*OP_COMMIT*/
         "mark", /*OP_MARK*/
+        "pop-pos-not", /*OP_POP_POS_NOT*/
+        "recursion-condition", /*OP_RECURSION_CONDITION*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -353,7 +357,7 @@ public interface OPCode {
         Arguments.NON, /*OP_PUSH_ABSENT_POS*/
         Arguments.RELADDR, /*OP_ABSENT*/
         Arguments.NON, /*OP_ABSENT_END*/
-        Arguments.ABSADDR, /*OP_CALL*/
+        Arguments.SPECIAL, /*OP_CALL*/
         Arguments.NON, /*OP_RETURN*/
         Arguments.SPECIAL, /*OP_CONDITION*/
         Arguments.SPECIAL, /*OP_STATE_CHECK_PUSH*/
@@ -375,5 +379,7 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_THEN*/
         Arguments.MEMNUM, /*OP_COMMIT*/
         Arguments.MEMNUM, /*OP_MARK*/
+        Arguments.NON, /*OP_POP_POS_NOT*/
+        Arguments.SPECIAL, /*OP_RECURSION_CONDITION*/
     } : null;
 }

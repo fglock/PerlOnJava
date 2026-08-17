@@ -294,6 +294,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
                 case OPCode.PUSH_POS_NOT:               opPushPosNot();            continue;
+                case OPCode.POP_POS_NOT:                opPopPosNot();             continue;
                 case OPCode.FAIL_POS:                   opFailPos();               continue;
                 case OPCode.PUSH_STOP_BT:               opPushStopBT();            continue;
                 case OPCode.POP_STOP_BT:                opPopStopBT();             continue;
@@ -309,6 +310,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALL:                       opCall();                  continue;
                 case OPCode.RETURN:                     opReturn();                continue;
                 case OPCode.CONDITION:                  opCondition();             continue;
+                case OPCode.RECURSION_CONDITION:        opRecursionCondition();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
@@ -444,6 +446,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
                 case OPCode.PUSH_POS_NOT:               opPushPosNot();            continue;
+                case OPCode.POP_POS_NOT:                opPopPosNot();             continue;
                 case OPCode.FAIL_POS:                   opFailPos();               continue;
                 case OPCode.PUSH_STOP_BT:               opPushStopBT();            continue;
                 case OPCode.POP_STOP_BT:                opPopStopBT();             continue;
@@ -459,6 +462,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALL:                       opCall();                  continue;
                 case OPCode.RETURN:                     opReturn();                continue;
                 case OPCode.CONDITION:                  opCondition();             continue;
+                case OPCode.RECURSION_CONDITION:        opRecursionCondition();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
@@ -814,6 +818,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (mem > regex.numMem || repeatStk[memEndStk + mem] == INVALID_INDEX || repeatStk[memStartStk + mem] == INVALID_INDEX) {
             ip += addr;
         }
+    }
+
+    private void opRecursionCondition() {
+        int groupNum = code[ip++];
+        int addr = code[ip++];
+        if (!isInsideSubexpCall(groupNum)) ip += addr;
     }
 
     private boolean isInBitSet() {
@@ -1871,6 +1881,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         opFail();
     }
 
+    private void opPopPosNot() {
+        StackEntry e = stack[posNotEnd()];
+        s = e.getStatePStr();
+        sprev = e.getStatePStrPrev();
+    }
+
     private void opPushStopBT() {
         pushStopBT();
     }
@@ -1963,7 +1979,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             throw new ValueException("subpattern recursion limit exceeded");
         }
         int addr = code[ip++];
-        pushCallFrame(ip);
+        int groupNum = code[ip++];
+        pushCallFrame(ip, groupNum);
         ip = addr; // absolute address
     }
 
