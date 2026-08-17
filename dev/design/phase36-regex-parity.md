@@ -230,6 +230,12 @@ Perl's user-property callback path. A 39-assertion standard-Perl oracle passes
 on JVM and interpreter; the unchanged `regexp_unicode_prop.t` runner improves
 from 1,039/1,110 to 1,054/1,110, leaving built-in aliases and six
 user-property-definition diagnostic assertions as separate work.
+Direct user-property definitions now report Perl-compatible overflow, reversed
+range, invalid component, callback death, recursion-chain, and package-name
+diagnostics. The focused 12-assertion oracle passes on both execution backends;
+`regexp_unicode_prop.t` gains two more assertions. Four deferred bare-name
+assertions retain correct diagnostic content but still need literal source-order
+provenance to add the canonical `main::` prefix.
 
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
@@ -350,6 +356,11 @@ matcher-specific timeouts on both execution backends.
     naming convention and made unknown-property diagnostics fatal even in
     compatibility warning mode. The focused oracle passes 39/39 on system
     Perl, JVM, and interpreter; `regexp_unicode_prop.t` gains 15 assertions.
+  - [x] Matched user-property definition validation, deterministic recursion
+    chains, callback-death wrapping, and direct package-name policy.
+    The focused oracle passes 12/12 on system Perl, JVM, and interpreter;
+    unchanged upstream coverage gains two assertions, with four source-order
+    provenance assertions tracked separately.
   - [ ] Complete the remaining Unicode aliases and diagnostic parity inventory.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -373,9 +384,9 @@ matcher-specific timeouts on both execution backends.
    slices, then rerun the forced-Joni corpus from the new combined head.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-4. Integrate the exact invalid-property dispatch/diagnostic slice, then finish
-   PerlOnJava4's built-in Unicode-alias slice and the six residual
-   user-property-definition diagnostic assertions against Perl 5.44 behavior.
+4. Integrate the invalid-property and definition-diagnostic slices, then finish
+   PerlOnJava4's built-in Unicode aliases and preserve compile-time source-order
+   provenance for the four deferred bare-name diagnostics.
 5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.

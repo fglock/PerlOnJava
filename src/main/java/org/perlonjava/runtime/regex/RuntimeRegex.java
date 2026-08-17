@@ -901,7 +901,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // User property subs can execute arbitrary Perl and block. Resolve them
         // before compile() takes its process-wide monitor; only simultaneous
         // definitions of the same property coordinate in PerlThreadRegistry.
-        UnicodeResolver.preloadUserDefinedProperties(regex.patternString,
+        UnicodeResolver.preloadDeferredUserDefinedProperties(regex.patternString,
                 regex.regexFlags != null && regex.regexFlags.isCaseInsensitive());
         RuntimeRegex recompiled = compile(regex.patternString,
                 regex.regexFlags == null ? "" : regex.regexFlags.toFlagString(),

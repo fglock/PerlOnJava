@@ -6,7 +6,10 @@ import com.ibm.icu.text.UnicodeSet;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -199,15 +202,16 @@ public class UnicodeResolver {
                 }
             } else {
                 // Parse hex range - extract the hex part before any comments
-                String hexPart = line.split("#")[0].trim();
-                // Split by tabs or multiple spaces
-                String[] parts = hexPart.split("\\t+|\\s{2,}");
+                String hexPart = stripDefinitionComment(line);
+                String[] parts = hexPart.split("\\s+");
                 if (parts.length == 1 && !parts[0].isEmpty()) {
                     // Single character
                     String hexStr = parts[0].trim();
                     // Check if it's a valid hex string
                     if (!hexStr.matches("[0-9A-Fa-f]+")) {
-                        throw new IllegalArgumentException("Can't find Unicode property definition \"" + line.trim() + "\" in expansion of " + propertyName);
+                        throw new IllegalArgumentException(
+                                "Can't find Unicode property definition \"" + hexPart
+                                        + "\" in expansion of " + propertyName);
                     }
                     try {
                         long codePoint = Long.parseLong(hexStr, 16);
@@ -218,7 +222,9 @@ public class UnicodeResolver {
                         }
                         resultSet.add((int) codePoint);
                     } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("Can't find Unicode property definition \"" + line.trim() + "\" in expansion of " + propertyName);
+                        throw new IllegalArgumentException(
+                                "Code point too large in \"" + line
+                                        + "\" in expansion of " + propertyName);
                     }
                 } else if (parts.length >= 2) {
                     // Range
@@ -227,7 +233,9 @@ public class UnicodeResolver {
 
                     // Check if they're valid hex strings
                     if (!startHex.matches("[0-9A-Fa-f]+") || !endHex.matches("[0-9A-Fa-f]+")) {
-                        throw new IllegalArgumentException("Can't find Unicode property definition \"" + line.trim() + "\" in expansion of " + propertyName);
+                        throw new IllegalArgumentException(
+                                "Can't find Unicode property definition \"" + hexPart
+                                        + "\" in expansion of " + propertyName);
                     }
 
                     try {
@@ -249,7 +257,9 @@ public class UnicodeResolver {
 
                         resultSet.add((int) start, (int) end);
                     } catch (NumberFormatException e) {
-                        throw new IllegalArgumentException("Can't find Unicode property definition \"" + line.trim() + "\" in expansion of " + propertyName);
+                        throw new IllegalArgumentException(
+                                "Code point too large in \"" + line
+                                        + "\" in expansion of " + propertyName);
                     }
                 }
             }
@@ -287,6 +297,16 @@ public class UnicodeResolver {
         }
     }
 
+    private static IllegalArgumentException recursivePropertyError(
+            String property, Set<String> recursionSet) {
+        List<String> expansionChain = new ArrayList<>(recursionSet);
+        Collections.reverse(expansionChain);
+        return new IllegalArgumentException(
+                "Infinite recursion in user-defined property \"" + property
+                        + "\" in expansion of "
+                        + String.join(" in expansion of ", expansionChain));
+    }
+
     /**
      * Resolves a property reference to a UnicodeSet (like utf8::InHiragana or main::IsMyProp).
      * Returns a UnicodeSet directly instead of a Java regex pattern string, so the result
@@ -301,18 +321,7 @@ public class UnicodeResolver {
         // Check for recursion
         if (recursionSet.contains(propRef)) {
             // Build recursion chain for error message
-            StringBuilder chain = new StringBuilder();
-            for (String prop : recursionSet) {
-                if (chain.length() > 0) {
-                    chain.append(" in expansion of ");
-                }
-                chain.append(prop);
-            }
-            if (chain.length() > 0) {
-                chain.append(" in expansion of ");
-            }
-            chain.append(propRef);
-            throw new IllegalArgumentException("Infinite recursion in user-defined property \"" + propRef + "\" in expansion of " + chain);
+            throw recursivePropertyError(propRef, recursionSet);
         }
 
         // Remove utf8:: prefix if present
@@ -483,6 +492,12 @@ public class UnicodeResolver {
      */
     private static String tryUserDefinedProperty(
             String property, Set<String> recursionSet, boolean caseInsensitive) {
+        return tryUserDefinedProperty(property, recursionSet, caseInsensitive, false);
+    }
+
+    private static String tryUserDefinedProperty(
+            String property, Set<String> recursionSet, boolean caseInsensitive,
+            boolean qualifyBareDiagnosticName) {
         // Build the full subroutine name
         String subName = property;
         if (!subName.contains("::")) {
@@ -495,18 +510,9 @@ public class UnicodeResolver {
         // namespace; otherwise InFoo -> main::InFoo can wait on its own active
         // future instead of reporting recursive expansion.
         if (recursionSet.contains(subName)) {
-            StringBuilder chain = new StringBuilder();
-            for (String recursiveProperty : recursionSet) {
-                if (chain.length() > 0) chain.append(" in expansion of ");
-                chain.append(recursiveProperty);
-            }
-            if (chain.length() > 0) chain.append(" in expansion of ");
-            chain.append(subName);
-            throw new IllegalArgumentException(
-                    "Infinite recursion in user-defined property \"" + subName
-                            + "\" in expansion of " + chain);
+            throw recursivePropertyError(subName, recursionSet);
         }
-        Set<String> newRecursionSet = new HashSet<>(recursionSet);
+        Set<String> newRecursionSet = new LinkedHashSet<>(recursionSet);
         newRecursionSet.add(subName);
 
         // Check cache first — Perl only calls user-defined property subs once
@@ -531,20 +537,26 @@ public class UnicodeResolver {
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
 
         final String resolvedSubName = subName;
+        final String diagnosticName = qualifyBareDiagnosticName
+                && !property.contains("::") ? subName : property;
         final String coordinationKey = cacheKey;
         try {
             String parsed = PerlRuntime.current().threadRegistry()
                     .resolveUserUnicodeProperty(coordinationKey,
                             () -> resolveUserDefinedProperty(
-                                    codeRef, resolvedSubName, newRecursionSet,
+                                    codeRef, resolvedSubName, diagnosticName,
+                                    newRecursionSet,
                                     caseInsensitive));
             userPropertyCache().put(cacheKey, parsed);
             return parsed;
+        } catch (PerlDieException e) {
+            throw propertyDefinitionDie(e, diagnosticName);
         } catch (PerlCompilerException e) {
             // Re-throw Perl exceptions (like die in IsDeath)
             String msg = e.getMessage();
             if (msg != null && !msg.contains("in expansion of")) {
-                throw new IllegalArgumentException("Died" + (msg.isEmpty() ? "" : ": " + msg) + " in expansion of " + subName, e);
+                throw new IllegalArgumentException("Died" + (msg.isEmpty() ? "" : ": " + msg)
+                        + " in expansion of " + diagnosticName, e);
             }
             throw e;
         } catch (IllegalArgumentException e) {
@@ -556,9 +568,9 @@ public class UnicodeResolver {
         }
     }
 
-    private static String resolveUserDefinedProperty(RuntimeScalar codeRef, String subName,
-                                                     Set<String> recursionSet,
-                                                     boolean caseInsensitive) {
+    private static String resolveUserDefinedProperty(
+            RuntimeScalar codeRef, String subName, String diagnosticName,
+            Set<String> recursionSet, boolean caseInsensitive) {
         try {
             // Perl passes one false/true argument for case-sensitive/folded
             // expansion. A user property may intentionally return distinct
@@ -573,13 +585,16 @@ public class UnicodeResolver {
             String definition = result.elements.getFirst().toString();
 
             // Parse and cache the property definition
-            return parseUserDefinedProperty(definition, recursionSet, subName);
+            return parseUserDefinedProperty(definition, recursionSet, diagnosticName);
 
+        } catch (PerlDieException e) {
+            throw propertyDefinitionDie(e, diagnosticName);
         } catch (PerlCompilerException e) {
             // Re-throw Perl exceptions (like die in IsDeath)
             String msg = e.getMessage();
             if (msg != null && !msg.contains("in expansion of")) {
-                throw new IllegalArgumentException("Died" + (msg.isEmpty() ? "" : ": " + msg) + " in expansion of " + subName, e);
+                throw new IllegalArgumentException("Died" + (msg.isEmpty() ? "" : ": " + msg)
+                        + " in expansion of " + diagnosticName, e);
             }
             throw e;
         } catch (IllegalArgumentException e) {
@@ -591,12 +606,31 @@ public class UnicodeResolver {
         }
     }
 
+    private static IllegalArgumentException propertyDefinitionDie(
+            PerlDieException failure, String propertyName) {
+        String message = failure.getMessage();
+        return new IllegalArgumentException(
+                "Error \"" + (message == null ? "" : message)
+                        + "\" in expansion of " + propertyName);
+    }
+
     /**
      * Resolve deferred top-level user properties before entering the synchronized
      * regex compiler. Property subs are arbitrary Perl and may block; keeping
      * them outside that compiler monitor lets unrelated property names proceed.
      */
     static void preloadUserDefinedProperties(String pattern, boolean caseInsensitive) {
+        preloadUserDefinedProperties(pattern, caseInsensitive, false);
+    }
+
+    static void preloadDeferredUserDefinedProperties(
+            String pattern, boolean caseInsensitive) {
+        preloadUserDefinedProperties(pattern, caseInsensitive, true);
+    }
+
+    private static void preloadUserDefinedProperties(
+            String pattern, boolean caseInsensitive,
+            boolean qualifyBareDiagnosticName) {
         if (pattern == null || pattern.isEmpty()) return;
 
         for (int slash = pattern.indexOf('\\'); slash >= 0;
@@ -622,19 +656,20 @@ public class UnicodeResolver {
                 // translator here would turn that intentional forward reference
                 // into an early "unsupported property" fatal before the
                 // placeholder path can run.
-                tryUserDefinedProperty(property, new HashSet<>(), caseInsensitive);
+                tryUserDefinedProperty(property, new LinkedHashSet<>(), caseInsensitive,
+                        qualifyBareDiagnosticName);
             }
             slash = end;
         }
     }
 
     public static String translateUnicodeProperty(String property, boolean negated) {
-        return translateUnicodeProperty(property, negated, new HashSet<>(), false);
+        return translateUnicodeProperty(property, negated, new LinkedHashSet<>(), false);
     }
 
     static String translateUnicodeProperty(
             String property, boolean negated, boolean caseInsensitive) {
-        return translateUnicodeProperty(property, negated, new HashSet<>(), caseInsensitive);
+        return translateUnicodeProperty(property, negated, new LinkedHashSet<>(), caseInsensitive);
     }
 
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
