@@ -733,6 +733,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opExact1IC() {
         if (s >= range) {opFail(); return;}
+        if (perlAsciiStrictRejectsFold(s, code[ip])) {opFail(); return;}
 
         byte[]lowbuf = cfbuf();
 
@@ -768,6 +769,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             while (ps < endp) {
                 sprev = s;
                 if (s >= range) {opFail(); return;}
+                if (perlAsciiStrictRejectsFold(s, bs[ps])) {opFail(); return;}
 
                 value = s;
                 int len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, lowbuf);
@@ -786,6 +788,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             while (ip < endp) {
                 sprev = s;
                 if (s >= range) {opFail(); return;}
+                if (perlAsciiStrictRejectsFold(s, code[ip])) {opFail(); return;}
 
                 value = s;
                 int len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, lowbuf);
@@ -800,6 +803,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             }
         }
 
+    }
+
+    private boolean perlAsciiStrictRejectsFold(int inputPosition, int targetByte) {
+        if (!Option.isPerlAsciiStrict(regex.options)) return false;
+        int inputCodePoint = enc.mbcToCode(bytes, inputPosition, end);
+        return !Encoding.isAscii(inputCodePoint) && (targetByte & 0xff) < 0x80;
     }
 
     private void opExactNICSb() {

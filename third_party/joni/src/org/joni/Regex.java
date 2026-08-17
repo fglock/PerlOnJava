@@ -169,7 +169,9 @@ public final class Regex {
 
         this.enc = enc;
         this.options = option;
-        this.caseFoldFlag = caseFoldFlag;
+        this.caseFoldFlag = Option.isPerlAsciiStrict(option)
+                ? caseFoldFlag & ~Config.INTERNAL_ENC_CASE_FOLD_MULTI_CHAR
+                : caseFoldFlag;
         new Analyser(this, syntax, bytes, p, end, warnings).compile();
     }
 

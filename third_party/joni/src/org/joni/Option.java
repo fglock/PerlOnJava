@@ -46,8 +46,10 @@ public final class Option {
     public static final int NOTBOS               = (1 << 16);
     public static final int NOTEOS               = (1 << 17);
     public static final int CR_7_BIT             = (1 << 18);
+    /** Perl /aa: forbid case-fold crossings between ASCII and non-ASCII. */
+    public static final int PERL_ASCII_STRICT    = (1 << 19);
 
-    public static final int MAXBIT               = (1 << 19); /* limit */
+    public static final int MAXBIT               = (1 << 20); /* limit */
 
     public static final int DEFAULT              = NONE;
 
@@ -66,6 +68,7 @@ public final class Option {
         if (isNotEol(option)) options += "NOTEOL";
         if (isPosixRegion(option)) options += "POSIX_REGION";
         if (isCR7Bit(option)) options += "CR_7_BIT";
+        if (isPerlAsciiStrict(option)) options += "PERL_ASCII_STRICT";
         return options;
     }
 
@@ -139,6 +142,10 @@ public final class Option {
 
     public static boolean isCR7Bit(int option) {
         return (option & CR_7_BIT) != 0;
+    }
+
+    public static boolean isPerlAsciiStrict(int option) {
+        return (option & PERL_ASCII_STRICT) != 0;
     }
 
     public static boolean isDynamic(int option) {
