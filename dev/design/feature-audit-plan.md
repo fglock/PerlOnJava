@@ -30,6 +30,8 @@ logs are in `/tmp/feature-audit-*` and are not committed by default.
 | `ops` module loads | pass | module missing | module missing | Still unsupported. |
 | Minimal extended `caller` tuple count | pass | pass | pass | Basic shape passes; field-by-field validation remains. |
 | Basic multibyte `seek`/`tell` | pass | pass | pass | Only the basic case is covered; full positioning semantics remain open. |
+| Executable regex conditionals | pass | pass | pass | Tested true and false callback branches; other conditional forms remain open. |
+| `\X` and `Extended_Pictographic` | pass | pass | pass | Tested representative grapheme and emoji cases; broader Unicode aliases remain open. |
 
 The exact commands and test names are documented in the probe README. A
 passing probe does not promote a broad feature automatically: semantic and
