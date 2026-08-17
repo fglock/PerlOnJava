@@ -207,8 +207,9 @@ compatibility contract.
 
 1. Finish the expanded MARK/named-SKIP JVM and interpreter gate, then run the
    applicable `pat_advanced.t` control-verb section.
-2. Fix duplicate named-capture arrays and the remaining forced-Joni ordinary
-   corpus failures before making Joni the default.
+2. Fix the remaining forced-Joni ordinary corpus failures, beginning with bare
+   Unicode properties, octal escapes, possessive quantifiers and runtime-source
+   grouping, before making Joni the default.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
 4. Inventory and move the next matcher-semantic preprocessor slice into Joni.

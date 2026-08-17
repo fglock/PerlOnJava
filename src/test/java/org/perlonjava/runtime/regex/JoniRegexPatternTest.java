@@ -58,4 +58,14 @@ class JoniRegexPatternTest {
                 RegexFlags.fromModifiers("xx", "[ a b c ]"));
         assertEquals("[abc]", pattern.patternDescription());
     }
+
+    @Test
+    void preservesEveryDuplicateNamedCapture() {
+        RegexMatcher matcher = new JoniRegexPattern("(?<x>a)|(?<x>b)", FLAGS)
+                .matcher("b", java.util.List.of());
+
+        assertTrue(matcher.find());
+        assertEquals(null, matcher.group("x"));
+        assertEquals("b", matcher.group("x" + CaptureNameEncoder.DUPLICATE_MARKER + "0"));
+    }
 }

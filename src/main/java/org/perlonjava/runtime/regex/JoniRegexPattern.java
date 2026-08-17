@@ -376,7 +376,11 @@ final class JoniRegexPattern {
             String name = new String(entry.name, entry.nameP, entry.nameEnd - entry.nameP,
                     StandardCharsets.UTF_8);
             int[] refs = entry.getBackRefs();
-            if (refs.length > 0) names.put(name, refs[refs.length - 1]);
+            for (int i = 0; i < refs.length; i++) {
+                String key = i == 0 ? name
+                        : name + CaptureNameEncoder.DUPLICATE_MARKER + (i - 1);
+                names.put(key, refs[i]);
+            }
         }
         return names;
     }
@@ -502,6 +506,8 @@ final class JoniRegexPattern {
         }
 
         private int namedGroupNumber(String name) {
+            Integer knownGroup = namedGroups.get(name);
+            if (knownGroup != null) return knownGroup;
             byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
             return regex.nameToBackrefNumber(nameBytes, 0, nameBytes.length,
                     UTF8Encoding.INSTANCE, captures);
