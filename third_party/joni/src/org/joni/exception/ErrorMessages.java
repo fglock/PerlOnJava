@@ -71,6 +71,9 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Regexp modifier \"l\" may not appear twice";
     String PERL_MODIFIER_A_MAXIMUM_TWICE =
             "Regexp modifier \"a\" may appear a maximum of twice";
+    String PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE =
+            "Missing right brace on \\o{}";
+    String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
 
     /* values error (syntax error) */
     String TOO_BIG_NUMBER = "too big number";
