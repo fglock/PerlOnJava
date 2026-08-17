@@ -579,6 +579,7 @@ final class JoniRegexPattern {
         private int regionEnd;
         private int nextStart;
         private boolean matched;
+        private int committedLastClosedCapture = -1;
         private final boolean hasControlVerbState;
         private final List<RuntimeRegexCallback> callbacks;
         private PerlCalloutHandler calloutHandler;
@@ -612,6 +613,7 @@ final class JoniRegexPattern {
         private boolean find(int option, boolean anchored) {
             if (nextStart > regionEnd) {
                 matched = false;
+                committedLastClosedCapture = -1;
                 if (hasControlVerbState) RuntimeRegex.updateControlVerbVariables(null, null);
                 return false;
             }
@@ -635,8 +637,21 @@ final class JoniRegexPattern {
                         matcher.getControlMark(), matcher.getControlError());
             }
             if (calloutHandler != null) calloutHandler.finish(matched);
-            if (!matched) return false;
-            captures = matcher.getEagerRegion();
+            if (!matched) {
+                committedLastClosedCapture = -1;
+                return false;
+            }
+            captures = Region.newRegion(regex.numberOfCaptures() + 1);
+            for (int group = 0; group <= regex.numberOfCaptures(); group++) {
+                captures.setBeg(group, matcher.captureBegin(group));
+                captures.setEnd(group, matcher.captureEnd(group));
+            }
+            committedLastClosedCapture = matcher.lastClosedCapture();
+            if (committedLastClosedCapture <= 0
+                    || captures.getBeg(committedLastClosedCapture) < 0
+                    || captures.getEnd(committedLastClosedCapture) < 0) {
+                committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
+            }
             int start = start();
             int end = end();
             nextStart = end > start ? end : advanceCodePoint(end);
@@ -676,11 +691,24 @@ final class JoniRegexPattern {
         }
 
         @Override public int groupCount() { return regex.numberOfCaptures(); }
-        @Override public int lastClosedCapture() { return matcher.lastClosedCapture(); }
+        @Override public int lastClosedCapture() { return committedLastClosedCapture; }
         @Override public String controlMark() { return matcher.getControlMark(); }
         @Override public String controlError() { return matcher.getControlError(); }
         @Override public Map<String, Integer> namedGroups() { return namedGroups; }
         @Override public String patternDescription() { return sourcePattern; }
+
+        private static int deriveCommittedLastClosedCapture(Region region) {
+            int latestCapture = -1;
+            int latestEnd = -1;
+            for (int group = 1; group < region.getNumRegs(); group++) {
+                int end = region.getEnd(group);
+                if (region.getBeg(group) >= 0 && end > latestEnd) {
+                    latestCapture = group;
+                    latestEnd = end;
+                }
+            }
+            return latestCapture;
+        }
 
         private int groupOffset(String name, boolean begin) {
             requireMatch();

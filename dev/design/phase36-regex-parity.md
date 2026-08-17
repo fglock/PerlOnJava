@@ -222,11 +222,13 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phase 4 source preservation at 423/555
+### Current Status: Joni default; Phase 4 recursive captures at 432/555
 
 Executable callback source and literal trailing `/x` comments survive canonical
-regex-object stringification on both execution backends. The focused
-`pat_re_eval.t` gate currently executes all 555 assertions with 423 passing.
+regex-object stringification on both execution backends. Recursive Joni call
+frames now preserve the Perl-visible caller capture view for optimistic
+callbacks and committed matches, including `$1`, `$^N`, and `$+`. The focused
+`pat_re_eval.t` gate executes all 555 assertions with 432 passing.
 
 ### Completed Phases
 
@@ -240,22 +242,24 @@ regex-object stringification on both execution backends. The focused
 
 ### Next Steps
 
-1. Correct recursion-visible capture restoration so `$^N` and `$+` expose the
-   selected Perl capture state after optimistic callbacks and nested dynamic
-   programs; use the first failing `pat_re_eval.t` block as the focused oracle.
-2. Capture forced-Java and forced-Joni results for the full 80-file direct regex
+1. Fix the next executable-pattern capture boundary: tied/interpolated dynamic
+   programs must observe the current outer capture while resolving their value
+   (`pat_re_eval.t` test 511), without caching magic or reference stringification.
+2. Normalize dynamic-program compilation diagnostics, beginning with the
+   nonexistent-group wording exercised by `pat_re_eval.t` test 515.
+3. Capture forced-Java and forced-Joni results for the full 80-file direct regex
    corpus, compare both against PR 958, and classify any newly exposed gaps.
-3. Run the applicable `pat_advanced.t` control-verb and condition sections,
+4. Run the applicable `pat_advanced.t` control-verb and condition sections,
    then close Phase 2 if their direct and interpreter results agree.
-4. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
+5. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
    closes, remove its hunk and rerun the targeted importer so validation uses
    the original Perl 5.44 assertions.
-5. Capture the clean-branch JVM and interpreter 80-file baselines and compare
+6. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-6. Inventory the remaining uncommon Unicode aliases and invalid-property
+7. Inventory the remaining uncommon Unicode aliases and invalid-property
    diagnostics against Perl 5.44's bundled tables, then move the next
    matcher-semantic preprocessor slice into Joni.
-7. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+8. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 

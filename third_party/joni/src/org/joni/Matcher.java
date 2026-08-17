@@ -116,6 +116,19 @@ public abstract class Matcher extends IntHolder {
         return msaEnd;
     }
 
+    /** Capture offsets exposed after a match; bytecode matchers may provide a language view. */
+    public int captureBegin(int capture) {
+        if (capture == 0) return msaBegin;
+        Region region = getEagerRegion();
+        return capture < region.getNumRegs() ? region.getBeg(capture) : Region.REGION_NOTPOS;
+    }
+
+    public int captureEnd(int capture) {
+        if (capture == 0) return msaEnd;
+        Region region = getEagerRegion();
+        return capture < region.getNumRegs() ? region.getEnd(capture) : Region.REGION_NOTPOS;
+    }
+
     /** Most recently closed active capture; engines without this view return -1. */
     public int lastClosedCapture() {
         return -1;
