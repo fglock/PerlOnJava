@@ -44,4 +44,10 @@ public class TestPerl extends Test {
 	@Override
     public void test() throws Exception {
     }
+
+    @org.junit.Test(timeout = 5000)
+    public void testNestedQuantifierCombinationExplosion() throws Exception {
+        x2s(".X(.+)+X", "bXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, 4);
+        org.junit.Assert.assertEquals(0, nfail + nerror);
+    }
 }

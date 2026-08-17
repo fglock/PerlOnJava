@@ -1355,10 +1355,11 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case NodeType.QTFR:
-            if (Config.USE_CEC) {
-                len = compileCECLengthQuantifierNode((QuantifierNode)node);
+            QuantifierNode quantifier = (QuantifierNode)node;
+            if (Config.USE_CEC && regex.numCombExpCheck > 0 && quantifier.combExpCheckNum > 0) {
+                len = compileCECLengthQuantifierNode(quantifier);
             } else {
-                len = compileNonCECLengthQuantifierNode((QuantifierNode)node);
+                len = compileNonCECLengthQuantifierNode(quantifier);
             }
             break;
 
