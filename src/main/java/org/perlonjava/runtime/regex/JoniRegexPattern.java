@@ -624,27 +624,16 @@ final class JoniRegexPattern {
         private final int[] byteToChar;
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
-        private final RegexCallbackMutationSnapshot mutations;
         private final int initialLocalLevel;
         private RuntimeScalar completedResult;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                            RegexFlags outerFlags) {
-            this(input, byteToChar, callbacks, outerFlags,
-                    RegexCallbackMutationSnapshot.capture());
-        }
-
-        private PerlCalloutHandler(String input, int[] byteToChar,
-                                   List<RuntimeRegexCallback> callbacks,
-                                   RegexFlags outerFlags,
-                                   RegexCallbackMutationSnapshot mutations) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
-            this.mutations = mutations;
             this.initialLocalLevel = DynamicVariableManager.getLocalLevel();
-            for (RuntimeRegexCallback callback : callbacks) mutations.include(callback.code);
         }
 
         @Override
@@ -704,8 +693,7 @@ final class JoniRegexPattern {
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
                             value.value instanceof RuntimeRegex runtimeRegex
                                     && runtimeRegex.getRegexFlags() != null
-                                    ? runtimeRegex.getRegexFlags() : outerFlags,
-                            mutations);
+                                    ? runtimeRegex.getRegexFlags() : outerFlags);
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
                     evaluation.token());
         }
@@ -733,7 +721,6 @@ final class JoniRegexPattern {
                             new RuntimeScalar(callback.code), enclosingSelf);
                 }
             }
-            mutations.include(callback.code);
             publishProvisional(match);
             var callbackLocations = PerlRuntime.current().executionState()
                     .activeRegexCallbackLocations;
@@ -763,7 +750,6 @@ final class JoniRegexPattern {
                 // The matcher cannot register an unwind token when the callout
                 // itself throws. Restore the provisional match and dynamic
                 // scope here before the exception crosses an eval boundary.
-                mutations.restore();
                 restoreCallbackScope(localLevel, savedRegex, previousR);
                 throw failure;
             } finally {
@@ -788,7 +774,6 @@ final class JoniRegexPattern {
 
         void finish(boolean matched) {
             try {
-                if (!matched) mutations.restore();
                 if (matched && completedResult != null) {
                     GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
                             .set(completedResult);
@@ -799,11 +784,7 @@ final class JoniRegexPattern {
         }
 
         void abort() {
-            try {
-                mutations.restore();
-            } finally {
-                DynamicVariableManager.popToLocalLevel(initialLocalLevel);
-            }
+            DynamicVariableManager.popToLocalLevel(initialLocalLevel);
         }
 
         private void restore(Token token, boolean completed) {
