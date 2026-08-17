@@ -26,11 +26,17 @@ public final class AnchorNode extends Node {
     public final boolean asciiRange;
     public Node target;
     public int charLength;
+    public int variableLookBehindMin;
+    public int variableLookBehindMax;
+    public int variableLookBehindTargetLength;
 
     public AnchorNode(int type, boolean asciiRange) {
         super(ANCHOR);
         this.type = type;
         charLength = -1;
+        variableLookBehindMin = -1;
+        variableLookBehindMax = -1;
+        variableLookBehindTargetLength = -1;
         this.asciiRange = asciiRange;
     }
 

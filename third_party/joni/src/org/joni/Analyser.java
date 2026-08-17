@@ -1414,7 +1414,9 @@ final class Analyser extends Parser {
             node.charLength = len;
             break;
         case GET_CHAR_LEN_VARLEN:
-            newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+            if (!setupBoundedQuantifierLookBehind(node)) {
+                newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+            }
             break;
         case GET_CHAR_LEN_TOP_ALT_VARLEN:
             if (syntax.differentLengthAltLookBehind()) {
@@ -1424,6 +1426,23 @@ final class Analyser extends Parser {
             }
         }
         return node;
+    }
+
+    private boolean setupBoundedQuantifierLookBehind(AnchorNode node) {
+        if (!syntax.op2OptionPerl() || !(node.target instanceof QuantifierNode quantifier)
+                || isRepeatInfinite(quantifier.upper)) {
+            return false;
+        }
+        int targetLength = getCharLengthTree(quantifier.target);
+        if (returnCode != 0 || targetLength < 0
+                || MinMaxLen.distanceMultiply(targetLength, quantifier.upper) > 255) {
+            return false;
+        }
+        node.variableLookBehindMin = quantifier.lower;
+        node.variableLookBehindMax = quantifier.upper;
+        node.variableLookBehindTargetLength = targetLength;
+        returnCode = 0;
+        return true;
     }
 
     private void nextSetup(Node node, Node nextNode) {

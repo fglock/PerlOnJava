@@ -107,7 +107,10 @@ final class JoniRegexPattern {
             String property = pattern.substring(i + 3, end).trim();
             String unnegated = property.startsWith("^")
                     ? property.substring(1).trim() : property;
-            if (!unnegated.matches("^(.*::)?([Ii][sSNn]).+")) {
+            boolean userDefined = unnegated.matches("^(.*::)?([Ii][sSNn]).+");
+            boolean scriptExtensions = unnegated.matches(
+                    "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
+            if (!userDefined && !scriptExtensions) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
@@ -118,7 +121,9 @@ final class JoniRegexPattern {
                 translated.append("(?-i:").append(propertyClass).append(')');
             } catch (IllegalArgumentException error) {
                 String message = error.getMessage();
-                if (message != null && message.contains("in expansion of")) throw error;
+                if (!userDefined || message != null && message.contains("in expansion of")) {
+                    throw error;
+                }
                 translated.append("[\\s\\S]");
                 deferred = true;
             }

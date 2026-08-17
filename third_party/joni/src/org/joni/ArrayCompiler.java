@@ -1084,10 +1084,16 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case AnchorType.LOOK_BEHIND:
+            if (node.variableLookBehindMin >= 0) {
+                return compileLengthVariableLookBehind(node, false);
+            }
             len = OPSize.LOOK_BEHIND + tlen;
             break;
 
         case AnchorType.LOOK_BEHIND_NOT:
+            if (node.variableLookBehindMin >= 0) {
+                return compileLengthVariableLookBehind(node, true);
+            }
             len = OPSize.PUSH_LOOK_BEHIND_NOT + tlen + OPSize.FAIL_LOOK_BEHIND_NOT;
             break;
 
@@ -1096,6 +1102,24 @@ final class ArrayCompiler extends Compiler {
             break;
         } // switch
         return len;
+    }
+
+    private int compileLengthVariableLookBehind(AnchorNode node, boolean negative) {
+        QuantifierNode quantifier = (QuantifierNode)node.target;
+        int targetLength = compileLengthTree(quantifier.target);
+        int variants = node.variableLookBehindMax - node.variableLookBehindMin + 1;
+        int length = 0;
+        for (int count = node.variableLookBehindMin;
+                count <= node.variableLookBehindMax; count++) {
+            int bodyLength = targetLength * count;
+            length += negative
+                    ? OPSize.PUSH_LOOK_BEHIND_NOT + bodyLength + OPSize.FAIL_LOOK_BEHIND_NOT
+                    : OPSize.LOOK_BEHIND + bodyLength;
+        }
+        if (!negative && variants > 1) {
+            length += (variants - 1) * (OPSize.PUSH + OPSize.JUMP);
+        }
+        return length;
     }
 
     @Override
@@ -1168,6 +1192,10 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case AnchorType.LOOK_BEHIND:
+            if (node.variableLookBehindMin >= 0) {
+                compileVariableLookBehind(node, false);
+                break;
+            }
             addOpcode(OPCode.LOOK_BEHIND);
             if (node.charLength < 0) {
                 n = analyser.getCharLengthTree(node.target);
@@ -1180,6 +1208,10 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case AnchorType.LOOK_BEHIND_NOT:
+            if (node.variableLookBehindMin >= 0) {
+                compileVariableLookBehind(node, true);
+                break;
+            }
             regex.requireStack = true;
             len = compileLengthTree(node.target);
             addOpcodeRelAddr(OPCode.PUSH_LOOK_BEHIND_NOT, len + OPSize.FAIL_LOOK_BEHIND_NOT);
@@ -1305,6 +1337,50 @@ final class ArrayCompiler extends Compiler {
             int[]tmp = new int[length];
             System.arraycopy(code, 0, tmp, 0, code.length);
             code = tmp;
+        }
+    }
+
+    private void compileVariableLookBehind(AnchorNode node, boolean negative) {
+        QuantifierNode quantifier = (QuantifierNode)node.target;
+        int targetCodeLength = compileLengthTree(quantifier.target);
+        if (negative) {
+            regex.requireStack = true;
+            for (int count = node.variableLookBehindMin;
+                    count <= node.variableLookBehindMax; count++) {
+                int bodyLength = targetCodeLength * count;
+                addOpcodeRelAddr(OPCode.PUSH_LOOK_BEHIND_NOT,
+                        bodyLength + OPSize.FAIL_LOOK_BEHIND_NOT);
+                addLength(node.variableLookBehindTargetLength * count);
+                compileTreeNTimes(quantifier.target, count);
+                addOpcode(OPCode.FAIL_LOOK_BEHIND_NOT);
+            }
+            return;
+        }
+
+        int variants = node.variableLookBehindMax - node.variableLookBehindMin + 1;
+        int[] counts = new int[variants];
+        int[] bodies = new int[variants];
+        int remaining = 0;
+        for (int i = 0; i < variants; i++) {
+            counts[i] = quantifier.greedy
+                    ? node.variableLookBehindMax - i : node.variableLookBehindMin + i;
+            bodies[i] = OPSize.LOOK_BEHIND + targetCodeLength * counts[i];
+            remaining += bodies[i];
+            if (i + 1 < variants) remaining += OPSize.PUSH + OPSize.JUMP;
+        }
+        regex.requireStack = variants > 1 || regex.requireStack;
+        for (int i = 0; i < variants; i++) {
+            if (i + 1 < variants) {
+                addOpcodeRelAddr(OPCode.PUSH, bodies[i] + OPSize.JUMP);
+            }
+            addOpcode(OPCode.LOOK_BEHIND);
+            addLength(node.variableLookBehindTargetLength * counts[i]);
+            compileTreeNTimes(quantifier.target, counts[i]);
+            remaining -= bodies[i];
+            if (i + 1 < variants) {
+                remaining -= OPSize.PUSH + OPSize.JUMP;
+                addOpcodeRelAddr(OPCode.JUMP, remaining);
+            }
         }
     }
 
