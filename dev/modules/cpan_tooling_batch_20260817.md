@@ -26,7 +26,7 @@ their complete output under `/tmp`.
 
 ## Progress Tracking
 
-### Current Status: implementation and local validation complete
+### Current Status: implementation complete; PR #992 open with CI passing
 
 ### Completed Phases
 
@@ -78,8 +78,8 @@ their complete output under `/tmp`.
 
 ### Next Steps
 
-1. Open the pull request.
-2. Monitor Linux and Windows CI and address any platform-specific failures.
+1. Await review of PR #992.
+2. Merge after approval.
 
 ### Open Questions
 
