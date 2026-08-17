@@ -9,8 +9,12 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class UnicodeResolver {
+    private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
+            "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*$");
+
     private static final String[] PERL_UNICODE_AGE_VERSIONS = {
         "1.1", "2.0", "2.1", "3.0", "3.1", "3.2", "4.0", "4.1",
         "5.0", "5.1", "5.2", "6.0", "6.1", "6.2", "6.3", "7.0",
@@ -610,7 +614,7 @@ public class UnicodeResolver {
 
             String property = pattern.substring(slash + 3, end).trim();
             if (property.startsWith("^")) property = property.substring(1).trim();
-            if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
+            if (isUserDefinedPropertyName(property)) {
                 // Preloading is an optimization for callbacks that are already
                 // available. Perl permits qr// to contain a forward reference
                 // to a user property; RegexPreprocessor represents that with a
@@ -656,11 +660,9 @@ public class UnicodeResolver {
                 }
             }
 
-            // Check for user-defined properties (Is... or In...)
-            // Perl treats ANY property starting with Is/In (case-insensitive prefix)
-            // as potentially user-defined, regardless of the character after the prefix
-            // (e.g., Is_q, IsMyProp, InMyBlock all trigger user-defined lookup)
-            if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
+            // User-defined properties require an exact Is/In prefix on the final
+            // identifier. Lowercase variants are ordinary unknown properties.
+            if (isUserDefinedPropertyName(property)) {
                 String userProp = tryUserDefinedProperty(
                         property, recursionSet, caseInsensitive);
                 if (userProp != null) {
@@ -873,6 +875,10 @@ public class UnicodeResolver {
             }
             throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + property, e);
         }
+    }
+
+    static boolean isUserDefinedPropertyName(String property) {
+        return property != null && USER_DEFINED_PROPERTY_NAME.matcher(property).matches();
     }
 
     private static String translatePerlAgeProperty(String property, boolean negated) {

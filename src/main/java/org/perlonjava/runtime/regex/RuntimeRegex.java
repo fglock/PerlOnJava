@@ -65,7 +65,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final int MULTILINE = Pattern.MULTILINE;
     private static final int DOTALL = Pattern.DOTALL;
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
-            Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:[Ii][sS]|[Ii][nN])[A-Za-z0-9_]*)}");
+            Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
+    private static final Pattern MALFORMED_USER_DEFINED_PROPERTY_PATTERN =
+            Pattern.compile("(?:^|::)(?:Is|In)::");
     private static final Pattern UNICODE_PROPERTY_PATTERN =
             Pattern.compile("\\\\[pP]\\{");
     // Maximum size for each runtime's regex cache.
@@ -506,7 +508,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static boolean requiresRuntimeUnicodePropertyResolution(String patternString) {
         if (patternString == null) return false;
         return java.util.regex.Pattern.compile(
-                "\\\\[pP]\\{\\^?\\s*(?:[^}]*::)?[Ii][sSnN][^}]+}")
+                "\\\\[pP]\\{\\^?\\s*(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*\\s*}")
                 .matcher(patternString).find();
     }
 
@@ -733,6 +735,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         || "invalid backref number".equals(e.getMessage())) {
                     throw new PerlCompilerException("Reference to nonexistent group");
                 }
+                String invalidProperty = invalidUnicodePropertyName(e.getMessage());
+                if (invalidProperty != null) {
+                    if (MALFORMED_USER_DEFINED_PROPERTY_PATTERN.matcher(invalidProperty).find()) {
+                        throw new PerlCompilerException(
+                                "Illegal user-defined property name \"" + invalidProperty + "\"");
+                    }
+                    throw new PerlCompilerException(
+                            "Can't find Unicode property definition \"" + invalidProperty + "\"");
+                }
                 // PerlJavaUnimplementedException extends PerlCompilerException, so check
                 // the more specific type first. Real syntax errors (PerlCompilerException
                 // but NOT PerlJavaUnimplementedException) are always fatal.
@@ -789,6 +800,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
         return regex;
+    }
+
+    private static String invalidUnicodePropertyName(String message) {
+        if (message == null) return null;
+        String prefix = "invalid character property name <";
+        int start = message.indexOf(prefix);
+        if (start < 0) return null;
+        start += prefix.length();
+        int end = message.indexOf('>', start);
+        return end < 0 ? null : message.substring(start, end);
     }
 
     private static int debugMode(String modifiers) {

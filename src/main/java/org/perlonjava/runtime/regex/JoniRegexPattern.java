@@ -120,7 +120,7 @@ final class JoniRegexPattern {
             String property = pattern.substring(i + 3, end).trim();
             String unnegated = property.startsWith("^")
                     ? property.substring(1).trim() : property;
-            boolean userDefined = unnegated.matches("^(.*::)?([Ii][sSNn]).+");
+            boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(unnegated);
             boolean scriptExtensions = unnegated.matches(
                     "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
             boolean frontendProperty = unnegated.matches(

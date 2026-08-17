@@ -224,6 +224,13 @@ compatibility contract.
 
 ### Current Status: Joni default; Phase 1 remediation and Phase 3 Unicode active
 
+Invalid Unicode properties now remain fatal under
+`JPERL_UNIMPLEMENTED=warn`, and only exact `Is`/`In` final-name prefixes enter
+Perl's user-property callback path. A 39-assertion standard-Perl oracle passes
+on JVM and interpreter; the unchanged `regexp_unicode_prop.t` runner improves
+from 1,039/1,110 to 1,054/1,110, leaving built-in aliases and six
+user-property-definition diagnostic assertions as separate work.
+
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
 frames now preserve the Perl-visible caller capture view for optimistic
@@ -339,6 +346,10 @@ matcher-specific timeouts on both execution backends.
     offsets and Java matcher offsets for scalar `/g`, `\G`, fast scanners, and
     substitution callbacks. The 11-assertion supplementary-character oracle
     passes on system Perl, JVM, and interpreter.
+  - [x] Restricted user-defined property dispatch to Perl's exact `Is`/`In`
+    naming convention and made unknown-property diagnostics fatal even in
+    compatibility warning mode. The focused oracle passes 39/39 on system
+    Perl, JVM, and interpreter; `regexp_unicode_prop.t` gains 15 assertions.
   - [ ] Complete the remaining Unicode aliases and diagnostic parity inventory.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -362,9 +373,9 @@ matcher-specific timeouts on both execution backends.
    slices, then rerun the forced-Joni corpus from the new combined head.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-4. Inventory the remaining uncommon Unicode aliases and invalid-property
-   diagnostics against Perl 5.44's bundled tables, then move the next
-   matcher-semantic preprocessor slice into Joni.
+4. Integrate the exact invalid-property dispatch/diagnostic slice, then finish
+   PerlOnJava4's built-in Unicode-alias slice and the six residual
+   user-property-definition diagnostic assertions against Perl 5.44 behavior.
 5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
