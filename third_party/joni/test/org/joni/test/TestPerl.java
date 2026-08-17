@@ -51,6 +51,13 @@ public class TestPerl extends Test {
         xerrs("(?da:foo)", ErrorMessages.PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
         xerrs("(?lil:foo)", ErrorMessages.PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE);
         xerrs("(?aaia:foo)", ErrorMessages.PERL_MODIFIER_A_MAXIMUM_TWICE);
+        xerrs("\\o{7", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE);
+        xerrs("[\\o{7]", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE);
+        xerrs("\\o{}", ErrorMessages.PERL_EMPTY_OCTAL_ESCAPE);
+        xerrs("[\\o{}]", ErrorMessages.PERL_EMPTY_OCTAL_ESCAPE);
+        x2s("\\o{141}", "a", 0, 1);
+        x2s("\\o{ 141 }", "a", 0, 1);
+        ns("\\o{789}", "");
     }
 
     @org.junit.Test(timeout = 5000)
