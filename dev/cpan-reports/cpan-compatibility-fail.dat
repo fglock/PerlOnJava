@@ -1706,7 +1706,7 @@ Catmandu::Importer::WoS	FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-
 Catmandu::Importer::Zotero	FAIL	4		4 subtests failed in test files	2026-08-15		
 Catmandu::PICAplus	FAIL	4		2 subtests failed in test files	2026-08-17		
 Catmandu::WoS::AuthWSDL	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-08-15		
-CayleyDickson	FAIL			No parseable output	2026-05-11		
+CayleyDickson	FAIL			No parseable output	2026-08-17		
 Cdk	FAIL			Unknown test outcome	2026-05-18		
 CellBIS::SQL::Abstract	FAIL	40	40		2026-05-17		
 CentOS::Releases	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-08-14		
@@ -2544,6 +2544,7 @@ DarkPAN::Compare	FAIL			TIMEOUT (soft limit 1200s exceeded; no output for 792s)	
 DarkSky::API	FAIL				2026-05-17		
 Data::Alias	FAIL	1		29/33 test programs failed; 0/1 subtests failed	2026-06-18		
 Data::CEFACT::Unit	FAIL	3	1	2/3 subtests failed	2026-05-19		
+Data::CSel::WrapStruct	FAIL			TIMEOUT (runtime >300s; last output 30s ago)	2026-08-17		
 Data::Checker	FAIL	15		2/9 test programs failed; 0/15 subtests failed	2026-08-14		
 Data::Checks	FAIL			Build failed	2026-08-15		
 Data::Clean	FAIL	10	9	1/10 subtests failed	2026-05-10		
@@ -7961,6 +7962,7 @@ Throwable::SugarFactory	FAIL			Unknown test outcome	2026-04-21
 Thrust	FAIL				2026-05-18		
 TiVo::Calypso	FAIL	7	6	1/7 subtests failed	2026-05-12		
 Tic::Bindings	FAIL			No parseable output	2026-08-14		
+Tickit::Async	FAIL			TIMEOUT (runtime >300s; last output 19s ago)	2026-08-17		
 Tickit::Widget::Choice	FAIL			Unknown test outcome	2026-08-13		
 Tickit::Widget::Decoration	FAIL	9	7	2/9 subtests failed; 2/2 test programs failed	2026-08-11		
 Tickit::Widget::Table	FAIL	15	13	2/15 subtests failed; 2/3 test programs failed	2026-08-17		

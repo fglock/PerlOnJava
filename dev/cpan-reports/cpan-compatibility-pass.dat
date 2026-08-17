@@ -973,6 +973,7 @@ Class::Util	PASS	344	344		2026-06-18		c3e9fa049
 Class::Utils	PASS	22	22		2026-06-18		c3e9fa049
 Class::Virtual	PASS	34	34		2026-05-19		b5536d190
 Class::WeakSingleton	PASS	18	18		2026-08-13		cc69cbb4c
+Class::XPath	PASS	230	230		2026-08-17		6c5545d16
 Class::orMapper	PASS	1	1		2026-08-14		424ad3c8f
 ClassLoader	PASS	5	5		2026-05-12		312b4f902
 ClearCase::Region_Cfg_Parser	PASS	1	1		2026-05-10		1e95a0902
