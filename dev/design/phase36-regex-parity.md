@@ -150,17 +150,44 @@ allocate callback state or callback frames.
 
 ### Phase 6 — Integration and release
 
-1. Run the complete direct and `_thr.t` regex matrix on JVM and interpreter
+1. Retire regex-test accommodations incrementally. Whenever a PerlOnJava fix
+   makes a `dev/import-perl5/patches/pat.t.patch` hunk unnecessary, remove that
+   hunk and rerun `perl dev/import-perl5/sync.pl --only perl5/t/re/pat.t` to
+   restore the unchanged upstream assertions. Do not hand-edit the imported
+   test to approximate upstream content.
+2. Delete the `pat.t.patch` configuration entry and patch file once its final
+   hunk is obsolete. Rerun the targeted sync twice and require the second run to
+   produce no diff, proving that the checked-in test is the unpatched Perl 5.44
+   source and the import is idempotent.
+3. Run the complete direct and `_thr.t` regex matrix on JVM and interpreter
    backends and compare it file-by-file with both the Phase 0 result and PR 958.
-2. Run unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and every CPAN
+4. Run unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and every CPAN
    suite whose regex capability policy is removed.
-3. Run warning-free `make`, Joni upstream tests, packaging and license checks,
+5. Run warning-free `make`, Joni upstream tests, packaging and license checks,
    and the thread release matrix.
-4. Rebase each focused delivery slice onto current master. Require green Ubuntu
+6. Rebase each focused delivery slice onto current master. Require green Ubuntu
    and Windows CI before merging and beginning the next slice.
 
 Exit criteria: all semantic gates pass, no previously passing file regresses,
-and documentation reports optimizer/debug-only exclusions explicitly.
+the regex corpus is reproduced from `dev/import-perl5/sync.pl` without a regex
+test patch, and documentation reports optimizer/debug-only exclusions
+explicitly.
+
+### Upstream patch retirement queue
+
+`pat.t.patch` is reduced in place as these gates close; the corresponding
+upstream hunk is restored by the targeted importer before its result is counted:
+
+| Upstream section | Gate before restoring the hunk |
+|---|---|
+| `(*ACCEPT)` capture-close cases | Exact success and capture values pass without converting fatal setup failures to warnings |
+| `pos` inside `(?{...})` | Callback-visible `pos`, captures, and unwind behavior pass on JVM and interpreter |
+| reference stringification diagnostics | Unqualified `diag` resolves in the original lexical/package context |
+| `${^LAST_SUCCESSFUL_PATTERN}` | Dynamic empty-pattern reuse, copying, matching, and substitution pass |
+| `(??{...})` code blocks interpolated from arrays | All original runtime-eval and side-effect assertions pass without an enclosing compatibility `eval` |
+
+The queue is complete only when `config.yaml` no longer names `pat.t.patch`, the
+patch file is gone, and two consecutive targeted syncs leave a clean tree.
 
 ## Test Contract
 
@@ -174,6 +201,9 @@ and documentation reports optimizer/debug-only exclusions explicitly.
   result and may change only resources and ownership context.
 - Unsupported syntax remains fatal until its complete semantic gate passes.
 - Do not alter existing Perl core tests to fit PerlOnJava behavior.
+- Treat the import manifest and its patch files as temporary compatibility debt:
+  remove each regex-test patch hunk as soon as its guarded behavior passes, then
+  use a targeted `sync.pl` run to recover the exact upstream test source.
 - `make` must pass without warning output before every push.
 
 ## Performance Gate
@@ -192,7 +222,11 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default with native scoped `/aa`; Phases 0-4 in progress
+### Current Status: Joni default; Phase 4 source preservation at 423/555
+
+Executable callback source and literal trailing `/x` comments survive canonical
+regex-object stringification on both execution backends. The focused
+`pat_re_eval.t` gate currently executes all 555 assertions with 423 passing.
 
 ### Completed Phases
 
@@ -206,16 +240,22 @@ compatibility contract.
 
 ### Next Steps
 
-1. Capture forced-Java and forced-Joni results for the full 80-file direct regex
+1. Correct recursion-visible capture restoration so `$^N` and `$+` expose the
+   selected Perl capture state after optimistic callbacks and nested dynamic
+   programs; use the first failing `pat_re_eval.t` block as the focused oracle.
+2. Capture forced-Java and forced-Joni results for the full 80-file direct regex
    corpus, compare both against PR 958, and classify any newly exposed gaps.
-2. Run the applicable `pat_advanced.t` control-verb and condition sections,
+3. Run the applicable `pat_advanced.t` control-verb and condition sections,
    then close Phase 2 if their direct and interpreter results agree.
-3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
+4. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
+   closes, remove its hunk and rerun the targeted importer so validation uses
+   the original Perl 5.44 assertions.
+5. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-4. Inventory the remaining uncommon Unicode aliases and invalid-property
+6. Inventory the remaining uncommon Unicode aliases and invalid-property
    diagnostics against Perl 5.44's bundled tables, then move the next
    matcher-semantic preprocessor slice into Joni.
-5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+7. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 

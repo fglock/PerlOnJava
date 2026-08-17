@@ -3296,8 +3296,72 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Construct the Perl-like regex string with flags
         String displayPattern = executableCallbacks.isEmpty()
                 ? patternString
-                : RuntimeRegexTemplate.displayPattern(patternString);
+                : RuntimeRegexTemplate.displayPattern(patternString, executableCallbacks);
+        if (regexFlags.isExtended() && endsInExtendedModeComment(displayPattern)) {
+            // Perl terminates a trailing /x comment before adding the synthetic
+            // close parenthesis of the canonical (?^flags:pattern) wrapper.
+            displayPattern += "\n";
+        }
         return "(?^" + regexFlags.toFlagString() + ":" + displayPattern + ")";
+    }
+
+    private static boolean endsInExtendedModeComment(String pattern) {
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean inComment = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (inComment) {
+                if (ch == '\n' || ch == '\r') inComment = false;
+                continue;
+            }
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '[') {
+                inClass = true;
+            } else if (ch == ']' && inClass) {
+                inClass = false;
+            } else if (ch == '(' && !inClass
+                    && (pattern.startsWith("(?{", i) || pattern.startsWith("(??{", i))) {
+                i = skipExecutableRegexBlock(pattern,
+                        i + (pattern.startsWith("(??{", i) ? 3 : 2));
+            } else if (ch == '(' && !inClass && i + 2 < pattern.length()
+                    && pattern.charAt(i + 1) == '?' && pattern.charAt(i + 2) == '#') {
+                i += 3;
+                while (i < pattern.length() && pattern.charAt(i) != ')') {
+                    if (pattern.charAt(i) == '\\' && i + 1 < pattern.length()) i++;
+                    i++;
+                }
+            } else if (ch == '#' && !inClass) {
+                inComment = true;
+            }
+        }
+        return inComment;
+    }
+
+    private static int skipExecutableRegexBlock(String pattern, int braceIndex) {
+        int depth = 1;
+        char quote = 0;
+        boolean escaped = false;
+        for (int i = braceIndex + 1; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (quote != 0) {
+                if (ch == quote) quote = 0;
+            } else if (ch == '\'' || ch == '"') {
+                quote = ch;
+            } else if (ch == '{') {
+                depth++;
+            } else if (ch == '}' && --depth == 0) {
+                return i;
+            }
+        }
+        return pattern.length() - 1;
     }
 
     String toExecutableString() {

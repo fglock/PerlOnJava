@@ -187,14 +187,19 @@ public final class RuntimeRegexTemplate {
         return remapped.toString();
     }
 
-    static String displayPattern(String executablePattern) {
+    static String displayPattern(String executablePattern,
+                                 List<RuntimeRegexCallback> callbacks) {
         if (executablePattern == null || executablePattern.isEmpty()) {
             return executablePattern;
         }
         Matcher matcher = CALLOUT_ID.matcher(executablePattern);
         StringBuilder display = new StringBuilder();
         while (matcher.find()) {
-            String replacement = "DYNAMIC".equals(matcher.group(1)) ? "(??{})" : "(?{})";
+            int callbackId = Integer.parseInt(matcher.group(2));
+            String replacement = callbackId >= 0 && callbackId < callbacks.size()
+                    && callbacks.get(callbackId).source != null
+                    ? callbacks.get(callbackId).source
+                    : "DYNAMIC".equals(matcher.group(1)) ? "(??{})" : "(?{})";
             matcher.appendReplacement(display, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(display);
