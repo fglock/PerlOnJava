@@ -23,6 +23,11 @@ use constant O_APPEND   => 02000;  # Append mode - writes always go to end of fi
 use constant O_NONBLOCK => 04000;  # Non-blocking mode
 use constant O_NDELAY   => O_NONBLOCK;  # Synonym for O_NONBLOCK
 use constant O_NOFOLLOW => 0400000; # Fail if the final path component is a symlink
+# Binary/text mode flags are meaningful on Windows. Perl exposes both on
+# every platform; on Unix-like systems (and PerlOnJava's Java streams) they
+# are portable no-ops.
+use constant O_BINARY   => 0;
+use constant O_TEXT     => 0;
 
 # Seek constants
 use constant SEEK_SET   => 0;      # Seek from beginning of file

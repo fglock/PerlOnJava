@@ -78,6 +78,30 @@
       "provider": "compatibility-shim",
       "shadow_policy": "forbidden",
       "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Scalar::Util",
+      "version": "1.70",
+      "distribution": "Scalar-List-Utils",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "List::Util",
+      "version": "1.70",
+      "distribution": "Scalar-List-Utils",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
+      "module": "Sub::Util",
+      "version": "1.70",
+      "distribution": "Scalar-List-Utils",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
     }
   ]
 }

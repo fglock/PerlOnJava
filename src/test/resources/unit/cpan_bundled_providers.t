@@ -14,7 +14,7 @@ if ($is_perlonjava) {
 ok(PerlOnJava::ProviderManifest->can('provider_for'), 'loaded provider manifest');
 
 my @providers = PerlOnJava::ProviderManifest->providers;
-is(scalar(@providers), 9, 'bundled-provider manifest has nine module entries');
+is(scalar(@providers), 12, 'bundled-provider manifest has twelve module entries');
 
 my %expected = (
     DBI                  => [ '1.643',  'bundled-perl' ],
@@ -26,6 +26,9 @@ my %expected = (
     'XML::LibXSLT'       => [ '2.003000', 'java-xs' ],
     'Set::Object'        => [ '1.43',   'compatibility-shim' ],
     'Package::Stash::XS' => [ '0.30',   'compatibility-shim' ],
+    'Scalar::Util'       => [ '1.70',   'java-xs' ],
+    'List::Util'         => [ '1.70',   'java-xs' ],
+    'Sub::Util'          => [ '1.70',   'java-xs' ],
 );
 
 for my $module (sort keys %expected) {
@@ -43,7 +46,7 @@ is_deeply(
 );
 
 SKIP: {
-    skip 'CPAN integration and provider runtime smoke are PerlOnJava-specific', 32
+    skip 'CPAN integration and provider runtime smoke are PerlOnJava-specific', 38
         unless $is_perlonjava;
 
     require CPAN::Module;
@@ -105,7 +108,7 @@ SKIP: {
         'expanded provider dependency retains its minimum version');
 
     SKIP: {
-        skip 'full provider loading is covered by the JVM smoke gate', 16
+        skip 'full provider loading is covered by the JVM smoke gate', 24
             if $ENV{JPERL_INTERPRETER};
         for my $module (sort keys %expected) {
             my $loaded = eval "require $module; 1";
