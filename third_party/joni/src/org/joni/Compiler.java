@@ -162,10 +162,11 @@ abstract class Compiler implements ErrorMessages {
             break;
 
         case NodeType.QTFR:
-            if (Config.USE_CEC) {
-                compileCECQuantifierNode((QuantifierNode)node);
+            QuantifierNode quantifier = (QuantifierNode)node;
+            if (Config.USE_CEC && regex.numCombExpCheck > 0 && quantifier.combExpCheckNum > 0) {
+                compileCECQuantifierNode(quantifier);
             } else {
-                compileNonCECQuantifierNode((QuantifierNode)node);
+                compileNonCECQuantifierNode(quantifier);
             }
             break;
 

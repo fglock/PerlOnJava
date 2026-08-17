@@ -1,0 +1,20 @@
+use strict;
+use warnings;
+use Test::More tests => 16;
+
+ok('A' =~ /^\p{L&}$/, 'L& matches a cased letter');
+ok('1' !~ /^\p{L&}$/, 'L& rejects a digit');
+ok(chr(0xAC00) =~ /^\p{HangulSyllables}$/, 'bare Hangul block alias matches');
+ok('A' !~ /^\p{HangulSyllables}$/, 'bare Hangul block alias rejects Latin');
+ok('A' =~ /^\p{Category=UppercaseLetter}$/, 'Category long value matches');
+ok('a' !~ /^\p{Category=UppercaseLetter}$/, 'Category long value rejects lowercase');
+ok(chr(0xFF) =~ /^\p{latin-1   supplement}$/, 'loose bare block alias matches');
+ok(chr(0x100) !~ /^\p{latin-1   supplement}$/, 'loose bare block alias rejects next block');
+ok('A' =~ /^\p{InBasicLatin}$/, 'InBasicLatin matches its block');
+ok(chr(0x80) !~ /^\p{InBasicLatin}$/, 'InBasicLatin rejects next block');
+ok(chr(0x80) =~ /^\p{InLatin1Supplement}$/, 'InLatin1Supplement matches');
+ok('A' !~ /^\p{InLatin1Supplement}$/, 'InLatin1Supplement rejects Basic Latin');
+ok(chr(0x100) =~ /^\p{InLatinExtendedA}$/, 'InLatinExtendedA matches');
+ok(chr(0xFF) !~ /^\p{InLatinExtendedA}$/, 'InLatinExtendedA rejects prior block');
+ok(chr(0x30A1) =~ /^\p{InKatakana}$/, 'InKatakana matches');
+ok(chr(0x3041) !~ /^\p{InKatakana}$/, 'InKatakana rejects Hiragana');

@@ -150,7 +150,7 @@ abstract class StackMachine extends Matcher implements StackType {
                     // same impl, reduce...
                     stateCheckBuff = new byte[size];
                 }
-                Arrays.fill(stateCheckBuff, offset, (size - offset), (byte)0);
+                Arrays.fill(stateCheckBuff, offset, size, (byte)0);
                 stateCheckBuffSize = size;
             } else {
                 stateCheckBuff = null; // reduce

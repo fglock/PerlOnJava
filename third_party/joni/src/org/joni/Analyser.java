@@ -130,7 +130,9 @@ final class Analyser extends Parser {
         }
 
         if (Config.USE_CEC) {
-            if (env.backrefedMem == 0 || (Config.USE_SUBEXP_CALL && env.numCall == 0)) {
+            if (env.backrefedMem == 0 &&
+                    (!Config.USE_SUBEXP_CALL || env.numCall == 0) &&
+                    !env.hasCallout) {
                 setupCombExpCheck(root, 0);
 
                 if (Config.USE_SUBEXP_CALL && env.hasRecursion) {

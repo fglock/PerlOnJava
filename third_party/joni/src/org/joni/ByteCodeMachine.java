@@ -1151,7 +1151,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             sprev = s;
             s += n;
         }
-        sprev = sbegin; // break;
     }
 
     private void opStateCheckAnyCharStarSb() {
@@ -1165,7 +1164,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             sprev = s;
             s++;
         }
-        sprev = sbegin; // break;
     }
 
     // CEC
@@ -1181,7 +1179,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             sprev = s;
             s += n;
         }
-        sprev = sbegin; // break;
     }
 
     private void opStateCheckAnyCharMLStarSb() {
@@ -1193,7 +1190,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             sprev = s;
             s++;
         }
-        sprev = sbegin; // break;
     }
 
     private void opWord() {

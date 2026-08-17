@@ -360,6 +360,9 @@ public class UnicodeResolver {
      * @return A UnicodeSet, or null if the property cannot be resolved
      */
     private static UnicodeSet resolveStandardPropertyAsSet(String property, Set<String> recursionSet) {
+        UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(property);
+        if (perlBuiltInAlias != null) return perlBuiltInAlias;
+
         // Handle well-known Perl property aliases
         switch (property) {
             case "XPosixSpace": case "XPerlSpace": case "SpacePerl":
@@ -714,6 +717,11 @@ public class UnicodeResolver {
                 // Property not found - fall through to throw error below
             }
 
+            UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(property);
+            if (perlBuiltInAlias != null) {
+                return wrapCharClass(unicodeSetToJavaPattern(perlBuiltInAlias), negated);
+            }
+
             // Special cases - Perl XPosix properties not natively supported in Java
             switch (property) {
                 case "lb=cr":
@@ -922,6 +930,80 @@ public class UnicodeResolver {
 
     static boolean isUserDefinedPropertyName(String property) {
         return property != null && USER_DEFINED_PROPERTY_NAME.matcher(property).matches();
+    }
+
+    static boolean isPerlBuiltInPropertyAlias(String property) {
+        return resolvePerlBuiltInPropertyAlias(property) != null;
+    }
+
+    private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
+        if (property == null) return null;
+
+        String alias = property.trim();
+        if (alias.equalsIgnoreCase("L&")) {
+            UnicodeSet casedLetters = unicodePropertyValueSet(
+                    UProperty.GENERAL_CATEGORY, "UppercaseLetter");
+            casedLetters.addAll(unicodePropertyValueSet(
+                    UProperty.GENERAL_CATEGORY, "LowercaseLetter"));
+            casedLetters.addAll(unicodePropertyValueSet(
+                    UProperty.GENERAL_CATEGORY, "TitlecaseLetter"));
+            return casedLetters;
+        }
+
+        int equals = alias.indexOf('=');
+        if (equals > 0 && loosePropertyName(alias.substring(0, equals)).equals("category")) {
+            return unicodePropertyValueSet(
+                    UProperty.GENERAL_CATEGORY, alias.substring(equals + 1));
+        }
+
+        String blockAlias = alias;
+        if (alias.length() > 2 && alias.regionMatches(true, 0, "in", 0, 2)) {
+            int valueStart = 2;
+            while (valueStart < alias.length()) {
+                char separator = alias.charAt(valueStart);
+                if (!Character.isWhitespace(separator) && separator != '-' && separator != '_') break;
+                valueStart++;
+            }
+            if (valueStart >= alias.length()) return null;
+            blockAlias = alias.substring(valueStart);
+        } else if (equals >= 0 || unicodePropertyValue(UProperty.SCRIPT, alias) >= 0) {
+            return null;
+        }
+
+        int blockValue = unicodePropertyValue(UProperty.BLOCK, blockAlias);
+        if (blockValue < 0) return null;
+        String canonicalBlock = UCharacter.getPropertyValueName(
+                UProperty.BLOCK, blockValue, UProperty.NameChoice.LONG);
+        if (canonicalBlock == null || !loosePropertyName(blockAlias)
+                .equals(loosePropertyName(canonicalBlock))) {
+            return null;
+        }
+        return new UnicodeSet().applyIntPropertyValue(UProperty.BLOCK, blockValue);
+    }
+
+    private static String loosePropertyName(String value) {
+        StringBuilder normalized = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (!Character.isWhitespace(ch) && ch != '-' && ch != '_') {
+                normalized.append(Character.toLowerCase(ch));
+            }
+        }
+        return normalized.toString();
+    }
+
+    private static UnicodeSet unicodePropertyValueSet(int property, String alias) {
+        int value = unicodePropertyValue(property, alias);
+        if (value < 0) return null;
+        return new UnicodeSet().applyIntPropertyValue(property, value);
+    }
+
+    private static int unicodePropertyValue(int property, String alias) {
+        try {
+            return UCharacter.getPropertyValueEnum(property, alias);
+        } catch (IllegalArgumentException ignored) {
+            return -1;
+        }
     }
 
     private static String translatePerlAgeProperty(String property, boolean negated) {
