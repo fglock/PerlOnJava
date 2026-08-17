@@ -37,7 +37,16 @@ final class RuntimeRegexSourceCompiler {
         RuntimeCode owner = RuntimeCode.getActiveCodeAt(0);
         Map<String, RuntimeBase> cells = owner == null
                 ? Map.of() : RuntimeCode.snapshotActiveLexicals(owner);
-        Map<String, RuntimeBase> orderedCells = new LinkedHashMap<>(cells);
+        Map<String, RuntimeBase> orderedCells = new LinkedHashMap<>();
+        for (Map.Entry<String, RuntimeBase> entry : cells.entrySet()) {
+            String name = entry.getKey();
+            if (name == null || name.length() < 2
+                    || "this".equals(name) || "@_".equals(name)
+                    || "wantarray".equals(name)) {
+                continue;
+            }
+            orderedCells.put(name, entry.getValue());
+        }
 
         String publicModifiers = modifiers.replace("E", "").replace("T", "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_MARKER), "")
@@ -74,7 +83,6 @@ final class RuntimeRegexSourceCompiler {
             registry.put("wantarray", 2);
             int register = 3;
             for (String name : orderedCells.keySet()) {
-                if (name == null || name.length() < 2 || registry.containsKey(name)) continue;
                 symbolTable.addVariable(name, "my", null);
                 registry.put(name, register++);
             }

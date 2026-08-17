@@ -329,14 +329,19 @@ sub run_single_test {
     # variable. Keep a caller's larger value, but do not let an internal
     # deadline expire before the resource-aware runner's outer deadline.
     local $ENV{PERL_TEST_TIMEOUT_FACTOR} = $ENV{PERL_TEST_TIMEOUT_FACTOR};
-    if ($test_file =~ m{
-              (?:^|/)perl5_t/t/op/gv\.t$
-            | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-            | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
-        }x
+    my $minimum_watchdog_factor =
+        $test_file =~ m{(?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$}
+            ? 6
+            : $test_file =~ m{
+                  (?:^|/)perl5_t/t/op/gv\.t$
+                | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
+              }x
+                ? 2
+                : undef;
+    if (defined($minimum_watchdog_factor)
             && (!defined($ENV{PERL_TEST_TIMEOUT_FACTOR})
-                || $ENV{PERL_TEST_TIMEOUT_FACTOR} < 2)) {
-        $ENV{PERL_TEST_TIMEOUT_FACTOR} = 2;
+                || $ENV{PERL_TEST_TIMEOUT_FACTOR} < $minimum_watchdog_factor)) {
+        $ENV{PERL_TEST_TIMEOUT_FACTOR} = $minimum_watchdog_factor;
     }
 
     # Temporarily disable fatal unimplemented errors

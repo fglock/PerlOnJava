@@ -132,7 +132,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
-            if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
+            if (owner.threadShared) {
+                SharedPerlStorage.validateStoredValue(value);
+                SharedPerlStorage.publishBlessing(value);
+            }
             if (owner.isEnvironmentHash
                     && value != null
                     && !(value instanceof RuntimeEnvironmentScalar)) {
@@ -147,6 +150,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
         @Override
         public void putAll(Map<? extends String, ? extends RuntimeScalar> m) {
+            if (owner.threadShared) {
+                for (Map.Entry<? extends String, ? extends RuntimeScalar> entry
+                        : new StableHashMap<>(m).entrySet()) {
+                    put(entry.getKey(), entry.getValue());
+                }
+                return;
+            }
             boolean invalidates = false;
             if (owner.isPackageRootedHash()) {
                 for (Map.Entry<? extends String, ? extends RuntimeScalar> e : m.entrySet()) {

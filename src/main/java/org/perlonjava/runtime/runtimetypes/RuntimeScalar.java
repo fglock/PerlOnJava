@@ -1541,10 +1541,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
         if (threadShared && value != null && RuntimeScalarType.isReference(value)) {
-            RuntimeBase assigned = SharedPerlStorage.referent(value);
-            if (assigned == null || !assigned.threadShared) {
-                throw new PerlCompilerException("Invalid value for shared scalar");
-            }
+            SharedPerlStorage.validateStoredValue(value);
             // Assignment into a shared scalar publishes the referent's current
             // class. A local shared reference may be reblessed privately, but
             // storing it in shared scalar storage is the explicit publication

@@ -95,6 +95,23 @@ public final class SharedPerlStorage {
         return current;
     }
 
+    /**
+     * Validate a scalar before it is published into shared storage.
+     *
+     * <p>Perl permits ordinary scalar values in shared containers, but a
+     * reference is valid only when the referenced storage is itself shared.
+     * Callers must invoke this before mutating the destination slot. Bulk
+     * operations invoke it in order, matching threaded Perl's partial-write
+     * behavior when a later value is invalid.</p>
+     */
+    public static void validateStoredValue(RuntimeScalar value) {
+        if (value == null || !RuntimeScalarType.isReference(value)) return;
+        RuntimeBase assigned = referent(value);
+        if (assigned == null || !assigned.threadShared) {
+            throw new PerlCompilerException("Invalid value for shared scalar");
+        }
+    }
+
     public static RuntimeBase share(RuntimeScalar reference) {
         RuntimeBase root = referent(reference);
         if (root == null) {

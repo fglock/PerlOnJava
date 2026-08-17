@@ -559,7 +559,14 @@ public class Attributes extends PerlModuleBase {
         List<String> nonBuiltinAttrs = new ArrayList<>();
         for (String attr : attributes) {
             if ("shared".equals(attr)) {
-                SharedPerlStorage.shareValue(variable);
+                // On an ithread-enabled Perl, loading threads::shared without
+                // loading threads leaves :shared as a compatibility no-op.
+                // Thread::Queue relies on that mode for its no-threads suite:
+                // ordinary references remain ordinary instead of becoming
+                // invalid values in storage that cannot have another owner.
+                if (GlobalVariable.getGlobalVariable("threads::threads").getBoolean()) {
+                    SharedPerlStorage.shareValue(variable);
+                }
                 continue;
             }
             nonBuiltinAttrs.add(attr);
