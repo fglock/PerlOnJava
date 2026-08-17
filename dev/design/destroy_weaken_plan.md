@@ -1,5 +1,8 @@
 # DESTROY and weaken() — Design & Status
 
+> **Historical document (completed and superseded).** The maintained architecture
+> is [Weak References and Deterministic Destruction](../architecture/weaken-destroy.md).
+
 **Status**: Moo 71/71 (100%); DBIx::Class broad test suite passing  
 **Version**: 7.0  
 **Created**: 2026-04-08  

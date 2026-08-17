@@ -1,5 +1,8 @@
 # Object Lifecycle: DESTROY and Weak References
 
+> **Historical document (superseded).** The maintained architecture is
+> [Weak References and Deterministic Destruction](../architecture/weaken-destroy.md).
+
 **Status**: Design Proposal (Technically Reviewed)  
 **Version**: 1.0  
 **Created**: 2026-03-26  

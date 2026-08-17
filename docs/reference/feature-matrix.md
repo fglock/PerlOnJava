@@ -55,10 +55,10 @@ PerlOnJava implements most core Perl features with some key differences:
 - Some core modules and pragmas
 - File operations and I/O
 - Overload
-- `format` operator
+- Source filters: closure filters work; method filters and true streaming remain incomplete
 
 ❌ Not Supported:
-- XS modules and C integration
+- Native C/XS binaries (documented Java replacements and pure-Perl fallbacks are supported)
 - `fork`
 
 ---
@@ -602,7 +602,10 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **`reset("A-Z")`** resetting global variables is implemented.
 - ✅  **Single-quote as package separator**: Legacy `$a'b` style package separator is supported.
 - ✅  **Runtime-owned `@_`, `$_`, and regex state**: Each ithread receives an isolated runtime snapshot.
-- ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
+- 🟡  **Compiler hints and warning bits**: `$^H`, `%^H`, and
+  `${^WARNING_BITS}` are tracked as lexical compile-time state and snapshots
+  are exposed through the extended `caller` tuple on both backends. Some
+  pragma-specific mutation and exact bitmask compatibility remain incomplete.
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
   - ✅  **Extended call stack information**: the full 11-field `caller($level)` tuple and key subroutine metadata are supported on both backends. See the [caller audit probe](../../dev/tools/feature-audit/caller_fields.t).<br>
     Exact hint and bitmask values remain runtime- and pragma-dependent.
@@ -709,14 +712,20 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **ExtUtils::MakeMaker** module: PerlOnJava version installs pure Perl modules directly.
 - ✅  **Fcntl** module
 - ✅  **FileHandle** module
-- ✅  **Filter::Simple** module: `FILTER` and `FILTER_ONLY` for source code filtering.
+- 🟡  **Filter::Simple and Filter::Util::Call**: closure filters installed by
+  `use`, `FILTER`, and `FILTER_ONLY` are supported. Object/method filters are
+  not yet applied, and `filter_read` uses buffered line-oriented emulation
+  rather than Perl's incremental source stream. See the
+  [source-filter design notes](../../dev/design/source_filters.md).
 - ✅  **File::Basename** use the same version as Perl.
 - ✅  **File::Find** use the same version as Perl.
 - ✅  **File::Spec::Functions** module.
 - ✅  **File::Spec** module.
 - ✅  **Getopt::Long** module.
 - ✅  **HTTP::Date** module.
-- ✅  **Internals**: `Internals::SvREADONLY` is implemented as a no-op.
+- 🟡  **Internals**: `Internals::SvREADONLY` enforces read-only writes.
+  `Scalar::Util::readonly` recognizes compile-time read-only values but does
+  not yet recognize every scalar marked read-only at runtime.
 - ✅  **IO::File** module.
 - ✅  **IO::Seekable** module.
 - ✅  **IO::Socket** module.
@@ -891,7 +900,9 @@ maintenance contract.
 
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
 - ✅  **`DESTROY`**: Implemented with selective reference counting on top of JVM GC. Supports cascading destruction, closure capture tracking, `weaken`/`isweak`/`unweaken`, global destruction phase, and `Internals::SvREFCNT` introspection.
-- ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
+- 🟡  **Perl `XS` ecosystem**: native C/XS binaries cannot run on the JVM.
+  PerlOnJava supports a documented set of Java replacements loaded through
+  `XSLoader` and pure-Perl fallbacks; see [XS Compatibility](xs-compatibility.md).
 - 🚧  **Auto-close files**: Lexical buffered writes and fd closure pass on the JVM backend, but the interpreter backend still permits reopening the fd after the lexical handle goes out of scope. Explicit close and program-end cleanup remain supported. See the [scope probe](../../dev/tools/feature-audit/autoclose_scope.t) and [fd probe](../../dev/tools/feature-audit/autoclose_fd.t).
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.

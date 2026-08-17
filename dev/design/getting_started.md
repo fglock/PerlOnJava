@@ -1,4 +1,10 @@
-**Work in Progress**
+# Historical Getting-Started Draft
+
+> **Historical document (superseded).** Use the maintained
+> [installation guide](../../docs/getting-started/installation.md) and
+> [quick start](../../QUICKSTART.md).
+
+**Archived work in progress**
 
 # Getting Started with PerlOnJava
 
@@ -138,4 +144,3 @@ if ($@) {
 ```
 
 This guide covers the essentials to get you started with PerlOnJava. For more detailed information, refer to the specific guides in the docs directory.
-

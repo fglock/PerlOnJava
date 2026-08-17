@@ -166,21 +166,16 @@ Result: PASS
 
 `jprove` is useful when you want standard Perl `prove` behavior and options, while `perl_test_runner.pl` provides additional features like JSON reporting and feature impact analysis.
 
-### 3. JUnit/Gradle Testing (For CI/CD)
+### 3. JUnit Testing (For CI/CD)
 
 Uses JUnit 5 with tags for test filtering:
 
 ```bash
-# Fast unit tests via Gradle
+# Fast unit tests
 make test-gradle-unit
 
-# All tests via Gradle
+# All tests
 make test-gradle-all
-
-# Direct Gradle commands
-./gradlew testUnit    # Only unit tests
-./gradlew testAll     # All tests
-./gradlew test        # Default test task
 ```
 
 **Use Cases:**
@@ -412,15 +407,12 @@ jq '.feature_impact' test_results.json
 3. Select "Run tests"
 4. Or run specific tags: `@Tag("unit")` or `@Tag("full")`
 
-### Command Line with Gradle
+### Command Line
 
 ```bash
-# Run specific test class
-./gradlew test --tests PerlScriptExecutionTest
-
 # Run with tags
-./gradlew testUnit    # @Tag("unit")
-./gradlew testAll     # @Tag("full")
+make test-gradle-unit  # @Tag("unit")
+make test-gradle-all   # @Tag("full")
 ```
 
 ## Troubleshooting

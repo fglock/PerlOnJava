@@ -2,10 +2,7 @@
 
 ## Table of Contents
 1. [Prerequisites](#prerequisites)
-2. [Build Options](#build-options)
-   - [Using Make](#using-make)
-   - [Using Maven](#using-maven)
-   - [Using Gradle](#using-gradle)
+2. [Building from Source](#building-from-source)
 3. [Package Installation](#package-installation)
    - [Debian Package](#debian-package)
 4. [Dependencies](#dependencies)
@@ -25,13 +22,13 @@
 
 ## Prerequisites
 - JDK 24 or later
-- Maven, or the included Gradle wrapper (recommended)
+- Make and the included Gradle wrapper
 - Optional: JDBC drivers for database connectivity
 
-## Build Options
+## Building from Source
 
-### Using Make
-The project includes a Makefile that wraps Gradle commands for a familiar build experience:
+Use the project Makefile for source builds. It applies the repository's tested
+Gradle configuration consistently:
 
 ```bash
 make          # same as 'make build'
@@ -39,16 +36,6 @@ make build    # builds the project and runs unit tests
 make test     # runs fast unit tests
 make clean    # cleans build artifacts
 make deb      # creates a Debian package (Linux only)
-```
-
-### Using Maven
-```bash
-mvn clean package
-```
-
-### Using Gradle
-```bash
-./gradlew clean build
 ```
 
 ## Package Installation

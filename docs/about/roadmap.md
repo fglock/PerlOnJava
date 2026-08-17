@@ -84,7 +84,10 @@ Work currently in progress:
 
 - ~~**`DESTROY` Support**~~ — Implemented with selective reference counting. Supports cascading destruction, closure capture tracking, and global destruction phase.
 - ~~**Weak References**~~ — Implemented: `Scalar::Util::weaken`/`isweak`/`unweaken` with external WeakRefRegistry.
-- **Taint Mode (`-T`)** — Track external data provenance using a `TAINTED` wrapper type (no extra storage for untainted scalars). Required for security-sensitive Perl applications. See `dev/design/TAINT_MODE.md`.
+- ~~**Taint Mode (`-T`)**~~ — Implemented on both backends. External input is
+  marked tainted, taint propagates through supported operations, capture-based
+  untainting works, and security-sensitive operations reject tainted values.
+  Warning-mode `-t` semantics remain incomplete. See `dev/design/TAINT_MODE.md`.
 - **Dynamically-Scoped Regex Variables** — `$1`, `$2`, etc. should be localized per regex match in the dynamic scope.
 
 ### Missing Regex Features
@@ -112,9 +115,12 @@ Work currently in progress:
 
 ### Compiler Flags and Special Variables
 
-- **`$^H` and `%^H`** — Compile-time hint variables (needed for many pragmas).
-- **`${^WARNING_BITS}`** — Warning category bitmask.
-- **Extended `caller` info** — Full 11-element return from `caller($level)`.
+- ~~**`$^H`, `%^H`, and `${^WARNING_BITS}` snapshots**~~ — Lexical
+  compile-time state and extended `caller` fields are implemented on both
+  backends. Exact compatibility for every pragma-specific mutation and warning
+  bit remains ongoing.
+- ~~**Extended `caller` info**~~ — The full 11-element return from
+  `caller($level)` is implemented on both backends.
 
 ---
 
@@ -342,5 +348,8 @@ These features are unlikely to be implemented due to fundamental JVM constraints
 - **Perl XS (C code)** — C extensions cannot run on JVM. Java XS fallback mechanism is the replacement strategy.
 - **`dump` operator** — Core dump functionality has no JVM equivalent.
 - **DBM file support** — `dbmclose`/`dbmopen` not implemented; use DBI instead.
-- **Source filters** — `Filter::Util::Call` style source manipulation is not planned.
+- **Source filters beyond the supported subset** — Closure filters installed
+  through `Filter::Util::Call`, `Filter::Simple::FILTER`, and `FILTER_ONLY`
+  work. Object/method filters and Perl-compatible incremental streaming remain
+  deferred; see `dev/design/source_filters.md`.
 - **`Opcode.pm`** — Requires Perl opcode tree internals that don't exist in PerlOnJava's compilation model.
