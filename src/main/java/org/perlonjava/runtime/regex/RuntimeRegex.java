@@ -715,6 +715,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
             } catch (Exception e) {
+                if ("invalid backref number/name".equals(e.getMessage())
+                        || "invalid backref number".equals(e.getMessage())) {
+                    throw new PerlCompilerException("Reference to nonexistent group");
+                }
                 // PerlJavaUnimplementedException extends PerlCompilerException, so check
                 // the more specific type first. Real syntax errors (PerlCompilerException
                 // but NOT PerlJavaUnimplementedException) are always fatal.

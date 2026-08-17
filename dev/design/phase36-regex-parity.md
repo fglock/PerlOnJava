@@ -222,14 +222,15 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phase 4 callback values at 433/555
+### Current Status: Joni default; Phase 4 callback values at 434/555
 
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
 frames now preserve the Perl-visible caller capture view for optimistic
 callbacks and committed matches, including `$1`, `$^N`, and `$+`. Tied scalar
 values returned by dynamic callbacks are materialized before callee regex state
-teardown. The focused `pat_re_eval.t` gate executes all 555 assertions with 433
+teardown. Joni invalid-backreference errors use Perl's nonexistent-group
+diagnostic. The focused `pat_re_eval.t` gate executes all 555 assertions with 434
 passing.
 
 ### Completed Phases
@@ -244,8 +245,8 @@ passing.
 
 ### Next Steps
 
-1. Normalize dynamic-program compilation diagnostics, beginning with the
-   nonexistent-group wording exercised by `pat_re_eval.t` test 515.
+1. Correct repeated dynamic-program matching and capture propagation, beginning
+   with the Bug 56194 block in `pat_re_eval.t` (tests 87-143).
 2. Capture forced-Java and forced-Joni results for the full 80-file direct regex
    corpus, compare both against PR 958, and classify any newly exposed gaps.
 3. Run the applicable `pat_advanced.t` control-verb and condition sections,
