@@ -222,7 +222,7 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phase 1 differential and Phase 2 controls active
+### Current Status: Joni default; Phase 1 remediation and Phase 3 Unicode active
 
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
@@ -287,7 +287,16 @@ matcher-specific timeouts on both execution backends.
   - [x] Completed the four-leg forced-backend matrix and published its
     classification. The exit criterion is explicitly not met; timeout and
     semantic remediation remain Phase 1 work.
-- [ ] Phase 2: Conditions and backtracking-visible state (in progress)
+  - [x] Reduced the forced-Joni zero-pass surface to seven shared causes:
+    catastrophic backtracking, quadratic matcher reconstruction, absent
+    generated Unicode fixtures, regex-set preprocessing, unsupported compiler
+    introspection, regexp-object propagation, and three assertion-level
+    environment/runtime failures.
+  - [x] Moved immutable Joni UTF-8 input and offset maps out of the scalar
+    `/g` hot loop. The focused million-match oracle completes in 1.07 seconds
+    on JVM and 1.41 seconds on interpreter (PR #1008), with exact map and
+    supplementary-character capture-boundary coverage.
+- [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
   - [x] Closed runtime callback capture ownership at final scope teardown.
@@ -313,6 +322,16 @@ matcher-specific timeouts on both execution backends.
     on both execution backends.
   - [x] Removed the obsolete nested `(*ACCEPT)` and callback-`pos` workarounds
     from `pat.t.patch` and resynchronized those original Perl 5.44 assertions.
+  - [x] Verified reference stringification (5/5) and
+    `${^LAST_SUCCESSFUL_PATTERN}` dynamic scope and reuse (25/25) on system
+    Perl, JVM, and interpreter; removed both obsolete `pat.t.patch` wrappers
+    and resynchronized the original assertions.
+  - [x] Preserved callback-bearing compiled regexes through one- and multi-item
+    array interpolation, including Perl's deferred dot-overload composition
+    with surrounding dynamic callbacks. The focused oracle passes 28/28 on
+    system Perl, JVM, and interpreter.
+  - [x] Removed the final `pat.t.patch` hunk, deleted the patch and its importer
+    configuration, and resynchronized the unmodified Perl 5.44 `pat.t`.
 - [ ] Phase 3: Unicode and pattern syntax completion (in progress)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
@@ -332,12 +351,11 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Reduce the ten Joni matcher-specific timeout files and 29 zero-TAP files to
-   shared causes, starting with the `regexp*`, `pat_psycho*`, and `speed*`
-   clusters; keep per-child hard limits throughout.
-2. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
-   closes, remove its hunk and rerun the targeted importer so validation uses
-   the original Perl 5.44 assertions.
+1. Remediate the seven reduced forced-Joni failure causes, starting with the
+   catastrophic `regexp*` cluster and the now-profiled `pat_psycho*` matcher
+   reconstruction path; keep per-child hard limits throughout.
+2. Convert global regex `pos` consistently between Perl logical offsets and
+   Java matcher offsets, including supplementary characters and `\G` reuse.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
 4. Inventory the remaining uncommon Unicode aliases and invalid-property
@@ -359,6 +377,9 @@ matcher-specific timeouts on both execution backends.
   or scanned from dormant globals.
 - Shared parser or `eval` failures are fixed in focused slices when they block a
   regex semantic test, rather than being approximated inside the matcher.
+- Supplementary-character scalar `/g` currently publishes final `pos` in Java
+  UTF-16 code units (8000 for the shared oracle) instead of Perl code points
+  (6000). PerlOnJava2 owns this active `RuntimeRegex` follow-up.
 
 ## Related Documents and Skills
 
