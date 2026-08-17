@@ -205,9 +205,9 @@ compatibility contract.
 
 ### Next Steps
 
-1. Run the forced-Joni ordinary corpus and close the remaining possessive-
-   quantifier, runtime-source grouping, deferred-property, lookbehind, and
-   diagnostic failures before making Joni the default.
+1. Run the forced-Joni ordinary corpus and close the remaining runtime-source
+   grouping, deferred-property, lookbehind, and diagnostic failures before
+   making Joni the default.
 2. Complete the expanded MARK/named-SKIP and callback-unwind gates, then run the
    applicable `pat_advanced.t` control-verb and condition sections.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare

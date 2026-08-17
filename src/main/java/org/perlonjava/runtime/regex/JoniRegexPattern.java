@@ -14,6 +14,7 @@ import org.joni.Syntax;
 
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
+import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
@@ -34,7 +35,7 @@ final class JoniRegexPattern {
     // by callouts and control verbs while changing only that default policy.
     private static final Syntax PERLONJAVA_SYNTAX = new Syntax(
             "PERLONJAVA", Syntax.RUBY.op,
-            (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL,
+            (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL | OP2_PLUS_POSSESSIVE_INTERVAL,
             Syntax.RUBY.op3,
             Syntax.RUBY.behavior, Syntax.RUBY.options & ~Option.ASCII_RANGE,
             Syntax.RUBY.metaCharTable);
