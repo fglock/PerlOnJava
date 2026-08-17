@@ -7,11 +7,15 @@ use JSON::PP;
 use Encode qw(FB_DEFAULT decode);
 
 my $fail_on_regression = 0;
+my $fail_on_invalid = 0;
+my $expected_files;
 my $output_file;
 my $path_prefix;
 my $help = 0;
 GetOptions(
     'fail-on-regression!' => \$fail_on_regression,
+    'fail-on-invalid!' => \$fail_on_invalid,
+    'expected-files=i' => \$expected_files,
     'output=s' => \$output_file,
     'path-prefix=s' => \$path_prefix,
     'help' => \$help,
@@ -30,12 +34,14 @@ if (defined $path_prefix) {
     $candidate = filter_results($candidate, $path_prefix);
 }
 my $comparison = compare_results($baseline, $candidate);
+$comparison->{expected_files} = $expected_files if defined $expected_files;
 
 print_report($baseline_file, $candidate_file, $comparison);
 save_report($output_file, $baseline_file, $candidate_file, $comparison)
     if defined $output_file;
 
 exit 1 if $fail_on_regression && @{$comparison->{regressions}};
+exit 1 if $fail_on_invalid && has_invalid_candidate($comparison, $expected_files);
 exit 0;
 
 sub usage {
@@ -48,6 +54,9 @@ captured runner log such as logs/test_20260815_080000_958.log.
 
 Options:
   --fail-on-regression  Exit nonzero when any candidate file loses passing tests
+  --fail-on-invalid     Exit nonzero for missing files, execution failures,
+                        zero-TAP results, or an --expected-files mismatch
+  --expected-files NUM  Require exactly NUM candidate files
   --output FILE         Save the normalized comparison as JSON
   --path-prefix PATH    Compare only files below this canonical path
   --help                Show this help
@@ -118,7 +127,8 @@ sub filter_results {
 
 sub compare_results {
     my ($baseline, $candidate) = @_;
-    my (@regressions, @improvements, @plan_changes, @missing, @added);
+    my (@regressions, @improvements, @plan_changes, @missing, @added,
+        @execution_issues, @zero_tap);
     my ($baseline_ok, $candidate_ok, $baseline_total, $candidate_total) = (0, 0, 0, 0);
 
     $baseline_ok += $_->{ok} for values %$baseline;
@@ -127,6 +137,19 @@ sub compare_results {
     $candidate_total += $_->{total} for values %$candidate;
 
     my %all = map { $_ => 1 } (keys %$baseline, keys %$candidate);
+    for my $file (sort keys %$candidate) {
+        my $result = $candidate->{$file};
+        push @execution_issues, {
+            file => $file,
+            status => $result->{status},
+            ok => $result->{ok},
+            total => $result->{total},
+        } if $result->{status} =~ /\A(?:error|timeout|incomplete)\z/;
+        push @zero_tap, {
+            file => $file,
+            status => $result->{status},
+        } if $result->{total} == 0;
+    }
     for my $file (sort keys %all) {
         my ($before, $after) = ($baseline->{$file}, $candidate->{$file});
         if (!$after) {
@@ -165,6 +188,8 @@ sub compare_results {
         plan_changes => \@plan_changes,
         missing_files => \@missing,
         added_files => \@added,
+        execution_issues => \@execution_issues,
+        zero_tap => \@zero_tap,
     };
 }
 
@@ -175,10 +200,16 @@ sub print_report {
     print "Candidate: $candidate_file\n";
     printf "Passing assertions: %d/%d -> %d/%d (%+d passing, %+d planned)\n",
         @{$summary}{qw(baseline_ok baseline_total candidate_ok candidate_total delta_ok delta_total)};
-    printf "Files: %d -> %d; regressions=%d improvements=%d missing=%d added=%d\n",
+    printf "Files: %d -> %d; regressions=%d improvements=%d missing=%d added=%d execution-issues=%d zero-TAP=%d\n",
         $summary->{baseline_files}, $summary->{candidate_files},
         scalar(@{$comparison->{regressions}}), scalar(@{$comparison->{improvements}}),
-        scalar(@{$comparison->{missing_files}}), scalar(@{$comparison->{added_files}});
+        scalar(@{$comparison->{missing_files}}), scalar(@{$comparison->{added_files}}),
+        scalar(@{$comparison->{execution_issues}}), scalar(@{$comparison->{zero_tap}});
+    if (defined $comparison->{expected_files}
+            && $summary->{candidate_files} != $comparison->{expected_files}) {
+        printf "EXPECTED FILE COUNT MISMATCH: expected %d, found %d\n",
+            $comparison->{expected_files}, $summary->{candidate_files};
+    }
 
     print_entries('REGRESSIONS', $comparison->{regressions});
     print_entries('IMPROVEMENTS', $comparison->{improvements});
@@ -191,6 +222,26 @@ sub print_report {
         print "\nADDED FILES\n";
         print "  $_->{file}\n" for @{$comparison->{added_files}};
     }
+    if (@{$comparison->{execution_issues}}) {
+        print "\nEXECUTION ISSUES\n";
+        printf "  %s: status=%s %d/%d\n",
+            @{$_}{qw(file status ok total)} for @{$comparison->{execution_issues}};
+    }
+    if (@{$comparison->{zero_tap}}) {
+        print "\nZERO TAP\n";
+        printf "  %s: status=%s\n", @{$_}{qw(file status)}
+            for @{$comparison->{zero_tap}};
+    }
+}
+
+sub has_invalid_candidate {
+    my ($comparison, $required_files) = @_;
+    return 1 if @{$comparison->{missing_files}};
+    return 1 if @{$comparison->{execution_issues}};
+    return 1 if @{$comparison->{zero_tap}};
+    return 1 if defined($required_files)
+        && $comparison->{summary}{candidate_files} != $required_files;
+    return 0;
 }
 
 sub print_entries {
