@@ -57,6 +57,20 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
     String INVALID_REPEAT_RANGE_PATTERN = "invalid repeat range {lower,upper}";
     String INVALID_CONDITION_PATTERN = "invalid conditional pattern";
+    String PERL_GROUP_NAME_MUST_START_WITH_WORD =
+            "Group name must start with a non-digit word character";
+    String PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED =
+            "Sequence (?^-...) not recognized";
+    String PERL_CARET_D_OPTION_NOT_RECOGNIZED =
+            "Sequence (?^d...) not recognized";
+    String PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE =
+            "Regexp modifiers \"l\" and \"u\" are mutually exclusive";
+    String PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE =
+            "Regexp modifiers \"d\" and \"a\" are mutually exclusive";
+    String PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE =
+            "Regexp modifier \"l\" may not appear twice";
+    String PERL_MODIFIER_A_MAXIMUM_TWICE =
+            "Regexp modifier \"a\" may appear a maximum of twice";
 
     /* values error (syntax error) */
     String TOO_BIG_NUMBER = "too big number";

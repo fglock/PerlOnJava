@@ -21,6 +21,7 @@ package org.joni.test;
 
 import org.joni.Option;
 import org.joni.Syntax;
+import org.joni.exception.ErrorMessages;
 import org.jcodings.Encoding;
 import org.jcodings.specific.ASCIIEncoding;
 
@@ -43,6 +44,13 @@ public class TestPerl extends Test {
     }
 	@Override
     public void test() throws Exception {
+        xerrs("(?<;name>match)", ErrorMessages.PERL_GROUP_NAME_MUST_START_WITH_WORD);
+        xerrs("(?^-i:foo)", ErrorMessages.PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED);
+        xerrs("(?^d:foo)", ErrorMessages.PERL_CARET_D_OPTION_NOT_RECOGNIZED);
+        xerrs("(?^lu:foo)", ErrorMessages.PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE);
+        xerrs("(?da:foo)", ErrorMessages.PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
+        xerrs("(?lil:foo)", ErrorMessages.PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE);
+        xerrs("(?aaia:foo)", ErrorMessages.PERL_MODIFIER_A_MAXIMUM_TWICE);
     }
 
     @org.junit.Test(timeout = 5000)
