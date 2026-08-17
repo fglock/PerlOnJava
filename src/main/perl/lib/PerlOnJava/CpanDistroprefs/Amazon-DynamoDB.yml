@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Amazon-DynamoDB 0.25.
+
+  Amazon::DynamoDB::SignatureV4 is plain Perl, but loading the distribution's
+  top-level module eagerly loads the unrelated Kavorka-based 20120810 API.
+  Delay that API-version load until construction, at the point where the
+  distribution already selects the requested version. This keeps normal
+  Amazon::DynamoDB behavior while allowing independent modules such as the
+  signer to load without Perl's XS custom-keyword parser API.
+match:
+  distribution: "^.*/Amazon-DynamoDB-0\\.25\\.tar\\.gz$"
+patches:
+  - "Amazon-DynamoDB/LazyLoadApiVersion.patch"

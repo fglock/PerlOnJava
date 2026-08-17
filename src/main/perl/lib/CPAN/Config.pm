@@ -88,6 +88,7 @@ sub _bootstrap_prefs {
         'UUID-Tiny.yml'                 => 'PerlOnJava/CpanDistroprefs/UUID-Tiny.yml',
         'MooX-ClassAttribute.yml'       => 'PerlOnJava/CpanDistroprefs/MooX-ClassAttribute.yml',
         'Locale-CLDR.yml'                => 'PerlOnJava/CpanDistroprefs/Locale-CLDR.yml',
+        'Amazon-DynamoDB.yml'            => 'PerlOnJava/CpanDistroprefs/Amazon-DynamoDB.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -343,6 +344,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/MooseX-TraitFor-Meta-Class-BetterAnonClassNames-0.002003/NoAutobox.patch' ],
         [ 'Text-Markdown/BoundedBalancedPatterns.patch',
           'PerlOnJava/CpanPatches/Text-Markdown-1.000031/BoundedBalancedPatterns.patch' ],
+        [ 'Amazon-DynamoDB/LazyLoadApiVersion.patch',
+          'PerlOnJava/CpanPatches/Amazon-DynamoDB-0.25/LazyLoadApiVersion.patch' ],
     );
 
     # Like prefs, extracted patch files persist after an upgrade. These paths

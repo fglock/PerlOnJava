@@ -1,0 +1,18 @@
+--- lib/Amazon/DynamoDB.pm.orig
++++ lib/Amazon/DynamoDB.pm
+@@ -5,7 +5,6 @@
+ use strict;
+ use warnings;
+ 
+-use Amazon::DynamoDB::20120810;
+ use Module::Load;
+ 
+ 
+@@ -19,6 +18,7 @@
+     }
+     my $version = delete $args{version} || '20120810';
+     my $pkg = __PACKAGE__ . '::' . $version;
++    Module::Load::load($pkg) unless $pkg->can('new');
+     if (my $code = $pkg->can('new')) {
+         $class = $pkg if $class eq __PACKAGE__;
+         return $code->($class, %args)
