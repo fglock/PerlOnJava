@@ -32,6 +32,9 @@ logs are in `/tmp/feature-audit-*` and are not committed by default.
 | Basic multibyte `seek`/`tell` | pass | pass | pass | Only the basic case is covered; full positioning semantics remain open. |
 | Executable regex conditionals | pass | pass | pass | Tested true and false callback branches; other conditional forms remain open. |
 | `\X` and `Extended_Pictographic` | pass | pass | pass | Tested representative grapheme and emoji cases; broader Unicode aliases remain open. |
+| `postderef_qq` interpolation | pass | pass | pass | Existing `postderef_interpolation.t` passes all four assertions. |
+| `unicode_eval` / `evalbytes` | pass | pass | pass | Existing `evalbytes.t` passes all three assertions. |
+| Container `refaliasing` | pass | pass | pass | Existing `refaliasing_containers.t` passes both aliasing assertions. |
 
 The exact commands and test names are documented in the probe README. A
 passing probe does not promote a broad feature automatically: semantic and
@@ -205,6 +208,8 @@ documentation-only planning change.
   multibyte I/O cases with native Perl and both backends.
 - [x] Corrected the stale smartmatch and auto-close matrix claims from the
   initial evidence.
+- [x] Revalidated existing unit coverage for `postderef_qq`, `unicode_eval`,
+  and container `refaliasing`; corrected their stale matrix status.
 
 ### Next Steps
 
