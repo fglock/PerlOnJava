@@ -226,6 +226,16 @@ final class JoniRegexPattern {
                 continue;
             }
             if (ch == '[') {
+                if (inClass) {
+                    boolean posixClass = i + 1 < pattern.length()
+                            && (pattern.charAt(i + 1) == ':'
+                                    || pattern.charAt(i + 1) == '.'
+                                    || pattern.charAt(i + 1) == '=');
+                    if (!posixClass) {
+                        out.append("\\[");
+                        continue;
+                    }
+                }
                 if (!inClass && i + 1 < pattern.length() && pattern.charAt(i + 1) == '^') {
                     // Surrogate and beyond-Unicode Perl scalars use one
                     // Java-safe marker string internally. A negated class

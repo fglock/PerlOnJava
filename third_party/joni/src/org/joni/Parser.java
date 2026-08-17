@@ -621,6 +621,8 @@ class Parser extends Lexer {
                     option = bsOnOff(option, Option.SINGLELINE, false);
                     option = bsOnOff(option, Option.MULTILINE, true);
                     option = bsOnOff(option, Option.EXTEND, true);
+                    option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, true);
+                    option = bsOnOff(option, Option.CAPTURE_GROUP, false);
                     fetch();
                 } else {
                     newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -632,6 +634,7 @@ class Parser extends Lexer {
             case 'm':
             case 's':
             case 'x':
+            case 'n':
             case 'a':
             case 'd':
             case 'l':
@@ -650,6 +653,14 @@ class Parser extends Lexer {
                         break;
                     case 'i':
                         option = bsOnOff(option, Option.IGNORECASE, neg);
+                        break;
+                    case 'n':
+                        if (syntax.op2OptionPerl()) {
+                            option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, neg);
+                            option = bsOnOff(option, Option.CAPTURE_GROUP, !neg);
+                        } else {
+                            newSyntaxException(UNDEFINED_GROUP_OPTION);
+                        }
                         break;
                     case 's':
                         if (syntax.op2OptionPerl()) {
