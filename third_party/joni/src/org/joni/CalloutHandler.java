@@ -37,4 +37,8 @@ public interface CalloutHandler {
     default void complete(Object backtrackToken) {
         unwind(backtrackToken);
     }
+
+    /** Finish one matcher invocation after its active tokens have been resolved. */
+    default void finish(boolean matched) {
+    }
 }

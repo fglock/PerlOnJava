@@ -776,7 +776,7 @@ final class JoniRegexPattern {
 
     private static final class PerlCalloutHandler implements CalloutHandler {
         private record Token(int localLevel, RegexState regexState, RuntimeScalar previousR,
-                             RuntimeScalar result, boolean block,
+                             RuntimeScalar result, boolean block, boolean dynamic,
                              CaptureSnapshot previousDynamicView) {}
 
         private record CaptureSnapshot(int position, int[] begins, int[] ends,
@@ -931,7 +931,9 @@ final class JoniRegexPattern {
                 boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
                 if (block) rVariable.set(result);
                 Token token = new Token(localLevel, savedRegex, previousR,
-                        result.clone(), block, priorDynamicView);
+                        result.clone(), block,
+                        callback.kind == RuntimeRegexCallback.Kind.DYNAMIC,
+                        priorDynamicView);
                 return new Evaluation(result, token);
             } catch (RuntimeException | Error failure) {
                 // The matcher cannot register an unwind token when the callout
@@ -960,7 +962,8 @@ final class JoniRegexPattern {
             restore((Token) value, true);
         }
 
-        void finish(boolean matched) {
+        @Override
+        public void finish(boolean matched) {
             try {
                 if (matched && completedResult != null) {
                     GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
@@ -981,8 +984,10 @@ final class JoniRegexPattern {
                 previousDynamicView = token.previousDynamicView();
             }
             token.regexState().restore();
-            GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
-                    .set(token.previousR());
+            if (!completed || !token.dynamic()) {
+                GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
+                        .set(token.previousR());
+            }
             if (completed && token.block() && completedResult == null) {
                 completedResult = token.result();
             }

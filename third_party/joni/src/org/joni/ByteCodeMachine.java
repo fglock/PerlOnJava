@@ -2068,8 +2068,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             throw new IllegalStateException("dynamic regex requires the bytecode matcher");
         }
         nested.useIndependentStack();
-        nested.setCalloutHandler(result.getCalloutHandler());
-        DynamicContinuation continuation = new DynamicContinuation(nested, s, range);
+        CalloutHandler nestedHandler = result.getCalloutHandler();
+        nested.setCalloutHandler(nestedHandler);
+        DynamicContinuation continuation = new DynamicContinuation(
+                nested, nestedHandler, s, range);
         int nestedEnd = continuation.first();
         if (nestedEnd < 0) {
             continuation.abort();
@@ -2408,13 +2410,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     /** Lazy nested matcher whose remaining alternatives belong to its caller. */
     static final class DynamicContinuation {
         private final ByteCodeMachine machine;
+        private final CalloutHandler handler;
         private final int start;
         private final int range;
         private boolean started;
         private boolean closed;
 
-        DynamicContinuation(ByteCodeMachine machine, int start, int range) {
+        DynamicContinuation(ByteCodeMachine machine, CalloutHandler handler,
+                int start, int range) {
             this.machine = machine;
+            this.handler = handler;
             this.start = start;
             this.range = range;
         }
@@ -2464,12 +2469,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             if (closed) return;
             closed = true;
             machine.completeActiveCallouts();
+            if (handler != null) handler.finish(true);
         }
 
         void abort() {
             if (closed) return;
             closed = true;
             machine.unwindActiveCallouts();
+            if (handler != null) handler.finish(false);
         }
     }
 
