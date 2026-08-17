@@ -2,6 +2,8 @@ Alien::Build::Plugin::Download::GitLab	SKIP				2026-08-16	bundled
 AnyDBM_File	SKIP				2026-06-18	distroprefs	
 AnyEvent::Fork::Pool	SKIP				2026-08-14	distroprefs	
 AnyEvent::Fork::Remote	SKIP				2026-08-15	distroprefs	
+Archive::Tar::Std	SKIP				2026-08-17	bundled	
+BadPackage	SKIP				2026-08-17	bundled	
 Bio::Homology::InterologWalk	SKIP				2026-08-14	bundled	
 Bit::Vector::Overload	SKIP				2026-08-16	bundled	
 CGI	SKIP				2026-06-18	distroprefs	
@@ -12,13 +14,15 @@ CGI::Simple::Cookie	SKIP				2026-06-18	distroprefs
 Class::Load	SKIP				2026-06-18	bundled	
 Class::Load::XS	SKIP				2026-06-11	bundled	
 Class::XSAccessor::Array	SKIP				2026-06-15	bundled	
-Clone	SKIP				2026-08-16	bundled	
+Clone	SKIP				2026-08-17	bundled	
 Config::DB	SKIP				2026-08-14	bundled	
 Cpanel::JSON::XS	SKIP				2026-06-18	bundled	
 Cwd	SKIP				2026-06-11	bundled	
-DBD::DBM	SKIP				2026-08-14	bundled	
+DBD::DBM	SKIP				2026-08-17	bundled	
 DBD::File	SKIP				2026-08-15	bundled	
-DBD::SQLite::Constants	SKIP				2026-08-14	bundled	
+DBD::NullP	SKIP				2026-08-17	bundled	
+DBD::SQLite::Constants	SKIP				2026-08-17	bundled	
+DBIx::RetryConnect	SKIP				2026-08-17	bundled	
 Data::Swap	SKIP				2026-08-12	bundled	
 Devel::GlobalDestruction	SKIP				2026-06-18	bundled	
 Digest::MD2	SKIP				2026-06-09	bundled	
@@ -34,7 +38,7 @@ HTTP::Server::Simple	SKIP				2026-06-14	distroprefs
 HTTP::Tiny	SKIP				2026-08-15	bundled	
 Hg::Lib	SKIP				2026-08-11	bundled	
 Hook::LexWrap	SKIP				2026-06-18	distroprefs	
-IO::Pipe	SKIP				2026-08-16	bundled	
+IO::Pipe	SKIP				2026-08-17	bundled	
 Image::Magick	SKIP				2026-06-18	bundled	
 JSON::Syck	SKIP				2026-08-15	bundled	
 LWP	SKIP				2026-06-18	distroprefs	
@@ -45,6 +49,7 @@ MIME::Base64	SKIP				2026-08-13	bundled
 Math::BigFloat	SKIP				2026-06-18	bundled	
 Math::BigInt	SKIP				2026-06-15	bundled	
 Math::Trig	SKIP				2026-06-18	bundled	
+Minion::Backend::SQLite	SKIP				2026-08-17	bundled	
 Module::Load::Conditional	SKIP				2026-06-14	bundled	
 Module::Patch	SKIP				2026-06-03	distroprefs	
 Mojo	SKIP				2026-06-13	distroprefs	
@@ -54,6 +59,7 @@ Mojo::UserAgent	SKIP				2026-06-03	distroprefs
 Mojolicious	SKIP				2026-06-18	distroprefs	
 Monkey::Patch::Action	SKIP				2026-06-03	distroprefs	
 NEXT	SKIP				2026-06-15	bundled	
+Net::SSLeay::Handle	SKIP				2026-08-17	bundled	
 Net::Traceroute	SKIP				2026-08-13	bundled	
 Package::DeprecationManager	SKIP				2026-06-10	bundled	
 Package::Stash::XS	SKIP				2026-06-18	distroprefs	
@@ -62,7 +68,7 @@ Proc::Killall	SKIP				2026-08-13	bundled
 SQL::Translator	SKIP				2026-06-15	distroprefs	
 SSL_Context	SKIP				2026-06-14	bundled	
 Safe	SKIP				2026-08-16	bundled	
-Scalar::List::Utils	SKIP				2026-08-16	bundled	
+Scalar::List::Utils	SKIP				2026-08-17	bundled	
 Spiffy	SKIP				2026-08-15	bundled	
 String::Print	SKIP				2026-06-18	distroprefs	
 Sub::Delete	SKIP				2026-06-03	distroprefs	
@@ -70,6 +76,7 @@ Sub::Exporter::Util	SKIP				2026-06-18	bundled
 Term::ReadLine	SKIP				2026-06-18	bundled	
 Term::Size	SKIP				2026-06-18	bundled	
 Test::MockObject	SKIP				2026-06-18	distroprefs	
+Test::Pod	SKIP				2026-08-16	bundled	
 Test::SharedFork	SKIP				2026-06-18	distroprefs	
 Text::LineFold	SKIP				2026-08-16	bundled	
 Tie::File	SKIP				2026-06-18	bundled	
@@ -80,13 +87,13 @@ Unicode::LineBreak	SKIP				2026-06-18	bundled
 WWW::RobotRules	SKIP				2026-06-18	distroprefs	
 Win32	SKIP				2026-08-16	bundled	
 XML::SAX	SKIP				2026-08-15	bundled	
-XML::SAX::DocumentLocator	SKIP				2026-08-16	bundled	
-XS::Parse::Sublike	SKIP				2026-08-16	bundled	
+XML::SAX::DocumentLocator	SKIP				2026-08-17	bundled	
+XS::Parse::Sublike	SKIP				2026-08-17	bundled	
 YAML::Any	SKIP				2026-06-18	bundled	
 YAML::LibYAML	SKIP				2026-08-15	bundled	
-YAML::PP	SKIP				2026-08-16	bundled	
+YAML::PP	SKIP				2026-08-17	bundled	
 YAML::PP::Perl	SKIP				2026-08-16	bundled	
-YAML::Syck	SKIP				2026-08-16	bundled	
+YAML::Syck	SKIP				2026-08-17	bundled	
 bigint	SKIP				2026-06-14	bundled	
 common::sense	SKIP				2026-06-18	bundled	
 threads	SKIP				2026-08-12	bundled	
