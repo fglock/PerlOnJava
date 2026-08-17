@@ -348,7 +348,7 @@ matcher-specific timeouts on both execution backends.
     system Perl, JVM, and interpreter.
   - [x] Removed the final `pat.t.patch` hunk, deleted the patch and its importer
     configuration, and resynchronized the unmodified Perl 5.44 `pat.t`.
-- [x] Phase 3: Unicode and pattern syntax completion (2026-08-17)
+- [ ] Phase 3: Unicode and pattern syntax completion (in progress)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
   - [x] Converted public regex `pos` values between Perl logical-character
@@ -367,10 +367,7 @@ matcher-specific timeouts on both execution backends.
     Unicode-flag copies and later literal reuse. The focused oracle passes 8/8
     on system Perl, JVM, and interpreter; `regexp_unicode_prop.t` gains nine
     assertions to 1,065/1,110 on both execution backends.
-  - [x] Completed Perl-compatible built-in Unicode alias normalization while
-    preserving deferred user-property precedence. The focused alias oracle
-    passes 16/16 on system Perl, JVM, and interpreter; unchanged
-    `regexp_unicode_prop.t` passes 1,110/1,110 on both execution backends.
+  - [ ] Complete the remaining built-in Unicode aliases.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -386,14 +383,20 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Integrate the stacked offset-map, regex-set, Joni safeguard, property
-   diagnostics, provenance, and Unicode-alias branches while retaining their
-   validated prerequisite heads.
-2. Rerun the forced-Joni corpus from the combined head and capture clean JVM
-   and interpreter 80-file baselines for comparison with PR 958.
-3. Classify residual generated-fixture and engine-introspection exclusions,
-   then queue the largest remaining semantic cluster as a focused slice.
-4. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+1. Remediate the remaining forced-Joni failure causes, starting with the
+   catastrophic `regexp*` cluster and absent generated Unicode fixtures; keep
+   per-child hard limits throughout. PR #1008 has removed the release-blocking
+   `pat_psycho*` offset-map reconstruction and bounded profiling confirms that
+   matcher-wrapper reuse is no longer on the critical path.
+2. Integrate the stacked Joni offset-map, regex-set property, and CEC timeout
+   slices, then rerun the forced-Joni corpus from the new combined head.
+3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
+   both to PR 958 with the regression exit gate.
+4. Integrate PR #1011 and the deferred-property provenance slice, then finish
+   PerlOnJava4's built-in Unicode aliases against the 1,065/1,110 diagnostics
+   baseline. Fixing the 29 executed alias failures also unlocks 16 gated match
+   assertions, so the alias-complete target is 1,110/1,110.
+5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 
