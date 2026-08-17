@@ -465,7 +465,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`<*.*>`**: `<*.*>` glob operator is implemented.
 - ✅  **End of file markers**: Source code control characters `^D` and `^Z`, and the tokens `__END__` and `__DATA__` are implemented.
 - ❌  **Startup processing**: processing `$sitelib/sitecustomize.pl` at startup is not enabled.
-- ❌  **Smartmatch operator**: `~~` and `given`/`when` construct are not implemented.
+- ✅  **Smartmatch operator**: `~~` and `given`/`when` behavior is supported on both backends. See the rerunnable [audit probe](../../dev/tools/feature-audit/remaining_semantics.t).
 - ✅  **File test operators**: `-R`, `-W`, `-X`, `-O` (for real uid/gid), this implementation assumes that the real user ID corresponds to the current user running the Java application.
 - ✅  **File test operators**: `-t` (tty check), this implementation assumes that the -t check is intended to determine if the program is running in a TTY-compatible environment.
 - ✅  **File test operators**: `-p`, `-S`, `-b`, and `-c` are approximated using file names or paths, as Java doesn't provide direct equivalents.
@@ -606,9 +606,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Runtime-owned `@_`, `$_`, and regex state**: Each ithread receives an isolated runtime snapshot.
 - ❌  **Compiler flags**:  The special variables `$^H`, `%^H`, `${^WARNING_BITS}` are not implemented.
 - ✅  **`caller` operator**: `caller` returns `($package, $filename, $line)`.
-  - ❌  **Extended call stack information**: extra debug information like `(caller($level))[9]` is not implemented.<br>
-    This means we don't include subroutine names in error messages yet.<br>
-    Extra debug information: `($package, $filename, $line, $subroutine, $hasargs, $wantarray, $evaltext, $is_require, $hints, $bitmask, $hinthash)`
+  - ✅  **Extended call stack information**: the full 11-field `caller($level)` tuple and key subroutine metadata are supported on both backends. See the [caller audit probe](../../dev/tools/feature-audit/caller_fields.t).<br>
+    Exact hint and bitmask values remain runtime- and pragma-dependent.
 
 ---
 
@@ -649,8 +648,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **utf8** pragma: utf8 is always on. Disabling utf8 might work in a future version.
 - 🚧  **bytes** pragma
 - 🚧  **feature** pragma
-  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `defer`, `bitwise`, `postderef`, `evalbytes`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
-  - ❌ Features missing: `postderef_qq`, `unicode_eval`, `unicode_strings`, `refaliasing`.
+  - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `defer`, `bitwise`, `postderef`, `postderef_qq`, `evalbytes`, `unicode_eval`, `refaliasing`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
+  - ❌ Feature still missing: `unicode_strings`.
 - 🚧  **warnings** pragma
 - 🚧  **attributes** pragma: `MODIFY_*_ATTRIBUTES`/`FETCH_*_ATTRIBUTES` callbacks for subroutines and variables.
 - ❌  **bignum, bigint, and bigrat** pragmas
@@ -894,7 +893,7 @@ maintenance contract.
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
 - ✅  **`DESTROY`**: Implemented with selective reference counting on top of JVM GC. Supports cascading destruction, closure capture tracking, `weaken`/`isweak`/`unweaken`, global destruction phase, and `Internals::SvREFCNT` introspection.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
-- ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection. All files are closed before the program ends.
+- 🚧  **Auto-close files**: Lexical buffered writes and fd closure pass on the JVM backend, but the interpreter backend still permits reopening the fd after the lexical handle goes out of scope. Explicit close and program-end cleanup remain supported. See the [scope probe](../../dev/tools/feature-audit/autoclose_scope.t) and [fd probe](../../dev/tools/feature-audit/autoclose_fd.t).
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.
 - ❌  **DBM file support**: `dbmclose`, `dbmopen` are not implemented.
 - ❌  **Calling a class name** `package Test; Test->()` gives `Undefined subroutine &Test::Test called`.
