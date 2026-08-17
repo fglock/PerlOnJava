@@ -237,10 +237,14 @@ The lossless generated `TestProp.pl` fixture now exposes ten previously gated
 assertions with zero timeouts or incomplete files, at 175,768 passing and
 115,144 failing. PR 958 recorded zero plan for all ten files, so this is new
 coverage rather than a regression, but it reopens Phase 3's full-corpus exit
-gate. Chunks 06–10 are complete except for 791 failures in chunk 05; chunks
-01–04 require semantic clustering before Phase 3 can close.
-The interpreter produces the exact same 175,768/290,912 split, with identical
-per-file plans and no timeout or incomplete file.
+gate. The interpreter produces the exact same 175,768/290,912 split, with
+identical per-file plans and no timeout or incomplete file. Semantic-key
+validation found that all 123,411 generated records
+in chunks 05–10 retain literal UTF-8 boundary markers in both subjects and
+patterns. Their 122,620 apparent passing assertions are therefore vacuous,
+not evidence of boundary or folding parity. Chunks 01–04 contain the genuine
+property failures; raw eval/source UTF-8 tagging must be fixed before chunks
+05–10 can become an authoritative boundary gate.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -406,9 +410,12 @@ matcher-specific timeouts on both execution backends.
     corpus. The focused importer test passes 66/66, two real generations are
     byte-identical, system Perl executes 503,197 TAP, and JVM/interpreter both
     execute 290,912 TAP with exact semantic parity and no timeout.
-  - [ ] Classify and close the 115,144 failures newly exposed by the lossless
-    generated `uniprops*.t` corpus; require JVM/interpreter plan and semantic
-    parity before marking Phase 3 complete.
+  - [x] Classified all 115,144 failures newly exposed by the lossless generated
+    `uniprops*.t` corpus, including the cross-cutting invalid boundary-harness
+    evidence in chunks 05–10.
+  - [ ] Fix raw eval/source UTF-8 tagging so chunks 05–10 exercise real boundary
+    subjects, then close the property and boundary failures with exact
+    JVM/interpreter plan and semantic parity before marking Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -424,27 +431,30 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Publish the validated lossless generated Unicode fixture importer on top of
-   PR #1016. Preserve the canonical corpus losslessly and retain hard per-child
-   bounds. The 300-second warm `uniprops04.t` attempt was contention-invalid;
-   repeat its performance measurement only on an idle host.
-2. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
+1. Complete and publish the current explicit `Is_*` property/value
+   normalization slice, measuring its exact chunks 01–04 gain on JVM and
+   interpreter. Integrate the independent fatal-Joni-syntax diagnostic slice
+   after its focused regressions and warning-free `make` pass.
+2. Fix raw-loaded eval/source UTF-8 tagging without patching generated fixtures.
+   Regenerate the lossless corpus and prove that chunks 05–10 no longer match
+   literal boundary markers before treating any boundary or folding result as
+   evidence.
+3. Implement the remaining property clusters in measured order: Block,
+   Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
+   break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
+   acceptance and rejection semantics rather than inheriting host ICU breadth.
+4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
    head. Save complete JSON and logs, publish the missing differential report,
    and compare every file with both the Phase 0 result and PR 958 under the
    no-regression gate.
-3. Implement the largest residual semantic clusters from that report, including
-   the generated Unicode Age/alias/boundary groups and the accepted-invalid-
-   pattern and warning-policy losses in `reg_mesg.t`. Keep optimizer/debug-
-   transcript assertions explicitly classified rather than approximating Perl
-   internals.
-4. Audit every `RegexPreprocessor` rule against the final ownership boundary.
+5. Audit every `RegexPreprocessor` rule against the final ownership boundary.
    Move matcher semantics into Joni, retain only source-policy scanning, delete
    Java-only rewrites and compiled-pattern variants, and remove the temporary
    Java backend selector after the performance gate passes.
-5. Reconcile `docs/reference/feature-matrix.md` with the final corpus: replace
+6. Reconcile `docs/reference/feature-matrix.md` with the final corpus: replace
    stale Unicode limitations, add any still-missing regex features, and link
    each limitation to a reducer or explicit optimizer/debug exclusion.
-6. Run unchanged CPAN consumers, the direct/thread release matrix, packaging
+7. Run unchanged CPAN consumers, the direct/thread release matrix, packaging
    and license checks, and warning-free `make`; then rebase each focused PR and
    require green Ubuntu and Windows CI.
 
