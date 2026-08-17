@@ -21,6 +21,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.WeakHashMap;
 
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -30,6 +31,8 @@ import org.perlonjava.runtime.runtimetypes.*;
  * beyond the Java Pattern fast path.
  */
 final class JoniRegexPattern {
+    private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
+
     // Ruby syntax defaults \w to ASCII even for a Unicode encoding. Perl's
     // default and /u modes use Unicode character classes; /a adds ASCII_RANGE
     // explicitly in toJoniOptions(). Keep the richer Ruby parser surface used
@@ -79,6 +82,21 @@ final class JoniRegexPattern {
                          RuntimeScalar subject) {
         return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags,
                 hasControlVerbState, input, callbacks, subject);
+    }
+
+    record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
+
+    static InputEncoding inputEncoding(String input) {
+        synchronized (INPUT_ENCODINGS) {
+            return INPUT_ENCODINGS.computeIfAbsent(input, JoniRegexPattern::buildInputEncoding);
+        }
+    }
+
+    private static InputEncoding buildInputEncoding(String input) {
+        byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+        int[] charToByte = JoniRegexMatcher.buildCharToByte(input);
+        int[] byteToChar = JoniRegexMatcher.buildByteToChar(input, bytes.length, charToByte);
+        return new InputEncoding(bytes, charToByte, byteToChar);
     }
 
     String patternDescription() {
@@ -602,9 +620,10 @@ final class JoniRegexPattern {
             this.input = input;
             this.callbacks = callbacks;
             this.subject = subject;
-            this.bytes = input.getBytes(StandardCharsets.UTF_8);
-            this.charToByte = buildCharToByte(input);
-            this.byteToChar = buildByteToChar(input, bytes.length, charToByte);
+            InputEncoding encoding = inputEncoding(input);
+            this.bytes = encoding.bytes();
+            this.charToByte = encoding.charToByte();
+            this.byteToChar = encoding.byteToChar();
             region(0, input.length());
         }
 
@@ -772,12 +791,16 @@ final class JoniRegexPattern {
 
         private static int[] buildByteToChar(String input, int byteLength, int[] charToByte) {
             int[] offsets = new int[byteLength + 1];
-            int charOffset = 0;
-            for (int b = 0; b <= byteLength; b++) {
-                while (charOffset + 1 < charToByte.length && charToByte[charOffset + 1] <= b) {
-                    charOffset++;
+            for (int charOffset = 0; charOffset < input.length();) {
+                int chars = Character.charCount(input.codePointAt(charOffset));
+                int nextCharOffset = charOffset + chars;
+                int nextByteOffset = charToByte[nextCharOffset];
+                for (int byteOffset = charToByte[charOffset];
+                     byteOffset < nextByteOffset; byteOffset++) {
+                    offsets[byteOffset] = charOffset;
                 }
-                offsets[b] = charOffset;
+                offsets[nextByteOffset] = nextCharOffset;
+                charOffset = nextCharOffset;
             }
             return offsets;
         }
