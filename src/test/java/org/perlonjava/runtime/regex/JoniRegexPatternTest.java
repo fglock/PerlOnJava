@@ -119,4 +119,15 @@ class JoniRegexPatternTest {
         assertEquals(0, matcher.start(1));
         assertEquals(2, matcher.end(1));
     }
+
+    @Test
+    void resolvesBlockPropertiesInsideExtendedClassesBeforeJoniCompilation() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "(?[ [k] + \\p{Blk=ASCII} ])",
+                RegexFlags.fromModifiers("i", "(?[ [k] + \\p{Blk=ASCII} ])"));
+
+        assertTrue(pattern.matcher("k", java.util.List.of()).find());
+        assertTrue(pattern.matcher("A", java.util.List.of()).find());
+        assertFalse(pattern.matcher("\u017F", java.util.List.of()).find());
+    }
 }
