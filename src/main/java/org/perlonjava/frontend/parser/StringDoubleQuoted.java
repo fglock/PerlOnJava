@@ -428,7 +428,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
                 // This ensures overloaded objects are properly stringified in string context
                 var listNode = new ListNode(parser.tokenIndex);
                 listNode.elements.add(result);
-                yield new BinaryOperatorNode("join", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
+                yield new BinaryOperatorNode("join_interpolation", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
             }
             default -> {
                 Node result = nodes.getFirst();

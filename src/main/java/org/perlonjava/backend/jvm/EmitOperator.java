@@ -808,7 +808,7 @@ public class EmitOperator {
         }
 
         // For join, check if `no overloading` is active and use joinNoOverload variant
-        if (node.operator.equals("join")) {
+        if (node.operator.equals("join") || node.operator.equals("join_interpolation")) {
             ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
             boolean noOverloading = symbolTable != null &&
                     symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
@@ -828,6 +828,21 @@ public class EmitOperator {
                 }
                 return;
             }
+        }
+
+        if (node.operator.equals("join_interpolation")) {
+            emitterVisitor.ctx.mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/StringOperators",
+                    "joinForInterpolation",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                handleVoidContext(emitterVisitor);
+            } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                handleScalarContext(emitterVisitor, node);
+            }
+            return;
         }
 
         emitOperator(node, emitterVisitor);

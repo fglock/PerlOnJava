@@ -21,11 +21,13 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 
 /** Compiles executable source introduced by runtime regex interpolation. */
 final class RuntimeRegexSourceCompiler {
@@ -40,8 +42,12 @@ final class RuntimeRegexSourceCompiler {
         String publicModifiers = modifiers.replace("E", "").replace("T", "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER), "");
+        // qr// accepts pattern modifiers, not operation modifiers such as the
+        // trailing marker used for m?PAT?. Reapply the complete operation flag
+        // set to the compiled qr object below.
+        String sourceModifiers = publicModifiers.replaceAll("[gcr?op]", "");
         String source = "qr~" + pattern.toString().replace("~", "\\~")
-                + "~" + publicModifiers;
+                + "~" + sourceModifiers;
         String sourceName = owner != null && owner.cvStartFile != null
                 ? owner.cvStartFile : "(runtime regex)";
         int sourceLine = owner != null && owner.cvStartLine > 0 ? owner.cvStartLine : 1;
@@ -75,6 +81,12 @@ final class RuntimeRegexSourceCompiler {
 
             CompilerOptions options = new CompilerOptions();
             options.fileName = sourceName;
+            if (pattern.type == BYTE_STRING) {
+                options.isByteStringSource = true;
+            } else {
+                options.isUnicodeSource = pattern.toString().codePoints()
+                        .anyMatch(codePoint -> codePoint > 127);
+            }
             ErrorMessageUtil errors = new ErrorMessageUtil(sourceName, tokens);
             EmitterContext context = new EmitterContext(
                     new JavaClassInfo(), symbolTable, null, null,
@@ -89,9 +101,34 @@ final class RuntimeRegexSourceCompiler {
             }
 
             RuntimeList result = code.apply(new RuntimeArray(), RuntimeContextType.SCALAR);
-            return result.scalar().propagateTaint(pattern);
+            RuntimeScalar compiled = result.scalar().propagateTaint(pattern);
+            if (compiled.value instanceof RuntimeRegex && !modifiers.isEmpty()) {
+                compiled = RuntimeRegex.getQuotedRegex(
+                        compiled, new RuntimeScalar(modifiers)).propagateTaint(pattern);
+            }
+            return compiled;
         } finally {
             SpecialBlockParser.setCurrentScope(savedScope);
         }
+    }
+
+    static RuntimeScalar compileTemplate(RuntimeScalar original,
+                                         RuntimeRegexTemplate template,
+                                         String modifiers) {
+        RuntimeRegexTemplate.MaskedCallouts masked = template.maskCallouts();
+        RuntimeScalar compiled = compile(new RuntimeScalar(masked.pattern()), modifiers);
+        if (!(compiled.value instanceof RuntimeRegex sourceRegex)) {
+            throw new IllegalStateException("runtime regex source did not compile to qr//");
+        }
+
+        String executablePattern = RuntimeRegexTemplate.offsetCalloutIds(
+                sourceRegex.patternString, template.callbacks().size(),
+                sourceRegex.executableCallbacks.size());
+        executablePattern = masked.restore(executablePattern);
+
+        List<RuntimeRegexCallback> callbacks = new ArrayList<>(template.callbacks());
+        callbacks.addAll(sourceRegex.executableCallbacks);
+        return RuntimeRegex.compileExecutableTemplate(executablePattern, modifiers,
+                callbacks, original);
     }
 }

@@ -251,9 +251,9 @@ retain lexical warning masks and source locations.
 The focused direct gates are `rxcode.t` 42/42, `reg_eval_scope.t` 49/49, and
 `dynamic_patterns.t` 12/12 on both backends. The unchanged Object::InsideOut
 dynamic-pattern test is 6/6 on both backends. `reg_eval.t` remains 5/8 because
-of three shared non-regex code-evaluation failures, while `pat_re_eval.t` now
-executes 430 of 555 planned assertions before reaching a mixed literal/runtime
-source form that is not yet accepted.
+of three shared non-regex code-evaluation failures. `pat_re_eval.t` now executes
+all 555 planned assertions on both backends; 420 pass and 135 remain as focused
+semantic and diagnostic gaps.
 
 The final 2026-08-16 differential gate compared all 80 `perl5_t/t/re/` files
 with `../PerlOnJava/logs/test_20260815_080000_958.log`. It records
@@ -340,11 +340,37 @@ green without warning output.
   - Completed the warning-free full build and Phase 44 preservation matrix.
   - Passed both Net::SSLeay thread ecosystem checks and the unchanged
     DBIx::Class gate (325 files, 42,681 assertions).
+- [x] Mixed literal and runtime callback source (2026-08-16)
+  - Recompiled raw runtime eval groups inside an existing structured callback
+    template while preserving trusted callback identities and lexical cells.
+  - Propagated `use re 'eval'` through nested dynamic patterns and retained
+    match-once callsite state on both compiler backends.
+  - Kept standalone `(?(DEFINE)...)` containers on Joni when combined with
+    runtime callback source.
+  - Added an 11-case standard-Perl differential gate; JVM and interpreter both
+    pass 11/11, and `pat_re_eval.t` now reaches its complete 555-test plan.
+- [x] Runtime-source admission and structured array interpolation (2026-08-16)
+  - Rejected plain runtime eval groups outside lexical `use re 'eval'` while
+    ignoring callback-like text in regex comments, `/x` comments, escapes, and
+    character classes.
+  - Preserved callback-bearing `qr//` values through interpolation-only array
+    joins on both compiler backends without changing explicit `join()`.
+  - Preserved Unicode versus byte-string source metadata in the synthetic
+    runtime compiler.
+  - Expanded the standard-Perl differential gate to 16/16 on both backends;
+    `pat_re_eval.t` improves from 334/555 to 414/555.
+- [x] Localized package-array callback preservation (2026-08-16)
+  - Refreshed cached interpreter registers after plain `our` variables are
+    localized, so assignments target the active scalar, array, or hash slot.
+  - Added a six-case standard-Perl localization/restoration gate that passes on
+    both backends.
+  - Closed all six remaining package-global array interpolation variants;
+    `pat_re_eval.t` improves to 420/555 on both backends.
 
 ### Next steps
 
-1. Accept mixed literal/runtime callback source in the remaining
-   `pat_re_eval.t` cases without broadening `use re 'eval'` admission.
+1. Address exact runtime-eval source names, warning locations, and diagnostic
+   parity in `pat_re_eval.t`.
 2. Close the three non-regex `reg_eval.t` code-evaluation failures.
 3. Continue the remaining Unicode alias and recursion-condition cases as
    focused post-Phase-36 compatibility slices.

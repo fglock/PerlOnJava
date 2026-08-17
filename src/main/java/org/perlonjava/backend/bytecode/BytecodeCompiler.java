@@ -4066,6 +4066,16 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(rd);
                     emit(nameIdx);
 
+                    // `our $x; local $x` leaves a compile-time register for
+                    // the package variable. Refresh it after localization so
+                    // later assignments do not mutate the saved pre-local slot.
+                    if (hasVariable(varName) && isOurVariable(varName)) {
+                        int ourReg = getVariableRegister(varName);
+                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                        emitReg(ourReg);
+                        emit(nameIdx);
+                    }
+
                     // If this is a declared reference, create a reference to it
                     if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
                         int refReg = allocateRegister();
@@ -4129,6 +4139,18 @@ public class BytecodeCompiler implements Visitor {
                     }
                     emitReg(rd);
                     emit(nameIdx);
+
+                    // As for `local our @x`, refresh an existing `our`
+                    // register after plain `our @x; local @x` (or `%x`).
+                    // Otherwise subsequent bytecode writes the saved container
+                    // while dynamic reads observe the empty localized one.
+                    if (hasVariable(varName) && isOurVariable(varName)) {
+                        int ourReg = getVariableRegister(varName);
+                        emit(sigil.equals("@")
+                                ? Opcodes.LOAD_GLOBAL_ARRAY : Opcodes.LOAD_GLOBAL_HASH);
+                        emitReg(ourReg);
+                        emit(nameIdx);
+                    }
 
                     if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
                         int refReg1 = allocateRegister();
