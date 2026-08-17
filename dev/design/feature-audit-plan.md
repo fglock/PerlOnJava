@@ -23,7 +23,7 @@ logs are in `/tmp/feature-audit-*` and are not committed by default.
 |---|---|---|---|---|
 | Lexical buffered file auto-close | pass | pass | pass | Basic flush behavior passes everywhere. |
 | File descriptor closure at lexical scope exit | `reopen=no` | `reopen=no` | `reopen=yes` | Partial support; interpreter backend retains the fd. |
-| Smartmatch / `given` / `when` | pass | pass | pass | Matrix claim was stale; promoted to supported. |
+| Smartmatch / `given` / `when` | pass | pass | pass | Matrix claim was stale; promoted to supported. See the [probe](../tools/feature-audit/remaining_semantics.t). |
 | Restricted hashes | enforced | not enforced | not enforced | Still unsupported on both backends. |
 | DBM round trip | pass | explicit `dbmopen` not implemented | explicit `dbmopen` not implemented | Still unsupported. |
 | `fork` returns a child PID | pass | not defined | not defined | Still unsupported; true OS fork remains unavailable. |
