@@ -72,7 +72,7 @@ regressions against PR 958:
 
 | File | PR 958 | Candidate | Delta | Initial classification |
 |---|---:|---:|---:|---|
-| `pat.t` | 1099/1302 | 239/1302 | -860 | source-policy/backend routing abort |
+| `pat.t` | 1099/1302 | 239/1302 | -860 | shared source-provenance abort |
 | `pat_thr.t` | 1099/1302 | 239/1302 | -860 | same direct failure in thread wrapper |
 | `reg_mesg.t` | 1692/2525 | 1664/2521 | -28 | diagnostics and plan change |
 | `regexp_normal.t` | 2193/2210 | 2175/2210 | -18 | matcher semantics |
@@ -83,10 +83,11 @@ regressions against PR 958:
 Eval-group not allowed at runtime, use re 'eval'
 ```
 
-This is not an optimizer/debug transcript difference. Initial evidence
-indicates that the forced-Java route fails to retain or recognize the
-executable-group source policy needed to route the pattern to the matcher that
-supports callbacks.
+This is not an optimizer/debug transcript difference or a Java/Joni routing
+difference. The forced-Joni leg stops at the same point. The failing literal
+uses single-quote regex delimiters, `m'a(?{ ... })b'`; initial reduction shows
+that this parse path produces a plain pattern string and loses trusted literal
+callback provenance before matcher selection.
 
 The net aggregate loss masks substantial progress since PR 958. In particular,
 `pat_re_eval{,_thr}.t` improves from 0/555 to 423/555 each,
@@ -112,6 +113,8 @@ search before any broad implementation change.
 
 Completed Joni/JVM files also expose semantic gaps independent of timeout:
 
+- `pat{,_thr}.t`: 239/1302 each, sharing the matcher-independent literal
+  callback provenance abort described above.
 - `pat_advanced{,_thr}.t`: 1271/1687 each, versus forced Java 1511/1687.
 - `reg_mesg.t`: 1364/2486, versus forced Java 1664/2521.
 - `reg_posixcc.t`: 2052/2560, versus forced Java 2560/2560.
@@ -164,8 +167,8 @@ rather than execution-backend compilation.
 
 ## Classification and Follow-up
 
-- Source policy: reduce and fix the forced-Java executable-group abort after
-  this report PR, with a focused standard-Perl oracle.
+- Source policy: fix the matcher-independent single-quote literal callback
+  provenance abort after this report PR, with a focused standard-Perl oracle.
 - Matcher semantics: separate the shared `regexp_normal.t` loss from
   Joni-only `pat_advanced.t` and POSIX/property losses.
 - Diagnostics: treat `reg_mesg.t` independently from matching behavior.
