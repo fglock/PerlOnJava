@@ -1,8 +1,8 @@
 # Perl Threads Implementation Plan
 
-**Status:** Public thread modules delivered; complete core-wrapper milestone active
-**Version:** 3.1
-**Date:** 2026-08-16
+**Status:** Non-regex thread delivery complete; source-first regex gate awaits parallel Joni work
+**Version:** 3.2
+**Date:** 2026-08-17
 
 ## 1. Goal and Non-Negotiable Delivery Rule
 
@@ -193,12 +193,14 @@ alone.
 
 ## 5. Current Release Contract
 
-Thread delivery has two explicit milestones. The first is complete: the public
-thread runtime and unchanged module distributions pass their authoritative
-matrix. The second remains active: every applicable Perl core thread wrapper
-must complete its plan after its same-commit direct companion does. A direct
-parser, operator, or regex failure is not relabelled as a thread failure, and a
-wrapper is never patched to manufacture parity.
+Thread delivery has two explicit milestones. The public thread runtime and
+unchanged module distributions pass their authoritative matrix. The complete
+Perl-core wrapper gate is implemented and source-first, but its final release
+run remains pending while a direct interpreter executable-regex case exceeds
+the hard bound in the separate Phase 36/Joni project. A direct parser, operator,
+or regex failure is not relabelled as a thread failure, and a wrapper is never
+patched to manufacture parity. The gate rejects any loss of TAP, added failure,
+added incompleteness, timeout, or execution error.
 
 The supported implementation includes:
 
@@ -236,21 +238,30 @@ direct companions.
 
 ## 7. Progress Tracking
 
-### Current Status: module compatibility delivered; core wrappers active
+### Current Status: non-regex delivery complete; core parity gate ready
 
 `PerlRuntime` owns interpreter state, ithreads clone one isolated runtime graph,
 and `threads::shared` supplies explicit cross-runtime storage and synchronization.
 The unchanged upstream `threads`, `threads-shared`, `Thread-Queue`, and
 `Thread-Semaphore` distributions are the delivered public compatibility
-contract on both execution backends and both Java carrier policies. Complete
-Perl-core wrapper compatibility is a separate release milestone. Regex
-companions depend on Phase 36 direct-language completion; the concurrency
-project owns only snapshot, runtime-isolation, and direct/thread deltas.
+contract on both execution backends and both Java carrier policies. The five
+non-regex Perl-core thread files pass strictly. The source-first checker is
+ready for the twelve regex wrappers and passes the JVM virtual matrix; final
+four-mode activation waits for the direct interpreter Joni timeout to close.
+The concurrency project owns snapshot, runtime-isolation, and direct/thread
+deltas; it does not implement the direct regex engine.
 
 The callout-enabled Joni matcher is part of the shipped runtime. Remaining
 direct regex-language gaps are maintained in the separate regex project.
 Threaded regex wrappers remain preservation gates against their same-commit
 direct companions.
+
+The slow ecosystem contract is also active: pinned Test2, Storable, and Moose
+thread tests pass on both backends; DBI handle ownership matches system Perl on
+both backends and carrier policies; Net::SSLeay's callback/deadlock suites pass;
+and DBIx::Class passes its complete available corpus. JDBC-backed DBI wrappers
+call stable private Java entry points, so replacing public Perl method globs
+cannot capture a wrapper recursively on one compiler backend.
 
 Completed implementation history, validation evidence, and superseded decisions
 are intentionally omitted here and are recoverable from commit messages and pull
@@ -258,14 +269,17 @@ requests.
 
 ### Next Steps
 
-1. Keep `make test-threads` as a permanent Ubuntu pull-request gate. It runs
+1. Keep `make test-threads` as the permanent Ubuntu pull-request gate. It runs
    both execution backends with virtual carriers and focused platform lifecycle,
    signal, stack, wait, timeout, and deadlock coverage.
-2. The five non-regex core thread files are complete at 849/849 on JVM and
-   interpreter with both virtual and platform carriers. Close the remaining
-   twelve regex wrappers through `make test-threads-core`; direct companions
-   always run first and resource-sensitive families run serially.
-3. Run `make test-threads-release` before any thread/runtime release. It extends
+2. Merge the parallel Joni work, rebase, and rerun `make test-threads-core` as the
+   source-first Perl-core gate. The five
+   non-regex files are strict. Each partial regex direct companion runs before
+   its wrapper; `dev/tools/check_thread_core_parity.pl` rejects any wrapper
+   regression while allowing direct Phase 36 gaps to remain independently
+   visible. Resource-sensitive families run serially.
+3. Once the core gate is green, run `make test-threads-release` before any
+   thread/runtime release. It extends
    the pull-request gate to the complete public-module and core-wrapper matrices
    on platform carriers.
 4. Keep `make test-threads-regex` in the release matrix: lexical regex
@@ -273,7 +287,7 @@ requests.
    character classes, and callback-heavy psycho patterns. Its five unchanged
    files contain 48 assertions and pass on both backends. Partial wrappers must
    preserve their same-commit direct result until Phase 36 closes the direct gap.
-5. Run `make test-threads-ecosystem` for native callback and ORM releases. It
+5. Keep `make test-threads-ecosystem` green for native callback and ORM releases. It
    first runs pinned Test2 and Storable thread tests on both backends, then proves the DBI
    ownership contract under system Perl and all four PerlOnJava backend/carrier
    modes before Net::SSLeay and DBIx::Class. Moose 2.4000's unchanged upstream
@@ -285,8 +299,10 @@ requests.
 8. Monitor snapshot retention and startup cost. Runtime pooling remains bounded,
    opt-in, and disabled by default; returned application runtimes are replaced,
    not partially reused.
-9. Keep remaining direct regex-language work in the separate Phase 36 project.
-   Threaded regex wrappers must preserve their same-commit direct behavior.
+9. After each later Phase 36/Joni merge, rebase and rerun the source-first core gate.
+   Improvements in a direct companion become the wrapper's new minimum
+   automatically; direct regex-language implementation remains outside this
+   plan.
 
 Remaining direct regex-language work is not part of this release. The Joni
 callout engine and executable callback bridge are already integrated.

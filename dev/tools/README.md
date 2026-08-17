@@ -7,6 +7,10 @@ This directory contains utility scripts and tools for PerlOnJava development.
 ### perl_test_runner.pl
 **Purpose:** Main test runner for PerlOnJava test suite.
 
+On POSIX hosts each timed test runs in a runner-owned process group. Timeout
+cleanup kills that complete group so nested `fresh_perl` JVMs cannot survive
+after their direct test process exits.
+
 **Usage:**
 ```bash
 ./dev/tools/perl_test_runner.pl [test_directory]
@@ -30,6 +34,19 @@ This directory contains utility scripts and tools for PerlOnJava development.
 
 ### compare_test_results.pl
 **Purpose:** Compare test results between runs to identify regressions or improvements.
+
+### check_thread_core_parity.pl
+**Purpose:** Enforce the same-commit direct/thread contract for the Perl-core
+regex wrappers. It consumes the JSON reports produced by
+`make test-threads-core`, allows independently tracked direct Phase 36 gaps,
+and fails when a wrapper loses TAP or adds failures, incompleteness, a timeout,
+or an execution error.
+
+This tool is normally invoked by the Make target rather than directly:
+
+```bash
+perl dev/tools/check_thread_core_parity.pl build/reports/threads/core core-jvm-virtual
+```
 
 ### jcpan_bisect_module.pl
 **Purpose:** Find the PR merge commit where a slow `./jcpan -t MODULE` target stopped passing.

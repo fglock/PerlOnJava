@@ -7,7 +7,7 @@ use Time::HiRes qw(time);
 use Getopt::Long;
 use JSON::PP;
 use Data::Dumper;
-use POSIX qw(WNOHANG);
+use POSIX qw(WNOHANG WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG setsid);
 use Config ();
 
 # PerlOnJava Test Runner
@@ -411,9 +411,9 @@ sub run_single_test {
     # JVM builds or CPAN testers are active. A five-second sample still fits
     # the resource-sensitive test's 600-second runner allowance and makes its
     # relative global/lexical hash comparisons substantially more stable.
-    my $test_args = $test_file =~ m{
+    my @test_args = $test_file =~ m{
         (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
-    }x ? ' -5' : '';
+    }x ? ('-5') : ();
 
     # Try to use system timeout command if available.
     # Use --kill-after (-k) so a SIGTERM that the JVM ignores is followed
@@ -422,35 +422,76 @@ sub run_single_test {
     # homebrew/gtimeout) supports -k. Windows ships a `timeout.exe` that is
     # NOT GNU timeout (it's a sleep-with-countdown), so we skip detection
     # there and fall back to the alarm-based path.
-    my $timeout_cmd = '';
+    my $timeout_program = '';
     my $is_windows = ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys');
     my $kill_after = 10;  # seconds between SIGTERM and SIGKILL
     if (!$is_windows) {
         if (system('which timeout >/dev/null 2>&1') == 0) {
-            $timeout_cmd = "timeout -k ${kill_after}s ${test_timeout}s ";
+            $timeout_program = 'timeout';
         } elsif (system('which gtimeout >/dev/null 2>&1') == 0) {
             # macOS with coreutils
-            $timeout_cmd = "gtimeout -k ${kill_after}s ${test_timeout}s ";
+            $timeout_program = 'gtimeout';
         }
     }
 
-    # Test subprocesses run in their own process groups under GNU timeout.
     # Never inherit an interactive terminal as stdin: a test that reads from
     # it would receive SIGTTIN and stop indefinitely as a background group.
     my $devnull = File::Spec->devnull();
-    my $cmd = "${timeout_cmd}$abs_jperl $test_name$test_args < $devnull 2>&1";
 
     # Capture output with timeout
     my $output = '';
     my $exit_code = 0;
-    my $raw_output_path;
+    my $raw_output_path = "/tmp/perl_test_output_$$" . "_" . time()
+        . "_" . int(rand(1000)) . ".log";
+    my $output_captured = 0;
 
-    if ($timeout_cmd) {
-        # Use external timeout
-        $output = `$cmd`;
-        $exit_code = $? >> 8;
+    if ($timeout_program) {
+        # Put the complete test tree in a runner-owned session. GNU timeout's
+        # foreground mode keeps jperl and every nested fresh_perl process in
+        # that group. If the direct JVM exits on timeout but a descendant does
+        # not, the final group kill below still removes the orphan.
+        my $launcher_pid = fork();
+        die "Cannot fork test launcher: $!" unless defined $launcher_pid;
+        if ($launcher_pid == 0) {
+            my $session_id = setsid();
+            defined $session_id or die "Cannot create test session: $!";
+            open STDIN, '<', $devnull or die "Cannot open $devnull: $!";
+            open STDOUT, '>', $raw_output_path
+                or die "Cannot open $raw_output_path: $!";
+            open STDERR, '>&', \*STDOUT or die "Cannot redirect stderr: $!";
+            exec {
+                $timeout_program
+            } $timeout_program, '--foreground', '-k', "${kill_after}s",
+                "${test_timeout}s", $abs_jperl, $test_name, @test_args;
+            die "Cannot execute $timeout_program: $!";
+        }
+
+        waitpid($launcher_pid, 0);
+        my $wait_status = $?;
+        if (WIFEXITED($wait_status)) {
+            $exit_code = WEXITSTATUS($wait_status);
+        } elsif (WIFSIGNALED($wait_status)) {
+            $exit_code = 128 + WTERMSIG($wait_status);
+        } else {
+            $exit_code = 1;
+        }
+
+        # Negative PID targets the complete runner-owned session group. It is
+        # safe when already empty, cleans up detached descendants after normal
+        # completion, and catches children reparented after a timeout killed
+        # their direct Java parent.
+        kill 'KILL', -$launcher_pid;
+
+        if (open my $fh, '<:raw', $raw_output_path) {
+            local $/;
+            $output = <$fh> // '';
+            close $fh;
+        }
+        $output_captured = 1;
     } else {
         # Fallback to alarm-based timeout
+        my $cmd = join(' ', $abs_jperl, $test_name, @test_args)
+            . " < $devnull 2>&1";
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };
             alarm($test_timeout);
@@ -463,8 +504,7 @@ sub run_single_test {
         }
     }
 
-    $raw_output_path = "/tmp/perl_test_output_$$" . "_" . time() . "_" . int(rand(1000)) . ".log";
-    if (open my $fh, '>', $raw_output_path) {
+    if (!$output_captured && open my $fh, '>', $raw_output_path) {
         print $fh $output;
         close $fh;
     }

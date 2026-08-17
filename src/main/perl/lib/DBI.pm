@@ -82,17 +82,17 @@ sub DBD::_::st::finish {
 # to intercept the die and call HandleError from Perl context (where
 # caller() works correctly for DBIC's __find_caller).
 {
-    $JDBC_CONNECT = \&DBI::connect;
-    $JDBC_PREPARE = \&DBI::prepare;
-    $JDBC_EXECUTE = \&DBI::execute;
-    $JDBC_FINISH  = \&DBI::finish;
-    $JDBC_DISCONNECT = \&DBI::disconnect;
-    $JDBC_PING = \&DBI::ping;
-    $JDBC_BEGIN_WORK = \&DBI::begin_work;
-    $JDBC_COMMIT = \&DBI::commit;
-    $JDBC_ROLLBACK = \&DBI::rollback;
-    $JDBC_FETCHROW_ARRAYREF = \&DBI::fetchrow_arrayref;
-    $JDBC_FETCHROW_HASHREF = \&DBI::fetchrow_hashref;
+    $JDBC_CONNECT = \&DBI::_jdbc_connect;
+    $JDBC_PREPARE = \&DBI::_jdbc_prepare;
+    $JDBC_EXECUTE = \&DBI::_jdbc_execute;
+    $JDBC_FINISH  = \&DBI::_jdbc_finish;
+    $JDBC_DISCONNECT = \&DBI::_jdbc_disconnect;
+    $JDBC_PING = \&DBI::_jdbc_ping;
+    $JDBC_BEGIN_WORK = \&DBI::_jdbc_begin_work;
+    $JDBC_COMMIT = \&DBI::_jdbc_commit;
+    $JDBC_ROLLBACK = \&DBI::_jdbc_rollback;
+    $JDBC_FETCHROW_ARRAYREF = \&DBI::_jdbc_fetchrow_arrayref;
+    $JDBC_FETCHROW_HASHREF = \&DBI::_jdbc_fetchrow_hashref;
 
     no warnings 'redefine';
 
