@@ -3,14 +3,12 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.backend.jvm.EmitterContext;
-import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
-import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 
 import java.math.BigInteger;
@@ -849,6 +847,7 @@ public abstract class StringSegmentParser {
         int sourceLine = regexCallbackSourceLine();
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "?");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
+        int callbackSourceStart = parser.tokenIndex;
         LexerToken callbackType = TokenUtils.consume(parser);
         if (!"?".equals(callbackType.text) && !"*".equals(callbackType.text)) {
             throw new IllegalStateException("invalid regex callback condition marker");
@@ -858,7 +857,8 @@ public abstract class StringSegmentParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         segments.add(new StringNode("(?(", start));
-        segments.add(regexCallback(block, "CONDITION", start, sourceLine));
+        segments.add(regexCallback(block, "CONDITION", start, sourceLine,
+                "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
     }
 
     private boolean isRegexOptimisticBlock() {
@@ -872,12 +872,14 @@ public abstract class StringSegmentParser {
         flushCurrentSegment();
         int start = tokenIndex;
         int sourceLine = regexCallbackSourceLine();
+        int callbackSourceStart = parser.tokenIndex;
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "*");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
         Node block = parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
-        segments.add(regexCallback(block, "BLOCK", start, sourceLine));
+        segments.add(regexCallback(block, "BLOCK", start, sourceLine,
+                "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
     }
 
     /**
@@ -926,6 +928,7 @@ public abstract class StringSegmentParser {
 
         int savedTokenIndex = tokenIndex;
         int sourceLine = regexCallbackSourceLine();
+        int callbackSourceStart = parser.tokenIndex;
 
         // Consume the "?" token(s)
         TokenUtils.consume(parser); // consume first "?"
@@ -945,25 +948,21 @@ public abstract class StringSegmentParser {
         // Consume the closing ")" that completes the (?{...}) construct  
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
 
-        if (isRecursive) {
-            // Keep constant folding as the zero-overhead path, but preserve a
-            // runtime-dependent expression as a lexical dynamic-program closure.
-            Node folded = ConstantFoldingVisitor.foldConstants(block);
-            if (folded instanceof BlockNode blockNode && blockNode.elements.size() == 1) {
-                folded = blockNode.elements.getFirst();
-            }
-            RuntimeScalar constant = ConstantFoldingVisitor.getConstantValue(folded);
-            if (constant == null || !isSafeDynamicConstantFold(constant.toString())) {
-                segments.add(regexCallback(block, "DYNAMIC", savedTokenIndex, sourceLine));
-            } else {
-                segments.add(new StringNode(constant.toString(), savedTokenIndex));
-            }
-        } else {
-            segments.add(regexCallback(block, "BLOCK", savedTokenIndex, sourceLine));
-        }
+        String kind = isRecursive ? "DYNAMIC" : "BLOCK";
+        segments.add(regexCallback(block, kind, savedTokenIndex, sourceLine,
+                "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
     }
 
-    private Node regexCallback(Node block, String kind, int index, int sourceLine) {
+    private String regexSourceTokens(int start, int end) {
+        StringBuilder source = new StringBuilder();
+        for (int i = start; i < end && i < parser.tokens.size(); i++) {
+            source.append(parser.tokens.get(i).text);
+        }
+        return source.toString();
+    }
+
+    private Node regexCallback(Node block, String kind, int index, int sourceLine,
+                               String source) {
         SubroutineNode closure = new SubroutineNode(null, null, null, block, false, index);
         closure.setAnnotation("inheritsSelfReference", true);
         closure.setAnnotation("regexCallbackPseudoBlock", true);
@@ -981,6 +980,7 @@ public abstract class StringSegmentParser {
         callback.setAnnotation("regexCallbackKind", kind);
         callback.setAnnotation("regexCallbackPackage",
                 closure.getAnnotation("regexCallbackPackage"));
+        callback.setAnnotation("regexCallbackSource", source);
         hasExecutableRegexCallbacks = true;
         return callback;
     }
@@ -996,33 +996,6 @@ public abstract class StringSegmentParser {
             }
         }
         return line;
-    }
-
-    /**
-     * Folding is safe only when textual insertion preserves the nested program's
-     * grouping and capture isolation. A top-level alternative could absorb the
-     * outer suffix, and a capturing group could consume an outer capture number.
-     */
-    private static boolean isSafeDynamicConstantFold(String pattern) {
-        boolean escaped = false;
-        boolean inClass = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-            } else if (ch == '\\') {
-                escaped = true;
-            } else if (ch == '[') {
-                inClass = true;
-            } else if (ch == ']' && inClass) {
-                inClass = false;
-            } else if (ch == '(' && !inClass) {
-                return false;
-            } else if (ch == '|' && !inClass) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**

@@ -56,6 +56,8 @@ public abstract class Matcher extends IntHolder {
     private CalloutHandler calloutHandler;
     private boolean abortSearch;
     private int skipSearchTo = -1;
+    protected String controlMark;
+    protected String controlError;
 
     private static final class SkipSearch extends RuntimeException {
         final int target;
@@ -117,6 +119,14 @@ public abstract class Matcher extends IntHolder {
     /** Most recently closed active capture; engines without this view return -1. */
     public int lastClosedCapture() {
         return -1;
+    }
+
+    public final String getControlMark() {
+        return controlMark;
+    }
+
+    public final String getControlError() {
+        return controlError;
     }
 
     protected final void msaInit(int option, int start, int gpos) {
@@ -353,8 +363,13 @@ public abstract class Matcher extends IntHolder {
             try {
                 return searchCommon(next, next, range, option, false);
             } catch (SkipSearch skip) {
-                if (skip.target <= next || skip.target > range) return FAILED;
-                next = skip.target;
+                if (skip.target < next || skip.target > range) return FAILED;
+                if (skip.target == next) {
+                    if (next >= range) return FAILED;
+                    next += enc.length(bytes, next, end);
+                } else {
+                    next = skip.target;
+                }
             } catch (AbortSearch abort) {
                 return FAILED;
             } catch (InterruptedException ex) {
@@ -381,8 +396,13 @@ public abstract class Matcher extends IntHolder {
             try {
                 return searchCommon(next, next, range, option, true);
             } catch (SkipSearch skip) {
-                if (skip.target <= next || skip.target > range) return FAILED;
-                next = skip.target;
+                if (skip.target < next || skip.target > range) return FAILED;
+                if (skip.target == next) {
+                    if (next >= range) return FAILED;
+                    next += enc.length(bytes, next, end);
+                } else {
+                    next = skip.target;
+                }
             } catch (AbortSearch abort) {
                 return FAILED;
             }

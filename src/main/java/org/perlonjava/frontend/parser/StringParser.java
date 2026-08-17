@@ -373,7 +373,7 @@ public class StringParser {
             boolean hasXModifier = modifiers != null && modifiers.contains("x");
             
             String patternStr = rawStr.buffers.getFirst();
-            if (hasXModifier) {
+            if (hasXModifier && mayInterpolateRegex(patternStr)) {
                 // With /x modifier, strip comments before variable interpolation
                 // Comments start with # and extend to newline (but not inside [...] or escaped)
                 patternStr = stripRegexComments(patternStr);
@@ -393,6 +393,11 @@ public class StringParser {
                     parser != null ? parser.getHeredocNodes() : null, null, true, isRegexQuoteConstruction);
         }
         return parsed;
+    }
+
+    /** Literal /x comments can remain in the matcher source and must remain for qr stringification. */
+    private static boolean mayInterpolateRegex(String pattern) {
+        return pattern.indexOf('$') >= 0 || pattern.indexOf('@') >= 0;
     }
 
     /**

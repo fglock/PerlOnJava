@@ -1,394 +1,281 @@
-# Phase 36: Complete Regex Parity
+# Full Perl Regex Semantic Parity
 
-## Status
+## Goal
 
-- **Project status:** Delivered compatibility slice; residual gaps remain tracked
-- **Current stage:** Stage 36.7 complete
-- **Parent plan:** `dev/design/concurrency.md`
-- **Detailed callback design:** `dev/design/executable-regex-callbacks.md`
-- **Integration rule:** Direct regex semantics are implemented first. Thread
-  wrappers receive no compatibility branches or test-specific behavior.
+Complete Perl 5.44 regular-expression semantics on both PerlOnJava execution
+backends and converge on the vendored, namespaced Joni engine for all matching.
+Java `Pattern` remains available only as a temporary differential backend while
+the migration is being proved.
 
-## Objective
+The acceptance target includes matching, captures, match state, callbacks,
+dynamic patterns, errors, warning categories and locations, byte and Unicode
+behavior, direct/thread parity, and unchanged-source CPAN consumers. Assertions
+that inspect Perl's internal optimizer program or debug transcript are reported
+separately from language-semantic failures.
 
-Complete the shared Perl regex implementation exercised by direct core tests and
-their `_thr.t` wrappers. The result must behave consistently on the JVM and
-interpreter backends, preserve runtime ownership across ithread snapshots, and
-retain the existing fast paths for patterns that do not need advanced features.
+The historical comparison point is:
 
-Phase 36 is intentionally independent from the remaining threads delivery work.
-It should be developed in a separate checkout and integrated through focused
-regex PRs. The concurrency project consumes its results through unchanged
-thread wrappers and protects the Phase 44 release matrix.
+```text
+../PerlOnJava/logs/test_20260815_080000_958.log
+```
 
-## Completed Foundation
+The last completed 80-file differential recorded 51,002/94,829 passing
+assertions, 729 more passing assertions and 58 more planned assertions than that
+baseline, with no per-file pass-count regressions.
 
-- Lexical `use/no re 'debug'` and `debugcolor` state is runtime-owned and works
-  across thread snapshots.
-- Recursive definitions used by `reg_email` compile on the recursive backend.
-- DATA handles retain the source position and inheritance behavior needed by
-  direct and threaded regex fixtures.
-- Quoted `(?{` text inside `\Q...\E` is not parsed as executable code.
-- Literal regex expressions assembled from strings, concatenation, and
-  `quotemeta` are validated when the surrounding CV is compiled.
-- `(*FAIL)`/`(*F)`, `(*ACCEPT)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and
-  `(*COMMIT)` execute as matcher-owned control operations.
-- Runtime-owned Unicode property caches and per-runtime-family property
-  coordination are implemented.
-- Phase 44 established timeout-free thread-wrapper execution and the supported
-  regex anchors, including lexical debugging 6/6, user-property race 3/3, and
-  `pat_psycho_thr.t` 17/17.
-- A namespaced callout-enabled Joni fork is vendored and packaged. JVM and
-  interpreter templates execute `(?{ code })` and callback conditions with
-  provisional captures, `$^R`, and matcher-driven backtracking unwind.
+## Architecture
 
-## Remaining Workstreams
+### Final engine boundary
 
-### A. Complete executable regex callback semantics
+- The vendored Joni fork is the sole production matcher.
+- PerlOnJava owns Perl source policy: interpolation provenance, `use re 'eval'`,
+  lexical warning and modifier state, executable callback closures, user-defined
+  Unicode properties, source locations, and Perl diagnostics.
+- Joni owns regex parsing and matcher semantics: captures, conditions,
+  recursion, lookarounds, case folding, control verbs, backtracking-visible
+  state, and byte/Unicode matching.
+- The fork remains runtime-neutral. It receives internal callback IDs and a
+  matcher-local handler API, never Perl source or PerlOnJava runtime objects.
+- Upstream packages and notices stay unchanged in `third_party/joni`; standalone
+  packaging relocates Joni and JCodings into `org.perlonjava.internal`.
 
-Finish the semantic matrix around the integrated match-time `(?{ BLOCK })` and
-callback-condition bridge, then implement optimistic evaluation `(*{ BLOCK })`
-and dynamic patterns `(??{ EXPR })`.
-Callbacks must run while the matcher owns its provisional captures and
-backtracking stack. Post-match callbacks and construction-time execution are not
-acceptable approximations.
+### Migration controls
 
-The architecture, semantic matrix, and callback-specific risks live in
-`dev/design/executable-regex-callbacks.md`. The matcher seam is now delivered;
-keep that document aligned with the vendored fork rather than treating the
-callout API as a proposal.
+A temporary developer-only backend selector supports separate Java and Joni
+corpus runs. It must never run both matchers for one operation because callbacks,
+tied variables, `pos()`, and substitutions may have observable side effects.
+Joni is the default matcher; explicit Java mode remains only for differential
+measurement. The selector and Java matching fields are removed at the end of the
+migration.
 
-### B. Conditionals and control verbs
+### Preprocessing boundary
 
-Complete non-callback conditionals and the ACCEPT, PRUNE, SKIP, THEN, and COMMIT
-families. Define their capture, `pos`, alternation, and backtracking effects with
-standard-Perl differential tests. Engine rewrites are allowed only when they
-preserve those effects; otherwise route the pattern to a capable backend.
+Every current `RegexPreprocessor` rule is classified before it moves:
 
-### C. Lookbehind, recursion, and nested programs
+1. Perl source policy remains outside Joni.
+2. Backend-neutral spelling normalization moves into a small frontend scanner.
+3. Matcher semantics move into Joni's parser, compiler, and matcher.
+4. Java-only syntax rewrites and stack workarounds are deleted with the Java
+   matching backend.
 
-Close remaining variable-length lookbehind, recursive-call, nested-regex, and
-capture-numbering gaps. Declarative recursion and executable dynamic patterns
-must share consistent recursion limits and timeout behavior without relying on
-unbounded Java stack recursion.
+Text rewriting must not emulate behavior that depends on backtracking, capture
+close order, matcher regions, or encoding.
 
-### D. Unicode properties
+## Implementation Phases
 
-Finish direct Unicode property semantics before attributing wrapper failures to
-threads. Cover built-in and user-defined properties, cache identity, warnings,
-exceptions, recursion, concurrent unrelated names, and same-name coordination.
-Preserve runtime-local results and snapshot policy.
+### Phase 0 — Reproducible differential baseline
 
-### E. `qr//`, diagnostics, and match state
+1. Run all 80 `perl5_t/t/re` files on JVM and interpreter backends from the same
+   clean commit after confirming that no unrelated PerlOnJava builds are active.
+2. Save complete output and JSON outside the source tree, compare every file
+   against the PR 958 baseline, and reject any unexplained zero-TAP or timeout
+   result.
+3. Classify every failure as matcher semantics, source policy, diagnostics,
+   shared non-regex behavior, or optimizer/debug transcript.
+4. Give `pat_psycho*` and `speed*` a configurable two-worker CPU-heavy lane.
+   Keep `pat*`, `pat_advanced*`, and memory-sensitive fixtures in a one-worker
+   exclusive lane. Every child retains its own hard timeout and process group.
 
-Complete regex object interpolation/stringification, `/g`, `/c`, `/o`,
-substitution state, warning text, source locations, compile errors, byte/Unicode
-targets, and nested match-state restoration. Internal callback identifiers must
-never leak through stringification or diagnostics.
+Exit criteria: the baseline is repeatable, direct/thread and JVM/interpreter
+differences are visible, and the report identifies the next semantic slice.
 
-### F. Direct/thread parity and policy removal
+### Phase 1 — Joni ordinary-pattern parity
 
-After a direct test passes, run its unchanged thread wrapper on both backends.
-Remove capability policies, CPAN patches, or skips only when the unchanged
-source-first gate passes. A wrapper may configure resources and timeouts, but it
-must not change expected regex behavior.
+1. Add the temporary forced-backend selector and route ordinary patterns through
+   Joni by default in focused tests.
+2. Compile separate byte and Unicode variants using the source and target scalar
+   metadata; preserve raw byte offsets and convert UTF-8 offsets only at the Perl
+   match-variable boundary.
+3. Complete matcher regions, anchoring and transparent bounds, zero-width search
+   progression, `\G`, `/g`, `/c`, `/o`, captures, duplicate names, branch reset,
+   regex-object reuse, substitution, and nested match-state restoration.
+4. Run the same corpus once with each forced backend. Do not hide unsupported
+   Joni behavior by falling back within a match.
 
-## Implementation Stages
+Exit criteria: every assertion previously passing on Java also passes on Joni,
+with no direct/thread or JVM/interpreter regression.
 
-### Stage 36.0 — Refresh the differential baseline
+### Phase 2 — Conditions and backtracking-visible state
 
-1. Record same-commit direct and thread-wrapper counts with the standard runner.
-2. Separate direct language gaps from clone/runtime-ownership gaps.
-3. Add standard-Perl-valid focused tests for every proposed semantic change.
-4. Capture backend fallback and timeout behavior for each target.
+1. Implement numbered and named capture conditions, assertion conditions,
+   recursion conditions, `(DEFINE)`, and executable callback conditions in Joni.
+2. Complete `(*MARK:name)`, named `(*SKIP:name)`, `$REGMARK`, `$REGERROR`, cut
+   boundaries, recursion limits, and interactions with lookarounds, subpattern
+   calls, dynamic programs, and callback unwind.
+3. Preserve exact capture-close order, provisional match variables, dynamic
+   locals, and callback side effects along the selected matcher path.
 
-**Exit criteria:** Every target failure is classified by feature and backend;
-the baseline has no orphaned JVMs or unexplained timeout-only zero-TAP results.
+Exit criteria: focused standard-Perl oracles and applicable `pat_advanced.t`,
+`rxcode.t`, `reg_eval_scope.t`, and callback sections agree on both backends.
 
-### Stage 36.1 — Validate the callback engine seam
+### Phase 3 — Unicode and pattern syntax completion
 
-1. Keep the namespaced callout-enabled Joni fork isolated under `third_party/`.
-2. Preserve matcher tests proving that runtime-neutral callouts observe
-   provisional captures, repeat after backtracking, and receive exact unwind
-   notifications.
-3. Keep PerlOnJava runtime dependencies outside the regex-engine fork.
+1. Implement Perl property aliases, versioned `Age` forms, script extensions,
+   `\N{name}`, extended classes, user-defined property recursion and errors, and
+   byte-versus-Unicode warning behavior.
+2. Complete remaining case-folding, grapheme, lookbehind, and invalid-pattern
+   diagnostics in the Joni frontend and engine.
+3. Derive property names and aliases from the bundled Perl 5.44 Unicode data so
+   behavior does not depend on the host JDK Unicode version.
 
-**Exit criteria:** The spike demonstrates forward execution and backtracking
-unwind without PerlOnJava dependencies inside the regex engine.
+Exit criteria: semantic assertions in `regexp_unicode_prop.t`, `pat.t`, and
+`pat_advanced.t` complete without `JPERL_UNIMPLEMENTED=warn` masking supported
+syntax.
 
-### Stage 36.2 — Structured frontend and callback templates
+### Phase 4 — Runtime source and diagnostics
 
-1. Preserve callback Perl ASTs instead of flattening them into marker strings.
-2. Compile callback bodies as lexical `RuntimeCode` values on both backends.
-3. Build per-regex callback tables with collision-proof internal skeletons.
-4. Keep unsupported execution fatal until the matcher bridge is present.
+1. Preserve runtime-eval source names, package and lexical context, warning
+   masks, line numbers, syntax errors, and Unicode/byte source identity.
+2. Complete recursive and nested `(??{...})`, mixed literal/runtime executable
+   source, tied and localized interpolation, regex-object stringification, and
+   `/g`, `/c`, `/o` state across callback and exception boundaries.
+3. Close the semantic assertions in `pat_re_eval.t`. Track shared non-regex
+   `eval` failures separately, but fix them when they prevent regex source from
+   executing with standard Perl behavior.
 
-**Exit criteria:** JVM and interpreter construct equivalent closure-bearing
-templates, with correct lexical identity and snapshot ownership.
+Exit criteria: all 555 `pat_re_eval.t` assertions execute and every semantic
+assertion passes on both execution backends.
 
-### Stage 36.3 — Plain callbacks and provisional match state
+### Phase 5 — Remove the Java matching backend
 
-Implement `(?{ BLOCK })`, `$^R`, provisional numbered/named captures, `$^N`,
-`@-`, `@+`, `$_`, and `pos`. Add an active match-state stack so callbacks may
-run nested regexes without destroying the outer provisional state.
+1. Move every remaining matcher-semantic preprocessor rule into Joni.
+2. Delete Java compiled-pattern variants, feature routing, Java-only rewrites,
+   and the temporary backend selector.
+3. Retain only the small Perl source-policy/frontend layer described above.
+4. Remove stale parser and preprocessing plans or rewrite them to describe the
+   final ownership boundary.
 
-**Exit criteria:** The focused plain-callback matrix and relevant unchanged
-Type::Tiny tests pass on system Perl, JVM, and interpreter.
+Exit criteria: Joni is the only production matcher and ordinary patterns do not
+allocate callback state or callback frames.
 
-### Stage 36.4 — Backtracking, dynamic scope, and callback conditions
+### Phase 6 — Integration and release
 
-Add matcher-owned dynamic-local checkpoints and exact-once unwind for success,
-failure, alternatives, quantifiers, lookarounds, exceptions, interruption, and
-timeout. Implement callback conditions only after this unwind model is proven.
+1. Retire regex-test accommodations incrementally. Whenever a PerlOnJava fix
+   makes a `dev/import-perl5/patches/pat.t.patch` hunk unnecessary, remove that
+   hunk and rerun `perl dev/import-perl5/sync.pl --only perl5/t/re/pat.t` to
+   restore the unchanged upstream assertions. Do not hand-edit the imported
+   test to approximate upstream content.
+2. Delete the `pat.t.patch` configuration entry and patch file once its final
+   hunk is obsolete. Rerun the targeted sync twice and require the second run to
+   produce no diff, proving that the checked-in test is the unpatched Perl 5.44
+   source and the import is idempotent.
+3. Run the complete direct and `_thr.t` regex matrix on JVM and interpreter
+   backends and compare it file-by-file with both the Phase 0 result and PR 958.
+4. Run unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and every CPAN
+   suite whose regex capability policy is removed.
+5. Run warning-free `make`, Joni upstream tests, packaging and license checks,
+   and the thread release matrix.
+6. Rebase each focused delivery slice onto current master. Require green Ubuntu
+   and Windows CI before merging and beginning the next slice.
 
-**Exit criteria:** Applicable `rxcode.t`, `reg_eval_scope.t`, and
-Regexp::Common callback-condition sections match standard Perl.
+Exit criteria: all semantic gates pass, no previously passing file regresses,
+the regex corpus is reproduced from `dev/import-perl5/sync.pl` without a regex
+test patch, and documentation reports optimizer/debug-only exclusions
+explicitly.
 
-### Stage 36.5 — Dynamic patterns and recursive execution
+### Upstream patch retirement queue
 
-Implement `(??{ EXPR })` as a nested matcher program whose alternatives
-participate in outer backtracking. Specify returned string versus `qr//` values,
-capture numbering, modifier inheritance, caching, recursion limits, and `/o`.
+`pat.t.patch` is reduced in place as these gates close; the corresponding
+upstream hunk is restored by the targeted importer before its result is counted:
 
-**Exit criteria:** The focused dynamic-pattern matrix, Object::InsideOut's
-recursive pattern, and applicable `reg_eval.t`/`rxcode.t` sections pass.
+| Upstream section | Gate before restoring the hunk |
+|---|---|
+| `(*ACCEPT)` capture-close cases | Exact success and capture values pass without converting fatal setup failures to warnings |
+| `pos` inside `(?{...})` | Callback-visible `pos`, captures, and unwind behavior pass on JVM and interpreter |
+| reference stringification diagnostics | Unqualified `diag` resolves in the original lexical/package context |
+| `${^LAST_SUCCESSFUL_PATTERN}` | Dynamic empty-pattern reuse, copying, matching, and substitution pass |
+| `(??{...})` code blocks interpolated from arrays | All original runtime-eval and side-effect assertions pass without an enclosing compatibility `eval` |
 
-### Stage 36.6 — Remaining declarative parity
+The queue is complete only when `config.yaml` no longer names `pat.t.patch`, the
+patch file is gone, and two consecutive targeted syncs leave a clean tree.
 
-Complete control verbs, conditionals, lookbehind, Unicode properties, regex
-objects, state, and diagnostics. Prefer isolated feature slices with direct
-oracles over broad changes to `RegexPreprocessor`.
+## Test Contract
 
-**Exit criteria:** Direct target files complete their expected plans on both
-backends, with no regression in ordinary Java-regex or declarative Joni paths.
+- Validate every new or changed Perl unit test with system `perl` or `prove`
+  before running it with PerlOnJava.
+- Run JVM and interpreter tests under `timeout`, capture complete output in
+  files, and inspect the saved files rather than truncated terminal output.
+- Use `perl dev/tools/perl_test_runner.pl`; the runner requires process `fork`
+  and must not run under `jperl`.
+- Run direct tests before thread wrappers. A wrapper must preserve the direct
+  result and may change only resources and ownership context.
+- Unsupported syntax remains fatal until its complete semantic gate passes.
+- Do not alter existing Perl core tests to fit PerlOnJava behavior.
+- Treat the import manifest and its patch files as temporary compatibility debt:
+  remove each regex-test patch hunk as soon as its guarded behavior passes, then
+  use a targeted `sync.pl` run to recover the exact upstream test source.
+- `make` must pass without warning output before every push.
 
-### Stage 36.7 — Integration and release
+## Performance Gate
 
-1. Run all applicable direct and `_thr.t` companions.
-2. Run `make` and the Phase 44 thread release matrix.
-3. Run unchanged CPAN suites whose policies are being removed.
-4. Update the feature matrix, changelog, and regex implementation documents.
-5. Require green Ubuntu and Windows CI before merging each release slice.
+Before removing Java matching, run five warmed ordinary-pattern measurements on
+each backend. Joni's median runtime must be within 25% of the Java baseline,
+must introduce no new timeout, and must not materially increase steady-state
+allocation. A failure blocks backend removal, not semantic fixes.
 
-**Exit criteria:** Target suites and wrappers have captured passing evidence;
-removed policies are justified by unchanged-source results; Phase 44 anchors
-remain green.
+## Public Interfaces
 
-## Test Matrix
-
-### Focused core targets
-
-- `perl5_t/t/re/pat_re_eval.t`
-- `perl5_t/t/re/rxcode.t`
-- `perl5_t/t/re/reg_eval.t`
-- `perl5_t/t/re/reg_eval_scope.t`
-- `perl5_t/t/re/pat.t`
-- `perl5_t/t/re/pat_advanced.t`
-- `perl5_t/t/re/regexp_qr_embed.t`
-- `perl5_t/t/re/regexp_unicode_prop.t`
-- `perl5_t/t/re/speed.t`
-- Every applicable `_thr.t` companion
-
-### CPAN targets
-
-- Type::Tiny callback tests without callback capability patches
-- Regexp::Common callback and dynamic-pattern tests
-- Object::InsideOut recursive-pattern tests
-- Any distribution whose policy is removed by a Phase 36 slice
-
-### Preservation gates
-
-- Full `make`
-- Phase 44 core thread-wrapper matrix without timeout
-- Test2 default and opt-in stress
-- Storable and Net::SSLeay thread gates
-- DBI ownership tests and `timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`
-- Ubuntu and Windows CI
-
-All new Perl unit tests must first pass under system Perl. Every `jperl`,
-`jcpan`, and `prove` investigation must be hard-timeout-wrapped and captured to
-a file. Resource-sensitive tests stay in the runner's exclusive lane, and a
-timing delta is a regression only after a serialized same-commit reproduction.
-
-## Parallel-Project Boundaries
-
-- Work in a separate checkout and feature branch; do not share build artifacts
-  or active test processes with the concurrency release branch.
-- Keep callback-engine dependency changes separate from semantic frontend/runtime
-  changes where practical, so the fork surface can be reviewed independently.
-- Do not edit thread wrappers to manufacture parity. Fix the direct regex path,
-  then use wrappers as snapshot/ownership acceptance tests.
-- Rebase before each integration slice and rerun the focused direct/thread pair
-  on the rebased commit.
-- Update this file after each completed stage with dates, exact test evidence,
-  blockers, and the next resumable action. The concurrency plan should contain
-  only the cross-project status and Phase 44 preservation contract.
-
-## Risks and Stop Conditions
-
-- Stop if the matcher cannot expose provisional captures and unwind points; do
-  not replace callbacks with post-match execution.
-- Stop if dynamic patterns are atomic and cannot yield alternatives to outer
-  backtracking.
-- Keep unsupported syntax fatal if correct semantics are unavailable.
-- Preserve separate cached matcher structure and per-value lexical callback
-  tables to prevent closure identity leaks.
-- Do not allocate callback state on ordinary-pattern fast paths.
-- Treat timeout, interruption, nested match, and non-local control flow cleanup
-  as correctness requirements, not later optimizations.
+No permanent public regex API or command-line option is added. The temporary
+developer backend selector is removed in Phase 5. Existing Perl syntax,
+variables, warning categories, and regex object behavior are the public
+compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Stage 36.7 complete
+### Current Status: Joni default; Phase 4 source preservation at 423/555
 
-Closure-bearing and advanced declarative patterns use the namespaced Joni fork
-on both execution backends. The delivered matcher owns callback unwind, dynamic
-programs, recursion limits, cut verbs, bounded variable-length lookbehind,
-grapheme clusters, and advanced Unicode-property execution. Runtime-source
-scanning ignores callback-like braces inside quoted strings, and diagnostics
-retain lexical warning masks and source locations.
+Executable callback source and literal trailing `/x` comments survive canonical
+regex-object stringification on both execution backends. The focused
+`pat_re_eval.t` gate currently executes all 555 assertions with 423 passing.
 
-The focused direct gates are `rxcode.t` 42/42, `reg_eval_scope.t` 49/49, and
-`dynamic_patterns.t` 12/12 on both backends. The unchanged Object::InsideOut
-dynamic-pattern test is 6/6 on both backends. `reg_eval.t` remains 5/8 because
-of three shared non-regex code-evaluation failures. `pat_re_eval.t` now executes
-all 555 planned assertions on both backends; 420 pass and 135 remain as focused
-semantic and diagnostic gaps.
+### Completed Phases
 
-The final 2026-08-16 differential gate compared all 80 `perl5_t/t/re/` files
-with `../PerlOnJava/logs/test_20260815_080000_958.log`. It records
-51,002/94,829 versus 50,273/94,771: 729 additional passing assertions, 58
-additional planned assertions, and zero per-file pass-count regressions. The
-resource-sensitive `pat.t`, `pat_thr.t`, `pat_advanced.t`, and
-`pat_advanced_thr.t` files remained in the runner's exclusive lane.
-`pat_psycho_thr.t` completed 17/17 in an isolated concurrent runner; `speed.t`
-and `speed_thr.t` each reached 58/59 with 26 passing assertions. Full `make` is
-green without warning output.
+- [ ] Phase 0: Reproducible differential baseline
+- [ ] Phase 1: Joni ordinary-pattern parity
+- [ ] Phase 2: Conditions and backtracking-visible state
+- [ ] Phase 3: Unicode and pattern syntax completion
+- [ ] Phase 4: Runtime source and diagnostics
+- [ ] Phase 5: Remove the Java matching backend
+- [ ] Phase 6: Integration and release
 
-### Completed stages
+### Next Steps
 
-- [x] Stage 36.0: Refresh differential baseline
-- [x] Stage 36.1: Validate callback engine seam
-- [x] Stage 36.2: Structured frontend and callback templates
-- [x] Stage 36.3: Plain callbacks and provisional match state
-- [x] Stage 36.4: Backtracking, dynamic scope, and conditions
-- [x] Stage 36.5: Dynamic patterns and recursive execution
-- [x] Stage 36.6: Remaining declarative parity (2026-08-16)
-- [x] Stage 36.7: Integration and release (2026-08-16)
+1. Correct recursion-visible capture restoration so `$^N` and `$+` expose the
+   selected Perl capture state after optimistic callbacks and nested dynamic
+   programs; use the first failing `pat_re_eval.t` block as the focused oracle.
+2. Capture forced-Java and forced-Joni results for the full 80-file direct regex
+   corpus, compare both against PR 958, and classify any newly exposed gaps.
+3. Run the applicable `pat_advanced.t` control-verb and condition sections,
+   then close Phase 2 if their direct and interpreter results agree.
+4. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
+   closes, remove its hunk and rerun the targeted importer so validation uses
+   the original Perl 5.44 assertions.
+5. Capture the clean-branch JVM and interpreter 80-file baselines and compare
+   both to PR 958 with the regression exit gate.
+6. Inventory the remaining uncommon Unicode aliases and invalid-property
+   diagnostics against Perl 5.44's bundled tables, then move the next
+   matcher-semantic preprocessor slice into Joni.
+7. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+   use explicit Java mode only to classify corpus regressions before Phase 5
+   removes the legacy backend and selector.
 
-### Completed slices
+### Open Questions and Blockers
 
-- [x] Callback pseudo-block scope and diagnostics (2026-08-16)
-  - Preserved matcher-owned dynamic locals and callback source locations on the
-    JVM and interpreter backends.
-  - Bounded recursive callback re-entry independently of the Java stack size.
-  - Restored deferred Unicode-property cache eviction and recorded a
-    no-regression 80-file differential gate against PR 958.
-- [x] Lexical callback context and interpreter frame identity (2026-08-16)
-  - Preserved lexical package and `use/no re '/flags'` context for literal,
-    interpolated, and runtime-source callbacks.
-  - Preserved callback source locations, enclosing `__SUB__`, and cleanup after
-    warning, exception, alarm, and timeout-adjacent exits.
-  - Delivered an alarm owner's queued signal before cancelling the regex worker,
-    preventing the worker from consuming and discarding the owner's exception.
-  - Corrected interpreter caller metadata after a preceding package-scoped
-    callback; `reg_eval_scope.t` improved from 43/49 to 47/49 and now matches
-    the JVM backend.
-  - Added complete disassembly for callback and template bytecodes so their
-    package and callback-table operands remain inspectable.
-- [x] Tied, magical, shared, and readonly mutation policy (2026-08-16)
-  - Preserved observable tied, shared, and unrelated `pos()` side effects from
-    an executed callback path even when the matcher later abandons that path.
-  - Kept `$^R` matcher-owned so it follows the chosen path, and preserved
-    readonly failure without mutating the protected value.
-- [x] Object::InsideOut dynamic-pattern gate (2026-08-16)
-  - Corrected named-sub redefinition when the existing CV is an
-    `InterpretedCode` wrapper; the parser now uses the polymorphic `defined()`
-    contract instead of inspecting only JVM implementation fields.
-  - Preserved saved references to the old CV while publishing the replacement
-    into the named slot, including runtime typeglob wrappers and `do FILE`.
-  - Restored pristine Object::InsideOut 4.05 `t/17-dynamic.t` from a 180-second
-    zero-assertion timeout to 6/6 on both JVM and interpreter backends.
-  - Ran the unchanged 67-file distribution in 51 seconds: 876 assertions were
-    emitted and 851 passed. The 25 remaining assertion failures are confined to
-    shared-object, lvalue, overload, and readonly tests and are not regex or
-    timeout failures.
-- [x] Beyond-Unicode property warning (2026-08-16)
-  - Detected Perl's internal beyond-Unicode scalar markers at regex use time
-    and emitted the `non_unicode` warning with the match-site source line.
-  - Preserved lexical `no warnings 'non_unicode'` suppression.
-  - The focused oracle is 2/2 on system Perl and both execution backends;
-    `reg_eval_scope.t` improves to 48/49 on the interpreter backend.
-- [x] Legacy HINT_NEW_RE diagnostic (2026-08-16)
-  - Preserved Perl's `Constant(qq) unknown` compile error for the manually
-    restored HINT_NEW_RE bit and escaped pseudo-callback opener.
-  - The focused oracle is 1/1 on system Perl, JVM, and interpreter;
-    interpreter `reg_eval_scope.t` is now 49/49 and JVM is 48/49.
-- [x] Declarative Joni hardening (2026-08-16)
-  - Added matcher-native `PRUNE`, `SKIP`, `THEN`, and `COMMIT` semantics and
-    retained `ACCEPT`, `FAIL`, and `F` boundary behavior.
-  - Added an engine-owned depth ceiling for pure subexpression recursion.
-  - Added bounded variable-length positive and negative lookbehind, `\X`
-    grapheme clusters, `Extended_Pictographic`, and script-extension matching.
-  - Preserved quoted braces in dynamic runtime source and completed
-    `reg_eval_scope.t` at 49/49 on both backends.
-- [x] Integration and differential release gate (2026-08-16)
-  - Ran all 80 regex files with resource-sensitive fixtures serialized and
-    isolated heavy fixtures parallelized.
-  - Improved the PR 958 baseline by 729 passing assertions with zero per-file
-    regression; retained exact JSON and full-output reports outside the tree.
-  - Completed the warning-free full build and Phase 44 preservation matrix.
-  - Passed both Net::SSLeay thread ecosystem checks and the unchanged
-    DBIx::Class gate (325 files, 42,681 assertions).
-- [x] Mixed literal and runtime callback source (2026-08-16)
-  - Recompiled raw runtime eval groups inside an existing structured callback
-    template while preserving trusted callback identities and lexical cells.
-  - Propagated `use re 'eval'` through nested dynamic patterns and retained
-    match-once callsite state on both compiler backends.
-  - Kept standalone `(?(DEFINE)...)` containers on Joni when combined with
-    runtime callback source.
-  - Added an 11-case standard-Perl differential gate; JVM and interpreter both
-    pass 11/11, and `pat_re_eval.t` now reaches its complete 555-test plan.
-- [x] Runtime-source admission and structured array interpolation (2026-08-16)
-  - Rejected plain runtime eval groups outside lexical `use re 'eval'` while
-    ignoring callback-like text in regex comments, `/x` comments, escapes, and
-    character classes.
-  - Preserved callback-bearing `qr//` values through interpolation-only array
-    joins on both compiler backends without changing explicit `join()`.
-  - Preserved Unicode versus byte-string source metadata in the synthetic
-    runtime compiler.
-  - Expanded the standard-Perl differential gate to 16/16 on both backends;
-    `pat_re_eval.t` improves from 334/555 to 414/555.
-- [x] Localized package-array callback preservation (2026-08-16)
-  - Refreshed cached interpreter registers after plain `our` variables are
-    localized, so assignments target the active scalar, array, or hash slot.
-  - Added a six-case standard-Perl localization/restoration gate that passes on
-    both backends.
-  - Closed all six remaining package-global array interpolation variants;
-    `pat_re_eval.t` improves to 420/555 on both backends.
-
-### Next steps
-
-1. Address exact runtime-eval source names, warning locations, and diagnostic
-   parity in `pat_re_eval.t`.
-2. Close the three non-regex `reg_eval.t` code-evaluation failures.
-3. Continue the remaining Unicode alias and recursion-condition cases as
-   focused post-Phase-36 compatibility slices.
-
-### Open blockers
-
-- Some broad core files remain partial because they combine regex assertions
-  with unsupported parser, eval, Unicode-alias, and regex-object behavior.
-  Their thread wrappers remain preservation gates against the same-commit
-  direct result, not claims of complete Perl regex compatibility.
+- Exact optimizer/debug transcript assertions are not semantic release blockers;
+  each exclusion still requires an explicit report entry.
+- Resource-sensitive baselines must wait for unrelated Java builds to finish.
+- The interpreter does not reliably expose the lexical package through
+  `InterpreterState.currentPackage` while a regex executes. Localized
+  `$REGMARK`/`$REGERROR` slots are therefore discovered by their active
+  `GlobalRuntimeScalar` identities; a future regex call-site metadata field can
+  make nested simultaneous localizations exact without scanning active globals.
+- Shared parser or `eval` failures are fixed in focused slices when they block a
+  regex semantic test, rather than being approximated inside the matcher.
 
 ## Related Documents and Skills
 
-- `dev/design/executable-regex-callbacks.md` — detailed callback architecture
-- `dev/design/concurrency.md` — parent threads plan and Phase 44 gates
-- `dev/design/regex_jruby_joni.md` — Joni integration notes
-- `dev/design/regex_parser_integration.md` — parser/AST strategy
-- `dev/design/regex_preprocessing_fixes.md` — preprocessing gaps and baselines
-- `dev/design/regex_alternatives.md` — backend alternatives
-- `dev/implementation/regex.md` — earlier matcher architecture
-- `.agents/skills/debug-perlonjava/SKILL.md` — differential debugging workflow
+- `docs/design/joni-callout-fork.md`
+- `dev/design/executable-regex-callbacks.md`
+- `dev/design/regex_parser_integration.md`
+- `dev/design/regex_preprocessing_fixes.md`
+- `.agents/skills/debug-perlonjava/SKILL.md`

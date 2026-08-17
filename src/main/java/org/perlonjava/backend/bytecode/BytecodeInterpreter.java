@@ -1091,6 +1091,7 @@ public class BytecodeInterpreter {
                                 int codeReg = bytecode[pc++];
                                 int kindIdx = bytecode[pc++];
                                 int packageIdx = bytecode[pc++];
+                                int sourceIdx = bytecode[pc++];
                                 if (DEBUG_REGEX) {
                                     RuntimeCode callbackCode =
                                             (RuntimeCode) registers[codeReg].scalar().value;
@@ -1102,7 +1103,7 @@ public class BytecodeInterpreter {
                                 }
                                 registers[rd] = org.perlonjava.runtime.regex.RuntimeRegexCallback.wrap(
                                         registers[codeReg].scalar(), code.stringPool[kindIdx],
-                                        code.stringPool[packageIdx]);
+                                        code.stringPool[packageIdx], code.stringPool[sourceIdx]);
                             }
 
                             case Opcodes.REGEX_TEMPLATE -> {

@@ -46,6 +46,7 @@ public interface StackType {
     int ABSENT_POS                    = 0x0b00;  /* for absent */
     int ABSENT                        = 0x0c00;  /* absent inner loop marker */
     int CALLOUT                       = 0x0d00;  /* match-time callback unwind token */
+    int CONTROL_MARK                  = 0x0e00;  /* Perl (*MARK:name) backtrack state */
     int DYNAMIC_ALT                   = 0x0004;  /* resumable nested-program alternative */
 
     /* stack type check mask */

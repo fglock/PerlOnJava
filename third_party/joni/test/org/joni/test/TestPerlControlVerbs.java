@@ -63,4 +63,35 @@ public class TestPerlControlVerbs {
         assertEquals(-1, matcher("a(*COMMIT)b|ac", "ac").search(0, 2, Option.NONE));
         assertEquals(-1, matcher("a(*COMMIT)c|b", "ab").search(0, 2, Option.NONE));
     }
+
+    @Test
+    public void markReportsTheSuccessfulPathAndRestoresOnBacktrack() {
+        Matcher matcher = matcher("a(*MARK:first)b|a(*MARK:second)c", "ac");
+        assertEquals(0, matcher.search(0, 2, Option.NONE));
+        assertEquals("second", matcher.getControlMark());
+        assertEquals(null, matcher.getControlError());
+    }
+
+    @Test
+    public void namedSkipResumesAtTheMatchingMark() {
+        Matcher matcher = matcher("a(*MARK:after-a)b(*SKIP:after-a)(*FAIL)|b", "aab");
+        assertEquals(2, matcher.search(0, 3, Option.NONE));
+        assertEquals(3, matcher.getEnd());
+    }
+
+    @Test
+    public void namedSkipAtTheCurrentStartAdvancesOneCharacter() {
+        Matcher matcher = matcher(
+                "a*(*MARK:a)(?<b>b)?(?(<b>)(*SKIP:a)(*FAIL)|(?!))|c", "aaabc");
+        assertEquals(4, matcher.search(0, 5, Option.NONE));
+        assertEquals(5, matcher.getEnd());
+    }
+
+    @Test
+    public void namedPruneReportsItsFailureName() {
+        Matcher matcher = matcher("a(*PRUNE:blocked)b", "ac");
+        assertEquals(-1, matcher.search(0, 2, Option.NONE));
+        assertEquals(null, matcher.getControlMark());
+        assertEquals("blocked", matcher.getControlError());
+    }
 }

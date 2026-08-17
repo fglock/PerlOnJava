@@ -156,7 +156,9 @@ final class Analyser extends Parser {
         // unreachable. The ordinary optimizer assumes every concatenated node
         // remains mandatory, so its minimum-length and literal-search filters
         // are not sound for these programs.
-        if (Config.OPTIMIZE && !env.hasControlVerb) setOptimizedInfoFromTree(root);
+        if (Config.OPTIMIZE && !env.hasControlVerb && !regex.hasDynamicOptions) {
+            setOptimizedInfoFromTree(root);
+        }
 
         env.memNodes = null;
 
@@ -287,9 +289,14 @@ final class Analyser extends Parser {
 
         case NodeType.ENCLOSE:
             EncloseNode en = (EncloseNode)node;
-            if (en.type == EncloseType.CONDITION && en.calloutConditionId < 0) {
+            if (en.type == EncloseType.CONDITION && en.calloutConditionId < 0
+                    && en.assertionCondition == null && en.recursionConditionGroup < 0) {
                 en.regNum = map[en.regNum];
             }
+            if (en.recursionConditionGroup > 0) {
+                en.recursionConditionGroup = map[en.recursionConditionGroup];
+            }
+            if (en.assertionCondition != null) renumberByMap(en.assertionCondition, map);
             renumberByMap(en.target, map);
             break;
 
@@ -1321,7 +1328,23 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.ENCLOSE:
-            setupSubExpCall(((EncloseNode)node).target);
+            EncloseNode en = (EncloseNode)node;
+            if (en.recursionConditionNameP >= 0) {
+                NameEntry ne = regex.nameToGroupNumbers(bytes,
+                        en.recursionConditionNameP, en.recursionConditionNameEnd);
+                if (ne == null) {
+                    newValueException(UNDEFINED_NAME_REFERENCE,
+                            en.recursionConditionNameP, en.recursionConditionNameEnd);
+                }
+                int[] refs = ne.getBackRefs();
+                if (refs.length != 1) {
+                    newValueException(MULTIPLEX_DEFINITION_NAME_CALL,
+                            en.recursionConditionNameP, en.recursionConditionNameEnd);
+                }
+                en.recursionConditionGroup = refs[0];
+            }
+            if (en.assertionCondition != null) setupSubExpCall(en.assertionCondition);
+            setupSubExpCall(en.target);
             break;
 
         case NodeType.CALL:
@@ -1414,7 +1437,9 @@ final class Analyser extends Parser {
             node.charLength = len;
             break;
         case GET_CHAR_LEN_VARLEN:
-            newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+            if (!setupBoundedQuantifierLookBehind(node)) {
+                newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+            }
             break;
         case GET_CHAR_LEN_TOP_ALT_VARLEN:
             if (syntax.differentLengthAltLookBehind()) {
@@ -1424,6 +1449,102 @@ final class Analyser extends Parser {
             }
         }
         return node;
+    }
+
+    private boolean setupBoundedQuantifierLookBehind(AnchorNode node) {
+        if (!syntax.op2OptionPerl()) {
+            return false;
+        }
+        if (node.target instanceof QuantifierNode quantifier && !isRepeatInfinite(quantifier.upper)) {
+            int targetLength = getCharLengthTree(quantifier.target);
+            if (returnCode == 0 && targetLength >= 0
+                    && MinMaxLen.distanceMultiply(targetLength, quantifier.upper) <= 255) {
+                node.variableLookBehindMin = quantifier.lower;
+                node.variableLookBehindMax = quantifier.upper;
+                node.variableLookBehindTargetLength = targetLength;
+                returnCode = 0;
+                return true;
+            }
+        }
+
+        CharLengthRange range = getCharLengthRange(node.target);
+        if (range == null || range.max > 255 || range.min == range.max) {
+            return false;
+        }
+        node.variableLookBehindMin = range.min;
+        node.variableLookBehindMax = range.max;
+        node.variableLookBehindTargetLength = -1;
+        returnCode = 0;
+        return true;
+    }
+
+    private static final class CharLengthRange {
+        final int min;
+        final int max;
+
+        CharLengthRange(int min, int max) {
+            this.min = min;
+            this.max = max;
+        }
+    }
+
+    private CharLengthRange getCharLengthRange(Node node) {
+        switch (node.getType()) {
+        case NodeType.LIST: {
+            int min = 0;
+            int max = 0;
+            ListNode list = (ListNode)node;
+            do {
+                CharLengthRange item = getCharLengthRange(list.value);
+                if (item == null) return null;
+                min = MinMaxLen.distanceAdd(min, item.min);
+                max = MinMaxLen.distanceAdd(max, item.max);
+            } while ((list = list.tail) != null);
+            return new CharLengthRange(min, max);
+        }
+        case NodeType.ALT: {
+            int min = MinMaxLen.INFINITE_DISTANCE;
+            int max = 0;
+            ListNode alt = (ListNode)node;
+            do {
+                CharLengthRange branch = getCharLengthRange(alt.value);
+                if (branch == null) return null;
+                min = Math.min(min, branch.min);
+                max = Math.max(max, branch.max);
+            } while ((alt = alt.tail) != null);
+            return new CharLengthRange(min, max);
+        }
+        case NodeType.STR: {
+            int length = ((StringNode)node).length(enc);
+            return new CharLengthRange(length, length);
+        }
+        case NodeType.CTYPE:
+        case NodeType.CCLASS:
+        case NodeType.CANY:
+            return new CharLengthRange(1, 1);
+        case NodeType.QTFR: {
+            QuantifierNode quantifier = (QuantifierNode)node;
+            if (isRepeatInfinite(quantifier.upper)) return null;
+            CharLengthRange target = getCharLengthRange(quantifier.target);
+            if (target == null) return null;
+            return new CharLengthRange(
+                    MinMaxLen.distanceMultiply(target.min, quantifier.lower),
+                    MinMaxLen.distanceMultiply(target.max, quantifier.upper));
+        }
+        case NodeType.ENCLOSE: {
+            EncloseNode enclose = (EncloseNode)node;
+            if (enclose.type == EncloseType.ABSENT) return null;
+            return getCharLengthRange(enclose.target);
+        }
+        case NodeType.ANCHOR:
+            return new CharLengthRange(0, 0);
+        case NodeType.CALL: {
+            CallNode call = (CallNode)node;
+            return call.isRecursion() ? null : getCharLengthRange(call.target);
+        }
+        default:
+            return null;
+        }
     }
 
     private void nextSetup(Node node, Node nextNode) {
@@ -1501,7 +1622,7 @@ final class Analyser extends Parser {
 
         while (value < end) {
             int ovalue = value;
-            int len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, buf);
+            int len = enc.mbcCaseFold(regex.caseFoldFlagFor(regex.options), bytes, this, end, buf);
 
             for (int i = 0; i < len; i++) {
                 if (bytes[ovalue + i] != buf[i]) {
@@ -1510,7 +1631,7 @@ final class Analyser extends Parser {
                     System.arraycopy(bytes, sn.p, sbuf, 0, ovalue - sn.p);
                     value = ovalue;
                     while (value < end) {
-                        len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, buf);
+                        len = enc.mbcCaseFold(regex.caseFoldFlagFor(regex.options), bytes, this, end, buf);
                         for (i = 0; i < len; i++) {
                             if (sp >= sbuf.length) {
                                 byte[]tmp = new byte[sbuf.length << 1];
@@ -1609,6 +1730,47 @@ final class Analyser extends Parser {
     }
 
     private static final int THRESHOLD_CASE_FOLD_ALT_FOR_EXPANSION = 8;
+
+    private Node protectPerlAsciiStrictCrossings(StringNode source, int state) {
+        byte[] bytes = source.bytes;
+        int segmentStart = source.p;
+        int p = source.p;
+        ListNode root = null;
+        ListNode tail = null;
+
+        while (p < source.end) {
+            int codePoint = enc.mbcToCode(bytes, p, source.end);
+            int next = p + enc.length(bytes, p, source.end);
+            if (codePoint == 0x017f || codePoint == 0x212a) {
+                if (segmentStart < p) {
+                    ListNode segment = ListNode.newList(
+                            new StringNode(bytes, segmentStart, p), null);
+                    if (root == null) root = segment;
+                    else tail.setTail(segment);
+                    tail = segment;
+                }
+
+                StringNode exact = new StringNode(bytes, p, next);
+                exact.setRaw();
+                ListNode segment = ListNode.newList(exact, null);
+                if (root == null) root = segment;
+                else tail.setTail(segment);
+                tail = segment;
+                segmentStart = next;
+            }
+            p = next;
+        }
+
+        if (root == null) return source;
+        if (segmentStart < source.end) {
+            tail.setTail(ListNode.newList(
+                    new StringNode(bytes, segmentStart, source.end), null));
+        }
+        source.replaceWith(root);
+        setupTree(root, state);
+        return root;
+    }
+
     private Node expandCaseFoldString(Node node) {
         StringNode sn = (StringNode)node;
 
@@ -1624,7 +1786,8 @@ final class Analyser extends Parser {
         StringNode stringNode = null;
 
         while (p < end) {
-            CaseFoldCodeItem[]items = enc.caseFoldCodesByString(regex.caseFoldFlag, bytes, p, end);
+            CaseFoldCodeItem[]items = enc.caseFoldCodesByString(
+                    regex.caseFoldFlagFor(regex.options), bytes, p, end);
             int len = enc.length(bytes, p, end);
 
             if (items.length == 0 || !isCaseFoldVariableLength(items.length, items, len)) {
@@ -1855,7 +2018,14 @@ final class Analyser extends Parser {
 
         case NodeType.STR:
             if (isIgnoreCase(regex.options) && !((StringNode)node).isRaw()) {
-                node = expandCaseFoldString(node);
+                if (Option.isPerlAsciiStrict(regex.options)) {
+                    Node protectedNode = protectPerlAsciiStrictCrossings(
+                            (StringNode)node, state);
+                    node = protectedNode == node
+                            ? expandCaseFoldString(node) : protectedNode;
+                } else {
+                    node = expandCaseFoldString(node);
+                }
             }
             break;
 
@@ -1988,12 +2158,18 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseNode.CONDITION:
-                if (Config.USE_NAMED_GROUP) {
+                if (Config.USE_NAMED_GROUP && en.assertionCondition == null
+                        && en.calloutConditionId < 0 && en.recursionConditionGroup < 0) {
                     if (!en.isNameRef() && env.numNamed > 0 && syntax.captureOnlyNamedGroup() && !isCaptureGroup(env.option)) {
                         newValueException(NUMBERED_BACKREF_OR_CALL_NOT_ALLOWED);
                     }
                 }
-                if (en.regNum > env.numMem) newValueException(INVALID_BACKREF);
+                if (en.assertionCondition == null && en.calloutConditionId < 0
+                        && en.recursionConditionGroup < 0 && en.regNum > env.numMem) {
+                    newValueException(INVALID_BACKREF);
+                }
+                if (en.recursionConditionGroup > env.numMem) newValueException(INVALID_BACKREF);
+                if (en.assertionCondition != null) setupTree(en.assertionCondition, state);
                 setupTree(en.target, state);
                 break;
 
@@ -2239,9 +2415,12 @@ final class Analyser extends Parser {
                     opt.length.set(0, MinMaxLen.INFINITE_DISTANCE);
                 } else {
                     int safe = oenv.options;
+                    int safeCaseFoldFlag = oenv.caseFoldFlag;
                     oenv.options = cn.target.option;
+                    oenv.caseFoldFlag = regex.caseFoldFlagFor(cn.target.option);
                     optimizeNodeLeft(cn.target, opt, oenv);
                     oenv.options = safe;
+                    oenv.caseFoldFlag = safeCaseFoldFlag;
                 }
             } // USE_SUBEXP_CALL
             break;
@@ -2299,9 +2478,12 @@ final class Analyser extends Parser {
             switch (en.type) {
             case EncloseType.OPTION:
                 int save = oenv.options;
+                int saveCaseFoldFlag = oenv.caseFoldFlag;
                 oenv.options = en.option;
+                oenv.caseFoldFlag = regex.caseFoldFlagFor(en.option);
                 optimizeNodeLeft(en.target, opt, oenv);
                 oenv.options = save;
+                oenv.caseFoldFlag = saveCaseFoldFlag;
                 break;
 
             case EncloseType.MEMORY:
@@ -2344,7 +2526,7 @@ final class Analyser extends Parser {
 
         oenv.enc = regex.enc;
         oenv.options = regex.options;
-        oenv.caseFoldFlag = regex.caseFoldFlag;
+        oenv.caseFoldFlag = regex.caseFoldFlagFor(regex.options);
         oenv.scanEnv = env;
         oenv.mmd.clear(); // ??
 

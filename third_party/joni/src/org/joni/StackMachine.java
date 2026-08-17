@@ -306,11 +306,30 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
-    protected final void pushCallFrame(int pat) {
+    protected final void pushCallFrame(int pat, int groupNum) {
         StackEntry e = ensure1();
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
+        e.setCallFrameNum(groupNum);
         stk++;
+    }
+
+    protected final boolean isInsideSubexpCall(int groupNum) {
+        int returned = 0;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry e = stack[i];
+            if (e.type == RETURN) {
+                returned++;
+            } else if (e.type == CALL_FRAME) {
+                if (returned > 0) {
+                    returned--;
+                } else if (e.getCallFrameNum() >= 0
+                        && (groupNum == 0 || e.getCallFrameNum() == groupNum)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     protected final void pushReturn() {
@@ -337,6 +356,13 @@ abstract class StackMachine extends Matcher implements StackType {
         StackEntry e = ensure1();
         e.type = CALLOUT;
         e.setCalloutToken(token);
+        stk++;
+    }
+
+    protected final void pushControlMark(String previousName, String label, int position) {
+        StackEntry e = ensure1();
+        e.type = CONTROL_MARK;
+        e.setControlMark(previousName, label, position);
         stk++;
     }
 
@@ -371,6 +397,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 return e;
             } else if (e.type == CALLOUT) {
                 unwindCallout(e);
+            } else if (e.type == CONTROL_MARK) {
+                restoreControlMark(e.getPreviousControlMarkName());
             } else if (USE_CEC) {
                 if (e.type == STATE_CHECK_MARK) stateCheckMark();
             }
@@ -384,6 +412,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 return e;
             } else if (e.type == CALLOUT) {
                 unwindCallout(e);
+            } else if (e.type == CONTROL_MARK) {
+                restoreControlMark(e.getPreviousControlMarkName());
             } else if (e.type == MEM_START) {
                 repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
                 repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -396,6 +426,8 @@ abstract class StackMachine extends Matcher implements StackType {
     private void popRewrite(StackEntry e) {
         if (e.type == CALLOUT) {
             unwindCallout(e);
+        } else if (e.type == CONTROL_MARK) {
+            restoreControlMark(e.getPreviousControlMarkName());
         } else if (e.type == MEM_START) {
             repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -407,6 +439,20 @@ abstract class StackMachine extends Matcher implements StackType {
         } else if (USE_CEC) {
             if (e.type == STATE_CHECK_MARK) stateCheckMark();
         }
+    }
+
+    protected void restoreControlMark(String name) {
+    }
+
+    protected final int findControlMarkPosition(String name) {
+        if (stack == null) return -1;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == CONTROL_MARK && name.equals(entry.getControlMarkLabel())) {
+                return entry.getControlMarkPosition();
+            }
+        }
+        return -1;
     }
 
     protected final void unwindActiveCallouts() {
@@ -500,10 +546,11 @@ abstract class StackMachine extends Matcher implements StackType {
         }
     }
 
-    protected final void popTilPosNot() {
+    protected final StackEntry popTilPosNot() {
         while (true) {
             StackEntry e = stack[--stk];
-            if (e.type == POS_NOT) break; else popRewrite(e);
+            if (e.type == POS_NOT) return e;
+            popRewrite(e);
         }
     }
 
@@ -531,6 +578,28 @@ abstract class StackMachine extends Matcher implements StackType {
             } else if (e.type == POS) {
                 e.type = VOID;
                 break;
+            }
+        }
+        return k;
+    }
+
+    protected final int savedPosition(int markerType) {
+        for (int i = stk - 1; i >= 0; i--) {
+            if (stack[i].type == markerType) return stack[i].getStatePStr();
+        }
+        return -1;
+    }
+
+    protected final int posNotEnd() {
+        int k = stk;
+        while (true) {
+            k--;
+            StackEntry e = stack[k];
+            if (e.type == POS_NOT) {
+                e.type = VOID;
+                break;
+            } else if ((e.type & MASK_TO_VOID_TARGET) != 0) {
+                e.type = VOID;
             }
         }
         return k;

@@ -50,6 +50,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int sstart;
     private int sbegin;
     private int pkeep;
+    private int currentRegexOptions;
 
     private final int[]code;        // byte code
     private int ip;                 // instruction pointer
@@ -163,6 +164,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         sprev = _sprev;
         stk = 0;
         ip = 0;
+        currentRegexOptions = regex.options;
+        controlMark = null;
 
         if (Config.DEBUG_MATCH) debugMatchBegin();
         stackInit();
@@ -176,8 +179,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                     ? executeSb(interrupt) : execute(interrupt);
             return result;
         } finally {
-            if (result >= 0) completeActiveCallouts();
-            else unwindActiveCallouts();
+            if (result >= 0) {
+                controlError = null;
+                completeActiveCallouts();
+            } else {
+                if (controlMark != null) controlError = controlMark;
+                controlMark = null;
+                unwindActiveCallouts();
+            }
         }
     }
 
@@ -265,6 +274,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.BACKREF_MULTI_IC:           opBackRefMultiIC();        continue;
                 case OPCode.BACKREF_WITH_LEVEL:         opBackRefAtLevel();        continue;
 
+                case OPCode.SET_OPTION_PUSH:            opSetOptionPush();         continue;
+                case OPCode.SET_OPTION:                 opSetOption();             continue;
+
                 case OPCode.NULL_CHECK_START:           opNullCheckStart();        continue;
                 case OPCode.NULL_CHECK_END:             opNullCheckEnd();          continue;
                 case OPCode.NULL_CHECK_END_MEMST:       opNullCheckEndMemST();     continue;
@@ -287,6 +299,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
                 case OPCode.PUSH_POS_NOT:               opPushPosNot();            continue;
+                case OPCode.POP_POS_NOT:                opPopPosNot();             continue;
                 case OPCode.FAIL_POS:                   opFailPos();               continue;
                 case OPCode.PUSH_STOP_BT:               opPushStopBT();            continue;
                 case OPCode.POP_STOP_BT:                opPopStopBT();             continue;
@@ -302,16 +315,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALL:                       opCall();                  continue;
                 case OPCode.RETURN:                     opReturn();                continue;
                 case OPCode.CONDITION:                  opCondition();             continue;
+                case OPCode.RECURSION_CONDITION:        opRecursionCondition();    continue;
+                case OPCode.CHECK_POS_END:              opCheckPosEnd();           continue;
+                case OPCode.CHECK_LOOK_BEHIND_END:      opCheckLookBehindEnd();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
-                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.PRUNE:                      opPrune();                  continue;
                 case OPCode.SKIP:                       opSkip();                   continue;
                 case OPCode.THEN:                       opThen();                   continue;
                 case OPCode.COMMIT:                     opCommit();                 continue;
+                case OPCode.MARK:                       opMark();                   continue;
 
                 case OPCode.STATE_CHECK_ANYCHAR_STAR:   if (USE_CEC) {opStateCheckAnyCharStar(); break;}
                 case OPCode.STATE_CHECK_ANYCHAR_ML_STAR:if (USE_CEC) {opStateCheckAnyCharMLStar();break;}
@@ -414,6 +431,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.BACKREF_MULTI_IC:           opBackRefMultiIC();        continue;
                 case OPCode.BACKREF_WITH_LEVEL:         opBackRefAtLevel();        continue;
 
+                case OPCode.SET_OPTION_PUSH:            opSetOptionPush();         continue;
+                case OPCode.SET_OPTION:                 opSetOption();             continue;
+
                 case OPCode.NULL_CHECK_START:           opNullCheckStart();        continue;
                 case OPCode.NULL_CHECK_END:             opNullCheckEnd();          continue;
                 case OPCode.NULL_CHECK_END_MEMST:       opNullCheckEndMemST();     continue;
@@ -436,6 +456,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
                 case OPCode.PUSH_POS_NOT:               opPushPosNot();            continue;
+                case OPCode.POP_POS_NOT:                opPopPosNot();             continue;
                 case OPCode.FAIL_POS:                   opFailPos();               continue;
                 case OPCode.PUSH_STOP_BT:               opPushStopBT();            continue;
                 case OPCode.POP_STOP_BT:                opPopStopBT();             continue;
@@ -451,16 +472,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CALL:                       opCall();                  continue;
                 case OPCode.RETURN:                     opReturn();                continue;
                 case OPCode.CONDITION:                  opCondition();             continue;
+                case OPCode.RECURSION_CONDITION:        opRecursionCondition();    continue;
+                case OPCode.CHECK_POS_END:              opCheckPosEnd();           continue;
+                case OPCode.CHECK_LOOK_BEHIND_END:      opCheckLookBehindEnd();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
                 case OPCode.ACCEPT:             if (opAccept()) return finish();   continue;
-                case OPCode.PRUNE:                      cutAlternatives(false);     continue;
+                case OPCode.PRUNE:                      opPrune();                  continue;
                 case OPCode.SKIP:                       opSkip();                   continue;
                 case OPCode.THEN:                       opThen();                   continue;
                 case OPCode.COMMIT:                     opCommit();                 continue;
+                case OPCode.MARK:                       opMark();                   continue;
 
                 case OPCode.EXACT1_IC_SB:               opExact1ICSb();            break;
                 case OPCode.EXACTN_IC_SB:               opExactNICSb();            continue;
@@ -498,7 +523,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         if (n > bestLen) {
             if (Config.USE_FIND_LONGEST_SEARCH_ALL_OF_RANGE) {
-                if (isFindLongest(regex.options)) {
+                if (isFindLongest(regex.options | msaOptions)) {
                     if (n > msaBestLen) {
                         msaBestLen = n;
                         msaBestS = sstart;
@@ -546,12 +571,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean endBestLength() {
-        if (isFindCondition(regex.options)) {
-            if (isFindNotEmpty(regex.options) && s == sstart) {
+        int effectiveOptions = regex.options | msaOptions;
+        if (isFindCondition(effectiveOptions)) {
+            if (isFindNotEmpty(effectiveOptions) && s == sstart) {
                 bestLen = -1;
                 {opFail(); return false;} /* for retry */
             }
-            if (isFindLongest(regex.options) && s < range) {
+            if (isFindLongest(effectiveOptions) && s < range) {
                 {opFail(); return false;} /* for retry */
             }
         }
@@ -715,11 +741,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opExact1IC() {
         if (s >= range) {opFail(); return;}
+        if (perlAsciiStrictRejectsFold(s, code[ip])) {opFail(); return;}
 
         byte[]lowbuf = cfbuf();
 
         value = s;
-        int len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, lowbuf);
+        int len = enc.mbcCaseFold(currentCaseFoldFlag(), bytes, this, end, lowbuf);
         s = value;
 
         if (s > range) {opFail(); return;}
@@ -750,9 +777,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             while (ps < endp) {
                 sprev = s;
                 if (s >= range) {opFail(); return;}
+                if (perlAsciiStrictRejectsFold(s, bs[ps])) {opFail(); return;}
 
                 value = s;
-                int len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, lowbuf);
+                int len = enc.mbcCaseFold(currentCaseFoldFlag(), bytes, this, end, lowbuf);
                 s = value;
 
                 if (s > range) {opFail(); return;}
@@ -768,9 +796,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             while (ip < endp) {
                 sprev = s;
                 if (s >= range) {opFail(); return;}
+                if (perlAsciiStrictRejectsFold(s, code[ip])) {opFail(); return;}
 
                 value = s;
-                int len = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end, lowbuf);
+                int len = enc.mbcCaseFold(currentCaseFoldFlag(), bytes, this, end, lowbuf);
                 s = value;
 
                 if (s > range) {opFail(); return;}
@@ -782,6 +811,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             }
         }
 
+    }
+
+    private boolean perlAsciiStrictRejectsFold(int inputPosition, int targetByte) {
+        if (!Option.isPerlAsciiStrict(currentRegexOptions)) return false;
+        int inputCodePoint = enc.mbcToCode(bytes, inputPosition, end);
+        return !Encoding.isAscii(inputCodePoint) && (targetByte & 0xff) < 0x80;
     }
 
     private void opExactNICSb() {
@@ -805,6 +840,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (mem > regex.numMem || repeatStk[memEndStk + mem] == INVALID_INDEX || repeatStk[memStartStk + mem] == INVALID_INDEX) {
             ip += addr;
         }
+    }
+
+    private void opRecursionCondition() {
+        int groupNum = code[ip++];
+        int addr = code[ip++];
+        if (!isInsideSubexpCall(groupNum)) ip += addr;
+    }
+
+    private void opCheckPosEnd() {
+        if (s != savedPosition(POS)) opFail();
+    }
+
+    private void opCheckLookBehindEnd() {
+        if (s != savedPosition(LOOK_BEHIND_NOT)) opFail();
     }
 
     private boolean isInBitSet() {
@@ -1456,7 +1505,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         sprev = s;
 
         value = s;
-        if (!stringCmpIC(regex.caseFoldFlag, pstart, this, n, end)) {opFail(); return;}
+        if (!stringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
         s = value;
 
         if (sprev < range) {
@@ -1518,7 +1567,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             sprev = s;
 
             value = s;
-            if (!stringCmpIC(regex.caseFoldFlag, pstart, this, n, end)) continue loop; // STRING_CMP_VALUE_IC
+            if (!stringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) continue loop; // STRING_CMP_VALUE_IC
             s = value;
 
             int len;
@@ -1594,7 +1643,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int tlen    = code[ip++];
 
         sprev = s;
-        if (backrefMatchAtNestedLevel(ic != 0, regex.caseFoldFlag, level, tlen, ip)) { // (s) and (end) implicit
+        if (backrefMatchAtNestedLevel(ic != 0, currentCaseFoldFlag(), level, tlen, ip)) { // (s) and (end) implicit
             int len;
             if (sprev < range) {
                 while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
@@ -1608,14 +1657,18 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     /* no need: IS_DYNAMIC_OPTION() == 0 */
     @SuppressWarnings("unused")
     private void opSetOptionPush() {
-        // option = code[ip++]; // final for now
+        currentRegexOptions = code[ip++];
         pushAlt(ip, s, sprev, pkeep);
         ip += OPSize.SET_OPTION + OPSize.FAIL;
     }
 
     @SuppressWarnings("unused")
     private void opSetOption() {
-        // option = code[ip++]; // final for now
+        currentRegexOptions = code[ip++];
+    }
+
+    private int currentCaseFoldFlag() {
+        return regex.caseFoldFlagFor(currentRegexOptions);
     }
 
     private void opNullCheckStart() {
@@ -1862,6 +1915,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         opFail();
     }
 
+    private void opPopPosNot() {
+        StackEntry e = stack[posNotEnd()];
+        s = e.getStatePStr();
+        sprev = e.getStatePStrPrev();
+    }
+
     private void opPushStopBT() {
         pushStopBT();
     }
@@ -1954,7 +2013,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             throw new ValueException("subpattern recursion limit exceeded");
         }
         int addr = code[ip++];
-        pushCallFrame(ip);
+        int groupNum = code[ip++];
+        pushCallFrame(ip, groupNum);
         ip = addr; // absolute address
     }
 
@@ -2061,18 +2121,53 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return opEnd();
     }
 
+    private void opPrune() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
+        cutAlternatives(false);
+    }
+
     private void opSkip() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
+        if (name != null) {
+            int target = findControlMarkPosition(name);
+            if (target < 0) return;
+            cutAlternatives(false);
+            requestSearchSkip(target);
+            return;
+        }
         cutAlternatives(false);
         requestSearchSkip(s);
     }
 
     private void opThen() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
         cutAlternatives(true, s, sprev, pkeep);
     }
 
     private void opCommit() {
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
         cutAlternatives(false);
         requestSearchAbort();
+    }
+
+    private void opMark() {
+        String next = controlVerbName(code[ip++]);
+        pushControlMark(controlMark, next, s);
+        controlMark = next;
+    }
+
+    @Override
+    protected void restoreControlMark(String name) {
+        if (controlMark != null) controlError = controlMark;
+        controlMark = name;
+    }
+
+    private String controlVerbName(int labelId) {
+        return labelId < 0 ? null : regex.controlVerbLabels[labelId];
     }
 
     private void closeOpenCaptures(int boundary) {
@@ -2132,6 +2227,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             if (repeatStk[memEndStk + mem] == i) return mem;
         }
         return -1;
+    }
+
+    @Override
+    public String controlMark() {
+        return controlMark;
     }
 
     private void checkCapture(int capture) {

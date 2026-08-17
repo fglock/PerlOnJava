@@ -31,4 +31,7 @@ public interface MatchView {
 
     /** Number of the most recently closed active capture, or -1 if none. */
     int lastClosedCapture();
+
+    /** Most recent active Perl control mark, or {@code null}. */
+    String controlMark();
 }

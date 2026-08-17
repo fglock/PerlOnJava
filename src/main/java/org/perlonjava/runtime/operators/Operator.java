@@ -4,6 +4,7 @@ import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.regex.RegexTimeoutCharSequence;
 import org.perlonjava.runtime.regex.RegexTimeoutException;
+import org.perlonjava.runtime.regex.RegexMatcher;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -121,9 +122,8 @@ public class Operator {
             if (patternStr.equals(" ")) {
                 quotedRegex = RuntimeRegex.getQuotedRegex(new RuntimeScalar("\\s+"), new RuntimeScalar(unicodeStrings ? "u" : ""));
                 RuntimeRegex whitespaceRegex = (RuntimeRegex) quotedRegex.value;
-                Matcher leadingMatcher = whitespaceRegex.selectPattern(string)
-                        .matcher(new RegexTimeoutCharSequence(inputStr));
-                if (leadingMatcher.lookingAt()) {
+                RegexMatcher leadingMatcher = whitespaceRegex.matcher(string, inputStr);
+                if (leadingMatcher.find() && leadingMatcher.start() == 0) {
                     inputStr = inputStr.substring(leadingMatcher.end());
                 }
             } else {
@@ -134,14 +134,15 @@ public class Operator {
         if (quotedRegex.type == RuntimeScalarType.REGEX) {
             RuntimeRegex regex = (RuntimeRegex) quotedRegex.value;
             regex.emitExecutionDebugTrace(inputStr);
-            Pattern pattern = regex.selectPattern(string);
 
             // Special case: if the pattern is "/^/", treat it as if it used the multiline modifier
-            if (pattern.pattern().equals("^")) {
-                pattern = Pattern.compile("^", Pattern.MULTILINE);
+            if (regex.sourcePattern().equals("^")) {
+                quotedRegex = RuntimeRegex.getQuotedRegex(
+                        new RuntimeScalar("^"), new RuntimeScalar("m"));
+                regex = (RuntimeRegex) quotedRegex.value;
             }
 
-            if (pattern.pattern().isEmpty()) {
+            if (regex.sourcePattern().isEmpty()) {
                 // Special case: if the pattern matches the empty string, split between characters
                 if (limit > 0) {
                     for (int i = 0; i < inputStr.length() && splitElements.size() < limit - 1; i++) {
@@ -160,8 +161,7 @@ public class Operator {
                     }
                 }
             } else {
-                CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
-                Matcher matcher = pattern.matcher(matchInput);
+                RegexMatcher matcher = regex.matcher(string, inputStr);
                 int lastEnd = 0;
                 int splitCount = 0;
 
@@ -186,8 +186,7 @@ public class Operator {
                         }
 
                         // Add captured groups if any (but skip code block captures)
-                        Pattern p = matcher.pattern();
-                        Map<String, Integer> namedGroups = p.namedGroups();
+                        Map<String, Integer> namedGroups = matcher.namedGroups();
                         for (int i = 1; i <= matcher.groupCount(); i++) {
                             // Check if this is a code block capture (starts with "cb")
                             boolean isCodeBlockCapture = false;
@@ -230,7 +229,7 @@ public class Operator {
                         if (matchStart == matchEnd
                                 && matchEnd < inputStr.length()
                                 && (limit <= 0 || splitCount < limit - 1)) {
-                            int consumedEnd = findConsumingMatch(pattern, inputStr, matchEnd);
+                            int consumedEnd = findConsumingMatch(regex, string, inputStr, matchEnd);
                             if (consumedEnd > matchEnd) {
                                 // Emit the (empty) field between the two separators
                                 splitElements.add(new RuntimeScalar(""));
@@ -328,12 +327,13 @@ public class Operator {
      * perl's {@code REG_NOTEMPTY_ATSTART} retry that split uses after each
      * zero-width match.
      */
-    private static int findConsumingMatch(Pattern pattern, String input, int pos) {
+    private static int findConsumingMatch(RuntimeRegex regex, RuntimeScalar inputValue,
+                                          String input, int pos) {
         int max = Math.min(input.length() - pos, 64);
-        Matcher probe = pattern.matcher(input);
         for (int len = 1; len <= max; len++) {
+            RegexMatcher probe = regex.matcher(inputValue, input);
             probe.region(pos, pos + len);
-            if (probe.matches()) {
+            if (probe.find() && probe.start() == pos && probe.end() == pos + len) {
                 return pos + len;
             }
         }

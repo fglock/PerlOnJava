@@ -13,8 +13,14 @@ after their direct test process exits.
 
 **Usage:**
 ```bash
-./dev/tools/perl_test_runner.pl [test_directory]
+perl dev/tools/perl_test_runner.pl --jobs 10 --cpu-heavy-jobs 2 \
+  --output /tmp/regex.json perl5_t/t/re
 ```
+
+Normal fixtures use `--jobs`. Memory-sensitive regex fixtures run in a serial
+lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane
+controlled by `--cpu-heavy-jobs` (default 2). This permits useful CPU
+parallelism without making their watchdogs contend with `pat*`.
 
 ### reorganize_tests.sh
 **Purpose:** Reorganize test directory structure to separate PerlOnJava unit tests from standard Perl module tests.
@@ -34,6 +40,17 @@ after their direct test process exits.
 
 ### compare_test_results.pl
 **Purpose:** Compare test results between runs to identify regressions or improvements.
+
+The baseline may be either runner JSON or a captured historical runner log.
+Use `--fail-on-regression` for release gates and `--output` to retain a
+machine-readable per-file comparison:
+
+```bash
+perl dev/tools/compare_test_results.pl --fail-on-regression \
+  --path-prefix perl5_t/t/re \
+  --output /tmp/regex-comparison.json \
+  ../PerlOnJava/logs/test_20260815_080000_958.log /tmp/regex.json
+```
 
 ### check_thread_core_parity.pl
 **Purpose:** Enforce the same-commit direct/thread contract for the Perl-core

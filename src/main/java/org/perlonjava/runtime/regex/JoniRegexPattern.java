@@ -12,6 +12,10 @@ import org.joni.Regex;
 import org.joni.Region;
 import org.joni.Syntax;
 
+import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
+import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
+import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -25,26 +29,50 @@ import org.perlonjava.runtime.runtimetypes.*;
  * beyond the Java Pattern fast path.
  */
 final class JoniRegexPattern {
+    // Ruby syntax defaults \w to ASCII even for a Unicode encoding. Perl's
+    // default and /u modes use Unicode character classes; /a adds ASCII_RANGE
+    // explicitly in toJoniOptions(). Keep the richer Ruby parser surface used
+    // by callouts and control verbs while changing only that default policy.
+    private static final Syntax PERLONJAVA_SYNTAX = new Syntax(
+            "PERLONJAVA", Syntax.RUBY.op,
+            (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL | OP2_PLUS_POSSESSIVE_INTERVAL,
+            Syntax.RUBY.op3,
+            Syntax.RUBY.behavior,
+            Syntax.RUBY.options & ~(Option.ASCII_RANGE
+                    | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
+            Syntax.RUBY.metaCharTable);
+
     private final Regex regex;
     private final String sourcePattern;
     private final Map<String, Integer> namedGroups;
     private final RegexFlags flags;
+    private final boolean hasControlVerbState;
+    private final boolean hasDeferredUserDefinedUnicodeProperty;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
-        this(perlPattern, flags, 0);
+        this(perlPattern, flags, 0, false);
     }
 
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount) {
+        this(perlPattern, flags, trustedCalloutCount, false);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses) {
         this.flags = flags;
-        sourcePattern = translatePattern(perlPattern, flags, trustedCalloutCount);
+        hasControlVerbState = hasControlVerbState(perlPattern);
+        UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
+        hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
+        sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
         byte[] bytes = sourcePattern.getBytes(StandardCharsets.UTF_8);
-        regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags),
-                UTF8Encoding.INSTANCE, Syntax.RUBY);
+        regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
+                UTF8Encoding.INSTANCE, PERLONJAVA_SYNTAX);
         namedGroups = collectNamedGroups(regex);
     }
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
-        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags, input, callbacks);
+        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags,
+                hasControlVerbState, input, callbacks);
     }
 
     String patternDescription() {
@@ -55,13 +83,101 @@ final class JoniRegexPattern {
         return regex;
     }
 
-    private static int toJoniOptions(RegexFlags flags) {
+    boolean hasDeferredUserDefinedUnicodeProperty() {
+        return hasDeferredUserDefinedUnicodeProperty;
+    }
+
+    private record UserPropertyTranslation(String pattern, boolean deferred) {}
+
+    private static UserPropertyTranslation translateUserDefinedProperties(
+            String pattern, RegexFlags flags) {
+        StringBuilder translated = new StringBuilder(pattern.length());
+        boolean deferred = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (ch == '\\' && i + 1 < pattern.length() && pattern.charAt(i + 1) == '\\') {
+                translated.append("\\\\");
+                i++;
+                continue;
+            }
+            if (ch != '\\' || i + 3 >= pattern.length()
+                    || (pattern.charAt(i + 1) != 'p' && pattern.charAt(i + 1) != 'P')
+                    || pattern.charAt(i + 2) != '{') {
+                translated.append(ch);
+                continue;
+            }
+            int end = pattern.indexOf('}', i + 3);
+            if (end < 0) {
+                translated.append(ch);
+                continue;
+            }
+            String property = pattern.substring(i + 3, end).trim();
+            String unnegated = property.startsWith("^")
+                    ? property.substring(1).trim() : property;
+            boolean userDefined = unnegated.matches("^(.*::)?([Ii][sSNn]).+");
+            boolean scriptExtensions = unnegated.matches(
+                    "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
+            boolean frontendProperty = unnegated.matches(
+                    "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*=.*");
+            if (!userDefined && !scriptExtensions && !frontendProperty) {
+                translated.append(pattern, i, end + 1);
+                i = end;
+                continue;
+            }
+            try {
+                String propertyClass = UnicodeResolver.translateUnicodeProperty(
+                        property, pattern.charAt(i + 1) == 'P', flags.isCaseInsensitive());
+                translated.append("(?-i:")
+                        .append(normalizeGeneratedPropertyClassForJoni(propertyClass))
+                        .append(')');
+            } catch (IllegalArgumentException error) {
+                String message = error.getMessage();
+                if (!userDefined || message != null && message.contains("in expansion of")) {
+                    throw error;
+                }
+                translated.append("[\\s\\S]");
+                deferred = true;
+            }
+            i = end;
+        }
+        return new UserPropertyTranslation(translated.toString(), deferred);
+    }
+
+    /**
+     * UnicodeResolver emits Java-property spellings inside composite classes.
+     * Joni accepts the equivalent Unicode aliases without Java's {@code Is}
+     * and {@code gc=} prefixes.
+     */
+    private static String normalizeGeneratedPropertyClassForJoni(String propertyClass) {
+        StringBuilder normalized = new StringBuilder(propertyClass.length());
+        for (int i = 0; i < propertyClass.length(); i++) {
+            if (propertyClass.charAt(i) == '\\' && i + 3 < propertyClass.length()
+                    && (propertyClass.charAt(i + 1) == 'p' || propertyClass.charAt(i + 1) == 'P')
+                    && propertyClass.charAt(i + 2) == '{') {
+                int end = propertyClass.indexOf('}', i + 3);
+                if (end > i + 3) {
+                    String name = propertyClass.substring(i + 3, end);
+                    if (name.startsWith("gc=")) name = name.substring(3);
+                    else if (name.startsWith("Is")) name = name.substring(2);
+                    normalized.append(propertyClass, i, i + 3).append(name).append('}');
+                    i = end;
+                    continue;
+                }
+            }
+            normalized.append(propertyClass.charAt(i));
+        }
+        return normalized.toString();
+    }
+
+    private static int toJoniOptions(RegexFlags flags, boolean forceAsciiClasses) {
         int options = Option.NONE;
         if (flags.isCaseInsensitive()) options |= Option.IGNORECASE;
         if (flags.isExtended()) options |= Option.EXTEND;
         // Oniguruma's MULTILINE option controls whether dot matches newline.
         if (flags.isDotAll()) options |= Option.MULTILINE;
-        if (flags.isAscii()) options |= Option.ASCII_RANGE;
+        if (!flags.isMultiLine()) options |= Option.SINGLELINE;
+        if (flags.isAscii() || forceAsciiClasses) options |= Option.ASCII_RANGE;
+        if (flags.isAsciiStrict()) options |= Option.PERL_ASCII_STRICT;
         // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
         // when a pattern also contains named groups. Perl keeps both kinds of
         // captures numbered. Force that behavior unless /n explicitly disables
@@ -76,17 +192,27 @@ final class JoniRegexPattern {
         return pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(*ACCEPT)")
-                || pattern.contains("(*PRUNE)")
-                || pattern.contains("(*SKIP)")
-                || pattern.contains("(*THEN)")
-                || pattern.contains("(*COMMIT)")
+                || pattern.contains("(*PRUNE")
+                || pattern.contains("(*SKIP")
+                || pattern.contains("(*THEN")
+                || pattern.contains("(*COMMIT")
+                || pattern.contains("(*MARK")
                 || pattern.contains("(?(DEFINE)")
                 || pattern.contains("(?(?{=CALL:")
+                || pattern.contains("(?(R")
+                || pattern.contains("(?<=")
+                || pattern.contains("(?<!")
                 || pattern.contains("(?(<")
                 || pattern.contains("(?('")
                 || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
                 || pattern.contains("(?&")
                 || pattern.contains("(?P>");
+    }
+
+    private static boolean hasControlVerbState(String pattern) {
+        return pattern.contains("(*MARK") || pattern.contains("(*PRUNE")
+                || pattern.contains("(*SKIP") || pattern.contains("(*THEN")
+                || pattern.contains("(*COMMIT");
     }
 
     static String translatePattern(String pattern) {
@@ -99,6 +225,10 @@ final class JoniRegexPattern {
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
+        boolean atClassStart = false;
+        boolean classAllowsLeadingClose = false;
+        int posixClassDepth = 0;
+        boolean wrapsInternalScalarMarker = false;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (escaped) {
@@ -107,6 +237,20 @@ final class JoniRegexPattern {
                 continue;
             }
             if (ch == '\\') {
+                if (inClass) {
+                    atClassStart = false;
+                    classAllowsLeadingClose = false;
+                }
+                if (pattern.startsWith("\\N{", i)) {
+                    int end = pattern.indexOf('}', i + 3);
+                    if (end > i + 3) {
+                        int codePoint = UnicodeResolver.getCodePointFromName(
+                                pattern.substring(i + 3, end));
+                        appendResolvedNamedCharacter(out, codePoint, flags);
+                        i = end;
+                        continue;
+                    }
+                }
                 // In Perl, \g{name} is a backreference.  Ruby/Oniguruma uses
                 // \g<name> for a subexpression call and \k<name> for the
                 // backreference, so passing the brace form through makes Joni
@@ -125,14 +269,70 @@ final class JoniRegexPattern {
                 continue;
             }
             if (ch == '[') {
+                if (inClass) {
+                    boolean posixClass = i + 1 < pattern.length()
+                            && (pattern.charAt(i + 1) == ':'
+                                    || pattern.charAt(i + 1) == '.'
+                                    || pattern.charAt(i + 1) == '=');
+                    if (posixClass) {
+                        posixClassDepth++;
+                        atClassStart = false;
+                        classAllowsLeadingClose = false;
+                        out.append(ch);
+                        continue;
+                    } else {
+                        out.append("\\[");
+                        atClassStart = false;
+                        classAllowsLeadingClose = false;
+                        continue;
+                    }
+                }
+                if (!inClass && i + 1 < pattern.length() && pattern.charAt(i + 1) == '^') {
+                    // Surrogate and beyond-Unicode Perl scalars use one
+                    // Java-safe marker string internally. A negated class
+                    // accepts those scalars, but must consume the complete
+                    // marker as one Perl character.
+                    out.append("(?:\\x{FFFD}<[0-9A-F]+>|");
+                    wrapsInternalScalarMarker = true;
+                }
                 inClass = true;
+                atClassStart = true;
+                classAllowsLeadingClose = true;
                 out.append(ch);
                 continue;
             }
-            if (ch == ']' && inClass) {
-                inClass = false;
-                out.append(ch);
+            if (inClass && flags.isExtendedWhitespace() && Character.isWhitespace(ch)) {
                 continue;
+            }
+            if (inClass && atClassStart && ch == '^') {
+                out.append(ch);
+                atClassStart = false;
+                continue;
+            }
+            if (inClass && classAllowsLeadingClose && ch == ']') {
+                out.append(ch);
+                atClassStart = false;
+                classAllowsLeadingClose = false;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                out.append(ch);
+                if (posixClassDepth > 0) {
+                    posixClassDepth--;
+                    continue;
+                }
+                inClass = false;
+                atClassStart = false;
+                classAllowsLeadingClose = false;
+                if (wrapsInternalScalarMarker) {
+                    out.append(')');
+                    wrapsInternalScalarMarker = false;
+                }
+                continue;
+            }
+            if (inClass) {
+                atClassStart = false;
+                classAllowsLeadingClose = false;
             }
             if (!inClass && pattern.startsWith("(?{", i)
                     && !isTrustedCallout(pattern, i, trustedCalloutCount)) {
@@ -161,22 +361,10 @@ final class JoniRegexPattern {
                 i = end;
                 continue;
             }
-            if (!inClass && pattern.startsWith("(?^", i)) {
-                int colon = pattern.indexOf(':', i + 3);
-                if (colon > i) {
-                    out.append("(?");
-                    for (int p = i + 3; p < colon; p++) {
-                        char modifier = pattern.charAt(p);
-                        if (modifier == 'i' || modifier == 'm'
-                                || modifier == 's' || modifier == 'x'
-                                || modifier == '-') {
-                            out.append(modifier);
-                        }
-                    }
-                    out.append(':');
-                    i = colon;
-                    continue;
-                }
+            if (!inClass && pattern.startsWith("(?)", i)) {
+                out.append("(?:)");
+                i += 2;
+                continue;
             }
             if (!inClass && pattern.startsWith("(?&", i)) {
                 int end = pattern.indexOf(')', i + 3);
@@ -208,6 +396,24 @@ final class JoniRegexPattern {
             out.append(ch);
         }
         return out.toString();
+    }
+
+    private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,
+                                                      RegexFlags flags) {
+        boolean extendedSyntax = flags.isExtended()
+                && (codePoint == '#' || Character.isWhitespace(codePoint));
+        boolean regexSyntax = codePoint == '\\' || codePoint == '.' || codePoint == '^'
+                || codePoint == '$' || codePoint == '|' || codePoint == '?'
+                || codePoint == '*' || codePoint == '+' || codePoint == '('
+                || codePoint == ')' || codePoint == '[' || codePoint == ']'
+                || codePoint == '{' || codePoint == '}';
+        if (extendedSyntax || regexSyntax || Character.isISOControl(codePoint)) {
+            out.append("\\x{")
+                    .append(Integer.toHexString(codePoint).toUpperCase(java.util.Locale.ROOT))
+                    .append('}');
+        } else {
+            out.appendCodePoint(codePoint);
+        }
     }
 
     private static boolean isTrustedCallout(String pattern, int offset, int callbackCount) {
@@ -349,7 +555,11 @@ final class JoniRegexPattern {
             String name = new String(entry.name, entry.nameP, entry.nameEnd - entry.nameP,
                     StandardCharsets.UTF_8);
             int[] refs = entry.getBackRefs();
-            if (refs.length > 0) names.put(name, refs[refs.length - 1]);
+            for (int i = 0; i < refs.length; i++) {
+                String key = i == 0 ? name
+                        : name + CaptureNameEncoder.DUPLICATE_MARKER + (i - 1);
+                names.put(key, refs[i]);
+            }
         }
         return names;
     }
@@ -369,15 +579,18 @@ final class JoniRegexPattern {
         private int regionEnd;
         private int nextStart;
         private boolean matched;
+        private final boolean hasControlVerbState;
         private final List<RuntimeRegexCallback> callbacks;
         private PerlCalloutHandler calloutHandler;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
-                         RegexFlags flags, String input, List<RuntimeRegexCallback> callbacks) {
+                         RegexFlags flags, boolean hasControlVerbState, String input,
+                         List<RuntimeRegexCallback> callbacks) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
             this.flags = flags;
+            this.hasControlVerbState = hasControlVerbState;
             this.input = input;
             this.callbacks = callbacks;
             this.bytes = input.getBytes(StandardCharsets.UTF_8);
@@ -388,8 +601,18 @@ final class JoniRegexPattern {
 
         @Override
         public boolean find() {
+            return find(Option.NONE, false);
+        }
+
+        @Override
+        public boolean findNotEmpty() {
+            return find(Option.FIND_NOT_EMPTY, true);
+        }
+
+        private boolean find(int option, boolean anchored) {
             if (nextStart > regionEnd) {
                 matched = false;
+                if (hasControlVerbState) RuntimeRegex.updateControlVerbVariables(null, null);
                 return false;
             }
             matcher = regex.matcher(bytes);
@@ -399,12 +622,18 @@ final class JoniRegexPattern {
             }
             int result;
             try {
-                result = matcher.search(charToByte[nextStart], charToByte[regionEnd], Option.NONE);
+                result = anchored
+                        ? matcher.match(charToByte[nextStart], charToByte[regionEnd], option)
+                        : matcher.search(charToByte[nextStart], charToByte[regionEnd], option);
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
                 throw failure;
             }
             matched = result >= 0;
+            if (hasControlVerbState) {
+                RuntimeRegex.updateControlVerbVariables(
+                        matcher.getControlMark(), matcher.getControlError());
+            }
             if (calloutHandler != null) calloutHandler.finish(matched);
             if (!matched) return false;
             captures = matcher.getEagerRegion();
@@ -448,6 +677,8 @@ final class JoniRegexPattern {
 
         @Override public int groupCount() { return regex.numberOfCaptures(); }
         @Override public int lastClosedCapture() { return matcher.lastClosedCapture(); }
+        @Override public String controlMark() { return matcher.getControlMark(); }
+        @Override public String controlError() { return matcher.getControlError(); }
         @Override public Map<String, Integer> namedGroups() { return namedGroups; }
         @Override public String patternDescription() { return sourcePattern; }
 
@@ -465,6 +696,8 @@ final class JoniRegexPattern {
         }
 
         private int namedGroupNumber(String name) {
+            Integer knownGroup = namedGroups.get(name);
+            if (knownGroup != null) return knownGroup;
             byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
             return regex.nameToBackrefNumber(nameBytes, 0, nameBytes.length,
                     UTF8Encoding.INSTANCE, captures);
@@ -521,27 +754,16 @@ final class JoniRegexPattern {
         private final int[] byteToChar;
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
-        private final RegexCallbackMutationSnapshot mutations;
         private final int initialLocalLevel;
         private RuntimeScalar completedResult;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                            RegexFlags outerFlags) {
-            this(input, byteToChar, callbacks, outerFlags,
-                    RegexCallbackMutationSnapshot.capture());
-        }
-
-        private PerlCalloutHandler(String input, int[] byteToChar,
-                                   List<RuntimeRegexCallback> callbacks,
-                                   RegexFlags outerFlags,
-                                   RegexCallbackMutationSnapshot mutations) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
-            this.mutations = mutations;
             this.initialLocalLevel = DynamicVariableManager.getLocalLevel();
-            for (RuntimeRegexCallback callback : callbacks) mutations.include(callback.code);
         }
 
         @Override
@@ -601,8 +823,7 @@ final class JoniRegexPattern {
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
                             value.value instanceof RuntimeRegex runtimeRegex
                                     && runtimeRegex.getRegexFlags() != null
-                                    ? runtimeRegex.getRegexFlags() : outerFlags,
-                            mutations);
+                                    ? runtimeRegex.getRegexFlags() : outerFlags);
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
                     evaluation.token());
         }
@@ -630,7 +851,6 @@ final class JoniRegexPattern {
                             new RuntimeScalar(callback.code), enclosingSelf);
                 }
             }
-            mutations.include(callback.code);
             publishProvisional(match);
             var callbackLocations = PerlRuntime.current().executionState()
                     .activeRegexCallbackLocations;
@@ -660,7 +880,6 @@ final class JoniRegexPattern {
                 // The matcher cannot register an unwind token when the callout
                 // itself throws. Restore the provisional match and dynamic
                 // scope here before the exception crosses an eval boundary.
-                mutations.restore();
                 restoreCallbackScope(localLevel, savedRegex, previousR);
                 throw failure;
             } finally {
@@ -685,7 +904,6 @@ final class JoniRegexPattern {
 
         void finish(boolean matched) {
             try {
-                if (!matched) mutations.restore();
                 if (matched && completedResult != null) {
                     GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
                             .set(completedResult);
@@ -696,11 +914,7 @@ final class JoniRegexPattern {
         }
 
         void abort() {
-            try {
-                mutations.restore();
-            } finally {
-                DynamicVariableManager.popToLocalLevel(initialLocalLevel);
-            }
+            DynamicVariableManager.popToLocalLevel(initialLocalLevel);
         }
 
         private void restore(Token token, boolean completed) {
@@ -770,6 +984,7 @@ final class JoniRegexPattern {
             int lastClosed = match.lastClosedCapture();
             state.lastClosedCapture = lastClosed > 0 && lastClosed <= count
                     ? state.lastCaptureGroups[lastClosed - 1] : null;
+            RuntimeRegex.updateControlVerbVariables(match.controlMark(), null);
         }
 
         private int charOffset(int byteOffset) {

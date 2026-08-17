@@ -24,6 +24,8 @@ class StackEntry {
     private int E1, E2, E3, E4;
     private Object calloutToken;
     private ByteCodeMachine.DynamicContinuation dynamicContinuation;
+    private String previousControlMarkName;
+    private String controlMarkLabel;
 
     // first union member
     /* byte code position */
@@ -197,6 +199,24 @@ class StackEntry {
         ByteCodeMachine.DynamicContinuation continuation = dynamicContinuation;
         dynamicContinuation = null;
         return continuation;
+    }
+
+    void setControlMark(String previousName, String label, int position) {
+        previousControlMarkName = previousName;
+        controlMarkLabel = label;
+        E1 = position;
+    }
+
+    String getPreviousControlMarkName() {
+        return previousControlMarkName;
+    }
+
+    String getControlMarkLabel() {
+        return controlMarkLabel;
+    }
+
+    int getControlMarkPosition() {
+        return E1;
     }
 }
 

@@ -1242,12 +1242,15 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         int callbackKindIdx = interpretedCode.bytecode[pc++];
                         int callbackPackageIdx = interpretedCode.bytecode[pc++];
+                        int callbackSourceIdx = interpretedCode.bytecode[pc++];
                         sb.append("REGEX_CALLBACK r").append(rd)
                                 .append(" = callback(r").append(rs)
                                 .append(", kind=")
                                 .append(interpretedCode.stringPool[callbackKindIdx])
                                 .append(", package=")
                                 .append(interpretedCode.stringPool[callbackPackageIdx])
+                                .append(", source=")
+                                .append(interpretedCode.stringPool[callbackSourceIdx])
                                 .append(")\n");
                         break;
                     case Opcodes.REGEX_TEMPLATE:

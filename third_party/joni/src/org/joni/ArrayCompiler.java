@@ -25,6 +25,9 @@ import static org.joni.Option.isIgnoreCase;
 import static org.joni.Option.isMultiline;
 import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.jcodings.constants.CharacterType;
 import org.joni.ast.AnchorNode;
 import org.joni.ast.BackRefNode;
@@ -51,6 +54,7 @@ final class ArrayCompiler extends Compiler {
 
     private byte[][]templates;
     private int templateNum;
+    private final Map<String, Integer> controlVerbLabelIds = new LinkedHashMap<>();
 
     ArrayCompiler(Analyser analyser) {
         super(analyser);
@@ -72,6 +76,7 @@ final class ArrayCompiler extends Compiler {
         regex.codeLength = codeLength;
         regex.templates = templates;
         regex.templateNum = templateNum;
+        regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
         regex.factory = MatcherFactory.DEFAULT;
 
         if (Config.USE_SUBEXP_CALL && analyser.env.unsetAddrList != null) {
@@ -101,22 +106,36 @@ final class ArrayCompiler extends Compiler {
         case PRUNE:
             regex.requireStack = true;
             addOpcode(OPCode.PRUNE);
+            addInt(controlVerbLabelId(node.name));
             break;
         case SKIP:
             regex.requireStack = true;
             addOpcode(OPCode.SKIP);
+            addInt(controlVerbLabelId(node.name));
             break;
         case THEN:
             regex.requireStack = true;
             addOpcode(OPCode.THEN);
+            addInt(controlVerbLabelId(node.name));
             break;
         case COMMIT:
             regex.requireStack = true;
             addOpcode(OPCode.COMMIT);
+            addInt(controlVerbLabelId(node.name));
+            break;
+        case MARK:
+            regex.requireStack = true;
+            addOpcode(OPCode.MARK);
+            addInt(controlVerbLabelId(node.name));
             break;
         default:
             newInternalException(PARSER_BUG);
         }
+    }
+
+    private int controlVerbLabelId(String name) {
+        if (name == null) return -1;
+        return controlVerbLabelIds.computeIfAbsent(name, ignored -> controlVerbLabelIds.size());
     }
 
     @Override
@@ -398,6 +417,7 @@ final class ArrayCompiler extends Compiler {
         addOpcode(OPCode.CALL);
         node.unsetAddrList.add(codeLength, node.target);
         addAbsAddr(0); /*dummy addr.*/
+        addMemNum(node.groupNum);
     }
 
     @Override
@@ -836,7 +856,7 @@ final class ArrayCompiler extends Compiler {
         int tlen = compileLengthTree(node.target);
         regex.options = prev;
 
-        if (Config.USE_DYNAMIC_OPTION && isDynamic(prev ^ node.option)) {
+        if (isDynamic(prev ^ node.option)) {
             return OPSize.SET_OPTION_PUSH + OPSize.SET_OPTION + OPSize.FAIL + tlen + OPSize.SET_OPTION;
         } else {
             return tlen;
@@ -847,7 +867,8 @@ final class ArrayCompiler extends Compiler {
     protected void compileOptionNode(EncloseNode node) {
         int prev = regex.options;
 
-        if (Config.USE_DYNAMIC_OPTION && isDynamic(prev ^ node.option)) {
+        if (isDynamic(prev ^ node.option)) {
+            regex.requireStack = true;
             addOpcodeOption(OPCode.SET_OPTION_PUSH, node.option);
             addOpcodeOption(OPCode.SET_OPTION, prev);
             addOpcode(OPCode.FAIL);
@@ -857,7 +878,7 @@ final class ArrayCompiler extends Compiler {
         compileTree(node.target);
         regex.options = prev;
 
-        if (Config.USE_DYNAMIC_OPTION && isDynamic(prev ^ node.option)) {
+        if (isDynamic(prev ^ node.option)) {
             addOpcodeOption(OPCode.SET_OPTION, prev);
         }
     }
@@ -908,7 +929,13 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case EncloseType.CONDITION:
-            len = node.calloutConditionId >= 0 ? OPSize.CALLOUT_CONDITION : OPSize.CONDITION;
+            if (node.assertionCondition != null) {
+                len = OPSize.PUSH_POS_NOT + compileLengthTree(node.assertionCondition.target) + OPSize.POP_POS_NOT;
+            } else if (node.recursionConditionGroup >= 0) {
+                len = OPSize.RECURSION_CONDITION;
+            } else {
+                len = node.calloutConditionId >= 0 ? OPSize.CALLOUT_CONDITION : OPSize.CONDITION;
+            }
             if (node.target.getType() == NodeType.ALT) {
                 ListNode x = (ListNode)node.target;
                 tlen = compileLengthTree(x.value); /* yes-node */
@@ -940,9 +967,12 @@ final class ArrayCompiler extends Compiler {
             if (Config.USE_SUBEXP_CALL && node.isCalled()) {
                 regex.requireStack = true;
                 addOpcode(OPCode.CALL);
-                node.callAddr = codeLength + OPSize.ABSADDR + OPSize.JUMP;
+                node.callAddr = codeLength + OPSize.ABSADDR + OPSize.MEMNUM + OPSize.JUMP;
                 node.setAddrFixed();
                 addAbsAddr(node.callAddr);
+                // This CALL is a compiler implementation detail for a group's
+                // ordinary occurrence, not a Perl recursive subpattern call.
+                addMemNum(-1);
                 len = compileLengthTree(node.target);
                 len += OPSize.MEMORY_START_PUSH + OPSize.RETURN;
                 if (bsAt(regex.btMemEnd, node.regNum)) {
@@ -1008,11 +1038,8 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case EncloseType.CONDITION:
-            if (node.calloutConditionId >= 0) regex.requireStack = true;
-            addOpcode(node.calloutConditionId >= 0
-                    ? OPCode.CALLOUT_CONDITION : OPCode.CONDITION);
-            addMemNum(node.calloutConditionId >= 0
-                    ? node.calloutConditionId : node.regNum);
+            if (node.calloutConditionId >= 0 || node.assertionCondition != null
+                    || node.recursionConditionGroup >= 0) regex.requireStack = true;
             if (node.target.getType() == NodeType.ALT) {
                 ListNode x = (ListNode)node.target;
                 len = compileLengthTree(x.value); /* yes-node */
@@ -1021,7 +1048,32 @@ final class ArrayCompiler extends Compiler {
                 int len2 = compileLengthTree(x.value); /* no-node */
                 if (x.tail != null) newSyntaxException(INVALID_CONDITION_PATTERN);
                 x = (ListNode)node.target;
-                addRelAddr(len + OPSize.JUMP);
+                if (node.assertionCondition != null) {
+                    boolean positive = node.assertionCondition.type == AnchorType.PREC_READ;
+                    ListNode yes = x;
+                    ListNode no = x.tail;
+                    ListNode first = positive ? yes : no;
+                    ListNode second = positive ? no : yes;
+                    int firstLength = compileLengthTree(first.value);
+                    int secondLength = compileLengthTree(second.value);
+                    int conditionLength = compileLengthTree(node.assertionCondition.target);
+                    addOpcodeRelAddr(OPCode.PUSH_POS_NOT,
+                            conditionLength + OPSize.POP_POS_NOT + firstLength + OPSize.JUMP);
+                    compileTree(node.assertionCondition.target);
+                    addOpcode(OPCode.POP_POS_NOT);
+                    compileTree(first.value);
+                    addOpcodeRelAddr(OPCode.JUMP, secondLength);
+                    compileTree(second.value);
+                    break;
+                } else {
+                    addOpcode(node.calloutConditionId >= 0 ? OPCode.CALLOUT_CONDITION
+                            : node.recursionConditionGroup >= 0 ? OPCode.RECURSION_CONDITION
+                            : OPCode.CONDITION);
+                    addMemNum(node.calloutConditionId >= 0 ? node.calloutConditionId
+                            : node.recursionConditionGroup >= 0 ? node.recursionConditionGroup
+                            : node.regNum);
+                    addRelAddr(len + OPSize.JUMP);
+                }
                 compileTree(x.value); /* yes-node */
                 addOpcodeRelAddr(OPCode.JUMP, len2);
                 x = x.tail;
@@ -1065,10 +1117,16 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case AnchorType.LOOK_BEHIND:
+            if (node.variableLookBehindMin >= 0) {
+                return compileLengthVariableLookBehind(node, false);
+            }
             len = OPSize.LOOK_BEHIND + tlen;
             break;
 
         case AnchorType.LOOK_BEHIND_NOT:
+            if (node.variableLookBehindMin >= 0) {
+                return compileLengthVariableLookBehind(node, true);
+            }
             len = OPSize.PUSH_LOOK_BEHIND_NOT + tlen + OPSize.FAIL_LOOK_BEHIND_NOT;
             break;
 
@@ -1077,6 +1135,36 @@ final class ArrayCompiler extends Compiler {
             break;
         } // switch
         return len;
+    }
+
+    private int compileLengthVariableLookBehind(AnchorNode node, boolean negative) {
+        if (node.variableLookBehindTargetLength < 0) {
+            int targetLength = compileLengthTree(node.target);
+            int variants = node.variableLookBehindMax - node.variableLookBehindMin + 1;
+            int bodyLength = negative
+                    ? OPSize.PUSH_LOOK_BEHIND_NOT + targetLength
+                            + OPSize.CHECK_LOOK_BEHIND_END + OPSize.FAIL_LOOK_BEHIND_NOT
+                    : OPSize.PUSH_POS + OPSize.LOOK_BEHIND + targetLength
+                            + OPSize.CHECK_POS_END + OPSize.POP_POS;
+            int length = variants * bodyLength;
+            if (!negative && variants > 1) length += (variants - 1) * (OPSize.PUSH + OPSize.JUMP);
+            return length;
+        }
+        QuantifierNode quantifier = (QuantifierNode)node.target;
+        int targetLength = compileLengthTree(quantifier.target);
+        int variants = node.variableLookBehindMax - node.variableLookBehindMin + 1;
+        int length = 0;
+        for (int count = node.variableLookBehindMin;
+                count <= node.variableLookBehindMax; count++) {
+            int bodyLength = targetLength * count;
+            length += negative
+                    ? OPSize.PUSH_LOOK_BEHIND_NOT + bodyLength + OPSize.FAIL_LOOK_BEHIND_NOT
+                    : OPSize.LOOK_BEHIND + bodyLength;
+        }
+        if (!negative && variants > 1) {
+            length += (variants - 1) * (OPSize.PUSH + OPSize.JUMP);
+        }
+        return length;
     }
 
     @Override
@@ -1149,6 +1237,10 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case AnchorType.LOOK_BEHIND:
+            if (node.variableLookBehindMin >= 0) {
+                compileVariableLookBehind(node, false);
+                break;
+            }
             addOpcode(OPCode.LOOK_BEHIND);
             if (node.charLength < 0) {
                 n = analyser.getCharLengthTree(node.target);
@@ -1161,6 +1253,10 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case AnchorType.LOOK_BEHIND_NOT:
+            if (node.variableLookBehindMin >= 0) {
+                compileVariableLookBehind(node, true);
+                break;
+            }
             regex.requireStack = true;
             len = compileLengthTree(node.target);
             addOpcodeRelAddr(OPCode.PUSH_LOOK_BEHIND_NOT, len + OPSize.FAIL_LOOK_BEHIND_NOT);
@@ -1192,6 +1288,7 @@ final class ArrayCompiler extends Compiler {
                 case SKIP -> OPSize.SKIP;
                 case THEN -> OPSize.THEN;
                 case COMMIT -> OPSize.COMMIT;
+                case MARK -> OPSize.MARK;
             };
         }
         int len = 0;
@@ -1285,6 +1382,93 @@ final class ArrayCompiler extends Compiler {
             int[]tmp = new int[length];
             System.arraycopy(code, 0, tmp, 0, code.length);
             code = tmp;
+        }
+    }
+
+    private void compileVariableLookBehind(AnchorNode node, boolean negative) {
+        if (node.variableLookBehindTargetLength < 0) {
+            compileCompoundVariableLookBehind(node, negative);
+            return;
+        }
+        QuantifierNode quantifier = (QuantifierNode)node.target;
+        int targetCodeLength = compileLengthTree(quantifier.target);
+        if (negative) {
+            regex.requireStack = true;
+            for (int count = node.variableLookBehindMin;
+                    count <= node.variableLookBehindMax; count++) {
+                int bodyLength = targetCodeLength * count;
+                addOpcodeRelAddr(OPCode.PUSH_LOOK_BEHIND_NOT,
+                        bodyLength + OPSize.FAIL_LOOK_BEHIND_NOT);
+                addLength(node.variableLookBehindTargetLength * count);
+                compileTreeNTimes(quantifier.target, count);
+                addOpcode(OPCode.FAIL_LOOK_BEHIND_NOT);
+            }
+            return;
+        }
+
+        int variants = node.variableLookBehindMax - node.variableLookBehindMin + 1;
+        int[] counts = new int[variants];
+        int[] bodies = new int[variants];
+        int remaining = 0;
+        for (int i = 0; i < variants; i++) {
+            counts[i] = quantifier.greedy
+                    ? node.variableLookBehindMax - i : node.variableLookBehindMin + i;
+            bodies[i] = OPSize.LOOK_BEHIND + targetCodeLength * counts[i];
+            remaining += bodies[i];
+            if (i + 1 < variants) remaining += OPSize.PUSH + OPSize.JUMP;
+        }
+        regex.requireStack = variants > 1 || regex.requireStack;
+        for (int i = 0; i < variants; i++) {
+            if (i + 1 < variants) {
+                addOpcodeRelAddr(OPCode.PUSH, bodies[i] + OPSize.JUMP);
+            }
+            addOpcode(OPCode.LOOK_BEHIND);
+            addLength(node.variableLookBehindTargetLength * counts[i]);
+            compileTreeNTimes(quantifier.target, counts[i]);
+            remaining -= bodies[i];
+            if (i + 1 < variants) {
+                remaining -= OPSize.PUSH + OPSize.JUMP;
+                addOpcodeRelAddr(OPCode.JUMP, remaining);
+            }
+        }
+    }
+
+    private void compileCompoundVariableLookBehind(AnchorNode node, boolean negative) {
+        int targetLength = compileLengthTree(node.target);
+        regex.requireStack = true;
+        if (negative) {
+            for (int length = node.variableLookBehindMin;
+                    length <= node.variableLookBehindMax; length++) {
+                addOpcodeRelAddr(OPCode.PUSH_LOOK_BEHIND_NOT,
+                        targetLength + OPSize.CHECK_LOOK_BEHIND_END
+                                + OPSize.FAIL_LOOK_BEHIND_NOT);
+                addLength(length);
+                compileTree(node.target);
+                addOpcode(OPCode.CHECK_LOOK_BEHIND_END);
+                addOpcode(OPCode.FAIL_LOOK_BEHIND_NOT);
+            }
+            return;
+        }
+
+        int variants = node.variableLookBehindMax - node.variableLookBehindMin + 1;
+        int bodyLength = OPSize.PUSH_POS + OPSize.LOOK_BEHIND + targetLength
+                + OPSize.CHECK_POS_END + OPSize.POP_POS;
+        int remaining = variants * bodyLength + (variants - 1) * (OPSize.PUSH + OPSize.JUMP);
+        for (int i = 0; i < variants; i++) {
+            int length = node.variableLookBehindMax - i;
+            if (i + 1 < variants) addOpcodeRelAddr(OPCode.PUSH, bodyLength + OPSize.JUMP);
+            addOpcodeRelAddr(OPCode.PUSH_POS,
+                    OPSize.LOOK_BEHIND + targetLength + OPSize.CHECK_POS_END + OPSize.POP_POS);
+            addOpcode(OPCode.LOOK_BEHIND);
+            addLength(length);
+            compileTree(node.target);
+            addOpcode(OPCode.CHECK_POS_END);
+            addOpcode(OPCode.POP_POS);
+            remaining -= bodyLength;
+            if (i + 1 < variants) {
+                remaining -= OPSize.PUSH + OPSize.JUMP;
+                addOpcodeRelAddr(OPCode.JUMP, remaining);
+            }
         }
     }
 

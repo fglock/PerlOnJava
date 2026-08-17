@@ -65,7 +65,7 @@ public interface OPSize {
     int LOOK_BEHIND                   = (OPCODE + LENGTH);
     int PUSH_LOOK_BEHIND_NOT          = (OPCODE + RELADDR + LENGTH);
     int FAIL_LOOK_BEHIND_NOT          = OPCODE;
-    int CALL                          = (OPCODE + ABSADDR);
+    int CALL                          = (OPCODE + ABSADDR + MEMNUM);
     int RETURN                        = OPCODE;
     int CONDITION                     = (OPCODE + MEMNUM + RELADDR);
     int PUSH_ABSENT_POS               = OPCODE;
@@ -75,10 +75,15 @@ public interface OPSize {
     int CALLOUT_CONDITION            = (OPCODE + MEMNUM + RELADDR);
     int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM);
     int ACCEPT                       = OPCODE;
-    int PRUNE                        = OPCODE;
-    int SKIP                         = OPCODE;
-    int THEN                         = OPCODE;
-    int COMMIT                       = OPCODE;
+    int PRUNE                        = (OPCODE + INDEX);
+    int SKIP                         = (OPCODE + INDEX);
+    int THEN                         = (OPCODE + INDEX);
+    int COMMIT                       = (OPCODE + INDEX);
+    int MARK                         = (OPCODE + INDEX);
+    int POP_POS_NOT                  = OPCODE;
+    int RECURSION_CONDITION          = (OPCODE + MEMNUM + RELADDR);
+    int CHECK_POS_END                = OPCODE;
+    int CHECK_LOOK_BEHIND_END        = OPCODE;
 
     // #ifdef USE_COMBINATION_EXPLOSION_CHECK
     int STATE_CHECK                   = (OPCODE + STATE_CHECK_NUM);

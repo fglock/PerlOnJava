@@ -43,6 +43,7 @@ public final class Regex {
     int[] code;             /* compiled pattern */
     int codeLength;
     boolean requireStack;
+    boolean hasDynamicOptions;
 
     int numMem;             /* used memory(...) num counted from 1 */
     int numRepeat;          /* OP_REPEAT/OP_REPEAT_NG id-counter */
@@ -89,6 +90,7 @@ public final class Regex {
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
+    String[] controlVerbLabels;
 
     private static final Encoding DEFAULT_ENCODING;
     static {
@@ -170,6 +172,12 @@ public final class Regex {
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;
         new Analyser(this, syntax, bytes, p, end, warnings).compile();
+    }
+
+    final int caseFoldFlagFor(int option) {
+        return Option.isPerlAsciiStrict(option)
+                ? caseFoldFlag & ~Config.INTERNAL_ENC_CASE_FOLD_MULTI_CHAR
+                : caseFoldFlag;
     }
 
     public Matcher matcher(byte[]bytes) {

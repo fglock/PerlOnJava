@@ -26,6 +26,8 @@ import static org.joni.Option.isDontCaptureGroup;
 import static org.joni.Option.isIgnoreCase;
 import static org.joni.Option.isPosixBracketAllRange;
 
+import java.nio.charset.StandardCharsets;
+
 import org.jcodings.Encoding;
 import org.jcodings.ObjPtr;
 import org.jcodings.Ptr;
@@ -530,10 +532,45 @@ class Parser extends Lexer {
                     int num = -1;
                     int name = -1;
                     int calloutConditionId = -1;
+                    AnchorNode assertionCondition = null;
+                    int recursionConditionGroup = -1;
+                    int recursionConditionNameP = -1;
+                    int recursionConditionNameEnd = -1;
                     fetch();
                     if (c == '?' && left() && peekIs('{')) {
                         fetch();
                         calloutConditionId = parseInternalCalloutId();
+                    } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
+                        fetch();
+                        assertionCondition = new AnchorNode(c == '='
+                                ? AnchorType.PREC_READ : AnchorType.PREC_READ_NOT);
+                        fetchToken();
+                        assertionCondition.setTarget(parseSubExp(term));
+                    } else if (c == 'R') {
+                        recursionConditionGroup = 0;
+                        if (!left()) newSyntaxException(INVALID_CONDITION_PATTERN);
+                        if (peekIs('&')) {
+                            inc();
+                            recursionConditionNameP = p;
+                            while (left() && !peekIs(')')) inc();
+                            recursionConditionNameEnd = p;
+                            if (recursionConditionNameEnd == recursionConditionNameP || !left()) {
+                                newSyntaxException(INVALID_CONDITION_PATTERN);
+                            }
+                            inc();
+                        } else if (enc.isDigit(peek())) {
+                            recursionConditionGroup = 0;
+                            while (left() && enc.isDigit(peek())) {
+                                recursionConditionGroup = recursionConditionGroup * 10 + peek() - '0';
+                                inc();
+                            }
+                            if (!left() || !peekIs(')')) newSyntaxException(INVALID_CONDITION_PATTERN);
+                            inc();
+                        } else if (peekIs(')')) {
+                            inc();
+                        } else {
+                            newSyntaxException(INVALID_CONDITION_PATTERN);
+                        }
                     } else if (enc.isDigit(c)) { /* (n) */
                         unfetch();
                         num = fetchName('(', true);
@@ -555,11 +592,25 @@ class Parser extends Lexer {
                     EncloseNode en = new EncloseNode(EncloseType.CONDITION);
                     en.regNum = num;
                     en.calloutConditionId = calloutConditionId;
+                    en.assertionCondition = assertionCondition;
+                    en.recursionConditionGroup = recursionConditionGroup;
+                    en.recursionConditionNameP = recursionConditionNameP;
+                    en.recursionConditionNameEnd = recursionConditionNameEnd;
                     if (name != -1) en.setNameRef();
                     node = en;
                 } else {
                     newSyntaxException(UNDEFINED_GROUP_OPTION);
                 }
+                break;
+
+            case '|':   /* Perl branch reset: (?|...|...) */
+                if (syntax.op2QMarkGroupEffect()) {
+                    fetchToken();
+                    node = parseBranchReset(term);
+                    returnCode = 0;
+                    return node;
+                }
+                newSyntaxException(UNDEFINED_GROUP_OPTION);
                 break;
 
             case '^': /* loads default options */
@@ -570,6 +621,9 @@ class Parser extends Lexer {
                     option = bsOnOff(option, Option.SINGLELINE, false);
                     option = bsOnOff(option, Option.MULTILINE, true);
                     option = bsOnOff(option, Option.EXTEND, true);
+                    option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, true);
+                    option = bsOnOff(option, Option.CAPTURE_GROUP, false);
+                    option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                     fetch();
                 } else {
                     newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -581,11 +635,13 @@ class Parser extends Lexer {
             case 'm':
             case 's':
             case 'x':
+            case 'n':
             case 'a':
             case 'd':
             case 'l':
             case 'u':
                 boolean neg = false;
+                int asciiModifierCount = 0;
                 while (true) {
                     switch(c) {
                     case ':':
@@ -599,6 +655,14 @@ class Parser extends Lexer {
                         break;
                     case 'i':
                         option = bsOnOff(option, Option.IGNORECASE, neg);
+                        break;
+                    case 'n':
+                        if (syntax.op2OptionPerl()) {
+                            option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, neg);
+                            option = bsOnOff(option, Option.CAPTURE_GROUP, !neg);
+                        } else {
+                            newSyntaxException(UNDEFINED_GROUP_OPTION);
+                        }
                         break;
                     case 's':
                         if (syntax.op2OptionPerl()) {
@@ -622,9 +686,13 @@ class Parser extends Lexer {
 
                     case 'a':     /* limits \d, \s, \w and POSIX brackets to ASCII range */
                         if ((syntax.op2OptionPerl() || syntax.op2OptionRuby()) && !neg) {
+                            asciiModifierCount++;
                             option = bsOnOff(option, Option.ASCII_RANGE, false);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT,
+                                    syntax.op2OptionPerl() && asciiModifierCount >= 2
+                                            ? false : true);
                             break;
                         } else {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -634,6 +702,7 @@ class Parser extends Lexer {
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                             break;
                         } else {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -642,6 +711,7 @@ class Parser extends Lexer {
                     case 'd':
                         if (syntax.op2OptionPerl() && !neg) {
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                         } else if (syntax.op2OptionRuby() && !neg) {
                             option = bsOnOff(option, Option.ASCII_RANGE, false);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, false);
@@ -654,6 +724,7 @@ class Parser extends Lexer {
                     case 'l':
                         if (syntax.op2OptionPerl() && !neg) {
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
+                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                         } else {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
                         }
@@ -663,11 +734,17 @@ class Parser extends Lexer {
                     } // switch
 
                     if (c == ')') {
+                        if (Option.isDynamic(env.option ^ option)) {
+                            regex.hasDynamicOptions = true;
+                        }
                         node = EncloseNode.newOption(option);
                         returnCode = 2; /* option only */
                         return node;
                     } else if (c == ':') {
                         int prev = env.option;
+                        if (Option.isDynamic(prev ^ option)) {
+                            regex.hasDynamicOptions = true;
+                        }
                         env.option = option;
                         fetchToken();
                         Node target = parseSubExp(term);
@@ -734,36 +811,49 @@ class Parser extends Lexer {
 
     private Node parseControlVerb() {
         final ControlVerbNode.Kind kind;
-        final String suffix;
+        final String verb;
         if (startsWith("ACCEPT)")) {
             kind = ControlVerbNode.Kind.ACCEPT;
-            suffix = "ACCEPT)";
+            verb = "ACCEPT";
         } else if (startsWith("FAIL)")) {
             kind = ControlVerbNode.Kind.FAIL;
-            suffix = "FAIL)";
+            verb = "FAIL";
         } else if (startsWith("F)")) {
             kind = ControlVerbNode.Kind.FAIL;
-            suffix = "F)";
-        } else if (startsWith("PRUNE)")) {
+            verb = "F";
+        } else if (startsWith("PRUNE)") || startsWith("PRUNE:")) {
             kind = ControlVerbNode.Kind.PRUNE;
-            suffix = "PRUNE)";
-        } else if (startsWith("SKIP)")) {
+            verb = "PRUNE";
+        } else if (startsWith("SKIP)") || startsWith("SKIP:")) {
             kind = ControlVerbNode.Kind.SKIP;
-            suffix = "SKIP)";
-        } else if (startsWith("THEN)")) {
+            verb = "SKIP";
+        } else if (startsWith("THEN)") || startsWith("THEN:")) {
             kind = ControlVerbNode.Kind.THEN;
-            suffix = "THEN)";
-        } else if (startsWith("COMMIT)")) {
+            verb = "THEN";
+        } else if (startsWith("COMMIT)") || startsWith("COMMIT:")) {
             kind = ControlVerbNode.Kind.COMMIT;
-            suffix = "COMMIT)";
+            verb = "COMMIT";
+        } else if (startsWith("MARK)") || startsWith("MARK:")) {
+            kind = ControlVerbNode.Kind.MARK;
+            verb = "MARK";
         } else {
             newSyntaxException(UNDEFINED_GROUP_OPTION);
             return null;
         }
-        p += suffix.length();
+        p += verb.length();
+        String name = null;
+        if (left() && peekIs(':')) {
+            inc();
+            int nameStart = p;
+            while (left() && !peekIs(')')) inc();
+            if (!left() || p == nameStart) newSyntaxException(UNDEFINED_GROUP_OPTION);
+            name = new String(bytes, nameStart, p - nameStart, StandardCharsets.UTF_8);
+        }
+        if (!left() || !peekIs(')')) newSyntaxException(END_PATTERN_IN_GROUP);
+        inc();
         returnCode = 0;
         env.hasControlVerb = true;
-        return new ControlVerbNode(kind);
+        return new ControlVerbNode(kind, name);
     }
 
     private int parseInternalCalloutId() {
@@ -1337,14 +1427,17 @@ class Parser extends Lexer {
             break;
 
         default:
-            newInternalException(PARSER_BUG);
+            CClassNode propertyClass = new CClassNode();
+            propertyClass.addCType(token.getPropCType(), false, false, env, this);
+            if (token.getPropNot()) propertyClass.setNot();
+            node = propertyClass;
         } // inner switch
         return node;
     }
 
     private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc) {
         ApplyCaseFoldArg arg = new ApplyCaseFoldArg(env, cc, ascCc);
-        enc.applyAllCaseFold(env.caseFoldFlag, ApplyCaseFold.INSTANCE, arg);
+        enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
         if (arg.altRoot != null) {
             node = ListNode.newAlt(node, arg.altRoot);
         }
@@ -1442,6 +1535,35 @@ class Parser extends Lexer {
             }
             return top;
         }
+    }
+
+    private Node parseBranchReset(TokenType term) {
+        int captureBase = env.numMem;
+        int captureMax = captureBase;
+        Node branch = parseBranch(term);
+        captureMax = Math.max(captureMax, env.numMem);
+
+        if (token.type == term) {
+            env.numMem = captureMax;
+            return branch;
+        }
+        if (token.type != TokenType.ALT) {
+            parseSubExpError(term);
+        }
+
+        ListNode top = ListNode.newAlt(branch, null);
+        ListNode tail = top;
+        while (token.type == TokenType.ALT) {
+            env.numMem = captureBase;
+            fetchToken();
+            branch = parseBranch(term);
+            captureMax = Math.max(captureMax, env.numMem);
+            tail.setTail(ListNode.newAlt(branch, null));
+            tail = tail.tail;
+        }
+        env.numMem = captureMax;
+        if (token.type != term) parseSubExpError(term);
+        return top;
     }
 
     /* term_tok: TK_EOT or TK_SUBEXP_CLOSE */

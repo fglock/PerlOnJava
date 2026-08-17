@@ -149,6 +149,11 @@ public interface OPCode {
     int SKIP                          = 105;          /* prune and resume search at current position */
     int THEN                          = 106;          /* prune through the nearest alternative */
     int COMMIT                        = 107;          /* prune and prevent another search start */
+    int MARK                          = 108;          /* record a named Perl backtracking mark */
+    int POP_POS_NOT                   = 109;          /* successful conditional assertion end */
+    int RECURSION_CONDITION           = 110;          /* active subpattern call conditional */
+    int CHECK_POS_END                 = 111;          /* require current position at saved positive boundary */
+    int CHECK_LOOK_BEHIND_END         = 112;          /* require current position at saved negative boundary */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -260,6 +265,11 @@ public interface OPCode {
         "skip", /*OP_SKIP*/
         "then", /*OP_THEN*/
         "commit", /*OP_COMMIT*/
+        "mark", /*OP_MARK*/
+        "pop-pos-not", /*OP_POP_POS_NOT*/
+        "recursion-condition", /*OP_RECURSION_CONDITION*/
+        "check-pos-end", /*OP_CHECK_POS_END*/
+        "check-look-behind-end", /*OP_CHECK_LOOK_BEHIND_END*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -351,7 +361,7 @@ public interface OPCode {
         Arguments.NON, /*OP_PUSH_ABSENT_POS*/
         Arguments.RELADDR, /*OP_ABSENT*/
         Arguments.NON, /*OP_ABSENT_END*/
-        Arguments.ABSADDR, /*OP_CALL*/
+        Arguments.SPECIAL, /*OP_CALL*/
         Arguments.NON, /*OP_RETURN*/
         Arguments.SPECIAL, /*OP_CONDITION*/
         Arguments.SPECIAL, /*OP_STATE_CHECK_PUSH*/
@@ -368,9 +378,14 @@ public interface OPCode {
         Arguments.SPECIAL, /*OP_CALLOUT_CONDITION*/
         Arguments.MEMNUM, /*OP_DYNAMIC_CALLOUT*/
         Arguments.NON, /*OP_ACCEPT*/
-        Arguments.NON, /*OP_PRUNE*/
-        Arguments.NON, /*OP_SKIP*/
-        Arguments.NON, /*OP_THEN*/
-        Arguments.NON, /*OP_COMMIT*/
+        Arguments.MEMNUM, /*OP_PRUNE*/
+        Arguments.MEMNUM, /*OP_SKIP*/
+        Arguments.MEMNUM, /*OP_THEN*/
+        Arguments.MEMNUM, /*OP_COMMIT*/
+        Arguments.MEMNUM, /*OP_MARK*/
+        Arguments.NON, /*OP_POP_POS_NOT*/
+        Arguments.SPECIAL, /*OP_RECURSION_CONDITION*/
+        Arguments.NON, /*OP_CHECK_POS_END*/
+        Arguments.NON, /*OP_CHECK_LOOK_BEHIND_END*/
     } : null;
 }

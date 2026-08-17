@@ -39,6 +39,11 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
         BitSet bs = cc.bs;
         boolean addFlag;
 
+        if (Option.isPerlAsciiStrict(env.option)
+                && Encoding.isAscii(from) != Encoding.isAscii(to[0])) {
+            return;
+        }
+
         if (ascCc == null) {
             addFlag = false;
         } else if (Encoding.isAscii(from) == Encoding.isAscii(to[0])) {

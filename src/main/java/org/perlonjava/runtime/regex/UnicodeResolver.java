@@ -11,6 +11,12 @@ import java.util.Map;
 import java.util.Set;
 
 public class UnicodeResolver {
+    private static final String[] PERL_UNICODE_AGE_VERSIONS = {
+        "1.1", "2.0", "2.1", "3.0", "3.1", "3.2", "4.0", "4.1",
+        "5.0", "5.1", "5.2", "6.0", "6.1", "6.2", "6.3", "7.0",
+        "8.0", "9.0", "10.0", "11.0", "12.0", "12.1", "13.0",
+        "14.0", "15.0"
+    };
     /**
      * Cache for user-defined property subroutine results.
      * Perl only calls user-defined property subs once per unique name and caches the result.
@@ -776,12 +782,13 @@ public class UnicodeResolver {
                     break;
             }
 
-            // Remove prefixes (Blk= is Perl's short form for Block=)
-            for (String prefix : new String[]{"Script=", "Block=", "Blk=", "In=", "Is="}) {
-                if (property.startsWith(prefix)) {
-                    property = property.substring(prefix.length());
-                    break;
-                }
+            String agePattern = translatePerlAgeProperty(property, negated);
+            if (agePattern != null) return agePattern;
+
+            // Is= is Perl shorthand for a property value. Keep Script=,
+            // Block=/Blk=, and the age aliases as property/value pairs for ICU.
+            if (property.startsWith("Is=")) {
+                property = property.substring("Is=".length());
             }
 
             // Strip 'Is'/'is' prefix for Perl compatibility (e.g., IsPrint -> Print, isAlpha -> Alpha)
@@ -866,6 +873,66 @@ public class UnicodeResolver {
             }
             throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + property, e);
         }
+    }
+
+    private static String translatePerlAgeProperty(String property, boolean negated) {
+        int equals = property.indexOf('=');
+        if (equals <= 0 || equals == property.length() - 1) return null;
+
+        String name = property.substring(0, equals)
+                .replace("_", "").replace("-", "").replace(" ", "");
+        boolean exact;
+        if (name.equalsIgnoreCase("Age")) {
+            exact = true;
+        } else if (name.equalsIgnoreCase("In") || name.equalsIgnoreCase("PresentIn")) {
+            exact = false;
+        } else {
+            return null;
+        }
+
+        String requested = normalizeUnicodeAgeVersion(property.substring(equals + 1));
+        if (requested.equalsIgnoreCase("NA") || requested.equalsIgnoreCase("Unassigned")) {
+            UnicodeSet unassigned = new UnicodeSet();
+            unassigned.applyPropertyAlias("Age", "Unassigned");
+            return wrapCharClass(unicodeSetToJavaPattern(unassigned), negated);
+        }
+
+        int versionIndex = -1;
+        for (int i = 0; i < PERL_UNICODE_AGE_VERSIONS.length; i++) {
+            if (PERL_UNICODE_AGE_VERSIONS[i].equals(requested)) {
+                versionIndex = i;
+                break;
+            }
+        }
+        if (versionIndex < 0) {
+            throw new IllegalArgumentException("Unsupported Unicode age version: " + requested);
+        }
+
+        UnicodeSet result = cumulativeAgeSet(PERL_UNICODE_AGE_VERSIONS[versionIndex]);
+        if (exact && versionIndex > 0) {
+            result.removeAll(cumulativeAgeSet(PERL_UNICODE_AGE_VERSIONS[versionIndex - 1]));
+        }
+        return wrapCharClass(unicodeSetToJavaPattern(result), negated);
+    }
+
+    private static String normalizeUnicodeAgeVersion(String value) {
+        String normalized = value.trim().replace("_", "").replace(" ", "");
+        if (normalized.length() > 1
+                && (normalized.charAt(0) == 'v' || normalized.charAt(0) == 'V')) {
+            normalized = normalized.substring(1);
+            if (!normalized.contains(".")) {
+                normalized = normalized.substring(0, normalized.length() - 1)
+                        + "." + normalized.charAt(normalized.length() - 1);
+            }
+        }
+        if (!normalized.contains(".")) normalized += ".0";
+        return normalized;
+    }
+
+    private static UnicodeSet cumulativeAgeSet(String version) {
+        UnicodeSet set = new UnicodeSet();
+        set.applyPropertyAlias("Age", version);
+        return set;
     }
 
     // Helper method to get XID_Start pattern using ICU4J

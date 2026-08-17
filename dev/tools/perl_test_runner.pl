@@ -24,6 +24,7 @@ use PerlTestRunner::Scheduler qw(
 my $jperl_path = './jperl';
 my $timeout = 300; # Default to 300 seconds
 my $jobs = 5;     # Default to 5 parallel jobs
+my $cpu_heavy_jobs;
 my $output_file;
 my $help;
 my $strict_exit = 0;
@@ -32,6 +33,7 @@ GetOptions(
     'jperl=s'   => \$jperl_path,
     'timeout=f' => \$timeout,
     'jobs|j=i'  => \$jobs,
+    'cpu-heavy-jobs=i' => \$cpu_heavy_jobs,
     'output=s'  => \$output_file,
     'strict-exit!' => \$strict_exit,
     'help'      => \$help,
@@ -63,6 +65,9 @@ for my $test_path (@ARGV) {
 }
 
 die "Error: No test files found\n" unless @test_files;
+die "Error: --jobs must be at least 1\n" unless $jobs >= 1;
+die "Error: --cpu-heavy-jobs must be at least 1\n"
+    if defined($cpu_heavy_jobs) && $cpu_heavy_jobs < 1;
 
 unless (-x $jperl_path) {
     die "Error: jperl not found or not executable at '$jperl_path'\n";
@@ -121,7 +126,29 @@ print "-" x 60, "\n";
 # unit, heavy semantic fixtures consume more, and true isolation cases wait for
 # an idle runner. Stable longest-first classes start known slow work early, then
 # use the more uniform ordinary files to fill the remaining resource budget.
-run_tests_weighted(\@indexed_tests, $test_dir, $jobs, $total_files);
+if (defined $cpu_heavy_jobs) {
+    my (@parallel_tests, @cpu_heavy_tests, @exclusive_tests);
+    for my $test (@indexed_tests) {
+        if (requires_exclusive_slot($test->{test_file})) {
+            push @exclusive_tests, $test;
+        } elsif (requires_cpu_heavy_slot($test->{test_file})) {
+            push @cpu_heavy_tests, $test;
+        } else {
+            push @parallel_tests, $test;
+        }
+    }
+    print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout; "
+        . scalar(@exclusive_tests) . " memory-sensitive tests run serially; "
+        . scalar(@cpu_heavy_tests) . " CPU-heavy tests use ${cpu_heavy_jobs} jobs)\n";
+    run_tests_parallel(\@parallel_tests, $test_dir, $jobs, $total_files);
+    run_tests_parallel(\@exclusive_tests, $test_dir, 1, $total_files);
+    run_tests_parallel(\@cpu_heavy_tests, $test_dir, $cpu_heavy_jobs, $total_files);
+} else {
+    print "Running tests with $jperl_path (${jobs}-unit resource budget, "
+        . "${timeout}s base timeout; $heavy_count weighted heavy, "
+        . "$exclusive_count exclusive)\n";
+    run_tests_weighted(\@indexed_tests, $test_dir, $jobs, $total_files);
+}
 
 print "-" x 60, "\n";
 print_summary();
@@ -148,6 +175,34 @@ sub find_test_files {
     }, $dir);
 
     return sort @files;
+}
+
+sub run_tests_parallel {
+    my ($test_files, $test_dir, $max_jobs, $total_files) = @_;
+    my %children;
+    my @test_queue = @$test_files;
+    my $completed = 0;
+    local $SIG{CHLD} = 'DEFAULT';
+
+    while (@test_queue && keys(%children) < $max_jobs) {
+        start_test_job(\@test_queue, \%children, $total_files, 0);
+    }
+    while (%children || @test_queue) {
+        for my $pid (keys %children) {
+            my $res = waitpid($pid, WNOHANG);
+            if ($res > 0) {
+                my $test_info = delete $children{$pid};
+                process_test_result($test_info, $test_dir);
+                $completed++;
+                start_test_job(\@test_queue, \%children, $total_files, 0)
+                    if @test_queue && keys(%children) < $max_jobs;
+            } elsif ($res < 0) {
+                warn "Warning: Lost track of child $pid\n";
+                delete $children{$pid};
+            }
+        }
+        select(undef, undef, undef, 0.05) if %children;
+    }
 }
 
 sub run_tests_weighted {
@@ -593,6 +648,28 @@ sub timeout_for_test {
     return $timeout;
 }
 
+sub requires_exclusive_slot {
+    my ($test_file) = @_;
+    return $test_file =~ m{
+          (?:^|/)perl5/dist/threads/t/join\.t$
+        |
+          (?:^|/)perl5_t/t/op/gv\.t$
+        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
+        | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
+        | (?:^|/)perl5_t/t/japh/abigail\.t$
+    }x;
+}
+
+sub requires_cpu_heavy_slot {
+    my ($test_file) = @_;
+    return $test_file =~ m{
+          (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
+    }x;
+}
+
 sub start_test_job {
     my ($test_queue, $children, $total_files, $queue_index) = @_;
 
@@ -651,6 +728,11 @@ sub parse_tap_output {
 
     # Parse TAP output
     for my $line (@lines) {
+        # Lexical re 'debugcolor' can leave an ANSI reset immediately before a
+        # top-level TAP result. Remove terminal control sequences before
+        # deciding whether the line is TAP or indented subtest output.
+        $line =~ s/\e\[[0-?]*[ -\/]*[@-~]//g;
+
         # Skip indented lines (subtest output) - check BEFORE trimming
         next if $line =~ /^\s+/;
         
@@ -904,6 +986,8 @@ Options:
   --timeout SEC    Base timeout per test in seconds (default: 300; selected
                    subprocess-heavy tests have a documented minimum)
   --jobs|-j NUM    Total scheduling-unit budget (default: 5)
+  --cpu-heavy-jobs NUM
+                   Use the legacy dedicated CPU-heavy lane (optional)
   --output FILE    Save detailed results to JSON file
   --strict-exit    Exit nonzero if any file fails, errors, times out, or is incomplete
   --help           Show this help message
