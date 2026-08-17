@@ -148,7 +148,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean add(RuntimeScalar value) {
-            if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
+            if (owner.threadShared) {
+                SharedPerlStorage.validateStoredValue(value);
+                SharedPerlStorage.publishBlessing(value);
+            }
             owner.noteIsaMutation();
             owner.notePackageRootMutation(null, value);
             if (value != null) value.markContainerOwner(owner);
@@ -158,7 +161,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public void add(int index, RuntimeScalar element) {
-            if (owner.threadShared) SharedPerlStorage.publishBlessing(element);
+            if (owner.threadShared) {
+                SharedPerlStorage.validateStoredValue(element);
+                SharedPerlStorage.publishBlessing(element);
+            }
             owner.noteIsaMutation();
             owner.notePackageRootMutation(null, element);
             if (element != null) element.markContainerOwner(owner);
@@ -168,32 +174,50 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean addAll(java.util.Collection<? extends RuntimeScalar> c) {
-            if (!c.isEmpty()) owner.noteIsaMutation();
-            owner.notePackageRootMutationIf(owner.hasRootEdge(c));
-            for (RuntimeScalar value : c) {
-                if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
-                if (value != null) value.markContainerOwner(owner);
-                owner.markPackageRootedValue(value);
+            if (!owner.threadShared) {
+                if (!c.isEmpty()) owner.noteIsaMutation();
+                owner.notePackageRootMutationIf(owner.hasRootEdge(c));
+                for (RuntimeScalar value : c) {
+                    if (value != null) value.markContainerOwner(owner);
+                    owner.markPackageRootedValue(value);
+                }
+                return super.addAll(c);
             }
-            return super.addAll(c);
+            boolean changed = false;
+            for (RuntimeScalar value : new ArrayList<>(c)) {
+                add(value);
+                changed = true;
+            }
+            return changed;
         }
 
         @Override
         public boolean addAll(int index, java.util.Collection<? extends RuntimeScalar> c) {
-            if (!c.isEmpty()) owner.noteIsaMutation();
-            owner.notePackageRootMutationIf(owner.hasRootEdge(c));
-            for (RuntimeScalar value : c) {
-                if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
-                if (value != null) value.markContainerOwner(owner);
-                owner.markPackageRootedValue(value);
+            if (!owner.threadShared) {
+                if (!c.isEmpty()) owner.noteIsaMutation();
+                owner.notePackageRootMutationIf(owner.hasRootEdge(c));
+                for (RuntimeScalar value : c) {
+                    if (value != null) value.markContainerOwner(owner);
+                    owner.markPackageRootedValue(value);
+                }
+                return super.addAll(index, c);
             }
-            return super.addAll(index, c);
+            int insertionIndex = index;
+            boolean changed = false;
+            for (RuntimeScalar value : new ArrayList<>(c)) {
+                add(insertionIndex++, value);
+                changed = true;
+            }
+            return changed;
         }
 
         @Override
         public RuntimeScalar set(int index, RuntimeScalar element) {
             RuntimeScalar previous = super.get(index);
-            if (owner.threadShared) SharedPerlStorage.publishBlessing(element);
+            if (owner.threadShared) {
+                SharedPerlStorage.validateStoredValue(element);
+                SharedPerlStorage.publishBlessing(element);
+            }
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, element);
             if (element != null) element.markContainerOwner(owner);

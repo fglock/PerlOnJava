@@ -4,6 +4,22 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- CPAN/compiler tooling: index token source-line offsets once per parser so
+  quote-heavy generated sources such as multi-megabyte CPAN `CHECKSUMS` files
+  parse linearly instead of quadratically. Complete bundled `Want::want`
+  varargs and chained-object context handling. This unblocks
+  Data::OpenStruct::Deep, App::column::run, and
+  Dist::Zilla::Plugin::Rinci::AddPrereqs without distribution preferences.
+- CPAN/compiler tooling: permit exact-identity literal argument assignment,
+  parse indirect constructors after trailing package separators, create nested
+  MakeMaker `.PL` targets safely, and finish fixed test plans with explicit
+  skips when they reach unsupported process `fork`. Add a commonmark-java-backed
+  `Text::Markdown::Hoedown` implementation. Preserve installed closure
+  captures during interpreter eval cleanup, Perl's runtime-regex `\u`
+  behavior, and encoding-layer unmappable-character warnings. This unblocks
+  MetaStore, Story::Interact::WWW, Cantella::Worker,
+  Parallel::Fork::BossWorker, and the strict XML::Writer dependency suite
+  without distribution preferences.
 - Regex: complete the Phase 36 Joni compatibility slice on both execution
   backends. Closure-bearing patterns support matcher-owned callback unwind,
   dynamic `(??{ ... })` programs, bounded recursion, variable-length

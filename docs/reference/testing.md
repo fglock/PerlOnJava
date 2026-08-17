@@ -108,15 +108,32 @@ perl dev/tools/perl_test_runner.pl --jobs 4 --timeout 20 src/test/resources/unit
 
 **Features:**
 - TAP (Test Anything Protocol) output
-- Parallel test execution
+- Resource-weighted parallel test execution
 - Timeout protection
 - Feature impact analysis
 - Incomplete test detection
 - JSON reporting
 
+The runner is a semantic validator, not a performance benchmark harness.
+`--jobs` is a scheduling-unit budget shared by the whole run: ordinary files
+consume one unit, known CPU/memory-heavy semantic fixtures consume three, and
+any future test requiring demonstrated process isolation can run alone. No
+current test has an exclusive semantic profile. A heavy file's weight is
+clamped to the caller's budget, so it still runs with `--jobs 1` or `--jobs 2`.
+The runner starts known long-running heavy files before ordinary files,
+preserving input order within each class. Starting the long work early avoids a
+heavy-test tail; the more uniform ordinary files fill unused scheduling units
+as heavy tests complete.
+
+Resource profiles are defined in
+`dev/tools/lib/PerlTestRunner/Scheduler.pm`. Tune them from semantic stability,
+peak memory, and orphan-process checks across supported CI platforms. Do not
+tune them to preserve benchmark ratios or elapsed-time measurements; collect
+authoritative timings with a separate controlled benchmark procedure.
+
 **Options:**
 ```bash
---jobs|-j NUM      Number of parallel jobs (default: 5)
+--jobs|-j NUM      Total scheduling-unit budget (default: 5)
 --timeout SEC      Timeout per test in seconds
 --output FILE      Save detailed results to JSON file
 --jperl PATH       Path to jperl executable (default: ./jperl)
@@ -166,21 +183,16 @@ Result: PASS
 
 `jprove` is useful when you want standard Perl `prove` behavior and options, while `perl_test_runner.pl` provides additional features like JSON reporting and feature impact analysis.
 
-### 3. JUnit/Gradle Testing (For CI/CD)
+### 3. JUnit Testing (For CI/CD)
 
 Uses JUnit 5 with tags for test filtering:
 
 ```bash
-# Fast unit tests via Gradle
+# Fast unit tests
 make test-gradle-unit
 
-# All tests via Gradle
+# All tests
 make test-gradle-all
-
-# Direct Gradle commands
-./gradlew testUnit    # Only unit tests
-./gradlew testAll     # All tests
-./gradlew test        # Default test task
 ```
 
 **Use Cases:**
@@ -254,7 +266,7 @@ perl dev/tools/perl_test_runner.pl \
   terminate that exact PID only.
 - Do not recursively delete wildcard test directories as routine preparation.
   Remove an exact, verified stale path only when the failing test requires it.
-- `--jobs 10` - Run ten independent test files concurrently
+- `--jobs 10` - Allow ten scheduling units of concurrent test work
 - `--timeout 300` - Allow 5 minutes per test (for slower tests)
 - `logs/test_YYYYMMDD_HHMMSS.log` - Timestamped log for tracking history
 
@@ -391,7 +403,7 @@ jq '.feature_impact' test_results.json
 
 1. **Run `test-unit` frequently** during development for fast feedback
 2. **Run `test-all` before commits** to catch regressions
-3. **Use parallel jobs** (`--jobs 8`) to speed up test runs
+3. **Set a resource budget** (`--jobs 8`) to control concurrent test work
 4. **Set appropriate timeouts** - short for unit tests (10s), longer for module tests (30s)
 5. **Review incomplete tests** - they often indicate bugs that block many tests
 6. **Save JSON reports** for trend analysis and debugging
@@ -400,7 +412,8 @@ jq '.feature_impact' test_results.json
 
 - **Unit tests**: Should complete in < 5 minutes total
 - **All tests**: May take 10-30 minutes depending on system
-- **Parallel jobs**: Adjust `--jobs` based on CPU cores (typically 1-2x core count)
+- **Parallel work**: Adjust `--jobs` based on CPU capacity and available memory;
+  heavy semantic fixtures consume three units each
 - **Timeouts**: Increase for slow systems, decrease for fast feedback
 
 ## Integration with IDEs
@@ -412,15 +425,12 @@ jq '.feature_impact' test_results.json
 3. Select "Run tests"
 4. Or run specific tags: `@Tag("unit")` or `@Tag("full")`
 
-### Command Line with Gradle
+### Command Line
 
 ```bash
-# Run specific test class
-./gradlew test --tests PerlScriptExecutionTest
-
 # Run with tags
-./gradlew testUnit    # @Tag("unit")
-./gradlew testAll     # @Tag("full")
+make test-gradle-unit  # @Tag("unit")
+make test-gradle-all   # @Tag("full")
 ```
 
 ## Troubleshooting

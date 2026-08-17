@@ -1268,7 +1268,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (!(patternString.value instanceof RuntimeRegexTemplate)
                 && patternString.type != RuntimeScalarType.REGEX
                 && containsExecutableSource(patternString.toString(), modifierStr.indexOf('x') >= 0)) {
-            if (modifierStr.indexOf('E') < 0) {
+            if (modifierStr.indexOf('E') < 0 && !patternString.firstClassRegexScalar) {
                 throw new PerlCompilerException(
                         "Eval-group not allowed at runtime, use re 'eval'");
             }

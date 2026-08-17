@@ -1,11 +1,12 @@
 use strict;
 use warnings;
-use Test::More tests => 10;
+use Test::More tests => 12;
 
 # Regression: `Foo::->bar()` should pass class name "Foo", not "Foo::"
 # See dev/modules/ppi.md (RC1).
 
 package Foo;
+sub new { my ($class, %args) = @_; bless \%args, $class }
 sub classname { $_[0] }
 sub isa_check { $_[0]->isa('Foo') ? 1 : 0 }
 
@@ -20,6 +21,12 @@ is(Foo::Bar::->classname,'Foo::Bar', 'nested bareword class with trailing :: is 
 
 ok(Foo::->isa_check,      'isa still works through trailing-:: invocant');
 ok(Foo::Bar::->isa_check, 'isa finds parent class through trailing-:: invocant');
+
+# The trailing package separator is also accepted in indirect-object syntax.
+# MetaStore::Config and other older CPAN distributions use this spelling.
+my $indirect = new Foo::(marker => 7);
+isa_ok($indirect, 'Foo', 'indirect constructor accepts trailing ::');
+is($indirect->{marker}, 7, 'indirect constructor keeps its argument list');
 
 # Regression: `bless $ref, Foo::Bar::;` should strip trailing "::".
 # Previously produced ref "Foo::Bar::" (keeping the ::), breaking
@@ -42,4 +49,3 @@ ok(Foo::Bar::->isa_check, 'isa finds parent class through trailing-:: invocant')
 
 # Sanity: the package literal by itself still stringifies correctly.
 is(Foo::Bar::, 'Foo::Bar', 'package literal evaluates to class name');
-

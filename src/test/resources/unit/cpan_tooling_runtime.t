@@ -46,6 +46,40 @@ sub localize_readonly_argument {
 is localize_readonly_argument('literal'), 'localized',
     'localizing a read-only argument installs a writable array slot';
 
+sub assign_readonly_argument_to_itself {
+    $_[0] = $_[0];
+    return $_[0];
+}
+is assign_readonly_argument_to_itself('literal'), 'literal',
+    'assigning a read-only literal argument to itself is a no-op';
+is assign_readonly_argument_to_itself(42), 42,
+    'numeric read-only argument identity assignment is a no-op';
+
+sub assign_equal_copy_to_readonly_argument {
+    my $copy = $_[0];
+    $_[0] = $copy;
+}
+eval { assign_equal_copy_to_readonly_argument('literal') };
+like $@, qr/Modification of a read-only value attempted/,
+    'an equal value in another scalar does not make a read-only argument writable';
+
+my $unicode_diagnostic = 'Code point \\u0000 is not valid';
+my $runtime_pattern = '\\u0000';
+ok $unicode_diagnostic =~ $runtime_pattern,
+    'runtime regex treats unrecognized \\u as a literal u';
+
+require IO::File;
+{
+    my $ascii_file = IO::File->new_tmpfile;
+    my $encoding_warning = '';
+    local $SIG{__WARN__} = sub { $encoding_warning .= $_[0] };
+    binmode $ascii_file, ':encoding(us-ascii)';
+    print {$ascii_file} "\x{A3}";
+    $ascii_file->flush;
+    like $encoding_warning, qr/does not map to ascii/,
+        'encoding layer warns when output is not representable';
+}
+
 use IPC::Cmd qw(run);
 {
     local $IPC::Cmd::USE_IPC_RUN = 1;

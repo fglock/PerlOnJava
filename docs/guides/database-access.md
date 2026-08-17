@@ -30,9 +30,7 @@ Examples:
 
 Then build with the drivers included:
 ```bash
-mvn clean package
-# or
-./gradlew clean build
+make
 ```
 
 2. Using Java classpath:

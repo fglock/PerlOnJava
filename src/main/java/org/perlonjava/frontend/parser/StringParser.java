@@ -313,12 +313,7 @@ public class StringParser {
         }
         ParsedString parsed = new ParsedString(index, tokPos, buffers, startDelim, endDelim,
                 secondBufferStartDelim, secondBufferEndDelim);
-        int sourceLine = parser != null && parser.baseLineNumber > 0
-                ? parser.baseLineNumber : 1;
-        for (int i = 0; i < Math.min(index, tokens.size()); i++) {
-            if (tokens.get(i).type == LexerTokenType.NEWLINE) sourceLine++;
-        }
-        parsed.sourceLine = sourceLine;
+        parsed.sourceLine = parser != null ? parser.sourceLineAt(index) : 1;
         return parsed;
     }
 

@@ -31,6 +31,7 @@ Recent CPAN compatibility additions include:
 | `Data::Util` | Java XS bridge plus upstream pure-Perl fallback | Scalar classification preserves XS non-vivifying behavior; the remaining API uses `Data::Util::PurePerl` |
 | `YAML::Syck` | Pure Perl over bundled `YAML::PP` | Compatibility loader/dumper for distributions that use the legacy Syck API |
 | `Authen::PAM` | Java XS compatibility bridge | Constants and load-time API for PAM consumers; native conversations currently return `PAM_SYSTEM_ERR` rather than authenticating |
+| `Text::Markdown::Hoedown` | Perl + Java XS bridge over commonmark-java | Hoedown-compatible HTML, table-of-contents, extension flags, and callback rendering without the native C library |
 
 ---
 
@@ -446,8 +447,8 @@ These are loaded automatically or via `use`:
 | `Sys::Hostname` | Java | |
 | `I18N::Langinfo` | Java | |
 | `Benchmark` | Perl | |
-| `Filter::Simple` | Perl | |
-| `Filter::Util::Call` | Java | |
+| `Filter::Simple` | Perl | `FILTER` and `FILTER_ONLY` closure filters; method filters and true incremental streaming remain unsupported |
+| `Filter::Util::Call` | Java | Closure-based `filter_add`/`filter_read`/`filter_del`; buffered line-oriented emulation, without object/method filters |
 | `Tie::Hash` / `Tie::Array` / `Tie::Scalar` | Perl | |
 | `Tie::RefHash` | Perl | |
 | `Tie::Hash::Indexed` | Java XS bridge | Ordered tied-hash and object APIs, iterators, arithmetic helpers, and Storable hooks; no native C compiler required |

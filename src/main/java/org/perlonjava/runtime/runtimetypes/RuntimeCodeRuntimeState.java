@@ -60,6 +60,11 @@ public final class RuntimeCodeRuntimeState {
      */
     void snapshotCompiledMetadataInto(RuntimeCodeRuntimeState child) {
         child.evalContexts.putAll(evalContexts);
+        // A child inherits the parent's loaded-module/runtime feature surface.
+        // PadWalker, Devel::LexAlias, and runtime regex source all depend on
+        // live lexical registration after the snapshot; leaving this false in
+        // the child silently replaced those captures with undef.
+        child.lexicalAliasSupportEnabled = lexicalAliasSupportEnabled;
     }
 
     RuntimeCode cachedInlineMethod(int callsiteId, int blessId, int methodHash) {

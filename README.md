@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
 [![License](https://img.shields.io/badge/license-Artistic_1.0_|_GPL_1+-blue.svg)](LICENSE.md)
 
-PerlOnJava compiles Perl to JVM bytecode — run existing Perl scripts on any platform with a JVM, with access to Java libraries. One jar file runs on Linux, macOS, and Windows — just add Java 24+. PerlOnJava is an independent project, not part of the Perl core distribution.
+PerlOnJava compiles Perl to JVM bytecode, so many existing Perl scripts can run on any platform with a JVM and use supported Java-backed libraries. Compatibility is substantial but not complete; check the [feature matrix](docs/reference/feature-matrix.md) and [bundled-module list](docs/reference/bundled-modules.md) before relying on a particular language feature or CPAN module. One jar file runs on Linux, macOS, and Windows — just add Java 24+. PerlOnJava is an independent project, not part of the Perl core distribution.
 
 ## Features
 
@@ -16,7 +16,7 @@ PerlOnJava compiles Perl to JVM bytecode — run existing Perl scripts on any pl
 - **Install more with jcpan** — [pure-Perl CPAN modules](docs/guides/using-cpan-modules.md) work out of the box
 - **JDBC database access** — [PostgreSQL, MySQL, SQLite, Oracle](docs/guides/database-access.md) via standard JDBC drivers
 - **Embed in Java apps** — [JSR-223 ScriptEngine](docs/guides/java-integration.md) integration
-- **Perl 5.44 language compatibility** — [see feature matrix](docs/reference/feature-matrix.md)
+- **Perl 5.44 language compatibility target** — implemented coverage and limitations are tracked in the [feature matrix](docs/reference/feature-matrix.md)
 
 ## Quick Start
 

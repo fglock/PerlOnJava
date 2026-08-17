@@ -351,11 +351,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, String variableName, RuntimeBase cell) {
         PerlRuntime runtime = PerlRuntime.current();
         if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return;
-        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+        Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
+        for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
                 frame.cells().put(variableName, cell);
                 return;
             }
+        }
+        // Lazy named-CV materialization and ithread adoption can execute a
+        // runtime-owned CODE object while generated lexical initialization
+        // still carries the logically equivalent template CODE reference.
+        // The top frame is nevertheless the authoritative invocation whose
+        // cell is being initialized. Without this fallback the child frame is
+        // left empty and runtime regex source captures undef for outer cells.
+        if (!frames.isEmpty()) {
+            frames.peek().cells().put(variableName, cell);
         }
     }
 

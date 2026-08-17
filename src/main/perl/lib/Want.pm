@@ -15,19 +15,23 @@ our $VERSION = '0.29';
 our @EXPORT = qw(want rreturn lnoreturn wantref want_ref);
 
 sub want {
-    my ($kind) = @_;
-    return !defined wantarray if $kind eq 'VOID';
-    return defined(wantarray) && wantarray if $kind eq 'LIST';
-    return defined(wantarray) && !wantarray if $kind eq 'SCALAR';
+    my @wanted = map { split } @_;
+    for my $kind (@wanted) {
+        my $matches;
+        $matches = !defined wantarray if $kind eq 'VOID';
+        $matches = defined(wantarray) && wantarray if $kind eq 'LIST';
+        $matches = defined(wantarray) && !wantarray if $kind eq 'SCALAR';
 
-    # PerlOnJava currently has no runtime op tree.  Method chaining is the
-    # useful OBJECT case supported by this compatibility layer.  RVALUE is
-    # the safe default outside lvalue calls; BOOL remains conservative.
-    return 1 if $kind eq 'OBJECT';
-    return 1 if $kind eq 'RVALUE';
-    return 0 if $kind eq 'BOOL';
-    return 0 if $kind eq 'LVALUE' || $kind eq 'ASSIGN';
-    return 0;
+        # PerlOnJava's portable fallback has no runtime op tree. OBJECT
+        # requires parent-op inspection and is supplied by the Java
+        # bridge. RVALUE is the safe fallback outside lvalue calls; BOOL and
+        # other parent-op-only predicates remain conservative here.
+        $matches = 1 if $kind eq 'RVALUE';
+        $matches = 0 if $kind eq 'OBJECT' || $kind eq 'BOOL'
+            || $kind eq 'LVALUE' || $kind eq 'ASSIGN';
+        return 0 unless $matches;
+    }
+    return 1;
 }
 
 sub rreturn { return wantarray ? @_ : $_[-1] }

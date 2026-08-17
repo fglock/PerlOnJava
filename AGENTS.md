@@ -256,12 +256,16 @@ Example format at the end of a design doc:
 
 ### Unimplemented Features
 
+Perl ithreads are implemented on both execution backends, including the bundled
+`threads`, `threads::shared`, `Thread::Queue`, and `Thread::Semaphore` modules.
+See [docs/reference/threads.md](docs/reference/threads.md) for the supported
+surface and remaining ecosystem-specific limitations.
+
 PerlOnJava does **not** implement the following Perl features:
 
 | Feature | Impact |
 |---------|--------|
 | `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
-| `threads` | Perl threads not supported; use Java threading via inline Java if needed |
 
 ### Testing
 

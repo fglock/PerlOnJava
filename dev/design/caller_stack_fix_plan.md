@@ -1,6 +1,10 @@
 # Caller Stack Fix Plan - Consolidated
 
-## Status: Active Development
+> **Historical document (completed and superseded).** Retained as implementation
+> history; use the [feature matrix](../../docs/reference/feature-matrix.md) and
+> [runtime architecture](../../docs/reference/architecture.md) for current status.
+
+## Historical Status: Completed
 
 ## Branch: `fix/caller-line-numbers`
 

@@ -8,6 +8,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -518,6 +519,10 @@ public class ParseInfix {
             name = NameNormalizer.normalizeVariableName(
                     identifier.name,
                     parser.ctx.symbolTable.getCurrentPackage());
+        }
+        if (code.isConstantCv || code.constantValue != null
+                || GlobalVariable.hasGlobalPseudoConstant(name)) {
+            parser.throwError("Can't modify constant item in scalar assignment");
         }
         parser.throwError("Can't modify non-lvalue subroutine call of &" + name
                 + " in scalar assignment");

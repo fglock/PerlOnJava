@@ -124,6 +124,22 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     }
 
     /**
+     * Perl permits assigning a read-only alias back to itself.  This occurs for
+     * literal subroutine arguments in code such as {@code $_[0] = $_[0]}: the
+     * assignment is an identity-preserving no-op, whereas assigning even an
+     * equal value held in a different scalar still raises the normal read-only
+     * error.  Keep that distinction here instead of making literal arguments
+     * generally writable.
+     */
+    @Override
+    public RuntimeScalar set(RuntimeScalar newValue) {
+        if (newValue == this) {
+            return this;
+        }
+        return super.set(newValue);
+    }
+
+    /**
      * chop on a read-only scalar: silently return the last character
      * without modifying. Real Perl raises a compile-time "Can't modify
      * constant item in chop" error, but our compiler doesn't catch this,

@@ -9,6 +9,14 @@ use JSON::PP;
 use Data::Dumper;
 use POSIX qw(WNOHANG WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG setsid);
 use Config ();
+use FindBin qw($Bin);
+use lib "$Bin/lib";
+use PerlTestRunner::Scheduler qw(
+    effective_weight
+    next_runnable_index
+    profile_for_test
+    scheduling_priority
+);
 
 # PerlOnJava Test Runner
 # Runs standard Perl tests against PerlOnJava and analyzes results
@@ -16,7 +24,7 @@ use Config ();
 my $jperl_path = './jperl';
 my $timeout = 300; # Default to 300 seconds
 my $jobs = 5;     # Default to 5 parallel jobs
-my $cpu_heavy_jobs = 2; # pat_psycho*/speed* can use separate cores safely
+my $cpu_heavy_jobs;
 my $output_file;
 my $help;
 my $strict_exit = 0;
@@ -35,6 +43,8 @@ if ($help || @ARGV < 1) {
     print_usage();
     exit($help ? 0 : 1);
 }
+
+die "Error: --jobs must be a positive integer\n" unless $jobs > 0;
 
 # Accept either a directory or a specific .t file, or multiple directories
 my $test_dir = '.';
@@ -56,7 +66,8 @@ for my $test_path (@ARGV) {
 
 die "Error: No test files found\n" unless @test_files;
 die "Error: --jobs must be at least 1\n" unless $jobs >= 1;
-die "Error: --cpu-heavy-jobs must be at least 1\n" unless $cpu_heavy_jobs >= 1;
+die "Error: --cpu-heavy-jobs must be at least 1\n"
+    if defined($cpu_heavy_jobs) && $cpu_heavy_jobs < 1;
 
 unless (-x $jperl_path) {
     die "Error: jperl not found or not executable at '$jperl_path'\n";
@@ -92,31 +103,52 @@ my %feature_patterns = (
 
 my $total_files = @test_files;
 my @indexed_tests = map {
-    +{ test_file => $test_files[$_], test_index => $_ + 1 }
-} 0 .. $#test_files;
-my (@parallel_tests, @cpu_heavy_tests, @exclusive_tests);
-for my $test (@indexed_tests) {
-    if (requires_exclusive_slot($test->{test_file})) {
-        push @exclusive_tests, $test;
-    } elsif (requires_cpu_heavy_slot($test->{test_file})) {
-        push @cpu_heavy_tests, $test;
-    } else {
-        push @parallel_tests, $test;
+    +{
+        test_file => $test_files[$_],
+        test_index => $_ + 1,
+        profile => profile_for_test($test_files[$_]),
     }
-}
+} 0 .. $#test_files;
+my $heavy_count = grep { $_->{profile}{class} eq 'heavy' } @indexed_tests;
+my $exclusive_count = grep { $_->{profile}{exclusive} } @indexed_tests;
+@indexed_tests = sort {
+       scheduling_priority($a->{profile}) <=> scheduling_priority($b->{profile})
+    || $a->{test_index} <=> $b->{test_index}
+} @indexed_tests;
 
 print "Found $total_files test files\n";
-print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout; "
-    . scalar(@exclusive_tests) . " memory-sensitive tests run serially; "
-    . scalar(@cpu_heavy_tests) . " CPU-heavy tests use ${cpu_heavy_jobs} jobs)\n";
+print "Running tests with $jperl_path (${jobs}-unit resource budget, "
+    . "${timeout}s base timeout; $heavy_count weighted heavy, "
+    . "$exclusive_count exclusive)\n";
 print "-" x 60, "\n";
 
-# Run the normal corpus first. Keep memory-sensitive fixtures isolated, then
-# allow the CPU-heavy direct/thread pairs to use separate cores without making
-# them contend with the normal corpus or the high-memory regex fixtures.
-run_tests_parallel(\@parallel_tests, $test_dir, $jobs, $total_files);
-run_tests_parallel(\@exclusive_tests, $test_dir, 1, $total_files);
-run_tests_parallel(\@cpu_heavy_tests, $test_dir, $cpu_heavy_jobs, $total_files);
+# Use one scheduling budget for the complete corpus. Ordinary tests consume one
+# unit, heavy semantic fixtures consume more, and true isolation cases wait for
+# an idle runner. Stable longest-first classes start known slow work early, then
+# use the more uniform ordinary files to fill the remaining resource budget.
+if (defined $cpu_heavy_jobs) {
+    my (@parallel_tests, @cpu_heavy_tests, @exclusive_tests);
+    for my $test (@indexed_tests) {
+        if (requires_exclusive_slot($test->{test_file})) {
+            push @exclusive_tests, $test;
+        } elsif (requires_cpu_heavy_slot($test->{test_file})) {
+            push @cpu_heavy_tests, $test;
+        } else {
+            push @parallel_tests, $test;
+        }
+    }
+    print "Running tests with $jperl_path (${jobs} parallel jobs, ${timeout}s base timeout; "
+        . scalar(@exclusive_tests) . " memory-sensitive tests run serially; "
+        . scalar(@cpu_heavy_tests) . " CPU-heavy tests use ${cpu_heavy_jobs} jobs)\n";
+    run_tests_parallel(\@parallel_tests, $test_dir, $jobs, $total_files);
+    run_tests_parallel(\@exclusive_tests, $test_dir, 1, $total_files);
+    run_tests_parallel(\@cpu_heavy_tests, $test_dir, $cpu_heavy_jobs, $total_files);
+} else {
+    print "Running tests with $jperl_path (${jobs}-unit resource budget, "
+        . "${timeout}s base timeout; $heavy_count weighted heavy, "
+        . "$exclusive_count exclusive)\n";
+    run_tests_weighted(\@indexed_tests, $test_dir, $jobs, $total_files);
+}
 
 print "-" x 60, "\n";
 print_summary();
@@ -147,20 +179,70 @@ sub find_test_files {
 
 sub run_tests_parallel {
     my ($test_files, $test_dir, $max_jobs, $total_files) = @_;
-    my $completed = 0;
     my %children;
     my @test_queue = @$test_files;
+    my $completed = 0;
+    local $SIG{CHLD} = 'DEFAULT';
+
+    while (@test_queue && keys(%children) < $max_jobs) {
+        start_test_job(\@test_queue, \%children, $total_files, 0);
+    }
+    while (%children || @test_queue) {
+        for my $pid (keys %children) {
+            my $res = waitpid($pid, WNOHANG);
+            if ($res > 0) {
+                my $test_info = delete $children{$pid};
+                process_test_result($test_info, $test_dir);
+                $completed++;
+                start_test_job(\@test_queue, \%children, $total_files, 0)
+                    if @test_queue && keys(%children) < $max_jobs;
+            } elsif ($res < 0) {
+                warn "Warning: Lost track of child $pid\n";
+                delete $children{$pid};
+            }
+        }
+        select(undef, undef, undef, 0.05) if %children;
+    }
+}
+
+sub run_tests_weighted {
+    my ($test_files, $test_dir, $budget, $total_files) = @_;
+    my %children;
+    my @test_queue = @$test_files;
+    my $active_weight = 0;
+    my $exclusive_active = 0;
 
     # Don't use SIGCHLD handler - we'll poll instead
     local $SIG{CHLD} = 'DEFAULT';
 
-    # Start initial batch of jobs
-    while (@test_queue && keys(%children) < $max_jobs) {
-        start_test_job(\@test_queue, \%children, $total_files, $completed);
-    }
-
-    # Wait for jobs to complete and start new ones
     while (%children || @test_queue) {
+        while (@test_queue) {
+            my $queue_index = next_runnable_index(
+                \@test_queue,
+                $budget,
+                $active_weight,
+                scalar(keys %children),
+                $exclusive_active,
+            );
+            last unless defined $queue_index;
+
+            my $test = $test_queue[$queue_index];
+            my $profile = $test->{profile};
+            my $weight = effective_weight($profile, $budget);
+            $test->{scheduler_weight} = $weight;
+            start_test_job(
+                \@test_queue,
+                \%children,
+                $total_files,
+                $queue_index,
+            );
+            $active_weight += $weight;
+            if ($profile->{exclusive}) {
+                $exclusive_active = 1;
+                last;
+            }
+        }
+
         # Check for completed children
         my @pids = keys %children;
         for my $pid (@pids) {
@@ -168,17 +250,15 @@ sub run_tests_parallel {
             if ($res > 0) {
                 # Child has exited
                 my $test_info = delete $children{$pid};
+                $active_weight -= $test_info->{scheduler_weight};
+                $exclusive_active = 0 if $test_info->{exclusive};
                 process_test_result($test_info, $test_dir);
-                $completed++;
-
-                # Start a new job if queue has items
-                if (@test_queue && keys(%children) < $max_jobs) {
-                    start_test_job(\@test_queue, \%children, $total_files, $completed);
-                }
             } elsif ($res < 0) {
                 # Error - child doesn't exist
                 warn "Warning: Lost track of child $pid\n";
-                delete $children{$pid};
+                my $test_info = delete $children{$pid};
+                $active_weight -= $test_info->{scheduler_weight};
+                $exclusive_active = 0 if $test_info->{exclusive};
             }
         }
 
@@ -304,14 +384,19 @@ sub run_single_test {
     # variable. Keep a caller's larger value, but do not let an internal
     # deadline expire before the resource-aware runner's outer deadline.
     local $ENV{PERL_TEST_TIMEOUT_FACTOR} = $ENV{PERL_TEST_TIMEOUT_FACTOR};
-    if ($test_file =~ m{
-              (?:^|/)perl5_t/t/op/gv\.t$
-            | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-            | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
-        }x
+    my $minimum_watchdog_factor =
+        $test_file =~ m{(?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$}
+            ? 6
+            : $test_file =~ m{
+                  (?:^|/)perl5_t/t/op/gv\.t$
+                | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
+              }x
+                ? 2
+                : undef;
+    if (defined($minimum_watchdog_factor)
             && (!defined($ENV{PERL_TEST_TIMEOUT_FACTOR})
-                || $ENV{PERL_TEST_TIMEOUT_FACTOR} < 2)) {
-        $ENV{PERL_TEST_TIMEOUT_FACTOR} = 2;
+                || $ENV{PERL_TEST_TIMEOUT_FACTOR} < $minimum_watchdog_factor)) {
+        $ENV{PERL_TEST_TIMEOUT_FACTOR} = $minimum_watchdog_factor;
     }
 
     # Temporarily disable fatal unimplemented errors
@@ -418,13 +503,6 @@ sub run_single_test {
     # Use absolute path for jperl
     my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
     my $test_name = File::Spec->abs2rel($test_file, $local_test_dir || '.');
-    # Benchmark.pm's default three-CPU-second sample is too noisy while other
-    # JVM builds or CPAN testers are active. A five-second sample still fits
-    # the resource-sensitive test's 600-second runner allowance and makes its
-    # relative global/lexical hash comparisons substantially more stable.
-    my @test_args = $test_file =~ m{
-        (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
-    }x ? ('-5') : ();
 
     # Try to use system timeout command if available.
     # Use --kill-after (-k) so a SIGTERM that the JVM ignores is followed
@@ -473,7 +551,7 @@ sub run_single_test {
             exec {
                 $timeout_program
             } $timeout_program, '--foreground', '-k', "${kill_after}s",
-                "${test_timeout}s", $abs_jperl, $test_name, @test_args;
+                "${test_timeout}s", $abs_jperl, $test_name;
             die "Cannot execute $timeout_program: $!";
         }
 
@@ -501,7 +579,7 @@ sub run_single_test {
         $output_captured = 1;
     } else {
         # Fallback to alarm-based timeout
-        my $cmd = join(' ', $abs_jperl, $test_name, @test_args)
+        my $cmd = join(' ', $abs_jperl, $test_name)
             . " < $devnull 2>&1";
         eval {
             local $SIG{ALRM} = sub { die "timeout\n" };
@@ -565,7 +643,6 @@ sub timeout_for_test {
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
         | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/benchmark/gh7094-speed-up-keys-on-empty-hash\.t$
         | (?:^|/)perl5_t/t/japh/abigail\.t$
     }x && $timeout < 600;
     return $timeout;
@@ -594,11 +671,12 @@ sub requires_cpu_heavy_slot {
 }
 
 sub start_test_job {
-    my ($test_queue, $children, $total_files, $completed) = @_;
+    my ($test_queue, $children, $total_files, $queue_index) = @_;
 
     return unless @$test_queue;
 
-    my $test = shift @$test_queue;
+    $queue_index //= 0;
+    my ($test) = splice @$test_queue, $queue_index, 1;
     my $test_file = $test->{test_file};
     my $test_index = $test->{test_index};
 
@@ -629,6 +707,8 @@ sub start_test_job {
             test_index => $test_index,
             start_time => time(),
             child_pid => $pid,
+            scheduler_weight => $test->{scheduler_weight},
+            exclusive => $test->{profile}{exclusive},
         };
     }
 }
@@ -905,10 +985,9 @@ Options:
   --jperl PATH     Path to jperl executable (default: ./jperl)
   --timeout SEC    Base timeout per test in seconds (default: 300; selected
                    subprocess-heavy tests have a documented minimum)
-  --jobs|-j NUM    Number of parallel jobs (default: 5)
+  --jobs|-j NUM    Total scheduling-unit budget (default: 5)
   --cpu-heavy-jobs NUM
-                   Parallel jobs for pat_psycho* and speed* after isolated
-                   fixtures complete (default: 2)
+                   Use the legacy dedicated CPU-heavy lane (optional)
   --output FILE    Save detailed results to JSON file
   --strict-exit    Exit nonzero if any file fails, errors, times out, or is incomplete
   --help           Show this help message

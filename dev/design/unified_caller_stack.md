@@ -1,5 +1,10 @@
 # Unified Caller Stack Implementation
 
+> **Historical document (superseded).** This plan records work that has been
+> incorporated into the current caller and runtime-isolation implementations.
+> Use the [feature matrix](../../docs/reference/feature-matrix.md) and
+> [runtime architecture](../../docs/reference/architecture.md) for current status.
+
 > **Note:** This document has been consolidated into `dev/design/caller_stack_fix_plan.md`.
 > See that document for the current plan and status.
 

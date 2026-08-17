@@ -265,9 +265,11 @@ public class BytecodeInterpreter {
         java.util.ArrayDeque<Integer> evalLocalLevelStack = frame.evalLocalLevelStack;
 
         // Parallel stack tracking the first register allocated inside the eval body.
-        // When an exception is caught, registers from this index to the end of the
-        // register array are cleaned up (scope exit cleanup + mortal flush) so that
-        // DESTROY fires for blessed objects that went out of scope during die.
+        // When an exception is caught, my-variable registers from this index onward
+        // receive scope cleanup so DESTROY fires for lexicals that went out of scope.
+        // Expression temporaries must not be cleaned as lexicals: a temporary may be
+        // a CODE ref loaded from the stash, and scopeExitCleanup would release that
+        // installed subroutine's captures.
         java.util.ArrayDeque<Integer> evalBaseRegStack = frame.evalBaseRegStack;
 
         // Interpreted eval BLOCKs execute inline, so caller() needs a virtual
@@ -2934,7 +2936,10 @@ public class BytecodeInterpreter {
                         if (!evalBaseRegStack.isEmpty()) {
                             int baseReg = evalBaseRegStack.pop();
                             boolean needsFlush = false;
-                            for (int i = baseReg; i < registers.length; i++) {
+                            BitSet myVars = code.myVarRegisters;
+                            for (int i = myVars.nextSetBit(baseReg);
+                                 i >= 0 && i < registers.length;
+                                 i = myVars.nextSetBit(i + 1)) {
                                 RuntimeBase reg = registers[i];
                                 if (reg == null) continue;
                                 if (reg instanceof RuntimeScalar rs) {

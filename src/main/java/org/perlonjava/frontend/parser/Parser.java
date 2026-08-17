@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.CompilationRuntimeState;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
@@ -80,6 +81,11 @@ public class Parser {
     // re-tokenized string content and __LINE__ should use this as the base line,
     // counting newlines from the inner token list to offset from it.
     public int baseLineNumber = 0;
+    // Source-line offsets are indexed once by token identity. String parsing used
+    // to rescan every preceding token for every quote-like operator, which made
+    // large generated Perl data files (notably CPAN CHECKSUMS) quadratic to parse.
+    // Identity keys remain valid when parsing rewrites or removes nearby tokens.
+    private final IdentityHashMap<LexerToken, Integer> sourceLineOffsets = new IdentityHashMap<>();
     /**
      * When {@code true} (qq and normal strings), {@link Variable#parseBracedVariable} may rewrite
      * {@code \"} before {@code "} inside {@code ${...}} so patterns like {@code "${\"name\"}"}
@@ -98,6 +104,7 @@ public class Parser {
     public Parser(EmitterContext ctx, List<LexerToken> tokens) {
         this.ctx = ctx;
         this.tokens = tokens;
+        indexSourceLines();
         if (ctx != null && ctx.symbolTable != null) {
             setCurrentScope(ctx.symbolTable);
         }
@@ -108,11 +115,42 @@ public class Parser {
         this.ctx = ctx;
         this.tokens = tokens;
         this.tokenIndex = 0;
+        indexSourceLines();
         // Share the heredoc nodes list instead of creating a new one
         this.heredocNodes = sharedHeredocNodes;
         if (ctx != null && ctx.symbolTable != null) {
             setCurrentScope(ctx.symbolTable);
         }
+    }
+
+    private void indexSourceLines() {
+        int lineOffset = 0;
+        for (LexerToken token : tokens) {
+            sourceLineOffsets.put(token, lineOffset);
+            if (token.type == LexerTokenType.NEWLINE) {
+                lineOffset++;
+            }
+        }
+    }
+
+    /** Return the source line at a token without repeatedly scanning the token list. */
+    public int sourceLineAt(int tokenIndex) {
+        int baseLine = baseLineNumber > 0 ? baseLineNumber : 1;
+        if (tokenIndex >= 0 && tokenIndex < tokens.size()) {
+            Integer offset = sourceLineOffsets.get(tokens.get(tokenIndex));
+            if (offset != null) {
+                return baseLine + offset;
+            }
+        }
+
+        // Synthetic tokens are rare; retain a correctness fallback for them.
+        int sourceLine = baseLine;
+        for (int i = 0; i < Math.min(tokenIndex, tokens.size()); i++) {
+            if (tokens.get(i).type == LexerTokenType.NEWLINE) {
+                sourceLine++;
+            }
+        }
+        return sourceLine;
     }
 
     public static boolean isExpressionTerminator(LexerToken token) {

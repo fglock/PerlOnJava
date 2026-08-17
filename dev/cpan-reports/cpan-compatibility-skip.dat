@@ -22,6 +22,7 @@ DBD::DBM	SKIP				2026-08-17	bundled
 DBD::File	SKIP				2026-08-15	bundled	
 DBD::NullP	SKIP				2026-08-17	bundled	
 DBD::SQLite::Constants	SKIP				2026-08-17	bundled	
+DBI	SKIP				2026-08-17	bundled	
 DBIx::RetryConnect	SKIP				2026-08-17	bundled	
 Data::Swap	SKIP				2026-08-12	bundled	
 Devel::GlobalDestruction	SKIP				2026-06-18	bundled	
@@ -78,6 +79,7 @@ Term::Size	SKIP				2026-06-18	bundled
 Test::MockObject	SKIP				2026-06-18	distroprefs	
 Test::Pod	SKIP				2026-08-16	bundled	
 Test::SharedFork	SKIP				2026-06-18	distroprefs	
+Text::CSV_XS	SKIP				2026-08-17	bundled	
 Text::LineFold	SKIP				2026-08-16	bundled	
 Tie::File	SKIP				2026-06-18	bundled	
 Treex::Block::W2A::TagFeaturama	SKIP				2026-08-14	bundled	
