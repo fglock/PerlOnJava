@@ -438,7 +438,15 @@ matcher-specific timeouts on both execution backends.
     the final owning regex scope exits (test 307).
   - [x] Resolved failed-path `$^N`/`$+` tests 85-86 on JVM and interpreter.
   - [x] Classified tests 444-448 as optimizer/debug-transcript exclusions.
+  - [x] Decoded byte-backed eval source according to lexical `use utf8`,
+    including pragmas activated inside the source, while preserving `no utf8`
+    byte semantics and fatal malformed-UTF-8 diagnostics. The focused oracle
+    passes 7/7 on system Perl, JVM, interpreter, and the direct JVM eval
+    compiler.
 - [ ] Phase 5: Remove the Java matching backend
+  - [x] Retired the unreachable top-level `(*PRUNE)` text rewrite after native
+    Joni control-verb gates passed under default and forced-Java policy
+    (`5760874e4`; 316 preprocessor lines removed).
 - [ ] Phase 6: Integration and release
 
 ### Next Steps
@@ -449,13 +457,16 @@ matcher-specific timeouts on both execution backends.
 2. Fix lexical `use bytes` substitution when an upgraded marker regex matches a
    byte subject, without patching generated fixtures. Regenerate the lossless
    corpus and prove that chunks 05–10 no longer match literal boundary markers
-   before treating any boundary or folding result as evidence. Keep the
-   separately reduced eval byte-source UTF-8 decoding fix as an independent
-   runtime parity slice.
+   before treating any boundary or folding result as evidence. Retain the now-
+   completed eval byte-source UTF-8 oracle as an independent runtime regression
+   gate; it is not the generated-corpus marker fix.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
    break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
+   Close the independently reduced Joni syntax gaps for Python-style named
+   groups, alpha assertion aliases, underscored numeric escapes, and braced
+   octal parsing with focused standard-Perl gates.
 4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
    head. Save complete JSON and logs, publish the missing differential report,
    and compare every file with both the Phase 0 result and PR 958 under the
