@@ -8,7 +8,7 @@ Unblock compiler/runtime/tooling failures found while exercising:
 
 ## Progress Tracking
 
-### Current Status: implementation complete; PR/CI in progress
+### Current Status: complete
 
 ### Completed Phases
 
@@ -47,7 +47,10 @@ Unblock compiler/runtime/tooling failures found while exercising:
     failures safely without altering the feature branch.
   - The minimized branch passes the required `make`, including all five unit
     shards, Joni tests, packaging verification, and the shadow JAR build.
-- [ ] Phase 4b: publish the feature branch PR and verify CI checks.
+- [x] Phase 4b: publish the feature branch PR and verify CI checks
+  (2026-08-17).
+  - Opened PR #991 from `fix/jcpan-module-tooling`.
+  - GitHub Actions passed on Ubuntu and Windows.
 
 ### Open Questions / Handoffs
 
@@ -59,5 +62,4 @@ Unblock compiler/runtime/tooling failures found while exercising:
 
 ### Next Steps
 
-1. Commit with attribution, push the branch, and open the PR.
-2. Monitor and fix CI until all required checks pass.
+1. Await review of PR #991.
