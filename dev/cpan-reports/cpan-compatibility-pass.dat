@@ -102,6 +102,7 @@ Aliyun	PASS	1	1		2026-05-15		3fe76ed3b
 Alpha::Beta::Gamma	PASS	168	168		2026-08-15		d5aec7092
 Alt	PASS	9	9		2026-05-16		d8a8a9f34
 AltaVista::BabelFish	PASS	17	17		2026-05-18		bd327bb57
+Alvis::TermTagger	PASS	14	14		2026-08-17		6c5545d16
 Amazon::S3	PASS	19	19		2026-04-21		73edc8aba
 Amazon::SimpleDB	PASS	8	8		2026-08-14		424ad3c8f
 Amethyst	PASS	1	1		2026-05-11		2b8886eec
@@ -168,6 +169,7 @@ Apache::WebSNMP	PASS				2026-08-17		06656bfa2
 ApacheLog::Compressor	PASS	39	39		2026-05-12		93dfa497b
 Apigee::Edge	PASS	14	14		2026-08-14		424ad3c8f
 App::Addex	PASS	31	31		2026-08-11		19f3fff98
+App::Angle2Zodiac	PASS	5	5		2026-08-17		6c5545d16
 App::Antigen	PASS	1	1		2026-08-12		cc69cbb4c
 App::ArticleWrap	PASS	7	7		2026-08-11		19f3fff98
 App::AsciiChart	PASS	3	3		2026-08-17		06656bfa2
@@ -178,6 +180,7 @@ App::CLI	PASS	24	24		2026-06-18		c3e9fa049
 App::CLI::Plugin::Parallel::ForkManager	PASS	1	1		2026-08-15		570876923
 App::CLI::Plugin::StackTrace	PASS	1	1		2026-08-11		19f3fff98
 App::CMAM	PASS	1	1		2026-08-13		2103d7edf
+App::CPAN::Search	PASS	12	12		2026-08-17		6c5545d16
 App::CPANIDX	PASS	101	101		2026-08-16		ebd367ec5
 App::CSV	PASS	17	17		2026-08-15		570876923
 App::Cache	PASS	49	49		2026-04-21		73edc8aba
@@ -321,6 +324,7 @@ Array::Ordered	PASS	21	21		2026-08-15		d5aec7092
 Array::Pick::Scan	PASS	3	3		2026-08-14		424ad3c8f
 Array::Set::Naive	PASS	5	5		2026-08-14		424ad3c8f
 Array::Tour	PASS	209	209		2026-08-16		570876923
+Array::Uniq	PASS	6	6		2026-08-17		6c5545d16
 Array::Util::MultiTarget	PASS	8	8		2026-08-12		004ce4b1f
 Array::Utils	PASS	17	17		2026-06-10		959012866
 ArrayData	PASS	8	8		2026-05-12		b5c01ce1c
@@ -2304,6 +2308,7 @@ HealthCheck::Diagnostic::SMTP	PASS	7	7		2026-05-12		b5c01ce1c
 Heap	PASS	2473	2473		2026-06-15		cc8aa9561
 Heap::Fibonacci	PASS	2473	2473		2026-06-15		cc8aa9561
 Heap::Priority	PASS	33	33		2026-05-12		b5c01ce1c
+Heap::Simple	PASS	2	2		2026-08-17		6c5545d16
 HeliosX::Job::JSON	PASS	10	10		2026-08-16		570876923
 Heritable::Types	PASS	9	9		2026-08-16		570876923
 Hex::Record::Parser	PASS	40	40		2026-08-13		424ad3c8f
@@ -2904,6 +2909,7 @@ MasonX::Request::WithApache2Session	PASS	1	1		2026-04-29		82e5e452d
 MasonX::Request::WithApacheSession2	PASS	1	1		2026-04-29		82e5e452d
 Math::Approx::Symbolic	PASS	3	3		2026-08-13		424ad3c8f
 Math::Base::Convert	PASS	5350	5350		2026-06-18		c3e9fa049
+Math::BigInt::Named	PASS	240	240		2026-08-17		6c5545d16
 Math::BigInt::Random::OO	PASS	339	339		2026-05-08		24f4fb162
 Math::Calc::Euro	PASS				2026-08-16		570876923
 Math::Calc::Units	PASS	79	79		2026-05-17		d8a8a9f34
@@ -4396,6 +4402,7 @@ Suffit	PASS	2	2		2026-08-15		d5aec7092
 SugarSync::API	PASS	1	1		2026-08-14		424ad3c8f
 Surveyor::App	PASS	1	1		2026-08-15		570876923
 Surveyor::Benchmark::SchwartzianTransform::SortFilesBySize	PASS	5	5		2026-08-17		06656bfa2
+Swim::Plugin::cpan	PASS	2	2		2026-08-17		6c5545d16
 Switch	PASS	590	590		2026-06-15		cc8aa9561
 Symbol::Name	PASS	6	6		2026-08-13		2103d7edf
 Syndication::ESF	PASS	30	30		2026-08-15		d5aec7092
@@ -4581,6 +4588,7 @@ Test2::Tools::PerlTidy	PASS	7	7		2026-05-17		bd327bb57
 Test2::Util::DistFiles	PASS	4	4		2026-05-17		d8a8a9f34
 Test2::Util::UUID	PASS	5	5		2026-06-15		cc8aa9561
 Test::API	PASS	32	32		2026-08-13		2103d7edf
+Test::Able::Runner	PASS	6	6		2026-08-17		6c5545d16
 Test::AllModules	PASS	24	24		2026-05-13		3fe76ed3b
 Test::Arrow	PASS	113	113		2026-05-07		24f4fb162
 Test::AskAnExpert	PASS	77	77		2026-08-13		424ad3c8f
@@ -4639,6 +4647,7 @@ Test::Lazy	PASS	118	118		2026-08-16		ebd367ec5
 Test::Lib	PASS	9	9		2026-06-10		959012866
 Test::Lives	PASS	3	3		2026-05-19		b5536d190
 Test::LoadAllModules	PASS	5	5		2026-06-18		c3e9fa049
+Test::Locale::PO	PASS	7	7		2026-08-17		6c5545d16
 Test::LogFile	PASS	6	6		2026-08-13		cc69cbb4c
 Test::LongString	PASS	44	44		2026-06-18		c3e9fa049
 Test::Memcached	PASS	1	1		2026-05-10		a0cb33710
@@ -5188,6 +5197,7 @@ WWW::SlideShare	PASS	1	1		2026-05-12		312b4f902
 WWW::SolveMedia	PASS	1	1		2026-05-11		b5c01ce1c
 WWW::Spotify	PASS	33	33		2026-05-18		bd327bb57
 WWW::StatsMix	PASS	100	100		2026-05-17		d8a8a9f34
+WWW::StreamSend	PASS	1	1		2026-08-17		6c5545d16
 WWW::Suffit::Client::NoAPI	PASS	2	2		2026-08-13		2103d7edf
 WWW::Suffit::Plugin::CommonHelpers	PASS	4	4		2026-05-09		d7916b01c
 WWW::Suffit::Plugin::FileAuth	PASS	2	2		2026-08-15		d5aec7092
