@@ -150,6 +150,16 @@ public class LayeredIOHandle implements IOHandle {
         return delegate.write(processed);
     }
 
+    @Override
+    public int writeSome(String data) {
+        // Partial byte counts map to the caller's buffer only when no
+        // transforming PerlIO layer is active.
+        if (activeLayers.isEmpty()) {
+            return delegate.writeSome(data);
+        }
+        return IOHandle.super.writeSome(data);
+    }
+
     /**
      * Reads data from the handle, applying all input layers.
      *

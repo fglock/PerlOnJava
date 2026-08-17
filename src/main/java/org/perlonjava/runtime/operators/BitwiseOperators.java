@@ -24,6 +24,28 @@ public class BitwiseOperators {
         return new RuntimeScalar(value.and(UV_MASK));
     }
 
+    private static boolean hasNativeInteger(RuntimeScalar scalar) {
+        return scalar.type == RuntimeScalarType.INTEGER && !(scalar.value instanceof BigInteger);
+    }
+
+    private static RuntimeScalar unsignedResult(long value) {
+        if (value >= 0) return RuntimeScalarCache.getScalarInt(value);
+        return new RuntimeScalar(new BigInteger(Long.toUnsignedString(value)));
+    }
+
+    private static RuntimeScalar nativeBitwiseResult(
+            RuntimeScalar left, RuntimeScalar right, char operator) {
+        long a = ((Number) left.value).longValue();
+        long b = ((Number) right.value).longValue();
+        long value = switch (operator) {
+            case '&' -> a & b;
+            case '|' -> a | b;
+            case '^' -> a ^ b;
+            default -> throw new IllegalArgumentException("unknown bitwise operator: " + operator);
+        };
+        return unsignedResult(value).propagateTaint(left, right);
+    }
+
     private static RuntimeScalar unsignedShiftLeft(BigInteger value, long shift) {
         if (shift >= 64) return RuntimeScalarCache.scalarZero;
         return unsignedResult(value.shiftLeft((int) shift));
@@ -53,6 +75,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (isNumericBitwiseOperand(t1) && isNumericBitwiseOperand(t2)) {
+            if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
+                return nativeBitwiseResult(runtimeScalar, arg2, '&');
+            }
             return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
         }
@@ -103,7 +128,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise AND operation.
      */
     public static RuntimeScalar bitwiseAndBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use long values to preserve full precision
+        if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
+            return nativeBitwiseResult(runtimeScalar, arg2, '&');
+        }
         return unsignedResult(unsignedValue(runtimeScalar).and(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
     }
@@ -122,6 +149,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+            if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
+                return nativeBitwiseResult(runtimeScalar, arg2, '|');
+            }
             return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
         }
@@ -162,7 +192,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise OR operation.
      */
     public static RuntimeScalar bitwiseOrBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use long values to preserve full precision
+        if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
+            return nativeBitwiseResult(runtimeScalar, arg2, '|');
+        }
         return unsignedResult(unsignedValue(runtimeScalar).or(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
     }
@@ -185,6 +217,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
+            if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
+                return nativeBitwiseResult(runtimeScalar, arg2, '^');
+            }
             return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
                     .propagateTaint(runtimeScalar, arg2);
         }
@@ -231,7 +266,9 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise XOR operation.
      */
     public static RuntimeScalar bitwiseXorBinary(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
-        // Use long values to preserve full precision
+        if (hasNativeInteger(runtimeScalar) && hasNativeInteger(arg2)) {
+            return nativeBitwiseResult(runtimeScalar, arg2, '^');
+        }
         return unsignedResult(unsignedValue(runtimeScalar).xor(unsignedValue(arg2)))
                 .propagateTaint(runtimeScalar, arg2);
     }

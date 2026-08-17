@@ -116,7 +116,7 @@ export JPERL_ORPHAN_EXIT=1
 # CPAN build tools may install copies of their own implementation modules into
 # the user library.  Keep PerlOnJava's narrow compatibility overlays ahead of
 # those copies while jcpan and its child build processes run.
-export PERLONJAVA_PREFER_BUNDLED_MODULES="Module/Build/Base.pm,Object/Pad.pm${PERLONJAVA_PREFER_BUNDLED_MODULES:+,$PERLONJAVA_PREFER_BUNDLED_MODULES}"
+export PERLONJAVA_PREFER_BUNDLED_MODULES="Module/Build/Base.pm,Module/Build/Tiny.pm,Object/Pad.pm${PERLONJAVA_PREFER_BUNDLED_MODULES:+,$PERLONJAVA_PREFER_BUNDLED_MODULES}"
 
 # CPAN test suites should run with deterministic semantics. User-interface
 # color preferences such as NO_COLOR can change module behavior under test

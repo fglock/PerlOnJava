@@ -6858,7 +6858,10 @@ public class BytecodeCompiler implements Visitor {
         emitReg(condReg);
         emitInt(0);
 
-        compileNode(node.trueExpr, rd, currentCallContext);
+        Node trueExpr = scalarizeParenthesizedTernaryBranch(node.trueExpr, currentCallContext);
+        Node falseExpr = scalarizeParenthesizedTernaryBranch(node.falseExpr, currentCallContext);
+
+        compileNode(trueExpr, rd, currentCallContext);
         emitAliasWithTarget(rd, lastResultReg);
 
         int gotoEndPos = bytecode.size();
@@ -6868,7 +6871,7 @@ public class BytecodeCompiler implements Visitor {
         int falseStart = bytecode.size();
         patchIntOffset(ifFalsePos + 2, falseStart);
 
-        compileNode(node.falseExpr, rd, currentCallContext);
+        compileNode(falseExpr, rd, currentCallContext);
         emitAliasWithTarget(rd, lastResultReg);
 
         // Patch goto-end jump to here
@@ -6876,6 +6879,23 @@ public class BytecodeCompiler implements Visitor {
         patchIntOffset(gotoEndPos + 1, endPos);
 
         lastResultReg = rd;
+    }
+
+    /**
+     * Parentheses are represented as a one-element ListNode. In scalar lvalue
+     * context Perl treats that shape as the enclosed lvalue, not as a one-item
+     * list. Keeping the ListNode here makes constructs such as
+     * {@code ($ok ? $a : ($b = '')) .= $suffix} return a RuntimeList from one
+     * branch and later crash the scalar assignment opcode.
+     */
+    private static Node scalarizeParenthesizedTernaryBranch(Node branch, int context) {
+        if (context != RuntimeContextType.LVALUE) {
+            return branch;
+        }
+        while (branch instanceof ListNode list && list.elements.size() == 1) {
+            branch = list.elements.getFirst();
+        }
+        return branch;
     }
 
     @Override

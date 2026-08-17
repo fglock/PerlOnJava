@@ -14,6 +14,9 @@ target/
 .gradle/
 .java-version
 build/
+# Bundled Perl build-tool compatibility modules are source, not build output.
+!src/main/perl/lib/Module/Build/
+!src/main/perl/lib/Module/Build/Tiny.pm
 bin/
 # But allow Perl bin scripts
 !src/main/perl/bin/

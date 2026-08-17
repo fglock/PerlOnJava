@@ -68,6 +68,17 @@ public interface IOHandle {
     RuntimeScalar write(String string);
 
     /**
+     * Write at most one chunk and report its byte count.  Most handles either
+     * accept the complete string or fail; non-blocking sockets override this
+     * to expose partial writes needed by sendfile-style callers.
+     */
+    default int writeSome(String string) {
+        RuntimeScalar result = write(string);
+        return result.getBoolean()
+                ? string.getBytes(StandardCharsets.ISO_8859_1).length : -1;
+    }
+
+    /**
      * Closes this I/O handle and releases system resources.
      *
      * <p>Note: This does NOT call sync()/fsync. The OS will flush kernel buffers

@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.WeakHashMap;
 
 /** Runtime-owned mortal, weak-reference, DESTROY, and reachability sweep state. */
 final class LifecycleRuntimeState {
@@ -53,8 +52,10 @@ final class LifecycleRuntimeState {
     boolean blessedObjectExists;
     final Map<RuntimeBase, LinkedHashMap<Integer, String>> traceOwners =
             Collections.synchronizedMap(new IdentityHashMap<>());
-    final Map<RuntimeScalar, Boolean> scalarRegistry = new WeakHashMap<>();
-    final Map<RuntimeScalar, Throwable> scalarRegisterStacks = new WeakHashMap<>();
+    final ScalarRefRegistry.WeakIdentityMap<Boolean> scalarRegistry =
+            new ScalarRefRegistry.WeakIdentityMap<>();
+    final ScalarRefRegistry.WeakIdentityMap<Throwable> scalarRegisterStacks =
+            new ScalarRefRegistry.WeakIdentityMap<>();
 
     void clear() {
         mortalActive = true;

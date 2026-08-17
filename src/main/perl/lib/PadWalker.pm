@@ -18,8 +18,8 @@ sub _unsupported {
     die "PadWalker::$_[0] is not implemented on PerlOnJava\n";
 }
 
-sub peek_my         { _unsupported('peek_my') }
-sub peek_our        { _unsupported('peek_our') }
+sub peek_my         { Internals::jperl_peek_my(@_) }
+sub peek_our        { Internals::jperl_peek_our(@_) }
 sub var_name        { Internals::jperl_var_name(@_) }
 sub set_closed_over { Internals::jperl_set_closed_over(@_) }
 

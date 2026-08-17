@@ -49,6 +49,7 @@ public final class SharedTransportIOHandle implements IOHandle {
     }
 
     @Override public RuntimeScalar write(String value) { return open() ? delegate.write(value) : closed("write"); }
+    @Override public int writeSome(String value) { return open() ? delegate.writeSome(value) : -1; }
     @Override public RuntimeScalar flush() { return open() ? delegate.flush() : scalarFalse; }
     @Override public RuntimeScalar sync() { return open() ? delegate.sync() : scalarFalse; }
     @Override public RuntimeScalar doRead(int size, Charset charset) { return open() ? delegate.doRead(size, charset) : closed("read"); }

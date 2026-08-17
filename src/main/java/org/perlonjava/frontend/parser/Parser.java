@@ -322,7 +322,7 @@ public class Parser {
         ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
         String cleanMessage = "Missing right curly or square bracket at " + loc.fileName() + " line " + loc.lineNumber() + ", at end of line\n" +
                 "syntax error at " + loc.fileName() + " line " + loc.lineNumber() + ", at EOF\n" +
-                "Execution of " + loc.fileName() + " aborted due to compilation errors.";
+                "Execution of " + loc.fileName() + " aborted due to compilation errors.\n";
         throw new PerlParserException(cleanMessage);
     }
 

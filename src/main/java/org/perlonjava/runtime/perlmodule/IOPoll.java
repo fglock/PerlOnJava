@@ -169,8 +169,17 @@ public class IOPoll extends PerlModuleBase {
                 }
             }
 
-            // If some handles already ready and no NIO channels need polling, done
-            if (readyCount > 0 && channelToIndex.isEmpty() && nonSocketIndices.isEmpty()) {
+            // poll(2) reports every descriptor that is currently ready.  If a
+            // non-socket descriptor was ready during classification, do not
+            // skip the socket selector: IO::Async commonly has an internal
+            // descriptor ready at the same time as a stream socket.  Skipping
+            // the selector in that case starves the socket callback forever.
+            if (readyCount > 0) {
+                if (!channelToIndex.isEmpty()) {
+                    selector.selectNow();
+                    readyCount += collectSelectedEvents(
+                            selector, channelToIndex, revents);
+                }
                 writeResults(args, nfd, fds, revents);
                 return new RuntimeScalar(readyCount).getList();
             }
@@ -191,20 +200,8 @@ public class IOPoll extends PerlModuleBase {
                         selector.select(Math.max(1, remainMs));
                     }
 
-                    for (SelectionKey key : selector.selectedKeys()) {
-                        Integer idx = channelToIndex.get(key.channel());
-                        if (idx == null) continue;
-                        int readyOps = key.readyOps();
-
-                        if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0) {
-                            revents[idx] |= POLLIN;
-                        }
-                        if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0) {
-                            revents[idx] |= POLLOUT;
-                        }
-                        if (revents[idx] != 0) readyCount++;
-                    }
-                    selector.selectedKeys().clear();
+                    readyCount += collectSelectedEvents(
+                            selector, channelToIndex, revents);
                     if (readyCount > 0) break;
                 }
 
@@ -257,6 +254,28 @@ public class IOPoll extends PerlModuleBase {
                 try { ch.configureBlocking(true); } catch (Exception ignored) {}
             }
         }
+    }
+
+    private static int collectSelectedEvents(
+            Selector selector,
+            Map<SelectableChannel, Integer> channelToIndex,
+            int[] revents) {
+        int readyCount = 0;
+        for (SelectionKey key : selector.selectedKeys()) {
+            Integer idx = channelToIndex.get(key.channel());
+            if (idx == null) continue;
+            int readyOps = key.readyOps();
+            int before = revents[idx];
+            if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0) {
+                revents[idx] |= POLLIN;
+            }
+            if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0) {
+                revents[idx] |= POLLOUT;
+            }
+            if (before == 0 && revents[idx] != 0) readyCount++;
+        }
+        selector.selectedKeys().clear();
+        return readyCount;
     }
 
     /**

@@ -330,6 +330,11 @@ public class ErrorMessageUtil {
         }
         SourceLocation loc = getSourceLocationAccurate(effectiveIndex);
 
+        if (message.startsWith("Bareword \"")
+                && message.endsWith("not allowed while \"strict subs\" in use")) {
+            return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".\n";
+        }
+
         String nearString = buildNearString(effectiveIndex, message);
 
         return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ", near " + errorMessageQuote(nearString) + "\n";

@@ -6,6 +6,7 @@ package Module::Build::Base;
 use strict;
 use warnings;
 use Cwd qw(abs_path);
+use Config ();
 
 # Remove this file from %INC so the real Module::Build::Base can be loaded
 delete $INC{'Module/Build/Base.pm'};
@@ -52,18 +53,16 @@ if (!$loaded) {
     no warnings 'redefine';
     *have_forkpipe = sub { 0 };
 
-    # Auto-enable pureperl_only for modules that support it.
-    # PerlOnJava runs on JVM and cannot compile XS/C code.
-    # Module::Build's process_xs_files() only skips XS when BOTH
-    # pureperl_only AND allow_pureperl are true.  Since pureperl_only
-    # defaults to 0, modules like Params::Validate (allow_pureperl=1)
-    # still attempt XS compilation and die.  Fix: auto-set pureperl_only
-    # when the module declares allow_pureperl and no C compiler exists.
+    # PerlOnJava cannot compile distribution XS.  Java-backed XS replacements
+    # are discovered by XSLoader at runtime, so the build must still copy the
+    # distribution's .pm files even when it does not advertise a pure-Perl
+    # fallback (Plate and Sys::Sendfile are examples).  Unsupported XS remains
+    # an honest load/test failure instead of an unrelated C-compiler failure.
     my $orig_process_xs_files = \&Module::Build::Base::process_xs_files;
     *Module::Build::Base::process_xs_files = sub {
         my $self = shift;
-        if ($self->allow_pureperl && !$self->have_c_compiler) {
-            $self->pureperl_only(1);
+        if ($Config::Config{perlonjava} || !$self->have_c_compiler) {
+            $self->pureperl_only(1) if $self->allow_pureperl;
             return;
         }
         return $self->$orig_process_xs_files(@_);
@@ -72,7 +71,7 @@ if (!$loaded) {
     my $orig_process_support_files = \&Module::Build::Base::process_support_files;
     *Module::Build::Base::process_support_files = sub {
         my $self = shift;
-        if ($self->allow_pureperl && !$self->have_c_compiler) {
+        if ($Config::Config{perlonjava} || !$self->have_c_compiler) {
             return;
         }
         return $self->$orig_process_support_files(@_);

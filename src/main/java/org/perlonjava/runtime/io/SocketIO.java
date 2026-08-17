@@ -180,6 +180,15 @@ public class SocketIO implements IOHandle {
         return streamPeer != null && streamPeer.closed;
     }
 
+    /** Return the connected channel used by zero-copy file transfers. */
+    public SocketChannel channelForTransfer() throws IOException {
+        if (!ensureConnected() || hasClosedStreamPeer()) {
+            getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+            return null;
+        }
+        return socketChannel;
+    }
+
     private RuntimeScalar consumeDatagramConnectionRefused() {
         datagramErrorPending = false;
         getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
@@ -776,16 +785,24 @@ public class SocketIO implements IOHandle {
      */
     @Override
     public RuntimeScalar write(String string) {
+        return writeSome(string) > 0 ? scalarTrue : scalarFalse;
+    }
+
+    @Override
+    public int writeSome(String string) {
         var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             // Ensure non-blocking connect has completed before writing
             if (!ensureConnected()) {
                 getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
-                return scalarFalse;
+                return -1;
             }
             if (hasClosedStreamPeer()) {
                 getGlobalVariable("main::!").set(ErrnoVariable.EPIPE());
-                return scalarFalse;
+                return -1;
+            }
+            if (data.length == 0) {
+                return 0;
             }
 
             // Use channel-based I/O for non-blocking sockets to avoid
@@ -797,18 +814,19 @@ public class SocketIO implements IOHandle {
                 if (written == 0) {
                     // Would block — set EWOULDBLOCK
                     getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
-                    return scalarFalse;
+                    return -1;
                 }
-                return written > 0 ? scalarTrue : scalarFalse;
+                return written;
             }
 
             if (outputStream != null) {
                 outputStream.write(data);
-                return scalarTrue;
+                return data.length;
             }
             throw new IllegalStateException("No output stream available");
         } catch (IOException e) {
-            return handleIOException(e, "write operation failed");
+            handleIOException(e, "write operation failed");
+            return -1;
         }
     }
 
@@ -956,6 +974,11 @@ public class SocketIO implements IOHandle {
             byte[] bytes = new byte[data.length()];
             for (int i = 0; i < data.length(); i++) {
                 bytes[i] = (byte) (data.charAt(i) & 0xFF);
+            }
+            // A zero-length syswrite is a successful no-op, not EAGAIN.
+            // IO::Async uses this result to retire empty producer markers.
+            if (bytes.length == 0) {
+                return new RuntimeScalar(0);
             }
 
             if (datagramChannel != null) {

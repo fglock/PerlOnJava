@@ -930,7 +930,7 @@ public class SystemOperator {
      * This ensures output goes through any Perl-level redirections (e.g.,
      * when STDERR has been reopened to a file via open STDERR, ">", $file).
      */
-    private static void writeToPerlStderrBytes(byte[] buffer, int bytesRead) {
+    public static void writeToPerlStderrBytes(byte[] buffer, int bytesRead) {
         try {
             RuntimeIO perlStderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
             if (writeRawBytesToPerlHandle(perlStderr, buffer, bytesRead)) {

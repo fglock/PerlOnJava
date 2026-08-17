@@ -50,8 +50,10 @@ public class PerlOnJavaProcess extends PerlModuleBase {
 
         RuntimeHash result = new RuntimeHash();
         Process process = null;
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        Thread reader = null;
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        Thread stdoutReader = null;
+        Thread stderrReader = null;
         boolean timedOut = false;
         int exitCode = -1;
         String error = "";
@@ -63,20 +65,28 @@ public class PerlOnJavaProcess extends PerlModuleBase {
                 builder.directory(new File(cwd));
             }
             copyPerlEnvironment(builder);
-            builder.redirectErrorStream(true);
+            builder.redirectErrorStream(false);
             process = builder.start();
             process.getOutputStream().close();
 
             Process activeProcess = process;
             PerlRuntime runtime = PerlRuntime.current();
-            reader = new Thread(() -> {
+            stdoutReader = new Thread(() -> {
                 try (PerlRuntime.Binding ignored = runtime.bind()) {
-                    copyOutput(activeProcess.getInputStream(), output, tee);
+                    copyOutput(activeProcess.getInputStream(), stdout, tee, false);
                 }
             },
-                "perlonjava-process-output");
-            reader.setDaemon(true);
-            reader.start();
+                "perlonjava-process-stdout");
+            stderrReader = new Thread(() -> {
+                try (PerlRuntime.Binding ignored = runtime.bind()) {
+                    copyOutput(activeProcess.getErrorStream(), stderr, tee, true);
+                }
+            },
+                "perlonjava-process-stderr");
+            stdoutReader.setDaemon(true);
+            stderrReader.setDaemon(true);
+            stdoutReader.start();
+            stderrReader.start();
 
             if (timeoutSeconds > 0) {
                 long timeoutMillis = Math.max(1L, (long) (timeoutSeconds * 1000));
@@ -97,17 +107,18 @@ public class PerlOnJavaProcess extends PerlModuleBase {
                 terminateTree(process);
             }
         } finally {
-            if (reader != null) {
-                try {
-                    reader.join(1000);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
+            joinReader(stdoutReader);
+            joinReader(stderrReader);
         }
 
+        String stdoutText = stdout.toString(StandardCharsets.UTF_8);
+        String stderrText = stderr.toString(StandardCharsets.UTF_8);
         result.put("exit_code", new RuntimeScalar(exitCode));
-        result.put("output", new RuntimeScalar(output.toString(StandardCharsets.UTF_8)));
+        result.put("stdout", new RuntimeScalar(stdoutText));
+        result.put("stderr", new RuntimeScalar(stderrText));
+        // Keep the original API for CPAN tooling callers that only need a
+        // combined diagnostic transcript.
+        result.put("output", new RuntimeScalar(stdoutText + stderrText));
         result.put("timed_out", new RuntimeScalar(timedOut ? 1 : 0));
         result.put("error", new RuntimeScalar(error));
         return result.createReference().getList();
@@ -123,7 +134,7 @@ public class PerlOnJavaProcess extends PerlModuleBase {
     }
 
     private static void copyOutput(InputStream input, ByteArrayOutputStream output,
-            boolean tee) {
+            boolean tee, boolean errorStream) {
         try (input) {
             byte[] buffer = new byte[8192];
             int read;
@@ -132,11 +143,24 @@ public class PerlOnJavaProcess extends PerlModuleBase {
                     output.write(buffer, 0, read);
                 }
                 if (tee) {
-                    SystemOperator.writeToPerlStdoutBytes(buffer, read);
+                    if (errorStream) {
+                        SystemOperator.writeToPerlStderrBytes(buffer, read);
+                    } else {
+                        SystemOperator.writeToPerlStdoutBytes(buffer, read);
+                    }
                 }
             }
         } catch (IOException ignored) {
             // Process termination closes the stream.
+        }
+    }
+
+    private static void joinReader(Thread reader) {
+        if (reader == null) return;
+        try {
+            reader.join(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

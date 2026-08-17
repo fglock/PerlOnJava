@@ -73,6 +73,11 @@ public class BorrowedIOHandle implements IOHandle {
     }
 
     @Override
+    public int writeSome(String string) {
+        return closed ? -1 : delegate.writeSome(string);
+    }
+
+    @Override
     public RuntimeScalar flush() {
         if (closed) return scalarTrue;
         return delegate.flush();

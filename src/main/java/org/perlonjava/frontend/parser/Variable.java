@@ -1259,7 +1259,7 @@ public class Variable {
             String fileName = parser.ctx.errorUtil.getFileName();
             String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", at end of line\n" +
                     "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
-                    "Execution of " + fileName + " aborted due to compilation errors.";
+                    "Execution of " + fileName + " aborted due to compilation errors.\n";
             throw new PerlParserException(multiLineError);
         } finally {
             parser.insideBracedDereference = savedInsideBracedDereference;

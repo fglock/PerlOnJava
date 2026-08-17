@@ -208,7 +208,7 @@ PadWalker failure. Any later Reply failure should be investigated separately.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 completed (2026-08-07)
+### Current Status: Phase 2 completed (2026-08-16)
 
 ### Completed Phases
 
@@ -227,19 +227,31 @@ PadWalker failure. Any later Reply failure should be investigated separately.
     `VariableCollectorVisitor.java`, `EmitVariable.java`,
     `BytecodeCompiler.java`, `PadWalker.pm`, `Devel/Caller.pm`, and
     `Devel/LexAlias.pm`.
+- [x] Phase 2: caller-frame pad introspection (2026-08-16)
+  - Added opt-in live lexical-pad registration to compiled and interpreted
+    subroutine frames.
+  - Implemented `peek_my` and `peek_our` with PadWalker-compatible logical
+    frame numbering and live scalar, array, and hash aliases.
+  - Preserved lexical declaration and `our` metadata through graph cloning so
+    the two APIs can filter the active pad correctly.
+  - Added focused system-Perl and PerlOnJava coverage as part of
+    `cpan_tooling_runtime.t`.
+  - Files include `RuntimeCode.java`, `RuntimeGraphCloner.java`,
+    `VariableCollectorVisitor.java`, `InterpretedCode.java`,
+    `BytecodeCompiler.java`, `SubroutineParser.java`, `Variable.java`,
+    `Internals.java`, and `PadWalker.pm`.
 
 ### Next Steps
 
 1. Validate `./jcpan -t Reply` and diagnose any failure beyond its former
    PadWalker load blocker.
-2. Design Phase 2 `peek_my` and `peek_our` scope filtering on top of the
-   opt-in active-frame registry.
-3. Add duplicate-name and closure-lifetime coverage beyond the
+2. Add duplicate-name and closure-lifetime coverage beyond the
    Lexical::Persistence integration suite.
+3. Measure the opt-in caller-frame registry under debugger and REPL workloads.
 
 ### Open Questions
 
 - Should `peek_sub` eventually preserve local pad variables, or should
   compiler-maintained declaration metadata remain the supported boundary?
-- Should Phase 2 share its frame-level filtering and logical-frame numbering
-  with the debugger's existing call-stack infrastructure?
+- Should the completed Phase 2 frame registry eventually be shared with the
+  debugger's call-stack infrastructure, or remain an independent opt-in path?
