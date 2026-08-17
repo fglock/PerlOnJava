@@ -240,6 +240,16 @@ passes on both execution backends; unchanged upstream coverage gains nine more
 assertions to reach 1,065/1,110, and all user-property diagnostic assertions
 through test 1,094 pass.
 
+Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
+syntax as matcher-neutral policy. PerlOnJava publishes that policy while
+ordinary and substitution callbacks execute, without misclassifying escaped or
+character-class text. The focused 15-assertion oracle passes on system Perl,
+JVM, and interpreter, and unchanged `reg_pmod.t` reaches 88/88 on both
+execution backends. Regex source scanning also consumes each `\c` operand
+before interpolation, so `\c@` cannot be mistaken for `@-`; the focused
+4-assertion oracle passes on all three runtimes and unchanged `subst.t` reaches
+250/281 on JVM and interpreter.
+
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
 frames now preserve the Perl-visible caller capture view for optimistic
@@ -367,6 +377,13 @@ matcher-specific timeouts on both execution backends.
     Unicode-flag copies and later literal reuse. The focused oracle passes 8/8
     on system Perl, JVM, and interpreter; `regexp_unicode_prop.t` gains nine
     assertions to 1,065/1,110 on both execution backends.
+  - [x] Accepted inline `p` directly in Joni while retaining match-variable
+    policy in PerlOnJava, including provisional callback state. The focused
+    oracle passes 15/15 and unchanged `reg_pmod.t` passes 88/88 on JVM and
+    interpreter.
+  - [x] Preserved `\c` control operands through regex source interpolation.
+    The focused oracle passes 4/4 and unchanged `subst.t` gains test 154 on
+    both execution backends.
   - [ ] Complete the remaining built-in Unicode aliases.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -392,11 +409,17 @@ matcher-specific timeouts on both execution backends.
    slices, then rerun the forced-Joni corpus from the new combined head.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-4. Integrate PR #1011 and the deferred-property provenance slice, then finish
-   PerlOnJava4's built-in Unicode aliases against the 1,065/1,110 diagnostics
-   baseline. Fixing the 29 executed alias failures also unlocks 16 gated match
-   assertions, so the alias-complete target is 1,110/1,110.
-5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+4. Integrate PR #1011, the deferred-property provenance slice, inline-`p`
+   syntax, and control-escape source handling. Finish PerlOnJava4's built-in
+   Unicode aliases against the 1,065/1,110 diagnostics baseline. Fixing the 29
+   executed alias failures also unlocks 16 gated match assertions, so the
+   alias-complete target is 1,110/1,110.
+5. Give the matcher adapter an independent Joni `gpos` cursor. Substitution
+   must search before `pos` when pattern atoms precede `\G`; the current
+   start-at-`pos` shortcut causes `subst.t` tests 165-188 to miss every match.
+   Keep Java's temporary approximation isolated and use Joni's existing
+   `Matcher.search(gpos, start, range, option)` API for final semantics.
+6. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 
