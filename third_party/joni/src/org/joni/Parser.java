@@ -603,6 +603,16 @@ class Parser extends Lexer {
                 }
                 break;
 
+            case '|':   /* Perl branch reset: (?|...|...) */
+                if (syntax.op2QMarkGroupEffect()) {
+                    fetchToken();
+                    node = parseBranchReset(term);
+                    returnCode = 0;
+                    return node;
+                }
+                newSyntaxException(UNDEFINED_GROUP_OPTION);
+                break;
+
             case '^': /* loads default options */
                 if (left() && syntax.op2OptionPerl()) {
                     /* d-imsx */
@@ -1499,6 +1509,35 @@ class Parser extends Lexer {
             }
             return top;
         }
+    }
+
+    private Node parseBranchReset(TokenType term) {
+        int captureBase = env.numMem;
+        int captureMax = captureBase;
+        Node branch = parseBranch(term);
+        captureMax = Math.max(captureMax, env.numMem);
+
+        if (token.type == term) {
+            env.numMem = captureMax;
+            return branch;
+        }
+        if (token.type != TokenType.ALT) {
+            parseSubExpError(term);
+        }
+
+        ListNode top = ListNode.newAlt(branch, null);
+        ListNode tail = top;
+        while (token.type == TokenType.ALT) {
+            env.numMem = captureBase;
+            fetchToken();
+            branch = parseBranch(term);
+            captureMax = Math.max(captureMax, env.numMem);
+            tail.setTail(ListNode.newAlt(branch, null));
+            tail = tail.tail;
+        }
+        env.numMem = captureMax;
+        if (token.type != term) parseSubExpError(term);
+        return top;
     }
 
     /* term_tok: TK_EOT or TK_SUBEXP_CLOSE */
