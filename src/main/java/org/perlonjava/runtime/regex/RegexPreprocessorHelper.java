@@ -528,6 +528,15 @@ public class RegexPreprocessorHelper {
                 // Perl \a is BEL (0x07)
                 sb.setLength(sb.length() - 1);
                 sb.append("\\x07");
+            } else if (c2 == 'u') {
+                // Perl's regex engine does not treat backslash-u plus four
+                // digits as a Unicode escape (code points use hex braces). In a runtime pattern the
+                // unrecognized backslash is passed through and `u` is matched
+                // literally. Joni otherwise interprets that sequence Java-style,
+                // changing diagnostic-text patterns into a NUL
+                // match instead of matching the diagnostic text.
+                sb.setLength(sb.length() - 1);
+                sb.append('u');
             } else {
                 // Other escape sequences, pass through
                 sb.append(Character.toChars(c2));

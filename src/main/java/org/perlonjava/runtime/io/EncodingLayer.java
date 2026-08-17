@@ -1,5 +1,8 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.*;
@@ -150,6 +153,19 @@ public class EncodingLayer implements IOLayer {
      */
     @Override
     public String processOutput(String output) {
+        if (!encoder.canEncode(output)) {
+            int bad = output.codePoints()
+                    .filter(cp -> !encoder.canEncode(new String(Character.toChars(cp))))
+                    .findFirst()
+                    .orElse(0xFFFD);
+            String encoding = charset.equals(StandardCharsets.US_ASCII)
+                    ? "ascii"
+                    : charset.name().toLowerCase(java.util.Locale.ROOT);
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar(String.format("\\x{%x} does not map to %s", bad, encoding)),
+                    new RuntimeScalar(""),
+                    "utf8");
+        }
         // Encode string to bytes using the charset
         byte[] bytes = output.getBytes(charset);
 

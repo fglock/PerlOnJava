@@ -983,19 +983,28 @@ sub _create_install_makefile {
     my @pl_cmds;
     my @pl_rules;
     my %pl_targets;
+    my %pl_target_dirs;
     if ($args->{PL_FILES} && %{$args->{PL_FILES}}) {
         for my $pl (sort keys %{$args->{PL_FILES}}) {
             my $target = $args->{PL_FILES}{$pl};
             if (ref $target eq 'ARRAY') {
                 for my $t (@$target) {
                     $pl_targets{$t} = 1;
+                    my $dir = dirname($t);
+                    push @pl_cmds, _shell_mkdir($dir)
+                        if $dir ne '.' && !$pl_target_dirs{$dir}++;
                     push @pl_cmds, "\t-$perl $pl $t";
-                    push @pl_rules, "$t :: $pl pm_to_blib\n\t-$perl $pl $t\n";
+                    my $mkdir = $dir ne '.' ? _shell_mkdir($dir) . "\n" : '';
+                    push @pl_rules, "$t :: $pl pm_to_blib\n$mkdir\t-$perl $pl $t\n";
                 }
             } else {
                 $pl_targets{$target} = 1;
+                my $dir = dirname($target);
+                push @pl_cmds, _shell_mkdir($dir)
+                    if $dir ne '.' && !$pl_target_dirs{$dir}++;
                 push @pl_cmds, "\t-$perl $pl $target";
-                push @pl_rules, "$target :: $pl pm_to_blib\n\t-$perl $pl $target\n";
+                my $mkdir = $dir ne '.' ? _shell_mkdir($dir) . "\n" : '';
+                push @pl_rules, "$target :: $pl pm_to_blib\n$mkdir\t-$perl $pl $target\n";
             }
         }
     }

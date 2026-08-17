@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
+use Config ();
 use Cwd qw(getcwd);
 use File::Temp qw(tempdir);
 
@@ -13,9 +14,14 @@ END {
 
 chdir $tmpdir or die "chdir $tmpdir: $!";
 
+open my $makefile_pl, '>', 'Makefile.PL'
+    or die "create Makefile.PL marker: $!";
+print {$makefile_pl} "# generated test fixture\n";
+close $makefile_pl or die "close Makefile.PL marker: $!";
+
 open my $pl, '>', 'ReadKey.pm.PL'
     or die "create generated pm template: $!";
-print {$pl} "open my \$out, '>', 'ReadKey.pm' or die \$!; print {\$out} qq{package Term::ReadKey; 1;\\n}; close \$out;\n";
+print {$pl} "open my \$out, '>', \$ARGV[0] or die \$!; print {\$out} qq{package Term::ReadKey; 1;\\n}; close \$out;\n";
 close $pl or die "close generated pm template: $!";
 
 use ExtUtils::MakeMaker;
@@ -23,8 +29,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME     => 'Term::ReadKey',
     VERSION  => '0.001',
-    PL_FILES => { 'ReadKey.pm.PL' => 'ReadKey.pm' },
-    PM       => { 'ReadKey.pm'    => '$(INST_ARCHLIBDIR)/ReadKey.pm' },
+    PL_FILES => { 'ReadKey.pm.PL' => '$(INST_LIB)/Term/ReadKey.pm' },
 );
 
 open my $mf, '<', 'Makefile' or die "open generated Makefile: $!";
@@ -45,6 +50,17 @@ like(
     $makefile,
     qr/ReadKey\.pm\.PL/,
     'PL_FILES command is still emitted',
+);
+
+my $make = $Config::Config{make} || 'make';
+is(
+    system($make, 'all'),
+    0,
+    'PL_FILES can generate a module into a nested blib directory',
+);
+ok(
+    -f 'blib/lib/Term/ReadKey.pm',
+    'PL_FILES creates its nested module target',
 );
 
 done_testing();

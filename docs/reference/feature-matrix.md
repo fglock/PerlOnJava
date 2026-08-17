@@ -780,6 +780,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   scalar taint inspection.
 - ✅  **String::Similarity**: Java XS replacement for Unicode-aware string
   similarity scoring.
+- ✅  **Text::Markdown::Hoedown**: Java XS replacement over commonmark-java,
+  including HTML, table-of-contents, extension flags, and callback renderers.
 - 🟡 **Authen::PAM**: the generated CPAN Perl API loads through a Java XS
   compatibility bridge and exposes PAM constants; native conversations are
   not yet implemented and return `PAM_SYSTEM_ERR`.
