@@ -454,13 +454,17 @@ matcher-specific timeouts on both execution backends.
   - [x] Retired the unreachable top-level `(*PRUNE)` text rewrite after native
     Joni control-verb gates passed under default and forced-Java policy
     (`5760874e4`; 316 preprocessor lines removed).
+  - [x] Removed the disabled invalid-brace pass and its exclusive helpers
+    (`4be6a48e3`; 208 preprocessor lines removed), retaining active Perl/Joni
+    quantifier diagnostics as explicit focused hard/TODO gates.
 - [ ] Phase 6: Integration and release
 
 ### Next Steps
 
 1. Publish the integrated inline-option parser slice after combined-stack
    focused gates and warning-free `make`, then integrate the validated PRUNE
-   preprocessor retirement commit `5760874e4` as the next stacked slice.
+   and dead invalid-brace preprocessor retirement commits `5760874e4` and
+   `4be6a48e3` as the next stacked slice.
 2. Fix lexical `use bytes` substitution when an upgraded marker regex matches a
    byte subject, without patching generated fixtures. Regenerate the lossless
    corpus and prove that chunks 05–10 no longer match literal boundary markers
