@@ -6916,6 +6916,7 @@ RT::Search::Googleish_Overlay	FAIL			Configure failed	2026-08-12
 RT::System	FAIL			Missing: RT.pm	2026-05-17		
 RT::Todo	FAIL			Unknown test outcome	2026-05-17		
 RT::View::Tree	FAIL			Unknown test outcome	2026-05-17		
+RTF::Encode	FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-08-17		
 RTPG	FAIL			Unknown test outcome	2026-05-10		
 RTSP::Lite	FAIL			Unknown test outcome	2026-05-17		
 RTx::AttachmentZip	FAIL			Unknown test outcome	2026-05-21		
