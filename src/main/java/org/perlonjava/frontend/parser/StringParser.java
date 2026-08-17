@@ -366,8 +366,14 @@ public class StringParser {
         Node parsed;
 
         if (rawStr.startDelim == '\'') {
-            // single quote delimiter, use the string as-is
-            parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
+            // An apostrophe delimiter suppresses ordinary interpolation, but
+            // literal (?{...}) and (??{...}) blocks are still compiled as regex
+            // callbacks. Keep variable interpolation disabled while using the
+            // regex-aware parser so executable source retains its provenance.
+            parsed = StringDoubleQuoted.parseDoubleQuotedString(
+                    ctx, rawStr, false, false, true,
+                    parser != null ? parser.getHeredocNodes() : null,
+                    null, true, isRegexQuoteConstruction);
         } else {
             // Check if /x modifier is present
             boolean hasXModifier = modifiers != null && modifiers.contains("x");
