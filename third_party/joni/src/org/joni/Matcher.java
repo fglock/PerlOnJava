@@ -363,8 +363,13 @@ public abstract class Matcher extends IntHolder {
             try {
                 return searchCommon(next, next, range, option, false);
             } catch (SkipSearch skip) {
-                if (skip.target <= next || skip.target > range) return FAILED;
-                next = skip.target;
+                if (skip.target < next || skip.target > range) return FAILED;
+                if (skip.target == next) {
+                    if (next >= range) return FAILED;
+                    next += enc.length(bytes, next, end);
+                } else {
+                    next = skip.target;
+                }
             } catch (AbortSearch abort) {
                 return FAILED;
             } catch (InterruptedException ex) {
@@ -391,8 +396,13 @@ public abstract class Matcher extends IntHolder {
             try {
                 return searchCommon(next, next, range, option, true);
             } catch (SkipSearch skip) {
-                if (skip.target <= next || skip.target > range) return FAILED;
-                next = skip.target;
+                if (skip.target < next || skip.target > range) return FAILED;
+                if (skip.target == next) {
+                    if (next >= range) return FAILED;
+                    next += enc.length(bytes, next, end);
+                } else {
+                    next = skip.target;
+                }
             } catch (AbortSearch abort) {
                 return FAILED;
             }

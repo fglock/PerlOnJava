@@ -80,6 +80,14 @@ public class TestPerlControlVerbs {
     }
 
     @Test
+    public void namedSkipAtTheCurrentStartAdvancesOneCharacter() {
+        Matcher matcher = matcher(
+                "a*(*MARK:a)(?<b>b)?(?(<b>)(*SKIP:a)(*FAIL)|(?!))|c", "aaabc");
+        assertEquals(4, matcher.search(0, 5, Option.NONE));
+        assertEquals(5, matcher.getEnd());
+    }
+
+    @Test
     public void namedPruneReportsItsFailureName() {
         Matcher matcher = matcher("a(*PRUNE:blocked)b", "ac");
         assertEquals(-1, matcher.search(0, 2, Option.NONE));
