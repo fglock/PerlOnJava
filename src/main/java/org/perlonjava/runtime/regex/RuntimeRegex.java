@@ -186,12 +186,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     Pattern notemptyPatternUnicode;
     JoniRegexPattern recursivePattern;
     JoniRegexPattern recursivePatternUnicode;
+    JoniRegexPattern recursivePatternBytes;
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
     int[] branchResetCaptureMap;
     int patternFlags;
     int patternFlagsUnicode;
     public String patternString;
+    // Source scalar provenance needed when a compiled qr// is reused under
+    // lexical use bytes: byte-backed source characters are already octets.
+    private boolean patternByteBacked;
     String javaPatternString; // Preprocessed Java-compatible pattern for recompilation
     private String requiredLiteral;
     boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
@@ -241,11 +245,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.notemptyPatternUnicode = this.notemptyPatternUnicode;
         copy.recursivePattern = this.recursivePattern;
         copy.recursivePatternUnicode = this.recursivePatternUnicode;
+        copy.recursivePatternBytes = this.recursivePatternBytes;
         copy.setExecutableCallbacks(this.executableCallbacks);
         copy.branchResetCaptureMap = this.branchResetCaptureMap;
         copy.patternFlags = this.patternFlags;
         copy.patternFlagsUnicode = this.patternFlagsUnicode;
         copy.patternString = this.patternString;
+        copy.patternByteBacked = this.patternByteBacked;
         copy.javaPatternString = this.javaPatternString;
         copy.requiredLiteral = this.requiredLiteral;
         copy.hasPreservesMatch = this.hasPreservesMatch;
@@ -313,6 +319,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
+        if (bytesSubstitution && recursivePatternBytes != null
+                && string.type == RuntimeScalarType.BYTE_STRING) {
+            return recursivePatternBytes;
+        }
         if (recursivePatternUnicode != null && recursivePatternUnicode != recursivePattern
                 && regexFlags != null && !regexFlags.isAscii() && Utf8.isUtf8(string)) {
             return recursivePatternUnicode;
@@ -1373,6 +1383,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
             regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
             regex.patternString = originalRegex.patternString;
+            regex.patternByteBacked = originalRegex.patternByteBacked;
             regex.deferredUserDefinedUnicodeProperties =
                     originalRegex.deferredUserDefinedUnicodeProperties;
             regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
@@ -1415,6 +1426,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
                     regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
                     regex.patternString = originalRegex.patternString;
+                    regex.patternByteBacked = originalRegex.patternByteBacked;
                     regex.deferredUserDefinedUnicodeProperties =
                             originalRegex.deferredUserDefinedUnicodeProperties;
                     regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
@@ -1445,8 +1457,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Default: compile as string (cloneTracked() creates a tracked copy
         // so the cached RuntimeRegex is not corrupted by refCount changes)
-        return new RuntimeScalar(compile(patternString.toString(), modifierStr, callSiteDebugMode).cloneTracked())
-                .propagateTaint(patternString);
+        RuntimeRegex compiled = compile(patternString.toString(), modifierStr,
+                callSiteDebugMode).cloneTracked();
+        compiled.patternByteBacked = patternString.type == RuntimeScalarType.BYTE_STRING;
+        return new RuntimeScalar(compiled).propagateTaint(patternString);
     }
 
     static boolean containsExecutableSource(String pattern) {
@@ -1617,6 +1631,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.patternNoInternalMarkers = resolvedRegex.patternNoInternalMarkers;
         regex.patternUnicodeNoInternalMarkers = resolvedRegex.patternUnicodeNoInternalMarkers;
         regex.patternString = resolvedRegex.patternString;
+        regex.patternByteBacked = resolvedRegex.patternByteBacked;
         regex.deferredUserDefinedUnicodeProperties =
                 resolvedRegex.deferredUserDefinedUnicodeProperties;
         regex.regexFlags = resolvedRegex.regexFlags;
@@ -1705,8 +1720,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                                          RuntimeScalar modifiers,
                                                          RuntimeArray callerArgs) {
         RuntimeScalar result = getReplacementRegex(patternString, replacement, modifiers, callerArgs);
-        ((RuntimeRegex) result.value).bytesSubstitution = true;
+        RuntimeRegex regex = (RuntimeRegex) result.value;
+        regex.bytesSubstitution = true;
+        String sourcePattern = patternString.type == RuntimeScalarType.REGEX
+                ? regex.patternString : patternString.toString();
+        if (regex.recursivePattern != null && containsNonAscii(sourcePattern)) {
+            boolean byteBackedPattern = patternString.type == RuntimeScalarType.REGEX
+                    ? regex.patternByteBacked
+                    : patternString.type == RuntimeScalarType.BYTE_STRING;
+            regex.recursivePatternBytes = new JoniRegexPattern(sourcePattern,
+                    regex.regexFlags, regex.executableCallbacks.size(), true,
+                    true, byteBackedPattern);
+        }
         return result;
+    }
+
+    private static boolean containsNonAscii(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 0x7f) return true;
+        }
+        return false;
     }
 
     /**

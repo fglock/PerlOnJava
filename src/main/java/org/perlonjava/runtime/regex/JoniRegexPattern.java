@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import org.jcodings.specific.ISO8859_1Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
 import org.joni.CalloutHandler;
@@ -32,6 +33,7 @@ import org.perlonjava.runtime.runtimetypes.*;
  */
 final class JoniRegexPattern {
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
+    private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
 
     // Ruby syntax defaults \w to ASCII even for a Unicode encoding. Perl's
     // default and /u modes use Unicode character classes; /a adds ASCII_RANGE
@@ -52,6 +54,7 @@ final class JoniRegexPattern {
     private final RegexFlags flags;
     private final boolean hasControlVerbState;
     private final boolean hasDeferredUserDefinedUnicodeProperty;
+    private final boolean byteMode;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0, false);
@@ -63,14 +66,23 @@ final class JoniRegexPattern {
 
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
                      boolean forceAsciiClasses) {
+        this(perlPattern, flags, trustedCalloutCount, forceAsciiClasses, false, false);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses, boolean byteMode,
+                     boolean byteBackedPattern) {
         this.flags = flags;
+        this.byteMode = byteMode;
         hasControlVerbState = hasControlVerbState(perlPattern);
         UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
         hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
         sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
-        byte[] bytes = sourcePattern.getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = sourcePattern.getBytes(byteMode && byteBackedPattern
+                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
-                UTF8Encoding.INSTANCE, PERLONJAVA_SYNTAX);
+                byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
+                PERLONJAVA_SYNTAX);
         namedGroups = collectNamedGroups(regex);
     }
 
@@ -81,7 +93,7 @@ final class JoniRegexPattern {
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
                          RuntimeScalar subject) {
         return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags,
-                hasControlVerbState, input, callbacks, subject);
+                hasControlVerbState, byteMode, input, callbacks, subject);
     }
 
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
@@ -90,6 +102,20 @@ final class JoniRegexPattern {
         synchronized (INPUT_ENCODINGS) {
             return INPUT_ENCODINGS.computeIfAbsent(input, JoniRegexPattern::buildInputEncoding);
         }
+    }
+
+    static InputEncoding byteInputEncoding(String input) {
+        synchronized (BYTE_INPUT_ENCODINGS) {
+            return BYTE_INPUT_ENCODINGS.computeIfAbsent(input,
+                    JoniRegexPattern::buildByteInputEncoding);
+        }
+    }
+
+    private static InputEncoding buildByteInputEncoding(String input) {
+        byte[] bytes = input.getBytes(StandardCharsets.ISO_8859_1);
+        int[] identity = new int[input.length() + 1];
+        for (int i = 0; i < identity.length; i++) identity[i] = i;
+        return new InputEncoding(bytes, identity, identity);
     }
 
     private static InputEncoding buildInputEncoding(String input) {
@@ -634,22 +660,26 @@ final class JoniRegexPattern {
         private boolean matched;
         private int committedLastClosedCapture = -1;
         private final boolean hasControlVerbState;
+        private final boolean byteMode;
         private final List<RuntimeRegexCallback> callbacks;
         private final RuntimeScalar subject;
         private PerlCalloutHandler calloutHandler;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
-                         RegexFlags flags, boolean hasControlVerbState, String input,
+                         RegexFlags flags, boolean hasControlVerbState, boolean byteMode,
+                         String input,
                          List<RuntimeRegexCallback> callbacks, RuntimeScalar subject) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
             this.flags = flags;
             this.hasControlVerbState = hasControlVerbState;
+            this.byteMode = byteMode;
             this.input = input;
             this.callbacks = callbacks;
             this.subject = subject;
-            InputEncoding encoding = inputEncoding(input);
+            InputEncoding encoding = byteMode
+                    ? byteInputEncoding(input) : inputEncoding(input);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
             this.byteToChar = encoding.byteToChar();
@@ -797,12 +827,12 @@ final class JoniRegexPattern {
             if (knownGroup != null) return knownGroup;
             byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
             return regex.nameToBackrefNumber(nameBytes, 0, nameBytes.length,
-                    UTF8Encoding.INSTANCE, captures);
+                    byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE, captures);
         }
 
         private int advanceCodePoint(int offset) {
             return offset >= regionEnd ? regionEnd + 1
-                    : offset + Character.charCount(input.codePointAt(offset));
+                    : offset + (byteMode ? 1 : Character.charCount(input.codePointAt(offset)));
         }
 
         private int toCharOffset(int byteOffset) {
