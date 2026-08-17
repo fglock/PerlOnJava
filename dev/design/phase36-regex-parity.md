@@ -424,6 +424,9 @@ matcher-specific timeouts on both execution backends.
   - [x] Normalized explicit `Is_*` property/value assignments and the colon
     delimiter (PR #1019), gaining exactly 44,944 generated assertions on both
     execution backends without changing any plan.
+  - [x] Rejected 40 invalid Perl inline option/group-name forms in forked Joni
+    with exact JVM/interpreter `reg_mesg.t` parity, reducing residual Joni-only
+    acceptance differences from 198 to 158 (`028602adc`).
   - [ ] Fix byte-mode substitution of upgraded marker regexes so chunks 05–10
     exercise real boundary subjects, then close the property and boundary
     failures with exact JVM/interpreter plan and semantic parity before marking
@@ -455,8 +458,8 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Publish the integrated fatal-Joni-syntax slice after combined-stack focused
-   gates and warning-free `make`, then integrate the validated PRUNE
+1. Publish the integrated inline-option parser slice after combined-stack
+   focused gates and warning-free `make`, then integrate the validated PRUNE
    preprocessor retirement commit `5760874e4` as the next stacked slice.
 2. Fix lexical `use bytes` substitution when an upgraded marker regex matches a
    byte subject, without patching generated fixtures. Regenerate the lossless
