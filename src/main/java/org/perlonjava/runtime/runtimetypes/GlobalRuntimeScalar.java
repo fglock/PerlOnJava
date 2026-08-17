@@ -26,6 +26,21 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         return fullName.equals(variableName);
     }
 
+    String localizedName() {
+        return fullName;
+    }
+
+    RuntimeScalar activeLocalizedValue() {
+        Stack<SavedGlobalState> states = localizedStack();
+        for (int i = states.size() - 1; i >= 0; i--) {
+            SavedGlobalState state = states.get(i);
+            if (state.fullName.equals(fullName)) {
+                return state.localizedVariable;
+            }
+        }
+        return null;
+    }
+
     public static RuntimeScalar makeLocal(String fullName) {
         RuntimeScalar original = GlobalVariable.getGlobalVariable(fullName);
         if (original instanceof ScalarSpecialVariable sv && sv.variableId == ScalarSpecialVariable.Id.INPUT_LINE_NUMBER) {

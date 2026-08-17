@@ -157,8 +157,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // facade synchronized with every lexical package statement, so use the
         // localized scalar identities rather than guessing one package name.
         for (Map.Entry<String, RuntimeScalar> entry
-                : new ArrayList<>(GlobalVariable.globalVariables.entrySet())) {
-            if (!(entry.getValue() instanceof GlobalRuntimeScalar)) continue;
+                : DynamicVariableManager.activeLocalizedGlobalScalars().entrySet()) {
             if (entry.getKey().endsWith("::REGMARK")) {
                 entry.getValue().set(markValue);
             } else if (entry.getKey().endsWith("::REGERROR")) {

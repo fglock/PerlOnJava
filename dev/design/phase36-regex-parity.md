@@ -222,7 +222,7 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phase 4 semantic gate complete at 550/555
+### Current Status: Joni default; Phase 1 differential and Phase 2 controls active
 
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
@@ -250,6 +250,15 @@ one-level failed callback state. The focused `pat_re_eval.t` gate executes all
 555 assertions with 550 semantic assertions passing on both execution backends;
 the remaining five inspect Perl's optimizer/debug transcript.
 
+The forced-backend differential is running in the parallel PerlOnJava3
+checkout. Its completed forced-Java/JVM leg covers all 80 files at
+49,923/94,823 versus PR 958's 50,273/94,771. The apparent aggregate regression
+is dominated by `pat{,_thr}.t` aborting after test 239 on a runtime eval-group
+policy error; that source-policy slice is assigned independently. Forced Joni
+has exposed bounded timeout clusters in `regexp*.t`, `regex_sets_compat.t`, and
+`pat_psycho*`, plus Unicode/POSIX-class gaps; these remain provisional until
+the same-binary matrix report closes.
+
 ### Completed Phases
 
 - [x] Phase 0: Reproducible differential baseline (2026-08-17)
@@ -265,6 +274,8 @@ the remaining five inspect Perl's optimizer/debug transcript.
   - [x] Added the temporary backend selector and made Joni the default.
   - [x] Routed ordinary matching, substitution, and split through the selected
     backend without per-operation fallback.
+  - [x] Completed the forced-Java/JVM 80-file leg and identified the
+    `pat{,_thr}.t` test-239 source-policy abort as the leading regression.
   - [ ] Re-run the complete forced-backend matrix and prove the exit criterion.
 - [ ] Phase 2: Conditions and backtracking-visible state (in progress)
   - [x] Implemented executable callback conditions, control verbs including
@@ -272,6 +283,15 @@ the remaining five inspect Perl's optimizer/debug transcript.
   - [x] Closed runtime callback capture ownership at final scope teardown.
   - [x] Closed failed-path `$^N` and `$+` restoration through recursive
     callback unwind.
+  - [x] Added direct active-localization lookup for runtime control variables;
+    dynamic `PRUNE`, `SKIP`, and `COMMIT` update package `$REGERROR` without
+    mutating non-localized `$REGERROR`/`$REGMARK` variables on either backend.
+  - [ ] Propagate control-verb cuts from nested `(??{...})` matcher programs;
+    `pat_advanced.t` test 891 currently observes 9 callback executions instead
+    of 3.
+  - [ ] Resolve the long-corpus package-localization state behind
+    `pat_advanced.t` tests 922-933; the equivalent focused package oracle passes
+    on system Perl, JVM, and interpreter.
 - [ ] Phase 3: Unicode and pattern syntax completion (in progress)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
@@ -291,19 +311,23 @@ the remaining five inspect Perl's optimizer/debug transcript.
 
 ### Next Steps
 
-1. Capture forced-Java and forced-Joni results for the full 80-file direct regex
-   corpus, compare both against PR 958, and classify any newly exposed gaps.
-2. Run the applicable `pat_advanced.t` control-verb and condition sections,
-   then close Phase 2 if their direct and interpreter results agree.
-3. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
+1. Finish the forced-Joni/JVM leg and remaining execution-backend legs, publish
+   the same-binary 80-file report, and classify every timeout and zero-TAP file.
+2. Fix nested dynamic-program cut propagation for `(*PRUNE)`, then extend the
+   same Joni VM mechanism to `SKIP`, `COMMIT`, and `THEN` with focused engine
+   and standard-Perl oracles.
+3. Diagnose why the long `pat_advanced.t` environment detaches Fnorble's
+   localized `$REGERROR` while the equivalent focused oracle remains attached;
+   close tests 922-933 on JVM and interpreter.
+4. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
    closes, remove its hunk and rerun the targeted importer so validation uses
    the original Perl 5.44 assertions.
-4. Capture the clean-branch JVM and interpreter 80-file baselines and compare
+5. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-5. Inventory the remaining uncommon Unicode aliases and invalid-property
+6. Inventory the remaining uncommon Unicode aliases and invalid-property
    diagnostics against Perl 5.44's bundled tables, then move the next
    matcher-semantic preprocessor slice into Joni.
-6. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+7. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 
@@ -314,9 +338,9 @@ the remaining five inspect Perl's optimizer/debug transcript.
 - Resource-sensitive baselines must wait for unrelated Java builds to finish.
 - The interpreter does not reliably expose the lexical package through
   `InterpreterState.currentPackage` while a regex executes. Localized
-  `$REGMARK`/`$REGERROR` slots are therefore discovered by their active
-  `GlobalRuntimeScalar` identities; a future regex call-site metadata field can
-  make nested simultaneous localizations exact without scanning active globals.
+  `$REGMARK`/`$REGERROR` slots are therefore enumerated from active dynamic
+  `GlobalRuntimeScalar` bindings rather than inferred from the current package
+  or scanned from dormant globals.
 - Shared parser or `eval` failures are fixed in focused slices when they block a
   regex semantic test, rather than being approximated inside the matcher.
 
