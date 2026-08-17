@@ -66,6 +66,7 @@ Main synchronization script that imports files from perl5/ based on config.yaml.
 
 **Features:**
 - Copies individual files or entire directories
+- Generates pinned-source test artifacts such as `unicore/TestProp.pl`
 - Applies patches automatically
 - Creates necessary directories
 - Validates sources exist
@@ -79,6 +80,34 @@ perl dev/import-perl5/sync.pl --help
 ```
 
 Protected targets (`protected: true` in YAML) are always excluded from bulk directory rsync using the **full** config list, even when `--only` is used.
+
+#### Generated Unicode property fixture
+
+The upstream `uniprops01.t` through `uniprops10.t` wrappers load
+`perl5_t/lib/unicore/TestProp.pl`. Perl does not commit that file: its build
+generates it from `perl5/lib/unicore/mktables` and the pinned Unicode database.
+PerlOnJava therefore generates a losslessly split fixture explicitly:
+
+```bash
+perl dev/import-perl5/sync.pl --only TestProp.pl
+```
+
+Generation runs in a temporary copy of `perl5/lib/unicore`, so it does not
+modify the pinned source tree. The importer retains every canonical assertion,
+splits the ten existing `TESTCHUNK` sections into ignored `TestProp-01.pl`
+through `TestProp-10.pl` files, and installs a small `TestProp.pl` dispatcher.
+Each unchanged upstream wrapper consequently parses only its selected section
+instead of parsing the complete 12 MB corpus before applying its chunk guard.
+Running the dispatcher without `TESTCHUNK` still evaluates all sections in
+canonical order.
+
+The dispatcher embeds the canonical SHA-256 and per-chunk call counts. The
+dispatcher and all chunks remain ignored with the rest of `perl5_t/` and are
+not included in the JAR or distribution. A clean checkout obtains them by
+running the command above (a full unfiltered sync also runs this row). Unrelated
+filtered syncs neither generate nor remove them. Missing Unicode inputs or an
+incompatible host Perl make the sync fail with an actionable diagnostic rather
+than silently leaving the ten wrappers unavailable.
 
 ### add_module.pl
 
