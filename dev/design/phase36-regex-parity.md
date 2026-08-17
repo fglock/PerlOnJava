@@ -258,8 +258,11 @@ policy error; that source-policy slice is assigned independently. The completed
 forced-Joni/JVM leg is 32,479/77,612, with ten bounded timeout files. Its
 largest completed losses against forced Java are `reg_posixcc.t` (-508),
 `reg_mesg.t` (-300), both `pat_advanced` variants (-240 each),
-`alpha_assertions.t` (-89), and `regex_sets.t` (-84). The remaining execution
-backend legs and final same-binary classification report are still running.
+`alpha_assertions.t` (-89), and `regex_sets.t` (-84). The completed
+forced-Java/interpreter leg covers all 80 files at 50,021/94,823 with no runner
+timeouts, 98 more passing assertions than forced-Java/JVM, and an identical
+plan. The forced-Joni/interpreter leg and final same-binary classification
+report are still running.
 
 ### Completed Phases
 
@@ -292,9 +295,10 @@ backend legs and final same-binary classification report are still running.
     requests from nested `(??{...})` matcher programs. A 9-assertion
     standard-Perl oracle passes on JVM and interpreter, and `pat_advanced.t`
     test 891 now observes 3 callback executions instead of 9.
-  - [ ] Resolve the long-corpus package-localization state behind
-    `pat_advanced.t` tests 922-933; the equivalent focused package oracle passes
-    on system Perl, JVM, and interpreter.
+  - [x] Refreshed the package alias stored for a reused `our` symbol when a
+    later declaration changes package. The focused package oracle passes on
+    system Perl, JVM, and interpreter, and `pat_advanced.t` tests 922-933 pass
+    on both execution backends without a regex-adapter workaround.
 - [ ] Phase 3: Unicode and pattern syntax completion (in progress)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
@@ -314,20 +318,17 @@ backend legs and final same-binary classification report are still running.
 
 ### Next Steps
 
-1. Finish the remaining execution-backend legs, publish the same-binary 80-file
+1. Finish the forced-Joni/interpreter leg, publish the same-binary 80-file
    report, and classify every timeout and zero-TAP file.
-2. Diagnose why the long `pat_advanced.t` environment detaches Fnorble's
-   localized `$REGERROR` while the equivalent focused oracle remains attached;
-   close tests 922-933 on JVM and interpreter.
-3. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
+2. Map each remaining `pat.t.patch` hunk to its semantic blocker. As each blocker
    closes, remove its hunk and rerun the targeted importer so validation uses
    the original Perl 5.44 assertions.
-4. Capture the clean-branch JVM and interpreter 80-file baselines and compare
+3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-5. Inventory the remaining uncommon Unicode aliases and invalid-property
+4. Inventory the remaining uncommon Unicode aliases and invalid-property
    diagnostics against Perl 5.44's bundled tables, then move the next
    matcher-semantic preprocessor slice into Joni.
-6. Keep the warning-free whole-unit-suite gate green with Joni as the default;
+5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.
 

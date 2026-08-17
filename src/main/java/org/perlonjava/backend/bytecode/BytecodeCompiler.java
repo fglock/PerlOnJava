@@ -3616,6 +3616,19 @@ public class BytecodeCompiler implements Visitor {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
+                    // A later `our $x` under a different package establishes
+                    // a new lexical package alias even when an outer/sibling
+                    // declaration reused the same bare name. Refresh the
+                    // symbol entry as well as its register value; otherwise
+                    // later reads keep qualifying $x with the old package.
+                    if (hasVariable(varName) && isOurVariable(varName)) {
+                        SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(varName);
+                        if (entry != null
+                                && !getCurrentPackage().equals(entry.perlPackage())) {
+                            addVariable(varName, "our");
+                        }
+                    }
+
                     // Check if already declared in current scope
                     if (hasVariable(varName)) {
                         int reg = getVariableRegister(varName);
