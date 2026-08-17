@@ -1,6 +1,10 @@
 package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.StringOperators;
+import org.perlonjava.runtime.runtimetypes.Overload;
+import org.perlonjava.runtime.runtimetypes.OverloadContext;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -10,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /** Runtime interpolation result that keeps executable regex callbacks out of strings. */
 public final class RuntimeRegexTemplate {
@@ -58,7 +64,10 @@ public final class RuntimeRegexTemplate {
             // A lone interpolation must retain its runtime type so qr
             // overloading and an already-compiled regex remain observable.
             // Only a parser-created callback needs a new template skeleton.
-            if (!(only.value instanceof RuntimeRegexCallback)) return only;
+            if (!(only.value instanceof RuntimeRegexCallback)) {
+                RuntimeScalar overloaded = resolveLoneRegexOverload(only);
+                return overloaded == null ? only : overloaded;
+            }
         }
         boolean hasBlessedPart = false;
         for (RuntimeBase part : parts.elements) {
@@ -68,15 +77,10 @@ public final class RuntimeRegexTemplate {
             }
         }
         if (hasBlessedPart) {
-            RuntimeScalar concatenated = new RuntimeScalar("");
-            for (RuntimeBase part : parts.elements) {
-                RuntimeScalar scalar = part.scalar();
-                if (scalar.value instanceof RuntimeRegexCallback callback) {
-                    scalar = new RuntimeScalar(callback.source == null ? "" : callback.source);
-                }
-                concatenated = StringOperators.stringConcat(concatenated, scalar);
-            }
-            return concatenated;
+            // Overload dispatch is complete after this pass. A dot overload is
+            // allowed to return another blessed value; assemble that result
+            // without dispatching the same interpolation a second time.
+            parts = resolveBlessedParts(parts);
         }
         StringBuilder pattern = new StringBuilder();
         List<RuntimeRegexCallback> callbacks = new ArrayList<>();
@@ -113,6 +117,101 @@ public final class RuntimeRegexTemplate {
                 : new RuntimeScalar(new RuntimeRegexTemplate(pattern.toString(), callbacks));
         result.tainted = tainted;
         return result;
+    }
+
+    private static RuntimeScalar resolveLoneRegexOverload(RuntimeScalar scalar) {
+        int blessId = RuntimeScalarType.blessedId(scalar);
+        if (blessId >= 0) return null;
+        OverloadContext overload = OverloadContext.prepare(blessId);
+        if (overload == null) return null;
+
+        RuntimeScalar qr = resolveQrOverload(overload, scalar);
+        if (qr != null) return qr;
+        RuntimeScalar stringified = overload.tryOverload("(\"\"", unaryOverloadArguments(scalar));
+        if (stringified != null) return resolveStringificationResult(stringified);
+        if (!overload.allowsFallbackAutogen()) {
+            throw new PerlCompilerException("Operation \"qr\": no method found,");
+        }
+        return null;
+    }
+
+    private static RuntimeList resolveBlessedParts(RuntimeList parts) {
+        RuntimeList resolved = new RuntimeList();
+        resolved.add(new RuntimeScalar(""));
+
+        for (RuntimeBase part : parts.elements) {
+            RuntimeScalar scalar = part.scalar();
+            int blessId = RuntimeScalarType.blessedId(scalar);
+            if (blessId >= 0) {
+                resolved.add(scalar);
+                continue;
+            }
+
+            OverloadContext overload = OverloadContext.prepare(blessId);
+            RuntimeScalar qr = overload == null ? null : resolveQrOverload(overload, scalar);
+            if (qr != null) {
+                resolved.add(qr);
+                continue;
+            }
+
+            RuntimeScalar left = concatenateForOverload(resolved);
+            RuntimeScalar concatenated = OverloadContext.tryTwoArgumentOverloadDirect(
+                    left, scalar, RuntimeScalarType.blessedId(left), blessId, "(.");
+            if (concatenated != null) {
+                resolved = new RuntimeList(concatenated);
+                continue;
+            }
+
+            RuntimeScalar stringified = overload == null ? null
+                    : overload.tryOverload("(\"\"", unaryOverloadArguments(scalar));
+            if (stringified != null) {
+                resolved.add(resolveStringificationResult(stringified));
+                continue;
+            }
+
+            resolved = new RuntimeList(StringOperators.stringConcat(left, scalar));
+        }
+        return resolved;
+    }
+
+    /**
+     * A dot overload receives the textual pattern assembled so far. Executable
+     * callbacks on that side consequently become runtime source; only a qr or
+     * stringification overload that directly returns REGEXP keeps provenance.
+     */
+    private static RuntimeScalar concatenateForOverload(RuntimeList parts) {
+        RuntimeScalar concatenated = new RuntimeScalar("");
+        for (RuntimeBase part : parts.elements) {
+            RuntimeScalar scalar = part.scalar();
+            if (scalar.value instanceof RuntimeRegexCallback callback) {
+                scalar = new RuntimeScalar(callback.source == null ? "" : callback.source);
+            }
+            concatenated = StringOperators.stringConcat(concatenated, scalar);
+        }
+        return concatenated;
+    }
+
+    private static RuntimeScalar resolveQrOverload(OverloadContext overload,
+                                                    RuntimeScalar scalar) {
+        RuntimeScalar qr = overload.tryOverload("(qr", new RuntimeArray(scalar));
+        if (qr != null && qr.type != RuntimeScalarType.REGEX) {
+            throw new PerlCompilerException("Overloaded qr did not return a REGEXP");
+        }
+        return qr;
+    }
+
+    private static RuntimeScalar resolveStringificationResult(RuntimeScalar result) {
+        RuntimeScalar current = result;
+        for (int depth = 0; depth < 10 && RuntimeScalarType.blessedId(current) < 0; depth++) {
+            RuntimeScalar next = Overload.stringify(current);
+            if (next == current) break;
+            current = next;
+        }
+        return current;
+    }
+
+    private static RuntimeArray unaryOverloadArguments(RuntimeScalar scalar) {
+        return new RuntimeArray(scalar, scalarUndef, new RuntimeScalar(""));
     }
 
     /** Preserve callback-bearing qr values while an array is joined for interpolation. */
