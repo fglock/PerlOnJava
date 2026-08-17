@@ -1,6 +1,6 @@
 # Perl Threads Completion Plan
 
-**Status:** Phases 1–4 implemented; Phase 5 release validation in progress
+**Status:** Complete
 **Version:** 4.0
 **Date:** 2026-08-17
 
@@ -135,6 +135,13 @@ both backends and both carrier policies.
 evidence, and GitHub Actions is green on both operating systems.
 
 ## Release Gates
+
+### Current release evidence
+
+- `make` passes after the five implementation phases.
+- `make test-threads-release` passes all four backend/carrier configurations: 64 distribution files and 1,891 assertions per mode, the four-mode direct/wrapper core parity matrix, and 48 strict regex anchors per backend.
+- `make test-threads-ecosystem` passes pinned Test2, Storable, Moose, DBI, and Net::SSLeay coverage plus the DBIx::Class corpus (325 files and 43,017 assertions).
+- The complete 622-file imported-core differential against the exact base commit reports zero regressions and 38 additional passing assertions across three files. GitHub Actions passes on Ubuntu and Windows.
 
 All output is captured. Every `jperl`, `jcpan`, and `prove` command is wrapped
 in `timeout`.

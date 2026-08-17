@@ -20,8 +20,9 @@ interpreter with Java virtual and platform carriers. This is the delivered
 public-module milestone. The source-first core-wrapper gate is implemented: all
 five non-regex Perl core thread files pass 849/849 on both backends and
 carriers, and the twelve regex wrappers are compared with their same-commit
-direct companions. Final four-mode activation waits for a direct interpreter
-executable-regex timeout in the independent Phase 36/Joni project.
+direct companions. The callout-enabled Joni engine is integrated; remaining
+direct regex-language gaps are tracked independently and may not be hidden by
+thread wrappers.
 
 ## Snapshot and Shared Storage
 
@@ -37,6 +38,9 @@ Use `threads::shared` only for state that must be common:
 - `share(@array)` and `share(%hash)` follow Perl's destructive aggregate
   semantics and start with empty shared storage.
 - `shared_clone($value)` recursively publishes a preserving shared copy.
+- Shared aggregate writes accept ordinary scalar values and references whose
+  referents are already shared. Inserting a private reference throws `Invalid
+  value for shared scalar` before that destination write occurs.
 - `lock`, `cond_wait`, `cond_timedwait`, `cond_signal`, and `cond_broadcast`
   provide recursive lexical locking and condition coordination.
 - Nested aggregate fetches return runtime-local proxy references over common
@@ -44,6 +48,11 @@ Use `threads::shared` only for state that must be common:
   final `DESTROY` ownership remains global across views.
 - Tied scalars retain runtime-local callback state. Sharing an already tied
   array or hash converts it to Perl's native shared aggregate behavior.
+
+Loading `threads::shared` without first loading `threads` retains threaded
+Perl's inactive behavior: `:shared` is accepted but does not publish storage.
+This keeps modules such as `Thread::Queue` usable in their documented
+single-threaded mode.
 
 The recommended design is to share small coordination variables and keep bulk
 mutable work child-local. See the
