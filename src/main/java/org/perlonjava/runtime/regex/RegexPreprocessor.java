@@ -154,7 +154,6 @@ public class RegexPreprocessor {
         s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
         s = normalizeQuantifiers(s);
-        s = optimizeTerminatedWhitespaceQuantifiers(s);
         s = optimizeTerminatedLazyNegatedClasses(s);
 
         // Expand multi-character case folds when case-insensitive flag is set
@@ -167,85 +166,6 @@ public class RegexPreprocessor {
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
         return preferOmniHolderLiteralAlternation(result);
-    }
-
-    private static String optimizeTerminatedWhitespaceQuantifiers(String pattern) {
-        StringBuilder result = new StringBuilder(pattern.length());
-        int i = 0;
-        int len = pattern.length();
-        boolean escaped = false;
-
-        while (i < len) {
-            char ch = pattern.charAt(i);
-
-            if (escaped) {
-                result.append(ch);
-                escaped = false;
-                i++;
-                continue;
-            }
-
-            if (ch == '[' && !startsExtendedCharacterClass(pattern, i)) {
-                int classEnd = findRegularCharacterClassEnd(pattern, i);
-                if (classEnd > i) {
-                    result.append(pattern, i, classEnd + 1);
-                    i = classEnd + 1;
-                    continue;
-                }
-            }
-
-            if (ch == '\\'
-                    && i + 3 < len
-                    && pattern.charAt(i + 1) == 's'
-                    && (pattern.charAt(i + 2) == '*' || pattern.charAt(i + 2) == '+')) {
-                int literalOffset = i + 3;
-                if (pattern.charAt(literalOffset) == '+') {
-                    result.append(pattern, i, literalOffset + 1);
-                    i = literalOffset + 1;
-                    continue;
-                }
-                if (pattern.charAt(literalOffset) == '?') {
-                    literalOffset++;
-                }
-
-                LiteralToken nextLiteral = readLiteralToken(pattern, literalOffset);
-                if (nextLiteral != null && !isPerlWhitespaceCodePoint(nextLiteral.codePoint)) {
-                    result.append("\\s").append(pattern.charAt(i + 2)).append('+');
-                    i = literalOffset;
-                    continue;
-                }
-            }
-
-            if (ch == '\\') {
-                result.append(ch);
-                escaped = true;
-                i++;
-                continue;
-            }
-
-            result.append(ch);
-            i++;
-        }
-
-        return result.toString();
-    }
-
-    private static boolean isPerlWhitespaceCodePoint(int codePoint) {
-        return codePoint == '\t'
-                || codePoint == '\n'
-                || codePoint == 0x000B
-                || codePoint == '\f'
-                || codePoint == '\r'
-                || codePoint == ' '
-                || codePoint == 0x0085
-                || codePoint == 0x00A0
-                || codePoint == 0x1680
-                || (codePoint >= 0x2000 && codePoint <= 0x200A)
-                || codePoint == 0x2028
-                || codePoint == 0x2029
-                || codePoint == 0x202F
-                || codePoint == 0x205F
-                || codePoint == 0x3000;
     }
 
     /**
