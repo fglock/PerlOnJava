@@ -35,10 +35,73 @@ logs are in `/tmp/feature-audit-*` and are not committed by default.
 | `postderef_qq` interpolation | pass | pass | pass | Existing `postderef_interpolation.t` passes all four assertions. |
 | `unicode_eval` / `evalbytes` | pass | pass | pass | Existing `evalbytes.t` passes all three assertions. |
 | Container `refaliasing` | pass | pass | pass | Existing `refaliasing_containers.t` passes both aliasing assertions. |
+| `Safe` sandbox | pass | pass | pass | `safe_permit_only.t` passes all five assertions. |
+| `encoding` pragma | pass | pass | pass | `encoding_pragma.t` and the encoding-layer probe pass. |
+| `integer` pragma | pass | pass | pass | Native-width arithmetic and bitwise tests pass. |
+| `Unicode::Normalize` | pass | pass | pass | Canonical and compatibility normalization tests pass. |
+| `builtin::export_lexically` | pass | pass | pass | Existing lexical export test passes all assertions. |
+| Overload `++`, `.`, and `=` | pass | pass | pass | Focused increment, concatenation, and copy-constructor tests pass. |
+| `overloading` pragma | pass | pass | pass | Existing lexical enable/disable test passes. |
+| `bigint` / `bignum` | pass | pass | precision failure / timeout | Numeric pragmas are partial; `bigrat` passes separately. |
+| Local glob/filehandle boundaries | pass | pass | pass | Four focused glob/typeglob tests pass; exact `local *HANDLE = *HANDLE` semantics remain separate. |
+| `unicode_strings` | pass | pass | pass | Unicode uppercase mapping for a non-UTF-8 byte string passes. |
+| `bigrat` | pass | pass | pass | Isolated rational-arithmetic probe passes. |
+| Multibyte encoded I/O positioning | pass | pass | pass | Representative `seek`, `tell`, and `truncate` behavior passes. |
 
 The exact commands and test names are documented in the probe README. A
 passing probe does not promote a broad feature automatically: semantic and
 edge-case coverage must be sufficient for the documented claim.
+
+## Completion Inventory
+
+The remaining matrix entries have been reconciled into the following evidence
+classes. An item is considered audited when its status is supported by a
+probe, an implementation/design source, or an explicit JVM boundary—not when
+the feature itself is implemented.
+
+### Probe-confirmed remaining gaps
+
+| Gap | Evidence | Disposition |
+|---|---|---|
+| Restricted hashes | [`remaining_semantics.t`](../tools/feature-audit/remaining_semantics.t) | `Hash::Util` loads, but lock enforcement fails on both backends. |
+| `fork` | [`remaining_semantics.t`](../tools/feature-audit/remaining_semantics.t) | Native Perl returns a child PID; both backends leave it undefined. |
+| DBM | [`remaining_semantics.t`](../tools/feature-audit/remaining_semantics.t) | Native round trip passes; `dbmopen` is explicitly unimplemented on both backends. |
+| `ops` | [`remaining_semantics.t`](../tools/feature-audit/remaining_semantics.t) | Native module loads; PerlOnJava cannot locate `ops.pm`. |
+| Interpreter `bigint`/`bignum` | [`numeric_bigint.t`](../tools/feature-audit/numeric_bigint.t), [`numeric_bignum.t`](../tools/feature-audit/numeric_bignum.t) | Interpreter loses `bigint` precision and times out on `bignum`; JVM and native checks pass. |
+
+### Passing representative behavior
+
+`unicode_strings`, `bigrat`, encoded `seek`/`tell`/`truncate`, `Safe`,
+`encoding`, `integer`, `Unicode::Normalize`, lexical builtin export,
+`overloading`, local glob/filehandle boundaries, selected overload operators,
+taint mode, bytes scope, POSIX math, warnings bits, and regex conditional/
+Unicode cases have native/JVM/interpreter evidence. Their remaining matrix
+notes describe only the untested edge cases or broader APIs.
+
+### Source- or boundary-confirmed gaps
+
+These do not have a meaningful “system Perl versus jperl” probe because the
+gap is an embedding interface, debugger command, native boundary, or JVM
+execution constraint:
+
+- debugger custom modules, `perl5db.pl`, restart, history, command editing,
+  conditional breakpoints, watches, and line actions — tracked in the
+  [debugger reference](../../docs/reference/debugger.md);
+- missing command-line switches, startup `sitecustomize.pl`, compiler hint
+  variables, lexical `no strict refs`, `locale`, `ops`, `vmsish`, builtin
+  `load_module`, exporter `*glob`, and the remaining overload operators —
+  tracked in the [feature matrix](../../docs/reference/feature-matrix.md);
+- direct Perl-to-Java interoperation and native XS/C loading — explicitly
+  bounded in the [feature matrix](../../docs/reference/feature-matrix.md);
+- JSR-223 `Invocable`, `ScriptContext` writers, Java `Bindings`, and the
+  `THREADING` factory parameter — documented in the [JSR-223 design](jsr223-perlonjava-web.md);
+- true OS-level `fork`, native Perl `dump`, DBM, class-name invocation, and
+  JVM-dependent destructor/file lifecycle behavior — documented as JVM
+  boundaries in the [feature matrix](../../docs/reference/feature-matrix.md).
+
+These entries are not left as unexplained “TODO” claims: each has a current
+status, an evidence source, and—where applicable—a separate implementation
+follow-up rather than an audit ambiguity.
 
 ## Audit Method
 
@@ -194,7 +257,7 @@ documentation-only planning change.
 
 ## Progress Tracking
 
-### Current Status: Initial probe batch complete; broader audit in progress
+### Current Status: Documented gap inventory audited; implementation follow-ups remain
 
 ### Completed Phases
 
@@ -212,17 +275,21 @@ documentation-only planning change.
   and container `refaliasing`; corrected their stale matrix status.
 - [x] Validated the full 11-field `caller()` tuple and key subroutine metadata
   with a dedicated native/JVM/interpreter probe.
+- [x] Audited the main pragma, taint, Safe, overload, bytes, I/O, POSIX,
+  warnings, glob, and normalization test batch on all three runtimes.
+- [x] Audited small `bigint`/`bignum` probes; recorded the interpreter
+  precision failure and timeout as partial-support evidence.
+- [x] Reconciled the remaining matrix entries into probe-confirmed,
+  representative-pass, and source/JVM-boundary evidence classes.
 
 ### Next Steps
 
-1. Add probes for the remaining language, pragma, overload, regex, debugger,
-   module, XS, and JSR-223 gaps.
-2. Validate full `caller` fields and multibyte `seek`/`tell`/`truncate`
-   semantics rather than only their basic cases.
-3. Reconcile remaining stale and duplicate documentation claims.
-4. Update related module and design pages from confirmed evidence.
-5. Route genuine backend regressions, such as interpreter fd retention, to
-   implementation-specific follow-up work.
+1. Route confirmed implementation gaps to code-fix work, starting with
+   interpreter numeric precision and fd retention.
+2. Extend representative probes when a future implementation changes a
+   partial status or when a module’s broader API is promoted.
+3. Keep the matrix and related design/module pages synchronized with future
+   audit evidence.
 
 ### Open Questions and Blockers
 

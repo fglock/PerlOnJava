@@ -567,7 +567,7 @@ my @copy = @{$z};         # ERROR
   - `:unix` - Unix-style line endings (LF only)
   - `:encoding(ENCODING)` - Specific character encoding
 - ✅  **Layer stacking**: Multiple layers can be combined (e.g., `:raw:utf8`)
-- ❌  **Multibyte encoding support for `seek`, `tell`, `truncate`**: These operations are not yet implemented for multibyte encodings.
+- ✅  **Multibyte encoding support for `seek`, `tell`, `truncate`**: Representative encoded-handle positioning and truncation pass on both backends. See the [audit probe](../../dev/tools/feature-audit/multibyte_io.t); additional platform/encoding edge cases remain suitable for follow-up coverage.
 
 ### Supported Encodings
 The `:encoding()` layer supports all encodings provided by Java's `Charset.forName()` method:
@@ -649,12 +649,13 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **bytes** pragma
 - 🚧  **feature** pragma
   - ✅ Features implemented: `fc`, `say`, `current_sub`, `isa`, `state`, `try`, `defer`, `bitwise`, `postderef`, `postderef_qq`, `evalbytes`, `unicode_eval`, `refaliasing`, `module_true`, `signatures`, `class`, `keyword_all`, `keyword_any`.
-  - ❌ Feature still missing: `unicode_strings`.
+  - ✅ `unicode_strings` (see the [audit probe](../../dev/tools/feature-audit/unicode_strings.t)).
 - 🚧  **warnings** pragma
 - 🚧  **attributes** pragma: `MODIFY_*_ATTRIBUTES`/`FETCH_*_ATTRIBUTES` callbacks for subroutines and variables.
-- ❌  **bignum, bigint, and bigrat** pragmas
-- ❌  **encoding** pragma
-- ❌  **integer** pragma
+- 🚧  **bignum** and **bigint** pragmas: basic checks pass on the JVM backend; the interpreter loses `bigint` precision and does not complete the basic `bignum` probe within the audit timeout. See the [bignum](../../dev/tools/feature-audit/numeric_bignum.t) and [bigint](../../dev/tools/feature-audit/numeric_bigint.t) probes.
+- ✅  **bigrat** pragma: isolated rational-arithmetic probe passes on all backends; see the [audit probe](../../dev/tools/feature-audit/numeric_bigrat.t).
+- ✅  **encoding** pragma: the supported encoding pragma forms pass the native/JVM/interpreter audit batch.
+- ✅  **integer** pragma: native-width arithmetic and bitwise behavior pass the native/JVM/interpreter audit batch.
 - ❌  **locale** pragma
 - ❌  **ops** pragma
 - 🚧  **re** pragma for regular expression options: Implemented `is_regexp`.
@@ -662,7 +663,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **subs** pragma.
 - 🚧  **builtin** pragma:
   - ✅ Implemented: `true` `false` `is_bool` `inf` `nan` `weaken` `unweaken` `is_weak` `blessed` `refaddr` `reftype` `created_as_string` `created_as_number` `stringify` `ceil` `floor` `indexed` `trim` `is_tainted`.
-  - ❌ Missing: `export_lexically`, `load_module`
+  - ✅ `export_lexically`.
+  - ❌ Missing: `load_module`
 - 🚧  **overload** pragma:
   - ✅ Implemented: `""`, `0+`, `bool`, `fallback`, `nomethod`.
   - ✅ Implemented: `!`, `+`, `-`, `*`, `/`, `%`, `int`, `neg`, `log`, `sqrt`, `cos`, `sin`, `exp`, `abs`, `atan2`, `**`.
@@ -671,12 +673,11 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Implemented: `qr`.
   - ✅ Implemented: `+=`, `-=`, `*=`, `/=`, `%=`.
   - ✅ Implemented: `<>`.
-  - ❌ Missing: `++`, `--`, `=`.
-  - ❌ Missing: `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`, `.`.
+  - ✅ `++`, `.`, and `=` copy-constructor behavior pass focused audit tests.
+  - ❌ Missing: `--`, `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`.
   - ❌ Missing: `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`.
   - ❌ Missing: `-X`.
-  - ❌ Missing: `=` copy constructor for mutators.
-- ❌  **overloading** pragma
+- ✅  **overloading** pragma: lexical enable/disable behavior passes the focused audit batch.
 
 
 
@@ -760,14 +761,14 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - 🚧  **DynaLoader** placeholder module.
 - 🚧  **HTTP::Tiny** some features untested: proxy settings.
 - 🚧  **POSIX** module.
-- 🚧  **Unicode::Normalize** `normalize`, `NFC`, `NFD`, `NFKC`, `NFKD`.
+- ✅  **Unicode::Normalize**: canonical and compatibility normalization passes the focused audit batch.
 - ✅  **Archive::Tar** module.
 - ✅  **Archive::Zip** module.
 - ✅  **IPC::Open2** module.
 - ✅  **IPC::Open3** module.
 - ✅  **Net::FTP** module.
 - ✅  **Net::Cmd** module.
-- ❌  **Safe** module.
+- ✅  **Safe** module: permit-only and default sandbox behavior passes the focused audit batch.
 
 ### Non-core modules
 - 🟡 **Object::Pad**: core class, field, method, parameter, and inheritance
