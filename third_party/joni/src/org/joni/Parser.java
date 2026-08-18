@@ -1069,8 +1069,8 @@ class Parser extends Lexer {
         int num = env.addMemEntry();
         if (listCapture && num >= BitStatus.BIT_STATUS_BITS_NUM) newValueException(GROUP_NUMBER_OVER_FOR_CAPTURE_HISTORY);
 
-        regex.nameAdd(bytes, nm, nameEnd, num, syntax);
         EncloseNode en = EncloseNode.newMemory(env.option, true);
+        en.physicalNamedCaptureId = regex.nameAdd(bytes, nm, nameEnd, num, syntax);
         en.regNum = num;
 
         if (listCapture) env.captureHistory = bsOnAtSimple(env.captureHistory, num);

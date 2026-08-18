@@ -29,6 +29,8 @@ public final class NameEntry {
     int backNum;
     int backRef1;
     int[] backRefs;
+    int physicalRef1;
+    int[] physicalRefs;
 
     public NameEntry(byte[]bytes, int p, int end) {
         name = bytes;
@@ -49,8 +51,22 @@ public final class NameEntry {
         }
     }
 
+    public int[] getPhysicalBackRefs() {
+        switch (backNum) {
+        case 0:
+            return new int[]{};
+        case 1:
+            return new int[]{physicalRef1};
+        default:
+            int[] result = new int[backNum];
+            System.arraycopy(physicalRefs, 0, result, 0, backNum);
+            return result;
+        }
+    }
+
     private void alloc() {
         backRefs = new int[INIT_NAME_BACKREFS_ALLOC_NUM];
+        physicalRefs = new int[INIT_NAME_BACKREFS_ALLOC_NUM];
     }
 
     private void ensureSize() {
@@ -58,24 +74,31 @@ public final class NameEntry {
             int[]tmp = new int[backRefs.length << 1];
             System.arraycopy(backRefs, 0, tmp, 0, backRefs.length);
             backRefs = tmp;
+            int[] physicalTmp = new int[physicalRefs.length << 1];
+            System.arraycopy(physicalRefs, 0, physicalTmp, 0, physicalRefs.length);
+            physicalRefs = physicalTmp;
         }
     }
 
-    public void addBackref(int backRef) {
+    public void addBackref(int backRef, int physicalRef) {
         backNum++;
 
         switch (backNum) {
             case 1:
                 backRef1 = backRef;
+                physicalRef1 = physicalRef;
                 break;
             case 2:
                 alloc();
                 backRefs[0] = backRef1;
                 backRefs[1] = backRef;
+                physicalRefs[0] = physicalRef1;
+                physicalRefs[1] = physicalRef;
                 break;
             default:
                 ensureSize();
                 backRefs[backNum - 1] = backRef;
+                physicalRefs[backNum - 1] = physicalRef;
         }
     }
 

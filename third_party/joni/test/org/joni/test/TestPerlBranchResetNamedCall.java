@@ -96,4 +96,20 @@ public class TestPerlBranchResetNamedCall {
         assertEquals(1, matcher.getRegion().getBeg(2));
         assertEquals(2, matcher.getRegion().getEnd(2));
     }
+
+    @Test
+    public void duplicateBranchResetNamesRetainPhysicalDefinitionSpans() {
+        String pattern = "(?|(?<x>1)|(?<x>2))";
+        Matcher first = assertMatches(pattern, "1");
+        assertEquals(0, first.physicalNamedCaptureBegin(1));
+        assertEquals(1, first.physicalNamedCaptureEnd(1));
+        assertEquals(-1, first.physicalNamedCaptureBegin(2));
+        assertEquals(-1, first.physicalNamedCaptureEnd(2));
+
+        Matcher second = assertMatches(pattern, "2");
+        assertEquals(-1, second.physicalNamedCaptureBegin(1));
+        assertEquals(-1, second.physicalNamedCaptureEnd(1));
+        assertEquals(0, second.physicalNamedCaptureBegin(2));
+        assertEquals(1, second.physicalNamedCaptureEnd(2));
+    }
 }

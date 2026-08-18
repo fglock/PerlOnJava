@@ -130,6 +130,15 @@ public abstract class Matcher extends IntHolder {
         return capture < region.getNumRegs() ? region.getEnd(capture) : Region.REGION_NOTPOS;
     }
 
+    /** Physical named-group definition offsets, used when definitions share a number. */
+    public int physicalNamedCaptureBegin(int capture) {
+        return Region.REGION_NOTPOS;
+    }
+
+    public int physicalNamedCaptureEnd(int capture) {
+        return Region.REGION_NOTPOS;
+    }
+
     /** Most recently closed active capture; engines without this view return -1. */
     public int lastClosedCapture() {
         return -1;

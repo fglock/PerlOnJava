@@ -84,6 +84,8 @@ public interface OPSize {
     int RECURSION_CONDITION          = (OPCODE + MEMNUM + RELADDR);
     int CHECK_POS_END                = OPCODE;
     int CHECK_LOOK_BEHIND_END        = OPCODE;
+    int PHYSICAL_NAMED_CAPTURE_START = (OPCODE + MEMNUM);
+    int PHYSICAL_NAMED_CAPTURE_END   = (OPCODE + MEMNUM);
 
     // #ifdef USE_COMBINATION_EXPLOSION_CHECK
     int STATE_CHECK                   = (OPCODE + STATE_CHECK_NUM);

@@ -53,6 +53,7 @@ final class JoniRegexPattern {
     private final Regex regex;
     private final String sourcePattern;
     private final Map<String, Integer> namedGroups;
+    private final Map<String, Integer> physicalNamedGroups;
     private final RegexFlags flags;
     private final boolean hasControlVerbState;
     private final boolean hasDeferredUserDefinedUnicodeProperty;
@@ -85,7 +86,9 @@ final class JoniRegexPattern {
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 PERLONJAVA_SYNTAX);
-        namedGroups = collectNamedGroups(regex);
+        NamedGroupMaps groupMaps = collectNamedGroups(regex);
+        namedGroups = groupMaps.logical();
+        physicalNamedGroups = groupMaps.physical();
     }
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
@@ -94,7 +97,7 @@ final class JoniRegexPattern {
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
                          RuntimeScalar subject) {
-        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, flags,
+        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, physicalNamedGroups, flags,
                 hasControlVerbState, byteMode, input, callbacks, subject);
     }
 
@@ -789,27 +792,34 @@ final class JoniRegexPattern {
         return -1;
     }
 
-    private static Map<String, Integer> collectNamedGroups(Regex regex) {
+    private record NamedGroupMaps(Map<String, Integer> logical,
+                                  Map<String, Integer> physical) {}
+
+    private static NamedGroupMaps collectNamedGroups(Regex regex) {
         Map<String, Integer> names = new LinkedHashMap<>();
+        Map<String, Integer> physicalNames = new LinkedHashMap<>();
         Iterator<NameEntry> iterator = regex.namedBackrefIterator();
         while (iterator.hasNext()) {
             NameEntry entry = iterator.next();
             String name = new String(entry.name, entry.nameP, entry.nameEnd - entry.nameP,
                     StandardCharsets.UTF_8);
             int[] refs = entry.getBackRefs();
+            int[] physicalRefs = entry.getPhysicalBackRefs();
             for (int i = 0; i < refs.length; i++) {
                 String key = i == 0 ? name
                         : name + CaptureNameEncoder.DUPLICATE_MARKER + (i - 1);
                 names.put(key, refs[i]);
+                physicalNames.put(key, physicalRefs[i]);
             }
         }
-        return names;
+        return new NamedGroupMaps(names, physicalNames);
     }
 
     private static final class JoniRegexMatcher implements RegexMatcher {
         private final Regex regex;
         private final String sourcePattern;
         private final Map<String, Integer> namedGroups;
+        private final Map<String, Integer> physicalNamedGroups;
         private final RegexFlags flags;
         private final String input;
         private final byte[] bytes;
@@ -830,12 +840,14 @@ final class JoniRegexPattern {
         private PerlCalloutHandler calloutHandler;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
+                         Map<String, Integer> physicalNamedGroups,
                          RegexFlags flags, boolean hasControlVerbState, boolean byteMode,
                          String input,
                          List<RuntimeRegexCallback> callbacks, RuntimeScalar subject) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
+            this.physicalNamedGroups = physicalNamedGroups;
             this.flags = flags;
             this.hasControlVerbState = hasControlVerbState;
             this.byteMode = byteMode;
@@ -949,8 +961,13 @@ final class JoniRegexPattern {
 
         @Override
         public String group(String name) {
-            int group = namedGroupNumber(name);
-            return group(group);
+            requireMatch();
+            Integer physical = physicalNamedGroups.get(name);
+            if (physical == null) return group(namedGroupNumber(name));
+            int begin = matcher.physicalNamedCaptureBegin(physical);
+            int end = matcher.physicalNamedCaptureEnd(physical);
+            if (begin < 0 || end < 0) return null;
+            return input.substring(toCharOffset(begin), toCharOffset(end));
         }
 
         @Override public int groupCount() { return regex.numberOfCaptures(); }
@@ -975,6 +992,12 @@ final class JoniRegexPattern {
 
         private int groupOffset(String name, boolean begin) {
             requireMatch();
+            Integer physical = physicalNamedGroups.get(name);
+            if (physical != null) {
+                int offset = begin ? matcher.physicalNamedCaptureBegin(physical)
+                        : matcher.physicalNamedCaptureEnd(physical);
+                return offset < 0 ? -1 : toCharOffset(offset);
+            }
             int group = namedGroupNumber(name);
             return groupOffset(group, begin);
         }

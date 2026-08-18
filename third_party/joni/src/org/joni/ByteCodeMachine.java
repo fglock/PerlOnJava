@@ -258,6 +258,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_WORD_BREAK_BOUNDARY:    opWordBreakBoundary(true);  continue;
                 case OPCode.LINE_BOUNDARY:              opLineBoundary(false);     continue;
                 case OPCode.NOT_LINE_BOUNDARY:          opLineBoundary(true);      continue;
+                case OPCode.PHYSICAL_NAMED_CAPTURE_START: opPhysicalNamedCaptureStart(); continue;
+                case OPCode.PHYSICAL_NAMED_CAPTURE_END: opPhysicalNamedCaptureEnd(); continue;
                 case OPCode.WORD_BEGIN:                 opWordBegin();             continue;
                 case OPCode.WORD_END:                   opWordEnd();               continue;
 
@@ -423,6 +425,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_WORD_BREAK_BOUNDARY:    opWordBreakBoundary(true);   continue;
                 case OPCode.LINE_BOUNDARY:              opLineBoundary(false);       continue;
                 case OPCode.NOT_LINE_BOUNDARY:          opLineBoundary(true);        continue;
+                case OPCode.PHYSICAL_NAMED_CAPTURE_START: opPhysicalNamedCaptureStart(); continue;
+                case OPCode.PHYSICAL_NAMED_CAPTURE_END: opPhysicalNamedCaptureEnd(); continue;
                 case OPCode.WORD_BEGIN:                 opWordBeginSb();             continue;
                 case OPCode.WORD_END:                   opWordEndSb();               continue;
 
@@ -560,6 +564,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             } // USE_FIND_LONGEST_SEARCH_ALL_OF_RANGE
 
             bestLen = n;
+            if (physicalNamedCaptureBeg != null) {
+                System.arraycopy(physicalNamedCaptureBeg, 0,
+                        committedPhysicalNamedCaptureBeg, 0, physicalNamedCaptureBeg.length);
+                System.arraycopy(physicalNamedCaptureEnd, 0,
+                        committedPhysicalNamedCaptureEnd, 0, physicalNamedCaptureEnd.length);
+            }
             final Region region = msaRegion;
             if (region != null) {
                 // USE_POSIX_REGION_OPTION ... else ...
@@ -2140,6 +2150,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         pushMemStart(mem, s);
     }
 
+    private void opPhysicalNamedCaptureStart() {
+        int capture = code[ip++];
+        if (!isInsideSubexpCall(0)) pushPhysicalNamedCapture(capture, s);
+    }
+
+    private void opPhysicalNamedCaptureEnd() {
+        int capture = code[ip++];
+        if (!isInsideSubexpCall(0)) physicalNamedCaptureEnd[capture] = s;
+    }
+
     private void opMemoryStart() {
         int mem = code[ip++];
         repeatStk[memStartStk + mem] = s;
@@ -2954,6 +2974,26 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int value = visibleCapturePointer(capture, false);
         if (value == INVALID_INDEX) return Region.REGION_NOTPOS;
         return (bsAt(regex.btMemEnd, capture) ? stack[value].getMemPStr() : value) - str;
+    }
+
+    @Override
+    public int physicalNamedCaptureBegin(int capture) {
+        if (committedPhysicalNamedCaptureBeg == null
+                || capture <= 0 || capture >= committedPhysicalNamedCaptureBeg.length) {
+            return Region.REGION_NOTPOS;
+        }
+        int begin = committedPhysicalNamedCaptureBeg[capture];
+        return begin == INVALID_INDEX ? Region.REGION_NOTPOS : begin - str;
+    }
+
+    @Override
+    public int physicalNamedCaptureEnd(int capture) {
+        if (committedPhysicalNamedCaptureEnd == null
+                || capture <= 0 || capture >= committedPhysicalNamedCaptureEnd.length) {
+            return Region.REGION_NOTPOS;
+        }
+        int end = committedPhysicalNamedCaptureEnd[capture];
+        return end == INVALID_INDEX ? Region.REGION_NOTPOS : end - str;
     }
 
     @Override
