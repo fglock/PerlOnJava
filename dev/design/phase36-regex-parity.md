@@ -242,7 +242,8 @@ ancestry from #1016, and temporary integration merge commits were excluded.
 The final stacked implementation matches PR #1040 plus the independent #1006,
 #1007, and #1010 changes. The exact source head `3e6076a67` passed warning-free
 `make` in 6m46s, including direct Joni, packaging, and all five unit shards.
-Publication of the unified draft PR remains pending.
+Unified draft PR #1042 is open against `master`; Ubuntu and Windows CI and the
+final forced-backend differential remain pending.
 
 The unified history includes the completed callback/runtime slices, lossless
 generated Unicode fixtures, explicit `Is_*` property/value
@@ -743,9 +744,9 @@ is retained for now.
 
 ### Next Steps
 
-1. Push `integration/phase36-regex-parity` and open one unified draft PR
-   against `master`. Keep its 35 source PR commits intact and use a merge
-   commit after final validation.
+1. Keep unified draft PR #1042 open until final validation completes. Preserve
+   its 35 source PR commits and use a merge commit after the forced-backend
+   differential and Ubuntu/Windows CI pass.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
