@@ -720,6 +720,8 @@ public class UnicodeResolver {
                     isPerlIsPrefixedBlockWildcard(property);
             boolean isPrefixedScriptWildcard =
                     isPerlIsPrefixedScriptWildcard(property);
+            boolean isPrefixedBreakPropertyWildcard =
+                    isPerlIsPrefixedBreakPropertyWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
@@ -736,6 +738,10 @@ public class UnicodeResolver {
             if (isPrefixedScriptWildcard) {
                 throw new IllegalArgumentException(
                         "Can't find Unicode property definition for Is-prefixed Script wildcard");
+            }
+            if (isPrefixedBreakPropertyWildcard) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition for Is-prefixed break-property wildcard");
             }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
@@ -762,10 +768,6 @@ public class UnicodeResolver {
 
             // Special cases - Perl XPosix properties not natively supported in Java
             switch (property) {
-                case "lb=cr":
-                case "lb=CR":
-                    // Line Break = Carriage Return (U+000D)
-                    return negated ? "[^\\r]" : "[\\r]";
                 case "XPosixSpace":
                 case "XPerlSpace":
                 case "SpacePerl":
@@ -985,6 +987,8 @@ public class UnicodeResolver {
                 && (PerlUnicodeScriptData.isScriptPropertyAlias(
                         alias.substring(0, assignment))
                     || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(
+                        alias.substring(0, assignment))
+                    || PerlUnicodeBreakPropertyData.isPropertyAlias(
                         alias.substring(0, assignment)))) {
             throw new IllegalArgumentException(
                     "Unicode property wildcard not terminated");
@@ -1078,6 +1082,12 @@ public class UnicodeResolver {
                 && PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(
                         alias.substring(0, assignment))) {
             return resolvePerlScript(alias.substring(assignment + 1), true);
+        }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeBreakPropertyData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            return resolvePerlBreakProperty(
+                    alias.substring(0, assignment), alias.substring(assignment + 1));
         }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
@@ -1241,6 +1251,16 @@ public class UnicodeResolver {
                 && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
     }
 
+    private static boolean isPerlIsPrefixedBreakPropertyWildcard(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String propertyName = exactIsPrefixedPropertyName(
+                property.substring(0, assignment));
+        return propertyName != null
+                && PerlUnicodeBreakPropertyData.isPropertyAlias(propertyName)
+                && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
     private static String exactIsPrefixedPropertyName(String name) {
         if (name.length() <= 2 || name.charAt(0) != 'I' || name.charAt(1) != 's') {
             return null;
@@ -1383,6 +1403,44 @@ public class UnicodeResolver {
             throw new IllegalArgumentException(
                     "No Unicode property value wildcard matches "
                             + (extensions ? "Script_Extensions" : "Script"));
+        }
+        return result.freeze();
+    }
+
+    private static UnicodeSet resolvePerlBreakProperty(
+            String property, String value) {
+        String wildcard = perlNumericWildcardBody(value);
+        if (wildcard == null) {
+            UnicodeSet exact = PerlUnicodeBreakPropertyData.valueSet(property, value);
+            if (exact == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported Unicode break-property value: " + value.trim());
+            }
+            return exact;
+        }
+        if (wildcard.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        Pattern valuePattern;
+        try {
+            valuePattern = Pattern.compile(wildcard);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (String candidate : PerlUnicodeBreakPropertyData.wildcardValues(property)) {
+            if (valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+                result.addAll(PerlUnicodeBreakPropertyData.valueSet(property, candidate));
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches break property");
         }
         return result.freeze();
     }
