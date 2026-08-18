@@ -1987,6 +1987,7 @@ final class Analyser extends Parser {
     private static final int IN_VAR_REPEAT              = (1<<3);
     private static final int IN_CALL                    = (1<<4);
     private static final int IN_RECCALL                 = (1<<5);
+    private static final int IN_LOOKAROUND              = (1<<6);
     private static final int EXPAND_STRING_MAX_LENGTH   = 100;
 
     /* setup_tree does the following work.
@@ -2189,11 +2190,11 @@ final class Analyser extends Parser {
             AnchorNode an = (AnchorNode)node;
             switch (an.type) {
             case AnchorType.PREC_READ:
-                setupTree(an.target, state);
+                setupTree(an.target, (state | IN_LOOKAROUND));
                 break;
 
             case AnchorType.PREC_READ_NOT:
-                setupTree(an.target, (state | IN_NOT));
+                setupTree(an.target, (state | IN_NOT | IN_LOOKAROUND));
                 break;
 
             case AnchorType.LOOK_BEHIND:
@@ -2203,7 +2204,7 @@ final class Analyser extends Parser {
                 if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB, allowedInLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
                 node = setupLookBehind(an);
                 if (node.getType() != NodeType.ANCHOR) continue restart;
-                setupTree(((AnchorNode)node).target, state);
+                setupTree(((AnchorNode)node).target, (state | IN_LOOKAROUND));
                 node = setupLookBehind(an);
                 break;
 
@@ -2214,8 +2215,14 @@ final class Analyser extends Parser {
                 if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB_NOT, allowedInNegativeLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
                 node = setupLookBehind(an);
                 if (node.getType() != NodeType.ANCHOR) continue restart;
-                setupTree(((AnchorNode)node).target, (state | IN_NOT));
+                setupTree(((AnchorNode)node).target, (state | IN_NOT | IN_LOOKAROUND));
                 node = setupLookBehind(an);
+                break;
+
+            case AnchorType.KEEP:
+                if (syntax.op2OptionPerl() && (state & IN_LOOKAROUND) != 0) {
+                    newSyntaxException(PERL_KEEP_NOT_PERMITTED_IN_LOOKAROUND);
+                }
                 break;
 
             } // inner switch
