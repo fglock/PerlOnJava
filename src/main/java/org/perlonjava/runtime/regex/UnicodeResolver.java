@@ -1245,8 +1245,16 @@ public class UnicodeResolver {
         // Perl's bare script-value shortcuts use Script_Extensions semantics.
         // Keep binary and General_Category names ahead of this value namespace.
         String scriptShortcut = alias;
-        if (alias.length() > 2 && alias.startsWith("Is")) {
-            int valueStart = 2;
+        int scriptPrefixStart = 0;
+        while (scriptPrefixStart < alias.length()) {
+            char separator = alias.charAt(scriptPrefixStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            scriptPrefixStart++;
+        }
+        if (alias.length() - scriptPrefixStart > 2
+                && alias.regionMatches(true, scriptPrefixStart, "is", 0, 2)) {
+            int valueStart = scriptPrefixStart + 2;
             while (valueStart < alias.length()) {
                 char separator = alias.charAt(valueStart);
                 if (!Character.isWhitespace(separator)
