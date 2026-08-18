@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -16,6 +17,20 @@ public final class RuntimeRegexTemplate {
             "\\(\\?\\{=(CALL|DYNAMIC):(\\d+)\\}\\)");
     private final String pattern;
     private final List<RuntimeRegexCallback> callbacks;
+
+    /**
+     * Deferred array interpolation. Keeping the joined operands separate until
+     * the enclosing regex template is assembled lets a blessed element's dot
+     * overload observe the complete left-hand pattern, as Perl does.
+     */
+    private record JoinedParts(List<RuntimeScalar> parts) {
+        @Override
+        public String toString() {
+            StringBuilder joined = new StringBuilder();
+            for (RuntimeScalar part : parts) joined.append(part);
+            return joined.toString();
+        }
+    }
 
     record MaskedCallouts(String pattern, String syntheticPrefix,
                           List<String> placeholders, List<String> markers) {
@@ -37,12 +52,31 @@ public final class RuntimeRegexTemplate {
     }
 
     public static RuntimeScalar build(RuntimeList parts) {
+        parts = flattenJoinedParts(parts);
         if (parts.elements.size() == 1) {
             RuntimeScalar only = parts.elements.getFirst().scalar();
             // A lone interpolation must retain its runtime type so qr
             // overloading and an already-compiled regex remain observable.
             // Only a parser-created callback needs a new template skeleton.
             if (!(only.value instanceof RuntimeRegexCallback)) return only;
+        }
+        boolean hasBlessedPart = false;
+        for (RuntimeBase part : parts.elements) {
+            if (RuntimeScalarType.blessedId(part.scalar()) != 0) {
+                hasBlessedPart = true;
+                break;
+            }
+        }
+        if (hasBlessedPart) {
+            RuntimeScalar concatenated = new RuntimeScalar("");
+            for (RuntimeBase part : parts.elements) {
+                RuntimeScalar scalar = part.scalar();
+                if (scalar.value instanceof RuntimeRegexCallback callback) {
+                    scalar = new RuntimeScalar(callback.source == null ? "" : callback.source);
+                }
+                concatenated = StringOperators.stringConcat(concatenated, scalar);
+            }
+            return concatenated;
         }
         StringBuilder pattern = new StringBuilder();
         List<RuntimeRegexCallback> callbacks = new ArrayList<>();
@@ -84,18 +118,37 @@ public final class RuntimeRegexTemplate {
     /** Preserve callback-bearing qr values while an array is joined for interpolation. */
     public static RuntimeScalar buildJoined(RuntimeScalar separator,
                                             List<RuntimeScalar> elements) {
-        RuntimeList parts = new RuntimeList();
+        List<RuntimeScalar> parts = new ArrayList<>();
+        boolean tainted = separator.isTainted();
         for (int i = 0; i < elements.size(); i++) {
             if (i > 0) parts.add(separator);
-            parts.add(elements.get(i));
+            RuntimeScalar element = elements.get(i);
+            parts.add(element);
+            tainted |= element.isTainted();
         }
-        return build(parts);
+        RuntimeScalar result = new RuntimeScalar(new JoinedParts(List.copyOf(parts)));
+        result.tainted = tainted;
+        return result;
     }
 
     public static boolean hasExecutableValue(RuntimeScalar scalar) {
-        return scalar != null && (scalar.value instanceof RuntimeRegexTemplate
+        return scalar != null && (scalar.value instanceof JoinedParts
+                || scalar.value instanceof RuntimeRegexTemplate
                 || scalar.value instanceof RuntimeRegex regex
                 && !regex.executableCallbacks.isEmpty());
+    }
+
+    private static RuntimeList flattenJoinedParts(RuntimeList input) {
+        RuntimeList flattened = new RuntimeList();
+        for (RuntimeBase part : input.elements) {
+            RuntimeScalar scalar = part.scalar();
+            if (scalar.value instanceof JoinedParts joined) {
+                for (RuntimeScalar joinedPart : joined.parts) flattened.add(joinedPart);
+            } else {
+                flattened.add(part);
+            }
+        }
+        return flattened;
     }
 
     private static void appendEmbeddedRegex(StringBuilder pattern,

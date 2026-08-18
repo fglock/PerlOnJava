@@ -3,7 +3,9 @@ package org.perlonjava.runtime.runtimetypes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -53,6 +55,17 @@ public class DynamicVariableManager {
             }
         }
         return false;
+    }
+
+    /** Return active package-scalar localizations by dynamic binding identity. */
+    public static Map<String, RuntimeScalar> activeLocalizedGlobalScalars() {
+        Map<String, RuntimeScalar> localized = new LinkedHashMap<>();
+        for (DynamicState state : variableStack()) {
+            if (!(state instanceof GlobalRuntimeScalar scalar)) continue;
+            RuntimeScalar value = scalar.activeLocalizedValue();
+            if (value != null) localized.put(scalar.localizedName(), value);
+        }
+        return localized;
     }
 
     /**

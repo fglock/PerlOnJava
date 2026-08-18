@@ -902,7 +902,17 @@ public class StringOperators {
                 WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
-            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
+            RuntimeScalar resolved = resolveTiedStringOperand(scalar);
+            // A one-element interpolated array must retain a compiled regex's
+            // callback template. Stringifying it here turns trusted (??{...})
+            // callbacks back into runtime source and incorrectly requires
+            // lexical `use re 'eval'`.
+            if (isStringInterpolation && list instanceof RuntimeArray
+                    && RuntimeRegexTemplate.hasExecutableValue(resolved)) {
+                return recordJoinTaint(RuntimeRegexTemplate.buildJoined(
+                        runtimeScalar, java.util.List.of(resolved)));
+            }
+            resolved = stringifyForStringContext(resolved);
             RuntimeScalar res = new RuntimeScalar(resolved.toString());
             if (resolved.type != RuntimeScalarType.STRING) {
                 res.type = BYTE_STRING;
@@ -946,10 +956,15 @@ public class StringOperators {
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
 
-            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
+            RuntimeScalar materialized = resolveTiedStringOperand(scalar);
+            RuntimeScalar resolved = stringifyForStringContext(materialized);
             if (isStringInterpolation) {
-                resolvedElements.add(resolved);
-                hasExecutableValue |= RuntimeRegexTemplate.hasExecutableValue(resolved);
+                // If any element carries executable regex callbacks, buildJoined
+                // must still see blessed elements so the outer regex-template
+                // concatenation can dispatch their `.` overload. Ordinary joins
+                // continue to use the stringified value accumulated below.
+                resolvedElements.add(materialized);
+                hasExecutableValue |= RuntimeRegexTemplate.hasExecutableValue(materialized);
             }
             if (resolved.type == RuntimeScalarType.STRING) {
                 hasUtf8 = true;
