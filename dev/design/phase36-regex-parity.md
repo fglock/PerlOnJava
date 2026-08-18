@@ -243,11 +243,16 @@ The focused PR #958 gate restores both `pat.t` variants above baseline. The
 validated second temporary exception for ordinary constant branch-reset plus
 subroutine-call patterns lets both `pat_advanced` variants complete all 1,687
 tests and pass 1,522 each, 146 above the PR #958 baseline per file. The only
-known negative focused deltas are now 98 assertions across 18 smaller files;
-forced Java produces the same results, proving that they are independent of
-regex backend routing. Explicit Joni and patterns containing callbacks,
-dynamic source, conditions, control verbs, or other Joni-only semantics remain
-Joni.
+negative focused map contains 98 assertions across 18 smaller files; forced
+Java produces the same results, proving that they are independent of regex
+backend routing. Exact PR #958 reconstruction and standard Perl classify 26
+of those displayed losses as baseline-transcript artifacts: `op/do.t` had
+duplicated its first 28 assertions (94/99 instead of canonical 68/71 unique
+behavior), and `japh/abigail.t` reconstructs at the current 109/130 rather than
+the logged 110/130. Of the remaining net deficit of 72, 43 assertions belong
+to one confirmed `.=` overload regression and 29 across 14 files remain under
+audit. Explicit Joni and patterns containing callbacks, dynamic source,
+conditions, control verbs, or other Joni-only semantics remain Joni.
 These exceptions are merge scaffolding, not the target architecture. PR #1042
 cannot leave draft until a fresh 622-file run has zero per-file losses against
 PR #958.
@@ -781,10 +786,13 @@ is retained for now.
 
 ### Next Steps
 
-1. Make PR #1042 mergeable without weakening the PR #958 baseline: fix the 98
-   unrelated losses across 18 smaller files, then require a fresh complete
-   622-file comparison with zero negative per-file deltas. Keep explicit Joni
-   and Joni-only constructs forced to Joni throughout.
+1. Make PR #1042 mergeable without weakening the PR #958 baseline: fix the
+   confirmed `.=` regression, classify and repair the remaining 29 exact-
+   rebuild losses, and add narrowly tested normalization for the two known
+   legacy transcript artifacts while retaining raw counts. Then require a
+   fresh complete 622-file comparison with zero unexplained negative per-file
+   deltas. Keep explicit Joni and Joni-only constructs forced to Joni
+   throughout.
 2. Integrate validated native commits `43b4981a6` (nested lookahead inside
    lookbehind) and `b2f225c11` (outside-class `\N`) after PR #1042 stabilizes.
    Remove each temporary routing exception as soon as its native replacement
