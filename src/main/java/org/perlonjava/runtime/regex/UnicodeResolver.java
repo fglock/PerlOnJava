@@ -1407,8 +1407,20 @@ public class UnicodeResolver {
         UnicodeSet result = new UnicodeSet();
         for (int valueId = 0; valueId < PerlUnicodeBlockData.valueCount(); valueId++) {
             String candidate = PerlUnicodeBlockData.canonicalValue(valueId);
-            if (valuePattern.matcher(candidate).matches()
-                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+            boolean matches = valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(loosePropertyName(candidate)).matches();
+            int icuValue = unicodePropertyValue(UProperty.BLOCK, candidate);
+            for (int nameChoice = UProperty.NameChoice.SHORT;
+                    !matches && icuValue >= 0 && nameChoice <= UProperty.NameChoice.LONG;
+                    nameChoice++) {
+                String officialAlias = UCharacter.getPropertyValueName(
+                        UProperty.BLOCK, icuValue, nameChoice);
+                matches = officialAlias != null
+                        && (valuePattern.matcher(officialAlias).matches()
+                            || valuePattern.matcher(
+                                    loosePropertyName(officialAlias)).matches());
+            }
+            if (matches) {
                 result.addAll(PerlUnicodeBlockData.set(valueId));
             }
         }
@@ -1476,6 +1488,10 @@ public class UnicodeResolver {
 
     private static String perlBlockWildcardBody(String value) {
         String trimmed = value.trim();
+        if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
+                && trimmed.length() > 6) {
+            return trimmed.substring(3, trimmed.length() - 3);
+        }
         if (!trimmed.startsWith("#") || !trimmed.endsWith("#")
                 || trimmed.length() <= 2) {
             return null;
