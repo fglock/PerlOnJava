@@ -41,6 +41,7 @@ public final class ScanEnvironment {
     int numCall;
     UnsetAddrList unsetAddrList; // USE_SUBEXP_CALL
     public int numMem;
+    boolean[] multiplexMemNodes;
 
     int numNamed; // USE_NAMED_GROUP
 
@@ -75,11 +76,19 @@ public final class ScanEnvironment {
     int addMemEntry() {
         if (numMem >= Config.MAX_CAPTURE_GROUP_NUM) throw new InternalException(ErrorMessages.TOO_MANY_CAPTURE_GROUPS);
         if (numMem++ == 0) {
-            memNodes = new EncloseNode[Config.SCANENV_MEMNODES_SIZE];
+            // Branch-reset parsing can rewind numMem without starting a new
+            // parse. Keep nodes recorded by earlier alternatives.
+            if (memNodes == null) {
+                memNodes = new EncloseNode[Config.SCANENV_MEMNODES_SIZE];
+                multiplexMemNodes = new boolean[Config.SCANENV_MEMNODES_SIZE];
+            }
         } else if (numMem >= memNodes.length) {
             EncloseNode[]tmp = new EncloseNode[memNodes.length << 1];
             System.arraycopy(memNodes, 0, tmp, 0, memNodes.length);
             memNodes = tmp;
+            boolean[] multiplexTmp = new boolean[multiplexMemNodes.length << 1];
+            System.arraycopy(multiplexMemNodes, 0, multiplexTmp, 0, multiplexMemNodes.length);
+            multiplexMemNodes = multiplexTmp;
         }
 
         return numMem;
@@ -87,10 +96,20 @@ public final class ScanEnvironment {
 
     void setMemNode(int num, EncloseNode node) {
         if (numMem >= num) {
-            memNodes[num] = node;
+            // Branch-reset alternatives reuse capture numbers. Subexpression
+            // calls target the leftmost physical group with that number.
+            if (memNodes[num] == null) {
+                memNodes[num] = node;
+            } else if (memNodes[num] != node) {
+                multiplexMemNodes[num] = true;
+            }
         } else {
             throw new InternalException(ErrorMessages.PARSER_BUG);
         }
+    }
+
+    boolean isMultiplexMemNode(int num) {
+        return multiplexMemNodes != null && multiplexMemNodes[num];
     }
 
 

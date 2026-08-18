@@ -386,6 +386,10 @@ public final class Syntax implements SyntaxProperties {
         return isBehavior(ALLOW_MULTIPLEX_DEFINITION_NAME);
     }
 
+    public boolean allowMultiplexDefinitionNameCall() {
+        return isBehavior(ALLOW_MULTIPLEX_DEFINITION_NAME_CALL);
+    }
+
     public boolean fixedIntervalIsGreedyOnly() {
         return isBehavior(FIXED_INTERVAL_IS_GREEDY_ONLY);
     }

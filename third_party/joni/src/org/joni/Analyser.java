@@ -1308,6 +1308,9 @@ final class Analyser extends Parser {
     private void setCallAttr(CallNode cn) {
         EncloseNode en = env.memNodes[cn.groupNum];
         if (en == null) newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
+        // Perl subroutine calls do not replace captures already visible in the
+        // caller. Reused branch-reset numbers need the existing snapshot path.
+        if (env.isMultiplexMemNode(cn.groupNum)) cn.setRecursion();
         en.setCalled();
         cn.setTarget(en);
         env.btMemStart = BitStatus.bsOnAt(env.btMemStart, cn.groupNum);
@@ -1339,7 +1342,7 @@ final class Analyser extends Parser {
                             en.recursionConditionNameP, en.recursionConditionNameEnd);
                 }
                 int[] refs = ne.getBackRefs();
-                if (refs.length != 1) {
+                if (refs.length != 1 && !syntax.allowMultiplexDefinitionNameCall()) {
                     newValueException(MULTIPLEX_DEFINITION_NAME_CALL,
                             en.recursionConditionNameP, en.recursionConditionNameEnd);
                 }
@@ -1370,10 +1373,11 @@ final class Analyser extends Parser {
 
                         if (ne == null) {
                             newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
-                        } else if (ne.backNum > 1) {
+                        } else if (ne.backNum > 1 && !syntax.allowMultiplexDefinitionNameCall()) {
                             newValueException(MULTIPLEX_DEFINITION_NAME_CALL, cn.nameP, cn.nameEnd);
                         } else {
                             cn.groupNum = ne.backRef1; // ne.backNum == 1 ? ne.backRef1 : ne.backRefs[0]; // ??? need to check ?
+                            if (ne.backNum > 1) cn.setRecursion();
                             setCallAttr(cn);
                         }
                     }
