@@ -699,10 +699,16 @@ public class UnicodeResolver {
             }
             boolean isPrefixedNumericWildcard =
                     isPerlIsPrefixedNumericWildcard(property);
+            boolean isPrefixedJoiningGroupWildcard =
+                    isPerlIsPrefixedJoiningGroupWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
                         "Is-prefixed Numeric_Value properties do not accept wildcard values");
+            }
+            if (isPrefixedJoiningGroupWildcard) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition for Is-prefixed Joining_Group wildcard");
             }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
@@ -926,6 +932,7 @@ public class UnicodeResolver {
             String message = e.getMessage();
             if (message != null && (message.contains("in expansion of")
                     || message.startsWith("Illegal user-defined property name")
+                    || message.startsWith("Can't find Unicode property definition")
                     || message.startsWith("Timeout waiting for another thread"))) {
                 throw e;
             }
@@ -1017,6 +1024,11 @@ public class UnicodeResolver {
             }
             return numericValue;
         }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeJoiningGroupData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            return resolvePerlJoiningGroup(alias.substring(assignment + 1));
+        }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1080,11 +1092,73 @@ public class UnicodeResolver {
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) return false;
         String name = property.substring(0, assignment);
-        return name.length() > 2
-                && name.charAt(0) == 'I'
-                && name.charAt(1) == 's'
-                && PerlUnicodeNumericValueData.isPropertyAlias(name)
+        String propertyName = exactIsPrefixedPropertyName(name);
+        return propertyName != null
+                && PerlUnicodeNumericValueData.isPropertyAlias(propertyName)
                 && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
+    private static boolean isPerlIsPrefixedJoiningGroupWildcard(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String name = property.substring(0, assignment);
+        String propertyName = exactIsPrefixedPropertyName(name);
+        return propertyName != null
+                && PerlUnicodeJoiningGroupData.isPropertyAlias(propertyName)
+                && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
+    private static String exactIsPrefixedPropertyName(String name) {
+        if (name.length() <= 2 || name.charAt(0) != 'I' || name.charAt(1) != 's') {
+            return null;
+        }
+        int start = 2;
+        while (start < name.length()) {
+            char separator = name.charAt(start);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') {
+                break;
+            }
+            start++;
+        }
+        return start == name.length() ? null : name.substring(start);
+    }
+
+    private static UnicodeSet resolvePerlJoiningGroup(String value) {
+        String wildcard = perlNumericWildcardBody(value);
+        if (wildcard == null) {
+            UnicodeSet exact = PerlUnicodeJoiningGroupData.valueSet(value);
+            if (exact == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported Joining_Group value: " + value.trim());
+            }
+            return exact;
+        }
+        if (wildcard.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        Pattern valuePattern;
+        try {
+            valuePattern = Pattern.compile(wildcard);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (String candidate : PerlUnicodeJoiningGroupData.wildcardValues()) {
+            if (valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+                result.addAll(PerlUnicodeJoiningGroupData.valueSet(candidate));
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches Joining_Group");
+        }
+        return result.freeze();
     }
 
     private static UnicodeSet resolvePerlNumericValue(String value) {
