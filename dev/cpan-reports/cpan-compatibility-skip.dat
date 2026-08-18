@@ -84,7 +84,7 @@ Test::MockObject	SKIP				2026-06-18	distroprefs
 Test::Pod	SKIP				2026-08-16	bundled	
 Test::SharedFork	SKIP				2026-06-18	distroprefs	
 Text::CSV_XS	SKIP				2026-08-17	bundled	
-Text::LineFold	SKIP				2026-08-17	bundled	
+Text::LineFold	SKIP				2026-08-18	bundled	
 Tie::File	SKIP				2026-06-18	bundled	
 Treex::Block::W2A::TagFeaturama	SKIP				2026-08-14	bundled	
 UNIVERSAL::can	SKIP				2026-06-18	distroprefs	
@@ -94,7 +94,7 @@ WWW::RobotRules	SKIP				2026-06-18	distroprefs
 Win32	SKIP				2026-08-16	bundled	
 XML::SAX	SKIP				2026-08-15	bundled	
 XML::SAX::DocumentLocator	SKIP				2026-08-17	bundled	
-XS::Parse::Sublike	SKIP				2026-08-17	bundled	
+XS::Parse::Sublike	SKIP				2026-08-18	bundled	
 YAML::Any	SKIP				2026-06-18	bundled	
 YAML::LibYAML	SKIP				2026-08-15	bundled	
 YAML::PP	SKIP				2026-08-18	bundled	
