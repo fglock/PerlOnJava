@@ -235,19 +235,24 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-Draft PR #1042 is the current integration gate. Its progressive routing
-checkpoint passes a warning-free `make`, but the complete comparison against
-PR #958 still has 23 regressed files and 4,395 lost assertions. A reversible
-merge-only exception is being validated so ordinary lookbehind uses the Java
-backend in default/auto mode; explicit Joni and every pattern containing a
-Joni-only callback, dynamic construct, condition, recursion, or control verb
-remain on Joni. This exception is temporary debt, not the target architecture.
-PR #1042 cannot leave draft until a fresh 622-file run has zero per-file losses
-against PR #958.
+Draft PR #1042 is the current integration gate. Its reversible ordinary-
+lookbehind fallback is published at `7e5d119508` after a warning-free `make`.
+The focused PR #958 gate now restores both `pat.t` variants above baseline, but
+both `pat_advanced` variants abort after test 1019 and 18 smaller files retain
+98 unrelated losses, for a selected negative sum of 1,008. A second temporary
+exception for ordinary constant branch-reset plus subroutine-call patterns is
+being validated. Explicit Joni and patterns containing callbacks, dynamic
+source, conditions, control verbs, or other Joni-only semantics remain Joni.
+These exceptions are merge scaffolding, not the target architecture. PR #1042
+cannot leave draft until a fresh 622-file run has zero per-file losses against
+PR #958.
 
-The permanent full-Joni path is advancing independently: native nested
-lookahead-in-lookbehind admission targets the 4,296 `pat*` losses, and native
-outside-class `\N` targets 179 assertions in the seven `regexp*` variants.
+The permanent full-Joni path is advancing independently. Native nested
+lookahead-in-lookbehind admission is complete at `43b4981a6`, with 1,704
+focused `pat{,_thr}.t` gains and no losses. Native outside-class `\N` is
+complete at `b2f225c11`, recovering 172 assertions across the seven `regexp*`
+variants with no losses or backend differences; seven remaining assertions
+belong to independent branch-reset capture state.
 Exact package publication for `(*MARK:NAME)`, `$REGMARK`, and `$REGERROR` now
 passes the expanded 53-assertion oracle on JVM and interpreter in draft PR
 #1051. Match bytecodes carry the executing package explicitly, callback lexical
@@ -553,6 +558,9 @@ is retained for now.
   - [x] Reran the combined forced-Joni 80-file corpus on JVM and interpreter,
     published the complete file-by-file comparison, and reduced its six actual
     regressions to two fatal roots with narrow owners and rerun gates.
+  - [x] Added native lookahead nodes to Joni's positive and negative
+    lookbehind admission masks (`43b4981a6`). The 8-assertion oracle passes on
+    both backends and `pat{,_thr}.t` gains 1,704 assertions with no losses.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-18)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -716,6 +724,11 @@ is retained for now.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
+  - [x] Implemented outside-class non-newline `\N`, including numeric interval
+    disambiguation while preserving named `\N{SPACE}` and class rejection
+    (`b2f225c11`). The 8-assertion oracle passes and seven forced-Joni
+    `regexp*` variants recover 172 assertions with zero losses and exact backend
+    identity.
   - [ ] Close the remaining property failures before marking Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -759,14 +772,15 @@ is retained for now.
 ### Next Steps
 
 1. Make PR #1042 mergeable without weakening the PR #958 baseline: validate
-   the temporary ordinary-lookbehind default/auto fallback, rerun the four
-   `pat*` and 19 stable smaller regression files, then require a fresh complete
-   622-file comparison with zero negative per-file deltas. Keep explicit Joni
-   and Joni-only constructs forced to Joni throughout.
-2. Integrate the native nested-lookahead-in-lookbehind and outside-class `\N`
-   patches after their focused JVM/interpreter, corpus, and warning-free build
-   gates. Remove the temporary lookbehind routing exception as soon as the
-   native patch proves the same no-regression corpus.
+   the temporary ordinary branch-reset/subroutine-call fallback, restore both
+   `pat_advanced*` files, fix the 98 unrelated losses across 18 smaller files,
+   then require a fresh complete 622-file comparison with zero negative
+   per-file deltas. Keep explicit Joni and Joni-only constructs forced to Joni
+   throughout.
+2. Integrate validated native commits `43b4981a6` (nested lookahead inside
+   lookbehind) and `b2f225c11` (outside-class `\N`) after PR #1042 stabilizes.
+   Remove each temporary routing exception as soon as its native replacement
+   proves the same no-regression corpus.
 3. Rebase draft PR #1051 onto the final PR #1042 head, preserve its warning-free
    build and 53/53 JVM/interpreter `(*MARK:NAME)` package oracle, and integrate
    it without restoring broadcast publication.
