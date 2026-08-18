@@ -240,8 +240,13 @@ public class StringParser {
 
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
                 || ctx.compilerOptions.isUnicodeSource) {
-            // utf8 source code is true - keep Unicode string as-is
-            buffers.add(buffer.toString());
+            // A byte-backed eval can activate `use utf8` inside its own source.
+            // Decode only after the parser has applied that lexical pragma;
+            // whole-source substring detection would misclassify comments and
+            // quoted text containing the words "use utf8".
+            buffers.add(ctx.compilerOptions.isByteStringSource
+                    ? decodeUtf8ByteSource(buffer.toString())
+                    : buffer.toString());
 
             // System.out.println("buffers utf8: " + buffer.toString().length() + " " + buffer.toString());
         } else if (ctx.compilerOptions.isEvalbytes) {
@@ -315,6 +320,22 @@ public class StringParser {
                 secondBufferStartDelim, secondBufferEndDelim);
         parsed.sourceLine = parser != null ? parser.sourceLineAt(index) : 1;
         return parsed;
+    }
+
+    private static String decodeUtf8ByteSource(String source) {
+        byte[] bytes = new byte[source.length()];
+        for (int i = 0; i < source.length(); i++) {
+            bytes[i] = (byte) (source.charAt(i) & 0xFF);
+        }
+        try {
+            return java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(bytes))
+                    .toString();
+        } catch (java.nio.charset.CharacterCodingException e) {
+            throw new IllegalArgumentException("Malformed UTF-8 character (fatal)", e);
+        }
     }
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {

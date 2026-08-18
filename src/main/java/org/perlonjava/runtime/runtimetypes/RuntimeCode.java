@@ -27,6 +27,7 @@ import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.CoreSubroutineGenerator;
 
 import java.lang.invoke.MethodHandle;
@@ -2065,7 +2066,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (int i = 0; i < source.length(); i++) {
             bytes[i] = (byte) (source.charAt(i) & 0xFF);
         }
-        return new String(bytes, StandardCharsets.UTF_8);
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(bytes))
+                    .toString();
+        } catch (java.nio.charset.CharacterCodingException e) {
+            throw new IllegalArgumentException("Malformed UTF-8 character (fatal)", e);
+        }
     }
 
     /**
@@ -2146,11 +2155,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // EXCEPT for evalbytes, which must treat everything as bytes
             String evalString = code.toString();
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
-            if (evalbytesUtf8Source) {
+            boolean byteStringUtf8Source = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0;
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
             }
             boolean hasUnicode = false;
-            if (evalbytesUtf8Source) {
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 hasUnicode = true;
             } else if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
                 for (int i = 0; i < evalString.length(); i++) {
@@ -2168,7 +2180,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // The eval string can originate from either a Perl STRING or BYTE_STRING scalar.
             // For BYTE_STRING source we must treat the source as raw bytes (latin-1-ish) and
             // NOT re-encode characters to UTF-8 when simulating 'non-unicode source'.
-            boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+            boolean isByteStringSource = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && !byteStringUtf8Source;
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
             }
@@ -2176,6 +2190,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCompilerOptions.isEvalbytes = true;
             }
             if (isByteStringSource) {
+                evalCompilerOptions.isUnicodeSource = false;
                 evalCompilerOptions.isByteStringSource = true;
             }
 
@@ -2197,7 +2212,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Include package name in cache key to ensure source location info is correct per-package
             int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
             String currentPackage = ctx.symbolTable.getCurrentPackage();
-            String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
+            String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + byteStringUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
                 Map<String, Class<?>> runtimeEvalCache = evalCache();
@@ -2689,14 +2704,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             String evalString = code.toString();
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
-            if (evalbytesUtf8Source) {
+            boolean byteStringUtf8Source = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0;
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
             }
             evalTrace("evalStringWithInterpreter parse start tag=" + evalTag + " ctx=" + callContext +
                     " fileName=" + ctx.compilerOptions.fileName);
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
-            if (evalbytesUtf8Source) {
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 hasUnicode = true;
             } else if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
                 for (int i = 0; i < evalString.length(); i++) {
@@ -2710,7 +2728,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Clone compiler options and set isUnicodeSource if needed
             // Always clone to avoid modifying the original and to set a unique filename
             CompilerOptions evalCompilerOptions = ctx.compilerOptions.clone();
-            boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+            boolean isByteStringSource = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && !byteStringUtf8Source;
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
             }
@@ -2718,6 +2738,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCompilerOptions.isEvalbytes = true;
             }
             if (isByteStringSource) {
+                evalCompilerOptions.isUnicodeSource = false;
                 evalCompilerOptions.isByteStringSource = true;
             }
             // Always generate a unique filename for each eval to prevent source location collisions
