@@ -385,7 +385,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
 - ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
 - ✅  **Python-style named groups**: `(?P<name>...)` and `(?P=name)` are parsed natively by Joni with Perl capture numbering, duplicate-name behavior, and malformed/unknown-name diagnostics.
-- ❌  **Alpha assertion aliases**: `(*pla:...)`, `(*plb:...)`, `(*nla:...)`, `(*nlb:...)`, and `(*atomic:...)` are not yet parsed by Joni.
+- ✅  **Alpha assertion aliases**: `(*pla:...)`, `(*plb:...)`, `(*nla:...)`, `(*nlb:...)`, and `(*atomic:...)` are parsed natively by Joni with Perl nesting, capture numbering, backtracking, and malformed-form diagnostics.
 - ❌  **Underscored numeric regex escapes**: Perl spellings such as `\x{0_0_4_1}` and `\o{0_0_1_0_1}` still rely on frontend normalization rather than native Joni parsing. Valid braced octal and unconditional missing-close/empty diagnostics are native; three `use re 'strict'` non-octal cases remain deferred.
 
 - ✅  **Dynamically-scoped regex variables**: Provisional captures, `$^R`, `$^N`, match positions, and callback locals follow matcher paths and unwind on backtracking.
