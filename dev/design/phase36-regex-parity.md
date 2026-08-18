@@ -233,7 +233,27 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
+### Current Status: Phases 0 and 4 complete; Phases 1–3 corpus gates active
+
+Draft PR #1042 is the current integration gate. Its progressive routing
+checkpoint passes a warning-free `make`, but the complete comparison against
+PR #958 still has 23 regressed files and 4,395 lost assertions. A reversible
+merge-only exception is being validated so ordinary lookbehind uses the Java
+backend in default/auto mode; explicit Joni and every pattern containing a
+Joni-only callback, dynamic construct, condition, recursion, or control verb
+remain on Joni. This exception is temporary debt, not the target architecture.
+PR #1042 cannot leave draft until a fresh 622-file run has zero per-file losses
+against PR #958.
+
+The permanent full-Joni path is advancing independently: native nested
+lookahead-in-lookbehind admission targets the 4,296 `pat*` losses, and native
+outside-class `\N` targets 179 assertions in the seven `regexp*` variants.
+Exact package publication for `(*MARK:NAME)`, `$REGMARK`, and `$REGERROR` passes
+the 53-assertion JVM oracle but is 45/53 on the interpreter; callback lexical
+ownership is correct, while the outer interpreter match must carry its
+executing package explicitly instead of broadcasting to localized globals.
+The generated Unicode property map and its surrogate-marker hardening remain
+an independent Phase 3 gate.
 
 The published integration stack is preserved through draft PR #1039, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
@@ -532,15 +552,18 @@ is retained for now.
   - [x] Reran the combined forced-Joni 80-file corpus on JVM and interpreter,
     published the complete file-by-file comparison, and reduced its six actual
     regressions to two fatal roots with narrow owners and rerun gates.
-- [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
+- [ ] Phase 2: Conditions and backtracking-visible state (reopened for exact
+  interpreter package publication)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
   - [x] Closed runtime callback capture ownership at final scope teardown.
   - [x] Closed failed-path `$^N` and `$+` restoration through recursive
     callback unwind.
-  - [x] Added direct active-localization lookup for runtime control variables;
-    dynamic `PRUNE`, `SKIP`, and `COMMIT` update package `$REGERROR` without
-    mutating non-localized `$REGERROR`/`$REGMARK` variables on either backend.
+  - [x] Added provisional active-localization publication for runtime control
+    variables and reopened it after the expanded cross-package oracle proved
+    that broadcasting is not Perl semantics. JVM exact-package publication is
+    53/53; interpreter publication is 45/53 pending an explicit match-package
+    operand at the bytecode/runtime boundary.
   - [x] Propagated `PRUNE`, `SKIP`, `COMMIT`, and `THEN` cuts and search-control
     requests from nested `(??{...})` matcher programs. A 9-assertion
     standard-Perl oracle passes on JVM and interpreter, and `pat_advanced.t`
@@ -735,27 +758,37 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1039. Publish the validated
-   Script/Script_Extensions integration in a separate focused WIP PR,
-   preserving the independently reviewed data commit.
-2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
+1. Make PR #1042 mergeable without weakening the PR #958 baseline: validate
+   the temporary ordinary-lookbehind default/auto fallback, rerun the four
+   `pat*` and 19 stable smaller regression files, then require a fresh complete
+   622-file comparison with zero negative per-file deltas. Keep explicit Joni
+   and Joni-only constructs forced to Joni throughout.
+2. Integrate the native nested-lookahead-in-lookbehind and outside-class `\N`
+   patches after their focused JVM/interpreter, corpus, and warning-free build
+   gates. Remove the temporary lookbehind routing exception as soon as the
+   native patch proves the same no-regression corpus.
+3. Carry the interpreter match's compile-time package through `MATCH_REGEX`
+   and `MATCH_REGEX_NOT`, scope it around runtime matching, and revalidate the
+   53-assertion `(*MARK:NAME)` package oracle plus the preserved 31-assertion
+   compatibility gate. Never restore broadcast publication.
+4. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Integrate the independently generated break-property value slice, then the
+5. Integrate the independently generated break-property value slice, then the
    generic and specialized binary-property families and residual enumerated
    families currently advancing in parallel.
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
-4. Rerun generated property chunks 01–04 on both backends with the classified
+6. Rerun generated property chunks 01–04 on both backends with the classified
    600-second bound and retain complete TAP/JSON. After the two fatal roots and
    native line boundaries integrate, refresh the complete forced-Joni 80-file
    corpus and apply the no-regression gate against Phase 0 and PR 958.
-5. Audit every `RegexPreprocessor` rule against the final ownership boundary.
+7. Audit every `RegexPreprocessor` rule against the final ownership boundary.
    Move matcher semantics into Joni, retain only source-policy scanning, delete
    Java-only rewrites and compiled-pattern variants, and remove the temporary
    Java backend selector after the performance gate passes.
-6. Reconcile `docs/reference/feature-matrix.md` with the final corpus; update
+8. Reconcile `docs/reference/feature-matrix.md` with the final corpus; update
    `dev/implementation/regex.md` and `docs/design/joni-callout-fork.md` to the
    as-implemented architecture and review both for clarity and structure.
    Audit redundant regex/Joni documents, deleting only wholly redundant text
@@ -763,7 +796,7 @@ is retained for now.
    documents. Replace stale Unicode limitations, add any still-missing regex
    features, and link each limitation to a reducer or explicit optimizer/debug
    exclusion.
-7. Run unchanged CPAN consumers, the direct/thread release matrix, packaging
+9. Run unchanged CPAN consumers, the direct/thread release matrix, packaging
    and license checks, and warning-free `make`; then rebase each focused PR and
    require green Ubuntu and Windows CI.
 
@@ -772,11 +805,11 @@ is retained for now.
 - Exact optimizer/debug transcript assertions are not semantic release blockers;
   each exclusion still requires an explicit report entry.
 - Resource-sensitive baselines must wait for unrelated Java builds to finish.
-- The interpreter does not reliably expose the lexical package through
-  `InterpreterState.currentPackage` while a regex executes. Localized
-  `$REGMARK`/`$REGERROR` slots are therefore enumerated from active dynamic
-  `GlobalRuntimeScalar` bindings rather than inferred from the current package
-  or scanned from dormant globals.
+- The interpreter does not reliably expose the match operator's lexical package
+  through `InterpreterState.currentPackage` while a regex executes. The chosen
+  fix is to encode the compile-time package on match bytecodes and scope that
+  package around runtime matching; enumerating localized globals is explicitly
+  rejected because it broadcasts state to unrelated packages.
 - Shared parser or `eval` failures are fixed in focused slices when they block a
   regex semantic test, rather than being approximated inside the matcher.
 - Starting a forced-Joni global match exactly on a supplementary character
