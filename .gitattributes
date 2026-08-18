@@ -1,1 +1,3 @@
 /dev/unicode/17.0.0/** -text
+/src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBlockData.java text eol=lf
+/src/main/java/org/perlonjava/runtime/regex/PerlUnicodeNumericValueData.java text eol=lf
