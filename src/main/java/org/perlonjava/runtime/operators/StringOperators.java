@@ -522,12 +522,11 @@ public class StringOperators {
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
         int blessId2 = RuntimeScalarType.blessedId(b);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(
-                    runtimeScalar, b, blessId, blessId2, "(.=", ".=", "(.");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentAssignmentOverloadDirect(
+                    runtimeScalar, b, blessId, blessId2, "(.=");
             if (result != null) {
-                // Compound overloads return the value that Perl assigns back to
-                // the lvalue.  Preserve that reference instead of converting it
-                // through the ordinary string-concat result path.
+                // Assignment overloads return the value Perl assigns back to
+                // the lvalue. Preserve that reference instead of stringifying it.
                 runtimeScalar.set(result);
                 return runtimeScalar;
             }
