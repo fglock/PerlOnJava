@@ -1,15 +1,43 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Unicode::UCD qw(prop_invmap);
 
-my $expected_unicode_version = '16.0.0';
-my $unicode_version = Unicode::UCD::UnicodeVersion();
+my $unicode_root = 'perl5/lib/unicore';
+my $expected_unicode_version = '17.0.0';
+open my $version_fh, '<', "$unicode_root/version" or die "Can't read Unicode version: $!\n";
+chomp(my $unicode_version = <$version_fh>);
+close $version_fh;
 die "Expected Unicode $expected_unicode_version, found $unicode_version\n"
     unless $unicode_version eq $expected_unicode_version;
 
-my ($starts, $values) = prop_invmap('Sentence_Break');
-die "Sentence_Break inversion map is unavailable\n" unless $starts && $values;
+open my $property_fh, '<', "$unicode_root/auxiliary/SentenceBreakProperty.txt"
+    or die "Can't read Sentence_Break data: $!\n";
+my @ranges;
+while (<$property_fh>) {
+    next unless /^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*([A-Za-z_]+)/;
+    push @ranges, [hex($1), defined($2) ? hex($2) : hex($1), $3];
+}
+close $property_fh;
+@ranges = sort { $a->[0] <=> $b->[0] } @ranges;
+
+my (@starts, @values);
+my $cursor = 0;
+for my $range (@ranges) {
+    my ($start, $end, $property) = @$range;
+    die "Overlapping Sentence_Break ranges at U+", sprintf('%04X', $start), "\n"
+        if $start < $cursor;
+    if ($start > $cursor) {
+        push @starts, $cursor;
+        push @values, 'Other';
+    }
+    push @starts, $start;
+    push @values, $property;
+    $cursor = $end + 1;
+}
+if ($cursor <= 0x10ffff) {
+    push @starts, $cursor;
+    push @values, 'Other';
+}
 
 my @classes = qw(
     Other ATerm Close CR Extend Format LF Lower Numeric OLetter SContinue Sep Sp STerm Upper
@@ -17,7 +45,7 @@ my @classes = qw(
 my %class_id;
 @class_id{@classes} = (0 .. $#classes);
 
-for my $value (@$values) {
+for my $value (@values) {
     die "Unknown Sentence_Break value '$value'\n" unless exists $class_id{$value};
 }
 
@@ -54,14 +82,14 @@ for my $i (0 .. $#classes) {
 }
 
 print "\n    private static final int[] STARTS = {\n";
-for (my $i = 0; $i < @$starts; $i += 10) {
-    my $end = $i + 9 < $#$starts ? $i + 9 : $#$starts;
-    print "        ", join(', ', map { sprintf '0x%X', $starts->[$_] } $i .. $end), ",\n";
+for (my $i = 0; $i < @starts; $i += 10) {
+    my $end = $i + 9 < $#starts ? $i + 9 : $#starts;
+    print "        ", join(', ', map { sprintf '0x%X', $starts[$_] } $i .. $end), ",\n";
 }
 print "    };\n\n    private static final byte[] VALUES = {\n";
-for (my $i = 0; $i < @$values; $i += 16) {
-    my $end = $i + 15 < $#$values ? $i + 15 : $#$values;
-    print "        ", join(', ', map { uc($values->[$_]) } $i .. $end), ",\n";
+for (my $i = 0; $i < @values; $i += 16) {
+    my $end = $i + 15 < $#values ? $i + 15 : $#values;
+    print "        ", join(', ', map { uc($values[$_]) } $i .. $end), ",\n";
 }
 print <<'FOOTER';
     };
