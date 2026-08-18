@@ -242,22 +242,41 @@ if they expose a semantic defect.
    - integrate each validated runtime repair as an independently reviewable
      commit;
    - run the combined focused-file gate;
+   - generate a pre-acceptance manifest containing every negative file from the
+     latest comparison, rerun every manifest entry on the final integrated
+     artifact, and require exact explained counts before a full corpus run;
    - normalize only proven legacy baseline artifacts while always retaining raw
      counts;
+   - run the real normalized comparator against the targeted manifest before
+     authorizing the long user-acceptance run; no unexplained negative file may
+     be deferred to the 622-file run for discovery;
    - run a fresh 622-file comparison and require zero unexplained negative
      per-file deltas;
    - require warning-free `make` and green Ubuntu and Windows CI before review.
 2. Remove temporary ordinary-pattern Java routing as native Joni replacements
    become green:
-   - finish native nested-lookaround admission and remove its Java routing;
-   - route KEEP assertions through Joni and retire Java marker snapshots;
+   - land the combined nested-lookaround and native KEEP stack, then replace
+     the temporary adapter KEEP-in-lookaround diagnostic with an engine-owned
+     Joni diagnostic;
+   - remove Java routing immediately after each native reducer and combined
+     corpus gate are green;
    - use the integration report to choose the next fallback whose removal moves
      the most assertions to pure Joni;
    - never move callback, condition, control-verb, or dynamic-source patterns
      back to Java.
 3. Complete the Unicode ownership boundary:
-   - audit `UnicodeResolver` against the forked Joni resolver;
-   - move regex property parsing and matching into Joni;
+   - extend the runtime-neutral Joni range resolver from General_Category to
+     the remaining pinned property families;
+   - make case-fold policy explicit per property family before migrating Block,
+     Script, Age, numeric, or other non-category sets;
+   - migrate standalone Block and Script/Script_Extensions assignments with an
+     explicit no-fold result, while General_Category retains fold closure;
+   - keep no-fold properties inside composed character classes in the adapter
+     until Joni's class AST preserves per-member fold policy through union,
+     intersection, and negation;
+   - keep property-value wildcard parsing and diagnostics in the frontend until
+     Joni has a dedicated wildcard syntax node; do not flatten wildcard behavior
+     into literal ranges prematurely;
    - keep Perl lexical/source policy in the adapter;
    - prefer bundled Perl Unicode data over duplicating ICU behavior or depending
      on the host JDK Unicode version.
@@ -293,6 +312,13 @@ shared handoff files. Ownership is exclusive at the file/semantic-slice level.
 At most two full builds may run concurrently. Timing-sensitive final gates run
 serialized. Engineers should continue source-independent analysis and focused
 work while a full build runs rather than blocking on it.
+
+Implementation lanes run their required full `make` once the candidate is
+stable. The review stack then runs one combined full build and one combined
+focused reducer matrix; unchanged intermediate stacks are not rebuilt merely
+for handoff. Handoff messages are event-driven: candidate ready, build started,
+build finished, push complete, or blocker. Heartbeats exist only for crash
+detection and do not replace implementation work.
 
 ### Delivery checkpoints
 
