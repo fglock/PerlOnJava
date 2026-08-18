@@ -260,7 +260,7 @@ if they expose a semantic defect.
    - require warning-free `make` and green Ubuntu and Windows CI before review.
 2. Remove temporary ordinary-pattern Java routing as native Joni replacements
    become green:
-   - finish physical duplicate-name publication for branch-reset groups;
+   - integrate physical duplicate-name publication for branch-reset groups;
    - integrate native nested lookaround and outside-class named-character
      support;
    - use the integration report to choose the next fallback whose removal moves
