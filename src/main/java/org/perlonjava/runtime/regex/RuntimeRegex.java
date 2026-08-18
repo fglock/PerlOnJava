@@ -151,22 +151,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     static void updateControlVerbVariables(String mark, String error) {
+        updateControlVerbVariables(
+                InterpreterState.currentPackage.get().toString(), mark, error);
+    }
+
+    static void updateControlVerbVariables(String packageName, String mark, String error) {
         RuntimeScalar markValue = mark == null
                 ? RuntimeScalarCache.scalarEmptyString : new RuntimeScalar(mark);
         RuntimeScalar errorValue = error == null
                 ? RuntimeScalarCache.scalarEmptyString : new RuntimeScalar(error);
-        // Perl activates these otherwise ordinary package variables through
-        // local(). The interpreter does not keep its runtime current-package
-        // facade synchronized with every lexical package statement, so use the
-        // localized scalar identities rather than guessing one package name.
-        for (Map.Entry<String, RuntimeScalar> entry
-                : DynamicVariableManager.activeLocalizedGlobalScalars().entrySet()) {
-            if (entry.getKey().endsWith("::REGMARK")) {
-                entry.getValue().set(markValue);
-            } else if (entry.getKey().endsWith("::REGERROR")) {
-                entry.getValue().set(errorValue);
-            }
-        }
+        String owner = packageName == null || packageName.isEmpty() ? "main" : packageName;
+        String separator = owner.endsWith("::") ? "" : "::";
+        GlobalVariable.getGlobalVariable(owner + separator + "REGMARK").set(markValue);
+        GlobalVariable.getGlobalVariable(owner + separator + "REGERROR").set(errorValue);
     }
     // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
     public Pattern pattern;

@@ -898,7 +898,10 @@ class Parser extends Lexer {
 
         final ControlVerbNode.Kind kind;
         final String verb;
-        if (startsWith("ACCEPT)")) {
+        if (startsWith(":")) {
+            kind = ControlVerbNode.Kind.MARK;
+            verb = "";
+        } else if (startsWith("ACCEPT)")) {
             kind = ControlVerbNode.Kind.ACCEPT;
             verb = "ACCEPT";
         } else if (startsWith("FAIL)")) {

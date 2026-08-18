@@ -408,13 +408,6 @@ final class JoniRegexPattern {
                 out.append(ch);
                 continue;
             }
-            if (!inClass && pattern.startsWith("(*:", i)) {
-                // Perl's abbreviated MARK form is (*:NAME). Joni accepts the
-                // equivalent long spelling and publishes the mark normally.
-                out.append("(*MARK:");
-                i += 2;
-                continue;
-            }
             if (inClass && flags.isExtendedWhitespace() && Character.isWhitespace(ch)) {
                 continue;
             }
@@ -865,7 +858,6 @@ final class JoniRegexPattern {
             if (nextStart > regionEnd) {
                 matched = false;
                 committedLastClosedCapture = -1;
-                if (hasControlVerbState) RuntimeRegex.updateControlVerbVariables(null, null);
                 return false;
             }
             matcher = regex.matcher(bytes);
@@ -890,7 +882,7 @@ final class JoniRegexPattern {
                 throw failure;
             }
             matched = result >= 0;
-            if (hasControlVerbState || matcher.hasEncounteredControlVerb()) {
+            if (matcher.hasEncounteredControlVerb() || (hasControlVerbState && matched)) {
                 RuntimeRegex.updateControlVerbVariables(
                         matcher.getControlMark(), matcher.getControlError());
             }
@@ -1205,7 +1197,7 @@ final class JoniRegexPattern {
             CaptureSnapshot priorDynamicView = previousDynamicView;
             MatchView provisional = callback.kind == RuntimeRegexCallback.Kind.DYNAMIC
                     ? dynamicCaptureView(match, priorDynamicView) : match;
-            publishProvisional(provisional);
+            publishProvisional(provisional, callback.lexicalPackage);
             if (callback.kind == RuntimeRegexCallback.Kind.DYNAMIC) {
                 previousDynamicView = CaptureSnapshot.of(match);
             }
@@ -1377,7 +1369,7 @@ final class JoniRegexPattern {
             throw new PerlCompilerException(marker.buildErrorMessage() + ".\n");
         }
 
-        private void publishProvisional(MatchView match) {
+        private void publishProvisional(MatchView match, String lexicalPackage) {
             RuntimeRegexState state = PerlRuntime.current().regexState;
             state.lastParenMatchOverrideActive = false;
             state.lastParenMatchOverride = null;
@@ -1412,7 +1404,8 @@ final class JoniRegexPattern {
             state.lastClosedCapture = lastClosed > 0 && lastClosed <= count
                     ? state.lastCaptureGroups[lastClosed - 1] : null;
             if (publishesControlVerbState || match.controlMark() != null) {
-                RuntimeRegex.updateControlVerbVariables(match.controlMark(), null);
+                RuntimeRegex.updateControlVerbVariables(
+                        lexicalPackage, match.controlMark(), null);
             }
         }
 

@@ -54,9 +54,9 @@ class JoniRegexPatternTest {
     }
 
     @Test
-    void translatesAbbreviatedMarkControlVerb() {
+    void routesAbbreviatedMarkControlVerbWithoutRewriting() {
         assertTrue(JoniRegexPattern.requiresJoniBackend("(*:B)A"));
-        assertEquals("(*MARK:B)A", JoniRegexPattern.translatePattern("(*:B)A"));
+        assertEquals("(*:B)A", JoniRegexPattern.translatePattern("(*:B)A"));
     }
 
     @Test
