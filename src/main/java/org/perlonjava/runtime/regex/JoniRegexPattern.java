@@ -348,6 +348,20 @@ final class JoniRegexPattern {
                     atClassStart = false;
                     classAllowsLeadingClose = false;
                 }
+                if (!inClass && pattern.startsWith("\\N", i)) {
+                    if (i + 2 >= pattern.length() || pattern.charAt(i + 2) != '{') {
+                        out.append("[^\\n]");
+                        i++;
+                        continue;
+                    }
+                    int end = pattern.indexOf('}', i + 3);
+                    if (end > i + 3
+                            && isPerlNonNewlineInterval(pattern, i + 3, end)) {
+                        out.append("[^\\n]");
+                        i++;
+                        continue;
+                    }
+                }
                 if (pattern.startsWith("\\N{", i)) {
                     int end = pattern.indexOf('}', i + 3);
                     if (end > i + 3) {
@@ -357,6 +371,11 @@ final class JoniRegexPattern {
                         i = end;
                         continue;
                     }
+                }
+                if (inClass && pattern.startsWith("\\N", i)
+                        && (i + 2 >= pattern.length() || pattern.charAt(i + 2) != '{')) {
+                    throw new IllegalArgumentException(
+                            "\\N in a character class must be a named character");
                 }
                 // In Perl, \g{name} is a backreference.  Ruby/Oniguruma uses
                 // \g<name> for a subexpression call and \k<name> for the
@@ -639,6 +658,38 @@ final class JoniRegexPattern {
             replacement.append("|[").append(retained).append(']');
         }
         return replacement.append(')').toString();
+    }
+
+    private static boolean isPerlNonNewlineInterval(String pattern, int start, int end) {
+        int offset = skipPerlIntervalWhitespace(pattern, start, end);
+        int lowerStart = offset;
+        while (offset < end && pattern.charAt(offset) >= '0'
+                && pattern.charAt(offset) <= '9') {
+            offset++;
+        }
+        boolean hasLower = offset > lowerStart;
+        offset = skipPerlIntervalWhitespace(pattern, offset, end);
+        if (offset == end) return hasLower;
+        if (pattern.charAt(offset++) != ',') return false;
+
+        offset = skipPerlIntervalWhitespace(pattern, offset, end);
+        int upperStart = offset;
+        while (offset < end && pattern.charAt(offset) >= '0'
+                && pattern.charAt(offset) <= '9') {
+            offset++;
+        }
+        boolean hasUpper = offset > upperStart;
+        offset = skipPerlIntervalWhitespace(pattern, offset, end);
+        return offset == end && (hasLower || hasUpper);
+    }
+
+    private static int skipPerlIntervalWhitespace(String pattern, int offset, int end) {
+        while (offset < end) {
+            char ch = pattern.charAt(offset);
+            if (ch != ' ' && (ch < '\t' || ch > '\r')) break;
+            offset++;
+        }
+        return offset;
     }
 
     private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,
