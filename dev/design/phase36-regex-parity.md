@@ -587,6 +587,12 @@ the ordinary `regexp*` matrix. They are not accepted limitations.
 - [ ] Phase 1: Joni ordinary-pattern parity (implementation substantially
   complete; forced Java/Joni corpus comparison remains)
   - [x] Added the temporary backend selector and made Joni the default.
+  - [x] Added the explicitly temporary progressive acceptance route in PR
+    #1042 (`7173d9bff`): default/`auto` keeps ordinary patterns on Java while
+    every existing `requiresJoniBackend` construct still forces Joni. Explicit
+    Joni mode and the unchanged unit corpus remain forced-Joni; its focused
+    nine-file gate gained six passes with no regressions and `make` passed
+    warning-free in 4m04s.
   - [ ] Remove the temporary progressive-routing acceptance workaround after
     closing its forced-Joni regressions. Until then automatic routing keeps
     ordinary patterns on Java while executable closures, dynamic callouts,
