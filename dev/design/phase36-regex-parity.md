@@ -146,11 +146,12 @@ allocate callback state or callback frames.
 
 ### Phase 6 — Integration and release
 
-1. Keep regex core tests unpatched. The import manifest entry for
-   `perl5/t/re/pat.t` must not name a patch, and no regex-test patch file may
-   replace or weaken upstream assertions.
-2. Run `perl dev/import-perl5/sync.pl --only perl5/t/re/pat.t` twice and require
-   the second run to produce no diff. If an upstream assertion fails after
+1. Keep regex core tests unpatched. The canonical `perl5/t` directory import
+   owns `re/pat.t`; no duplicate file row or regex-test patch may replace or
+   weaken upstream assertions.
+2. Run `perl dev/import-perl5/sync.pl --only perl5/t` twice, verify the imported
+   `re/pat.t` hash against the configured upstream source, and require the
+   second run to produce no content diff. If an upstream assertion fails after
    sync, fix PerlOnJava rather than editing the imported test.
 3. Run the complete direct and `_thr.t` regex matrix on JVM and interpreter
    backends and compare it file-by-file with both the Phase 0 result and PR 958.
@@ -179,10 +180,13 @@ explicitly.
 
 ### Imported-test provenance gate
 
-- `dev/import-perl5/config.yaml` imports `perl5/t/re/pat.t` without a patch.
+- `dev/import-perl5/config.yaml` imports `perl5/t/re/pat.t` through the
+  canonical `perl5/t` directory entry, without a duplicate row or patch.
 - No regex-specific import patch weakens or skips upstream assertions.
-- A targeted sync restores the exact configured upstream source.
-- A second consecutive targeted sync is idempotent and leaves the tree clean.
+- A targeted `--only perl5/t` sync restores the exact configured upstream
+  source.
+- A second consecutive directory sync is content-idempotent and leaves the
+  tree clean.
 - The synchronized direct and thread tests run unchanged on JVM and interpreter.
 
 ## Test Contract
