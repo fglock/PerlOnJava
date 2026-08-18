@@ -400,15 +400,16 @@ generated evidence is 369,462/407,367.
 values from pinned Unicode 17 partitions and Script_Extensions overrides.
 Explicit `sc` retains strict Script semantics while Perl's bare Script-value
 shortcuts use Script_Extensions; the composite `Katakana_Or_Hiragana`/`Hrkt`
-value remains explicit-only as required by Perl. Loose aliases, `Qaac`/`Qaai`,
+pseudo-value is rejected from bare and exact assignments and excluded from
+wildcard unions as required by Perl. Loose aliases, `Qaac`/`Qaai`,
 wildcards, exact `Is` assignment policy, precedence over Block shortcuts, and
 positive or complemented properties inside ordinary character classes are
-covered. The 84-assertion oracle passes system Perl, JVM, and interpreter; the
+covered. The 95-assertion oracle passes system Perl, JVM, and interpreter; the
 focused precedence, class-negation, and bare-scx reducers pass 7/7, 8/8, and
 10/10 respectively on all three runtimes. Protected boundary smoke remains
-169/169 per backend. Chunks 01–04 gain 8,126 assertions with zero numbered
+169/169 per backend. Chunks 01–04 gain 8,140 assertions with zero numbered
 regressions and exact JVM/interpreter counts, raising current generated
-evidence to 377,588/407,367.
+evidence to 377,602/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -685,9 +686,9 @@ is retained for now.
     with zero numbered regressions and exact backend identity.
   - [x] Generated and integrated complete pinned Unicode 17.0 Script and
     Script_Extensions sets, including Perl's bare-scx policy, strict explicit
-    Script assignments, composite-value rejection, aliases, wildcards,
-    precedence, and ordinary character-class complements. The focused oracle
-    passes 84/84; chunks 01–04 gain 8,126 assertions with zero numbered
+    Script assignments, composite-value rejection and wildcard exclusion,
+    aliases, precedence, and ordinary character-class complements. The focused oracle
+    passes 95/95; chunks 01–04 gain 8,140 assertions with zero numbered
     regressions and exact backend counts.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
