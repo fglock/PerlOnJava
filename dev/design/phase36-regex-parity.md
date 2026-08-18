@@ -224,7 +224,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1030, stacked
+The published integration stack is preserved through draft PR #1031, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -234,9 +234,10 @@ boundaries; PR #1028 adds independently validated alpha assertion aliases and
 native word boundaries. PR #1029 integrates corrected global zero-width `/g`
 progression and pinned Perl 5.44 Unicode 17.0 Age properties. PR #1030 adds
 binary `ASCII_Hex_Digit` values, pinned General_Category sets, and exact native
-line boundaries. The new WIP adds pinned Canonical_Combining_Class sets while
-the numeric-escape, Bidi_Class, Decomposition_Type, and vertical-whitespace
-slices advance independently.
+line boundaries. PR #1031 adds pinned Canonical_Combining_Class sets and valid
+empty-property rendering. The new WIP integrates native numeric escapes while
+the Bidi_Class, Decomposition_Type, and vertical-whitespace slices advance
+independently.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -378,10 +379,15 @@ assigned line-boundary gap. Six regressions versus the preceding Joni result
 reduced to two fatal roots. Binary `ASCII_Hex_Digit=True` routing is now closed:
 the focused Perl boolean-value oracle passes 16/16 on system Perl, JVM, and
 interpreter, and `pat.t` is restored from its zero-TAP abort to the independently
-tracked test-239 runtime-eval gate. PerlOnJava3 owns the remaining unbraced byte
-escape `too short multibyte code string` root in `pat_advanced{,_thr}.t` and
-`pat_rt_report{,_thr}.t` as part of the overlapping native Joni numeric-escape
-parser slice.
+tracked test-239 runtime-eval gate. Native Joni numeric parsing now treats bare
+high octal escapes as UTF-8 code points and accepts underscored braced hex and
+octal escapes through U+10FFFF. The focused standard-Perl oracle has 14 ordinary
+passes plus four explicitly classified TODOs on both execution backends;
+`pat_rt_report{,_thr}` advances from 5 executed assertions to 73/72, and
+`pat_advanced.t` reaches its later independent `Titlecase` property blocker.
+Strict-regex source policy and Perl code points above U+10FFFF remain explicit
+frontend/representation debt, so the forced-Java underscore compatibility pass
+is retained for now.
 
 ### Completed Phases
 
@@ -515,6 +521,10 @@ parser slice.
   - [x] Integrated native braced-octal parsing and missing-close/empty
     diagnostics plus fatal unterminated braced-hex diagnostics (`55433291a`,
     `913e2b583`) with exact JVM/interpreter `reg_mesg.t` parity.
+  - [x] Integrated native bare high-octal and underscored braced hex/octal
+    parsing through U+10FFFF (`f849c2ef9`, integrated as `eb907a10b`). The
+    focused gate has 14 ordinary passes plus four classified TODOs on both
+    backends and restores `pat_advanced`/`pat_rt_report` startup.
   - [x] Integrated native Joni alpha assertion aliases `pla`, `plb`, `nla`,
     `nlb`, and `atomic` (`a6255fbff`, integrated as `49d7d9648`). The focused
     25-case oracle passes on both execution backends and the generated alpha
@@ -590,10 +600,10 @@ parser slice.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1030. Publish the pinned CCC
-   slice, then integrate accepted native numeric-escape commit `f849c2ef9` in a
-   new WIP PR. Preserve its restored `pat_advanced`/`pat_rt_report` startup and
-   explicit strict-policy and above-U+10FFFF representation debt.
+1. Land review-ready PR #1024 and draft PRs #1025–#1031. Finish the combined
+   validation for integrated numeric-escape commit `eb907a10b`, then publish
+   the new WIP PR. Preserve its restored `pat_advanced`/`pat_rt_report` startup
+   and explicit strict-policy and above-U+10FFFF representation debt.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
