@@ -732,6 +732,8 @@ public class UnicodeResolver {
                     isPerlIsPrefixedEnumeratedWildcard(property);
             boolean isPrefixedIdentifierWildcard =
                     isPerlIsPrefixedIdentifierWildcard(property);
+            boolean isPrefixedEgyptianHieroglyphCoreWildcard =
+                    isPerlIsPrefixedEgyptianHieroglyphCoreWildcard(property);
             boolean isPrefixedIndicCategoryAssignment =
                     isPerlIsPrefixedIndicCategoryAssignment(property);
             boolean isPrefixedIndicCategoryWildcard =
@@ -776,6 +778,10 @@ public class UnicodeResolver {
             if (isPrefixedIdentifierWildcard) {
                 throw new IllegalArgumentException(
                         "Can't find Unicode property definition for Is-prefixed Identifier wildcard");
+            }
+            if (isPrefixedEgyptianHieroglyphCoreWildcard) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition for Is-prefixed kEH_Core wildcard");
             }
             if (isPrefixedIndicCategoryWildcard) {
                 throw new IllegalArgumentException(
@@ -1047,6 +1053,13 @@ public class UnicodeResolver {
         if (property == null) return null;
 
         String alias = property.trim();
+        int malformedEgyptianWildcard = alias.indexOf(":=");
+        if (malformedEgyptianWildcard > 0
+                && PerlUnicodeEgyptianHieroglyphCoreData.isPropertyAlias(
+                        alias.substring(0, malformedEgyptianWildcard))) {
+            throw new IllegalArgumentException(
+                    "Unicode property wildcard not terminated");
+        }
         int assignment = propertyValueDelimiter(alias);
         if (assignment < 0
                 && PerlUnicodeQuickCheckHangulData.isPropertyAlias(alias)) {
@@ -1084,6 +1097,8 @@ public class UnicodeResolver {
                     || PerlUnicodeEnumeratedData.isPropertyAlias(
                         alias.substring(0, assignment))
                     || PerlUnicodeIdentifierData.isPropertyAlias(
+                        alias.substring(0, assignment))
+                    || PerlUnicodeEgyptianHieroglyphCoreData.isPropertyAlias(
                         alias.substring(0, assignment))
                     || PerlUnicodeIndicCategoryData.isPropertyAlias(
                         alias.substring(0, assignment)))) {
@@ -1184,6 +1199,12 @@ public class UnicodeResolver {
                     alias.substring(0, assignment), alias.substring(assignment + 1));
         }
         if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeEgyptianHieroglyphCoreData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            return resolvePerlEgyptianHieroglyphCore(
+                    alias.substring(0, assignment), alias.substring(assignment + 1));
+        }
+        if (assignment > 0 && assignment < alias.length() - 1
                 && PerlUnicodeIndicCategoryData.isPropertyAlias(
                         alias.substring(0, assignment))) {
             return resolvePerlIndicCategory(
@@ -1250,6 +1271,11 @@ public class UnicodeResolver {
                     "Can't find Unicode property definition \"" + alias + "\"");
         }
         if (assignment < 0 && PerlUnicodeIdentifierData.isPropertyAlias(alias)) {
+            throw new IllegalArgumentException(
+                    "Can't find Unicode property definition \"" + alias + "\"");
+        }
+        if (assignment < 0
+                && PerlUnicodeEgyptianHieroglyphCoreData.isPropertyAlias(alias)) {
             throw new IllegalArgumentException(
                     "Can't find Unicode property definition \"" + alias + "\"");
         }
@@ -1475,6 +1501,17 @@ public class UnicodeResolver {
                 && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
     }
 
+    private static boolean isPerlIsPrefixedEgyptianHieroglyphCoreWildcard(
+            String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String propertyName = exactIsPrefixedPropertyName(
+                property.substring(0, assignment));
+        return propertyName != null
+                && PerlUnicodeEgyptianHieroglyphCoreData.isPropertyAlias(propertyName)
+                && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
     private static boolean isPerlIsPrefixedIndicCategoryWildcard(String property) {
         if (!isPerlIsPrefixedIndicCategoryAssignment(property)) return false;
         int assignment = propertyValueDelimiter(property);
@@ -1617,6 +1654,63 @@ public class UnicodeResolver {
                     "No Unicode property value wildcard matches " + property.trim());
         }
         return result.freeze();
+    }
+
+    private static UnicodeSet resolvePerlEgyptianHieroglyphCore(
+            String property, String value) {
+        String wildcard = perlEgyptianHieroglyphCoreWildcardBody(value);
+        if (wildcard == null) {
+            UnicodeSet exact = PerlUnicodeEgyptianHieroglyphCoreData.valueSet(
+                    property, value);
+            if (exact == null) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition \""
+                                + property.trim() + "=" + value.trim() + "\"");
+            }
+            return exact;
+        }
+        RuntimeRegex.recordCompileWarning(
+                "The Unicode property wildcards feature is experimental",
+                "experimental::uniprop_wildcards");
+        if (wildcard.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "Use of quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        Pattern valuePattern;
+        try {
+            valuePattern = Pattern.compile(wildcard);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (String candidate :
+                PerlUnicodeEgyptianHieroglyphCoreData.wildcardValues(property)) {
+            if (valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(looseAsciiPropertyName(candidate)).matches()) {
+                result.addAll(PerlUnicodeEgyptianHieroglyphCoreData.valueSet(
+                        property, candidate));
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches " + property.trim());
+        }
+        return result.freeze();
+    }
+
+    private static String perlEgyptianHieroglyphCoreWildcardBody(String value) {
+        String anchored = perlNumericWildcardBody(value);
+        if (anchored != null) return anchored;
+        String trimmed = value.trim();
+        if (trimmed.length() > 2
+                && ((trimmed.startsWith(":") && trimmed.endsWith(":"))
+                    || (trimmed.startsWith("/") && trimmed.endsWith("/")))) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return null;
     }
 
     private static UnicodeSet resolvePerlIndicCategory(

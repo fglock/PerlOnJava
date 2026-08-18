@@ -656,6 +656,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             String javaPattern = null;
             beginCompileWarningCapture();
+            boolean compileCompleted = false;
             try {
                 boolean usesRecursiveBackend = RegexBackendPolicy.useJoni(compilePatternString);
                 if (usesRecursiveBackend
@@ -778,6 +779,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         regex.notemptyPatternUnicode = null;
                     }
                 }
+                compileCompleted = true;
             } catch (Exception e) {
                 if ("invalid backref number/name".equals(e.getMessage())
                         || "invalid backref number".equals(e.getMessage())) {
@@ -845,11 +847,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (regex.patternString == null) {
                         regex.patternString = originalPatternString != null ? originalPatternString : "";
                     }
+                    compileCompleted = true;
                 } else {
                     throw unimplEx;
                 }
             } finally {
                 regex.compileWarnings = endCompileWarningCapture();
+                if (!compileCompleted && !literalSyntaxValidation) regex.emitCompileWarnings();
             }
 
             // Cache the result if the cache is not full
