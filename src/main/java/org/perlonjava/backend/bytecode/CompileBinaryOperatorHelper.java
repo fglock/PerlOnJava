@@ -382,6 +382,8 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
                 bytecodeCompiler.emit(0);
                 bytecodeCompiler.emit(-1);
+                bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
+                        bytecodeCompiler.getCurrentPackage()));
             }
             case "!~" -> {
                 // $string !~ /pattern/ - negated regex match
@@ -392,6 +394,8 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
+                bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
+                        bytecodeCompiler.getCurrentPackage()));
             }
             case "&" -> {
                 // Numeric bitwise AND (default): rs1 & rs2

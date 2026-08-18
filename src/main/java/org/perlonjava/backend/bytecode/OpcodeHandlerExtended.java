@@ -908,7 +908,7 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute match regex operation.
-     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode targetNameIndex
+     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode targetNameIndex packageNameIndex
      */
     public static int executeMatchRegex(int[] bytecode, int pc, RuntimeBase[] registers,
                                         InterpretedCode code) {
@@ -918,6 +918,7 @@ public class OpcodeHandlerExtended {
         int ctx = bytecode[pc++];
         boolean bytesMode = bytecode[pc++] != 0;
         int targetNameIndex = bytecode[pc++];
+        int packageNameIndex = bytecode[pc++];
 
         RegexQuoteMeta.setMatchTargetName(targetNameIndex >= 0
                 && targetNameIndex < code.stringPool.length
@@ -926,37 +927,47 @@ public class OpcodeHandlerExtended {
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeScalar regex = registers[regexReg].scalar();
         RuntimeScalar string = registers[stringReg].scalar();
-        if (bytesMode) {
-            registers[rd] = RuntimeRegex.matchRegexBytes(
-                    regex,
-                    string,
-                    ctx);
-        } else {
-            registers[rd] = RuntimeRegex.matchRegex(
-                    regex,
-                    string,
-                    ctx);
+        RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
+        String savedPackage = currentPackage.toString();
+        currentPackage.set(code.stringPool[packageNameIndex]);
+        try {
+            if (bytesMode) {
+                registers[rd] = RuntimeRegex.matchRegexBytes(regex, string, ctx);
+            } else {
+                registers[rd] = RuntimeRegex.matchRegex(regex, string, ctx);
+            }
+        } finally {
+            currentPackage.set(savedPackage);
         }
         return pc;
     }
 
     /**
      * Execute negated match regex operation.
-     * Format: MATCH_REGEX_NOT rd stringReg regexReg ctx
+     * Format: MATCH_REGEX_NOT rd stringReg regexReg ctx packageNameIndex
      */
-    public static int executeMatchRegexNot(int[] bytecode, int pc, RuntimeBase[] registers) {
+    public static int executeMatchRegexNot(int[] bytecode, int pc, RuntimeBase[] registers,
+                                           InterpretedCode code) {
         int rd = bytecode[pc++];
         int stringReg = bytecode[pc++];
         int regexReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+        int packageNameIndex = bytecode[pc++];
 
         RegexQuoteMeta.setMatchTargetName(null);
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
-        RuntimeBase matchResult = RuntimeRegex.matchRegex(
-                (RuntimeScalar) registers[regexReg],
-                (RuntimeScalar) registers[stringReg],
-                ctx
-        );
+        RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
+        String savedPackage = currentPackage.toString();
+        RuntimeBase matchResult;
+        currentPackage.set(code.stringPool[packageNameIndex]);
+        try {
+            matchResult = RuntimeRegex.matchRegex(
+                    (RuntimeScalar) registers[regexReg],
+                    (RuntimeScalar) registers[stringReg],
+                    ctx);
+        } finally {
+            currentPackage.set(savedPackage);
+        }
         // Negate the boolean result
         registers[rd] = new RuntimeScalar(matchResult.scalar().getBoolean() ? 0 : 1);
         return pc;

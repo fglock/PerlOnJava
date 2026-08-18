@@ -359,6 +359,7 @@ public class CompileOperator {
         bc.emit(bc.isBytesEnabled() ? 1 : 0);
         bc.emit(regexTargetNameIndex(bc,
                 args.elements.size() > 2 ? args.elements.get(2) : null));
+        bc.emit(bc.addToStringPool(bc.getCurrentPackage()));
         bc.lastResultReg = rd;
     }
 
@@ -402,6 +403,7 @@ public class CompileOperator {
         bc.emit(bc.isBytesEnabled() ? 1 : 0);
         bc.emit(regexTargetNameIndex(bc,
                 args.elements.size() > 3 ? args.elements.get(3) : null));
+        bc.emit(bc.addToStringPool(bc.getCurrentPackage()));
         bc.lastResultReg = rd;
     }
 

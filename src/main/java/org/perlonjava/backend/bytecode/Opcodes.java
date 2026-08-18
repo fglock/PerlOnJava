@@ -1003,7 +1003,7 @@ public class Opcodes {
 
     /**
      * Match regex: rd = RuntimeRegex.matchRegex(string, regex, ctx)
-     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode target_name_index
+     * Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode target_name_index package_name_index
      */
     public static final short MATCH_REGEX = 167;
 
@@ -1255,7 +1255,7 @@ public class Opcodes {
 
     /**
      * Match regex (negated): rd = !RuntimeRegex.matchRegex(string, regex, ctx)
-     * Format: MATCH_REGEX_NOT rd stringReg regexReg ctx
+     * Format: MATCH_REGEX_NOT rd stringReg regexReg ctx package_name_index
      */
     public static final short MATCH_REGEX_NOT = 217;
 

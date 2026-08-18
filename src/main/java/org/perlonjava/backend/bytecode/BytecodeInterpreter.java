@@ -2096,14 +2096,15 @@ public class BytecodeInterpreter {
 
                             case Opcodes.MATCH_REGEX -> {
                                 // Match regex
-                                // Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode targetNameIndex
+                                // Format: MATCH_REGEX rd stringReg regexReg ctx bytesMode targetNameIndex packageNameIndex
                                 pc = OpcodeHandlerExtended.executeMatchRegex(bytecode, pc, registers, code);
                             }
 
                             case Opcodes.MATCH_REGEX_NOT -> {
                                 // Negated regex match
-                                // Format: MATCH_REGEX_NOT rd stringReg regexReg ctx
-                                pc = OpcodeHandlerExtended.executeMatchRegexNot(bytecode, pc, registers);
+                                // Format: MATCH_REGEX_NOT rd stringReg regexReg ctx packageNameIndex
+                                pc = OpcodeHandlerExtended.executeMatchRegexNot(
+                                        bytecode, pc, registers, code);
                             }
 
                             case Opcodes.CHOMP -> {

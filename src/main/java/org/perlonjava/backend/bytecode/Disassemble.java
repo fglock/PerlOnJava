@@ -845,14 +845,16 @@ public class Disassemble {
                         int matchCtx = interpretedCode.bytecode[pc++];
                         int bytesMode = interpretedCode.bytecode[pc++];
                         int targetNameIndex = interpretedCode.bytecode[pc++];
-                        sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(", bytes=").append(bytesMode).append(", targetName=").append(targetNameIndex).append(")\n");
+                        int matchPackageIndex = interpretedCode.bytecode[pc++];
+                        sb.append("MATCH_REGEX r").append(rd).append(" = r").append(strReg).append(" =~ r").append(regReg).append(" (ctx=").append(matchCtx).append(", bytes=").append(bytesMode).append(", targetName=").append(targetNameIndex).append(", package=").append(interpretedCode.stringPool[matchPackageIndex]).append(")\n");
                         break;
                     case Opcodes.MATCH_REGEX_NOT:
                         rd = interpretedCode.bytecode[pc++];
                         strReg = interpretedCode.bytecode[pc++];
                         regReg = interpretedCode.bytecode[pc++];
                         matchCtx = interpretedCode.bytecode[pc++];
-                        sb.append("MATCH_REGEX_NOT r").append(rd).append(" = r").append(strReg).append(" !~ r").append(regReg).append(" (ctx=").append(matchCtx).append(")\n");
+                        matchPackageIndex = interpretedCode.bytecode[pc++];
+                        sb.append("MATCH_REGEX_NOT r").append(rd).append(" = r").append(strReg).append(" !~ r").append(regReg).append(" (ctx=").append(matchCtx).append(", package=").append(interpretedCode.stringPool[matchPackageIndex]).append(")\n");
                         break;
                     case Opcodes.CHOMP:
                         rd = interpretedCode.bytecode[pc++];
