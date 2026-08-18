@@ -816,7 +816,14 @@ is retained for now.
 7. Audit every `RegexPreprocessor` rule against the final ownership boundary.
    Move matcher semantics into Joni, retain only source-policy scanning, delete
    Java-only rewrites and compiled-pattern variants, and remove the temporary
-   Java backend selector after the performance gate passes.
+   Java backend selector after the performance gate passes. The current
+   inventory confirms that `RegexPreprocessor.java` (2,542 lines) and
+   `RegexPreprocessorHelper.java` (1,325 lines) are reached only by the Java
+   compilation route; Joni uses its bounded translator plus the shared
+   `ExtendedCharClass`. Before deleting the Java pair, extract the diagnostic
+   helpers still referenced by `ExtendedCharClass`, then update stale ownership
+   comments in `StringSegmentParser`, `RegexMarkers`, `UnicodeResolver`, and
+   `CaptureNameEncoder`.
 8. Reconcile `docs/reference/feature-matrix.md` with the final corpus; update
    `dev/implementation/regex.md` and `docs/design/joni-callout-fork.md` to the
    as-implemented architecture and review both for clarity and structure.
