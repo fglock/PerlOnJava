@@ -221,13 +221,11 @@ public class RegexPreprocessorHelper {
             sb.append("[^\\n\\x0B\\f\\r\\x85\\x{2028}\\x{2029}]");
             return offset;
         } else if (nextChar == 'K') {
-            // \K - keep assertion (reset start of match)
-            // Insert a zero-width named capture group to mark the \K position.
-            // During substitution, text before this position is preserved ("kept").
-            sb.setLength(sb.length() - 1); // Remove the backslash
-            RegexPreprocessor.markBackslashK();
-            RegexPreprocessor.captureGroupCount++;
-            sb.append("(?<perlK>)");
+            // Syntax-aware admission routes real KEEP assertions to Joni. A
+            // \K reaching the Java preprocessor is literal, for example in a
+            // character class or a \Q...\E region.
+            sb.setLength(sb.length() - 1);
+            sb.append('K');
             return offset;
         } else if ((nextChar == 'b' || nextChar == 'B') && offset + 1 < length && s.charAt(offset + 1) == '{') {
             // Handle \b{...} and \B{...} boundary assertions
@@ -804,6 +802,12 @@ public class RegexPreprocessorHelper {
                             sb.append(Character.toChars(s.charAt(offset)));
                         }
                         lastChar = -1;  // Unicode properties can't be range endpoints
+                    } else if (offset < length && s.charAt(offset) == 'K') {
+                        // KEEP is not active inside a class. Preserve Perl's
+                        // literal K while emitting Java-compatible syntax.
+                        sb.setLength(sb.length() - 1);
+                        sb.append('K');
+                        lastChar = 'K';
                     } else if (offset < length && s.charAt(offset) == 'N') {
                         if (offset + 1 < length && s.charAt(offset + 1) == '{') {
                             // Handle \N{...} constructs
