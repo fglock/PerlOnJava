@@ -1210,18 +1210,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /** Refresh a live lexical binding after foreach replaces its alias cell. */
-    public RuntimeBase bindActiveLexical(String variableName, RuntimeBase cell) {
+    public void bindActiveLexical(String variableName, RuntimeBase cell) {
         registerActiveLexical(this, variableName, cell);
-        return cell;
     }
 
-    public static RuntimeBase bindActiveLexical(
+    public static void bindActiveLexical(
             RuntimeBase cell, RuntimeScalar codeRef, String variableName) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
-            return code.bindActiveLexical(variableName, cell);
+            code.bindActiveLexical(variableName, cell);
+            return;
         }
         RuntimeCode active = getActiveCodeAt(0);
-        return active == null ? cell : active.bindActiveLexical(variableName, cell);
+        if (active != null) {
+            active.bindActiveLexical(variableName, cell);
+        }
     }
 
     public static RuntimeBase resolveLexicalAlias(

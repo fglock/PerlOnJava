@@ -504,10 +504,16 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next", "()Ljava/lang/Object;", true);
             mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
 
-            // For reference aliasing with arrays/hashes, dereference the scalar
-            // to get the underlying RuntimeArray/RuntimeHash
+            // Reference-alias loop variables bind to the referenced cell, not
+            // to the RuntimeScalar that holds the reference.
             if (isReferenceAliasing && actualVariable instanceof OperatorNode innerOp) {
-                if (innerOp.operator.equals("@")) {
+                if (innerOp.operator.equals("$")) {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                            "scalarDeref",
+                            "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                } else if (innerOp.operator.equals("@")) {
                     // Array: dereference scalar to get RuntimeArray
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
@@ -522,7 +528,6 @@ public class EmitForeach {
                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
                             false);
                 }
-                // For scalars ($), no dereferencing needed - keep the reference as-is
             }
 
             if (loopVariableIsGlobal) {
@@ -577,11 +582,8 @@ public class EmitForeach {
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                             "bindActiveLexical",
-                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
                             false);
-                    mv.visitTypeInsn(Opcodes.CHECKCAST,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-                    mv.visitVarInsn(Opcodes.ASTORE, loopVarIndex);
                 }
             }
         }
