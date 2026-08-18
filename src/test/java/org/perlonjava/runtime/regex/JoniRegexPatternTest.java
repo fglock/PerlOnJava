@@ -128,6 +128,24 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void passesRemainingExactEnumeratedPropertiesToJoni() {
+        String[][] cases = {
+                {"\\p{Canonical_Combining_Class=Above}", "\u0301"},
+                {"\\p{Bidi_Class=Right_To_Left}", "\u05D0"},
+                {"\\p{Decomposition_Type=Canonical}", "\u00C0"},
+                {"\\p{East_Asian_Width=Fullwidth}", "\u3000"},
+                {"\\p{Numeric_Value=1/2}", "\u00BD"},
+                {"\\p{Joining_Group=Alef}", "\u0627"},
+        };
+
+        for (String[] testCase : cases) {
+            JoniRegexPattern pattern = new JoniRegexPattern(testCase[0], FLAGS);
+            assertEquals(testCase[0], pattern.patternDescription());
+            assertTrue(pattern.matcher(testCase[1], java.util.List.of()).find());
+        }
+    }
+
+    @Test
     void flattensTranslatedPropertiesInsideOrdinaryCharacterClasses() {
         JoniRegexPattern pattern = new JoniRegexPattern(
                 "[\\p{IsDigit}\\p{IsLower}\\p{IsUpper}]", FLAGS);
