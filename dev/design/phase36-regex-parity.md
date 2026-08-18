@@ -233,9 +233,12 @@ user-property-definition diagnostic assertions as separate work.
 Direct user-property definitions now report Perl-compatible overflow, reversed
 range, invalid component, callback death, recursion-chain, and package-name
 diagnostics. The focused 12-assertion oracle passes on both execution backends;
-`regexp_unicode_prop.t` gains two more assertions. Four deferred bare-name
-assertions retain correct diagnostic content but still need literal source-order
-provenance to add the canonical `main::` prefix.
+`regexp_unicode_prop.t` gains two more assertions. Deferred property provenance
+now survives implicit Unicode-flag regex copies and remains associated with the
+property name for later source-literal reuse. The focused 8-assertion oracle
+passes on both execution backends; unchanged upstream coverage gains nine more
+assertions to reach 1,065/1,110, and all user-property diagnostic assertions
+through test 1,094 pass.
 
 Executable callback source and literal trailing `/x` comments survive canonical
 regex-object stringification on both execution backends. Recursive Joni call
@@ -359,9 +362,12 @@ matcher-specific timeouts on both execution backends.
   - [x] Matched user-property definition validation, deterministic recursion
     chains, callback-death wrapping, and direct package-name policy.
     The focused oracle passes 12/12 on system Perl, JVM, and interpreter;
-    unchanged upstream coverage gains two assertions, with four source-order
-    provenance assertions tracked separately.
-  - [ ] Complete the remaining Unicode aliases and diagnostic parity inventory.
+    unchanged upstream coverage gains two assertions.
+  - [x] Preserved deferred user-property package provenance through implicit
+    Unicode-flag copies and later literal reuse. The focused oracle passes 8/8
+    on system Perl, JVM, and interpreter; `regexp_unicode_prop.t` gains nine
+    assertions to 1,065/1,110 on both execution backends.
+  - [ ] Complete the remaining built-in Unicode aliases.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -386,9 +392,10 @@ matcher-specific timeouts on both execution backends.
    slices, then rerun the forced-Joni corpus from the new combined head.
 3. Capture the clean-branch JVM and interpreter 80-file baselines and compare
    both to PR 958 with the regression exit gate.
-4. Integrate the invalid-property and definition-diagnostic slices, then finish
-   PerlOnJava4's built-in Unicode aliases and preserve compile-time source-order
-   provenance for the four deferred bare-name diagnostics.
+4. Integrate PR #1011 and the deferred-property provenance slice, then finish
+   PerlOnJava4's built-in Unicode aliases against the 1,065/1,110 diagnostics
+   baseline. Fixing the 29 executed alias failures also unlocks 16 gated match
+   assertions, so the alias-complete target is 1,110/1,110.
 5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
    use explicit Java mode only to classify corpus regressions before Phase 5
    removes the legacy backend and selector.

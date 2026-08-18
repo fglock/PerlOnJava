@@ -34,6 +34,10 @@ public class UnicodeResolver {
         return PerlRuntime.current().regexState().userUnicodePropertyCache;
     }
 
+    private static Set<String> deferredUserProperties() {
+        return PerlRuntime.current().regexState().deferredUserUnicodeProperties;
+    }
+
     private static String userPropertyCacheKey(String subName, boolean caseInsensitive) {
         return subName + (caseInsensitive ? "\u0000i" : "\u0000s");
     }
@@ -537,7 +541,8 @@ public class UnicodeResolver {
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
 
         final String resolvedSubName = subName;
-        final String diagnosticName = qualifyBareDiagnosticName
+        final String diagnosticName = (qualifyBareDiagnosticName
+                || deferredUserProperties().contains(subName))
                 && !property.contains("::") ? subName : property;
         final String coordinationKey = cacheKey;
         try {
@@ -649,6 +654,9 @@ public class UnicodeResolver {
             String property = pattern.substring(slash + 3, end).trim();
             if (property.startsWith("^")) property = property.substring(1).trim();
             if (isUserDefinedPropertyName(property)) {
+                if (qualifyBareDiagnosticName && !property.contains("::")) {
+                    deferredUserProperties().add("main::" + property);
+                }
                 // Preloading is an optimization for callbacks that are already
                 // available. Perl permits qr// to contain a forward reference
                 // to a user property; RegexPreprocessor represents that with a

@@ -1351,6 +1351,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
             regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
             regex.patternString = originalRegex.patternString;
+            regex.deferredUserDefinedUnicodeProperties =
+                    originalRegex.deferredUserDefinedUnicodeProperties;
             regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
             regex.quoteConstruction = originalRegex.quoteConstruction;
             regex.warningsOnUse = new ArrayList<>(originalRegex.warningsOnUse);
@@ -1391,6 +1393,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
                     regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
                     regex.patternString = originalRegex.patternString;
+                    regex.deferredUserDefinedUnicodeProperties =
+                            originalRegex.deferredUserDefinedUnicodeProperties;
                     regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
                     regex.quoteConstruction = originalRegex.quoteConstruction;
                     regex.warningsOnUse = new ArrayList<>(originalRegex.warningsOnUse);
@@ -1591,6 +1595,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.patternNoInternalMarkers = resolvedRegex.patternNoInternalMarkers;
         regex.patternUnicodeNoInternalMarkers = resolvedRegex.patternUnicodeNoInternalMarkers;
         regex.patternString = resolvedRegex.patternString;
+        regex.deferredUserDefinedUnicodeProperties =
+                resolvedRegex.deferredUserDefinedUnicodeProperties;
         regex.regexFlags = resolvedRegex.regexFlags;
         regex.hasPreservesMatch = resolvedRegex.hasPreservesMatch;
         regex.quoteConstruction = resolvedRegex.quoteConstruction;

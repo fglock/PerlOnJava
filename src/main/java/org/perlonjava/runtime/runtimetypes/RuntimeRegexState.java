@@ -4,9 +4,11 @@ import org.perlonjava.runtime.regex.RegexMatcher;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Mutable regular-expression state owned by one {@link PerlRuntime}.
@@ -46,6 +48,7 @@ public final class RuntimeRegexState {
     /** Stable scalar identities for literal regex targets, keyed by compiled call site. */
     public final Map<Integer, RuntimeScalar> literalRegexTargets = new LinkedHashMap<>();
     public final Map<String, String> userUnicodePropertyCache = new LinkedHashMap<>();
+    public final Set<String> deferredUserUnicodeProperties = new LinkedHashSet<>();
 
     /**
      * Per-runtime compiled templates. Some templates support deferred runtime
@@ -101,5 +104,6 @@ public final class RuntimeRegexState {
     /** Copy immutable regex metadata that Perl ithreads inherit at creation. */
     void snapshotInto(RuntimeRegexState target) {
         target.userUnicodePropertyCache.putAll(userUnicodePropertyCache);
+        target.deferredUserUnicodeProperties.addAll(deferredUserUnicodeProperties);
     }
 }
