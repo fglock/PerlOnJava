@@ -265,7 +265,10 @@ if they expose a semantic defect.
         prerequisites with a narrower permanent Java fallback;
      2. route branch-reset groups and delete their exclusive rewrite only after
         the named/numeric-call reducers and complete imported branch-reset gate
-        pass without the temporary automatic-Java guard;
+        pass without the temporary automatic-Java guard; relative calls such as
+        `(?-1)` must retain their lexical physical target in each branch-reset
+        alternative rather than resolving later through the shared logical
+        capture number;
      3. route alphabetic assertions and delete their recursive Java rewrite
         after direct Joni tests and the classified `alpha_assertions.t` gate
         prove every remaining failure is understood;
