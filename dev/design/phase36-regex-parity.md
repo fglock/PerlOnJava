@@ -222,23 +222,25 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Joni default; Phase 1 remediation and Phase 3 Unicode active
+### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-Invalid Unicode properties now remain fatal under
-`JPERL_UNIMPLEMENTED=warn`, and only exact `Is`/`In` final-name prefixes enter
-Perl's user-property callback path. A 39-assertion standard-Perl oracle passes
-on JVM and interpreter; the unchanged `regexp_unicode_prop.t` runner improves
-from 1,039/1,110 to 1,054/1,110, leaving built-in aliases and six
-user-property-definition diagnostic assertions as separate work.
-Direct user-property definitions now report Perl-compatible overflow, reversed
-range, invalid component, callback death, recursion-chain, and package-name
-diagnostics. The focused 12-assertion oracle passes on both execution backends;
-`regexp_unicode_prop.t` gains two more assertions. Deferred property provenance
-now survives implicit Unicode-flag regex copies and remains associated with the
-property name for later source-literal reuse. The focused 8-assertion oracle
-passes on both execution backends; unchanged upstream coverage gains nine more
-assertions to reach 1,065/1,110, and all user-property diagnostic assertions
-through test 1,094 pass.
+The combined integration stack now includes immutable Joni offset-map reuse,
+regex-set property preservation, bounded catastrophic-backtracking safeguards,
+user-property diagnostics and provenance, and focused built-in Unicode alias
+normalization. The focused property gates pass 39/39, 12/12, 8/8, and 16/16;
+unchanged `regexp_unicode_prop.t` passes 1,110/1,110 on JVM and interpreter.
+Draft PR #1016 preserves each validated prerequisite head and passed a
+warning-free full `make` on its corrected integration history.
+
+The lossless generated `TestProp.pl` fixture now exposes ten previously gated
+`uniprops*.t` files. The exact-history JVM run executes all 290,912 planned
+assertions with zero timeouts or incomplete files, at 175,768 passing and
+115,144 failing. PR 958 recorded zero plan for all ten files, so this is new
+coverage rather than a regression, but it reopens Phase 3's full-corpus exit
+gate. Chunks 06–10 are complete except for 791 failures in chunk 05; chunks
+01–04 require semantic clustering before Phase 3 can close.
+The interpreter produces the exact same 175,768/290,912 split, with identical
+per-file plans and no timeout or incomplete file.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -282,8 +284,8 @@ one-level failed callback state. The focused `pat_re_eval.t` gate executes all
 555 assertions with 550 semantic assertions passing on both execution backends;
 the remaining five inspect Perl's optimizer/debug transcript.
 
-The forced-backend differential is running in the parallel PerlOnJava3
-checkout. Its completed forced-Java/JVM leg covers all 80 files at
+The last completed forced-backend differential's forced-Java/JVM leg covers all
+80 files at
 49,923/94,823 versus PR 958's 50,273/94,771. The apparent aggregate regression
 is dominated by `pat{,_thr}.t` aborting after test 239 on a runtime eval-group
 policy error; that source-policy slice is assigned independently. The completed
@@ -368,7 +370,8 @@ matcher-specific timeouts on both execution backends.
     system Perl, JVM, and interpreter.
   - [x] Removed the final `pat.t.patch` hunk, deleted the patch and its importer
     configuration, and resynchronized the unmodified Perl 5.44 `pat.t`.
-- [x] Phase 3: Unicode and pattern syntax completion (2026-08-17)
+- [ ] Phase 3: Unicode and pattern syntax completion (focused gates complete;
+  generated full-corpus remediation active)
   - [x] Added Perl escape syntax, Unicode-property resolution, scoped ASCII
     folds, possessive intervals, and bounded lookbehind support to Joni.
   - [x] Converted public regex `pos` values between Perl logical-character
@@ -394,10 +397,18 @@ matcher-specific timeouts on both execution backends.
   - [x] Preserved `\c` control operands through regex source interpolation.
     The focused oracle passes 4/4 and unchanged `subst.t` gains test 154 on
     both execution backends.
-  - [x] Completed Perl-compatible built-in Unicode alias normalization while
-    preserving deferred user-property precedence. The focused alias oracle
-    passes 16/16 on system Perl, JVM, and interpreter; unchanged
-    `regexp_unicode_prop.t` passes 1,110/1,110 on both execution backends.
+  - [x] Completed the built-in Unicode aliases exercised by
+    `regexp_unicode_prop.t` while preserving deferred user-property precedence.
+    The focused alias oracle passes 16/16 on system Perl, JVM, and interpreter;
+    unchanged `regexp_unicode_prop.t` passes 1,110/1,110 on both execution
+    backends.
+  - [x] Added a lossless, idempotent importer for Perl's generated TestProp
+    corpus. The focused importer test passes 66/66, two real generations are
+    byte-identical, system Perl executes 503,197 TAP, and JVM/interpreter both
+    execute 290,912 TAP with exact semantic parity and no timeout.
+  - [ ] Classify and close the 115,144 failures newly exposed by the lossless
+    generated `uniprops*.t` corpus; require JVM/interpreter plan and semantic
+    parity before marking Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -413,18 +424,29 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Complete the combined offset-map, regex-set, Joni safeguard, property
-   diagnostics/provenance, Unicode-alias, inline-`p`, and control-escape
-   integration while retaining each validated prerequisite head.
-2. Integrate the lossless generated Unicode fixtures, then rerun the
-   forced-Joni corpus from the combined head with every child hard-bounded.
-3. Capture clean JVM and interpreter 80-file baselines and compare every file
-   with PR 958 under the no-regression gate.
-4. Classify residual engine-introspection exclusions, then queue the largest
-   remaining semantic cluster as a focused slice.
-5. Keep the warning-free whole-unit-suite gate green with Joni as the default;
-   use explicit Java mode only to classify corpus regressions before Phase 5
-   removes the legacy backend and selector.
+1. Publish the validated lossless generated Unicode fixture importer on top of
+   PR #1016. Preserve the canonical corpus losslessly and retain hard per-child
+   bounds. The 300-second warm `uniprops04.t` attempt was contention-invalid;
+   repeat its performance measurement only on an idle host.
+2. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
+   head. Save complete JSON and logs, publish the missing differential report,
+   and compare every file with both the Phase 0 result and PR 958 under the
+   no-regression gate.
+3. Implement the largest residual semantic clusters from that report, including
+   the generated Unicode Age/alias/boundary groups and the accepted-invalid-
+   pattern and warning-policy losses in `reg_mesg.t`. Keep optimizer/debug-
+   transcript assertions explicitly classified rather than approximating Perl
+   internals.
+4. Audit every `RegexPreprocessor` rule against the final ownership boundary.
+   Move matcher semantics into Joni, retain only source-policy scanning, delete
+   Java-only rewrites and compiled-pattern variants, and remove the temporary
+   Java backend selector after the performance gate passes.
+5. Reconcile `docs/reference/feature-matrix.md` with the final corpus: replace
+   stale Unicode limitations, add any still-missing regex features, and link
+   each limitation to a reducer or explicit optimizer/debug exclusion.
+6. Run unchanged CPAN consumers, the direct/thread release matrix, packaging
+   and license checks, and warning-free `make`; then rebase each focused PR and
+   require green Ubuntu and Windows CI.
 
 ### Open Questions and Blockers
 
