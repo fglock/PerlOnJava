@@ -224,7 +224,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1031, stacked
+The published integration stack is preserved through draft PR #1032, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -235,9 +235,9 @@ native word boundaries. PR #1029 integrates corrected global zero-width `/g`
 progression and pinned Perl 5.44 Unicode 17.0 Age properties. PR #1030 adds
 binary `ASCII_Hex_Digit` values, pinned General_Category sets, and exact native
 line boundaries. PR #1031 adds pinned Canonical_Combining_Class sets and valid
-empty-property rendering. The new WIP integrates native numeric escapes while
-the Bidi_Class, Decomposition_Type, and vertical-whitespace slices advance
-independently.
+empty-property rendering. PR #1032 integrates native numeric escapes through
+U+10FFFF. The new WIP adds pinned Bidi_Class sets while Decomposition_Type,
+East_Asian_Width, and vertical-whitespace slices advance independently.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -311,6 +311,14 @@ passes 33,516/41,843 identically on both execution backends: 2,195 CCC
 assertions and 10 already-native line preamble assertions improve over the
 31,311 baseline with zero numbered regressions. Current generated evidence is
 341,280/407,367.
+
+`Bidi_Class`/`bc` assignments now resolve all 23 values from a complete pinned
+Unicode 17 partition. Ordered missing defaults, short/long and loose aliases,
+directional controls, noncharacters, and unknown-value rejection are covered.
+The focused oracle passes 99/99 on system Perl, JVM, and interpreter; the
+combined Unicode/property/boundary smoke is 345/345 per backend. Chunk 01 gains
+736 assertions to 34,252/41,843 identically on both execution backends with no
+numbered regression, raising current generated evidence to 342,016/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -558,6 +566,10 @@ is retained for now.
     aliases, ordered missing defaults, reserved empty values, and valid
     empty/full rendering. The focused oracle passes 24/24 and chunk 01 reaches
     33,516/41,843 on both backends with zero numbered regressions.
+  - [x] Generated and integrated a complete pinned Unicode 17.0 Bidi_Class
+    partition with loose aliases and ordered missing defaults. The focused
+    oracle passes 99/99 and chunk 01 gains 736 assertions to 34,252/41,843 on
+    both backends with zero numbered regressions.
   - [ ] Close the remaining property failures before marking Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -600,15 +612,15 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1031. Finish the combined
-   validation for integrated numeric-escape commit `eb907a10b`, then publish
-   the new WIP PR. Preserve its restored `pat_advanced`/`pat_rt_report` startup
-   and explicit strict-policy and above-U+10FFFF representation debt.
+1. Land review-ready PR #1024 and draft PRs #1025–#1032. Publish the validated
+   Bidi_Class slice, then integrate native vertical-whitespace commit
+   `1eff1db97` and the completed Decomposition_Type data handoff in separate
+   focused WIP PRs.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Integrate the independently generated Bidi_Class and Decomposition_Type
-   slices, then continue the measured residual order: East_Asian_Width, binary
+3. Integrate the independently generated Decomposition_Type and
+   East_Asian_Width slices, then continue the measured residual order: binary
    property values, Block, Script/Script_Extensions, Numeric_Value,
    Joining_Group, and break-property values. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
