@@ -205,7 +205,8 @@ final class JoniRegexPattern {
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
             boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
-            if ((frontendProperty || scriptExtensions) && extendedClassBracketDepth > 0) {
+            if ((frontendProperty || scriptExtensions || perlBuiltInAlias)
+                    && extendedClassBracketDepth > 0) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
@@ -469,7 +470,8 @@ final class JoniRegexPattern {
                 if (sourceClass.toLowerCase(java.util.Locale.ROOT).contains("[:ascii:]")) {
                     appendAsciiClassForJoni(out, translatedClass.toString());
                 } else {
-                    out.append(translatedClass);
+                    out.append(normalizeGeneratedPropertyClassForJoni(
+                            translatedClass.toString()));
                 }
                 i = end;
                 continue;

@@ -176,4 +176,22 @@ class JoniRegexPatternTest {
         assertTrue(pattern.matcher("A", java.util.List.of()).find());
         assertFalse(pattern.matcher("\u017F", java.util.List.of()).find());
     }
+
+    @Test
+    void resolvesPerlPropertyAliasesInsideExtendedClasses() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "(?[ [A] + \\p{Titlecase} ])", FLAGS);
+
+        assertTrue(pattern.matcher("A", java.util.List.of()).find());
+        assertTrue(pattern.matcher("\u01C5", java.util.List.of()).find());
+        assertFalse(pattern.matcher("z", java.util.List.of()).find());
+    }
+
+    @Test
+    void resolvesControlEscapesInsideExtendedClasses() {
+        JoniRegexPattern pattern = new JoniRegexPattern("(?[\\c\\])", FLAGS);
+
+        assertTrue(pattern.matcher("\u001C", java.util.List.of()).find());
+        assertFalse(pattern.matcher("\\", java.util.List.of()).find());
+    }
 }
