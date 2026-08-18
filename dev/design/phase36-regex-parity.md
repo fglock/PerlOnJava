@@ -224,15 +224,16 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1027, stacked
+The published integration stack is preserved through draft PR #1028, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
 first 524 lines of retired Java-only preprocessor code. Every published slice
 has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
-boundaries. The current WIP integrates independently validated alpha assertion
-aliases and native word boundaries, while global zero-width `/g` progression
-and line boundaries remain parallel integration slices.
+boundaries; PR #1028 adds independently validated alpha assertion aliases and
+native word boundaries. The current WIP integrates corrected global zero-width
+`/g` progression and pinned Perl 5.44 Unicode 17.0 Age properties while line
+boundaries remain a parallel integration slice.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -267,9 +268,18 @@ Extended_Pictographic data. The 33-assertion focused oracle passes on system
 Perl, JVM, and interpreter, direct Joni exercises the same path, and generated
 chunk 10 passes 19,510/19,510 identically on both execution backends. Combined
 with the complete boundary chunk 05 and unchanged chunks 06–09, current
-generated evidence is 132,578/407,367. A resource-contended
+generated evidence was 132,578/407,367 before the current property slice. A resource-contended
 current-head refresh did not reproduce a complete exact JVM/interpreter pair,
 so it does not replace that accepted baseline.
+
+`Age` now uses exact introduction-version sets and `In`/`Present_In` use
+cumulative sets generated from the repository-pinned Perl 5.44 Unicode 17.0
+`DAge.txt`; `Unassigned`/`NA`, colon delimiters, wildcard-value spellings, and
+Perl loose version aliases are covered without inheriting the host ICU Unicode
+version. The focused oracle passes 14/14 on system Perl, JVM, and interpreter.
+Stable chunk 01 validation improves from 30,194 to 30,705 passing assertions
+identically on JVM and interpreter, with no numbered regression. This raises
+current generated evidence by 511 to 133,089/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -367,10 +377,10 @@ matcher-specific timeouts on both execution backends.
     non-ASCII substitutions under lexical `use bytes`. Upgraded, byte-backed,
     and compiled byte-backed patterns pass 12/12 on all runtimes, and the
     generated Unicode marker stage passes 4/4 on JVM and interpreter.
-  - [ ] Close `/g` same-position retry and capture semantics after a zero-width
-    first alternative. The standard-Perl omniholder reducer currently passes
-    7/10 in all PerlOnJava modes even though the DBIx substitution contract
-    passes; this is independent of the Java-only alternative-reorder rewrite.
+  - [x] Closed `/g` same-position retry and capture semantics after a zero-width
+    first alternative (`0703725c8`, integrated as `402102446`). The focused
+    oracle passes 23/23, the raw omniholder reducer improves from 7/10 to 10/10
+    in all six Java/Joni × JVM/interpreter modes, and DBIx::Simple remains 69/69.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -475,6 +485,10 @@ matcher-specific timeouts on both execution backends.
     reproducible Perl 5.44 Unicode 17.0 Word_Break and Extended_Pictographic
     tables. The focused oracle passes 33/33 and generated chunk 10 passes
     19,510/19,510 on both execution backends.
+  - [x] Generated exact `Age` and cumulative `In`/`Present_In` sets from pinned
+    Perl 5.44 Unicode 17.0 data, including loose version, wildcard, and
+    unassigned aliases. The focused oracle passes 14/14 and chunk 01 gains 511
+    assertions with no numbered regression.
   - [ ] Implement the native Joni line boundary algorithm, then
     close the remaining property and boundary failures before marking Phase 3
     complete.
@@ -513,16 +527,15 @@ matcher-specific timeouts on both execution backends.
     leftmost-capture and 20,000-character gates in all four backend modes.
   - [x] Retired the Java-only DBIx omniholder alternative reorder
     (`18e71a532`; 50 lines removed) after exact substitution and bundled
-    DBIx::Simple gates passed without changing the separately tracked raw `/g`
-    7/10 result.
+    DBIx::Simple gates passed. The independent raw `/g` 7/10 progression gap is
+    now closed at 10/10 by the shared matcher-adapter fix above.
 - [ ] Phase 6: Integration and release
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1027. Publish the current
-   WIP integration branch containing alpha-assertion aliases, then integrate the
-   pending zero-width `/g` adapter commit after its non-overlapping gates are
-   complete.
+1. Land review-ready PR #1024 and draft PRs #1025–#1028. Publish the current
+   post-#1028 WIP containing the completed zero-width `/g` adapter integration,
+   then rerun the combined forced-backend differential.
 2. Continue boundary semantics natively in Joni with line breaks
    (0/205,380 in chunks 06–09). PerlOnJava4 owns the non-overlapping line slice;
    word boundaries are complete at 19,510/19,510 in chunk 10. Use pinned Perl 5.44 Unicode data and
@@ -530,7 +543,7 @@ matcher-specific timeouts on both execution backends.
    boundary rewrite only after native parity.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
-   break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
+   break-property values. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Close underscored numeric escapes with focused standard-Perl gates.
 4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined

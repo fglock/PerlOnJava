@@ -190,7 +190,7 @@ final class JoniRegexPattern {
             boolean scriptExtensions = unnegated.matches(
                     "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
             boolean frontendProperty = unnegated.matches(
-                    "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*=.*");
+                    "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
             boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
             if (frontendProperty && extendedClassBracketDepth > 0) {
                 translated.append(pattern, i, end + 1);
