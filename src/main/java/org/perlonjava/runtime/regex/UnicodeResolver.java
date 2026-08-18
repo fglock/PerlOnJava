@@ -17,6 +17,8 @@ import java.util.regex.Pattern;
 public class UnicodeResolver {
     private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
             "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*$");
+    private static final UnicodeSet[] PERL_DECOMPOSITION_TYPE_SETS =
+            buildPerlDecompositionTypeSets();
 
     /**
      * Cache for user-defined property subroutine results.
@@ -971,6 +973,18 @@ public class UnicodeResolver {
             }
             return bidiClass;
         }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeDecompositionTypeData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            byte value = PerlUnicodeDecompositionTypeData.valueForAlias(
+                    alias.substring(assignment + 1));
+            if (value == PerlUnicodeDecompositionTypeData.INVALID) {
+                throw new IllegalArgumentException(
+                        "Unsupported Decomposition_Type value: "
+                                + alias.substring(assignment + 1).trim());
+            }
+            return PERL_DECOMPOSITION_TYPE_SETS[value];
+        }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1044,6 +1058,24 @@ public class UnicodeResolver {
         };
     }
 
+    private static UnicodeSet[] buildPerlDecompositionTypeSets() {
+        UnicodeSet[] sets = new UnicodeSet[
+                PerlUnicodeDecompositionTypeData.NON_CANONICAL + 1];
+        for (int i = 0; i < sets.length; i++) sets[i] = new UnicodeSet();
+        for (int i = 0; i < PerlUnicodeDecompositionTypeData.rangeCount(); i++) {
+            int start = PerlUnicodeDecompositionTypeData.rangeStart(i);
+            int end = PerlUnicodeDecompositionTypeData.rangeEnd(i);
+            byte value = PerlUnicodeDecompositionTypeData.rangeValue(i);
+            sets[value].add(start, end);
+            if (PerlUnicodeDecompositionTypeData.matches(
+                    value, PerlUnicodeDecompositionTypeData.NON_CANONICAL)) {
+                sets[PerlUnicodeDecompositionTypeData.NON_CANONICAL].add(start, end);
+            }
+        }
+        for (UnicodeSet set : sets) set.freeze();
+        return sets;
+    }
+
     private static int propertyValueDelimiter(String property) {
         int equals = property.indexOf('=');
         if (equals >= 0) return equals;
@@ -1091,8 +1123,14 @@ public class UnicodeResolver {
         }
 
         String name = property.substring(0, delimiter);
+        // Perl's assignment prefix is exactly "Is". Property and value
+        // aliases use loose matching after that prefix, but the prefix itself
+        // remains case-sensitive (for example, is_dt=Can is invalid).
+        if (name.length() < 2 || name.charAt(0) != 'I' || name.charAt(1) != 's') {
+            return property;
+        }
         String looseName = loosePropertyName(name);
-        if (!looseName.startsWith("is") || looseName.length() == 2) {
+        if (looseName.length() == 2) {
             return property;
         }
 
