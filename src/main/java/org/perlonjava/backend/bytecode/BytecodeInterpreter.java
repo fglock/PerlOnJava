@@ -926,7 +926,8 @@ public class BytecodeInterpreter {
                                 if (iterator.hasNext()) {
                                     // See FOREACH_NEXT_OR_EXIT above for the rationale.
                                     RuntimeScalar element = iterator.next();
-                                    if (element instanceof RuntimeScalarReadOnly) {
+                                    if (element instanceof RuntimeScalarReadOnly
+                                            && element != RuntimeScalarCache.scalarUndef) {
                                         element = new ReadOnlyAlias(element);
                                     } else if (element instanceof ScalarSpecialVariable) {
                                         element = ensureMutableScalar(element);
@@ -1322,7 +1323,8 @@ public class BytecodeInterpreter {
                                     // its alias status (and Perl's $&/$1 differ from the
                                     // foreach-loop-alias case anyway).
                                     RuntimeScalar elem = iterator.next();
-                                    if (elem instanceof RuntimeScalarReadOnly) {
+                                    if (elem instanceof RuntimeScalarReadOnly
+                                            && elem != RuntimeScalarCache.scalarUndef) {
                                         elem = new ReadOnlyAlias(elem);
                                     } else if (elem instanceof ScalarSpecialVariable) {
                                         elem = ensureMutableScalar(elem);
