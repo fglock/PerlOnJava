@@ -653,12 +653,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty()
                                     || regex.recursivePatternUnicode
                                             .hasDeferredUserDefinedUnicodeProperty();
-                    regex.hasPreservesMatch = regex.regexFlags.preservesMatch();
+                    regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
+                            || RegexFlags.hasInlinePreserveModifier(compilePatternString);
                     regex.hasBranchReset = false;
                     regex.hasBackslashK = false;
                 } else {
                     regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
-                    regex.hasPreservesMatch = regex.regexFlags.preservesMatch() || RegexPreprocessor.hadInlinePFlag();
+                    regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
+                            || RegexFlags.hasInlinePreserveModifier(compilePatternString)
+                            || RegexPreprocessor.hadInlinePFlag();
                     regex.hasBranchReset = RegexPreprocessor.hadBranchReset();
                     regex.hasBackslashK = RegexPreprocessor.hadBackslashK();
                     regex.warningsOnUse.addAll(RegexPreprocessor.getWarningsOnUse());
@@ -2053,6 +2056,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int capture = 1;
         int previousPos = startPos; // Track the previous position  
         int previousMatchEnd = -1;  // Track end of previous match
+        boolean previousMatchUsedPFlag = regexState.lastMatchUsedPFlag;
+        // Inline /p is Perl match-variable policy rather than a Joni option.
+        // Publish it while callouts execute; restore the preceding successful
+        // match's policy if this matcher ultimately fails.
+        regexState.lastMatchUsedPFlag = regex.hasPreservesMatch;
         // NOTE: Do NOT clear global match variables here.
         //
         // Perl preserves $1, @-, @+, $&, etc. from the last *successful* match even if a
@@ -2182,6 +2190,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // recursion ceiling is reached; do not let the JVM error abort the
             // whole program for the equivalent pathological failure case.
             found = false;
+        }
+
+        if (!found) {
+            regexState.lastMatchUsedPFlag = previousMatchUsedPFlag;
         }
 
         // Reset pos() on failed match with /g, unless /c is set
@@ -2799,6 +2811,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // The result string after substitutions
         StringBuilder resultBuffer = new StringBuilder();
         int found = 0;
+        boolean previousMatchUsedPFlag = state().lastMatchUsedPFlag;
+        state().lastMatchUsedPFlag = regex.hasPreservesMatch;
 
         // Unwrap readonly scalar
         if (replacement.type == RuntimeScalarType.READONLY_SCALAR) replacement = (RuntimeScalar) replacement.value;
@@ -2963,6 +2977,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         } catch (RegexTimeoutException e) {
             WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
             found = 0;
+        }
+        if (found == 0) {
+            state().lastMatchUsedPFlag = previousMatchUsedPFlag;
         }
         // Append the remaining text after the last match to the result buffer
         resultBuffer.append(inputStr, lastAppendEnd, inputStr.length());

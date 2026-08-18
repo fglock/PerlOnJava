@@ -629,13 +629,13 @@ class Parser extends Lexer {
                     newSyntaxException(UNDEFINED_GROUP_OPTION);
                 }
 
-            // case 'p': #ifdef USE_POSIXLINE_OPTION
             case '-':
             case 'i':
             case 'm':
             case 's':
             case 'x':
             case 'n':
+            case 'p':
             case 'a':
             case 'd':
             case 'l':
@@ -680,9 +680,14 @@ class Parser extends Lexer {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
                         }
                         break;
-                    // case 'p': #ifdef USE_POSIXLINE_OPTION // not defined
-                    // option = bsOnOff(option, Option.MULTILINE|Option.SINGLELINE, neg);
-                    // break;
+                    case 'p':
+                        // Perl's /p controls ${^PREMATCH}, ${^MATCH}, and
+                        // ${^POSTMATCH} retention in the host runtime. It has
+                        // no matcher option bit, but is valid inline syntax.
+                        if (!syntax.op2OptionPerl()) {
+                            newSyntaxException(UNDEFINED_GROUP_OPTION);
+                        }
+                        break;
 
                     case 'a':     /* limits \d, \s, \w and POSIX brackets to ASCII range */
                         if ((syntax.op2OptionPerl() || syntax.op2OptionRuby()) && !neg) {
