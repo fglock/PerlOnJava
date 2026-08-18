@@ -211,8 +211,13 @@ final class JoniRegexPattern {
             }
             if ((frontendProperty || scriptExtensions || perlBuiltInAlias)
                     && standardClassBracketDepth > 0) {
-                translated.append(UnicodeResolver.translateUnicodePropertyForCharClass(
-                        property, pattern.charAt(i + 1) == 'P'));
+                String propertyClass = UnicodeResolver.translateUnicodePropertyForCharClass(
+                        property, pattern.charAt(i + 1) == 'P');
+                if (propertyClass.startsWith("[") && propertyClass.endsWith("]")) {
+                    translated.append(propertyClass, 1, propertyClass.length() - 1);
+                } else {
+                    translated.append(propertyClass);
+                }
                 i = end;
                 continue;
             }

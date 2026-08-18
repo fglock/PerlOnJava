@@ -94,6 +94,16 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void flattensTranslatedPropertiesInsideOrdinaryCharacterClasses() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "[\\p{IsDigit}\\p{IsLower}\\p{IsUpper}]", FLAGS);
+
+        assertTrue(pattern.matcher("A", java.util.List.of()).find());
+        assertTrue(pattern.matcher("7", java.util.List.of()).find());
+        assertFalse(pattern.matcher("-", java.util.List.of()).find());
+    }
+
+    @Test
     void acceptsPerlNumericGBackrefsAndHexCodePoints() {
         assertTrue(new JoniRegexPattern("(a)(b)(c)\\g1\\g2\\g3", FLAGS)
                 .matcher("abcabc", java.util.List.of()).find());
