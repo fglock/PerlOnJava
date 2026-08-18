@@ -1454,6 +1454,12 @@ class Lexer extends ScannerSupport {
                             : AnchorType.WORD_BREAK_BOUNDARY);
                     return true;
                 }
+                if (name.toString().equals("lb")) {
+                    fetchTokenFor_anchor(negated
+                            ? AnchorType.NOT_LINE_BOUNDARY
+                            : AnchorType.LINE_BOUNDARY);
+                    return true;
+                }
                 restore();
                 return false;
             }
