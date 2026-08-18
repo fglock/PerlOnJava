@@ -224,7 +224,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1032, stacked
+The published integration stack is preserved through draft PR #1033, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -236,8 +236,9 @@ progression and pinned Perl 5.44 Unicode 17.0 Age properties. PR #1030 adds
 binary `ASCII_Hex_Digit` values, pinned General_Category sets, and exact native
 line boundaries. PR #1031 adds pinned Canonical_Combining_Class sets and valid
 empty-property rendering. PR #1032 integrates native numeric escapes through
-U+10FFFF. The new WIP adds pinned Bidi_Class sets while Decomposition_Type,
-East_Asian_Width, and vertical-whitespace slices advance independently.
+U+10FFFF; PR #1033 adds pinned Bidi_Class sets. The new WIP integrates native
+vertical-whitespace escapes while Decomposition_Type, East_Asian_Width, and
+Numeric_Value slices advance independently.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -319,6 +320,13 @@ The focused oracle passes 99/99 on system Perl, JVM, and interpreter; the
 combined Unicode/property/boundary smoke is 345/345 per backend. Chunk 01 gains
 736 assertions to 34,252/41,843 identically on both execution backends with no
 numbered regression, raising current generated evidence to 342,016/407,367.
+
+Native Joni `\v` now matches Perl's seven vertical-whitespace code points and
+`\V` matches their complement, both directly and inside character classes,
+without changing non-Perl Joni syntax behavior. The focused oracle passes
+92/92 on system Perl, JVM, and interpreter. Unchanged `reg_posixcc.t` improves
+from 2,052/2,560 to 2,560/2,560 on both execution backends with zero numbered
+regressions, closing its entire 508-assertion Joni gap.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -570,6 +578,9 @@ is retained for now.
     partition with loose aliases and ordered missing defaults. The focused
     oracle passes 99/99 and chunk 01 gains 736 assertions to 34,252/41,843 on
     both backends with zero numbered regressions.
+  - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
+    classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
+    92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
   - [ ] Close the remaining property failures before marking Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -612,15 +623,15 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1032. Publish the validated
-   Bidi_Class slice, then integrate native vertical-whitespace commit
-   `1eff1db97` and the completed Decomposition_Type data handoff in separate
-   focused WIP PRs.
+1. Land review-ready PR #1024 and draft PRs #1025–#1033. Publish the validated
+   native vertical-whitespace slice, then integrate the completed
+   Decomposition_Type data handoff in a separate focused WIP PR.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Integrate the independently generated Decomposition_Type and
-   East_Asian_Width slices, then continue the measured residual order: binary
+3. Integrate the independently generated Decomposition_Type,
+   East_Asian_Width, and Numeric_Value slices, then continue the measured
+   residual order: binary
    property values, Block, Script/Script_Extensions, Numeric_Value,
    Joining_Group, and break-property values. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
