@@ -287,6 +287,10 @@ if they expose a semantic defect.
 
 Workstreams must use isolated branches/worktrees and communicate through the
 shared handoff files. Ownership is exclusive at the file/semantic-slice level.
+Completed candidates stay on their validated base; the coordinator transplants
+them onto the canonical stack and verifies `range-diff`. Independent fixes
+targeting master start from current master. Engineers rebase themselves only
+when the coordinator assigns an exact new base before implementation begins.
 
 1. Integration and PR 958 parity: combine validated runtime repairs, run focused
    and full comparisons, and own CI/readiness of the current integration PR.
