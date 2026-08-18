@@ -262,6 +262,26 @@ These exceptions are merge scaffolding, not the target architecture. PR #1042
 cannot leave draft until a fresh 622-file run has zero per-file losses against
 PR #958.
 
+The PR #1042 parity repair ledger is active:
+
+- The `.=` overload root is complete and pushed as `8e9a45b07`; warning-free
+  `make` and JVM/interpreter corpus gates recover all 43 assertions
+  (`op/bop.t` +39 and `op/concat2.t` +4) to exact PR #958 parity.
+- Ordinary byte-backed eval decoding has an 8/8 standard-Perl reducer and is
+  in full-build validation before its four-file corpus gate.
+- Named-CV replacement is split into duplicate `B.pm` constant declarations,
+  named-sort entry lookup/snapshot semantics, and direct-call versus saved-CV
+  identity. Its standard-Perl reducers pass and JVM/interpreter validation is
+  active.
+- Tied/environment concat materialization and tied regex interpolation are in
+  an independent follow-up on top of `8e9a45b07`.
+- Foreach active-lexical rebinding, glob identity/error rendering, and the
+  warning-aware hash interpolation assertion remain independently owned repair
+  roots.
+- Native branch-reset named/numeric calls now pass the new direct-Joni matrix,
+  upstream recursive-capture tests, and warning-free `make`; focused
+  `pat_advanced*` corpus comparison is the remaining commit gate.
+
 The permanent full-Joni path is advancing independently. Native nested
 lookahead-in-lookbehind admission is complete at `43b4981a6`, with 1,704
 focused `pat{,_thr}.t` gains and no losses. Native outside-class `\N` is
@@ -792,7 +812,7 @@ is retained for now.
 ### Next Steps
 
 1. Make PR #1042 mergeable without weakening the PR #958 baseline: fix the
-   confirmed `.=` regression, repair the seven mapped residual roots in the
+   seven mapped residual roots in the
    documented priority order, and add narrowly tested normalization for the
    two known legacy transcript artifacts while retaining raw counts. Rerun
    each root's focused files before a combined 14-file gate, then require a
