@@ -2197,7 +2197,10 @@ final class Analyser extends Parser {
                 break;
 
             case AnchorType.LOOK_BEHIND:
-                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB, AnchorType.ALLOWED_IN_LB)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+                int allowedInLookBehind = syntax.op2OptionPerl()
+                        ? AnchorType.ALLOWED_IN_PERL_LB
+                        : AnchorType.ALLOWED_IN_LB;
+                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB, allowedInLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
                 node = setupLookBehind(an);
                 if (node.getType() != NodeType.ANCHOR) continue restart;
                 setupTree(((AnchorNode)node).target, state);
@@ -2205,7 +2208,10 @@ final class Analyser extends Parser {
                 break;
 
             case AnchorType.LOOK_BEHIND_NOT:
-                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB_NOT, AnchorType.ALLOWED_IN_LB_NOT)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+                int allowedInNegativeLookBehind = syntax.op2OptionPerl()
+                        ? AnchorType.ALLOWED_IN_PERL_LB_NOT
+                        : AnchorType.ALLOWED_IN_LB_NOT;
+                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB_NOT, allowedInNegativeLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
                 node = setupLookBehind(an);
                 if (node.getType() != NodeType.ANCHOR) continue restart;
                 setupTree(((AnchorNode)node).target, (state | IN_NOT));
