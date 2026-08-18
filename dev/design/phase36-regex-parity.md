@@ -443,6 +443,10 @@ matcher-specific timeouts on both execution backends.
     byte semantics and fatal malformed-UTF-8 diagnostics. The focused oracle
     passes 7/7 on system Perl, JVM, interpreter, and the direct JVM eval
     compiler.
+  - [x] Kept Joni syntax/value exceptions fatal for ordinary user-source
+    compilation while preserving executable-source validation deferral. The
+    focused oracle passes 7/7 and unchanged forced-Joni `reg_mesg.t` gains 259
+    raw passing assertions; 197 parser-acceptance differences remain classified.
 - [ ] Phase 5: Remove the Java matching backend
   - [x] Retired the unreachable top-level `(*PRUNE)` text rewrite after native
     Joni control-verb gates passed under default and forced-Java policy
@@ -451,9 +455,9 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Finalize PR #1019 after its tracker correction, then integrate the validated
-   fatal-Joni-syntax commit `d2fd88096` (+259 raw `reg_mesg.t` passes; warning-
-   free `make`) and publish it as the next stacked slice.
+1. Publish the integrated fatal-Joni-syntax slice after combined-stack focused
+   gates and warning-free `make`, then integrate the validated PRUNE
+   preprocessor retirement commit `5760874e4` as the next stacked slice.
 2. Fix lexical `use bytes` substitution when an upgraded marker regex matches a
    byte subject, without patching generated fixtures. Regenerate the lossless
    corpus and prove that chunks 05–10 no longer match literal boundary markers

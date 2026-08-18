@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import org.joni.exception.SyntaxException;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.operators.PerlUtfString;
@@ -501,7 +502,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexFlags preloadFlags = fromModifiers(modifiers, patternString);
         UnicodeResolver.preloadUserDefinedProperties(
                 patternString, preloadFlags.isCaseInsensitive());
-        return compileSynchronized(patternString, modifiers, lexicalDebugMode, trustedCalloutCount);
+        return compileSynchronized(patternString, modifiers, lexicalDebugMode,
+                trustedCalloutCount, false);
     }
 
     /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
@@ -522,7 +524,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static void validateLiteralSyntax(String patternString, String modifiers) {
         try {
-            compileSynchronized(patternString, stripDebugMarkers(modifiers), debugMode(modifiers), 0);
+            compileSynchronized(patternString, stripDebugMarkers(modifiers),
+                    debugMode(modifiers), 0, true);
         } catch (PerlJavaUnimplementedException unsupported) {
             String message = unsupported.getMessage();
             if (message != null && (message.contains("premature end of char-class")
@@ -541,7 +544,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static synchronized RuntimeRegex compileSynchronized(
             String patternString, String modifiers, int lexicalDebugMode,
-            int trustedCalloutCount) {
+            int trustedCalloutCount, boolean literalSyntaxValidation) {
         // Debug logging
         if (DEBUG_REGEX) {
             System.err.println("RuntimeRegex.compile: pattern=" + patternString + " modifiers=" + modifiers);
@@ -746,6 +749,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                     throw new PerlCompilerException(
                             "Can't find Unicode property definition \"" + invalidProperty + "\"");
+                }
+                // Joni reports malformed patterns with SyntaxException (including its
+                // ValueException subclass). These are real compile errors, not missing
+                // PerlOnJava features, so JPERL_UNIMPLEMENTED=warn must not downgrade them.
+                boolean validatesExecutableSource = literalSyntaxValidation
+                        && containsExecutableSource(originalPatternString,
+                                regex.regexFlags.isExtended());
+                if (e instanceof SyntaxException && !validatesExecutableSource) {
+                    String message = e.getMessage();
+                    if (literalSyntaxValidation && message != null
+                            && (message.contains("premature end of char-class")
+                                    || message.contains("Unclosed character class"))) {
+                        throw new PerlCompilerException("Unmatched [ in regex m/"
+                                + originalPatternString + "/");
+                    }
+                    throw new PerlCompilerException(message);
                 }
                 // PerlJavaUnimplementedException extends PerlCompilerException, so check
                 // the more specific type first. Real syntax errors (PerlCompilerException
