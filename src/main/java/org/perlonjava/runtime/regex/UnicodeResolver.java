@@ -1138,17 +1138,7 @@ public class UnicodeResolver {
 
         // Perl's bare script-value shortcuts use Script_Extensions semantics.
         // Keep binary and General_Category names ahead of this value namespace.
-        String scriptShortcut = alias;
-        if (alias.length() > 2 && alias.startsWith("Is")) {
-            int valueStart = 2;
-            while (valueStart < alias.length()) {
-                char separator = alias.charAt(valueStart);
-                if (!Character.isWhitespace(separator)
-                        && separator != '-' && separator != '_') break;
-                valueStart++;
-            }
-            if (valueStart < alias.length()) scriptShortcut = alias.substring(valueStart);
-        }
+        String scriptShortcut = perlBareIsScriptShortcut(alias);
         if (assignment < 0
                 && !isIcuBinaryPropertyAlias(scriptShortcut)
                 && !isIcuGeneralCategoryAlias(scriptShortcut)) {
@@ -1607,6 +1597,21 @@ public class UnicodeResolver {
             }
         }
         return normalized.toString();
+    }
+
+    private static String perlBareIsScriptShortcut(String alias) {
+        StringBuilder loose = new StringBuilder(alias.length());
+        for (int i = 0; i < alias.length(); i++) {
+            char character = alias.charAt(i);
+            if (character == '_' || character == '-'
+                    || character == ' ' || character >= '\t' && character <= '\r') {
+                continue;
+            }
+            loose.append(character >= 'A' && character <= 'Z'
+                    ? (char) (character + ('a' - 'A')) : character);
+        }
+        if (loose.length() <= 2 || !loose.substring(0, 2).equals("is")) return alias;
+        return loose.substring(2);
     }
 
     /**
