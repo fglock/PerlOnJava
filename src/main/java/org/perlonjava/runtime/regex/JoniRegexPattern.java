@@ -13,6 +13,7 @@ import org.joni.Regex;
 import org.joni.Region;
 import org.joni.Syntax;
 
+import static org.joni.constants.SyntaxProperties.ALLOW_MULTIPLEX_DEFINITION_NAME_CALL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
@@ -44,7 +45,7 @@ final class JoniRegexPattern {
             "PERLONJAVA", Syntax.RUBY.op,
             (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL | OP2_PLUS_POSSESSIVE_INTERVAL,
             Syntax.RUBY.op3,
-            Syntax.RUBY.behavior,
+            Syntax.RUBY.behavior | ALLOW_MULTIPLEX_DEFINITION_NAME_CALL,
             Syntax.RUBY.options & ~(Option.ASCII_RANGE
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable);

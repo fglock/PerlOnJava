@@ -565,9 +565,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 // USE_POSIX_REGION_OPTION ... else ...
                 region.setBeg(0, msaBegin = ((pkeep > s) ? s : pkeep) - str);
                 region.setEnd(0, msaEnd   = s      - str);
+                CompletedRecursiveCall completed = completedRecursiveCall();
+                int[] callerCaptures = completed == null
+                        ? null : completed.frame.getCallFrameCaptureSnapshot();
+                int captureCount = regex.numMem + 1;
                 for (int i = 1; i <= regex.numMem; i++) {
+                    boolean preserveCallerCapture = callerCaptures != null
+                            && i == completed.frame.getCallFrameNum()
+                            && callerCaptures[i] != INVALID_INDEX
+                            && callerCaptures[captureCount + i] != INVALID_INDEX;
                     int me = repeatStk[memEndStk + i];
-                    if (me != INVALID_INDEX) {
+                    if (preserveCallerCapture) {
+                        region.setBeg(i, captureBegin(i));
+                        region.setEnd(i, captureEnd(i));
+                    } else if (me != INVALID_INDEX) {
                         int ms = repeatStk[memStartStk + i];
                         region.setBeg(i, (bsAt(regex.btMemStart, i) ? stack[ms].getMemPStr() : ms) - str);
                         region.setEnd(i, (bsAt(regex.btMemEnd, i) ? stack[me].getMemPStr() : me) - str);
