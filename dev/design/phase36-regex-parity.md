@@ -237,16 +237,16 @@ if they expose a semantic defect.
 
 ### Current critical path
 
-1. Land the validated baseline-parity integration PR after user review, then
-   rebase the native-Joni delivery stack onto its merged master descendant.
+1. Validate and merge the rebased native-Joni delivery stack bottom-up. After
+   each parent merge, rebase its child onto current master, verify the commit
+   range and expected file set, and require warning-free build plus green CI.
    Preserve the negative-file manifest and normalized comparator as mandatory
-   pre-acceptance gates for every later full-corpus run; no unexplained negative
-   file may be deferred to a long acceptance run for discovery.
+   pre-acceptance gates; no unexplained negative file may be deferred to a long
+   acceptance run for discovery.
 2. Remove temporary ordinary-pattern Java routing as native Joni replacements
    become green:
-   - land the combined nested-lookaround and native KEEP stack, then replace
-     the temporary adapter KEEP-in-lookaround diagnostic with an engine-owned
-     Joni diagnostic;
+   - remove the temporary adapter KEEP-in-lookaround guard after the native
+     Joni diagnostic stack passes its combined gate;
    - remove Java routing immediately after each native reducer and combined
      corpus gate are green;
    - use the integration report to choose the next fallback whose removal moves
@@ -257,19 +257,15 @@ if they expose a semantic defect.
      `perl5_t/t/re` matrix (forced Java/Joni × JVM/interpreter) against one
      current artifact and establish new exact counts; the stale pre-migration
      counts are not a release gate for the progressive backend.
-3. Complete the Unicode ownership boundary:
-   - extend the runtime-neutral Joni range resolver from General_Category to
-     the remaining pinned property families;
-   - make case-fold policy explicit per property family before migrating Block,
-     Script, Age, numeric, or other non-category sets;
-   - migrate standalone Block and Script/Script_Extensions assignments with an
-     explicit no-fold result, while General_Category retains fold closure;
-   - keep no-fold properties inside composed character classes in the adapter
-     until Joni's class AST preserves per-member fold policy through union,
-     intersection, and negation;
-   - keep property-value wildcard parsing and diagnostics in the frontend until
-     Joni has a dedicated wildcard syntax node; do not flatten wildcard behavior
-     into literal ranges prematurely;
+3. Complete the remaining Unicode ownership boundary:
+   - preserve per-member fold policy in Joni's composed-class AST through union,
+     intersection, negation, and nested classes, then remove the corresponding
+     adapter translation;
+   - represent property-value wildcard parsing and diagnostics with a dedicated
+     Joni syntax node rather than flattening wildcard behavior into literal
+     ranges prematurely;
+   - close the remaining generated property/value alias gaps against the pinned
+     Perl 5.44 corpus;
    - keep Perl lexical/source policy in the adapter;
    - prefer bundled Perl Unicode data over duplicating ICU behavior or depending
      on the host JDK Unicode version.
