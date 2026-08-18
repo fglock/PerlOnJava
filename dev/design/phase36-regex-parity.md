@@ -41,12 +41,18 @@ baseline, with no per-file pass-count regressions.
 
 ### Migration controls
 
-A temporary developer-only backend selector supports separate Java and Joni
-corpus runs. It must never run both matchers for one operation because callbacks,
-tied variables, `pos()`, and substitutions may have observable side effects.
-Joni is the default matcher; explicit Java mode remains only for differential
-measurement. The selector and Java matching fields are removed at the end of the
-migration.
+A temporary backend selector supports separate Java and Joni corpus runs. It
+must never run both matchers for one operation because callbacks, tied
+variables, `pos()`, and substitutions may have observable side effects. The
+intended migration default is Joni. While the remaining forced-Joni corpus gap
+would otherwise regress the PR 958 acceptance baseline, automatic routing may
+temporarily keep ordinary patterns on Java and require Joni only for executable
+callbacks/dynamic callouts and the advanced constructs recognized by
+`requiresJoniBackend`. Forced-Joni differential coverage remains mandatory.
+This progressive-routing workaround is not a final architecture, does not
+satisfy the Phase 1 or Phase 5 exit criteria, and must be removed at the
+earliest evidence-backed point. The selector and all Java matching fields are
+removed at the end of the migration.
 
 ### Preprocessing boundary
 
@@ -571,6 +577,11 @@ is retained for now.
 - [ ] Phase 1: Joni ordinary-pattern parity (implementation substantially
   complete; forced Java/Joni corpus comparison remains)
   - [x] Added the temporary backend selector and made Joni the default.
+  - [ ] Remove the temporary progressive-routing acceptance workaround after
+    closing its forced-Joni regressions. Until then automatic routing keeps
+    ordinary patterns on Java while executable closures, dynamic callouts,
+    recursion/conditions, lookbehind, and control verbs require Joni. This is
+    explicitly cleanup debt and does not weaken the all-Joni exit criterion.
   - [x] Routed ordinary matching, substitution, and split through the selected
     backend without per-operation fallback.
   - [x] Completed the forced-Java/JVM 80-file leg and identified the
@@ -909,10 +920,15 @@ is retained for now.
    600-second bound and retain complete TAP/JSON. After the two fatal roots and
    native line boundaries integrate, refresh the complete forced-Joni 80-file
    corpus and apply the no-regression gate against Phase 0 and PR 958.
-5. Audit every `RegexPreprocessor` rule against the final ownership boundary.
-   Move matcher semantics into Joni, retain only source-policy scanning, delete
-   Java-only rewrites and compiled-pattern variants, and remove the temporary
-   Java backend selector after the performance gate passes.
+5. Continue the forced-Joni remediation immediately after the temporary
+   progressive-routing integration gate. Prioritize the ordinary-pattern
+   regressions hidden by automatic Java routing, remove that workaround as soon
+   as the PR 958 no-regression gate permits, and do not mark Phase 1 complete
+   while it remains. Audit every `RegexPreprocessor` rule against the final
+   ownership boundary; move matcher semantics into Joni, retain only
+   source-policy scanning, delete Java-only rewrites and compiled-pattern
+   variants, and remove the temporary backend selector after the performance
+   gate passes.
 6. Reconcile `docs/reference/feature-matrix.md` with the final corpus; update
    `dev/implementation/regex.md` and `docs/design/joni-callout-fork.md` to the
    as-implemented architecture and review both for clarity and structure.
