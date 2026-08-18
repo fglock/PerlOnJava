@@ -1058,7 +1058,8 @@ public class UnicodeResolver {
                             .applyPropertyAlias("ASCII_Hex_Digit", "True");
                 }
                 if (binaryProperty != null) {
-                    return value ? binaryProperty : binaryProperty.complement();
+                    return value ? binaryProperty
+                            : new UnicodeSet(binaryProperty).complement().freeze();
                 }
             }
         }
@@ -1073,6 +1074,7 @@ public class UnicodeResolver {
         }
 
         String blockAlias = alias;
+        boolean blockShortcut = false;
         if (alias.length() > 2 && alias.regionMatches(true, 0, "in", 0, 2)) {
             int valueStart = 2;
             while (valueStart < alias.length()) {
@@ -1082,6 +1084,7 @@ public class UnicodeResolver {
             }
             if (valueStart >= alias.length()) return null;
             blockAlias = alias.substring(valueStart);
+            blockShortcut = true;
         } else if (assignment >= 0 || unicodePropertyValue(UProperty.SCRIPT, alias) >= 0) {
             return null;
         } else if (alias.length() > 2 && alias.regionMatches(true, 0, "is", 0, 2)) {
@@ -1095,8 +1098,11 @@ public class UnicodeResolver {
             if (valueStart >= alias.length()) return null;
             String candidate = alias.substring(valueStart);
             if (unicodePropertyValue(UProperty.SCRIPT, candidate) >= 0) return null;
+            if (isIcuBinaryPropertyAlias(candidate)) return null;
             blockAlias = candidate;
+            blockShortcut = true;
         }
+        if (!blockShortcut && isIcuBinaryPropertyAlias(blockAlias)) return null;
         return PerlUnicodeBlockData.set(blockAlias);
     }
 
@@ -1106,6 +1112,15 @@ public class UnicodeResolver {
             case "false", "no", "n", "f" -> false;
             default -> null;
         };
+    }
+
+    private static boolean isIcuBinaryPropertyAlias(String alias) {
+        try {
+            new UnicodeSet().applyPropertyAlias(alias, "True");
+            return true;
+        } catch (IllegalArgumentException unsupported) {
+            return false;
+        }
     }
 
     private static boolean isPerlIsPrefixedNumericWildcard(String property) {
