@@ -1209,14 +1209,14 @@ class Lexer extends ScannerSupport {
                     break;
                 case 'b':
                     if (syntax.opEscBWordBound()) {
-                        if (fetchTokenForPerlGraphemeBoundary(false)) break;
+                        if (fetchTokenForPerlBoundary(false)) break;
                         fetchTokenFor_anchor(AnchorType.WORD_BOUND);
                         token.setAnchorASCIIRange(isAsciiRange(env.option) && !isWordBoundAllRange(env.option));
                     }
                     break;
                 case 'B':
                     if (syntax.opEscBWordBound()) {
-                        if (fetchTokenForPerlGraphemeBoundary(true)) break;
+                        if (fetchTokenForPerlBoundary(true)) break;
                         fetchTokenFor_anchor(AnchorType.NOT_WORD_BOUND);
                         token.setAnchorASCIIRange(isAsciiRange(env.option) && !isWordBoundAllRange(env.option));
                     }
@@ -1427,7 +1427,7 @@ class Lexer extends ScannerSupport {
         } // while
     }
 
-    private boolean fetchTokenForPerlGraphemeBoundary(boolean negated) {
+    private boolean fetchTokenForPerlBoundary(boolean negated) {
         if (!syntax.op2OptionPerl() || !left() || peek() != '{') return false;
 
         mark();
@@ -1440,6 +1440,12 @@ class Lexer extends ScannerSupport {
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_GRAPHEME_BOUNDARY
                             : AnchorType.GRAPHEME_BOUNDARY);
+                    return true;
+                }
+                if (name.toString().equals("sb")) {
+                    fetchTokenFor_anchor(negated
+                            ? AnchorType.NOT_SENTENCE_BOUNDARY
+                            : AnchorType.SENTENCE_BOUNDARY);
                     return true;
                 }
                 restore();

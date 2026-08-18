@@ -252,6 +252,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_WORD_BOUND:             opNotWordBound();          continue;
                 case OPCode.GRAPHEME_BOUNDARY:          opGraphemeBoundary(false); continue;
                 case OPCode.NOT_GRAPHEME_BOUNDARY:      opGraphemeBoundary(true);  continue;
+                case OPCode.SENTENCE_BOUNDARY:          opSentenceBoundary(false); continue;
+                case OPCode.NOT_SENTENCE_BOUNDARY:      opSentenceBoundary(true);  continue;
                 case OPCode.WORD_BEGIN:                 opWordBegin();             continue;
                 case OPCode.WORD_END:                   opWordEnd();               continue;
 
@@ -411,6 +413,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_WORD_BOUND:             opNotWordBoundSb();          continue;
                 case OPCode.GRAPHEME_BOUNDARY:          opGraphemeBoundary(false);   continue;
                 case OPCode.NOT_GRAPHEME_BOUNDARY:      opGraphemeBoundary(true);    continue;
+                case OPCode.SENTENCE_BOUNDARY:          opSentenceBoundary(false);   continue;
+                case OPCode.NOT_SENTENCE_BOUNDARY:      opSentenceBoundary(true);    continue;
                 case OPCode.WORD_BEGIN:                 opWordBeginSb();             continue;
                 case OPCode.WORD_END:                   opWordEndSb();               continue;
 
@@ -1245,6 +1249,133 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opGraphemeBoundary(boolean negated) {
         if (isGraphemeBoundary() == negated) opFail();
+    }
+
+    private void opSentenceBoundary(boolean negated) {
+        if (isSentenceBoundary() == negated) opFail();
+    }
+
+    private boolean isSentenceBoundary() {
+        if (s <= str || s >= end) return true; // SB1, SB2
+
+        int leftPosition = enc.prevCharHead(bytes, str, s, end);
+        byte left = sentencePropertyAt(leftPosition);
+        byte right = sentencePropertyAt(s);
+
+        if (left == SentenceBreakData.CR && right == SentenceBreakData.LF) return false; // SB3
+        if (isSentenceParagraphSeparator(left)) return true; // SB4
+        if (isSentenceIgnored(right)) return false; // SB5
+
+        int[] position = {leftPosition};
+        byte previous = previousSentenceProperty(position);
+
+        if (previous == SentenceBreakData.ATERM && right == SentenceBreakData.NUMERIC) return false; // SB6
+        if (right == SentenceBreakData.UPPER && previous == SentenceBreakData.ATERM) {
+            byte beforeTerm = previousSentenceProperty(position);
+            if (beforeTerm == SentenceBreakData.UPPER || beforeTerm == SentenceBreakData.LOWER) return false; // SB7
+        }
+
+        if (sentenceATermBeforeCloseAndSpace(positionFor(leftPosition))
+                && sentenceLowerAhead(s)) return false; // SB8
+
+        if ((right == SentenceBreakData.SCONTINUE
+                    || right == SentenceBreakData.STERM
+                    || right == SentenceBreakData.ATERM)
+                && sentenceTerminalBefore(positionFor(leftPosition), true)) return false; // SB8a
+
+        if ((right == SentenceBreakData.CLOSE
+                    || right == SentenceBreakData.SP
+                    || isSentenceParagraphSeparator(right))
+                && sentenceTerminalBeforeClose(positionFor(leftPosition))) return false; // SB9
+
+        if ((right == SentenceBreakData.SP || isSentenceParagraphSeparator(right))
+                && sentenceTerminalBefore(positionFor(leftPosition), true)) return false; // SB10
+
+        // Extend and Format are ignored except after a paragraph separator. A
+        // separator followed by ignored characters has already broken at SB4;
+        // do not let SB11 scan back through it to an earlier terminal.
+        if (isSentenceIgnored(left) && isSentenceParagraphSeparator(previous)) return false;
+
+        if (sentenceBoundaryAfterTerminal(positionFor(leftPosition))) return true; // SB11
+
+        return false; // SB998
+    }
+
+    private int[] positionFor(int position) {
+        return new int[] {position};
+    }
+
+    private byte sentencePropertyAt(int position) {
+        return SentenceBreakData.propertyOf(enc.mbcToCode(bytes, position, end));
+    }
+
+    private byte previousSentenceProperty(int[] position) {
+        while (position[0] >= str) {
+            byte property = sentencePropertyAt(position[0]);
+            if (position[0] == str) {
+                position[0] = -1;
+            } else {
+                position[0] = enc.prevCharHead(bytes, str, position[0], end);
+            }
+            if (!isSentenceIgnored(property)) return property;
+        }
+        return SentenceBreakData.OTHER;
+    }
+
+    private boolean sentenceTerminalBefore(int[] position, boolean skipSpaces) {
+        byte property = previousSentenceProperty(position);
+        if (skipSpaces) {
+            while (property == SentenceBreakData.SP) property = previousSentenceProperty(position);
+        }
+        while (property == SentenceBreakData.CLOSE) property = previousSentenceProperty(position);
+        return isSentenceTerminal(property);
+    }
+
+    private boolean sentenceATermBeforeCloseAndSpace(int[] position) {
+        byte property = previousSentenceProperty(position);
+        while (property == SentenceBreakData.SP) property = previousSentenceProperty(position);
+        while (property == SentenceBreakData.CLOSE) property = previousSentenceProperty(position);
+        return property == SentenceBreakData.ATERM;
+    }
+
+    private boolean sentenceLowerAhead(int position) {
+        while (position < end) {
+            byte property = sentencePropertyAt(position);
+            if (property == SentenceBreakData.LOWER) return true;
+            if (property != SentenceBreakData.CLOSE
+                    && property != SentenceBreakData.SP
+                    && !isSentenceIgnored(property)) return false;
+            position += enc.length(bytes, position, end);
+        }
+        return false;
+    }
+
+    private boolean sentenceTerminalBeforeClose(int[] position) {
+        byte property = previousSentenceProperty(position);
+        while (property == SentenceBreakData.CLOSE) property = previousSentenceProperty(position);
+        return isSentenceTerminal(property);
+    }
+
+    private boolean sentenceBoundaryAfterTerminal(int[] position) {
+        byte property = previousSentenceProperty(position);
+        if (isSentenceParagraphSeparator(property)) property = previousSentenceProperty(position);
+        while (property == SentenceBreakData.SP) property = previousSentenceProperty(position);
+        while (property == SentenceBreakData.CLOSE) property = previousSentenceProperty(position);
+        return isSentenceTerminal(property);
+    }
+
+    private boolean isSentenceIgnored(byte property) {
+        return property == SentenceBreakData.EXTEND || property == SentenceBreakData.FORMAT;
+    }
+
+    private boolean isSentenceParagraphSeparator(byte property) {
+        return property == SentenceBreakData.SEP
+                || property == SentenceBreakData.CR
+                || property == SentenceBreakData.LF;
+    }
+
+    private boolean isSentenceTerminal(byte property) {
+        return property == SentenceBreakData.ATERM || property == SentenceBreakData.STERM;
     }
 
     private boolean isGraphemeBoundary() {

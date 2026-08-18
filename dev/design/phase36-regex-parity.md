@@ -224,13 +224,15 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1025, stacked
-on review-ready PR #1024. It includes the completed callback/runtime slices,
+The published integration stack is preserved through draft PR #1026, stacked
+on draft PR #1025 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
 first 524 lines of retired Java-only preprocessor code. Every published slice
-has a warning-free combined `make` checkpoint. The current WIP integrates six
-independently validated parser and preprocessor commits above that checkpoint.
+has a warning-free combined `make` checkpoint. The current WIP adds native
+sentence boundaries above that checkpoint; independently validated alpha
+assertion aliases and global zero-width `/g` progression remain parallel
+integration slices.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -250,9 +252,17 @@ Authoritative chunk 05 improves by 6,324 assertions from 2,192/14,953 to
 8,516/14,976 identically on JVM and interpreter: its complete GCB/`\X` section
 passes, leaving only the 6,460 sentence-boundary assertions in that chunk.
 
+Native Joni sentence assertions now implement SB1–SB11 and SB998 with a
+reproducibly generated Perl 5.44 Unicode 17.0 `Sentence_Break` table. The
+23-assertion focused oracle passes on system Perl, JVM, and interpreter, direct
+Joni coverage exercises the same engine path, and authoritative chunk 05 passes
+14,976/14,976 identically on JVM and interpreter. This closes all 6,460
+remaining sentence assertions without coupling the Joni fork to ICU or the
+PerlOnJava runtime.
+
 The most recent exact property chunks 01–04 remain 98,092/167,501 on both
-execution backends. Combined with the native-GCB result and unchanged chunks
-06–10, current generated evidence is 106,608/407,367. A resource-contended
+execution backends. Combined with the complete boundary chunk 05 and unchanged
+chunks 06–10, current generated evidence is 113,068/407,367. A resource-contended
 current-head refresh did not reproduce a complete exact JVM/interpreter pair,
 so it does not replace that accepted baseline.
 
@@ -449,7 +459,10 @@ matcher-specific timeouts on both execution backends.
   - [x] Implemented native Joni GCB assertions for GB1–GB13 and GB999 and aligned
     `\X` with repeated GB9c Indic conjunct behavior. The focused oracle passes
     29/29 and generated chunk 05 reaches 8,516/14,976 on both execution backends.
-  - [ ] Implement native Joni line, sentence, and word boundary algorithms, then
+  - [x] Implemented native Joni sentence assertions for SB1–SB11 and SB998 from
+    a reproducible Perl 5.44 Unicode 17.0 table. The focused oracle passes 23/23
+    and generated chunk 05 passes 14,976/14,976 on both execution backends.
+  - [ ] Implement native Joni line and word boundary algorithms, then
     close the remaining property and boundary failures before marking Phase 3
     complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
@@ -493,21 +506,22 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PR #1025, then publish the current
-   integration branch containing native braced-octal/hex diagnostics,
-   Python-style named groups, and the whitespace, lazy-negated-class, and DBIx
-   omniholder preprocessor retirements.
-2. Continue boundary semantics natively in Joni in measured order: sentence
-   breaks next (0/6,460 in the remainder of chunk 05), followed by line and word
-   breaks (0/224,890 in chunks 06–10). Use bundled Perl 5.44 Unicode data and
+1. Land review-ready PR #1024 and draft PRs #1025–#1026, then publish the
+   sentence-boundary slice as the next stacked PR. Integrate the independently
+   validated alpha-assertion alias commit and the pending zero-width `/g`
+   adapter commit after their non-overlapping gates are complete.
+2. Continue boundary semantics natively in Joni with line and word breaks
+   (0/224,890 in chunks 06–10). PerlOnJava4 owns line-boundary preparation while
+   the coordinator takes word boundaries after the shared sentence base is
+   published. Use pinned Perl 5.44 Unicode data and
    the generated chunks as the release oracle; remove each simplified Java
    boundary rewrite only after native parity.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
    break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
-   Close alpha assertion aliases and underscored numeric escapes with focused
-   standard-Perl gates.
+   Integrate the completed alpha assertion aliases and close underscored numeric
+   escapes with focused standard-Perl gates.
 4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
    head. Save complete JSON and logs, publish the missing differential report,
    and compare every file with both the Phase 0 result and PR 958 under the
