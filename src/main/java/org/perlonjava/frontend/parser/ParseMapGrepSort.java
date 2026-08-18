@@ -73,8 +73,11 @@ public class ParseMapGrepSort {
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseSort method call: " + operand);
             } else {
                 // This is a comparison subroutine name
-                Node var = new OperatorNode("&",
-                        new IdentifierNode(subName, parser.tokenIndex), parser.tokenIndex);
+                // Keep a package comparator as a name until sort starts.  The
+                // runtime resolves it once at sort entry, so a redefinition
+                // made before the sort is visible while a redefinition made
+                // by the comparator does not affect the active sort.
+                Node var = new StringNode(subName, parser.tokenIndex);
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
                 operand.handle = var;
                 if (hasSortParen) {

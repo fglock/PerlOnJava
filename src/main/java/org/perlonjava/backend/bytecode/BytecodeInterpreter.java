@@ -1026,7 +1026,7 @@ public class BytecodeInterpreter {
                                     }
                                     registers[rd] = RuntimeCode.selfReferenceMaybeNull(selfReference);
                                 } else {
-                                    registers[rd] = GlobalVariable.getGlobalCodeRef(name);
+                                    registers[rd] = GlobalVariable.getGlobalCodeRefForDirectCall(name);
                                 }
                             }
 
