@@ -364,6 +364,38 @@ public class OverloadContext {
     }
 
     /**
+     * Tries only an explicitly defined assignment overload.  Unlike the
+     * generic binary-overload driver, a missing method does not invoke
+     * {@code nomethod} or enforce the package fallback policy; callers may
+     * continue with the corresponding non-assignment operator or its native
+     * behavior.  When the left operand supplies the mutator, preserve Perl's
+     * copy-constructor semantics before invoking it.
+     *
+     * @return The explicit assignment-overload result, or {@code null} when
+     *         neither operand defines it.
+     */
+    public static RuntimeScalar tryTwoArgumentAssignmentOverloadDirect(
+            RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2,
+            String overloadName) {
+        if (blessId < 0) {
+            OverloadContext ctx1 = prepare(blessId);
+            if (ctx1 != null && ctx1.hasOverload(overloadName)) {
+                ctx1.copyForMutator(arg1);
+                return ctx1.tryOverload(
+                        overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
+            }
+        }
+        if (blessId2 < 0) {
+            OverloadContext ctx2 = prepare(blessId2);
+            if (ctx2 != null && ctx2.hasOverload(overloadName)) {
+                return ctx2.tryOverload(
+                        overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
+            }
+        }
+        return null;
+    }
+
+    /**
      * Tries nomethod fallback on either blessed argument.
      * Used as a last resort after direct overload and autogeneration have failed.
      * Also enforces the fallback=0 restriction, throwing when no method is found
