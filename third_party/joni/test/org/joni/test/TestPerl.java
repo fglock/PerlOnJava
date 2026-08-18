@@ -76,6 +76,23 @@ public class TestPerl extends Test {
         xerrs("(?P=name", ErrorMessages.PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
         ns("[(?P<x>)]", "z");
         x2s("\\(\\?P<x>", "(?P<x>", 0, 6);
+        x2s("a(*pla:b)b", "ab", 0, 2);
+        ns("a(*pla:c)b", "ab");
+        x2s("a(*plb:a)b", "ab", 0, 2);
+        ns("a(*plb:c)b", "ab");
+        x2s("a(*nla:c)b", "ab", 0, 2);
+        ns("a(*nla:b)b", "ab");
+        x2s("a(*nlb:c)b", "ab", 0, 2);
+        ns("a(*nlb:a)b", "ab");
+        ns("(*atomic:a|ab)c", "abc");
+        x2s("a(*pla:(*nla:c)b)b", "ab", 0, 2);
+        x2s("(*pla:)", "", 0, 0);
+        xerrs("(*PLA:a)", "Unknown verb pattern 'PLA'");
+        xerrs("(*pla)", "'(*pla' requires a terminating ':'");
+        xerrs("(*plx:a)", "Unknown '(*...)' construct 'plx'");
+        xerrs("(*pla:a", ErrorMessages.PERL_UNTERMINATED_CONTROL_ARGUMENT);
+        ns("[(?*pla:)]", "z");
+        x2s("\\(\\*pla:a\\)", "(*pla:a)", 0, 8);
     }
 
     @org.junit.Test(timeout = 5000)
