@@ -224,12 +224,19 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1038, stacked
-on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
-lossless generated Unicode fixtures, explicit `Is_*` property/value
+The unified `integration/phase36-regex-parity` branch was assembled on
+2026-08-18 from all 34 open Phase 36 PRs, with one squashed review-unit commit
+per PR. Duplicate #1007 ancestry from #1010, duplicate #1008/#1009/#1012
+ancestry from #1016, and temporary integration merge commits were excluded.
+The final stacked implementation matches PR #1039 plus the independent #1006,
+#1007, and #1010 changes. Full integration validation and the unified draft PR
+remain pending while unrelated resource-intensive Java builds finish.
+
+The unified history includes the completed callback/runtime slices, lossless
+generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
-first 524 lines of retired Java-only preprocessor code. Every published slice
-has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
+first 524 lines of retired Java-only preprocessor code. Every source slice has
+a warning-free combined `make` checkpoint. PR #1027 adds native sentence
 boundaries; PR #1028 adds independently validated alpha assertion aliases and
 native word boundaries. PR #1029 integrates corrected global zero-width `/g`
 progression and pinned Perl 5.44 Unicode 17.0 Age properties. PR #1030 adds
@@ -702,9 +709,9 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1038. Publish the validated
-   Block integration in a separate focused WIP PR, preserving the
-   independently reviewed data commit.
+1. Run warning-free `make` on `integration/phase36-regex-parity`, push the
+   branch, and open one unified draft PR against `master`. Keep its 34 source
+   PR commits intact and use a merge commit after final validation.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
@@ -726,8 +733,9 @@ is retained for now.
    stale Unicode limitations, add any still-missing regex features, and link
    each limitation to a reducer or explicit optimizer/debug exclusion.
 7. Run unchanged CPAN consumers, the direct/thread release matrix, packaging
-   and license checks, and warning-free `make`; then rebase each focused PR and
-   require green Ubuntu and Windows CI.
+   and license checks, and require green Ubuntu and Windows CI on the unified
+   PR. Merge it with a merge commit so the focused history remains available
+   and the complete integration can be reverted with `git revert -m 1`.
 
 ### Open Questions and Blockers
 
