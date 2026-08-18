@@ -256,13 +256,8 @@ class Parser extends Lexer {
                 break;
 
             case CHAR_PROPERTY:
-                int ctype = fetchCharPropertyToCType();
-                cc.addCType(ctype, token.getPropNot(), false, env, this);
-                if (ascCc != null) {
-                    if (ctype != CharacterType.ASCII) {
-                        ascCc.addCType(ctype, token.getPropNot(), false, env, this);
-                    }
-                }
+                CharProperty property = fetchCharProperty();
+                addCharProperty(cc, ascCc, property, token.getPropNot());
                 cc.nextStateClass(arg, ascCc, env); // goto next_class
                 break;
 
@@ -1634,18 +1629,31 @@ class Parser extends Lexer {
     }
 
     private Node parseCharProperty() {
-        int ctype = fetchCharPropertyToCType();
+        CharProperty property = fetchCharProperty();
         CClassNode cc = new CClassNode();
         Node node = cc;
-        cc.addCType(ctype, false, false, env, this);
+        addCharProperty(cc, null, property, false);
         if (token.getPropNot()) cc.setNot();
 
         if (isIgnoreCase(env.option)) {
-            if (ctype != CharacterType.ASCII) {
+            if (property.ranges != null || property.ctype != CharacterType.ASCII) {
                 node = cClassCaseFold(node, cc, cc);
             }
         }
         return node;
+    }
+
+    private void addCharProperty(CClassNode cc, CClassNode ascCc,
+                                 CharProperty property, boolean not) {
+        if (property.ranges == null) {
+            cc.addCType(property.ctype, not, false, env, this);
+            if (ascCc != null && property.ctype != CharacterType.ASCII) {
+                ascCc.addCType(property.ctype, not, false, env, this);
+            }
+            return;
+        }
+        cc.addCodeRanges(property.ranges, not, env);
+        if (ascCc != null) ascCc.addCodeRanges(property.ranges, not, env);
     }
 
     private Node parseAnycharAnytime() {

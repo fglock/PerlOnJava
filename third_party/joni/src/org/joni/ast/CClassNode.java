@@ -288,6 +288,16 @@ public final class CClassNode extends Node {
         }
     }
 
+    /** Adds resolver-provided {@code [count, from, to, ...]} code-point ranges. */
+    public void addCodeRanges(int[] ranges, boolean not, ScanEnvironment env) {
+        int singleByteLimit = 0;
+        while (singleByteLimit < BitSet.SINGLE_BYTE_SIZE
+                && env.enc.codeToMbcLength(singleByteLimit) == 1) {
+            singleByteLimit++;
+        }
+        addCTypeByRange(0, not, env, singleByteLimit, ranges);
+    }
+
     private static int CR_FROM(int[] range, int i) {
         return range[(i * 2) + 1];
     }
