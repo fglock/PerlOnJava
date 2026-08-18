@@ -1,77 +1,149 @@
-# Architecture options for Perl regex in PerlOnJava
+# Regex implementation
 
-## Implemented architecture
+PerlOnJava's regex subsystem has one long-term matcher target: the vendored
+Joni engine. The current runtime is an intentional migration state, however,
+and still uses progressive routing between `java.util.regex` and Joni. This
+document describes that present state; it does not imply that Java removal or
+all remaining Perl regex semantics are complete.
 
-PerlOnJava uses a hybrid dispatcher. Ordinary Java-compatible patterns retain
-the `java.util.regex` fast path. Patterns requiring Perl recursion, branch-reset
-groups, executable closures, dynamic programs, bounded variable-length
-lookbehind, grapheme clusters, advanced properties, or backtracking control
-verbs execute in the vendored `org.perlonjava.joni` fork.
+## Runtime shape
 
-The fork is runtime-neutral: Perl closures and mutable runtime state stay in
-PerlOnJava callback tables. Matcher callouts expose provisional captures and
-exact unwind notifications, allowing `$^R`, `$^N`, callback locals, nested
-matches, and `(??{ ... })` alternatives to follow the engine's backtracking
-stack. Both callback and declarative recursion use engine-owned limits. The
-legacy preprocessor remains only for syntax normalization and dispatch that
-cannot yet be represented directly in Joni; semantic backtracking operations
-belong inside the matcher.
+`RuntimeRegex` owns Perl-facing compilation, caching, modifiers, diagnostics,
+match variables, substitution, `/g`, `pos()`, and runtime integration. It
+compiles against the backend-neutral `RegexMatcher` interface and selects one
+of two matcher implementations:
 
-The namespaced fork preserves upstream copyright and authorship notices and
-avoids classpath collisions with applications that depend on upstream Joni.
+- `JavaRegexMatcher` is the compatibility path for patterns not yet admitted
+  to Joni by the migration policy.
+- `JoniRegexPattern` is the stack-based matcher path for constructs that need
+  engine-visible backtracking, recursion, control verbs, or executable
+  callbacks.
 
-## 1) Hybrid delegator (quickest path)
+`RegexBackendPolicy` controls this temporary split. With no setting, `auto`,
+or `java`, the progressive selector uses Java unless
+`JoniRegexPattern.requiresJoniBackend()` identifies a Joni-only construct.
+`JPERL_REGEX_BACKEND=joni` (or `jperl.regex.backend=joni`) forces Joni for
+differential work. The `java` value does not override Joni-only safety routing.
 
-* **Idea:** Compile the pattern into a sequence of “atoms.” Route the Java-compatible subset to `java.util.regex`, and handle Perl-only constructs in your own engine.
-* **How:** Build a tiny parser that segments the pattern around features Java lacks: `(?{...})`, `(??{...})`, `(?|…)` (branch reset), `\K`, `\G`, subroutine calls `(?&name)`, recursion `(?R)`, cut verbs `(*THEN|*SKIP|*PRUNE|*COMMIT)`, embedded code/modifiers, and capture semantics that differ.
-* **Backtracking control:** Your wrapper owns the global backtracking stack. Delegated Java chunks run as “primitive predicates” that either succeed (and push a single backtrack point) or fail atomically. For cut/atomic groups, you discard backtrack frames before invoking the delegate.
-* **Pros:** Fast to ship; reuses a tuned engine for large chunks of work.
-* **Cons:** Edge-case fidelity is tricky (leftmost-longest vs leftmost-first nuances, capture numbering across branch-reset, interactions with `\G`, `pos()`, and `s///` flags).
+The selector currently routes structured callouts and dynamic programs,
+subpattern calls and recursion, `\K`, definitions and recursion conditions,
+and the implemented matcher-control verbs to Joni. Ordinary lookbehind and
+other compatibility-sensitive patterns may remain on Java until their Joni
+admission gates are satisfied.
 
-## 2) Full Perl regex VM with JIT (most faithful, best long-term)
+## Perl source-policy boundary
 
-* **Idea:** Treat each regex as bytecode you compile (with ASM) into a specialized matcher class that runs on top of a small interpreter/VM. Think: a backtracking VM with explicit frames, plus deopt to an interpreter for rare ops.
-* **Core instructions:** `CHAR`, `CLASS`, `ANCHOR`, `SAVE(n)`, `GROUP_ENTER/EXIT`, `CALL_SUBRULE`, `RECURSE`, `ASSERT_{POS,NEG}`, `ATOMIC_ENTER/EXIT`, `CUT_{PRUNE,THEN,COMMIT,SKIP}`, `SET_POS`, `RESET_CAPS`, `YIELD_CODE` (for `(?{ })`), `EVAL_PATTERN` (for `(??{ })`), `BRANCH_RESET_ENTER/EXIT`.
-* **Backtracking model:** An explicit stack with frames recording: input idx, capture state snapshot (or journal of diffs), verb targets, and engine PC. Atomic groups elide frame pushes; cut verbs pop to the right watermark.
-* **Embedded code & side effects:** Use PerlOnJava’s existing save-stack and scope machinery. Every side effect during match (variable writes, `local`, `tie` magic, pos changes) must be **journaling** so you can roll it back on backtrack. Re-execution on retry falls out naturally.
-* **Unicode/char semantics:** Inline fast-path ASCII ops; deopt to helper calls for general category properties and grapheme boundaries. (You can keep ICU-style helpers behind an interface if you want to swap implementations later.)
-* **Pros:** Exact Perl semantics, predictable performance characteristics, clean hooks for `(??{ })`, `qr//`, `s///e`, verb semantics, named/subrule recursion, etc.
-* **Cons:** More work up front; you own all perf.
+The matcher never parses or executes Perl source text. PerlOnJava's parser and
+runtime own the trust boundary:
 
-# Integration points with PerlOnJava internals
+1. Literal executable regex blocks are compiled as lexical Perl closures.
+2. `RuntimeRegexTemplate` stores ordered interpolation parts and explicit
+   callback wrappers.
+3. Template construction assigns callback IDs and emits engine-facing tokens
+   such as `(?{=CALL:<id>})` and `(?{=DYNAMIC:<id>})`.
+4. `JoniRegexPattern` translates those trusted tokens into native callout
+   nodes and installs a matcher-local handler.
 
-* **`qr//` and pattern cache:** Compile once into a matcher class; cache by `(pattern, flags, locale)`. Honor `/o` and embedded modifiers. Expose deopt guards for locale/utf8 mode.
-* **`pos()` / `\G` / `/g` / `/c`:** Store per-SV `pos` in the scalar’s magic; the engine queries/updates it. `/c` prevents `pos` reset on failure; `\G` anchors to it.
-* **Captures & numbering:** Maintain Perl’s numbering and named capture tables, including **branch-reset `(?|…)`** rules. This is where the hybrid approach usually stumbles—your VM owns it cleanly.
-* **Subrule calls & recursion:** Implement `(?&name)` / `(?R)` as true calls that push a frame with their own capture scope, respecting leftmost-first.
-* **Cut verbs:** Map `(*COMMIT)` to “drop all frames in this alternation,” `(*PRUNE)` to “drop just-created frames,” `(*THEN)` to “fail this branch, try next,” `(*SKIP:name?)` to “pop to a named cut or last savepoint.” These are first-class VM ops.
-* **`(?{ code })` and `(??{ expr })`:**
+An interpolated string cannot manufacture a trusted callback token. Runtime
+source remains subject to Perl's `use re 'eval'` policy and the existing
+compatibility behavior for unsupported textual eval groups. This distinction
+must remain in PerlOnJava even after Joni becomes the sole matcher.
 
-  * Execute on **enter** with transactional side-effects.
-  * Roll back on backtrack via your journal.
-  * For `(??{ expr })`, compile the produced pattern on the fly and tail-call into it; cache if it’s stable under `/o`.
-* **Substitution pipeline:** For `s///` variants (`/e`, `/r`, `/g`, `/c`, `/p`), drive the VM for find-phase; feed captures into replacement compiler (which can also be JITed if it includes `\U...\E` and friends or `e` code).
-* **Locales, `/a` `/d` `/u` `/l`:** Thread flags through your char-class ops and anchors. Guard the JIT with the active mode and deopt if it changes.
+## Match-time callbacks
 
-# Performance strategy (keeps it fast)
+The vendored Joni fork exposes only runtime-neutral callout types. It sees
+numeric IDs, provisional byte offsets, capture boundaries, control marks, and
+opaque cleanup tokens; it has no dependency on PerlOnJava runtime classes.
 
-* **Hot-path JIT:** Emit straight-line checks for literal runs, small classes, anchors, and word boundaries; fall back to helper calls for complex classes. Inline captures as simple array writes.
-* **Frame elision:** Avoid pushing frames when the next op cannot fail (e.g., after `^` at start, fixed-width literals).
-* **Memoization:** Optional: add a (pos, pc) → fail memo to short-circuit catastrophic cases (kept small to avoid memory blow-ups).
-* **String access:** Work over UTF-16 with indexed access and a “cursor” abstraction; provide fast ASCII branch and slow path for surrogate pairs only when needed.
-* **Deopt hooks:** If `(??{ })` or complicated verbs appear, deopt to the interpreter version of your VM for just that region.
+The PerlOnJava bridge publishes provisional captures and match variables,
+executes the lexical closure in scalar context, and checkpoints dynamic local
+state. Joni stores the opaque token on its own backtracking stack. Crossing the
+frame unwinds the token exactly once; successful completion resolves remaining
+tokens in reverse order. Dynamic `(??{ ... })` results run as nested Joni
+matchers whose remaining alternatives stay available to outer backtracking.
 
-# Security & isolation
+This contract is why executable constructs cannot be implemented by splitting
+a pattern around Java matchers or by invoking callbacks after a match.
 
-* **`(?{ })` / `/e`:** Run with the same safety model you apply to `eval`: lexically scoped pads, `Safe`-like compartments if enabled, and hard time/memory guards. The journaling rollback ensures determinism under backtracking.
-* **Denial-of-service:** Offer a global step counter and optional timeouts per match; expose knobs to cap backtrack frames and memo table sizes.
+See [joni-callout-fork.md](../../docs/design/joni-callout-fork.md) for the
+engine API and unwind contract.
 
-# Recommendation
+## Unicode and case folding
 
-* **Start hybrid** to get immediate wins and production exposure (especially for users not depending on `(??{ })`/verbs).
-* **Converge to full VM JIT** for exact semantics and predictable behavior. You already generate bytecode with ASM and have Perl’s save-stack/ops—this plays to your strengths.
+PerlOnJava owns Perl property spelling, aliases, user-defined properties, and
+diagnostics in `UnicodeResolver`. The native Joni resolver receives generated
+range tables backed by Perl 5.44's pinned Unicode 17.0.0 inputs rather than the
+host JDK's Unicode version.
 
-# Minimal milestone plan
+Each natively resolved property carries an explicit `caseFold` policy:
 
-1. Parser + IR for full Perl regex features → 2) Interpreter VM with full backtracking + side-effect journaling → 3) Bytecode JIT for hot ops (literals, classes, anchors, groups) → 4) Subrule recursion & branch-reset → 5) Verbs and atomic groups → 6) `(??{ })` + cached dynamic patterns → 7) s/// integration and `/g` semantics → 8) Perf passes (frame elision, memo, guards).
+- general-category properties participate in `/i` folding;
+- Block, Script, Script_Extensions, combining class, bidi class,
+  decomposition type, East Asian width, numeric value, and joining group do
+  not gain members merely because `/i` is active.
 
+Joni applies folding only when that flag is true. Perl `/aa` also disables
+multi-character folds and rejects non-ASCII-to-ASCII fold matches. Properties
+that cannot yet preserve their policy inside a composed character class are
+kept on the frontend translation path instead of being admitted with broader
+semantics.
+
+User-defined property subs and Perl-specific error behavior remain runtime
+responsibilities. The engine callback is for pinned built-in range data, not a
+general path from Joni into Perl code.
+
+## Preprocessing ownership
+
+`RegexPreprocessor` remains part of the Java compatibility path and the Perl
+source-policy layer. Rules belong in one of four categories:
+
+- Perl source policy: trust, lexical warnings, diagnostics, user properties,
+  modifier rules, and capture mapping;
+- backend-neutral syntax normalization: aliases accepted by both engines;
+- Java adaptation: rewrites and stack-safety workarounds needed only by
+  `java.util.regex`;
+- matcher semantics: operations whose meaning depends on backtracking state
+  and therefore belong in Joni.
+
+New semantic behavior should not be added as a textual Java rewrite when the
+matcher must observe it. Migration work should move only the last category
+into focused Joni extensions, with differential Perl tests.
+
+## Vendoring and packaging
+
+Joni 2.2.7 is compiled from `third_party/joni`; JCodings remains an upstream
+binary dependency. Sources retain their upstream `org.joni` packages and MIT
+copyright/authorship notices so the fork stays reviewable. The standalone
+shadow JAR relocates Joni and JCodings to
+`org.perlonjava.internal.joni` and `org.perlonjava.internal.jcodings`, avoiding
+classpath collisions with JRuby or applications using stock Joni.
+
+The JAR includes the Joni and JCodings license texts, a PerlOnJava modification
+notice, and SBOM entries for the vendored component and dependency. Packaging
+verification is part of the build.
+
+## Remaining boundaries
+
+The following are migration boundaries, not shipped claims:
+
+- Java remains the default compatibility path for patterns not selected for
+  Joni; retiring it requires current corpus and performance evidence.
+- Property-value wildcard coverage is not complete across all Perl property
+  families.
+- Native no-fold policy is not yet retained for every property embedded in a
+  composed or extended character class; those cases continue through frontend
+  translation.
+- Some lookbehind combinations and other compatibility-sensitive constructs
+  remain outside Joni admission.
+
+Keep the selector and forced-backend controls until these boundaries have
+explicit differential gates. Do not describe the target sole-matcher design as
+the current runtime until the Java path and its preprocessing adaptations are
+actually removed.
+
+## Related documents
+
+- [Vendored Joni Callout Engine](../../docs/design/joni-callout-fork.md)
+- [Executable Regex Callbacks](../design/executable-regex-callbacks.md)
+- [Phase 36 regex parity plan](../design/phase36-regex-parity.md)
+- [Regex feature matrix](../../docs/reference/feature-matrix.md)
