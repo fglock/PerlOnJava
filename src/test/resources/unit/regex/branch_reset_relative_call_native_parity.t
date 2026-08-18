@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Test::More;
 
-my $regex = eval { qr/((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))/ };
+my $regex = eval { qr/(*MARK:joni)((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))/ };
 ok(defined($regex), 'branch-reset relative-call pattern compiles') or diag($@);
 
 for my $case (

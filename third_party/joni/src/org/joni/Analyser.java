@@ -1312,11 +1312,15 @@ final class Analyser extends Parser {
     }
 
     private void setCallAttr(CallNode cn) {
-        EncloseNode en = env.memNodes[cn.groupNum];
+        EncloseNode en = cn.lexicalTarget != null
+                ? cn.lexicalTarget
+                : env.memNodes[cn.groupNum];
         if (en == null) newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
         // Perl subroutine calls do not replace captures already visible in the
         // caller. Reused branch-reset numbers need the existing snapshot path.
-        if (env.isMultiplexMemNode(cn.groupNum)) cn.setRecursion();
+        if (cn.lexicalTarget == null && env.isMultiplexMemNode(cn.groupNum)) {
+            cn.setRecursion();
+        }
         en.setCalled();
         cn.setTarget(en);
         env.btMemStart = BitStatus.bsOnAt(env.btMemStart, cn.groupNum);
