@@ -251,14 +251,13 @@ U+10FFFF; PR #1033 adds pinned Bidi_Class sets; PR #1034 integrates native
 vertical-whitespace escapes; PR #1035 adds Decomposition_Type and PR #1036
 adds East_Asian_Width, PR #1037 adds Numeric_Value, and PR #1038 adds
 Joining_Group, PR #1039 adds Block, and PR #1040 adds
-Script/Script_Extensions. The current WIP integrates pinned break-property
-values. Generic binary-property support has been semantically stacked on that
-checkpoint and is undergoing post-stack validation; QC/HST resolver support is
-independently complete and awaiting coordinator stacking, and five residual
-enumerated families remain active with the parallel engineer. Specialized
-binary-property data, the other residual enumerated families, and the first
-preprocessor dead-state deletion remain queued or independently advancing for
-focused integration.
+Script/Script_Extensions, and draft PR #1041 adds pinned break-property values.
+The current WIP integrates 51 generic binary-property families. QC/HST and five
+residual enumerated families are independently complete and awaiting
+coordinator stacking; specialized binary properties and the remaining InPC/InSC
+families are actively integrating in parallel. The first preprocessor
+dead-state deletion is independently complete, and the next retirement audit
+is active.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -427,6 +426,19 @@ and 1,424 successful assertions respectively, chunk 03 is unchanged, and no
 previous logical or numbered success is lost. Baseline and current maps are
 backend-identical. Property chunks reach 141,591/167,506 and complete generated
 evidence reaches 381,455/407,372.
+
+Fifty-one core binary-property families now resolve from pinned Perl 5.44
+Unicode 17 data rather than host ICU. Bare and exact `Is` shortcuts, all eight
+Boolean aliases, complements, slash and anchored wildcards, case-insensitive
+value matching, nested-property/star rejection, and false/full-set unions
+follow Perl; unsupported contributory and obsolete `Expands_On_*` aliases are
+rejected explicitly to prevent host-version drift. The focused oracle passes
+139/139 on system Perl, JVM, and interpreter, and the combined break/binary
+oracle passes 231/231 on both execution backends after stacking. The
+authoritative post-stack `make` is warning-free in 6m04s. Chunks 01–04 gain
+1,904, 1,032, 588, and 1,100 numbered assertions respectively with no lost
+success and exact backend identity. Property chunks reach 146,215/167,506 and
+complete generated evidence reaches 386,079/407,372.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -712,6 +724,11 @@ is retained for now.
     rejection rules, and complete defaults. The focused oracle passes 92/92;
     chunks 01, 02, and 04 gain 5, 2,424, and 1,424 assertions with zero lost
     logical/numbered passes and exact backend maps.
+  - [x] Integrated 51 pinned core Unicode 17 binary-property families with bare
+    and exact shortcuts, Boolean aliases, complements, wildcard unions, and
+    explicit host-ICU drift rejection. The focused oracle passes 139/139;
+    chunks 01–04 gain 4,624 numbered assertions with zero regressions and exact
+    backend maps.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
