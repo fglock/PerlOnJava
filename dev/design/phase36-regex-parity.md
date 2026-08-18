@@ -253,7 +253,7 @@ Authoritative chunk 05 improves by 6,324 assertions from 2,192/14,953 to
 passes, leaving only the 6,460 sentence-boundary assertions in that chunk.
 
 Native Joni sentence assertions now implement SB1–SB11 and SB998 with a
-reproducibly generated Unicode 16.0 `Sentence_Break` inversion table. The
+reproducibly generated Perl 5.44 Unicode 17.0 `Sentence_Break` table. The
 23-assertion focused oracle passes on system Perl, JVM, and interpreter, direct
 Joni coverage exercises the same engine path, and authoritative chunk 05 passes
 14,976/14,976 identically on JVM and interpreter. This closes all 6,460
@@ -460,7 +460,7 @@ matcher-specific timeouts on both execution backends.
     `\X` with repeated GB9c Indic conjunct behavior. The focused oracle passes
     29/29 and generated chunk 05 reaches 8,516/14,976 on both execution backends.
   - [x] Implemented native Joni sentence assertions for SB1–SB11 and SB998 from
-    a reproducible Unicode 16.0 inversion table. The focused oracle passes 23/23
+    a reproducible Perl 5.44 Unicode 17.0 table. The focused oracle passes 23/23
     and generated chunk 05 passes 14,976/14,976 on both execution backends.
   - [ ] Implement native Joni line and word boundary algorithms, then
     close the remaining property and boundary failures before marking Phase 3
