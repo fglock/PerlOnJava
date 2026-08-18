@@ -332,6 +332,13 @@ final class JoniRegexPattern {
 
     static boolean requiresJoniBackend(String pattern, RegexFlags flags) {
         if (pattern == null) return false;
+        boolean hasSubroutineCall = pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*")
+                || pattern.contains("(?&")
+                || pattern.contains("(?P>");
+        // Keep automatic routing on Java until the native branch-reset call
+        // implementation passes its combined imported-corpus gate. Explicit
+        // Joni mode still exercises the native implementation directly.
+        boolean branchResetCallUsesJava = pattern.contains("(?|") && hasSubroutineCall;
         return analyzeKeepSyntax(pattern, flags != null && flags.isExtended()).present()
                 || pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
@@ -347,9 +354,7 @@ final class JoniRegexPattern {
                 || pattern.contains("(?(R")
                 || pattern.contains("(?(<")
                 || pattern.contains("(?('")
-                || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*")
-                || pattern.contains("(?&")
-                || pattern.contains("(?P>");
+                || (hasSubroutineCall && !branchResetCallUsesJava);
     }
 
     private record KeepSyntax(boolean present, boolean inLookaround) {}
