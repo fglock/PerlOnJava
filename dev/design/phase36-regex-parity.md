@@ -288,6 +288,18 @@ The property corpus therefore reaches 153,882/167,506 and the complete
 property-plus-boundary evidence reaches 393,748/407,372, leaving 13,624
 property assertions.
 
+Draft PR #1049 implements the shared marker-aware surrogate property
+renderer. Its standard-Perl-first focused oracle passes 27/27 on standard
+Perl, JVM, and interpreter; direct Joni tests, packaging verification, and a
+warning-free 4m58s `make` pass. Positive and complemented properties,
+ordinary and negated classes, captures, substitution, and `/g` now consume
+U+D800..U+DFFF markers as one Perl scalar. The exact generated chunks 01–04
+map remains the acceptance gate before changing the totals above. The first
+two map attempts were discarded rather than counted because one read a JAR
+while `shadowJar` replaced it and the next exceeded its resource bound while
+overlapping the full-tree acceptance suite. The rerun must use the stable JAR
+at lower parallelism after competing heavy workers finish.
+
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
 `qr//` source provenance. The focused oracle passes 12/12 on system Perl, JVM,
@@ -815,9 +827,20 @@ is retained for now.
     with only nine isolated-surrogate TODOs; chunk 01 gains exactly 2,765
     numbered assertions with zero losses and exact 41,848-assertion backend
     identity, reaching 153,882/167,506 properties.
-  - [ ] Render resolved surrogate property subsets as Perl scalar markers so
+  - [x] Render resolved surrogate property subsets as Perl scalar markers so
     positive, complemented, class, capture, substitution, and `/g` membership
-    preserve the exact U+D800..U+DFFF truth table.
+    preserve the exact U+D800..U+DFFF truth table. The focused oracle passes
+    27/27 on standard Perl, JVM, and interpreter; warning-free `make`, direct
+    Joni, and packaging gates pass in draft PR #1049.
+  - [ ] Complete the authoritative stable-JAR chunks 01–04 map for the
+    surrogate renderer with exact JVM/interpreter identity, zero losses, and
+    no missing numbered assertions before updating aggregate totals.
+  - [ ] Prevent unanchored native Joni properties/classes that contain no
+    translated surrogate range from beginning inside the visible payload of
+    an internal scalar marker. The isolated reducer at
+    `/tmp/phase36-native-property-marker-boundary.t` passes 2/2 on standard
+    Perl and 1/2 on PerlOnJava; this is separate from PR #1049's
+    surrogate-bearing translated-class renderer.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -874,9 +897,10 @@ is retained for now.
 3. Preserve draft PR #1046's completed combined QC/HST, five-family enumerated,
    and InPC/InSC map plus the follow-on mechanical-cleanup, Identifier,
    `kEH_Core`, and Block/Blk wildcard checkpoints. Integrate the independently
-   validated importer-owned Unikemet snapshot, then complete the shared
-   marker-aware isolated-surrogate property renderer. Preserve pinned Perl 5.44
-   acceptance and rejection semantics rather than inheriting host ICU breadth.
+   validated importer-owned Unikemet snapshot, then complete PR #1049's
+   stable-JAR generated map and the separate native-property marker-boundary
+   reducer. Preserve pinned Perl 5.44 acceptance and rejection semantics
+   rather than inheriting host ICU breadth.
    The post-Block generated residual is 13,624 assertions: 12,797
    alias/precedence, 476 wildcard, 346 diagnostic/value-policy, and five shared
    runtime assertions.
