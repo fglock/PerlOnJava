@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -140,6 +141,23 @@ class JoniRegexPatternTest {
         assertEquals("\uD83D\uDE42", matcher.group(1));
         assertEquals(0, matcher.start(1));
         assertEquals(2, matcher.end(1));
+    }
+
+    @Test
+    void matchesStandaloneBeyondUnicodeCharacterClassMembers() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "[\\x{4000001}\\x{4000003}\\x{4000005}]+", FLAGS);
+
+        assertFalse(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000000L),
+                java.util.List.of()).find());
+        assertTrue(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000001L),
+                java.util.List.of()).find());
+        assertTrue(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000003L),
+                java.util.List.of()).find());
+        assertTrue(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000005L),
+                java.util.List.of()).find());
+        assertFalse(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000006L),
+                java.util.List.of()).find());
     }
 
     @Test
