@@ -1069,6 +1069,7 @@ public class UnicodeResolver {
 
         String blockAlias = alias;
         boolean blockShortcut = false;
+        boolean isBlockShortcut = false;
         if (alias.length() > 2 && alias.regionMatches(true, 0, "in", 0, 2)) {
             int valueStart = 2;
             while (valueStart < alias.length()) {
@@ -1092,12 +1093,22 @@ public class UnicodeResolver {
             if (valueStart >= alias.length()) return null;
             String candidate = alias.substring(valueStart);
             if (unicodePropertyValue(UProperty.SCRIPT, candidate) >= 0) return null;
-            if (isIcuBinaryPropertyAlias(candidate)) return null;
+            if (isIcuBinaryPropertyAlias(candidate)
+                    || isIcuGeneralCategoryAlias(candidate)) return null;
             blockAlias = candidate;
             blockShortcut = true;
+            isBlockShortcut = true;
         }
-        if (!blockShortcut && isIcuBinaryPropertyAlias(blockAlias)) return null;
-        return PerlUnicodeBlockData.set(blockAlias);
+        if (!blockShortcut && (isIcuBinaryPropertyAlias(blockAlias)
+                || isIcuGeneralCategoryAlias(blockAlias))) return null;
+        UnicodeSet block = PerlUnicodeBlockData.set(blockAlias);
+        if (isBlockShortcut && block != null && block.containsSome(0xD800, 0xDFFF)) {
+            // Joni's UTF-8 subject path cannot represent an isolated surrogate.
+            // Retain the established deferred single-Is behavior until that
+            // representation debt is closed; explicit Block=/In forms remain pinned.
+            return null;
+        }
+        return block;
     }
 
     private static Boolean perlBooleanPropertyValue(String value) {
@@ -1111,6 +1122,15 @@ public class UnicodeResolver {
     private static boolean isIcuBinaryPropertyAlias(String alias) {
         try {
             new UnicodeSet().applyPropertyAlias(alias, "True");
+            return true;
+        } catch (IllegalArgumentException unsupported) {
+            return false;
+        }
+    }
+
+    private static boolean isIcuGeneralCategoryAlias(String alias) {
+        try {
+            new UnicodeSet().applyPropertyAlias("General_Category", alias);
             return true;
         } catch (IllegalArgumentException unsupported) {
             return false;
