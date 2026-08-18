@@ -699,6 +699,7 @@ public class UnicodeResolver {
                 property = property.substring(1).trim();
                 negated = !negated;
             }
+            property = normalizePerlIsPropertyAssignment(property);
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
                 if (!userPropertyName.matches("[A-Za-z_][A-Za-z0-9_]*")) {
@@ -933,7 +934,8 @@ public class UnicodeResolver {
     }
 
     static boolean isPerlBuiltInPropertyAlias(String property) {
-        return resolvePerlBuiltInPropertyAlias(property) != null;
+        return !normalizePerlIsPropertyAssignment(property).equals(property)
+                || resolvePerlBuiltInPropertyAlias(property) != null;
     }
 
     private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
@@ -990,6 +992,47 @@ public class UnicodeResolver {
             }
         }
         return normalized.toString();
+    }
+
+    /**
+     * Perl accepts an {@code Is_} prefix before property names in explicit
+     * property/value forms, and accepts a colon in place of the equals sign.
+     * The prefix is distinct from a bare {@code IsFoo} user property because
+     * this normalization applies only when a value delimiter is present.
+     */
+    private static String normalizePerlIsPropertyAssignment(String property) {
+        int delimiter = property.indexOf('=');
+        if (delimiter < 0) {
+            for (int i = 1; i < property.length() - 1; i++) {
+                if (property.charAt(i) == ':'
+                        && property.charAt(i - 1) != ':'
+                        && property.charAt(i + 1) != ':') {
+                    delimiter = i;
+                    break;
+                }
+            }
+        }
+        if (delimiter <= 0 || delimiter == property.length() - 1) {
+            return property;
+        }
+
+        String name = property.substring(0, delimiter);
+        String looseName = loosePropertyName(name);
+        if (!looseName.startsWith("is") || looseName.length() == 2) {
+            return property;
+        }
+
+        int nameStart = 2;
+        while (nameStart < name.length()) {
+            char separator = name.charAt(nameStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') {
+                break;
+            }
+            nameStart++;
+        }
+        if (nameStart >= name.length()) return property;
+        return name.substring(nameStart) + "=" + property.substring(delimiter + 1);
     }
 
     private static UnicodeSet unicodePropertyValueSet(int property, String alias) {
