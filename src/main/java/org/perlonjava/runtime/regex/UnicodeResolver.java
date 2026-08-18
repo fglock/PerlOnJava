@@ -1266,31 +1266,50 @@ public class UnicodeResolver {
             }
         }
 
-        String blockAlias = alias;
+        String blockShortcutAlias = alias;
+        if (assignment < 0) {
+            int prefixStart = 0;
+            while (prefixStart < alias.length()) {
+                char separator = alias.charAt(prefixStart);
+                if (!Character.isWhitespace(separator)
+                        && separator != '-' && separator != '_') break;
+                prefixStart++;
+            }
+            if (prefixStart > 0 && alias.length() - prefixStart > 2
+                    && (alias.regionMatches(true, prefixStart, "in", 0, 2)
+                        || alias.regionMatches(true, prefixStart, "is", 0, 2))) {
+                blockShortcutAlias = alias.substring(prefixStart);
+            }
+        }
+
+        String blockAlias = blockShortcutAlias;
         boolean blockShortcut = false;
         boolean isBlockShortcut = false;
-        if (alias.length() > 2 && alias.regionMatches(true, 0, "in", 0, 2)) {
+        if (blockShortcutAlias.length() > 2
+                && blockShortcutAlias.regionMatches(true, 0, "in", 0, 2)) {
             int valueStart = 2;
-            while (valueStart < alias.length()) {
-                char separator = alias.charAt(valueStart);
+            while (valueStart < blockShortcutAlias.length()) {
+                char separator = blockShortcutAlias.charAt(valueStart);
                 if (!Character.isWhitespace(separator) && separator != '-' && separator != '_') break;
                 valueStart++;
             }
-            if (valueStart >= alias.length()) return null;
-            blockAlias = alias.substring(valueStart);
+            if (valueStart >= blockShortcutAlias.length()) return null;
+            blockAlias = blockShortcutAlias.substring(valueStart);
             blockShortcut = true;
-        } else if (assignment >= 0 || unicodePropertyValue(UProperty.SCRIPT, alias) >= 0) {
+        } else if (assignment >= 0
+                || unicodePropertyValue(UProperty.SCRIPT, blockShortcutAlias) >= 0) {
             return null;
-        } else if (alias.length() > 2 && alias.regionMatches(true, 0, "is", 0, 2)) {
+        } else if (blockShortcutAlias.length() > 2
+                && blockShortcutAlias.regionMatches(true, 0, "is", 0, 2)) {
             int valueStart = 2;
-            while (valueStart < alias.length()) {
-                char separator = alias.charAt(valueStart);
+            while (valueStart < blockShortcutAlias.length()) {
+                char separator = blockShortcutAlias.charAt(valueStart);
                 if (!Character.isWhitespace(separator)
                         && separator != '-' && separator != '_') break;
                 valueStart++;
             }
-            if (valueStart >= alias.length()) return null;
-            String candidate = alias.substring(valueStart);
+            if (valueStart >= blockShortcutAlias.length()) return null;
+            String candidate = blockShortcutAlias.substring(valueStart);
             if (unicodePropertyValue(UProperty.SCRIPT, candidate) >= 0) return null;
             if (isIcuBinaryPropertyAlias(candidate)
                     || isIcuGeneralCategoryAlias(candidate)) return null;
