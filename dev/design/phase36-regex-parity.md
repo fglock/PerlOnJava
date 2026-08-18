@@ -374,6 +374,12 @@ detection and do not replace implementation work.
 
 ### Open decisions and blockers
 
+- Temporary backend-policy tests that assert Java routing can conflict with the
+  required final Joni-only behavior. The repository forbids modifying existing
+  tests, so a routing-removal slice that makes such an assertion obsolete must
+  remain preserved and unmerged until the user explicitly approves a test
+  replacement/update policy; implementation must not disguise the new route to
+  keep a stale assertion green.
 - Optimizer/debug transcript assertions are reported separately from semantic
   behavior and must never silently alter the raw baseline comparison.
 - A runtime or shared-language defect that prevents a regex test from executing
