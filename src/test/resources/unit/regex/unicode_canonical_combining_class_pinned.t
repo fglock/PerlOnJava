@@ -1,0 +1,32 @@
+use strict;
+use warnings;
+use Test::More tests => 24;
+no warnings 'experimental::uniprop_wildcards';
+
+my $above = "\x{301}";
+my $overlay = "\x{334}";
+
+ok($above =~ /\p{ccc=230}/, 'numeric canonical combining class');
+ok($above =~ /\p{ccc=Above}/, 'long value alias');
+ok($above =~ /\p{ccc=A}/, 'short value alias');
+ok($above =~ /\p{Canonical_Combining_Class=Above}/, 'long property alias');
+ok($above =~ /\p{ccc: 230}/, 'colon property delimiter');
+ok($above =~ /\p{Is_Canonical_Combining_Class=Above}/, 'Is property prefix');
+ok($above =~ /\p{ccc=+00_230}/, 'loose numeric value');
+ok($above =~ /\p{ccc=:\AAbove\z:}/, 'anchored wildcard value');
+ok($overlay =~ /\p{ccc=1}/, 'overlay numeric value');
+ok($overlay =~ /\p{ccc=OV}/, 'overlay short alias');
+ok($overlay =~ /\p{ccc=Overlay}/, 'overlay long alias');
+ok('A' =~ /\p{ccc=0}/, 'not-reordered numeric value');
+ok('A' =~ /\p{ccc=NR}/, 'not-reordered short alias');
+ok("\x{378}" =~ /\p{ccc=0}/, 'unassigned code point uses missing default');
+ok("\x{378}" =~ /\p{ccc=NR}/, 'unassigned code point uses default alias');
+ok('A' !~ /\p{ccc=133}/, 'reserved empty class never matches');
+ok('A' =~ /\P{ccc=133}/, 'negated reserved empty class matches');
+ok('A' =~ /\p{^ccc=133}/, 'inner-negated reserved empty class matches');
+ok('A' !~ /\P{^ccc=133}/, 'double-negated reserved empty class never matches');
+ok($above !~ /\p{ccc=1}/, 'exact class excludes another value');
+ok($above =~ /\P{ccc=1}/, 'outer property negation');
+ok($above =~ /\p{^ccc=1}/, 'inner property negation');
+ok($above =~ /\P{^ccc=230}/, 'double property negation');
+ok("\x{5B0}" =~ /\p{ccc=10}/, 'fixed numeric CCC alias');

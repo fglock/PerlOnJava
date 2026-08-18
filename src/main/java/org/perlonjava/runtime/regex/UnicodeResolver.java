@@ -948,6 +948,17 @@ public class UnicodeResolver {
             }
             return category;
         }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && isCanonicalCombiningClassProperty(alias.substring(0, assignment))) {
+            UnicodeSet combiningClass = PerlUnicodeCombiningClassData.resolve(
+                    alias.substring(assignment + 1));
+            if (combiningClass == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported Canonical_Combining_Class value: "
+                                + alias.substring(assignment + 1).trim());
+            }
+            return combiningClass;
+        }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1010,6 +1021,13 @@ public class UnicodeResolver {
     private static boolean isGeneralCategoryProperty(String property) {
         return switch (loosePropertyName(property)) {
             case "gc", "generalcategory", "category" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isCanonicalCombiningClassProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "ccc", "canonicalcombiningclass" -> true;
             default -> false;
         };
     }
@@ -1213,6 +1231,11 @@ public class UnicodeResolver {
     }
 
     private static String wrapCharClass(String pattern, boolean negated) {
+        if (pattern.isEmpty()) {
+            return negated
+                    ? "[\\x{0}-\\x{10FFFF}]"
+                    : "[^\\x{0}-\\x{10FFFF}]";
+        }
         return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
     }
 
