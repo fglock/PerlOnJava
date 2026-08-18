@@ -269,18 +269,22 @@ The PR #1042 parity repair ledger is active:
   (`op/bop.t` +39 and `op/concat2.t` +4) to exact PR #958 parity.
 - Ordinary byte-backed eval decoding has an 8/8 standard-Perl reducer and is
   in full-build validation before its four-file corpus gate.
-- Named-CV replacement is split into duplicate `B.pm` constant declarations,
-  named-sort entry lookup/snapshot semantics, and direct-call versus saved-CV
-  identity. Its standard-Perl reducers pass and JVM/interpreter validation is
-  active.
+- Named-CV replacement is complete and pushed as `d7e39c808`: duplicate
+  `B.pm` constant declarations are removed, named sort comparators resolve and
+  snapshot at sort entry, and direct calls follow visible typeglob replacement
+  without changing saved-CV or stash-deletion behavior. Warning-free `make`,
+  JVM/interpreter reducers, and the affected imported assertions are green at
+  exact PR #958 counts.
 - Tied/environment concat materialization and tied regex interpolation are in
   an independent follow-up on top of `8e9a45b07`.
 - Foreach active-lexical rebinding, glob identity/error rendering, and the
   warning-aware hash interpolation assertion remain independently owned repair
   roots.
-- Native branch-reset named/numeric calls now pass the new direct-Joni matrix,
-  upstream recursive-capture tests, and warning-free `make`; focused
-  `pat_advanced*` corpus comparison is the remaining commit gate.
+- Native branch-reset named/numeric calls are complete and pushed as
+  `7f9e7f8d3`: the direct-Joni matrix, upstream recursive-capture tests,
+  warning-free `make`, and focused `pat_advanced*` comparison are green. JVM
+  matches temporary PR #1042 routing exactly at 1,522/1,687 per file; the
+  interpreter's independent locale-eval assertion remains separately mapped.
 
 The permanent full-Joni path is advancing independently. Native nested
 lookahead-in-lookbehind admission is complete at `43b4981a6`, with 1,704
