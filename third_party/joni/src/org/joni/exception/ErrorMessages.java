@@ -67,6 +67,13 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Sequence (?<... not terminated";
     String PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED =
             "Sequence ?P=... not terminated";
+    String PERL_ALPHA_ASSERTION_REQUIRES_COLON =
+            "'(*%n' requires a terminating ':'";
+    String PERL_UNKNOWN_VERB_PATTERN = "Unknown verb pattern '%n'";
+    String PERL_UNKNOWN_CONTROL_CONSTRUCT =
+            "Unknown '(*...)' construct '%n'";
+    String PERL_UNTERMINATED_CONTROL_ARGUMENT =
+            "Unterminated '(*...' argument";
     String PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED =
             "Sequence (?^-...) not recognized";
     String PERL_CARET_D_OPTION_NOT_RECOGNIZED =

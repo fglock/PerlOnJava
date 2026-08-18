@@ -893,6 +893,9 @@ class Parser extends Lexer {
     }
 
     private Node parseControlVerb() {
+        Node alphaAssertion = parseAlphaAssertion();
+        if (alphaAssertion != null) return alphaAssertion;
+
         final ControlVerbNode.Kind kind;
         final String verb;
         if (startsWith("ACCEPT)")) {
@@ -920,7 +923,11 @@ class Parser extends Lexer {
             kind = ControlVerbNode.Kind.MARK;
             verb = "MARK";
         } else {
-            newSyntaxException(UNDEFINED_GROUP_OPTION);
+            String construct = controlConstructName();
+            if (!construct.isEmpty() && Character.isUpperCase(construct.codePointAt(0))) {
+                newValueException(PERL_UNKNOWN_VERB_PATTERN, construct);
+            }
+            newValueException(PERL_UNKNOWN_CONTROL_CONSTRUCT, construct);
             return null;
         }
         p += verb.length();
@@ -937,6 +944,73 @@ class Parser extends Lexer {
         returnCode = 0;
         env.hasControlVerb = true;
         return new ControlVerbNode(kind, name);
+    }
+
+    private Node parseAlphaAssertion() {
+        int nameStart = p;
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (!Character.isLetter(code)) break;
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        String name = new String(bytes, nameStart, cursor - nameStart, StandardCharsets.UTF_8);
+        if (!name.equals("pla") && !name.equals("plb") && !name.equals("nla")
+                && !name.equals("nlb") && !name.equals("atomic")) {
+            return null;
+        }
+        if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != ':') {
+            newValueException(PERL_ALPHA_ASSERTION_REQUIRES_COLON, name);
+        }
+        p = cursor + enc.length(bytes, cursor, stop);
+
+        Node node;
+        switch (name) {
+        case "pla":
+            node = new AnchorNode(AnchorType.PREC_READ);
+            break;
+        case "plb":
+            node = new AnchorNode(AnchorType.LOOK_BEHIND);
+            break;
+        case "nla":
+            node = new AnchorNode(AnchorType.PREC_READ_NOT);
+            break;
+        case "nlb":
+            node = new AnchorNode(AnchorType.LOOK_BEHIND_NOT);
+            break;
+        default:
+            node = new EncloseNode(EncloseType.STOP_BACKTRACK);
+            break;
+        }
+
+        fetchToken();
+        final Node target;
+        try {
+            target = parseSubExp(TokenType.SUBEXP_CLOSE);
+        } catch (SyntaxException e) {
+            if (END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
+                newSyntaxException(PERL_UNTERMINATED_CONTROL_ARGUMENT);
+            }
+            throw e;
+        }
+        if (node.getType() == NodeType.ANCHOR) {
+            ((AnchorNode)node).setTarget(target);
+        } else {
+            ((EncloseNode)node).setTarget(target);
+        }
+        returnCode = 0;
+        return node;
+    }
+
+    private String controlConstructName() {
+        int start = p;
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == ':' || code == ')') break;
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return new String(bytes, start, cursor - start, StandardCharsets.UTF_8);
     }
 
     private int parseInternalCalloutId() {

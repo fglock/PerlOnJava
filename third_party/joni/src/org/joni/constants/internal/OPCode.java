@@ -158,6 +158,8 @@ public interface OPCode {
     int NOT_GRAPHEME_BOUNDARY         = 114;          /* Perl \B{gcb} */
     int SENTENCE_BOUNDARY             = 115;          /* Perl \b{sb} */
     int NOT_SENTENCE_BOUNDARY         = 116;          /* Perl \B{sb} */
+    int WORD_BREAK_BOUNDARY           = 117;          /* Perl \b{wb} */
+    int NOT_WORD_BREAK_BOUNDARY       = 118;          /* Perl \B{wb} */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -278,6 +280,8 @@ public interface OPCode {
         "not-grapheme-boundary", /*OP_NOT_GRAPHEME_BOUNDARY*/
         "sentence-boundary", /*OP_SENTENCE_BOUNDARY*/
         "not-sentence-boundary", /*OP_NOT_SENTENCE_BOUNDARY*/
+        "word-break-boundary", /*OP_WORD_BREAK_BOUNDARY*/
+        "not-word-break-boundary", /*OP_NOT_WORD_BREAK_BOUNDARY*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -399,5 +403,7 @@ public interface OPCode {
         Arguments.NON, /*OP_NOT_GRAPHEME_BOUNDARY*/
         Arguments.NON, /*OP_SENTENCE_BOUNDARY*/
         Arguments.NON, /*OP_NOT_SENTENCE_BOUNDARY*/
+        Arguments.NON, /*OP_WORD_BREAK_BOUNDARY*/
+        Arguments.NON, /*OP_NOT_WORD_BREAK_BOUNDARY*/
     } : null;
 }
