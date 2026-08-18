@@ -1123,8 +1123,14 @@ public class UnicodeResolver {
         }
 
         String name = property.substring(0, delimiter);
+        // Perl's assignment prefix is exactly "Is". Property and value
+        // aliases use loose matching after that prefix, but the prefix itself
+        // remains case-sensitive (for example, is_dt=Can is invalid).
+        if (name.length() < 2 || name.charAt(0) != 'I' || name.charAt(1) != 's') {
+            return property;
+        }
         String looseName = loosePropertyName(name);
-        if (!looseName.startsWith("is") || looseName.length() == 2) {
+        if (looseName.length() == 2) {
             return property;
         }
 
