@@ -260,9 +260,8 @@ if they expose a semantic defect.
    - require warning-free `make` and green Ubuntu and Windows CI before review.
 2. Remove temporary ordinary-pattern Java routing as native Joni replacements
    become green:
-   - integrate physical duplicate-name publication for branch-reset groups;
-   - integrate native nested lookaround and outside-class named-character
-     support;
+   - finish native nested-lookaround admission and remove its Java routing;
+   - route KEEP assertions through Joni and retire Java marker snapshots;
    - use the integration report to choose the next fallback whose removal moves
      the most assertions to pure Joni;
    - never move callback, condition, control-verb, or dynamic-source patterns
