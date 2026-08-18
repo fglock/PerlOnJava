@@ -720,6 +720,8 @@ public class UnicodeResolver {
                     isPerlIsPrefixedBlockWildcard(property);
             boolean isPrefixedScriptWildcard =
                     isPerlIsPrefixedScriptWildcard(property);
+            boolean isPrefixedQuickCheckHangulWildcard =
+                    isPerlIsPrefixedQuickCheckHangulWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
@@ -736,6 +738,10 @@ public class UnicodeResolver {
             if (isPrefixedScriptWildcard) {
                 throw new IllegalArgumentException(
                         "Can't find Unicode property definition for Is-prefixed Script wildcard");
+            }
+            if (isPrefixedQuickCheckHangulWildcard) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition for Is-prefixed Quick_Check/Hangul wildcard");
             }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
@@ -981,6 +987,19 @@ public class UnicodeResolver {
 
         String alias = property.trim();
         int assignment = propertyValueDelimiter(alias);
+        if (assignment < 0
+                && PerlUnicodeQuickCheckHangulData.isPropertyAlias(alias)) {
+            throw new IllegalArgumentException(
+                    "Unicode enumerated property requires a value: " + alias);
+        }
+        if (assignment == alias.length() - 1
+                && PerlUnicodeQuickCheckHangulData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            throw new IllegalArgumentException(
+                    "Missing Unicode property value for "
+                            + PerlUnicodeQuickCheckHangulData.canonicalProperty(
+                                    alias.substring(0, assignment)));
+        }
         if (assignment == alias.length() - 1
                 && (PerlUnicodeScriptData.isScriptPropertyAlias(
                         alias.substring(0, assignment))
@@ -1046,6 +1065,12 @@ public class UnicodeResolver {
                                 + alias.substring(assignment + 1).trim());
             }
             return eastAsianWidth;
+        }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeQuickCheckHangulData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            return resolvePerlQuickCheckHangul(
+                    alias.substring(0, assignment), alias.substring(assignment + 1));
         }
         if (assignment > 0 && assignment < alias.length() - 1
                 && PerlUnicodeNumericValueData.isPropertyAlias(
@@ -1241,6 +1266,16 @@ public class UnicodeResolver {
                 && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
     }
 
+    private static boolean isPerlIsPrefixedQuickCheckHangulWildcard(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String propertyName = exactIsPrefixedPropertyName(
+                property.substring(0, assignment));
+        return propertyName != null
+                && PerlUnicodeQuickCheckHangulData.isPropertyAlias(propertyName)
+                && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
     private static String exactIsPrefixedPropertyName(String name) {
         if (name.length() <= 2 || name.charAt(0) != 'I' || name.charAt(1) != 's') {
             return null;
@@ -1372,6 +1407,53 @@ public class UnicodeResolver {
             throw new IllegalArgumentException(
                     "No Unicode property value wildcard matches "
                             + (extensions ? "Script_Extensions" : "Script"));
+        }
+        return result.freeze();
+    }
+
+    private static UnicodeSet resolvePerlQuickCheckHangul(
+            String property, String value) {
+        String wildcard = perlNumericWildcardBody(value);
+        if (wildcard == null) {
+            UnicodeSet exact = PerlUnicodeQuickCheckHangulData.valueSet(property, value);
+            if (exact == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported "
+                                + PerlUnicodeQuickCheckHangulData.canonicalProperty(property)
+                                + " value: " + value.trim());
+            }
+            return exact;
+        }
+        if (wildcard.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        Pattern valuePattern;
+        try {
+            valuePattern = Pattern.compile(wildcard, Pattern.CASE_INSENSITIVE);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (String candidate :
+                PerlUnicodeQuickCheckHangulData.wildcardValues(property)) {
+            String shortCandidate =
+                    PerlUnicodeQuickCheckHangulData.shortValue(property, candidate);
+            if (valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(shortCandidate).matches()
+                    || valuePattern.matcher(loosePropertyName(candidate)).matches()
+                    || valuePattern.matcher(loosePropertyName(shortCandidate)).matches()) {
+                result.addAll(
+                        PerlUnicodeQuickCheckHangulData.valueSet(property, candidate));
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches "
+                            + PerlUnicodeQuickCheckHangulData.canonicalProperty(property));
         }
         return result.freeze();
     }
