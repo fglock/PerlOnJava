@@ -959,6 +959,18 @@ public class UnicodeResolver {
             }
             return combiningClass;
         }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeBidiClassData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            UnicodeSet bidiClass = PerlUnicodeBidiClassData.valueSet(
+                    alias.substring(assignment + 1));
+            if (bidiClass == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported Bidi_Class value: "
+                                + alias.substring(assignment + 1).trim());
+            }
+            return bidiClass;
+        }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
