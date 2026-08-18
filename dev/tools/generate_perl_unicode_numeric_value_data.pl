@@ -217,6 +217,8 @@ package org.perlonjava.runtime.regex;
 
 import com.ibm.icu.text.UnicodeSet;
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 
 /*
  * Generated from Perl 5.44's pinned Unicode Character Database by
@@ -258,8 +260,11 @@ for (my $i = 0; $i < @range_endpoints; $i += 10) {
 print <<'FOOTER';
     };
 
+    private static final MathContext PERL_NUMERIC_CONTEXT =
+            new MathContext(4, RoundingMode.HALF_EVEN);
     private static final UnicodeSet[] SETS = buildSets();
     private static final BigDecimal[] DECIMALS = buildDecimals();
+    private static final BigDecimal[] ALTERNATE_DECIMALS = buildAlternateDecimals();
     private static final UnicodeSet ASSIGNED = buildAssignedSet();
     private static final UnicodeSet NAN = new UnicodeSet(0, 0x10ffff)
             .removeAll(ASSIGNED).freeze();
@@ -277,17 +282,14 @@ print <<'FOOTER';
     }
 
     static short valueForDecimal(BigDecimal decimal) {
-        int low = 0;
-        int high = DECIMALS.length - 1;
-        while (low <= high) {
-            int middle = (low + high) >>> 1;
-            int comparison = DECIMALS[middle].compareTo(decimal);
-            if (comparison < 0) {
-                low = middle + 1;
-            } else if (comparison > 0) {
-                high = middle - 1;
-            } else {
-                return (short) middle;
+        double binaryValue = decimal.doubleValue();
+        if (!Double.isFinite(binaryValue)) return INVALID;
+        BigDecimal canonical = new BigDecimal(binaryValue).round(PERL_NUMERIC_CONTEXT);
+        for (short index = 0; index < DECIMALS.length; index++) {
+            if (DENOMINATORS[index] != 1
+                    && (DECIMALS[index].compareTo(canonical) == 0
+                        || ALTERNATE_DECIMALS[index].compareTo(canonical) == 0)) {
+                return index;
             }
         }
         return INVALID;
@@ -359,6 +361,16 @@ print <<'FOOTER';
             if (index > 0 && decimals[index - 1].compareTo(decimals[index]) >= 0) {
                 throw new IllegalStateException("Numeric_Value decimals are not sorted");
             }
+        }
+        return decimals;
+    }
+
+    private static BigDecimal[] buildAlternateDecimals() {
+        MathContext alternateContext = new MathContext(4, RoundingMode.HALF_UP);
+        BigDecimal[] decimals = new BigDecimal[NUMERATORS.length];
+        for (int index = 0; index < decimals.length; index++) {
+            decimals[index] = BigDecimal.valueOf(NUMERATORS[index])
+                    .divide(BigDecimal.valueOf(DENOMINATORS[index]), alternateContext);
         }
         return decimals;
     }

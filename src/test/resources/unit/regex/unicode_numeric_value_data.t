@@ -40,6 +40,10 @@ sub matches_property {
         'the pinned rounded decimal alias matches one sixth');
     ok(!defined(compile_property('nv=0.1668')),
         'a nearby decimal outside the pinned aliases is rejected');
+    ok(matches_property('nv=0.14295', 0x2150),
+        'NV canonicalization follows binary floating-point rounding');
+    ok(!defined(compile_property('nv=0.1428')),
+        'NV canonicalization rejects the adjacent rounded value');
 
     ok(matches_property('nv=10000000000000000', 0x4EAC),
         'maximum Unicode numeric value fits an exact integer');

@@ -89,12 +89,18 @@ class PerlUnicodeNumericValueDataTest {
                 PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("8.333e-02")));
         assertEquals(index("1/64"),
                 PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.01562")));
+        assertEquals(index("1/64"),
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.01563")));
         assertEquals(index("1/6"),
                 PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.1667")));
         assertEquals(index("3/64"),
                 PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("4.688e-02")));
         assertEquals(PerlUnicodeNumericValueData.INVALID,
                 PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.1668")));
+        assertEquals(index("1/7"),
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.14295")));
+        assertEquals(PerlUnicodeNumericValueData.INVALID,
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.1428")));
     }
 
     @Test
