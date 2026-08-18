@@ -233,9 +233,8 @@ has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
 boundaries; PR #1028 adds independently validated alpha assertion aliases and
 native word boundaries. PR #1029 integrates corrected global zero-width `/g`
 progression and pinned Perl 5.44 Unicode 17.0 Age properties. The new WIP is
-closing combined-corpus property regressions and adding pinned
-General_Category sets while line boundaries remain a parallel integration
-slice.
+closing combined-corpus property regressions, adding pinned General_Category
+sets, and integrating exact native line boundaries.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -290,7 +289,15 @@ reproducibly without the host ICU category table. The focused oracle passes
 18/18 on system Perl, JVM, and interpreter; Age remains 14/14 and invalid
 property diagnostics remain 39/39. Chunk 01 improves by another 606 assertions
 to 31,311/41,843 identically on both execution backends with no numbered
-regression, raising pre-line generated evidence to 133,695/407,367.
+regression, raising property-plus-completed-sentence/word evidence to
+133,695/407,367 before line integration.
+
+Native Joni line assertions now implement Unicode 17 UAX #14 from pinned Perl
+5.44 Line_Break, General_Category, East_Asian_Width, and emoji data. The
+84-assertion focused oracle passes on both execution backends and chunks 06–09
+pass 205,380/205,380 each on JVM and interpreter. Protected sentence and word
+chunks remain exact, making the complete generated boundary corpus
+239,866/239,866 and current generated evidence 339,075/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -522,9 +529,10 @@ parser slice.
   - [x] Generated pinned Unicode 17.0 General_Category atomic and aggregate
     sets with Perl property/value aliases. The focused oracle passes 18/18 and
     chunk 01 gains 606 assertions on both backends with zero regressions.
-  - [ ] Implement the native Joni line boundary algorithm, then
-    close the remaining property and boundary failures before marking Phase 3
-    complete.
+  - [x] Implemented native Joni line assertions from reproducible pinned Unicode
+    17.0 data. The focused oracle passes 84/84 and chunks 06–09 pass
+    205,380/205,380 on both execution backends while sentence/word stay exact.
+  - [ ] Close the remaining property failures before marking Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -569,11 +577,9 @@ parser slice.
 1. Land review-ready PR #1024 and draft PRs #1025–#1029. Integrate native Joni
    unbraced-byte and underscored numeric escape parsing, then rerun the affected
    direct/thread files and confirm the last combined-corpus fatal root is closed.
-2. Continue boundary semantics natively in Joni with line breaks
-   (0/205,380 in chunks 06–09). PerlOnJava4 owns the non-overlapping line slice;
-   word boundaries are complete at 19,510/19,510 in chunk 10. Use pinned Perl 5.44 Unicode data and
-   the generated chunks as the release oracle; remove each simplified Java
-   boundary rewrite only after native parity.
+2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
+   sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
+   JVM and interpreter while property and parser work continues.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group,
    break-property values. Preserve pinned Perl 5.44
