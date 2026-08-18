@@ -32,6 +32,10 @@ sub matches_property {
     for my $value ('-1/2', '-01/02', '-0.5', '-.5', '-5e-1') {
         ok(matches_property("nv=$value", 0x0F33), "negative half spelling $value");
     }
+    ok(matches_property('Numeric_Value: -0000001/0000002', 0x0F33),
+        'leading loose whitespace is accepted before a rational value');
+    ok(matches_property('nv=8.333e-02', 0x109F6),
+        'a sufficiently precise decimal approximation matches one twelfth');
 
     ok(matches_property('nv=10000000000000000', 0x4EAC),
         'maximum Unicode numeric value fits an exact integer');

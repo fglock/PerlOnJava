@@ -1151,13 +1151,17 @@ public class UnicodeResolver {
             } else if (decimal.scale() < 0) {
                 numerator = numerator.multiply(BigInteger.TEN.pow(-decimal.scale()));
             }
-            return rationalValueIndex(numerator, denominator);
+            short exact = rationalValueIndex(numerator, denominator);
+            return exact != PerlUnicodeNumericValueData.INVALID
+                    ? exact
+                    : approximateNumericValueIndex(numerator, denominator);
         } catch (ArithmeticException | NumberFormatException invalidValue) {
             return PerlUnicodeNumericValueData.INVALID;
         }
     }
 
     private static short perlRationalValueIndex(String value) {
+        value = value.trim();
         for (int i = 0; i < value.length(); i++) {
             char character = value.charAt(i);
             if (character == ' ' || character >= '\t' && character <= '\r') {
@@ -1191,6 +1195,33 @@ public class UnicodeResolver {
         }
         return PerlUnicodeNumericValueData.valueForRational(
                 numerator.longValueExact(), denominator.longValueExact());
+    }
+
+    private static short approximateNumericValueIndex(
+            BigInteger numerator, BigInteger denominator) {
+        short best = PerlUnicodeNumericValueData.INVALID;
+        BigInteger bestDifference = null;
+        BigInteger bestReference = null;
+        BigInteger toleranceScale = BigInteger.valueOf(10_000);
+        for (short index = 0; index < PerlUnicodeNumericValueData.valueCount(); index++) {
+            BigInteger candidateNumerator = BigInteger.valueOf(
+                    PerlUnicodeNumericValueData.numerator(index));
+            if (candidateNumerator.signum() == 0) continue;
+            BigInteger candidateDenominator = BigInteger.valueOf(
+                    PerlUnicodeNumericValueData.denominator(index));
+            BigInteger difference = numerator.multiply(candidateDenominator)
+                    .subtract(candidateNumerator.multiply(denominator)).abs();
+            BigInteger reference = candidateNumerator.abs().multiply(denominator);
+            if (difference.multiply(toleranceScale).compareTo(reference) > 0) continue;
+            if (bestDifference == null
+                    || difference.multiply(bestReference)
+                            .compareTo(bestDifference.multiply(reference)) < 0) {
+                best = index;
+                bestDifference = difference;
+                bestReference = reference;
+            }
+        }
+        return best;
     }
 
     private static String removePerlNumericLooseCharacters(String value) {
