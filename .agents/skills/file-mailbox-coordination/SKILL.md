@@ -173,6 +173,85 @@ READY -> CLAIMED -> WORKING -> BLOCKED -> COMPLETED
 Never report completion until required validation and externally observable
 state agree with the claim.
 
+## Prefer bounded execution envelopes
+
+Reduce coordination latency by authorizing the worker's predictable delivery
+sequence in one complete assignment. Do not require a new coordinator ping
+after every diagnosis, focused test, build, commit, or push when those actions
+remain inside a reviewed boundary.
+
+Include these fields or equivalent prose in the assignment:
+
+- exact parent SHA, worktree, branch, attempt, and lease token;
+- owned files or semantic area, plus explicit excluded files and active owners;
+- ordered actions the worker may take without further approval;
+- required system-of-record oracle, focused tests, full-build gate, warning
+  scan, and artifacts;
+- resource-slot rule, including when a conditional slot may be claimed;
+- commit and push authority when the diff and gates remain within bounds;
+- a small correction budget, normally one in-scope correction after a focused
+  failure;
+- mandatory stop conditions for scope growth, existing-suite regressions,
+  dependency mismatches, destructive actions, or external state changes;
+- the next queued task or the state to enter after delivery.
+
+Make dependency handoffs self-advancing. Name the predecessor task and require
+the worker to verify its reported commit SHA, file scope, and validation before
+incorporating it. If those checks match the assignment, permit the worker to
+continue without another round trip. Preserve predecessor commits as
+identifiable review units and require `range-diff` when transplanting them.
+
+Treat the envelope as bounded authority, not blanket permission. A worker must
+still acknowledge the assignment and every actual resource claim in the
+mailbox. It should ping the coordinator only when a stop condition occurs, the
+envelope is exhausted, or a decision would change scope. Never pre-authorize
+merges, destructive recovery, force-pushes, or writes to external systems merely
+to reduce messages.
+
+Example envelope body:
+
+```text
+From exact <sha>, own <files/semantics>; exclude <files and owners>.
+Run <oracle> then <focused matrix>. One correction within owned files is
+authorized. When predecessor <task> reports a matching green commit, verify and
+incorporate it. Claim build slot 2 only when free and record the claim. On a
+green warning-free build with unchanged scope, commit and push the owned branch,
+report SHA/logs, release the slot, and become AVAILABLE. Stop for any new
+production file, existing-test regression, dependency mismatch, or second
+failed correction.
+```
+
+### Decentralize low-risk local resource admission
+
+For local, reversible resources such as build concurrency, prefer worker-side
+admission over coordinator-granted slots when the coordinator has published a
+clear global limit. Keep centralized grants for scarce, costly, destructive,
+or externally visible resources.
+
+Before starting a local build, require the worker to:
+
+1. append a build-intent claim with task, checkout, command class, log path,
+   start deadline, and unique claim token;
+2. reread all relevant mailboxes after a short jitter and count non-stale active
+   claims;
+3. inspect exact build processes and current machine load without killing or
+   classifying processes from CPU percentage alone;
+4. start only when the published concurrency and load policy permits;
+5. append a start acknowledgment, heartbeat at the published interval, and a
+   release with exit status and log path.
+
+Make simultaneous claims deterministic: sort by mailbox timestamp and claim
+token, and let only the first available claims up to the global limit start.
+Expire an intent that misses its start deadline. Treat a running process as
+authoritative even when its mailbox heartbeat is delayed; verify checkout,
+command, PID, and start time before recovering a stale claim. Workers that
+cannot inspect load or exact processes must wait rather than guess.
+
+This protocol removes approval round trips, not the resource limit. The
+coordinator publishes or changes the limit, audits claims, resolves stale or
+conflicting ownership, and may temporarily suspend decentralized admission
+after overload or cleanup incidents.
+
 ## Keep monitoring alive
 
 Remain in monitoring mode until explicitly released, replaced, or authorized to
