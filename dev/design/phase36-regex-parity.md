@@ -279,9 +279,17 @@ if they expose a semantic defect.
      current artifact and establish new exact counts; the stale pre-migration
      counts are not a release gate for the progressive backend.
 3. Complete the remaining Unicode ownership boundary:
+   - parse `\h` and `\H` natively as Perl's exact horizontal-whitespace set in
+     direct and character-class forms, including scoped `/a` and `/aa`, without
+     changing stock Ruby-syntax hexadecimal escapes;
+   - close the leading-loose Block and Script shortcut families, then classify
+     the remaining bare binary, enumerated, and General_Category aliases while
+     preserving user-property and property-family precedence;
    - preserve per-member fold policy in Joni's composed-class AST through union,
      intersection, negation, and nested classes, then remove the corresponding
      adapter translation;
+   - close ASCII-strict multi-character folds and the remaining `/aa` imported
+     owner families before deleting their Java fold routing;
    - represent property-value wildcard parsing and diagnostics with a dedicated
      Joni syntax node rather than flattening wildcard behavior into literal
      ranges prematurely;
