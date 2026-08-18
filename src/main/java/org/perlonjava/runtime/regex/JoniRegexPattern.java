@@ -300,6 +300,7 @@ final class JoniRegexPattern {
                 || pattern.contains("(*THEN")
                 || pattern.contains("(*COMMIT")
                 || pattern.contains("(*MARK")
+                || pattern.contains("(*:")
                 || pattern.contains("(?(DEFINE)")
                 || pattern.contains("(?(?{=CALL:")
                 || pattern.contains("(?(R")
@@ -313,7 +314,8 @@ final class JoniRegexPattern {
     }
 
     private static boolean hasControlVerbState(String pattern) {
-        return pattern.contains("(*MARK") || pattern.contains("(*PRUNE")
+        return pattern.contains("(*MARK") || pattern.contains("(*:")
+                || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP") || pattern.contains("(*THEN")
                 || pattern.contains("(*COMMIT");
     }
@@ -403,6 +405,13 @@ final class JoniRegexPattern {
                 atClassStart = true;
                 classAllowsLeadingClose = true;
                 out.append(ch);
+                continue;
+            }
+            if (!inClass && pattern.startsWith("(*:", i)) {
+                // Perl's abbreviated MARK form is (*:NAME). Joni accepts the
+                // equivalent long spelling and publishes the mark normally.
+                out.append("(*MARK:");
+                i += 2;
                 continue;
             }
             if (inClass && flags.isExtendedWhitespace() && Character.isWhitespace(ch)) {

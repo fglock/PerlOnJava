@@ -54,6 +54,12 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void translatesAbbreviatedMarkControlVerb() {
+        assertTrue(JoniRegexPattern.requiresJoniBackend("(*:B)A"));
+        assertEquals("(*MARK:B)A", JoniRegexPattern.translatePattern("(*:B)A"));
+    }
+
+    @Test
     void translatesNamedCharactersAndDoubleExtendedClasses() {
         assertEquals("café", JoniRegexPattern.translatePattern(
                 "caf\\N{LATIN SMALL LETTER E WITH ACUTE}"));
