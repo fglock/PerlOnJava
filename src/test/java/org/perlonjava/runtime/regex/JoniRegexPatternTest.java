@@ -116,6 +116,18 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void preservesStandaloneBlockAndScriptFoldPolicyInsideJoni() {
+        RegexFlags ignoreCase = RegexFlags.fromModifiers("i", "property");
+        JoniRegexPattern block = new JoniRegexPattern("\\p{Block=ASCII}", ignoreCase);
+        JoniRegexPattern script = new JoniRegexPattern("\\p{Script=Common}", ignoreCase);
+
+        assertEquals("\\p{Block=ASCII}", block.patternDescription());
+        assertEquals("\\p{Script=Common}", script.patternDescription());
+        assertFalse(block.matcher("\u212A", java.util.List.of()).find());
+        assertFalse(script.matcher("K", java.util.List.of()).find());
+    }
+
+    @Test
     void flattensTranslatedPropertiesInsideOrdinaryCharacterClasses() {
         JoniRegexPattern pattern = new JoniRegexPattern(
                 "[\\p{IsDigit}\\p{IsLower}\\p{IsUpper}]", FLAGS);

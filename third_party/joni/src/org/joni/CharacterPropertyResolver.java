@@ -24,9 +24,23 @@ import org.jcodings.Encoding;
 /** Resolves syntax-specific character properties to inclusive code-point ranges. */
 @FunctionalInterface
 public interface CharacterPropertyResolver {
+    /** A resolved range set and whether ignore-case folding applies to it. */
+    final class Result {
+        public final int[] ranges;
+        public final boolean caseFold;
+
+        public Result(int[] ranges, boolean caseFold) {
+            this.ranges = ranges;
+            this.caseFold = caseFold;
+        }
+    }
+
     /**
-     * Returns {@code [count, from1, to1, ...]} for a resolved property, or
-     * {@code null} to use the encoding's built-in property lookup.
+     * Returns resolved ranges and their ignore-case policy, or {@code null} to
+     * use the encoding's built-in property lookup. The context flag allows a
+     * resolver to defer properties whose class-composition semantics require
+     * frontend handling.
      */
-    int[] resolve(byte[] bytes, int p, int end, Encoding encoding);
+    Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                   boolean inCharacterClass);
 }
