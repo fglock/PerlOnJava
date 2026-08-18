@@ -256,7 +256,7 @@ class Parser extends Lexer {
                 break;
 
             case CHAR_PROPERTY:
-                CharProperty property = fetchCharProperty();
+                CharProperty property = fetchCharProperty(true);
                 addCharProperty(cc, ascCc, property, token.getPropNot());
                 cc.nextStateClass(arg, ascCc, env); // goto next_class
                 break;
@@ -1629,13 +1629,13 @@ class Parser extends Lexer {
     }
 
     private Node parseCharProperty() {
-        CharProperty property = fetchCharProperty();
+        CharProperty property = fetchCharProperty(false);
         CClassNode cc = new CClassNode();
         Node node = cc;
         addCharProperty(cc, null, property, false);
         if (token.getPropNot()) cc.setNot();
 
-        if (isIgnoreCase(env.option)) {
+        if (isIgnoreCase(env.option) && property.caseFold) {
             if (property.ranges != null || property.ctype != CharacterType.ASCII) {
                 node = cClassCaseFold(node, cc, cc);
             }

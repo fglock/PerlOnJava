@@ -3,6 +3,7 @@ package org.perlonjava.runtime.regex;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
+import org.joni.CharacterPropertyResolver;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -978,14 +979,35 @@ public class UnicodeResolver {
                 || resolvePerlBuiltInPropertyAlias(property) != null;
     }
 
-    /** Returns pinned Perl-property ranges in Joni's native range-array format. */
-    static int[] resolveJoniPropertyRanges(String property) {
+    /** Returns pinned Perl-property ranges and their native Joni fold policy. */
+    static CharacterPropertyResolver.Result resolveJoniProperty(
+            String property, boolean inCharacterClass) {
         if (property == null) return null;
         int assignment = propertyValueDelimiter(property);
-        if (assignment <= 0 || assignment == property.length() - 1
-                || !isGeneralCategoryProperty(property.substring(0, assignment))) {
+        if (assignment <= 0 || assignment == property.length() - 1) {
             return null;
         }
+        String name = property.substring(0, assignment);
+        String value = property.substring(assignment + 1);
+        boolean caseFold;
+        if (isGeneralCategoryProperty(name)) {
+            caseFold = true;
+        } else if (PerlUnicodeBlockData.isPropertyAlias(name)) {
+            if (perlBlockWildcardBody(value) != null) return null;
+            caseFold = false;
+        } else if (PerlUnicodeScriptData.isScriptPropertyAlias(name)
+                || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(name)) {
+            if (perlNumericWildcardBody(value) != null) return null;
+            caseFold = false;
+        } else {
+            return null;
+        }
+
+        // Joni currently folds a complete bracket expression as one class.
+        // Keep no-fold families translated by the adapter inside brackets until
+        // the AST can retain per-property fold policy through class composition.
+        if (!caseFold && inCharacterClass) return null;
+
         UnicodeSet set = resolvePerlBuiltInPropertyAlias(property);
         if (set == null) return null;
 
@@ -995,7 +1017,7 @@ public class UnicodeResolver {
             ranges[i * 2 + 1] = set.getRangeStart(i);
             ranges[i * 2 + 2] = set.getRangeEnd(i);
         }
-        return ranges;
+        return new CharacterPropertyResolver.Result(ranges, caseFold);
     }
 
     private static boolean isPerlSpecialPropertyAlias(String property) {

@@ -6,6 +6,7 @@ import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
 import org.joni.CalloutHandler;
 import org.joni.CalloutResult;
+import org.joni.CharacterPropertyResolver;
 import org.joni.DynamicPatternResult;
 import org.joni.MatchView;
 import org.joni.NameEntry;
@@ -60,12 +61,13 @@ final class JoniRegexPattern {
                         ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8));
     }
 
-    private static int[] resolveCharacterProperty(byte[] bytes, int p, int end,
-                                                  Encoding encoding) {
+    private static CharacterPropertyResolver.Result resolveCharacterProperty(
+            byte[] bytes, int p, int end, Encoding encoding,
+            boolean inCharacterClass) {
         String property = new String(bytes, p, end - p,
                 encoding == ISO8859_1Encoding.INSTANCE
                         ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
-        return UnicodeResolver.resolveJoniPropertyRanges(property);
+        return UnicodeResolver.resolveJoniProperty(property, inCharacterClass);
     }
 
     private final Regex regex;
@@ -231,8 +233,9 @@ final class JoniRegexPattern {
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
             boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
-            boolean joniResolvedProperty = UnicodeResolver.resolveJoniPropertyRanges(
-                    unnegated) != null;
+            boolean joniResolvedProperty = UnicodeResolver.resolveJoniProperty(
+                    unnegated, extendedClassBracketDepth > 0
+                            || standardClassBracketDepth > 0) != null;
             if (!userDefined && joniResolvedProperty
                     && (frontendProperty || scriptExtensions || perlBuiltInAlias)) {
                 translated.append(pattern, i, end + 1);

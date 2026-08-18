@@ -34,10 +34,13 @@ import org.junit.Test;
 
 public class TestCharacterPropertyResolver {
     private static final CharacterPropertyResolver RESOLVER =
-            (bytes, p, end, encoding) -> {
+            (bytes, p, end, encoding, inCharacterClass) -> {
                 String name = new String(bytes, p, end - p, StandardCharsets.UTF_8);
                 return switch (name) {
-                    case "Fake" -> new int[] {2, 'A', 'A', 0x1f642, 0x1f642};
+                    case "Fake" -> new CharacterPropertyResolver.Result(
+                            new int[] {2, 'A', 'A', 0x1f642, 0x1f642}, true);
+                    case "FakeNoFold" -> new CharacterPropertyResolver.Result(
+                            new int[] {1, 'A', 'A'}, false);
                     default -> null;
                 };
             };
@@ -69,6 +72,8 @@ public class TestCharacterPropertyResolver {
         assertEquals(-1, search("[\\P{Fake}]", "A"));
         assertEquals(0, search("(?i)\\p{Fake}", "a"));
         assertEquals(-1, search("(?i)\\P{Fake}", "A"));
+        assertEquals(0, search("(?i)\\p{FakeNoFold}", "A"));
+        assertEquals(-1, search("(?i)\\p{FakeNoFold}", "a"));
     }
 
     @Test
@@ -81,7 +86,9 @@ public class TestCharacterPropertyResolver {
     public void preservesResolverExceptions() {
         IllegalArgumentException expected = new IllegalArgumentException("failure");
         try {
-            compile("\\p{Fake}", (bytes, p, end, encoding) -> { throw expected; });
+            compile("\\p{Fake}", (bytes, p, end, encoding, inCharacterClass) -> {
+                throw expected;
+            });
             fail("expected resolver exception");
         } catch (IllegalArgumentException error) {
             assertSame(expected, error);
@@ -91,7 +98,8 @@ public class TestCharacterPropertyResolver {
     @Test
     public void rejectsMalformedRangeResults() {
         try {
-            compile("\\p{Fake}", (bytes, p, end, encoding) -> new int[] {1, 2});
+            compile("\\p{Fake}", (bytes, p, end, encoding, inCharacterClass) ->
+                    new CharacterPropertyResolver.Result(new int[] {1, 2}, true));
             fail("expected invalid range result");
         } catch (IllegalArgumentException error) {
             assertEquals("invalid character property ranges", error.getMessage());

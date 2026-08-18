@@ -1698,14 +1698,16 @@ class Lexer extends ScannerSupport {
     protected static final class CharProperty {
         final int ctype;
         final int[] ranges;
+        final boolean caseFold;
 
-        CharProperty(int ctype, int[] ranges) {
+        CharProperty(int ctype, int[] ranges, boolean caseFold) {
             this.ctype = ctype;
             this.ranges = ranges;
+            this.caseFold = caseFold;
         }
     }
 
-    protected final CharProperty fetchCharProperty() {
+    protected final CharProperty fetchCharProperty(boolean inCharacterClass) {
         mark();
 
         while (left()) {
@@ -1713,15 +1715,17 @@ class Lexer extends ScannerSupport {
             fetch();
             if (c == '}') {
                 if (syntax.characterPropertyResolver != null) {
-                    int[] ranges = syntax.characterPropertyResolver.resolve(
-                            bytes, _p, last, enc);
-                    if (ranges != null) {
-                        validateCharacterPropertyRanges(ranges);
-                        return new CharProperty(0, ranges);
+                    CharacterPropertyResolver.Result resolved =
+                            syntax.characterPropertyResolver.resolve(
+                                    bytes, _p, last, enc, inCharacterClass);
+                    if (resolved != null) {
+                        validateCharacterPropertyRanges(resolved.ranges);
+                        return new CharProperty(0, resolved.ranges,
+                                resolved.caseFold);
                     }
                 }
                 return new CharProperty(
-                        enc.propertyNameToCType(bytes, _p, last), null);
+                        enc.propertyNameToCType(bytes, _p, last), null, true);
             } else if (c == '(' || c == ')' || c == '{' || c == '|') {
                 throw new CharacterPropertyException(EncodingError.ERR_INVALID_CHAR_PROPERTY_NAME, bytes, _p, last);
             }
