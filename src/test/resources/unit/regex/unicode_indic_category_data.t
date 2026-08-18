@@ -66,9 +66,6 @@ sub matches {
     return defined($rx) && $char =~ $rx;
 }
 
-TODO: {
-local $TODO = 'Indic category resolver wiring is a separate Phase 36 slice';
-
 for my $property (@properties) {
     for my $entry (@{$property->{values}}) {
         my ($short_value, $cp, $long_value) = @$entry;
@@ -127,8 +124,6 @@ SKIP: {
     ok(matches("\x{11B62}", '\\p{InPC=Bottom}'), 'Unicode 17 Sharada supplement bottom mark');
     ok(matches("\x{11B67}", '\\p{InSC=Vowel_Dependent}'),
         'Unicode 17 Sharada supplement syllabic category');
-}
-
 }
 
 done_testing;
