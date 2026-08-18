@@ -281,15 +281,27 @@ The PR #1042 parity repair ledger is active:
   an independent follow-up on top of `8e9a45b07`. Its warning-free `make` is
   green and focused JVM/interpreter plus imported corpus validation is active.
 - Glob identity and qualified `SUPER` error rendering are implemented as
-  ordered commits `ebbf41d47` and `8e0b9b379`; their standard-Perl reducers
-  are green and warning-free build validation is active.
+  ordered commits `ebbf41d47` and corrected `4dc212902`; their standard-Perl
+  reducers are green and a serialized warning-free rebuild is active. The
+  first corrected build overlapped another full build and both failed only the
+  same timing-sensitive condition-wait deadline after roughly 26 minutes;
+  the quiet focused test is 12/12, so final build gates are serialized.
 - Warning-aware hash interpolation is complete and pushed as `5303811d1`.
   It preserves the source hash name and runtime key only for quoted-string
   interpolation under lexical `uninitialized` warnings. Warning-free `make`,
   the 6/6 standard/JVM/interpreter reducer, and imported `op/hashwarn.t` 20/20
   on both backends are green.
 - Foreach active-lexical rebinding remains the final independently owned
-  repair root and is under read-only reduction while the tied lane validates.
+- Foreach active-lexical rebinding is the final mapped runtime root. Its audit
+  is complete: callback registration must become a void side effect that never
+  replaces the installed scalar/array/hash cell, and the interpreter must
+  preserve canonical undef identity. Two ordered implementation commits are
+  active with 22- and 5-assertion Perl 5.43.9 oracles.
+- Exact artifact normalization is implemented as opt-in comparator commit
+  `a6bfe7927`. It applies only to the two reconstructed PR #958 count
+  signatures, always prints raw and normalized counts, and its seven-test
+  standard-Perl gate proves unrelated regressions remain visible. A serialized
+  full build remains before publication.
 - Native branch-reset named/numeric calls are complete and pushed as
   `7f9e7f8d3`: the direct-Joni matrix, upstream recursive-capture tests,
   warning-free `make`, and focused `pat_advanced*` comparison are green. JVM
