@@ -918,6 +918,10 @@ final class ArrayCompiler extends Compiler {
                 }
                 len += tlen + (bsAt(regex.btMemEnd, node.regNum) ? OPSize.MEMORY_END_PUSH : OPSize.MEMORY_END);
             }
+            if (node.physicalNamedCaptureId >= 0) {
+                len += OPSize.PHYSICAL_NAMED_CAPTURE_START
+                        + OPSize.PHYSICAL_NAMED_CAPTURE_END;
+            }
             break;
 
         case EncloseType.STOP_BACKTRACK:
@@ -977,6 +981,10 @@ final class ArrayCompiler extends Compiler {
                 addMemNum(-1);
                 len = compileLengthTree(node.target);
                 len += OPSize.MEMORY_START_PUSH + OPSize.RETURN;
+                if (node.physicalNamedCaptureId >= 0) {
+                    len += OPSize.PHYSICAL_NAMED_CAPTURE_START
+                            + OPSize.PHYSICAL_NAMED_CAPTURE_END;
+                }
                 if (bsAt(regex.btMemEnd, node.regNum)) {
                     len += node.isRecursion() ? OPSize.MEMORY_END_PUSH_REC : OPSize.MEMORY_END_PUSH;
                 } else {
@@ -984,6 +992,12 @@ final class ArrayCompiler extends Compiler {
                 }
                 addOpcodeRelAddr(OPCode.JUMP, len);
             } // USE_SUBEXP_CALL
+
+            if (node.physicalNamedCaptureId >= 0) {
+                regex.requireStack = true;
+                addOpcode(OPCode.PHYSICAL_NAMED_CAPTURE_START);
+                addMemNum(node.physicalNamedCaptureId);
+            }
 
             if (bsAt(regex.btMemStart, node.regNum)) {
                 regex.requireStack = true;
@@ -1002,6 +1016,10 @@ final class ArrayCompiler extends Compiler {
                     addOpcode(node.isRecursion() ? OPCode.MEMORY_END_REC : OPCode.MEMORY_END);
                 }
                 addMemNum(node.regNum);
+                if (node.physicalNamedCaptureId >= 0) {
+                    addOpcode(OPCode.PHYSICAL_NAMED_CAPTURE_END);
+                    addMemNum(node.physicalNamedCaptureId);
+                }
                 addOpcode(OPCode.RETURN);
             } else if (Config.USE_SUBEXP_CALL && node.isRecursion()) { // USE_SUBEXP_CALL
                 if (bsAt(regex.btMemEnd, node.regNum)) {
@@ -1010,6 +1028,10 @@ final class ArrayCompiler extends Compiler {
                     addOpcode(OPCode.MEMORY_END_REC);
                 }
                 addMemNum(node.regNum);
+                if (node.physicalNamedCaptureId >= 0) {
+                    addOpcode(OPCode.PHYSICAL_NAMED_CAPTURE_END);
+                    addMemNum(node.physicalNamedCaptureId);
+                }
             } else {
                 if (bsAt(regex.btMemEnd, node.regNum)) {
                     addOpcode(OPCode.MEMORY_END_PUSH);
@@ -1017,6 +1039,10 @@ final class ArrayCompiler extends Compiler {
                     addOpcode(OPCode.MEMORY_END);
                 }
                 addMemNum(node.regNum);
+                if (node.physicalNamedCaptureId >= 0) {
+                    addOpcode(OPCode.PHYSICAL_NAMED_CAPTURE_END);
+                    addMemNum(node.physicalNamedCaptureId);
+                }
             }
             break;
 

@@ -26,6 +26,7 @@ import org.joni.constants.internal.EncloseType;
 public final class EncloseNode extends StateNode implements EncloseType {
     public final int type;          // enclose type
     public int regNum;
+    public int physicalNamedCaptureId = -1;
     public int option;
     public Node target;             /* EncloseNode : ENCLOSE_MEMORY */
     public int callAddr;            // AbsAddrType

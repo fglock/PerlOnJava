@@ -128,6 +128,24 @@ class StackEntry {
         return E4;
     }
 
+    void setPhysicalNamedCapture(int capture, int begin, int end) {
+        E1 = capture;
+        E2 = begin;
+        E3 = end;
+    }
+
+    int getPhysicalNamedCapture() {
+        return E1;
+    }
+
+    int getPhysicalNamedCaptureBegin() {
+        return E2;
+    }
+
+    int getPhysicalNamedCaptureEnd() {
+        return E3;
+    }
+
     // fifth union member
     /* null check id */
     void setNullCheckNum(int num) {

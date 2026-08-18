@@ -34,6 +34,10 @@ abstract class StackMachine extends Matcher implements StackType {
     protected StackEntry[]stack;
     protected int stk;  // stkEnd
     protected final int[]repeatStk;
+    protected final int[] physicalNamedCaptureBeg;
+    protected final int[] physicalNamedCaptureEnd;
+    protected final int[] committedPhysicalNamedCaptureBeg;
+    protected final int[] committedPhysicalNamedCaptureEnd;
     protected final int memStartStk, memEndStk;
     protected byte[] stateCheckBuff; // CEC, move to int[] ?
     protected int stateCheckBuffSize;
@@ -54,6 +58,11 @@ abstract class StackMachine extends Matcher implements StackType {
             /* for index start from 1, mem_end_stk[1]..mem_end_stk[num_mem] */
         }
         repeatStk = n > 0 ? new int[n] : null;
+        int physicalCount = regex.numPhysicalNamedCaptures;
+        physicalNamedCaptureBeg = physicalCount == 0 ? null : new int[physicalCount + 1];
+        physicalNamedCaptureEnd = physicalCount == 0 ? null : new int[physicalCount + 1];
+        committedPhysicalNamedCaptureBeg = physicalCount == 0 ? null : new int[physicalCount + 1];
+        committedPhysicalNamedCaptureEnd = physicalCount == 0 ? null : new int[physicalCount + 1];
     }
 
     protected final void stackInit() {
@@ -63,6 +72,28 @@ abstract class StackMachine extends Matcher implements StackType {
                 repeatStk[i + memStartStk] = repeatStk[i + memEndStk] = INVALID_INDEX;
             }
         }
+        if (physicalNamedCaptureBeg != null) {
+            Arrays.fill(physicalNamedCaptureBeg, INVALID_INDEX);
+            Arrays.fill(physicalNamedCaptureEnd, INVALID_INDEX);
+            Arrays.fill(committedPhysicalNamedCaptureBeg, INVALID_INDEX);
+            Arrays.fill(committedPhysicalNamedCaptureEnd, INVALID_INDEX);
+        }
+    }
+
+    protected final void pushPhysicalNamedCapture(int capture, int position) {
+        StackEntry e = ensure1();
+        e.type = PHYSICAL_NAMED_CAPTURE;
+        e.setPhysicalNamedCapture(capture,
+                physicalNamedCaptureBeg[capture], physicalNamedCaptureEnd[capture]);
+        physicalNamedCaptureBeg[capture] = position;
+        physicalNamedCaptureEnd[capture] = INVALID_INDEX;
+        stk++;
+    }
+
+    private void restorePhysicalNamedCapture(StackEntry e) {
+        int capture = e.getPhysicalNamedCapture();
+        physicalNamedCaptureBeg[capture] = e.getPhysicalNamedCaptureBegin();
+        physicalNamedCaptureEnd[capture] = e.getPhysicalNamedCaptureEnd();
     }
 
     private static StackEntry[] allocateStack() {
@@ -408,6 +439,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 unwindCallout(e);
             } else if (e.type == CONTROL_MARK) {
                 restoreControlMark(e.getPreviousControlMarkName());
+            } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
+                restorePhysicalNamedCapture(e);
             } else if (USE_CEC) {
                 if (e.type == STATE_CHECK_MARK) stateCheckMark();
             }
@@ -423,6 +456,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 unwindCallout(e);
             } else if (e.type == CONTROL_MARK) {
                 restoreControlMark(e.getPreviousControlMarkName());
+            } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
+                restorePhysicalNamedCapture(e);
             } else if (e.type == MEM_START) {
                 repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
                 repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -437,6 +472,8 @@ abstract class StackMachine extends Matcher implements StackType {
             unwindCallout(e);
         } else if (e.type == CONTROL_MARK) {
             restoreControlMark(e.getPreviousControlMarkName());
+        } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
+            restorePhysicalNamedCapture(e);
         } else if (e.type == MEM_START) {
             repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();

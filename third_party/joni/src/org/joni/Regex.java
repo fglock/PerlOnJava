@@ -46,6 +46,7 @@ public final class Regex {
     boolean hasDynamicOptions;
 
     int numMem;             /* used memory(...) num counted from 1 */
+    int numPhysicalNamedCaptures;
     int numRepeat;          /* OP_REPEAT/OP_REPEAT_NG id-counter */
     int numNullCheck;       /* OP_NULL_CHECK_START/END id counter */
     int numCombExpCheck;    /* combination explosion check */
@@ -239,7 +240,7 @@ public final class Regex {
         }
     }
 
-    void nameAdd(byte[]name, int nameP, int nameEnd, int backRef, Syntax syntax) {
+    int nameAdd(byte[]name, int nameP, int nameEnd, int backRef, Syntax syntax) {
         if (nameEnd - nameP <= 0) throw new ValueException(ErrorMessages.EMPTY_GROUP_NAME);
 
         NameEntry e = null;
@@ -257,7 +258,13 @@ public final class Regex {
             throw new ValueException(ErrorMessages.MULTIPLEX_DEFINED_NAME, new String(name, nameP, nameEnd - nameP));
         }
 
-        e.addBackref(backRef);
+        int physicalRef = ++numPhysicalNamedCaptures;
+        e.addBackref(backRef, physicalRef);
+        return physicalRef;
+    }
+
+    public int numberOfPhysicalNamedCaptures() {
+        return numPhysicalNamedCaptures;
     }
 
     NameEntry nameToGroupNumbers(byte[]name, int nameP, int nameEnd) {
