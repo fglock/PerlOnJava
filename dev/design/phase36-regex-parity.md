@@ -233,7 +233,7 @@ compatibility contract.
 
 ## Progress Tracking
 
-### Current Status: Phases 0 and 4 complete; Phases 1–3 corpus gates active
+### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
 Draft PR #1042 is the current integration gate. Its progressive routing
 checkpoint passes a warning-free `make`, but the complete comparison against
@@ -248,10 +248,11 @@ against PR #958.
 The permanent full-Joni path is advancing independently: native nested
 lookahead-in-lookbehind admission targets the 4,296 `pat*` losses, and native
 outside-class `\N` targets 179 assertions in the seven `regexp*` variants.
-Exact package publication for `(*MARK:NAME)`, `$REGMARK`, and `$REGERROR` passes
-the 53-assertion JVM oracle but is 45/53 on the interpreter; callback lexical
-ownership is correct, while the outer interpreter match must carry its
-executing package explicitly instead of broadcasting to localized globals.
+Exact package publication for `(*MARK:NAME)`, `$REGMARK`, and `$REGERROR` now
+passes the expanded 53-assertion oracle on JVM and interpreter in draft PR
+#1051. Match bytecodes carry the executing package explicitly, callback lexical
+ownership remains independent, and list-form `our` declarations refresh their
+package aliases; unrelated localized globals are never broadcast targets.
 The generated Unicode property map and its surrogate-marker hardening remain
 an independent Phase 3 gate.
 
@@ -552,18 +553,17 @@ is retained for now.
   - [x] Reran the combined forced-Joni 80-file corpus on JVM and interpreter,
     published the complete file-by-file comparison, and reduced its six actual
     regressions to two fatal roots with narrow owners and rerun gates.
-- [ ] Phase 2: Conditions and backtracking-visible state (reopened for exact
-  interpreter package publication)
+- [x] Phase 2: Conditions and backtracking-visible state (2026-08-18)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
   - [x] Closed runtime callback capture ownership at final scope teardown.
   - [x] Closed failed-path `$^N` and `$+` restoration through recursive
     callback unwind.
-  - [x] Added provisional active-localization publication for runtime control
-    variables and reopened it after the expanded cross-package oracle proved
-    that broadcasting is not Perl semantics. JVM exact-package publication is
-    53/53; interpreter publication is 45/53 pending an explicit match-package
-    operand at the bytecode/runtime boundary.
+  - [x] Replaced provisional active-localization broadcasting with exact
+    package publication. Match bytecodes carry the executing package, callback
+    lexical ownership remains separate, and list-form `our` aliases refresh
+    across package changes. The expanded cross-package oracle passes 53/53 on
+    JVM and interpreter in draft PR #1051.
   - [x] Propagated `PRUNE`, `SKIP`, `COMMIT`, and `THEN` cuts and search-control
     requests from nested `(??{...})` matcher programs. A 9-assertion
     standard-Perl oracle passes on JVM and interpreter, and `pat_advanced.t`
@@ -767,10 +767,9 @@ is retained for now.
    patches after their focused JVM/interpreter, corpus, and warning-free build
    gates. Remove the temporary lookbehind routing exception as soon as the
    native patch proves the same no-regression corpus.
-3. Carry the interpreter match's compile-time package through `MATCH_REGEX`
-   and `MATCH_REGEX_NOT`, scope it around runtime matching, and revalidate the
-   53-assertion `(*MARK:NAME)` package oracle plus the preserved 31-assertion
-   compatibility gate. Never restore broadcast publication.
+3. Rebase draft PR #1051 onto the final PR #1042 head, preserve its warning-free
+   build and 53/53 JVM/interpreter `(*MARK:NAME)` package oracle, and integrate
+   it without restoring broadcast publication.
 4. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
@@ -805,11 +804,10 @@ is retained for now.
 - Exact optimizer/debug transcript assertions are not semantic release blockers;
   each exclusion still requires an explicit report entry.
 - Resource-sensitive baselines must wait for unrelated Java builds to finish.
-- The interpreter does not reliably expose the match operator's lexical package
-  through `InterpreterState.currentPackage` while a regex executes. The chosen
-  fix is to encode the compile-time package on match bytecodes and scope that
-  package around runtime matching; enumerating localized globals is explicitly
-  rejected because it broadcasts state to unrelated packages.
+- The interpreter's match-package ownership issue is closed in draft PR #1051:
+  match bytecodes encode the compile-time package and scope it around runtime
+  matching. Enumerating localized globals remains explicitly rejected because
+  it broadcasts state to unrelated packages.
 - Shared parser or `eval` failures are fixed in focused slices when they block a
   regex semantic test, rather than being approximated inside the matcher.
 - Starting a forced-Joni global match exactly on a supplementary character
