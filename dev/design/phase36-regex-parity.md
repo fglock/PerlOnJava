@@ -252,12 +252,16 @@ vertical-whitespace escapes; PR #1035 adds Decomposition_Type and PR #1036
 adds East_Asian_Width, PR #1037 adds Numeric_Value, and PR #1038 adds
 Joining_Group, PR #1039 adds Block, and PR #1040 adds
 Script/Script_Extensions, and draft PR #1041 adds pinned break-property values.
-The current WIP integrates 51 generic binary-property families. QC/HST and five
-residual enumerated families are independently complete and awaiting
-coordinator stacking; specialized binary properties and the remaining InPC/InSC
-families are actively integrating in parallel. The first preprocessor
-dead-state deletion is independently complete, and the next retirement audit
-is active.
+Draft PR #1043 integrates 51 generic binary-property families. Draft PR #1045
+adds seven specialized binary-property families and cache-stable compile-time
+deprecation warnings; its focused oracle passes 73/73 on standard Perl, JVM,
+and interpreter, its protected boundary gate passes 169/169 per backend, and
+its warning-free `make` passes. Its exact chunks 01–04 numbered differential
+reaches 147,119/167,506 on both backends, gaining 904 assertions with zero
+losses. QC/HST, five residual enumerated families, and InPC/InSC are
+independently complete and awaiting coordinator stacking. The first
+preprocessor dead-state deletion and retirement audit are complete, and a
+one-file mechanical cleanup is awaiting its full-build result.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -729,6 +733,23 @@ is retained for now.
     explicit host-ICU drift rejection. The focused oracle passes 139/139;
     chunks 01–04 gain 4,624 numbered assertions with zero regressions and exact
     backend maps.
+  - [x] Integrated seven specialized Unicode 17 binary-property families:
+    `Hyphen`, `kEH_NoMirror`, `kEH_NoRotate`, `ID_Compat_Math_Continue`,
+    `ID_Compat_Math_Start`, `IDSU`, and `MCM`. Their aliases, Boolean values,
+    complements, wildcard unions, and rejection policy execute through Joni;
+    deprecated `Hyphen` warnings are replayed once across regex-cache hits with
+    Perl-caller lexical warning policy. The focused oracle passes 73/73 on
+    standard Perl, JVM, and interpreter; chunks 01–04 reach 147,119/167,506 on
+    both backends, gaining 904 numbered assertions with zero losses and exact
+    backend maps. The warning-context correction passes a warning-free 4m52s
+    `make`.
+  - [x] Completed the independent pinned Unicode 17
+    `Indic_Positional_Category`/`InPC` and
+    `Indic_Syllabic_Category`/`InSC` resolver slice. Its focused oracle passes
+    179/179 and protected boundaries pass 169/169 on both backends; chunks
+    01–04 gain 2,116 numbered assertions with zero losses and exact backend
+    maps. Commit `71b56a4bcedd73486b32d8b91e98b8f3b35c5df5` is awaiting
+    coordinator stacking.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -782,10 +803,9 @@ is retained for now.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Finish and publish the active break-property value slice, then the stacked
-   generic and specialized binary-property families. Review and semantically
-   stack the independently completed QC/HST resolver and the five-family
-   enumerated resolver before the remaining enumerated families.
+3. Publish draft PR #1045's completed exact numbered differential and
+   documentation, then integrate the independently completed QC/HST,
+   five-family enumerated, and InPC/InSC resolvers.
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.

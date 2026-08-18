@@ -8,6 +8,7 @@ import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Iterator;
@@ -86,8 +87,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     static void recordCompileWarning(String message, String category) {
         Deque<LinkedHashMap<String, CompileWarning>> stack = COMPILE_WARNING_STACK.get();
         if (stack.isEmpty()) {
-            WarnDie.warnWithCategory(new RuntimeScalar(message),
-                    RuntimeScalarCache.scalarEmptyString, category);
+            Warnings.emitCategoryWarning(category, message);
             return;
         }
         stack.peek().putIfAbsent(category + "\u0000" + message,
@@ -475,8 +475,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private void emitCompileWarnings() {
         for (CompileWarning warning : compileWarnings) {
-            WarnDie.warnWithCategory(new RuntimeScalar(warning.message()),
-                    RuntimeScalarCache.scalarEmptyString, warning.category());
+            Warnings.emitCategoryWarning(warning.category(), warning.message());
         }
     }
 
