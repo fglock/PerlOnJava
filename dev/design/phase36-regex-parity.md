@@ -224,7 +224,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1029, stacked
+The published integration stack is preserved through draft PR #1030, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -232,9 +232,11 @@ first 524 lines of retired Java-only preprocessor code. Every published slice
 has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
 boundaries; PR #1028 adds independently validated alpha assertion aliases and
 native word boundaries. PR #1029 integrates corrected global zero-width `/g`
-progression and pinned Perl 5.44 Unicode 17.0 Age properties. The new WIP is
-closing combined-corpus property regressions, adding pinned General_Category
-sets, and integrating exact native line boundaries.
+progression and pinned Perl 5.44 Unicode 17.0 Age properties. PR #1030 adds
+binary `ASCII_Hex_Digit` values, pinned General_Category sets, and exact native
+line boundaries. The new WIP adds pinned Canonical_Combining_Class sets while
+the numeric-escape, Bidi_Class, Decomposition_Type, and vertical-whitespace
+slices advance independently.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -298,6 +300,16 @@ Native Joni line assertions now implement Unicode 17 UAX #14 from pinned Perl
 pass 205,380/205,380 each on JVM and interpreter. Protected sentence and word
 chunks remain exact, making the complete generated boundary corpus
 239,866/239,866 and current generated evidence 339,075/407,367.
+
+`Canonical_Combining_Class`/`ccc` assignments now resolve every pinned Unicode
+17 value and alias, including ordered `Not_Reordered` defaults for unassigned
+code points and reserved valid values whose sets are empty. Empty properties
+render as valid match-none/match-all classes rather than invalid `[]` syntax.
+The focused oracle passes 24/24 on system Perl, JVM, and interpreter. Chunk 01
+passes 33,516/41,843 identically on both execution backends: 2,195 CCC
+assertions and 10 already-native line preamble assertions improve over the
+31,311 baseline with zero numbered regressions. Current generated evidence is
+341,280/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -532,6 +544,10 @@ parser slice.
   - [x] Implemented native Joni line assertions from reproducible pinned Unicode
     17.0 data. The focused oracle passes 84/84 and chunks 06–09 pass
     205,380/205,380 on both execution backends while sentence/word stay exact.
+  - [x] Generated pinned Unicode 17.0 Canonical_Combining_Class sets with loose
+    aliases, ordered missing defaults, reserved empty values, and valid
+    empty/full rendering. The focused oracle passes 24/24 and chunk 01 reaches
+    33,516/41,843 on both backends with zero numbered regressions.
   - [ ] Close the remaining property failures before marking Phase 3 complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
@@ -574,17 +590,20 @@ parser slice.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1029. Integrate native Joni
-   unbraced-byte and underscored numeric escape parsing, then rerun the affected
-   direct/thread files and confirm the last combined-corpus fatal root is closed.
+1. Land review-ready PR #1024 and draft PRs #1025–#1030. Publish the pinned CCC
+   slice, then integrate accepted native numeric-escape commit `f849c2ef9` in a
+   new WIP PR. Preserve its restored `pat_advanced`/`pat_rt_report` startup and
+   explicit strict-policy and above-U+10FFFF representation debt.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Implement the remaining property clusters in measured order: Block,
-   Script/Script_Extensions, Numeric_Value, Joining_Group,
-   break-property values. Preserve pinned Perl 5.44
+3. Integrate the independently generated Bidi_Class and Decomposition_Type
+   slices, then continue the measured residual order: East_Asian_Width, binary
+   property values, Block, Script/Script_Extensions, Numeric_Value,
+   Joining_Group, and break-property values. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
-   Close underscored numeric escapes with focused standard-Perl gates.
+   Integrate native `\v`/`\V` after the numeric Lexer slice and require exact
+   `reg_posixcc.t` parity.
 4. Rerun generated property chunks 01–04 on both backends with the classified
    600-second bound and retain complete TAP/JSON. After the two fatal roots and
    native line boundaries integrate, refresh the complete forced-Joni 80-file
