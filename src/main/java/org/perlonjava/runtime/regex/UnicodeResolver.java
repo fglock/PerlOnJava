@@ -1106,14 +1106,25 @@ public class UnicodeResolver {
             return casedLetters;
         }
 
-        // Perl treats an ambiguous bare value as Block, while explicit sc=/scx=
-        // retain Script semantics. Katakana is the canonical distinction.
+        // Perl's bare script-value shortcuts use Script_Extensions semantics.
+        // Keep binary and General_Category names ahead of this value namespace.
+        String scriptShortcut = alias;
+        if (alias.length() > 2 && alias.startsWith("Is")) {
+            int valueStart = 2;
+            while (valueStart < alias.length()) {
+                char separator = alias.charAt(valueStart);
+                if (!Character.isWhitespace(separator)
+                        && separator != '-' && separator != '_') break;
+                valueStart++;
+            }
+            if (valueStart < alias.length()) scriptShortcut = alias.substring(valueStart);
+        }
         if (assignment < 0
-                && PerlUnicodeScriptData.scriptSet(alias) != null
-                && !isIcuBinaryPropertyAlias(alias)
-                && !isIcuGeneralCategoryAlias(alias)) {
-            UnicodeSet ambiguousBlock = PerlUnicodeBlockData.set(alias);
-            if (ambiguousBlock != null) return ambiguousBlock;
+                && !isIcuBinaryPropertyAlias(scriptShortcut)
+                && !isIcuGeneralCategoryAlias(scriptShortcut)) {
+            UnicodeSet scriptExtensions =
+                    PerlUnicodeScriptData.scriptExtensionsSet(scriptShortcut);
+            if (scriptExtensions != null) return scriptExtensions;
         }
 
         String blockAlias = alias;
