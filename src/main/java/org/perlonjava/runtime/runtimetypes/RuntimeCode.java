@@ -3766,6 +3766,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // For SUPER:: calls, strip the prefix for error reporting to match Perl behavior
             if (methodName.startsWith("SUPER::")) {
                 errorMethodName = methodName.substring(7);
+            } else {
+                int qualifiedSuperIndex = methodName.lastIndexOf("::SUPER::");
+                if (qualifiedSuperIndex >= 0) {
+                    errorMethodName = methodName.substring(
+                            qualifiedSuperIndex + "::SUPER::".length());
+                }
             }
             throw new PerlCompilerException("Can't locate object method \"" + errorMethodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
         }
