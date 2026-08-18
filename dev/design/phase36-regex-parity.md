@@ -224,11 +224,13 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The current integration stack is preserved through review-ready PR #1024. It includes
-the completed callback/runtime slices, lossless generated Unicode fixtures,
-explicit `Is_*` property/value normalization, fatal Joni syntax diagnostics,
-and the first 524 lines of retired Java-only preprocessor code. Every published
-slice has a warning-free combined `make` checkpoint.
+The published integration stack is preserved through draft PR #1025, stacked
+on review-ready PR #1024. It includes the completed callback/runtime slices,
+lossless generated Unicode fixtures, explicit `Is_*` property/value
+normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
+first 524 lines of retired Java-only preprocessor code. Every published slice
+has a warning-free combined `make` checkpoint. The current WIP integrates six
+independently validated parser and preprocessor commits above that checkpoint.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -435,10 +437,13 @@ matcher-specific timeouts on both execution backends.
   - [x] Rejected 40 invalid Perl inline option/group-name forms in forked Joni
     with exact JVM/interpreter `reg_mesg.t` parity, reducing residual Joni-only
     acceptance differences from 198 to 158 (`028602adc`).
-  - [x] Validated native Python-style named captures and backreferences plus
-    removal of their frontend conversion (`afbe2bc34`). The 20-case oracle
-    passes on both execution backends with exact malformed/unknown diagnostics;
-    integration into the coordinator stack remains queued.
+  - [x] Integrated native Python-style named captures and backreferences plus
+    removal of their frontend conversion (`afbe2bc34`, integrated as
+    `cc489bee8`). The 20-case oracle passes on both execution backends with exact
+    malformed/unknown diagnostics.
+  - [x] Integrated native braced-octal parsing and missing-close/empty
+    diagnostics plus fatal unterminated braced-hex diagnostics (`55433291a`,
+    `913e2b583`) with exact JVM/interpreter `reg_mesg.t` parity.
   - [x] Fixed byte-mode substitution of upgraded marker regexes so chunks 05–10
     exercise real boundary subjects with exact JVM/interpreter plans.
   - [x] Implemented native Joni GCB assertions for GB1–GB13 and GB999 and aligned
@@ -488,9 +493,10 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Land review-ready PR #1024, publish the native-GCB slice as its own stacked
-   PR, then integrate the validated braced-octal, braced-hex,
-   terminated-whitespace, and lazy-negated-class slices as focused stacked PRs.
+1. Land review-ready PR #1024 and draft PR #1025, then publish the current
+   integration branch containing native braced-octal/hex diagnostics,
+   Python-style named groups, and the whitespace, lazy-negated-class, and DBIx
+   omniholder preprocessor retirements.
 2. Continue boundary semantics natively in Joni in measured order: sentence
    breaks next (0/6,460 in the remainder of chunk 05), followed by line and word
    breaks (0/224,890 in chunks 06–10). Use bundled Perl 5.44 Unicode data and
@@ -500,9 +506,8 @@ matcher-specific timeouts on both execution backends.
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
    break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
-   Integrate the validated Python-style named-group and braced-octal slices,
-   then close alpha assertion aliases and underscored numeric escapes with
-   focused standard-Perl gates.
+   Close alpha assertion aliases and underscored numeric escapes with focused
+   standard-Perl gates.
 4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
    head. Save complete JSON and logs, publish the missing differential report,
    and compare every file with both the Phase 0 result and PR 958 under the
