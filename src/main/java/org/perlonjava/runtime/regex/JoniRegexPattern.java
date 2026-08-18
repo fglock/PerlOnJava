@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import org.jcodings.Encoding;
 import org.jcodings.specific.ISO8859_1Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
@@ -48,7 +49,15 @@ final class JoniRegexPattern {
             Syntax.RUBY.behavior | ALLOW_MULTIPLEX_DEFINITION_NAME_CALL,
             Syntax.RUBY.options & ~(Option.ASCII_RANGE
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
-            Syntax.RUBY.metaCharTable);
+            Syntax.RUBY.metaCharTable,
+            JoniRegexPattern::resolveNamedCharacter);
+
+    private static int resolveNamedCharacter(byte[] bytes, int p, int end,
+                                             Encoding encoding) {
+        return UnicodeResolver.getCodePointFromName(new String(bytes, p, end - p,
+                encoding == ISO8859_1Encoding.INSTANCE
+                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8));
+    }
 
     private final Regex regex;
     private final String sourcePattern;
@@ -324,11 +333,17 @@ final class JoniRegexPattern {
     }
 
     static String translatePattern(String pattern) {
-        return translatePattern(pattern, RegexFlags.fromModifiers("", pattern), 0);
+        return translatePattern(pattern, RegexFlags.fromModifiers("", pattern), 0, true);
     }
 
     private static String translatePattern(String pattern, RegexFlags flags,
                                            int trustedCalloutCount) {
+        return translatePattern(pattern, flags, trustedCalloutCount, false);
+    }
+
+    private static String translatePattern(String pattern, RegexFlags flags,
+                                           int trustedCalloutCount,
+                                           boolean resolveNamedCharacters) {
         pattern = translateDefineBlocks(pattern);
         pattern = translateBeyondUnicodeClassMembers(pattern);
         StringBuilder out = new StringBuilder(pattern.length() + 16);
@@ -350,7 +365,7 @@ final class JoniRegexPattern {
                     atClassStart = false;
                     classAllowsLeadingClose = false;
                 }
-                if (pattern.startsWith("\\N{", i)) {
+                if (resolveNamedCharacters && pattern.startsWith("\\N{", i)) {
                     int end = pattern.indexOf('}', i + 3);
                     if (end > i + 3) {
                         int codePoint = UnicodeResolver.getCodePointFromName(
