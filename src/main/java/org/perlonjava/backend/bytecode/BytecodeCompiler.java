@@ -5017,6 +5017,22 @@ public class BytecodeCompiler implements Visitor {
                 // This will add the current package if no package is specified
                 subName = NameNormalizer.normalizeVariableName(subName, getCurrentPackage());
 
+                if (node.getBooleanAnnotation("directNamedCall")) {
+                    // An unresolved call compiled after a stash deletion must
+                    // install a new undefined slot instead of falling through
+                    // to the old pinned CV at execution time.
+                    if (!(node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar)) {
+                        GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                    }
+                    int rd = allocateOutputRegister();
+                    int nameIdx = addToStringPool(subName);
+                    emit(Opcodes.LOAD_GLOBAL_CODE);
+                    emitReg(rd);
+                    emit(nameIdx);
+                    lastResultReg = rd;
+                    return;
+                }
+
                 // Cache the RuntimeScalar code reference at compile time.
                 // This matches Perl's behavior where the CV (code value) is cached
                 // in the compiled bytecode, surviving stash entry deletion.

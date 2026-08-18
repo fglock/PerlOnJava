@@ -1632,6 +1632,42 @@ public class GlobalVariable {
     }
 
     /**
+     * Resolves a compiled direct named call against the current CODE slot.
+     * A typeglob replacement must be visible to the next call, but deleting
+     * the stash entry must not invalidate a call site compiled while the old
+     * CV existed. Newly compiled code after deletion installs a fresh
+     * undefined slot and therefore does not reach the old pin.
+     */
+    public static RuntimeScalar getGlobalCodeRefForDirectCall(String key) {
+        if (key == null) {
+            return new RuntimeScalar();
+        }
+
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar current = globalCodeRefs.get(resolvedKey);
+        if (current == null && !resolvedKey.equals(key)) {
+            current = globalCodeRefs.get(key);
+        }
+        if (current != null) {
+            return current;
+        }
+
+        RuntimeScalar pseudoConstant = createPseudoConstantCodeRef(resolvedKey);
+        if (pseudoConstant == null && !resolvedKey.equals(key)) {
+            pseudoConstant = createPseudoConstantCodeRef(key);
+        }
+        if (pseudoConstant != null) {
+            return pseudoConstant;
+        }
+
+        RuntimeScalar pinned = pinnedCodeRefs().get(resolvedKey);
+        if (pinned == null && !resolvedKey.equals(key)) {
+            pinned = pinnedCodeRefs().get(key);
+        }
+        return pinned != null ? pinned : getGlobalCodeRefForFreshLookup(key);
+    }
+
+    /**
      * Retrieves a global code reference for the purpose of DEFINING code.
      * Unlike getGlobalCodeRef(), this also ensures the entry is visible in
      * globalCodeRefs for method resolution via can() and the inheritance hierarchy.

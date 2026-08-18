@@ -744,6 +744,22 @@ public class EmitSubroutine {
 
         if (node.left instanceof OperatorNode operatorNode
                 && operatorNode.operator.equals("&")
+                && operatorNode.getBooleanAnnotation("directNamedCall")
+                && operatorNode.operand instanceof IdentifierNode identifierNode) {
+            String directName = NameNormalizer.normalizeVariableName(
+                    identifierNode.name,
+                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            if (!(operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar)) {
+                GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
+            }
+            mv.visitLdcInsn(directName);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "getGlobalCodeRefForDirectCall",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        } else if (node.left instanceof OperatorNode operatorNode
+                && operatorNode.operator.equals("&")
                 && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
             int codeRefId = GlobalVariable.registerCompiledCodeRef(codeRef);
             mv.visitLdcInsn(codeRefId);
