@@ -240,8 +240,9 @@ The unified `integration/phase36-regex-parity` branch was assembled on
 per PR. Duplicate #1007 ancestry from #1010, duplicate #1008/#1009/#1012
 ancestry from #1016, and temporary integration merge commits were excluded.
 The final stacked implementation matches PR #1040 plus the independent #1006,
-#1007, and #1010 changes. Full integration validation and the unified draft PR
-remain pending while unrelated resource-intensive Java builds finish.
+#1007, and #1010 changes. The exact source head `3e6076a67` passed warning-free
+`make` in 6m46s, including direct Joni, packaging, and all five unit shards.
+Publication of the unified draft PR remains pending.
 
 The unified history includes the completed callback/runtime slices, lossless
 generated Unicode fixtures, explicit `Is_*` property/value
@@ -742,9 +743,9 @@ is retained for now.
 
 ### Next Steps
 
-1. Run warning-free `make` on `integration/phase36-regex-parity`, push the
-   branch, and open one unified draft PR against `master`. Keep its 35 source
-   PR commits intact and use a merge commit after final validation.
+1. Push `integration/phase36-regex-parity` and open one unified draft PR
+   against `master`. Keep its 35 source PR commits intact and use a merge
+   commit after final validation.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
