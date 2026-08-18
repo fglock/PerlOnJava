@@ -387,6 +387,23 @@ public abstract class StringSegmentParser {
                     tokenIndex);
         }
 
+        // Perl gives an interpolated missing hash element a more specific
+        // warning than an ordinary undef string segment, including the hash
+        // name and the runtime key. Preserve that source context on the hash
+        // access node for both code generators. Regex interpolation has its
+        // own warning path and must not use the quoted-string diagnostic.
+        if (!isRegex
+                && ctx.symbolTable.isWarningCategoryEnabled("uninitialized")
+                && operand instanceof BinaryOperatorNode hashAccess
+                && "{".equals(hashAccess.operator)
+                && hashAccess.left instanceof OperatorNode hashSigil
+                && "$".equals(hashSigil.operator)
+                && hashSigil.operand instanceof IdentifierNode hashName
+                && hashAccess.right instanceof HashLiteralNode keys
+                && keys.elements.size() == 1) {
+            hashAccess.setAnnotation("stringInterpolationHashName", "$" + hashName.name);
+        }
+
         addStringSegment(operand);
     }
 
