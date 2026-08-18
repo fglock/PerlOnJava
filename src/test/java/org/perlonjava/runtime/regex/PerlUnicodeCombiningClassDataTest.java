@@ -19,8 +19,13 @@ class PerlUnicodeCombiningClassDataTest {
         assertTrue(PerlUnicodeCombiningClassData.resolve("Overlay").contains(0x334));
         assertTrue(PerlUnicodeCombiningClassData.resolve("10").contains(0x5b0));
         assertTrue(PerlUnicodeCombiningClassData.resolve("NR").contains('A'));
+        assertTrue(PerlUnicodeCombiningClassData.resolve("NR").contains(0x378));
         assertFalse(PerlUnicodeCombiningClassData.resolve("230").contains('A'));
         assertTrue(PerlUnicodeCombiningClassData.resolve("133").isEmpty());
+        assertEquals("[^\\x{0}-\\x{10FFFF}]",
+                UnicodeResolver.translateUnicodeProperty("ccc=133", false));
+        assertEquals("[\\x{0}-\\x{10FFFF}]",
+                UnicodeResolver.translateUnicodeProperty("ccc=133", true));
         assertNull(PerlUnicodeCombiningClassData.resolve("not_a_class"));
     }
 }

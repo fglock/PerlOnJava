@@ -16,6 +16,7 @@ import java.util.Map;
 
 final class PerlUnicodeCombiningClassData {
     static final String UNICODE_VERSION = "17.0.0";
+    private static final int DEFAULT_VALUE_INDEX = 0;
     private static final int[] VALUES = {
         0, 1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 84, 91, 103, 107, 118, 122, 129, 130, 132, 202, 214, 216, 218, 220, 222, 224, 226, 228, 230, 232, 233, 234, 240, 133, 200
     };
@@ -405,11 +406,15 @@ final class PerlUnicodeCombiningClassData {
     private static UnicodeSet[] buildSets() {
         UnicodeSet[] sets = new UnicodeSet[VALUES.length];
         for (int i = 0; i < sets.length; i++) sets[i] = new UnicodeSet();
+        UnicodeSet covered = new UnicodeSet();
         for (int[] ranges : RANGE_CHUNKS) {
             for (int i = 0; i < ranges.length; i += 3) {
                 sets[ranges[i + 2]].add(ranges[i], ranges[i + 1]);
+                covered.add(ranges[i], ranges[i + 1]);
             }
         }
+        sets[DEFAULT_VALUE_INDEX].addAll(
+                new UnicodeSet(0, 0x10FFFF).removeAll(covered));
         for (UnicodeSet set : sets) set.freeze();
         return sets;
     }

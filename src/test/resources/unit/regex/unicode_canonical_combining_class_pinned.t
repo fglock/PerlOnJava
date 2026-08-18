@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 18;
+use Test::More tests => 24;
 no warnings 'experimental::uniprop_wildcards';
 
 my $above = "\x{301}";
@@ -19,6 +19,12 @@ ok($overlay =~ /\p{ccc=OV}/, 'overlay short alias');
 ok($overlay =~ /\p{ccc=Overlay}/, 'overlay long alias');
 ok('A' =~ /\p{ccc=0}/, 'not-reordered numeric value');
 ok('A' =~ /\p{ccc=NR}/, 'not-reordered short alias');
+ok("\x{378}" =~ /\p{ccc=0}/, 'unassigned code point uses missing default');
+ok("\x{378}" =~ /\p{ccc=NR}/, 'unassigned code point uses default alias');
+ok('A' !~ /\p{ccc=133}/, 'reserved empty class never matches');
+ok('A' =~ /\P{ccc=133}/, 'negated reserved empty class matches');
+ok('A' =~ /\p{^ccc=133}/, 'inner-negated reserved empty class matches');
+ok('A' !~ /\P{^ccc=133}/, 'double-negated reserved empty class never matches');
 ok($above !~ /\p{ccc=1}/, 'exact class excludes another value');
 ok($above =~ /\P{ccc=1}/, 'outer property negation');
 ok($above =~ /\p{^ccc=1}/, 'inner property negation');

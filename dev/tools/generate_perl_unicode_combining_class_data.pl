@@ -61,6 +61,8 @@ for my $line (split /\n/, $class_text) {
     }
 }
 die "No Canonical_Combining_Class ranges found\n" unless @ranges;
+die "Unexpected Canonical_Combining_Class default\n"
+    unless $class_text =~ /^# \@missing:\s*0000\.\.10FFFF;\s*Not_Reordered\s*$/m;
 
 my $alias_text = read_pinned_file('PropValueAliases.txt');
 die "Property value aliases are not Unicode $expected_unicode_version\n"
@@ -114,6 +116,7 @@ final class PerlUnicodeCombiningClassData {
 HEADER
 
 print "    static final String UNICODE_VERSION = \"$unicode_version\";\n";
+print "    private static final int DEFAULT_VALUE_INDEX = $value_index{0};\n";
 print "    private static final int[] VALUES = {\n        ";
 print join(', ', @values);
 print "\n    };\n\n";
@@ -162,11 +165,15 @@ print <<'FOOTER';
     private static UnicodeSet[] buildSets() {
         UnicodeSet[] sets = new UnicodeSet[VALUES.length];
         for (int i = 0; i < sets.length; i++) sets[i] = new UnicodeSet();
+        UnicodeSet covered = new UnicodeSet();
         for (int[] ranges : RANGE_CHUNKS) {
             for (int i = 0; i < ranges.length; i += 3) {
                 sets[ranges[i + 2]].add(ranges[i], ranges[i + 1]);
+                covered.add(ranges[i], ranges[i + 1]);
             }
         }
+        sets[DEFAULT_VALUE_INDEX].addAll(
+                new UnicodeSet(0, 0x10FFFF).removeAll(covered));
         for (UnicodeSet set : sets) set.freeze();
         return sets;
     }

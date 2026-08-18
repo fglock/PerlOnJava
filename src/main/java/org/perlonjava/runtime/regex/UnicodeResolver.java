@@ -1231,6 +1231,11 @@ public class UnicodeResolver {
     }
 
     private static String wrapCharClass(String pattern, boolean negated) {
+        if (pattern.isEmpty()) {
+            return negated
+                    ? "[\\x{0}-\\x{10FFFF}]"
+                    : "[^\\x{0}-\\x{10FFFF}]";
+        }
         return negated ? "[^" + pattern + "]" : "[" + pattern + "]";
     }
 
