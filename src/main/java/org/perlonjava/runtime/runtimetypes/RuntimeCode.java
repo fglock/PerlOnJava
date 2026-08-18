@@ -2062,19 +2062,59 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static String decodeEvalbytesUtf8Source(String source) {
-        byte[] bytes = new byte[source.length()];
-        for (int i = 0; i < source.length(); i++) {
-            bytes[i] = (byte) (source.charAt(i) & 0xFF);
+        StringBuilder decoded = new StringBuilder(source.length());
+        int chunkStart = 0;
+        for (int i = 0; i + 6 < source.length(); i++) {
+            if ((source.charAt(i) & 0xFF) != 0xFE) {
+                continue;
+            }
+            boolean validExtended = true;
+            for (int j = 1; j <= 6; j++) {
+                int continuation = source.charAt(i + j) & 0xFF;
+                if (continuation < 0x80 || continuation > 0xBF) {
+                    validExtended = false;
+                    break;
+                }
+            }
+            if (!validExtended) {
+                continue;
+            }
+            decodeStandardUtf8Chunk(source, chunkStart, i, decoded);
+            // Keep Perl's historical seven-byte form intact. Lexer folds this
+            // sequence into the internal beyond-Unicode marker while retaining
+            // its use as a quote delimiter.
+            decoded.append(source, i, i + 7);
+            i += 6;
+            chunkStart = i + 1;
+        }
+        decodeStandardUtf8Chunk(source, chunkStart, source.length(), decoded);
+        return decoded.toString();
+    }
+
+    private static void decodeStandardUtf8Chunk(String source, int start, int end,
+                                                StringBuilder decoded) {
+        if (start == end) {
+            return;
+        }
+        byte[] bytes = new byte[end - start];
+        for (int i = start; i < end; i++) {
+            bytes[i - start] = (byte) (source.charAt(i) & 0xFF);
         }
         try {
-            return StandardCharsets.UTF_8.newDecoder()
+            decoded.append(StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
                     .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
                     .decode(java.nio.ByteBuffer.wrap(bytes))
-                    .toString();
+                    .toString());
         } catch (java.nio.charset.CharacterCodingException e) {
             throw new IllegalArgumentException("Malformed UTF-8 character (fatal)", e);
         }
+    }
+
+    public static boolean featureFlagsContain(int featureFlags, String feature) {
+        String enabled = "," + ScopedSymbolTable.stringifyFeatureFlags(featureFlags)
+                .replace(" ", "") + ",";
+        return enabled.contains("," + feature + ",");
     }
 
     /**
@@ -2157,7 +2197,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
             boolean byteStringUtf8Source = !ctx.isEvalbytes
                     && code.type == RuntimeScalarType.BYTE_STRING
-                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0;
+                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                    && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
             if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
             }
@@ -2706,7 +2747,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
             boolean byteStringUtf8Source = !ctx.isEvalbytes
                     && code.type == RuntimeScalarType.BYTE_STRING
-                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0;
+                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                    && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
             if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
             }

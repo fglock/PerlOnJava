@@ -11,6 +11,7 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.ArrayList;
@@ -238,8 +239,11 @@ public class StringParser {
         // Final flush of any pending content
         buffer.append(pendingBuffer);
 
-        if (ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
-                || ctx.compilerOptions.isUnicodeSource) {
+        boolean unicodeEvalByteSource = ctx.compilerOptions.isByteStringSource
+                && ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
+        if ((ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                || ctx.compilerOptions.isUnicodeSource)
+                && !unicodeEvalByteSource) {
             // A byte-backed eval can activate `use utf8` inside its own source.
             // Decode only after the parser has applied that lexical pragma;
             // whole-source substring detection would misclassify comments and
@@ -323,19 +327,7 @@ public class StringParser {
     }
 
     private static String decodeUtf8ByteSource(String source) {
-        byte[] bytes = new byte[source.length()];
-        for (int i = 0; i < source.length(); i++) {
-            bytes[i] = (byte) (source.charAt(i) & 0xFF);
-        }
-        try {
-            return java.nio.charset.StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-                    .decode(java.nio.ByteBuffer.wrap(bytes))
-                    .toString();
-        } catch (java.nio.charset.CharacterCodingException e) {
-            throw new IllegalArgumentException("Malformed UTF-8 character (fatal)", e);
-        }
+        return RuntimeCode.decodeEvalbytesUtf8Source(source);
     }
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
