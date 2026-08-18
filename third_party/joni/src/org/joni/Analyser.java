@@ -35,6 +35,7 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 import java.util.IllegalFormatConversionException;
 
 import org.jcodings.CaseFoldCodeItem;
+import org.jcodings.Encoding;
 import org.jcodings.ObjPtr;
 import org.jcodings.Ptr;
 import org.jcodings.constants.CharacterType;
@@ -1902,6 +1903,20 @@ final class Analyser extends Parser {
 
     private static final int THRESHOLD_CASE_FOLD_ALT_FOR_EXPANSION = 8;
 
+    private boolean perlAsciiStrictSourceCrossesIntoAscii(byte[] bytes, int p, int end,
+                                                           int codePoint) {
+        if (Encoding.isAscii(codePoint)) return false;
+
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlag, bytes, p, end);
+        for (CaseFoldCodeItem item : items) {
+            for (int foldedCodePoint : item.code) {
+                if (Encoding.isAscii(foldedCodePoint)) return true;
+            }
+        }
+        return false;
+    }
+
     private Node protectPerlAsciiStrictCrossings(StringNode source, int state) {
         byte[] bytes = source.bytes;
         int segmentStart = source.p;
@@ -1912,7 +1927,8 @@ final class Analyser extends Parser {
         while (p < source.end) {
             int codePoint = enc.mbcToCode(bytes, p, source.end);
             int next = p + enc.length(bytes, p, source.end);
-            if (codePoint == 0x017f || codePoint == 0x212a) {
+            if (perlAsciiStrictSourceCrossesIntoAscii(
+                    bytes, p, source.end, codePoint)) {
                 if (segmentStart < p) {
                     ListNode segment = ListNode.newList(
                             new StringNode(bytes, segmentStart, p), null);
