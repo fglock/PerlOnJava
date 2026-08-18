@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -93,5 +95,28 @@ class JoniRegexPatternTest {
                 .matcher("aa", java.util.List.of()).find());
         assertTrue(new JoniRegexPattern("\\p{Latin}{ , 2 }", FLAGS)
                 .matcher("a", java.util.List.of()).find());
+    }
+
+    @Test
+    void reusesImmutableInputEncodingAndPreservesSupplementaryOffsets() {
+        String input = new String("A\u00E9\uD83D\uDE42Z");
+
+        JoniRegexPattern.InputEncoding first = JoniRegexPattern.inputEncoding(input);
+        JoniRegexPattern.InputEncoding second = JoniRegexPattern.inputEncoding(input);
+
+        assertSame(first, second);
+        assertArrayEquals(new int[] {0, 1, 3, 3, 7, 8}, first.charToByte());
+        assertArrayEquals(new int[] {0, 1, 1, 2, 2, 2, 2, 4, 5}, first.byteToChar());
+    }
+
+    @Test
+    void supplementaryCaptureUsesTheHighSurrogateBoundary() {
+        RegexMatcher matcher = new JoniRegexPattern("(.)", FLAGS)
+                .matcher("\uD83D\uDE42", java.util.List.of());
+
+        assertTrue(matcher.find());
+        assertEquals("\uD83D\uDE42", matcher.group(1));
+        assertEquals(0, matcher.start(1));
+        assertEquals(2, matcher.end(1));
     }
 }
