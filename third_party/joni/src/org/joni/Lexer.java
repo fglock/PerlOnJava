@@ -1837,11 +1837,14 @@ class Lexer extends ScannerSupport {
     protected static final class CharProperty {
         final int ctype;
         final int[] ranges;
+        final long[] wideRanges;
         final boolean caseFold;
 
-        CharProperty(int ctype, int[] ranges, boolean caseFold) {
+        CharProperty(int ctype, int[] ranges, long[] wideRanges,
+                     boolean caseFold) {
             this.ctype = ctype;
             this.ranges = ranges;
+            this.wideRanges = wideRanges;
             this.caseFold = caseFold;
         }
     }
@@ -1858,13 +1861,16 @@ class Lexer extends ScannerSupport {
                             syntax.characterPropertyResolver.resolve(
                                     bytes, _p, last, enc, inCharacterClass);
                     if (resolved != null) {
-                        validateCharacterPropertyRanges(resolved.ranges);
+                        validateCharacterPropertyRanges(resolved.ranges,
+                                resolved.wideRanges);
                         return new CharProperty(0, resolved.ranges,
+                                resolved.wideRanges,
                                 resolved.caseFold);
                     }
                 }
                 return new CharProperty(
-                        enc.propertyNameToCType(bytes, _p, last), null, true);
+                        enc.propertyNameToCType(bytes, _p, last), null, null,
+                        true);
             } else if (c == '(' || c == ')' || c == '{' || c == '|') {
                 throw new CharacterPropertyException(EncodingError.ERR_INVALID_CHAR_PROPERTY_NAME, bytes, _p, last);
             }
@@ -1873,19 +1879,42 @@ class Lexer extends ScannerSupport {
         return null; // not reached
     }
 
-    private static void validateCharacterPropertyRanges(int[] ranges) {
-        if (ranges.length == 0 || ranges.length != ranges[0] * 2 + 1) {
+    private static void validateCharacterPropertyRanges(int[] ranges,
+                                                        long[] wideRanges) {
+        if (ranges == null && wideRanges == null) {
             throw new IllegalArgumentException("invalid character property ranges");
         }
-        int previousEnd = -1;
-        for (int i = 0; i < ranges[0]; i++) {
-            int from = ranges[i * 2 + 1];
-            int to = ranges[i * 2 + 2];
-            if (from < 0 || from > to || to > CodeRangeBuffer.LAST_CODE_POINT
-                    || from <= previousEnd) {
+        if (ranges != null) {
+            if (ranges.length == 0 || ranges[0] < 0
+                    || ranges.length != (long)ranges[0] * 2 + 1) {
                 throw new IllegalArgumentException("invalid character property ranges");
             }
-            previousEnd = to;
+            int previousEnd = -1;
+            for (int i = 0; i < ranges[0]; i++) {
+                int from = ranges[i * 2 + 1];
+                int to = ranges[i * 2 + 2];
+                if (from < 0 || from > to || to > CodeRangeBuffer.LAST_CODE_POINT
+                        || from <= previousEnd) {
+                    throw new IllegalArgumentException("invalid character property ranges");
+                }
+                previousEnd = to;
+            }
+        }
+        if (wideRanges != null) {
+            if (wideRanges.length == 0 || wideRanges[0] < 0
+                    || wideRanges[0] > Integer.MAX_VALUE
+                    || wideRanges.length != wideRanges[0] * 2 + 1) {
+                throw new IllegalArgumentException("invalid character property ranges");
+            }
+            long previousEnd = -1;
+            for (int i = 0; i < (int)wideRanges[0]; i++) {
+                long from = wideRanges[i * 2 + 1];
+                long to = wideRanges[i * 2 + 2];
+                if (from < 0 || from > to || from <= previousEnd) {
+                    throw new IllegalArgumentException("invalid character property ranges");
+                }
+                previousEnd = to;
+            }
         }
     }
 

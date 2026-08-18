@@ -444,6 +444,52 @@ public final class CClassNode extends Node {
         addCTypeByRange(0, not, env, singleByteLimit, ranges);
     }
 
+    /**
+     * Adds the union of resolver-provided encoding-domain and signed-IV-domain
+     * ranges. The complement, when requested, is applied once to the combined
+     * set so mixed normal/wide properties retain exact set semantics.
+     */
+    public void addCodeRanges(int[] ranges, long[] wideRanges, boolean not,
+                              ScanEnvironment env) {
+        if (wideRanges == null) {
+            addCodeRanges(ranges, not, env);
+            return;
+        }
+
+        CClassNode resolved = new CClassNode();
+        if (ranges != null) resolved.addCodeRanges(ranges, false, env);
+
+        int normalCount = 0;
+        int rangeCount = (int)wideRanges[0];
+        for (int i = 0; i < rangeCount; i++) {
+            if (wideRanges[i * 2 + 1] < FIRST_WIDE_SCALAR) normalCount++;
+        }
+        if (normalCount != 0) {
+            int[] normalRanges = new int[normalCount * 2 + 1];
+            normalRanges[0] = normalCount;
+            int cursor = 1;
+            for (int i = 0; i < rangeCount; i++) {
+                long from = wideRanges[i * 2 + 1];
+                long to = wideRanges[i * 2 + 2];
+                if (from >= FIRST_WIDE_SCALAR) continue;
+                normalRanges[cursor++] = (int)from;
+                normalRanges[cursor++] = (int)Math.min(to, FIRST_WIDE_SCALAR - 1);
+            }
+            resolved.addCodeRanges(normalRanges, false, env);
+        }
+
+        for (int i = 0; i < rangeCount; i++) {
+            long from = wideRanges[i * 2 + 1];
+            long to = wideRanges[i * 2 + 2];
+            if (to >= FIRST_WIDE_SCALAR) {
+                resolved.addWideScalarRange(Math.max(from, FIRST_WIDE_SCALAR), to);
+            }
+        }
+
+        if (not) resolved.setNot();
+        or(resolved, env);
+    }
+
     private static int CR_FROM(int[] range, int i) {
         return range[(i * 2) + 1];
     }

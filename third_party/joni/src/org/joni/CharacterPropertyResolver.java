@@ -27,10 +27,22 @@ public interface CharacterPropertyResolver {
     /** A resolved range set and whether ignore-case folding applies to it. */
     final class Result {
         public final int[] ranges;
+        public final long[] wideRanges;
         public final boolean caseFold;
 
         public Result(int[] ranges, boolean caseFold) {
+            this(ranges, null, caseFold);
+        }
+
+        /**
+         * Creates a result from the existing encoding-domain ranges and optional
+         * signed-IV-domain ranges. Both arrays use {@code [count, from, to, ...]}
+         * inclusive pairs; {@code wideRanges} may extend through
+         * {@link Long#MAX_VALUE}.
+         */
+        public Result(int[] ranges, long[] wideRanges, boolean caseFold) {
             this.ranges = ranges;
+            this.wideRanges = wideRanges;
             this.caseFold = caseFold;
         }
     }

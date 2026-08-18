@@ -1746,7 +1746,8 @@ class Parser extends Lexer {
         if (token.getPropNot()) cc.setNot();
 
         if (isIgnoreCase(env.option) && property.caseFold) {
-            if (property.ranges != null || property.ctype != CharacterType.ASCII) {
+            if (property.ranges != null || property.wideRanges != null
+                    || property.ctype != CharacterType.ASCII) {
                 node = cClassCaseFold(node, cc, cc, cc);
             }
         }
@@ -1756,7 +1757,7 @@ class Parser extends Lexer {
     private void addCharProperty(CClassNode cc, CClassNode ascCc,
                                  CClassNode foldCc, CharProperty property,
                                  boolean not) {
-        if (property.ranges == null) {
+        if (property.ranges == null && property.wideRanges == null) {
             cc.addCType(property.ctype, not, false, env, this);
             if (ascCc != null && property.ctype != CharacterType.ASCII) {
                 ascCc.addCType(property.ctype, not, false, env, this);
@@ -1766,12 +1767,12 @@ class Parser extends Lexer {
             }
             return;
         }
-        cc.addCodeRanges(property.ranges, not, env);
+        cc.addCodeRanges(property.ranges, property.wideRanges, not, env);
         if (ascCc != null) {
-            ascCc.addCodeRanges(property.ranges, not, env);
+            ascCc.addCodeRanges(property.ranges, property.wideRanges, not, env);
         }
         if (foldCc != null && property.caseFold) {
-            foldCc.addCodeRanges(property.ranges, not, env);
+            foldCc.addCodeRanges(property.ranges, property.wideRanges, not, env);
         }
     }
 
