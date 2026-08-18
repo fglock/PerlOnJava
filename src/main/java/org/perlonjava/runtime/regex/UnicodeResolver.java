@@ -1406,6 +1406,8 @@ public class UnicodeResolver {
             case "title", "titlecase" -> PerlUnicodeGeneralCategoryData.resolve("Lt");
             case "ce", "compositionexclusion" -> PERL_COMPOSITION_EXCLUSION_SET;
             case "horizspace" -> PERL_HORIZONTAL_SPACE_SET;
+            case "kehnomirror" -> PerlUnicodeUnikemetData.noMirror();
+            case "kehnorotate" -> PerlUnicodeUnikemetData.noRotate();
             default -> null;
         };
     }
