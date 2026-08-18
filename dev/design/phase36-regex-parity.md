@@ -564,6 +564,16 @@ Strict-regex source policy and Perl code points above U+10FFFF remain explicit
 frontend/representation debt, so the forced-Java underscore compatibility pass
 is retained for now.
 
+The final pre-workaround PR #1042 integration run completed at
+505,864/561,385 against PR 958's 269,171/324,252. Its exact file comparison
+reports 41 regression files and a 5,035-assertion negative sum. The leading
+pure-Joni blockers are 4,298 assertions behind the first aborts in
+`pat_advanced{,_thr}.t` and `pat{,_thr}.t`, followed by 224 in `reg_mesg.t`
+and 259 across seven `regexp*` variants; `regex_sets.t` is now only one
+assertion below baseline. These counts prioritize the cleanup after temporary
+progressive routing: unblock the four `pat*` files first, then diagnostics and
+the ordinary `regexp*` matrix. They are not accepted limitations.
+
 ### Completed Phases
 
 - [x] Phase 0: Reproducible differential baseline (2026-08-17)
