@@ -240,9 +240,13 @@ public class EvalStringHandler {
             int inheritedStrictOptions = siteStrictOptions >= 0
                     ? siteStrictOptions
                     : currentCode != null ? currentCode.strictOptions : 0;
+            int inheritedFeatureFlags = siteFeatureFlags >= 0
+                    ? siteFeatureFlags
+                    : currentCode != null ? currentCode.featureFlags : 0;
             boolean byteStringUtf8Source = !isEvalbytes
                     && sourceType == RuntimeScalarType.BYTE_STRING
-                    && (inheritedStrictOptions & Strict.HINT_UTF8) != 0;
+                    && (inheritedStrictOptions & Strict.HINT_UTF8) != 0
+                    && !RuntimeCode.featureFlagsContain(inheritedFeatureFlags, "unicode_eval");
             if ((isEvalbytes && RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode))
                     || byteStringUtf8Source) {
                 perlCode = RuntimeCode.decodeEvalbytesUtf8Source(perlCode);
