@@ -24,11 +24,11 @@ final class RegexBackendPolicy {
         }
         if (configured == null || configured.isBlank()
                 || configured.equalsIgnoreCase("auto")
-                || configured.equalsIgnoreCase("joni")) {
-            return Mode.JONI;
-        }
-        if (configured.equalsIgnoreCase("java")) {
+                || configured.equalsIgnoreCase("java")) {
             return Mode.JAVA;
+        }
+        if (configured.equalsIgnoreCase("joni")) {
+            return Mode.JONI;
         }
         throw new IllegalArgumentException("Invalid " + ENVIRONMENT + " value '"
                 + configured + "' (expected java or joni)");
