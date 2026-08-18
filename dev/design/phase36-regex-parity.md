@@ -461,6 +461,16 @@ focused precedence, class-negation, and bare-scx reducers pass 7/7, 8/8, and
 regressions and exact JVM/interpreter counts, raising current generated
 evidence to 377,602/407,367.
 
+The independently validated bare-Script alias follow-up is published as
+`296f240c2`. It applies Perl's ASCII-loose bare `Is` Script shortcut without
+changing explicit assignment, generated-data, or precedence policy. Its
+standard-Perl, JVM, and interpreter oracle passes 12/12; protected boundaries
+remain exact; warning-free `make`, Joni, and packaging pass. On its exact old
+base, the pinned target map gains 3,832 assertions in chunk 03 and 1,232 in
+chunk 04, exactly +5,064 with zero missing/failing target IDs and exact backend
+identity. Aggregate totals remain deferred until this commit is rebased onto
+the current residual stack.
+
 `Grapheme_Cluster_Break`/`gcb`, `Sentence_Break`/`sb`,
 `Word_Break`/`wb`, and `Line_Break`/`lb` assignments now resolve every pinned
 Unicode 17 value. Short, long, loose, colon, wildcard, missing-value, and exact
@@ -796,6 +806,11 @@ the ordinary `regexp*` matrix. They are not accepted limitations.
     aliases, precedence, and ordinary character-class complements. The focused oracle
     passes 95/95; chunks 01–04 gain 8,140 assertions with zero numbered
     regressions and exact backend counts.
+  - [x] Validated bare ASCII-loose `Is` Script aliases independently
+    (`296f240c2`): 12/12 on standard Perl, JVM, and interpreter, protected
+    boundaries exact, warning-free `make`, and an exact pinned target-map gain
+    of 5,064 with zero losses or backend differences. Rebase/integration onto
+    the current residual stack remains pending before aggregate totals change.
   - [x] Generated and integrated pinned Unicode 17.0 GCB/SB/WB/LB property
     values with official aliases, loose and wildcard policy, exact `Is`
     rejection rules, and complete defaults. The focused oracle passes 92/92;
