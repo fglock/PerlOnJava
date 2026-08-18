@@ -1448,6 +1448,12 @@ class Lexer extends ScannerSupport {
                             : AnchorType.SENTENCE_BOUNDARY);
                     return true;
                 }
+                if (name.toString().equals("wb")) {
+                    fetchTokenFor_anchor(negated
+                            ? AnchorType.NOT_WORD_BREAK_BOUNDARY
+                            : AnchorType.WORD_BREAK_BOUNDARY);
+                    return true;
+                }
                 restore();
                 return false;
             }

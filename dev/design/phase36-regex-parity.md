@@ -224,15 +224,15 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1026, stacked
-on draft PR #1025 and review-ready PR #1024. It includes the completed callback/runtime slices,
+The published integration stack is preserved through draft PR #1027, stacked
+on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
 first 524 lines of retired Java-only preprocessor code. Every published slice
-has a warning-free combined `make` checkpoint. The current WIP adds native
-sentence boundaries above that checkpoint; independently validated alpha
-assertion aliases are integrated on the next WIP branch, while global
-zero-width `/g` progression remains a parallel integration slice.
+has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
+boundaries. The current WIP integrates independently validated alpha assertion
+aliases and native word boundaries, while global zero-width `/g` progression
+and line boundaries remain parallel integration slices.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -261,8 +261,13 @@ remaining sentence assertions without coupling the Joni fork to ICU or the
 PerlOnJava runtime.
 
 The most recent exact property chunks 01–04 remain 98,092/167,501 on both
-execution backends. Combined with the complete boundary chunk 05 and unchanged
-chunks 06–10, current generated evidence is 113,068/407,367. A resource-contended
+execution backends. Native Joni word assertions implement WB1–WB16 and WB999
+from repository-pinned Perl 5.44 Unicode 17.0 Word_Break and
+Extended_Pictographic data. The 33-assertion focused oracle passes on system
+Perl, JVM, and interpreter, direct Joni exercises the same path, and generated
+chunk 10 passes 19,510/19,510 identically on both execution backends. Combined
+with the complete boundary chunk 05 and unchanged chunks 06–09, current
+generated evidence is 132,578/407,367. A resource-contended
 current-head refresh did not reproduce a complete exact JVM/interpreter pair,
 so it does not replace that accepted baseline.
 
@@ -466,7 +471,11 @@ matcher-specific timeouts on both execution backends.
   - [x] Implemented native Joni sentence assertions for SB1–SB11 and SB998 from
     a reproducible Perl 5.44 Unicode 17.0 table. The focused oracle passes 23/23
     and generated chunk 05 passes 14,976/14,976 on both execution backends.
-  - [ ] Implement native Joni line and word boundary algorithms, then
+  - [x] Implemented native Joni word assertions for WB1–WB16 and WB999 from
+    reproducible Perl 5.44 Unicode 17.0 Word_Break and Extended_Pictographic
+    tables. The focused oracle passes 33/33 and generated chunk 10 passes
+    19,510/19,510 on both execution backends.
+  - [ ] Implement the native Joni line boundary algorithm, then
     close the remaining property and boundary failures before marking Phase 3
     complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
@@ -514,10 +523,9 @@ matcher-specific timeouts on both execution backends.
    WIP integration branch containing alpha-assertion aliases, then integrate the
    pending zero-width `/g` adapter commit after its non-overlapping gates are
    complete.
-2. Continue boundary semantics natively in Joni with line and word breaks
-   (0/224,890 in chunks 06–10). PerlOnJava4 owns line-boundary preparation while
-   the coordinator takes word boundaries after the shared sentence base is
-   published. Use pinned Perl 5.44 Unicode data and
+2. Continue boundary semantics natively in Joni with line breaks
+   (0/205,380 in chunks 06–09). PerlOnJava4 owns the non-overlapping line slice;
+   word boundaries are complete at 19,510/19,510 in chunk 10. Use pinned Perl 5.44 Unicode data and
    the generated chunks as the release oracle; remove each simplified Java
    boundary rewrite only after native parity.
 3. Implement the remaining property clusters in measured order: Block,

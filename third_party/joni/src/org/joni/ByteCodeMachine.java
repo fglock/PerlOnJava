@@ -254,6 +254,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_GRAPHEME_BOUNDARY:      opGraphemeBoundary(true);  continue;
                 case OPCode.SENTENCE_BOUNDARY:          opSentenceBoundary(false); continue;
                 case OPCode.NOT_SENTENCE_BOUNDARY:      opSentenceBoundary(true);  continue;
+                case OPCode.WORD_BREAK_BOUNDARY:        opWordBreakBoundary(false); continue;
+                case OPCode.NOT_WORD_BREAK_BOUNDARY:    opWordBreakBoundary(true);  continue;
                 case OPCode.WORD_BEGIN:                 opWordBegin();             continue;
                 case OPCode.WORD_END:                   opWordEnd();               continue;
 
@@ -415,6 +417,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_GRAPHEME_BOUNDARY:      opGraphemeBoundary(true);    continue;
                 case OPCode.SENTENCE_BOUNDARY:          opSentenceBoundary(false);   continue;
                 case OPCode.NOT_SENTENCE_BOUNDARY:      opSentenceBoundary(true);    continue;
+                case OPCode.WORD_BREAK_BOUNDARY:        opWordBreakBoundary(false);  continue;
+                case OPCode.NOT_WORD_BREAK_BOUNDARY:    opWordBreakBoundary(true);   continue;
                 case OPCode.WORD_BEGIN:                 opWordBeginSb();             continue;
                 case OPCode.WORD_END:                   opWordEndSb();               continue;
 
@@ -1253,6 +1257,134 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opSentenceBoundary(boolean negated) {
         if (isSentenceBoundary() == negated) opFail();
+    }
+
+    private void opWordBreakBoundary(boolean negated) {
+        if (isWordBreakBoundary() == negated) opFail();
+    }
+
+    private boolean isWordBreakBoundary() {
+        if (s <= str || s >= end) return true; // WB1, WB2
+
+        int leftPosition = enc.prevCharHead(bytes, str, s, end);
+        byte immediateLeft = wordPropertyAt(leftPosition);
+        byte right = wordPropertyAt(s);
+
+        if (immediateLeft == WordBreakData.CR && right == WordBreakData.LF) return false; // WB3
+        if (isWordNewline(immediateLeft) || isWordNewline(right)) return true; // WB3a, WB3b
+        if (isWordIgnored(right)) return false; // WB4
+
+        if (immediateLeft == WordBreakData.ZWJ
+                && WordBreakData.isExtendedPictographic(enc.mbcToCode(bytes, s, end))) return false; // WB3c
+
+        int[] leftCursor = {leftPosition};
+        byte left = previousWordProperty(leftCursor);
+
+        if (immediateLeft == WordBreakData.WSEG_SPACE
+                && right == WordBreakData.WSEG_SPACE) return false; // WB3d
+
+        if (isWordAHLetter(left) && isWordAHLetter(right)) return false; // WB5
+        if (isWordAHLetter(left) && isWordLetterMid(right)
+                && isWordAHLetter(nextWordPropertyAfter(s))) return false; // WB6
+        if (isWordLetterMid(left) && isWordAHLetter(right)
+                && isWordAHLetter(previousWordProperty(leftCursor))) return false; // WB7
+
+        if (left == WordBreakData.HEBREW_LETTER
+                && right == WordBreakData.SINGLE_QUOTE) return false; // WB7a
+        if (left == WordBreakData.HEBREW_LETTER
+                && right == WordBreakData.DOUBLE_QUOTE
+                && nextWordPropertyAfter(s) == WordBreakData.HEBREW_LETTER) return false; // WB7b
+        if (left == WordBreakData.DOUBLE_QUOTE
+                && right == WordBreakData.HEBREW_LETTER
+                && previousWordProperty(leftCursor) == WordBreakData.HEBREW_LETTER) return false; // WB7c
+
+        if (left == WordBreakData.NUMERIC && right == WordBreakData.NUMERIC) return false; // WB8
+        if (isWordAHLetter(left) && right == WordBreakData.NUMERIC) return false; // WB9
+        if (left == WordBreakData.NUMERIC && isWordAHLetter(right)) return false; // WB10
+        if (isWordNumericMid(left) && right == WordBreakData.NUMERIC
+                && previousWordProperty(leftCursor) == WordBreakData.NUMERIC) return false; // WB11
+        if (left == WordBreakData.NUMERIC && isWordNumericMid(right)
+                && nextWordPropertyAfter(s) == WordBreakData.NUMERIC) return false; // WB12
+
+        if (left == WordBreakData.KATAKANA && right == WordBreakData.KATAKANA) return false; // WB13
+        if (isWordExtendNumLetBase(left) && right == WordBreakData.EXTEND_NUM_LET) return false; // WB13a
+        if (left == WordBreakData.EXTEND_NUM_LET && isWordExtendNumLetBase(right)) return false; // WB13b
+
+        if (left == WordBreakData.REGIONAL_INDICATOR
+                && right == WordBreakData.REGIONAL_INDICATOR
+                && hasOddWordRegionalIndicatorRun(leftPosition)) return false; // WB15, WB16
+
+        return true; // WB999
+    }
+
+    private byte wordPropertyAt(int position) {
+        return WordBreakData.propertyOf(enc.mbcToCode(bytes, position, end));
+    }
+
+    private byte previousWordProperty(int[] position) {
+        while (position[0] >= str) {
+            byte property = wordPropertyAt(position[0]);
+            if (position[0] == str) {
+                position[0] = -1;
+            } else {
+                position[0] = enc.prevCharHead(bytes, str, position[0], end);
+            }
+            if (!isWordIgnored(property)) return property;
+        }
+        return WordBreakData.OTHER;
+    }
+
+    private byte nextWordPropertyAfter(int position) {
+        position += enc.length(bytes, position, end);
+        while (position < end) {
+            byte property = wordPropertyAt(position);
+            if (!isWordIgnored(property)) return property;
+            position += enc.length(bytes, position, end);
+        }
+        return WordBreakData.OTHER;
+    }
+
+    private boolean hasOddWordRegionalIndicatorRun(int leftPosition) {
+        int count = 0;
+        int[] position = {leftPosition};
+        while (previousWordProperty(position) == WordBreakData.REGIONAL_INDICATOR) count++;
+        return (count & 1) == 1;
+    }
+
+    private boolean isWordIgnored(byte property) {
+        return property == WordBreakData.EXTEND
+                || property == WordBreakData.FORMAT
+                || property == WordBreakData.ZWJ;
+    }
+
+    private boolean isWordNewline(byte property) {
+        return property == WordBreakData.NEWLINE
+                || property == WordBreakData.CR
+                || property == WordBreakData.LF;
+    }
+
+    private boolean isWordAHLetter(byte property) {
+        return property == WordBreakData.ALETTER
+                || property == WordBreakData.HEBREW_LETTER;
+    }
+
+    private boolean isWordLetterMid(byte property) {
+        return property == WordBreakData.MID_LETTER
+                || property == WordBreakData.MID_NUM_LET
+                || property == WordBreakData.SINGLE_QUOTE;
+    }
+
+    private boolean isWordNumericMid(byte property) {
+        return property == WordBreakData.MID_NUM
+                || property == WordBreakData.MID_NUM_LET
+                || property == WordBreakData.SINGLE_QUOTE;
+    }
+
+    private boolean isWordExtendNumLetBase(byte property) {
+        return isWordAHLetter(property)
+                || property == WordBreakData.NUMERIC
+                || property == WordBreakData.KATAKANA
+                || property == WordBreakData.EXTEND_NUM_LET;
     }
 
     private boolean isSentenceBoundary() {
