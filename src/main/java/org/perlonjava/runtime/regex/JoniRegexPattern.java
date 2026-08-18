@@ -144,6 +144,7 @@ final class JoniRegexPattern {
         StringBuilder translated = new StringBuilder(pattern.length());
         boolean deferred = false;
         int extendedClassBracketDepth = 0;
+        int standardClassBracketDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (ch == '\\' && i + 1 < pattern.length() && pattern.charAt(i + 1) == '\\') {
@@ -164,6 +165,17 @@ final class JoniRegexPattern {
             }
             if (extendedClassBracketDepth > 0 && ch == ']') {
                 extendedClassBracketDepth--;
+                translated.append(ch);
+                continue;
+            }
+            if (extendedClassBracketDepth == 0 && ch == '[') {
+                standardClassBracketDepth++;
+                translated.append(ch);
+                continue;
+            }
+            if (extendedClassBracketDepth == 0
+                    && standardClassBracketDepth > 0 && ch == ']') {
+                standardClassBracketDepth--;
                 translated.append(ch);
                 continue;
             }
@@ -188,12 +200,18 @@ final class JoniRegexPattern {
                     ? property.substring(1).trim() : property;
             boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(unnegated);
             boolean scriptExtensions = unnegated.matches(
-                    "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
+                    "(?i)^(?:scx|script[-_ ]?extensions)\\s*(?:=|:(?!:)).*");
             boolean frontendProperty = unnegated.matches(
-                    "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
+                    "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
             boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
-            if (frontendProperty && extendedClassBracketDepth > 0) {
+            if ((frontendProperty || scriptExtensions) && extendedClassBracketDepth > 0) {
                 translated.append(pattern, i, end + 1);
+                i = end;
+                continue;
+            }
+            if ((frontendProperty || scriptExtensions) && standardClassBracketDepth > 0) {
+                translated.append(UnicodeResolver.translateUnicodePropertyForCharClass(
+                        property, pattern.charAt(i + 1) == 'P'));
                 i = end;
                 continue;
             }

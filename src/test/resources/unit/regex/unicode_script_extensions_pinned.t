@@ -52,6 +52,9 @@ my @membership = (
     [0x0300, q{qr/\p{scx=Inherited}/}, 0, 'combining grave scx override excludes Inherited'],
     [0x0041, q{qr/\p{scx=Latin}/}, 1, 'non-overridden scx falls back to Script'],
     [0x0378, q{qr/\p{scx=Unknown}/}, 1, 'unassigned scx falls back to Unknown Script'],
+    [0x0041, q{qr/[\p{sc=Latin}]/}, 1, 'Script assignment works inside a class'],
+    [0x00B7, q{qr/[\p{scx=Greek}]/}, 1, 'Script_Extensions works inside a class'],
+    [0x00B7, q{qr/[\p{scx:Greek}]/}, 1, 'scx colon works inside a class'],
 );
 for my $membership (@membership) {
     my ($code_point, $source, $expected, $description) = @$membership;
