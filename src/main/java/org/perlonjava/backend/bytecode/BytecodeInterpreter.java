@@ -842,8 +842,7 @@ public class BytecodeInterpreter {
                             case Opcodes.BIND_ACTIVE_LEXICAL -> {
                                 int reg = bytecode[pc++];
                                 int nameIdx = bytecode[pc++];
-                                registers[reg] = code.bindActiveLexical(
-                                        code.stringPool[nameIdx], registers[reg]);
+                                code.bindActiveLexical(code.stringPool[nameIdx], registers[reg]);
                             }
 
                             // =================================================================
