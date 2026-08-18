@@ -3,7 +3,8 @@
 # Each entry specifies:
 #   source:    Path relative to project root (typically perl5/...)
 #   target:    Path relative to project root where file/dir should be copied
-#   type:      'file' (default) or 'directory' for bulk directory copies
+#   type:      'file' (default), 'directory' for bulk copies, or a documented
+#              generated type handled by sync.pl (currently TestProp.pl only)
 #   patch:     Optional patch file (relative to dev/import-perl5/patches/)
 #   protected: Optional boolean (true/false) - if true, existing file won't be overwritten
 #
@@ -94,9 +95,39 @@ imports:
     target: perl5_t/Porting
     type: directory
 
-  # NOTE: perl5_t/lib directory should exist (for opendir tests) but remain empty
-  # to avoid module loading conflicts. PerlOnJava uses src/main/perl/lib instead.
-  # The sync.pl script will create an empty perl5_t/lib directory if needed.
+  # Minimal pinned Unicode 17.0 generator inputs. Keep these as explicit file
+  # imports so clean checkouts can reproduce the checked-in Java data without
+  # importing the complete perl5/lib/unicore tree.
+  - source: perl5/lib/unicore/version
+    target: dev/unicode/17.0.0/version
+    type: file
+
+  - source: perl5/lib/unicore/Blocks.txt
+    target: dev/unicode/17.0.0/Blocks.txt
+    type: file
+
+  - source: perl5/lib/unicore/PropertyAliases.txt
+    target: dev/unicode/17.0.0/PropertyAliases.txt
+    type: file
+
+  - source: perl5/lib/unicore/PropValueAliases.txt
+    target: dev/unicode/17.0.0/PropValueAliases.txt
+    type: file
+
+  - source: perl5/lib/unicore/extracted/DDecompositionType.txt
+    target: dev/unicode/17.0.0/extracted/DDecompositionType.txt
+    type: file
+
+  - source: perl5/lib/unicore/extracted/DNumValues.txt
+    target: dev/unicode/17.0.0/extracted/DNumValues.txt
+    type: file
+
+  # perl5_t/lib otherwise remains empty to avoid module loading conflicts.
+  # TestProp.pl is generated from the pinned Unicode inputs because upstream
+  # does not store this build artifact in the perl5 source tree.
+  - source: perl5/lib/unicore/mktables
+    target: perl5_t/lib/unicore/TestProp.pl
+    type: generated_unicode_testprop
 
   # Bulk import all core test files from perl5/t/ to perl5_t/t/
   # This creates a complete Perl 5 test environment under perl5_t/
@@ -111,7 +142,6 @@ imports:
 
   - source: perl5/t/re/pat.t
     target: perl5_t/t/re/pat.t
-    patch: pat.t.patch
 
   - source: perl5/t/porting/manifest.t
     target: perl5_t/t/porting/manifest.t

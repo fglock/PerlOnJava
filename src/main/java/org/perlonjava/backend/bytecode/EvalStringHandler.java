@@ -13,6 +13,7 @@ import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -236,7 +237,18 @@ public class EvalStringHandler {
             // Step 1: Clear $@ at start of eval
             GlobalVariable.setGlobalVariable("main::@", "");
 
-            if (isEvalbytes && RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode)) {
+            int inheritedStrictOptions = siteStrictOptions >= 0
+                    ? siteStrictOptions
+                    : currentCode != null ? currentCode.strictOptions : 0;
+            int inheritedFeatureFlags = siteFeatureFlags >= 0
+                    ? siteFeatureFlags
+                    : currentCode != null ? currentCode.featureFlags : 0;
+            boolean byteStringUtf8Source = !isEvalbytes
+                    && sourceType == RuntimeScalarType.BYTE_STRING
+                    && (inheritedStrictOptions & Strict.HINT_UTF8) != 0
+                    && !RuntimeCode.featureFlagsContain(inheritedFeatureFlags, "unicode_eval");
+            if ((isEvalbytes && RuntimeCode.shouldDecodeEvalbytesUtf8Source(perlCode))
+                    || byteStringUtf8Source) {
                 perlCode = RuntimeCode.decodeEvalbytesUtf8Source(perlCode);
             }
 
@@ -254,7 +266,9 @@ public class EvalStringHandler {
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
-            configureEvalSourceOptions(opts, perlCode, sourceType, isEvalbytes);
+            configureEvalSourceOptions(opts, perlCode,
+                    byteStringUtf8Source ? RuntimeScalarType.STRING : sourceType,
+                    isEvalbytes);
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
             // Add standard variables that are always available in eval context.

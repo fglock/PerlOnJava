@@ -2112,10 +2112,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit HASH_GET / HASH_GET_FOR_LOCAL (see localHashLvalueCompileDepth)
                 int rd = allocateOutputRegister();
-                emit(opcodeForHashElementGet());
-                emitReg(rd);
-                emitReg(hashReg);
-                emitReg(keyReg);
+                emitHashElementGet(node, rd, hashReg, keyReg);
 
                 lastResultReg = rd;
             } else {
@@ -2129,22 +2126,32 @@ public class BytecodeCompiler implements Visitor {
                 int keyReg = lastResultReg;
 
                 int rd = allocateOutputRegister();
-                emit(opcodeForHashElementGet());
-                emitReg(rd);
-                emitReg(hashReg);
-                emitReg(keyReg);
+                emitHashElementGet(node, rd, hashReg, keyReg);
 
                 lastResultReg = rd;
             }
         } else {
             int keyReg = compileMultidimensionalHashKey(keyNode);
             int rd = allocateOutputRegister();
-            emit(opcodeForHashElementGet());
+            emitHashElementGet(node, rd, hashReg, keyReg);
+            lastResultReg = rd;
+        }
+    }
+
+    private void emitHashElementGet(BinaryOperatorNode node, int rd, int hashReg, int keyReg) {
+        String interpolationHashName = (String) node.getAnnotation("stringInterpolationHashName");
+        if (interpolationHashName != null && !shouldEmitHashFetchForLocal()) {
+            emit(Opcodes.HASH_GET_STRING_INTERPOLATION);
             emitReg(rd);
             emitReg(hashReg);
             emitReg(keyReg);
-            lastResultReg = rd;
+            emit(addToStringPool(interpolationHashName));
+            return;
         }
+        emit(opcodeForHashElementGet());
+        emitReg(rd);
+        emitReg(hashReg);
+        emitReg(keyReg);
     }
 
     /**
@@ -3616,6 +3623,19 @@ public class BytecodeCompiler implements Visitor {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
+                    // A later `our $x` under a different package establishes
+                    // a new lexical package alias even when an outer/sibling
+                    // declaration reused the same bare name. Refresh the
+                    // symbol entry as well as its register value; otherwise
+                    // later reads keep qualifying $x with the old package.
+                    if (hasVariable(varName) && isOurVariable(varName)) {
+                        SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(varName);
+                        if (entry != null
+                                && !getCurrentPackage().equals(entry.perlPackage())) {
+                            addVariable(varName, "our");
+                        }
+                    }
+
                     // Check if already declared in current scope
                     if (hasVariable(varName)) {
                         int reg = getVariableRegister(varName);
@@ -5004,6 +5024,43 @@ public class BytecodeCompiler implements Visitor {
                 // This will add the current package if no package is specified
                 subName = NameNormalizer.normalizeVariableName(subName, getCurrentPackage());
 
+                if (node.getBooleanAnnotation("directNamedCall")) {
+                    // An unresolved call compiled after a stash deletion must
+                    // install a new undefined slot instead of falling through
+                    // to the old pinned CV at execution time.
+                    RuntimeScalar parseTimeCodeRef = node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                            ? codeRef
+                            : null;
+                    RuntimeScalar emissionTimeCodeRef = parseTimeCodeRef == null
+                            ? null
+                            : GlobalVariable.getGlobalCodeRefForDirectCall(subName);
+                    if (parseTimeCodeRef != null && emissionTimeCodeRef != parseTimeCodeRef) {
+                        // A BEGIN block displaced this call site's original CV
+                        // during compilation. Snapshot the original CV just as
+                        // an ordinary compiled code reference does.
+                        RuntimeScalar codeSnapshot = new RuntimeScalar();
+                        codeSnapshot.type = parseTimeCodeRef.type;
+                        codeSnapshot.value = parseTimeCodeRef.value;
+                        int rd = allocateOutputRegister();
+                        int constIdx = addToConstantPool(codeSnapshot);
+                        emit(Opcodes.LOAD_CONST);
+                        emitReg(rd);
+                        emit(constIdx);
+                        lastResultReg = rd;
+                        return;
+                    }
+                    if (parseTimeCodeRef == null) {
+                        GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
+                    }
+                    int rd = allocateOutputRegister();
+                    int nameIdx = addToStringPool(subName);
+                    emit(Opcodes.LOAD_GLOBAL_CODE);
+                    emitReg(rd);
+                    emit(nameIdx);
+                    lastResultReg = rd;
+                    return;
+                }
+
                 // Cache the RuntimeScalar code reference at compile time.
                 // This matches Perl's behavior where the CV (code value) is cached
                 // in the compiled bytecode, surviving stash entry deletion.
@@ -6253,6 +6310,15 @@ public class BytecodeCompiler implements Visitor {
         int varReg = -1;
         List<Integer> multiVarRegs = new ArrayList<>();
         List<String> lexicalLoopVarNames = new ArrayList<>();
+        OperatorNode referenceAliasedVariable = null;
+        if (globalLoopVarName == null && node.variable instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && referenceOp.operand instanceof OperatorNode sigilOp
+                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@")
+                        || sigilOp.operator.equals("%"))
+                && sigilOp.operand instanceof IdentifierNode) {
+            referenceAliasedVariable = sigilOp;
+        }
         if (globalLoopVarName == null && node.variable instanceof OperatorNode declaration
                 && declaration.operator.equals("my")
                 && declaration.operand instanceof ListNode variables) {
@@ -6269,6 +6335,10 @@ public class BytecodeCompiler implements Visitor {
                 && varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode idNode) {
             String varName = "$" + idNode.name;
             varReg = getVariableRegister(varName);
+        }
+        if (referenceAliasedVariable != null
+                && referenceAliasedVariable.operand instanceof IdentifierNode idNode) {
+            varReg = getVariableRegister(referenceAliasedVariable.operator + idNode.name);
         }
         if (!multiVarRegs.isEmpty()) {
             varReg = multiVarRegs.get(0);
@@ -6289,6 +6359,14 @@ public class BytecodeCompiler implements Visitor {
                     lexicalLoopVarName = varName;
                     restoreLexicalLoopVar = true;
                 }
+            }
+        }
+        if (referenceAliasedVariable != null
+                && referenceAliasedVariable.operand instanceof IdentifierNode idNode) {
+            String varName = referenceAliasedVariable.operator + idNode.name;
+            if (hasVariable(varName) && !isOurVariable(varName)) {
+                lexicalLoopVarName = varName;
+                restoreLexicalLoopVar = true;
             }
         }
 
@@ -6378,7 +6456,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 10: Emit the loop superinstruction at the bottom (do-while check).
         // If iterator has next: load element (and alias for global vars), jump back to body.
         // If exhausted: fall through to exit.
-        int multiLoopExitPatch = -1;
+        int explicitLoopExitPatch = -1;
         if (!multiVarRegs.isEmpty()) {
             int hasNextReg = allocateRegister();
             emit(Opcodes.ITERATOR_HAS_NEXT);
@@ -6386,7 +6464,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(iterReg);
             emit(Opcodes.GOTO_IF_FALSE);
             emitReg(hasNextReg);
-            multiLoopExitPatch = bytecode.size();
+            explicitLoopExitPatch = bytecode.size();
             emitInt(0);
 
             for (int i = 0; i < multiVarRegs.size(); i++) {
@@ -6420,6 +6498,35 @@ public class BytecodeCompiler implements Visitor {
             }
             emit(Opcodes.GOTO);
             emitInt(bodyStartPc);
+        } else if (referenceAliasedVariable != null) {
+            int hasNextReg = allocateRegister();
+            emit(Opcodes.ITERATOR_HAS_NEXT);
+            emitReg(hasNextReg);
+            emitReg(iterReg);
+            emit(Opcodes.GOTO_IF_FALSE);
+            emitReg(hasNextReg);
+            explicitLoopExitPatch = bytecode.size();
+            emitInt(0);
+
+            int referenceReg = allocateRegister();
+            emit(Opcodes.ITERATOR_NEXT);
+            emitReg(referenceReg);
+            emitReg(iterReg);
+            if (referenceAliasedVariable.operator.equals("$")) {
+                emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                emitReg(varReg);
+                emitReg(referenceReg);
+            } else if (referenceAliasedVariable.operator.equals("@")) {
+                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitReg(varReg);
+                emitReg(referenceReg);
+            } else {
+                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitReg(varReg);
+                emitReg(referenceReg);
+            }
+            emit(Opcodes.GOTO);
+            emitInt(bodyStartPc);
         } else if (globalLoopVarName != null) {
             // FOREACH_GLOBAL_NEXT_OR_EXIT: hasNext + next + aliasGlobalVariable + conditional jump
             int nameIdx = addToStringPool(globalLoopVarName);
@@ -6438,8 +6545,8 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 11: Loop exit - fall-through after the superinstruction
         int loopEndPc = bytecode.size();
-        if (multiLoopExitPatch >= 0) {
-            patchJump(multiLoopExitPatch, loopEndPc);
+        if (explicitLoopExitPatch >= 0) {
+            patchJump(explicitLoopExitPatch, loopEndPc);
         }
 
         // Step 11b: Restore global loop variable after loop exits.

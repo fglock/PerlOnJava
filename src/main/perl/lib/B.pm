@@ -555,33 +555,11 @@ sub end_av {
     return B::AV->new(Internals::jperl_end_av_ref());
 }
 
-# Export CV flags as functions
-sub CVf_CONST() { return 0x0004; }
-sub CVf_ANON() { return 0x0080; }
-
 # GV flag for "this CV was imported". Real Perl uses 0x80 in older perls and
 # 0x4000 in newer ones; Pod::Coverage falls back to 0x80 when this is missing.
 # Returning 0 here means GvFLAGS() & GVf_IMPORTED_CV() is always 0 (PerlOnJava
 # doesn't track this), which is what callers default to anyway.
 sub GVf_IMPORTED_CV() { return 0x80; }
-
-# Export SVf_IOK as a function
-sub SVf_IOK() { return 0x00000100; }
-
-# Export SVf_NOK as a function
-sub SVf_NOK() { return 0x00000200; }
-
-# Export SVf_POK as a function
-sub SVf_POK() { return 0x00000400; }
-
-# Export SVp_IOK as a function
-sub SVp_IOK() { return 0x00001000; }
-
-# Export SVp_NOK as a function
-sub SVp_NOK() { return 0x00002000; }
-
-# Export SVp_POK as a function
-sub SVp_POK() { return 0x00004000; }
 
 # Convert a string to its Perl source representation
 # This is used by modules like Specio for code generation

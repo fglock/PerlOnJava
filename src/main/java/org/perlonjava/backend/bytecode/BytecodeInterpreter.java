@@ -842,8 +842,7 @@ public class BytecodeInterpreter {
                             case Opcodes.BIND_ACTIVE_LEXICAL -> {
                                 int reg = bytecode[pc++];
                                 int nameIdx = bytecode[pc++];
-                                registers[reg] = code.bindActiveLexical(
-                                        code.stringPool[nameIdx], registers[reg]);
+                                code.bindActiveLexical(code.stringPool[nameIdx], registers[reg]);
                             }
 
                             // =================================================================
@@ -927,7 +926,8 @@ public class BytecodeInterpreter {
                                 if (iterator.hasNext()) {
                                     // See FOREACH_NEXT_OR_EXIT above for the rationale.
                                     RuntimeScalar element = iterator.next();
-                                    if (element instanceof RuntimeScalarReadOnly) {
+                                    if (element instanceof RuntimeScalarReadOnly
+                                            && element != RuntimeScalarCache.scalarUndef) {
                                         element = new ReadOnlyAlias(element);
                                     } else if (element instanceof ScalarSpecialVariable) {
                                         element = ensureMutableScalar(element);
@@ -1026,7 +1026,7 @@ public class BytecodeInterpreter {
                                     }
                                     registers[rd] = RuntimeCode.selfReferenceMaybeNull(selfReference);
                                 } else {
-                                    registers[rd] = GlobalVariable.getGlobalCodeRef(name);
+                                    registers[rd] = GlobalVariable.getGlobalCodeRefForDirectCall(name);
                                 }
                             }
 
@@ -1323,7 +1323,8 @@ public class BytecodeInterpreter {
                                     // its alias status (and Perl's $&/$1 differ from the
                                     // foreach-loop-alias case anyway).
                                     RuntimeScalar elem = iterator.next();
-                                    if (elem instanceof RuntimeScalarReadOnly) {
+                                    if (elem instanceof RuntimeScalarReadOnly
+                                            && elem != RuntimeScalarCache.scalarUndef) {
                                         elem = new ReadOnlyAlias(elem);
                                     } else if (elem instanceof ScalarSpecialVariable) {
                                         elem = ensureMutableScalar(elem);
@@ -1494,6 +1495,17 @@ public class BytecodeInterpreter {
 
                             case Opcodes.HASH_GET -> {
                                 pc = InlineOpcodeHandler.executeHashGet(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.HASH_GET_STRING_INTERPOLATION -> {
+                                int rd = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                int keyReg = bytecode[pc++];
+                                int hashNameIdx = bytecode[pc++];
+                                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                                registers[rd] = hash.getForStringInterpolation(
+                                        key, code.stringPool[hashNameIdx]);
                             }
 
                             case Opcodes.HASH_GET_FOR_LOCAL -> {

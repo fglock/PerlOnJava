@@ -637,6 +637,7 @@ public class SubroutineParser {
 
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
+            codeRefNode.setAnnotation("directNamedCall", true);
             if (parseTimeCodeRef != null) {
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
             }

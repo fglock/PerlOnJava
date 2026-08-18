@@ -16,7 +16,9 @@ use File::Basename qw(dirname);
 use File::Path qw(make_path);
 use File::Copy qw(copy);
 use File::Spec;
-use Cwd qw(abs_path);
+use File::Temp qw(tempdir tempfile);
+use Cwd qw(abs_path getcwd);
+use Digest::SHA qw(sha256_hex);
 
 # Simple YAML parser for our specific needs
 sub parse_yaml {
@@ -137,6 +139,249 @@ sub copy_directory {
         warn "  Warning: rsync failed with exit code $result\n";
         return 0;
     }
+    return 1;
+}
+
+# Split the canonical generated corpus without dropping or reordering a byte of
+# any TESTCHUNK section. The small dispatcher retains the canonical lexical
+# helper scope and evals only the selected section. Leading newlines in each
+# chunk preserve canonical caller line numbers in TAP diagnostics.
+sub split_unicode_testprop {
+    my ($canonical) = @_;
+    my @markers;
+    while ($canonical
+           =~ /^if \(!\$::TESTCHUNK or \$::TESTCHUNK == (\d+)\) \{\s*$/mg)
+    {
+        push @markers, { number => 0 + $1, start => $-[0] };
+    }
+    unless (join(',', map { $_->{number} } @markers) eq join(',', 1 .. 10)) {
+        die "Generated TestProp.pl has unexpected TESTCHUNK order: "
+            . (@markers ? join(',', map { $_->{number} } @markers) : '(none)')
+            . "\n";
+    }
+
+    pos($canonical) = $markers[-1]{start};
+    my $finished_start;
+    if ($canonical =~ /^Finished\(\);\s*$/mg) {
+        $finished_start = $-[0];
+    }
+    die "Generated TestProp.pl is missing Finished() after TESTCHUNK 10\n"
+        unless defined $finished_start;
+
+    my $preamble = substr($canonical, 0, $markers[0]{start});
+    my $finish = substr($canonical, $finished_start);
+    my @sections;
+    for my $index (0 .. $#markers) {
+        my $end = $index == $#markers
+            ? $finished_start
+            : $markers[$index + 1]{start};
+        my $section = substr($canonical, $markers[$index]{start},
+                             $end - $markers[$index]{start});
+        my $line_offset = substr($canonical, 0, $markers[$index]{start})
+            =~ tr/\n//;
+        my %counts;
+        $counts{$1}++ while $section
+            =~ /^\s+(Expect|Error|Test_GCB|Test_SB|Test_LB|Test_WB)\(/mg;
+        push @sections, {
+            number      => $markers[$index]{number},
+            source      => $section,
+            padded      => ("\n" x $line_offset) . $section,
+            line_offset => $line_offset,
+            counts      => \%counts,
+        };
+    }
+
+    my $reconstructed = $preamble . join('', map { $_->{source} } @sections)
+        . $finish;
+    die "Internal TestProp.pl split changed canonical content\n"
+        unless $reconstructed eq $canonical;
+
+    my $canonical_sha = sha256_hex($canonical);
+    my @manifest = (
+        "\n# PerlOnJava lossless TESTCHUNK dispatcher\n",
+        "# Canonical pinned mktables SHA-256: $canonical_sha\n",
+    );
+    for my $section (@sections) {
+        my @counts = map { "$_=$section->{counts}{$_}" }
+            sort keys %{$section->{counts}};
+        push @manifest, "# TESTCHUNK $section->{number}: "
+            . join(', ', @counts) . "\n";
+    }
+    push @manifest, <<'DISPATCHER';
+my $__poj_testprop_dir = __FILE__;
+$__poj_testprop_dir =~ s{[^/\\]+\z}{};
+my @__poj_testprop_chunks = !$::TESTCHUNK
+    ? (1 .. 10)
+    : ($::TESTCHUNK >= 1 && $::TESTCHUNK <= 10 ? ($::TESTCHUNK) : ());
+for my $__poj_testprop_chunk (@__poj_testprop_chunks) {
+    my $__poj_testprop_path = sprintf '%sTestProp-%02d.pl',
+        $__poj_testprop_dir, $__poj_testprop_chunk;
+    open my $__poj_testprop_fh, '<', $__poj_testprop_path
+        or die "Cannot load $__poj_testprop_path: $!\n";
+    local $/;
+    my $__poj_testprop_source = <$__poj_testprop_fh>;
+    close $__poj_testprop_fh
+        or die "Cannot close $__poj_testprop_path: $!\n";
+    my $__poj_testprop_completed = eval($__poj_testprop_source . "\n; 1;");
+    my $__poj_testprop_error = $@;
+    unless ($__poj_testprop_completed) {
+        $__poj_testprop_error = "section eval returned false without an error\n"
+            unless length $__poj_testprop_error;
+        die "Cannot evaluate $__poj_testprop_path: $__poj_testprop_error";
+    }
+}
+DISPATCHER
+    my $dispatcher = $preamble . join('', @manifest) . $finish;
+    return ($dispatcher, \@sections, $canonical_sha);
+}
+
+# Generate the Unicode property test fixture from a pristine copy of the
+# pinned source data. Upstream deliberately does not commit TestProp.pl; its
+# normal build creates it with lib/unicore/mktables -maketest.
+sub generate_unicode_testprop {
+    my ($generator_relative, $target, $project_root) = @_;
+    my $generator = File::Spec->catfile($project_root, $generator_relative);
+    my $unicode_source = dirname($generator);
+    my @required = (
+        $generator,
+        File::Spec->catfile($unicode_source, 'version'),
+        File::Spec->catfile($unicode_source, 'UnicodeData.txt'),
+    );
+    for my $required (@required) {
+        unless (-f $required) {
+            warn "  ERROR: Cannot generate Unicode TestProp.pl; missing pinned "
+                . "generation prerequisite: $required\n"
+                . "  Restore perl5/lib/unicore from the pinned perl5 source "
+                . "before running this sync.\n\n";
+            return 0;
+        }
+    }
+
+    my $temporary = tempdir('perlonjava-testprop-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+    my $temporary_unicode = File::Spec->catdir($temporary, 'unicore');
+    make_path($temporary_unicode) or do {
+        warn "  ERROR: Cannot create temporary Unicode generation directory: $!\n\n";
+        return 0;
+    };
+    unless (copy_directory($unicode_source, $temporary_unicode,
+                           $project_root, [], [])) {
+        warn "  ERROR: Cannot copy pinned Unicode data for TestProp.pl generation.\n\n";
+        return 0;
+    }
+
+    my $generated = File::Spec->catfile($temporary_unicode, 'TestProp.pl');
+    my $original_dir = getcwd();
+    unless (chdir $project_root) {
+        warn "  ERROR: Cannot enter project root for TestProp.pl generation: $!\n\n";
+        return 0;
+    }
+    print "  Generating with pinned Unicode data: $generator_relative\n";
+    my $result = system($^X, $generator_relative,
+                        '-C', $temporary_unicode,
+                        '-T', $generated,
+                        '-q');
+    my $generation_error = $!;
+    unless (chdir $original_dir) {
+        die "sync.pl: cannot restore working directory '$original_dir': $!\n";
+    }
+    if ($result != 0) {
+        my $exit = $result == -1
+            ? "could not start: $generation_error"
+            : ($result & 127)
+                ? "terminated by signal " . ($result & 127)
+                : "exit code " . ($result >> 8);
+        warn "  ERROR: Unicode TestProp.pl generation failed ($exit).\n"
+            . "  Ensure the pinned perl5/lib/unicore data is complete and the "
+            . "host Perl can run mktables.\n\n";
+        return 0;
+    }
+    unless (-s $generated) {
+        warn "  ERROR: Unicode generator completed without producing TestProp.pl.\n\n";
+        return 0;
+    }
+
+    open my $generated_fh, '<', $generated or do {
+        warn "  ERROR: Cannot inspect generated TestProp.pl: $!\n\n";
+        return 0;
+    };
+    local $/;
+    my $contents = <$generated_fh>;
+    close $generated_fh;
+    my ($dispatcher, $sections, $canonical_sha);
+    eval {
+        ($dispatcher, $sections, $canonical_sha)
+            = split_unicode_testprop($contents);
+        1;
+    } or do {
+        my $error = $@ || 'unknown split error';
+        chomp $error;
+        warn "  ERROR: Cannot split generated TestProp.pl: $error\n\n";
+        return 0;
+    };
+
+    my $target_dir = dirname($target);
+    unless (-d $target_dir) {
+        make_path($target_dir) or do {
+            warn "  ERROR: Cannot create generated fixture directory: $!\n\n";
+            return 0;
+        };
+    }
+    my @outputs;
+    my ($volume, $directories, $base) = File::Spec->splitpath($target);
+    $base =~ s/\.pl\z//;
+    for my $section (@$sections) {
+        my $chunk_base = sprintf '%s-%02d.pl', $base, $section->{number};
+        my $chunk_target = File::Spec->catpath($volume, $directories,
+                                               $chunk_base);
+        push @outputs, [$chunk_target, $section->{padded}];
+    }
+    # Publish the dispatcher last so readers never see it before all ten chunk
+    # names exist. Stage every output completely before replacing any member of
+    # the current family; a write failure therefore leaves that family intact.
+    push @outputs, [$target, $dispatcher];
+    my @staged;
+    for my $output (@outputs) {
+        my ($path, $source) = @$output;
+        my ($output_fh, $staged_path);
+        eval {
+            ($output_fh, $staged_path) = tempfile(
+                '.TestProp-sync-XXXXXX', DIR => $target_dir, UNLINK => 0
+            );
+            1;
+        } or do {
+            my $error = $@ || 'unknown temporary-file error';
+            chomp $error;
+            warn "  ERROR: Cannot stage generated fixture $path: $error\n\n";
+            unlink $_->[0] for @staged;
+            return 0;
+        };
+        print {$output_fh} $source or do {
+            warn "  ERROR: Cannot stage generated fixture $path: $!\n\n";
+            close $output_fh;
+            unlink $staged_path;
+            unlink $_->[0] for @staged;
+            return 0;
+        };
+        close $output_fh or do {
+            warn "  ERROR: Cannot close staged generated fixture $path: $!\n\n";
+            unlink $staged_path;
+            unlink $_->[0] for @staged;
+            return 0;
+        };
+        push @staged, [$staged_path, $path];
+    }
+    while (my $staged = shift @staged) {
+        my ($staged_path, $path) = @$staged;
+        unless (rename $staged_path, $path) {
+            warn "  ERROR: Cannot publish generated fixture $path: $!\n\n";
+            unlink $staged_path;
+            unlink $_->[0] for @staged;
+            return 0;
+        }
+    }
+    print "  Installed lossless generated fixture dispatcher and 10 chunks: "
+        . File::Spec->abs2rel($target, $project_root)
+        . " (canonical SHA-256 $canonical_sha)\n";
     return 1;
 }
 
@@ -264,7 +509,13 @@ sub main {
         print "Processing: $import->{source}\n";
         
         # Check if source exists
-        if ($type eq 'directory') {
+        if ($type eq 'generated_unicode_testprop') {
+            unless (generate_unicode_testprop($import->{source}, $target, $project_root)) {
+                $error_count++;
+                next;
+            }
+        }
+        elsif ($type eq 'directory') {
             unless (-d $source) {
                 warn "  ERROR: Source directory not found: $source\n\n";
                 $error_count++;
@@ -342,7 +593,8 @@ sub main {
         $success_count++;
     }
     
-    # Create empty perl5_t/lib directory (needed for opendir tests but must stay empty)
+    # Create perl5_t/lib for opendir tests. It remains empty except for
+    # explicitly configured generated test fixtures such as unicore/TestProp.pl.
     my $lib_dir = File::Spec->catdir($project_root, 'perl5_t', 'lib');
     unless (-d $lib_dir) {
         print "Creating empty perl5_t/lib directory...\n";
@@ -362,4 +614,6 @@ sub main {
     }
 }
 
-main();
+main() unless caller;
+
+1;

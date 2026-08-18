@@ -151,7 +151,10 @@ public class ListOperators {
             if (!subName.contains("::")) {
                 subName = packageName + "::" + subName;
             }
-            comparator = GlobalVariable.getGlobalCodeRef(subName);
+            // Snapshot the active CV at sort entry. Typeglob assignment can
+            // replace the CODE slot's RuntimeScalar in place; retaining that
+            // mutable slot would switch comparators halfway through a sort.
+            comparator = new RuntimeScalar(GlobalVariable.getGlobalCodeRefForDirectCall(subName));
         }
         final RuntimeScalar finalComparator = comparator;
 

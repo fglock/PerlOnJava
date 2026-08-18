@@ -798,6 +798,35 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Fetch a hash element used directly in quoted-string interpolation.
+     * This context has a Perl-specific uninitialized warning which includes
+     * the source hash name and the fully stringified runtime key.
+     */
+    public RuntimeScalar getForStringInterpolation(RuntimeScalar keyScalar, String hashName) {
+        RuntimeScalar result = get(keyScalar);
+        return warnForStringInterpolation(result, keyScalar.toString(), hashName);
+    }
+
+    public RuntimeScalar getForStringInterpolation(String key, String hashName) {
+        RuntimeScalar result = get(key);
+        return warnForStringInterpolation(result, key, hashName);
+    }
+
+    private RuntimeScalar warnForStringInterpolation(RuntimeScalar result, String key, String hashName) {
+        if (result.type == RuntimeScalarType.TIED_SCALAR) {
+            result = result.tiedFetch();
+        }
+        if (result.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value " + hashName
+                            + "{\"" + key + "\"} in string"),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "uninitialized");
+        }
+        return result;
+    }
+
+    /**
      * Checks if a key exists in the hash.
      *
      * @param key The RuntimeScalar representing the key to check.

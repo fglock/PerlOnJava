@@ -40,6 +40,8 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
 
+    private static final String REGEX_BACKEND_PROPERTY = "jperl.regex.backend";
+
     static {
         // Set default locale to US (uses dot as decimal separator)
         // This ensures consistent number formatting across different environments
@@ -48,6 +50,7 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
 
     private PrintStream originalOut; // Stores the original System.out
     private ByteArrayOutputStream outputStream; // Captures the output of the Perl script execution
+    private String originalRegexBackend;
 
     /**
      * Provides a stream of Perl script filenames located in the resources directory.
@@ -213,6 +216,12 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
     void setUp() {
         originalOut = System.out;
         outputStream = new ByteArrayOutputStream();
+        originalRegexBackend = System.getProperty(REGEX_BACKEND_PROPERTY);
+
+        // Keep the Perl unit corpus as an explicit forced-Joni compatibility
+        // gate while automatic production routing temporarily remains
+        // Java-first. RegexBackendPolicyTest covers the automatic policy.
+        System.setProperty(REGEX_BACKEND_PROPERTY, "joni");
 
         // Create a new StandardIO with the capture stream
         StandardIO newStdout = new StandardIO(outputStream, true);
@@ -238,6 +247,12 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
      */
     @AfterEach
     void tearDown() {
+        if (originalRegexBackend == null) {
+            System.clearProperty(REGEX_BACKEND_PROPERTY);
+        } else {
+            System.setProperty(REGEX_BACKEND_PROPERTY, originalRegexBackend);
+        }
+
         // Restore original stdout
         RuntimeIO.setStdout(new RuntimeIO(new StandardIO(originalOut, true)));
         RuntimeIO.setStderr(new RuntimeIO(new StandardIO(System.err, false)));

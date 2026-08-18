@@ -727,7 +727,20 @@ public class ExtendedCharClass {
                             continue;
                         }
 
-                        if (next == 'p' || next == 'P') {
+                        if (next == 'c' && i + 2 < content.length()) {
+                            // Convert Perl's control-character escape before
+                            // Joni can mistake targets such as \\, [, or ] for
+                            // character-class syntax.
+                            int ctrl = content.codePointAt(i + 2);
+                            if (ctrl >= 'a' && ctrl <= 'z') {
+                                ctrl = ctrl - 'a' + 'A';
+                            }
+                            int value = (ctrl ^ 0x40) & 0xFF;
+                            result.append(String.format("\\x{%X}", value));
+                            i += 3;
+                            lastChar = value;
+                            continue;
+                        } else if (next == 'p' || next == 'P') {
                             // Unicode property
                             int start = i;
                             if (i + 2 < content.length() && content.charAt(i + 2) == '{') {

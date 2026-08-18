@@ -51,7 +51,15 @@ public class RuntimeStashEntry extends RuntimeGlob {
      */
     @Override
     public RuntimeScalar createReference() {
-        if (GlobalVariable.hasGlobalPseudoConstant(this.globName)) {
+        RuntimeScalar pseudoConstant =
+                GlobalVariable.getGlobalPseudoConstant(this.globName);
+        RuntimeScalar codeSlot =
+                GlobalVariable.globalCodeRefs.get(this.globName);
+        if (pseudoConstant != null
+                && codeSlot != null
+                && codeSlot.type == CODE
+                && codeSlot.value instanceof RuntimeCode code
+                && code.constantValue != null) {
             RuntimeScalar reference = new RuntimeScalar();
             reference.type = REFERENCE;
             reference.value = this;

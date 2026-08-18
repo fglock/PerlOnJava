@@ -360,7 +360,8 @@ public class RegexPreprocessorHelper {
                     // But if the error already contains "in expansion of", it is a real user-property definition error
                     // that should be reported (not deferred).
                     String msg = e.getMessage();
-                    if (property.matches("^(.*::)?([Ii][sSNn]).+") && (msg == null || !msg.contains("in expansion of"))) {
+                    if (UnicodeResolver.isUserDefinedPropertyName(property)
+                            && (msg == null || !msg.contains("in expansion of"))) {
                         RegexPreprocessor.markDeferredUnicodePropertyEncountered();
                         sb.setLength(sb.length() - 1); // Remove the backslash
                         // Placeholder: match any single character, including newline

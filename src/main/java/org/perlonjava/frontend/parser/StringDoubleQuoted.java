@@ -499,6 +499,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
                 caseModifiers.push(new CaseModifier("Q", false));
             }
 
+            // A regex control escape consumes its operand before normal string
+            // interpolation sees it. In particular, the '@' in \c@ is not the
+            // start of @- when used in a range such as [\c@-\c_].
+            case "c" -> appendToCurrentSegment("\\c" + TokenUtils.consumeChar(parser));
+
             // Unknown escape - treat as literal character
             default -> appendToCurrentSegment("\\" + escape);
         }

@@ -11,6 +11,7 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.ArrayList;
@@ -238,10 +239,18 @@ public class StringParser {
         // Final flush of any pending content
         buffer.append(pendingBuffer);
 
-        if (ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
-                || ctx.compilerOptions.isUnicodeSource) {
-            // utf8 source code is true - keep Unicode string as-is
-            buffers.add(buffer.toString());
+        boolean unicodeEvalByteSource = ctx.compilerOptions.isByteStringSource
+                && ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
+        if ((ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                || ctx.compilerOptions.isUnicodeSource)
+                && !unicodeEvalByteSource) {
+            // A byte-backed eval can activate `use utf8` inside its own source.
+            // Decode only after the parser has applied that lexical pragma;
+            // whole-source substring detection would misclassify comments and
+            // quoted text containing the words "use utf8".
+            buffers.add(ctx.compilerOptions.isByteStringSource
+                    ? decodeUtf8ByteSource(buffer.toString())
+                    : buffer.toString());
 
             // System.out.println("buffers utf8: " + buffer.toString().length() + " " + buffer.toString());
         } else if (ctx.compilerOptions.isEvalbytes) {
@@ -317,6 +326,10 @@ public class StringParser {
         return parsed;
     }
 
+    private static String decodeUtf8ByteSource(String source) {
+        return RuntimeCode.decodeEvalbytesUtf8Source(source);
+    }
+
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
         return parseRawStrings(parser, ctx, tokens, tokenIndex, stringCount, false);
     }
@@ -366,8 +379,14 @@ public class StringParser {
         Node parsed;
 
         if (rawStr.startDelim == '\'') {
-            // single quote delimiter, use the string as-is
-            parsed = new StringNode(rawStr.buffers.getFirst(), rawStr.index);
+            // An apostrophe delimiter suppresses ordinary interpolation, but
+            // literal (?{...}) and (??{...}) blocks are still compiled as regex
+            // callbacks. Keep variable interpolation disabled while using the
+            // regex-aware parser so executable source retains its provenance.
+            parsed = StringDoubleQuoted.parseDoubleQuotedString(
+                    ctx, rawStr, false, false, true,
+                    parser != null ? parser.getHeredocNodes() : null,
+                    null, true, isRegexQuoteConstruction);
         } else {
             // Check if /x modifier is present
             boolean hasXModifier = modifiers != null && modifiers.contains("x");

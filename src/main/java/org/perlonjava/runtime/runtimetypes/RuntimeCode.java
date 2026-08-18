@@ -27,6 +27,7 @@ import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.CoreSubroutineGenerator;
 
 import java.lang.invoke.MethodHandle;
@@ -1209,18 +1210,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /** Refresh a live lexical binding after foreach replaces its alias cell. */
-    public RuntimeBase bindActiveLexical(String variableName, RuntimeBase cell) {
+    public void bindActiveLexical(String variableName, RuntimeBase cell) {
         registerActiveLexical(this, variableName, cell);
-        return cell;
     }
 
-    public static RuntimeBase bindActiveLexical(
+    public static void bindActiveLexical(
             RuntimeBase cell, RuntimeScalar codeRef, String variableName) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
-            return code.bindActiveLexical(variableName, cell);
+            code.bindActiveLexical(variableName, cell);
+            return;
         }
         RuntimeCode active = getActiveCodeAt(0);
-        return active == null ? cell : active.bindActiveLexical(variableName, cell);
+        if (active != null) {
+            active.bindActiveLexical(variableName, cell);
+        }
     }
 
     public static RuntimeBase resolveLexicalAlias(
@@ -2061,11 +2064,59 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static String decodeEvalbytesUtf8Source(String source) {
-        byte[] bytes = new byte[source.length()];
-        for (int i = 0; i < source.length(); i++) {
-            bytes[i] = (byte) (source.charAt(i) & 0xFF);
+        StringBuilder decoded = new StringBuilder(source.length());
+        int chunkStart = 0;
+        for (int i = 0; i + 6 < source.length(); i++) {
+            if ((source.charAt(i) & 0xFF) != 0xFE) {
+                continue;
+            }
+            boolean validExtended = true;
+            for (int j = 1; j <= 6; j++) {
+                int continuation = source.charAt(i + j) & 0xFF;
+                if (continuation < 0x80 || continuation > 0xBF) {
+                    validExtended = false;
+                    break;
+                }
+            }
+            if (!validExtended) {
+                continue;
+            }
+            decodeStandardUtf8Chunk(source, chunkStart, i, decoded);
+            // Keep Perl's historical seven-byte form intact. Lexer folds this
+            // sequence into the internal beyond-Unicode marker while retaining
+            // its use as a quote delimiter.
+            decoded.append(source, i, i + 7);
+            i += 6;
+            chunkStart = i + 1;
         }
-        return new String(bytes, StandardCharsets.UTF_8);
+        decodeStandardUtf8Chunk(source, chunkStart, source.length(), decoded);
+        return decoded.toString();
+    }
+
+    private static void decodeStandardUtf8Chunk(String source, int start, int end,
+                                                StringBuilder decoded) {
+        if (start == end) {
+            return;
+        }
+        byte[] bytes = new byte[end - start];
+        for (int i = start; i < end; i++) {
+            bytes[i - start] = (byte) (source.charAt(i) & 0xFF);
+        }
+        try {
+            decoded.append(StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(bytes))
+                    .toString());
+        } catch (java.nio.charset.CharacterCodingException e) {
+            throw new IllegalArgumentException("Malformed UTF-8 character (fatal)", e);
+        }
+    }
+
+    public static boolean featureFlagsContain(int featureFlags, String feature) {
+        String enabled = "," + ScopedSymbolTable.stringifyFeatureFlags(featureFlags)
+                .replace(" ", "") + ",";
+        return enabled.contains("," + feature + ",");
     }
 
     /**
@@ -2146,11 +2197,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // EXCEPT for evalbytes, which must treat everything as bytes
             String evalString = code.toString();
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
-            if (evalbytesUtf8Source) {
+            boolean byteStringUtf8Source = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                    && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
             }
             boolean hasUnicode = false;
-            if (evalbytesUtf8Source) {
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 hasUnicode = true;
             } else if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
                 for (int i = 0; i < evalString.length(); i++) {
@@ -2168,7 +2223,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // The eval string can originate from either a Perl STRING or BYTE_STRING scalar.
             // For BYTE_STRING source we must treat the source as raw bytes (latin-1-ish) and
             // NOT re-encode characters to UTF-8 when simulating 'non-unicode source'.
-            boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+            boolean isByteStringSource = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && !byteStringUtf8Source;
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
             }
@@ -2176,6 +2233,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCompilerOptions.isEvalbytes = true;
             }
             if (isByteStringSource) {
+                evalCompilerOptions.isUnicodeSource = false;
                 evalCompilerOptions.isByteStringSource = true;
             }
 
@@ -2197,7 +2255,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Include package name in cache key to ensure source location info is correct per-package
             int featureFlags = ctx.symbolTable.featureFlagsStack.peek();
             String currentPackage = ctx.symbolTable.getCurrentPackage();
-            String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
+            String cacheKey = evalString + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + evalbytesUtf8Source + '\0' + byteStringUtf8Source + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
                 Map<String, Class<?>> runtimeEvalCache = evalCache();
@@ -2689,14 +2747,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         try {
             String evalString = code.toString();
             boolean evalbytesUtf8Source = ctx.isEvalbytes && shouldDecodeEvalbytesUtf8Source(evalString);
-            if (evalbytesUtf8Source) {
+            boolean byteStringUtf8Source = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && (ctx.symbolTable.strictOptionsStack.peek() & Strict.HINT_UTF8) != 0
+                    && !ctx.symbolTable.isFeatureCategoryEnabled("unicode_eval");
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 evalString = decodeEvalbytesUtf8Source(evalString);
             }
             evalTrace("evalStringWithInterpreter parse start tag=" + evalTag + " ctx=" + callContext +
                     " fileName=" + ctx.compilerOptions.fileName);
             // Handle Unicode source detection (same logic as evalStringHelper)
             boolean hasUnicode = false;
-            if (evalbytesUtf8Source) {
+            if (evalbytesUtf8Source || byteStringUtf8Source) {
                 hasUnicode = true;
             } else if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
                 for (int i = 0; i < evalString.length(); i++) {
@@ -2710,7 +2772,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Clone compiler options and set isUnicodeSource if needed
             // Always clone to avoid modifying the original and to set a unique filename
             CompilerOptions evalCompilerOptions = ctx.compilerOptions.clone();
-            boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
+            boolean isByteStringSource = !ctx.isEvalbytes
+                    && code.type == RuntimeScalarType.BYTE_STRING
+                    && !byteStringUtf8Source;
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
             }
@@ -2718,6 +2782,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCompilerOptions.isEvalbytes = true;
             }
             if (isByteStringSource) {
+                evalCompilerOptions.isUnicodeSource = false;
                 evalCompilerOptions.isByteStringSource = true;
             }
             // Always generate a unique filename for each eval to prevent source location collisions
@@ -3745,6 +3810,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // For SUPER:: calls, strip the prefix for error reporting to match Perl behavior
             if (methodName.startsWith("SUPER::")) {
                 errorMethodName = methodName.substring(7);
+            } else {
+                int qualifiedSuperIndex = methodName.lastIndexOf("::SUPER::");
+                if (qualifiedSuperIndex >= 0) {
+                    errorMethodName = methodName.substring(
+                            qualifiedSuperIndex + "::SUPER::".length());
+                }
             }
             throw new PerlCompilerException("Can't locate object method \"" + errorMethodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
         }

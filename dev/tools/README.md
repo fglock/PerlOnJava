@@ -43,10 +43,13 @@ parallelism without making their watchdogs contend with `pat*`.
 
 The baseline may be either runner JSON or a captured historical runner log.
 Use `--fail-on-regression` for release gates and `--output` to retain a
-machine-readable per-file comparison:
+machine-readable per-file comparison. Corpus gates can additionally use
+`--fail-on-invalid --expected-files N` to reject missing files, execution
+errors, timeouts, incomplete runs, and zero-TAP results:
 
 ```bash
-perl dev/tools/compare_test_results.pl --fail-on-regression \
+perl dev/tools/compare_test_results.pl --fail-on-regression --fail-on-invalid \
+  --expected-files 80 \
   --path-prefix perl5_t/t/re \
   --output /tmp/regex-comparison.json \
   ../PerlOnJava/logs/test_20260815_080000_958.log /tmp/regex.json

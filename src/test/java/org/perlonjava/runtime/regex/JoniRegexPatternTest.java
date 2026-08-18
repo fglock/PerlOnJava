@@ -1,10 +1,13 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
@@ -51,6 +54,12 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void translatesAbbreviatedMarkControlVerb() {
+        assertTrue(JoniRegexPattern.requiresJoniBackend("(*:B)A"));
+        assertEquals("(*MARK:B)A", JoniRegexPattern.translatePattern("(*:B)A"));
+    }
+
+    @Test
     void translatesNamedCharactersAndDoubleExtendedClasses() {
         assertEquals("café", JoniRegexPattern.translatePattern(
                 "caf\\N{LATIN SMALL LETTER E WITH ACUTE}"));
@@ -80,6 +89,28 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void translatesPerlOnlyUnicodePropertyAliasesBeforeJoniCompilation() {
+        assertTrue(new JoniRegexPattern("\\p{Titlecase}", FLAGS)
+                .matcher("\u01c5", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\p{XPosixSpace}", FLAGS)
+                .matcher("\u00a0", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\p{PosixUpper}", FLAGS)
+                .matcher("A", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\p{_Perl_IDStart}", FLAGS)
+                .matcher("_", java.util.List.of()).find());
+    }
+
+    @Test
+    void flattensTranslatedPropertiesInsideOrdinaryCharacterClasses() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "[\\p{IsDigit}\\p{IsLower}\\p{IsUpper}]", FLAGS);
+
+        assertTrue(pattern.matcher("A", java.util.List.of()).find());
+        assertTrue(pattern.matcher("7", java.util.List.of()).find());
+        assertFalse(pattern.matcher("-", java.util.List.of()).find());
+    }
+
+    @Test
     void acceptsPerlNumericGBackrefsAndHexCodePoints() {
         assertTrue(new JoniRegexPattern("(a)(b)(c)\\g1\\g2\\g3", FLAGS)
                 .matcher("abcabc", java.util.List.of()).find());
@@ -93,5 +124,74 @@ class JoniRegexPatternTest {
                 .matcher("aa", java.util.List.of()).find());
         assertTrue(new JoniRegexPattern("\\p{Latin}{ , 2 }", FLAGS)
                 .matcher("a", java.util.List.of()).find());
+    }
+
+    @Test
+    void reusesImmutableInputEncodingAndPreservesSupplementaryOffsets() {
+        String input = new String("A\u00E9\uD83D\uDE42Z");
+
+        JoniRegexPattern.InputEncoding first = JoniRegexPattern.inputEncoding(input);
+        JoniRegexPattern.InputEncoding second = JoniRegexPattern.inputEncoding(input);
+
+        assertSame(first, second);
+        assertArrayEquals(new int[] {0, 1, 3, 3, 7, 8}, first.charToByte());
+        assertArrayEquals(new int[] {0, 1, 1, 2, 2, 2, 2, 4, 5}, first.byteToChar());
+    }
+
+    @Test
+    void supplementaryCaptureUsesTheHighSurrogateBoundary() {
+        RegexMatcher matcher = new JoniRegexPattern("(.)", FLAGS)
+                .matcher("\uD83D\uDE42", java.util.List.of());
+
+        assertTrue(matcher.find());
+        assertEquals("\uD83D\uDE42", matcher.group(1));
+        assertEquals(0, matcher.start(1));
+        assertEquals(2, matcher.end(1));
+    }
+
+    @Test
+    void matchesStandaloneBeyondUnicodeCharacterClassMembers() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "[\\x{4000001}\\x{4000003}\\x{4000005}]+", FLAGS);
+
+        assertFalse(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000000L),
+                java.util.List.of()).find());
+        assertTrue(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000001L),
+                java.util.List.of()).find());
+        assertTrue(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000003L),
+                java.util.List.of()).find());
+        assertTrue(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000005L),
+                java.util.List.of()).find());
+        assertFalse(pattern.matcher(PerlUtfString.encodeBeyondUnicode(0x4000006L),
+                java.util.List.of()).find());
+    }
+
+    @Test
+    void resolvesBlockPropertiesInsideExtendedClassesBeforeJoniCompilation() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "(?[ [k] + \\p{Blk=ASCII} ])",
+                RegexFlags.fromModifiers("i", "(?[ [k] + \\p{Blk=ASCII} ])"));
+
+        assertTrue(pattern.matcher("k", java.util.List.of()).find());
+        assertTrue(pattern.matcher("A", java.util.List.of()).find());
+        assertFalse(pattern.matcher("\u017F", java.util.List.of()).find());
+    }
+
+    @Test
+    void resolvesPerlPropertyAliasesInsideExtendedClasses() {
+        JoniRegexPattern pattern = new JoniRegexPattern(
+                "(?[ [A] + \\p{Titlecase} ])", FLAGS);
+
+        assertTrue(pattern.matcher("A", java.util.List.of()).find());
+        assertTrue(pattern.matcher("\u01C5", java.util.List.of()).find());
+        assertFalse(pattern.matcher("z", java.util.List.of()).find());
+    }
+
+    @Test
+    void resolvesControlEscapesInsideExtendedClasses() {
+        JoniRegexPattern pattern = new JoniRegexPattern("(?[\\c\\])", FLAGS);
+
+        assertTrue(pattern.matcher("\u001C", java.util.List.of()).find());
+        assertFalse(pattern.matcher("\\", java.util.List.of()).find());
     }
 }

@@ -522,19 +522,19 @@ public class StringOperators {
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
         int blessId2 = RuntimeScalarType.blessedId(b);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(
-                    runtimeScalar, b, blessId, blessId2, "(.=", ".=", "(.");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentAssignmentOverloadDirect(
+                    runtimeScalar, b, blessId, blessId2, "(.=");
             if (result != null) {
-                // Compound overloads return the value that Perl assigns back to
-                // the lvalue.  Preserve that reference instead of converting it
-                // through the ordinary string-concat result path.
-                runtimeScalar.set(result);
-                return runtimeScalar;
+                // Assignment overloads return the value Perl assigns back to
+                // the lvalue. Preserve that reference instead of stringifying it.
+                return result;
             }
         }
-        RuntimeScalar result = stringConcat(runtimeScalar, b, false);
-        runtimeScalar.set(result);
-        return runtimeScalar;
+        // The JVM and interpreter compound-assignment drivers perform the
+        // single lvalue store. Returning the materialized value here avoids a
+        // second tied FETCH/STORE and preserves proxy metadata such as %ENV
+        // taint when that driver writes the result back.
+        return stringConcat(runtimeScalar, b, false);
     }
 
     private static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b,
@@ -902,7 +902,17 @@ public class StringOperators {
                 WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
-            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
+            RuntimeScalar resolved = resolveTiedStringOperand(scalar);
+            // A one-element interpolated array must retain a compiled regex's
+            // callback template. Stringifying it here turns trusted (??{...})
+            // callbacks back into runtime source and incorrectly requires
+            // lexical `use re 'eval'`.
+            if (isStringInterpolation && list instanceof RuntimeArray
+                    && RuntimeRegexTemplate.hasExecutableValue(resolved)) {
+                return recordJoinTaint(RuntimeRegexTemplate.buildJoined(
+                        runtimeScalar, java.util.List.of(resolved)));
+            }
+            resolved = stringifyForStringContext(resolved);
             RuntimeScalar res = new RuntimeScalar(resolved.toString());
             if (resolved.type != RuntimeScalarType.STRING) {
                 res.type = BYTE_STRING;
@@ -946,10 +956,15 @@ public class StringOperators {
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
 
-            RuntimeScalar resolved = stringifyForStringContext(resolveTiedStringOperand(scalar));
+            RuntimeScalar materialized = resolveTiedStringOperand(scalar);
+            RuntimeScalar resolved = stringifyForStringContext(materialized);
             if (isStringInterpolation) {
-                resolvedElements.add(resolved);
-                hasExecutableValue |= RuntimeRegexTemplate.hasExecutableValue(resolved);
+                // If any element carries executable regex callbacks, buildJoined
+                // must still see blessed elements so the outer regex-template
+                // concatenation can dispatch their `.` overload. Ordinary joins
+                // continue to use the stringified value accumulated below.
+                resolvedElements.add(materialized);
+                hasExecutableValue |= RuntimeRegexTemplate.hasExecutableValue(materialized);
             }
             if (resolved.type == RuntimeScalarType.STRING) {
                 hasUtf8 = true;

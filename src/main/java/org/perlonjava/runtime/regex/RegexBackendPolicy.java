@@ -2,8 +2,11 @@ package org.perlonjava.runtime.regex;
 
 /**
  * Temporary migration policy for comparing the legacy Java-first routing with
- * the canonical Joni matcher. This class and its controls are removed when the
- * Java matching backend is retired.
+ * the canonical Joni matcher. Ordinary lookbehind also remains on Java until
+ * Joni's nested-lookahead admission is complete. Branch-reset subroutine calls
+ * also temporarily use Java pending Joni's native named-call patch. Other
+ * Joni-only constructs in the same pattern still force Joni. This class and its
+ * controls are removed when the Java matching backend is retired.
  */
 final class RegexBackendPolicy {
     static final String PROPERTY = "jperl.regex.backend";
@@ -24,11 +27,11 @@ final class RegexBackendPolicy {
         }
         if (configured == null || configured.isBlank()
                 || configured.equalsIgnoreCase("auto")
-                || configured.equalsIgnoreCase("joni")) {
-            return Mode.JONI;
-        }
-        if (configured.equalsIgnoreCase("java")) {
+                || configured.equalsIgnoreCase("java")) {
             return Mode.JAVA;
+        }
+        if (configured.equalsIgnoreCase("joni")) {
+            return Mode.JONI;
         }
         throw new IllegalArgumentException("Invalid " + ENVIRONMENT + " value '"
                 + configured + "' (expected java or joni)");

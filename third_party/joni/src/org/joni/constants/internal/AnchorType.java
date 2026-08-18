@@ -43,6 +43,14 @@ public interface AnchorType {
     int END_BUF_MASK      = (END_BUF | SEMI_END_BUF);
 
     int KEEP              = (1<<16);
+    int GRAPHEME_BOUNDARY = (1<<17);
+    int NOT_GRAPHEME_BOUNDARY = (1<<18);
+    int SENTENCE_BOUNDARY = (1<<19);
+    int NOT_SENTENCE_BOUNDARY = (1<<20);
+    int WORD_BREAK_BOUNDARY = (1<<21);
+    int NOT_WORD_BREAK_BOUNDARY = (1<<22);
+    int LINE_BOUNDARY = (1<<23);
+    int NOT_LINE_BOUNDARY = (1<<24);
 
     int ALLOWED_IN_LB =     ( LOOK_BEHIND |
                                     LOOK_BEHIND_NOT |
@@ -53,6 +61,14 @@ public interface AnchorType {
                                     KEEP |
                                     WORD_BOUND |
                                     NOT_WORD_BOUND |
+                                    GRAPHEME_BOUNDARY |
+                                    NOT_GRAPHEME_BOUNDARY |
+                                    SENTENCE_BOUNDARY |
+                                    NOT_SENTENCE_BOUNDARY |
+                                    WORD_BREAK_BOUNDARY |
+                                    NOT_WORD_BREAK_BOUNDARY |
+                                    LINE_BOUNDARY |
+                                    NOT_LINE_BOUNDARY |
                                     WORD_BEGIN |
                                     WORD_END );
 
@@ -66,6 +82,14 @@ public interface AnchorType {
                                     KEEP |
                                     WORD_BOUND |
                                     NOT_WORD_BOUND |
+                                    GRAPHEME_BOUNDARY |
+                                    NOT_GRAPHEME_BOUNDARY |
+                                    SENTENCE_BOUNDARY |
+                                    NOT_SENTENCE_BOUNDARY |
+                                    WORD_BREAK_BOUNDARY |
+                                    NOT_WORD_BREAK_BOUNDARY |
+                                    LINE_BOUNDARY |
+                                    NOT_LINE_BOUNDARY |
                                     WORD_BEGIN |
                                     WORD_END );
 }

@@ -37,6 +37,22 @@ perl dev/import-perl5/sync.pl --only File-DosGlob
 
 Substring match against each row’s `source:` and `target:` fields. Prefer this after adding a single module so unrelated trees under `src/main/perl/lib/` are not overwritten. Run `perl dev/import-perl5/sync.pl --help` for details.
 
+### Refresh the pinned Unicode generator snapshot
+
+The six tracked payloads under `dev/unicode/17.0.0/` are ordinary manifest
+imports from the pinned `perl5/lib/unicore` checkout. Refresh only that complete
+group with its unique target prefix:
+
+```bash
+perl dev/import-perl5/sync.pl --only dev/unicode/17.0.0
+```
+
+The command updates `version`, the three alias/block files, and the two
+`extracted/` property files. Their repository-authored `README.md` is not an
+import target and remains untouched. Review source/target hashes and regenerate
+the affected checked-in Java data after intentionally advancing the pinned Perl
+or Unicode baseline.
+
 ### Add a New Module
 
 ```bash
@@ -66,6 +82,8 @@ Main synchronization script that imports files from perl5/ based on config.yaml.
 
 **Features:**
 - Copies individual files or entire directories
+- Refreshes the minimal tracked Unicode generator snapshot through explicit manifest rows
+- Generates pinned-source test artifacts such as `unicore/TestProp.pl`
 - Applies patches automatically
 - Creates necessary directories
 - Validates sources exist
@@ -79,6 +97,34 @@ perl dev/import-perl5/sync.pl --help
 ```
 
 Protected targets (`protected: true` in YAML) are always excluded from bulk directory rsync using the **full** config list, even when `--only` is used.
+
+#### Generated Unicode property fixture
+
+The upstream `uniprops01.t` through `uniprops10.t` wrappers load
+`perl5_t/lib/unicore/TestProp.pl`. Perl does not commit that file: its build
+generates it from `perl5/lib/unicore/mktables` and the pinned Unicode database.
+PerlOnJava therefore generates a losslessly split fixture explicitly:
+
+```bash
+perl dev/import-perl5/sync.pl --only TestProp.pl
+```
+
+Generation runs in a temporary copy of `perl5/lib/unicore`, so it does not
+modify the pinned source tree. The importer retains every canonical assertion,
+splits the ten existing `TESTCHUNK` sections into ignored `TestProp-01.pl`
+through `TestProp-10.pl` files, and installs a small `TestProp.pl` dispatcher.
+Each unchanged upstream wrapper consequently parses only its selected section
+instead of parsing the complete 12 MB corpus before applying its chunk guard.
+Running the dispatcher without `TESTCHUNK` still evaluates all sections in
+canonical order.
+
+The dispatcher embeds the canonical SHA-256 and per-chunk call counts. The
+dispatcher and all chunks remain ignored with the rest of `perl5_t/` and are
+not included in the JAR or distribution. A clean checkout obtains them by
+running the command above (a full unfiltered sync also runs this row). Unrelated
+filtered syncs neither generate nor remove them. Missing Unicode inputs or an
+incompatible host Perl make the sync fail with an actionable diagnostic rather
+than silently leaving the ten wrappers unavailable.
 
 ### add_module.pl
 

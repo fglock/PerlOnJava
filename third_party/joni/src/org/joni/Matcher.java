@@ -58,6 +58,7 @@ public abstract class Matcher extends IntHolder {
     private int skipSearchTo = -1;
     protected String controlMark;
     protected String controlError;
+    protected boolean controlVerbEncountered;
 
     private static final class SkipSearch extends RuntimeException {
         final int target;
@@ -142,6 +143,10 @@ public abstract class Matcher extends IntHolder {
         return controlError;
     }
 
+    public final boolean hasEncounteredControlVerb() {
+        return controlVerbEncountered;
+    }
+
     protected final void msaInit(int option, int start, int gpos) {
         msaOptions = option;
         msaStart = start;
@@ -157,7 +162,20 @@ public abstract class Matcher extends IntHolder {
         abortSearch = true;
     }
 
+    protected final int takeSearchSkipRequest() {
+        int target = skipSearchTo;
+        skipSearchTo = -1;
+        return target;
+    }
+
+    protected final boolean takeSearchAbortRequest() {
+        boolean requested = abortSearch;
+        abortSearch = false;
+        return requested;
+    }
+
     public final int match(int at, int range, int option) {
+        controlVerbEncountered = false;
         try {
             return matchCommon(at, range, option, false);
         } catch (InterruptedException ex) {
@@ -166,6 +184,7 @@ public abstract class Matcher extends IntHolder {
     }
 
     public final int matchInterruptible(int at, int range, int option) throws InterruptedException {
+        controlVerbEncountered = false;
         return matchCommon(at, range, option, true);
     }
 
@@ -173,7 +192,7 @@ public abstract class Matcher extends IntHolder {
         msaInit(option, at, at);
 
         if (Config.USE_CEC) {
-            int offset = at = str;
+            int offset = at - str;
             stateCheckBuffInit(end - str, offset, regex.numCombExpCheck); // move it to construction?
         } // USE_COMBINATION_EXPLOSION_CHECK
 
@@ -369,6 +388,7 @@ public abstract class Matcher extends IntHolder {
     }
 
     public final int search(int start, int range, int option) {
+        controlVerbEncountered = false;
         int next = start;
         while (true) {
             abortSearch = false;
@@ -392,6 +412,7 @@ public abstract class Matcher extends IntHolder {
     }
 
     public final int search(int gpos, int start, int range, int option) {
+        controlVerbEncountered = false;
         try {
             return searchCommon(gpos, start, range, option, false);
         } catch (SkipSearch | AbortSearch control) {
@@ -402,6 +423,7 @@ public abstract class Matcher extends IntHolder {
     }
 
     public final int searchInterruptible(int start, int range, int option) throws InterruptedException {
+        controlVerbEncountered = false;
         int next = start;
         while (true) {
             abortSearch = false;
@@ -423,6 +445,7 @@ public abstract class Matcher extends IntHolder {
     }
 
     public final int searchInterruptible(int gpos, int start, int range, int option) throws InterruptedException {
+        controlVerbEncountered = false;
         try {
             return searchCommon(gpos, start, range, option, true);
         } catch (SkipSearch | AbortSearch control) {

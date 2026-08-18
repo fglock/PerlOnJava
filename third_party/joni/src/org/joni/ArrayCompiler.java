@@ -1198,6 +1198,38 @@ final class ArrayCompiler extends Compiler {
             }
             break;
 
+        case AnchorType.GRAPHEME_BOUNDARY:
+            addOpcode(OPCode.GRAPHEME_BOUNDARY);
+            break;
+
+        case AnchorType.NOT_GRAPHEME_BOUNDARY:
+            addOpcode(OPCode.NOT_GRAPHEME_BOUNDARY);
+            break;
+
+        case AnchorType.SENTENCE_BOUNDARY:
+            addOpcode(OPCode.SENTENCE_BOUNDARY);
+            break;
+
+        case AnchorType.NOT_SENTENCE_BOUNDARY:
+            addOpcode(OPCode.NOT_SENTENCE_BOUNDARY);
+            break;
+
+        case AnchorType.WORD_BREAK_BOUNDARY:
+            addOpcode(OPCode.WORD_BREAK_BOUNDARY);
+            break;
+
+        case AnchorType.NOT_WORD_BREAK_BOUNDARY:
+            addOpcode(OPCode.NOT_WORD_BREAK_BOUNDARY);
+            break;
+
+        case AnchorType.LINE_BOUNDARY:
+            addOpcode(OPCode.LINE_BOUNDARY);
+            break;
+
+        case AnchorType.NOT_LINE_BOUNDARY:
+            addOpcode(OPCode.NOT_LINE_BOUNDARY);
+            break;
+
         case AnchorType.WORD_BEGIN:
             if (Config.USE_WORD_BEGIN_END) {
                 if (node.asciiRange) {
@@ -1355,10 +1387,11 @@ final class ArrayCompiler extends Compiler {
             break;
 
         case NodeType.QTFR:
-            if (Config.USE_CEC) {
-                len = compileCECLengthQuantifierNode((QuantifierNode)node);
+            QuantifierNode quantifier = (QuantifierNode)node;
+            if (Config.USE_CEC && regex.numCombExpCheck > 0 && quantifier.combExpCheckNum > 0) {
+                len = compileCECLengthQuantifierNode(quantifier);
             } else {
-                len = compileNonCECLengthQuantifierNode((QuantifierNode)node);
+                len = compileNonCECLengthQuantifierNode(quantifier);
             }
             break;
 
