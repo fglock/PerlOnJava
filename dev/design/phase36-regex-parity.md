@@ -232,7 +232,8 @@ first 524 lines of retired Java-only preprocessor code. Every published slice
 has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
 boundaries; PR #1028 adds independently validated alpha assertion aliases and
 native word boundaries. The current WIP integrates corrected global zero-width
-`/g` progression while line boundaries remain a parallel integration slice.
+`/g` progression and pinned Perl 5.44 Unicode 17.0 Age properties while line
+boundaries remain a parallel integration slice.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -267,9 +268,18 @@ Extended_Pictographic data. The 33-assertion focused oracle passes on system
 Perl, JVM, and interpreter, direct Joni exercises the same path, and generated
 chunk 10 passes 19,510/19,510 identically on both execution backends. Combined
 with the complete boundary chunk 05 and unchanged chunks 06–09, current
-generated evidence is 132,578/407,367. A resource-contended
+generated evidence was 132,578/407,367 before the current property slice. A resource-contended
 current-head refresh did not reproduce a complete exact JVM/interpreter pair,
 so it does not replace that accepted baseline.
+
+`Age` now uses exact introduction-version sets and `In`/`Present_In` use
+cumulative sets generated from the repository-pinned Perl 5.44 Unicode 17.0
+`DAge.txt`; `Unassigned`/`NA`, colon delimiters, wildcard-value spellings, and
+Perl loose version aliases are covered without inheriting the host ICU Unicode
+version. The focused oracle passes 14/14 on system Perl, JVM, and interpreter.
+Stable chunk 01 validation improves from 30,194 to 30,705 passing assertions
+identically on JVM and interpreter, with no numbered regression. This raises
+current generated evidence by 511 to 133,089/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -475,6 +485,10 @@ matcher-specific timeouts on both execution backends.
     reproducible Perl 5.44 Unicode 17.0 Word_Break and Extended_Pictographic
     tables. The focused oracle passes 33/33 and generated chunk 10 passes
     19,510/19,510 on both execution backends.
+  - [x] Generated exact `Age` and cumulative `In`/`Present_In` sets from pinned
+    Perl 5.44 Unicode 17.0 data, including loose version, wildcard, and
+    unassigned aliases. The focused oracle passes 14/14 and chunk 01 gains 511
+    assertions with no numbered regression.
   - [ ] Implement the native Joni line boundary algorithm, then
     close the remaining property and boundary failures before marking Phase 3
     complete.
@@ -529,7 +543,7 @@ matcher-specific timeouts on both execution backends.
    boundary rewrite only after native parity.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
-   break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
+   break-property values. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Close underscored numeric escapes with focused standard-Perl gates.
 4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
