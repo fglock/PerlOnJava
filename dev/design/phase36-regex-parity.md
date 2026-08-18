@@ -236,13 +236,18 @@ compatibility contract.
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
 Draft PR #1042 is the current integration gate. Its reversible ordinary-
-lookbehind fallback is published at `7e5d119508` after a warning-free `make`.
-The focused PR #958 gate now restores both `pat.t` variants above baseline, but
-both `pat_advanced` variants abort after test 1019 and 18 smaller files retain
-98 unrelated losses, for a selected negative sum of 1,008. A second temporary
-exception for ordinary constant branch-reset plus subroutine-call patterns is
-being validated. Explicit Joni and patterns containing callbacks, dynamic
-source, conditions, control verbs, or other Joni-only semantics remain Joni.
+lookbehind fallback is published at `7e5d119508`, and its ordinary
+branch-reset/subroutine-call extension is published at `e1c7fcccd`, after
+warning-free `make` validation.
+The focused PR #958 gate restores both `pat.t` variants above baseline. The
+validated second temporary exception for ordinary constant branch-reset plus
+subroutine-call patterns lets both `pat_advanced` variants complete all 1,687
+tests and pass 1,522 each, 146 above the PR #958 baseline per file. The only
+known negative focused deltas are now 98 assertions across 18 smaller files;
+forced Java produces the same results, proving that they are independent of
+regex backend routing. Explicit Joni and patterns containing callbacks,
+dynamic source, conditions, control verbs, or other Joni-only semantics remain
+Joni.
 These exceptions are merge scaffolding, not the target architecture. PR #1042
 cannot leave draft until a fresh 622-file run has zero per-file losses against
 PR #958.
@@ -561,6 +566,11 @@ is retained for now.
   - [x] Added native lookahead nodes to Joni's positive and negative
     lookbehind admission masks (`43b4981a6`). The 8-assertion oracle passes on
     both backends and `pat{,_thr}.t` gains 1,704 assertions with no losses.
+  - [x] Validated the temporary ordinary branch-reset/subroutine-call routing
+    exception. Both `pat_advanced{,_thr}.t` files now complete 1,687 tests and
+    pass 1,522, a +146 per-file result against PR #958. Native multiplex-name
+    call support remains the required replacement before the exception is
+    removed.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-18)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -771,12 +781,10 @@ is retained for now.
 
 ### Next Steps
 
-1. Make PR #1042 mergeable without weakening the PR #958 baseline: validate
-   the temporary ordinary branch-reset/subroutine-call fallback, restore both
-   `pat_advanced*` files, fix the 98 unrelated losses across 18 smaller files,
-   then require a fresh complete 622-file comparison with zero negative
-   per-file deltas. Keep explicit Joni and Joni-only constructs forced to Joni
-   throughout.
+1. Make PR #1042 mergeable without weakening the PR #958 baseline: fix the 98
+   unrelated losses across 18 smaller files, then require a fresh complete
+   622-file comparison with zero negative per-file deltas. Keep explicit Joni
+   and Joni-only constructs forced to Joni throughout.
 2. Integrate validated native commits `43b4981a6` (nested lookahead inside
    lookbehind) and `b2f225c11` (outside-class `\N`) after PR #1042 stabilizes.
    Remove each temporary routing exception as soon as its native replacement
