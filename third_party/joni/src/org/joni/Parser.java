@@ -625,6 +625,12 @@ class Parser extends Lexer {
                     option = bsOnOff(option, Option.CAPTURE_GROUP, false);
                     option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                     fetch();
+                    if (c == '-') {
+                        newSyntaxException(PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED);
+                    }
+                    if (c == 'd') {
+                        newSyntaxException(PERL_CARET_D_OPTION_NOT_RECOGNIZED);
+                    }
                 } else {
                     newSyntaxException(UNDEFINED_GROUP_OPTION);
                 }
@@ -642,6 +648,9 @@ class Parser extends Lexer {
             case 'u':
                 boolean neg = false;
                 int asciiModifierCount = 0;
+                boolean sawDefaultCharset = false;
+                boolean sawLocaleCharset = false;
+                boolean sawUnicodeCharset = false;
                 while (true) {
                     switch(c) {
                     case ':':
@@ -691,7 +700,13 @@ class Parser extends Lexer {
 
                     case 'a':     /* limits \d, \s, \w and POSIX brackets to ASCII range */
                         if ((syntax.op2OptionPerl() || syntax.op2OptionRuby()) && !neg) {
+                            if (syntax.op2OptionPerl() && sawDefaultCharset) {
+                                newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
+                            }
                             asciiModifierCount++;
+                            if (syntax.op2OptionPerl() && asciiModifierCount > 2) {
+                                newSyntaxException(PERL_MODIFIER_A_MAXIMUM_TWICE);
+                            }
                             option = bsOnOff(option, Option.ASCII_RANGE, false);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
@@ -704,6 +719,10 @@ class Parser extends Lexer {
                         }
                     case 'u':
                         if ((syntax.op2OptionPerl() || syntax.op2OptionRuby()) && !neg) {
+                            if (syntax.op2OptionPerl() && sawLocaleCharset) {
+                                newSyntaxException(PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE);
+                            }
+                            sawUnicodeCharset = true;
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
@@ -715,6 +734,10 @@ class Parser extends Lexer {
 
                     case 'd':
                         if (syntax.op2OptionPerl() && !neg) {
+                            if (asciiModifierCount > 0) {
+                                newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
+                            }
+                            sawDefaultCharset = true;
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
                             option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                         } else if (syntax.op2OptionRuby() && !neg) {
@@ -728,6 +751,13 @@ class Parser extends Lexer {
 
                     case 'l':
                         if (syntax.op2OptionPerl() && !neg) {
+                            if (sawUnicodeCharset) {
+                                newSyntaxException(PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE);
+                            }
+                            if (sawLocaleCharset) {
+                                newSyntaxException(PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE);
+                            }
+                            sawLocaleCharset = true;
                             option = bsOnOff(option, Option.ASCII_RANGE, true);
                             option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
                         } else {
@@ -905,6 +935,12 @@ class Parser extends Lexer {
     }
 
     private Node parseEncloseNamedGroup2(boolean listCapture) {
+        if (syntax.op2OptionPerl() && left()) {
+            int first = enc.mbcToCode(bytes, p, stop);
+            if (enc.isDigit(first) || !enc.isWord(first)) {
+                newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
+            }
+        }
         int nm = p;
         fetchName(c, false);
         int nameEnd = value;
