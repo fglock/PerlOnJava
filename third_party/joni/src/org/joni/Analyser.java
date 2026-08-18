@@ -1437,6 +1437,24 @@ final class Analyser extends Parser {
     }
 
     private Node setupLookBehind(AnchorNode node) {
+        AcceptLengthInfo acceptLengths = node.type == AnchorType.LOOK_BEHIND
+                ? getAcceptLengthInfo(node.target) : null;
+        if (acceptLengths != null && acceptLengths.hasAccept()) {
+            int min = acceptLengths.acceptMin;
+            int max = acceptLengths.acceptMax;
+            if (acceptLengths.hasNormal()) {
+                min = Math.min(min, acceptLengths.normalMin);
+                max = Math.max(max, acceptLengths.normalMax);
+            }
+            if (max <= 255) {
+                node.variableLookBehindMin = min;
+                node.variableLookBehindMax = max;
+                node.variableLookBehindTargetLength = -1;
+                returnCode = 0;
+                return node;
+            }
+        }
+
         int len = getCharLengthTree(node.target);
         switch(returnCode) {
         case 0:
@@ -1491,6 +1509,137 @@ final class Analyser extends Parser {
         CharLengthRange(int min, int max) {
             this.min = min;
             this.max = max;
+        }
+    }
+
+    /**
+     * Character widths for paths that complete normally and paths terminated
+     * by ACCEPT. ACCEPT is a matcher-boundary exit, so nodes after it in a list
+     * do not contribute to that path's effective lookbehind width.
+     */
+    private static final class AcceptLengthInfo {
+        int normalMin = MinMaxLen.INFINITE_DISTANCE;
+        int normalMax;
+        int acceptMin = MinMaxLen.INFINITE_DISTANCE;
+        int acceptMax;
+
+        boolean hasNormal() {
+            return normalMin != MinMaxLen.INFINITE_DISTANCE;
+        }
+
+        boolean hasAccept() {
+            return acceptMin != MinMaxLen.INFINITE_DISTANCE;
+        }
+
+        void addNormal(int min, int max) {
+            normalMin = Math.min(normalMin, min);
+            normalMax = Math.max(normalMax, max);
+        }
+
+        void addAccept(int min, int max) {
+            acceptMin = Math.min(acceptMin, min);
+            acceptMax = Math.max(acceptMax, max);
+        }
+    }
+
+    private AcceptLengthInfo getAcceptLengthInfo(Node node) {
+        if (node instanceof ControlVerbNode control) {
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            if (control.kind == ControlVerbNode.Kind.ACCEPT) info.addAccept(0, 0);
+            else info.addNormal(0, 0);
+            return info;
+        }
+        if (node instanceof CalloutNode) return null;
+
+        switch (node.getType()) {
+        case NodeType.LIST: {
+            AcceptLengthInfo result = new AcceptLengthInfo();
+            result.addNormal(0, 0);
+            ListNode list = (ListNode)node;
+            do {
+                AcceptLengthInfo item = getAcceptLengthInfo(list.value);
+                if (item == null) return null;
+                AcceptLengthInfo next = new AcceptLengthInfo();
+                if (result.hasAccept()) {
+                    next.addAccept(result.acceptMin, result.acceptMax);
+                }
+                if (result.hasNormal() && item.hasAccept()) {
+                    next.addAccept(
+                            MinMaxLen.distanceAdd(result.normalMin, item.acceptMin),
+                            MinMaxLen.distanceAdd(result.normalMax, item.acceptMax));
+                }
+                if (result.hasNormal() && item.hasNormal()) {
+                    next.addNormal(
+                            MinMaxLen.distanceAdd(result.normalMin, item.normalMin),
+                            MinMaxLen.distanceAdd(result.normalMax, item.normalMax));
+                }
+                result = next;
+            } while ((list = list.tail) != null);
+            return result;
+        }
+        case NodeType.ALT: {
+            AcceptLengthInfo result = new AcceptLengthInfo();
+            ListNode alt = (ListNode)node;
+            do {
+                AcceptLengthInfo branch = getAcceptLengthInfo(alt.value);
+                if (branch == null) return null;
+                if (branch.hasNormal()) result.addNormal(branch.normalMin, branch.normalMax);
+                if (branch.hasAccept()) result.addAccept(branch.acceptMin, branch.acceptMax);
+            } while ((alt = alt.tail) != null);
+            return result;
+        }
+        case NodeType.STR: {
+            int length = ((StringNode)node).length(enc);
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            info.addNormal(length, length);
+            return info;
+        }
+        case NodeType.CTYPE:
+        case NodeType.CCLASS:
+        case NodeType.CANY: {
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            info.addNormal(1, 1);
+            return info;
+        }
+        case NodeType.QTFR: {
+            QuantifierNode quantifier = (QuantifierNode)node;
+            if (isRepeatInfinite(quantifier.upper)) return null;
+            AcceptLengthInfo target = getAcceptLengthInfo(quantifier.target);
+            if (target == null) return null;
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            if (target.hasNormal()) {
+                info.addNormal(
+                        MinMaxLen.distanceMultiply(target.normalMin, quantifier.lower),
+                        MinMaxLen.distanceMultiply(target.normalMax, quantifier.upper));
+            } else if (quantifier.lower == 0) {
+                info.addNormal(0, 0);
+            }
+            if (target.hasAccept() && quantifier.upper > 0) {
+                int repeatsBeforeAccept = target.hasNormal() ? quantifier.upper - 1 : 0;
+                info.addAccept(target.acceptMin,
+                        MinMaxLen.distanceAdd(
+                                MinMaxLen.distanceMultiply(target.normalMax, repeatsBeforeAccept),
+                                target.acceptMax));
+            }
+            return info;
+        }
+        case NodeType.ENCLOSE: {
+            EncloseNode enclose = (EncloseNode)node;
+            if (enclose.type == EncloseType.ABSENT) return null;
+            return getAcceptLengthInfo(enclose.target);
+        }
+        case NodeType.ANCHOR: {
+            // Nested assertions are their own ACCEPT boundary.
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            info.addNormal(0, 0);
+            return info;
+        }
+        case NodeType.CALL:
+            // Subexpression calls are their own ACCEPT boundary; their
+            // effective consumed width needs call-specific analysis.
+            return null;
+        default:
+            return null;
         }
     }
 
