@@ -101,6 +101,21 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void passesPinnedGeneralCategoriesToTheJoniParserWithoutTextExpansion() {
+        JoniRegexPattern category = new JoniRegexPattern("\\p{gc=Uppercase_Letter}", FLAGS);
+
+        assertEquals("\\p{gc=Uppercase_Letter}", category.patternDescription());
+        assertTrue(category.matcher("A", java.util.List.of()).find());
+        assertFalse(category.matcher("a", java.util.List.of()).find());
+        JoniRegexPattern folded = new JoniRegexPattern("\\p{gc=Uppercase_Letter}",
+                RegexFlags.fromModifiers("i", "\\p{gc=Uppercase_Letter}"));
+        JoniRegexPattern foldedNegated = new JoniRegexPattern("\\P{gc=Uppercase_Letter}",
+                RegexFlags.fromModifiers("i", "\\P{gc=Uppercase_Letter}"));
+        assertTrue(folded.matcher("a", java.util.List.of()).find());
+        assertFalse(foldedNegated.matcher("A", java.util.List.of()).find());
+    }
+
+    @Test
     void flattensTranslatedPropertiesInsideOrdinaryCharacterClasses() {
         JoniRegexPattern pattern = new JoniRegexPattern(
                 "[\\p{IsDigit}\\p{IsLower}\\p{IsUpper}]", FLAGS);
