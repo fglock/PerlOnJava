@@ -56,6 +56,7 @@ import org.joni.constants.internal.EncloseType;
 import org.joni.constants.internal.NodeType;
 import org.joni.constants.internal.TokenType;
 import org.joni.exception.ErrorMessages;
+import org.joni.exception.SyntaxException;
 
 class Parser extends Lexer {
     protected int returnCode; // return code used by parser methods (they itself return parsed nodes)
@@ -527,6 +528,53 @@ class Parser extends Lexer {
                 }
                 break;
 
+            case 'P':  /* Perl's Python-style (?P<name>...) and (?P=name) */
+                if (!syntax.op2OptionPerl() || !left()) {
+                    newSyntaxException(UNDEFINED_GROUP_OPTION);
+                }
+                fetch();
+                if (c == '<') {
+                    if (!left()) {
+                        newSyntaxException(PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED);
+                    }
+                    int first = enc.mbcToCode(bytes, p, stop);
+                    if (enc.isDigit(first) || !enc.isWord(first)) {
+                        newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
+                    }
+                    if (!hasCodePointAhead('>')) {
+                        newSyntaxException(PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED);
+                    }
+                    listCapture = false;
+                    node = parseEncloseNamedGroup2(listCapture);
+                    break;
+                }
+                if (c == '=') {
+                    if (!left()) {
+                        newSyntaxException(PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
+                    }
+                    int first = enc.mbcToCode(bytes, p, stop);
+                    if (enc.isDigit(first) || !enc.isWord(first)) {
+                        newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
+                    }
+                    if (!hasCodePointAhead(')')) {
+                        newSyntaxException(PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
+                    }
+                    c = '(';
+                    try {
+                        fetchNamedBackrefToken();
+                    } catch (SyntaxException e) {
+                        if (e.getMessage().startsWith("undefined name <")) {
+                            newValueException(PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP);
+                        }
+                        throw e;
+                    }
+                    returnCode = 0;
+                    return parseBackref();
+                }
+                newValueException(PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED,
+                        new String(Character.toChars(c)));
+                break;
+
             case '(':   /* conditional expression: (?(cond)yes), (?(cond)yes|no) */
                 if (left() && syntax.op2QMarkLParenCondition()) {
                     int num = -1;
@@ -954,6 +1002,16 @@ class Parser extends Lexer {
         if (listCapture) env.captureHistory = bsOnAtSimple(env.captureHistory, num);
         env.numNamed++;
         return en;
+    }
+
+    private boolean hasCodePointAhead(int target) {
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == target) return true;
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return false;
     }
 
     private int findStrPosition(int[]s, int n, int from, int to, Ptr nextChar) {

@@ -155,7 +155,6 @@ public class RegexPreprocessor {
         // s = escapeInvalidQuantifierBraces(s);
 
         s = translateTopLevelPruneVerbs(s);
-        s = convertPythonStyleGroups(s);
         s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
         s = normalizeQuantifiers(s);
@@ -3050,20 +3049,6 @@ public class RegexPreprocessor {
         return hasFirstNumber || hasSecondNumber;
     }
 
-
-    private static String convertPythonStyleGroups(String pattern) {
-        // Convert (?P<name>...) to (?<name>...)
-        pattern = pattern.replaceAll("\\(\\?P<", "(?<");
-
-        // Convert (?P=name) to \k<name>
-        StringBuffer result = new StringBuffer();
-        Matcher m = Pattern.compile("\\(\\?P=([^)]+)\\)").matcher(pattern);
-        while (m.find()) {
-            m.appendReplacement(result, "\\\\k<" + m.group(1) + ">");
-        }
-        m.appendTail(result);
-        return result.toString();
-    }
 
     /**
      * Transform simple conditional patterns (?(N)yes|no) that can be converted to alternations.
