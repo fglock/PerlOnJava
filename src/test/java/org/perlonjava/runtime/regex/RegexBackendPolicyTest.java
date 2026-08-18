@@ -59,6 +59,18 @@ class RegexBackendPolicyTest {
     }
 
     @Test
+    void autoModeTemporarilyUsesJavaForBranchResetSubroutineCalls() {
+        System.setProperty(RegexBackendPolicy.PROPERTY, "auto");
+
+        assertFalse(RegexBackendPolicy.useJoni("(?|(?<digit>1)|(?<digit>2))(?&digit)"));
+        assertFalse(RegexBackendPolicy.useJoni("(?|(1)|(2))(?1)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<digit>1)(?&digit)"));
+        assertTrue(RegexBackendPolicy.useJoni(
+                "(?|(?<digit>1)|(?<digit>2))(?&digit)(?{=CALL:0})"));
+        assertTrue(RegexBackendPolicy.useJoni("(?|(1)|(2))(?1)(*:mark)"));
+    }
+
+    @Test
     void javaModeRetainsRequiredAdvancedJoniRouting() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "java");
 
@@ -72,6 +84,7 @@ class RegexBackendPolicyTest {
 
         assertTrue(RegexBackendPolicy.useJoni("ordinary"));
         assertTrue(RegexBackendPolicy.useJoni("(?<=x)y"));
+        assertTrue(RegexBackendPolicy.useJoni("(?|(?<digit>1)|(?<digit>2))(?&digit)"));
     }
 
     @Test

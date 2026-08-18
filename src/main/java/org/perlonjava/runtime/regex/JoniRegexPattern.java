@@ -293,6 +293,12 @@ final class JoniRegexPattern {
 
     static boolean requiresJoniBackend(String pattern) {
         if (pattern == null) return false;
+        boolean hasSubroutineCall = pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*")
+                || pattern.contains("(?&")
+                || pattern.contains("(?P>");
+        // Temporary parity fallback: Java handles the branch-reset named-call
+        // corpus until Joni's native named-call admission patch is complete.
+        boolean branchResetCallUsesJava = pattern.contains("(?|") && hasSubroutineCall;
         return pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(*ACCEPT)")
@@ -307,9 +313,7 @@ final class JoniRegexPattern {
                 || pattern.contains("(?(R")
                 || pattern.contains("(?(<")
                 || pattern.contains("(?('")
-                || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )
-                || pattern.contains("(?&")
-                || pattern.contains("(?P>");
+                || (hasSubroutineCall && !branchResetCallUsesJava);
     }
 
     private static boolean hasControlVerbState(String pattern) {
