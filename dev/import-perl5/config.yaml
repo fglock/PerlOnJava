@@ -122,6 +122,10 @@ imports:
     target: dev/unicode/17.0.0/extracted/DNumValues.txt
     type: file
 
+  - source: perl5/lib/unicore/Unikemet.txt
+    target: dev/unicode/17.0.0/Unikemet.txt
+    type: file
+
   # perl5_t/lib otherwise remains empty to avoid module loading conflicts.
   # TestProp.pl is generated from the pinned Unicode inputs because upstream
   # does not store this build artifact in the perl5 source tree.
