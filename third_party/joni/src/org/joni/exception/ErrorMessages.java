@@ -98,6 +98,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
             "Missing right brace on \\N{}";
     String PERL_EMPTY_NAMED_CHARACTER_ESCAPE = "Empty \\N{}";
+    String PERL_WIDE_SCALAR_OVERFLOW =
+            "Use of code point is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF";
 
     /* values error (syntax error) */
     String TOO_BIG_NUMBER = "too big number";

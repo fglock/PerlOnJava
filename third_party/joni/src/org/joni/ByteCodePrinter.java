@@ -374,6 +374,13 @@ class ByteCodePrinter {
                 sb.append(':').append(addr).append(':').append(mem);
                 break;
 
+            case OPCode.WIDE_SCALAR:
+                long wide = (Integer.toUnsignedLong(code[bp]) << 32)
+                        | Integer.toUnsignedLong(code[bp + 1]);
+                bp += 2;
+                sb.append(":0x").append(Long.toHexString(wide));
+                break;
+
             default:
                 throw new InternalException("undefined code: " + code[--bp]);
             }

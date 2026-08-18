@@ -33,8 +33,11 @@ import org.joni.exception.ValueException;
 
 public final class CClassNode extends Node {
     private static final int FLAG_NCCLASS_NOT = 1 << 0;
+    private static final long FIRST_WIDE_SCALAR = 0x110000L;
 
     private int flags;
+    private long[] wideRanges;
+    private int wideRangeCount;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
@@ -47,6 +50,8 @@ public final class CClassNode extends Node {
         bs.clear();
         flags = 0;
         mbuf = null;
+        wideRanges = null;
+        wideRangeCount = 0;
     }
 
     @Override
@@ -70,7 +75,7 @@ public final class CClassNode extends Node {
     }
 
     public boolean isEmpty() {
-        return mbuf == null && bs.isEmpty();
+        return mbuf == null && bs.isEmpty() && wideRangeCount == 0;
     }
 
     void addCodeRangeToBuf(ScanEnvironment env, int from, int to) {
@@ -100,12 +105,13 @@ public final class CClassNode extends Node {
             if (!env.enc.isSingleByte()) {
                 mbuf = CodeRangeBuffer.notCodeRangeBuff(env, mbuf);
             }
+            setWideRanges(complementWideRanges(wideRangesCopy()));
             clearNot();
         }
     }
 
     public int isOneChar() {
-        if (isNot()) return -1;
+        if (isNot() || wideRangeCount != 0) return -1;
         int c = -1;
         if (mbuf != null) {
             int[]range = mbuf.getCodeRange();
@@ -140,6 +146,8 @@ public final class CClassNode extends Node {
         boolean not2 = other.isNot();
         BitSet bsr2 = other.bs;
         CodeRangeBuffer buf2 = other.mbuf;
+        long[] wide1 = actualWideRanges(wideRangesCopy(), not1);
+        long[] wide2 = actualWideRanges(other.wideRangesCopy(), not2);
 
         if (not1) {
             BitSet bs1 = new BitSet();
@@ -178,6 +186,8 @@ public final class CClassNode extends Node {
             }
             mbuf = pbuf;
         }
+        long[] actual = intersectWideRanges(wide1, wide2);
+        setWideRanges(not1 ? complementWideRanges(actual) : actual);
 
     }
 
@@ -189,6 +199,8 @@ public final class CClassNode extends Node {
         boolean not2 = other.isNot();
         BitSet bsr2 = other.bs;
         CodeRangeBuffer buf2 = other.mbuf;
+        long[] wide1 = actualWideRanges(wideRangesCopy(), not1);
+        long[] wide2 = actualWideRanges(other.wideRangesCopy(), not2);
 
         if (not1) {
             BitSet bs1 = new BitSet();
@@ -225,6 +237,140 @@ public final class CClassNode extends Node {
             }
             mbuf = pbuf;
         }
+        long[] actual = unionWideRanges(wide1, wide2);
+        setWideRanges(not1 ? complementWideRanges(actual) : actual);
+    }
+
+    public void addWideScalarRange(long from, long to) {
+        if (from < FIRST_WIDE_SCALAR || from > to) {
+            throw new ValueException(ErrorMessages.ERR_INVALID_CODE_POINT_VALUE);
+        }
+        long[] added = {from, to};
+        setWideRanges(unionWideRanges(wideRangesCopy(), added));
+    }
+
+    public boolean hasWideScalarRanges() {
+        return wideRangeCount != 0;
+    }
+
+    public boolean isWideScalarInCC(long value) {
+        boolean found = containsWideScalar(value);
+        return isNot() ? !found : found;
+    }
+
+    public boolean isScalarInCC(Encoding enc, long value) {
+        if (value <= 0x10ffffL) return isCodeInCC(enc, (int)value);
+        return isWideScalarInCC(value);
+    }
+
+    private boolean containsWideScalar(long value) {
+        int low = 0;
+        int high = wideRangeCount - 1;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            long from = wideRanges[mid * 2];
+            long to = wideRanges[mid * 2 + 1];
+            if (value < from) high = mid - 1;
+            else if (value > to) low = mid + 1;
+            else return true;
+        }
+        return false;
+    }
+
+    private long[] wideRangesCopy() {
+        if (wideRangeCount == 0) return new long[0];
+        return java.util.Arrays.copyOf(wideRanges, wideRangeCount * 2);
+    }
+
+    private void setWideRanges(long[] ranges) {
+        wideRanges = ranges.length == 0 ? null : ranges;
+        wideRangeCount = ranges.length / 2;
+        // A class containing host-defined scalars is opaque to Analyser's
+        // Unicode-only class algebra.  CANY preserves its one-character width
+        // and prevents unsafe disjointness/possessification decisions;
+        // Compiler recognizes the concrete CClassNode and emits the real set.
+        type = wideRangeCount == 0 ? CCLASS : CANY;
+    }
+
+    private static long[] actualWideRanges(long[] ranges, boolean negated) {
+        return negated ? complementWideRanges(ranges) : ranges;
+    }
+
+    private static long[] unionWideRanges(long[] left, long[] right) {
+        if (left.length == 0) return right.clone();
+        if (right.length == 0) return left.clone();
+        long[][] pairs = new long[(left.length + right.length) / 2][2];
+        int count = 0;
+        for (int i = 0; i < left.length; i += 2) {
+            pairs[count][0] = left[i];
+            pairs[count++][1] = left[i + 1];
+        }
+        for (int i = 0; i < right.length; i += 2) {
+            pairs[count][0] = right[i];
+            pairs[count++][1] = right[i + 1];
+        }
+        java.util.Arrays.sort(pairs, java.util.Comparator.comparingLong(pair -> pair[0]));
+        long[] merged = new long[pairs.length * 2];
+        int used = 0;
+        long from = pairs[0][0];
+        long to = pairs[0][1];
+        for (int i = 1; i < pairs.length; i++) {
+            long nextFrom = pairs[i][0];
+            long nextTo = pairs[i][1];
+            if (nextFrom <= to || to != Long.MAX_VALUE && nextFrom == to + 1) {
+                to = Math.max(to, nextTo);
+            } else {
+                merged[used++] = from;
+                merged[used++] = to;
+                from = nextFrom;
+                to = nextTo;
+            }
+        }
+        merged[used++] = from;
+        merged[used++] = to;
+        return java.util.Arrays.copyOf(merged, used);
+    }
+
+    private static long[] intersectWideRanges(long[] left, long[] right) {
+        long[] result = new long[Math.min(left.length, right.length) * 2];
+        int li = 0;
+        int ri = 0;
+        int used = 0;
+        while (li < left.length && ri < right.length) {
+            long from = Math.max(left[li], right[ri]);
+            long to = Math.min(left[li + 1], right[ri + 1]);
+            if (from <= to) {
+                result[used++] = from;
+                result[used++] = to;
+            }
+            if (left[li + 1] < right[ri + 1]) li += 2;
+            else ri += 2;
+        }
+        return java.util.Arrays.copyOf(result, used);
+    }
+
+    private static long[] complementWideRanges(long[] ranges) {
+        long[] result = new long[(ranges.length / 2 + 1) * 2];
+        int used = 0;
+        long next = FIRST_WIDE_SCALAR;
+        for (int i = 0; i < ranges.length; i += 2) {
+            long from = Math.max(FIRST_WIDE_SCALAR, ranges[i]);
+            long to = ranges[i + 1];
+            if (next < from) {
+                result[used++] = next;
+                result[used++] = from - 1;
+            }
+            if (to == Long.MAX_VALUE) {
+                next = Long.MAX_VALUE;
+                return java.util.Arrays.copyOf(result, used);
+            }
+            next = Math.max(next, to + 1);
+        }
+        if (next <= Long.MAX_VALUE) {
+            result[used++] = next;
+            result[used++] = Long.MAX_VALUE;
+        }
+        return java.util.Arrays.copyOf(result, used);
     }
 
     // add_ctype_to_cc_by_range // Encoding out!
@@ -395,6 +541,7 @@ public final class CClassNode extends Node {
     public enum CCVALTYPE {
         SB,
         CODE_POINT,
+        WIDE_SCALAR,
         CLASS
     }
 
@@ -406,8 +553,8 @@ public final class CClassNode extends Node {
     }
 
     public static final class CCStateArg {
-        public int from;
-        public int to;
+        public long from;
+        public long to;
         public boolean fromIsRaw;
         public boolean toIsRaw;
         public CCVALTYPE inType;
@@ -421,13 +568,15 @@ public final class CClassNode extends Node {
 
         if (arg.state == CCSTATE.VALUE && arg.type != CCVALTYPE.CLASS) {
             if (arg.type == CCVALTYPE.SB) {
-                bs.set(env, arg.from);
-                if (ascCc != null) ascCc.bs.set(arg.from);
-                if (foldCc != null) foldCc.bs.set(arg.from);
+                bs.set(env, (int)arg.from);
+                if (ascCc != null) ascCc.bs.set((int)arg.from);
+                if (foldCc != null) foldCc.bs.set((int)arg.from);
             } else if (arg.type == CCVALTYPE.CODE_POINT) {
-                addCodeRange(env, arg.from, arg.from);
-                if (ascCc != null) ascCc.addCodeRange(env, arg.from, arg.from, false);
-                if (foldCc != null) foldCc.addCodeRange(env, arg.from, arg.from, false);
+                addCodeRange(env, (int)arg.from, (int)arg.from);
+                if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
+                if (foldCc != null) foldCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
+            } else if (arg.type == CCVALTYPE.WIDE_SCALAR) {
+                addWideScalarRange(arg.from, arg.from);
             }
         }
         arg.state = CCSTATE.VALUE;
@@ -439,13 +588,15 @@ public final class CClassNode extends Node {
         switch(arg.state) {
         case VALUE:
             if (arg.type == CCVALTYPE.SB) {
-                bs.set(env, arg.from);
-                if (ascCc != null) ascCc.bs.set(arg.from);
-                if (foldCc != null) foldCc.bs.set(arg.from);
+                bs.set(env, (int)arg.from);
+                if (ascCc != null) ascCc.bs.set((int)arg.from);
+                if (foldCc != null) foldCc.bs.set((int)arg.from);
             } else if (arg.type == CCVALTYPE.CODE_POINT) {
-                addCodeRange(env, arg.from, arg.from);
-                if (ascCc != null) ascCc.addCodeRange(env, arg.from, arg.from, false);
-                if (foldCc != null) foldCc.addCodeRange(env, arg.from, arg.from, false);
+                addCodeRange(env, (int)arg.from, (int)arg.from);
+                if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
+                if (foldCc != null) foldCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
+            } else if (arg.type == CCVALTYPE.WIDE_SCALAR) {
+                addWideScalarRange(arg.from, arg.from);
             }
             break;
 
@@ -463,13 +614,22 @@ public final class CClassNode extends Node {
                             throw new ValueException(ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS);
                         }
                     }
-                    bs.setRange(env, arg.from, arg.to);
-                    if (ascCc != null) ascCc.bs.setRange(null, arg.from, arg.to);
-                    if (foldCc != null) foldCc.bs.setRange(null, arg.from, arg.to);
+                    bs.setRange(env, (int)arg.from, (int)arg.to);
+                    if (ascCc != null) ascCc.bs.setRange(null, (int)arg.from, (int)arg.to);
+                    if (foldCc != null) foldCc.bs.setRange(null, (int)arg.from, (int)arg.to);
+                } else if (arg.inType == CCVALTYPE.WIDE_SCALAR) {
+                    if (arg.from > arg.to) {
+                        if (env.syntax.allowEmptyRangeInCC()) {
+                            arg.state = CCSTATE.COMPLETE;
+                            break;
+                        }
+                        throw new ValueException(ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS);
+                    }
+                    addWideScalarRange(arg.from, arg.to);
                 } else {
-                    addCodeRange(env, arg.from, arg.to);
-                    if (ascCc != null) ascCc.addCodeRange(env, arg.from, arg.to, false);
-                    if (foldCc != null) foldCc.addCodeRange(env, arg.from, arg.to, false);
+                    addCodeRange(env, (int)arg.from, (int)arg.to);
+                    if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.to, false);
+                    if (foldCc != null) foldCc.addCodeRange(env, (int)arg.from, (int)arg.to, false);
                 }
             } else {
                 if (arg.from > arg.to) {
@@ -481,15 +641,19 @@ public final class CClassNode extends Node {
                         throw new ValueException(ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS);
                     }
                 }
-                bs.setRange(env, arg.from, arg.to < 0xff ? arg.to : 0xff);
-                addCodeRange(env, arg.from, arg.to);
-                if (ascCc != null) {
-                    ascCc.bs.setRange(null, arg.from, arg.to < 0xff ? arg.to : 0xff);
-                    ascCc.addCodeRange(env, arg.from, arg.to, false);
+                long normalTo = Math.min(arg.to, 0x10ffffL);
+                if (arg.from <= normalTo) {
+                    int normalFrom = (int)arg.from;
+                    int normalEnd = (int)normalTo;
+                    if (normalFrom < BitSet.SINGLE_BYTE_SIZE) {
+                        bs.setRange(env, normalFrom, Math.min(normalEnd, 0xff));
+                    }
+                    addCodeRange(env, normalFrom, normalEnd);
+                    if (ascCc != null) ascCc.addCodeRange(env, normalFrom, normalEnd, false);
+                    if (foldCc != null) foldCc.addCodeRange(env, normalFrom, normalEnd, false);
                 }
-                if (foldCc != null) {
-                    foldCc.bs.setRange(null, arg.from, arg.to < 0xff ? arg.to : 0xff);
-                    foldCc.addCodeRange(env, arg.from, arg.to, false);
+                if (arg.to >= FIRST_WIDE_SCALAR) {
+                    addWideScalarRange(Math.max(arg.from, FIRST_WIDE_SCALAR), arg.to);
                 }
             }
             // ccs_range_end:

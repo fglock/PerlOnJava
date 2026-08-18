@@ -238,6 +238,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CCLASS_NOT:                 opCClassNot();             break;
                 case OPCode.CCLASS_MB_NOT:              opCClassMBNot();           break;
                 case OPCode.CCLASS_MIX_NOT:             opCClassMIXNot();          break;
+                case OPCode.WIDE_SCALAR:                opWideScalar();            break;
+                case OPCode.WIDE_SCALAR_CLASS:          opWideScalarClass();       break;
 
                 case OPCode.ANYCHAR:                    opAnyChar();               break;
                 case OPCode.ANYCHAR_ML:                 opAnyCharML();             break;
@@ -405,6 +407,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CCLASS_NOT:                 opCClassNotSb();           break;
                 case OPCode.CCLASS_MB_NOT:              opCClassMBNotSb();         break;
                 case OPCode.CCLASS_MIX_NOT:             opCClassMIXNotSb();        break;
+                case OPCode.WIDE_SCALAR:                opWideScalar();            break;
+                case OPCode.WIDE_SCALAR_CLASS:          opWideScalarClass();       break;
 
                 case OPCode.ANYCHAR:                    opAnyCharSb();               break;
                 case OPCode.ANYCHAR_ML:                 opAnyCharMLSb();             break;
@@ -1048,6 +1052,59 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int tlen = code[ip++];
         ip += tlen;
         sprev = sbegin; // break;
+    }
+
+    private WideScalarCodec.Decoded decodeWideScalar() {
+        WideScalarCodec codec = regex.wideScalarCodec;
+        if (codec == null || s >= range) return null;
+        WideScalarCodec.Decoded decoded = codec.decode(bytes, s, end, enc);
+        if (decoded == null || decoded.end() <= s || decoded.end() > range) return null;
+        return decoded;
+    }
+
+    private void opWideScalar() {
+        long expected = (Integer.toUnsignedLong(code[ip++]) << 32)
+                | Integer.toUnsignedLong(code[ip++]);
+        WideScalarCodec.Decoded decoded = decodeWideScalar();
+        if (decoded == null || decoded.value() != expected) {
+            opFail();
+            return;
+        }
+        s = decoded.end();
+        sprev = sbegin;
+    }
+
+    private void opWideScalarClass() {
+        int classIndex = code[ip++];
+        if (s >= range) {
+            opFail();
+            return;
+        }
+
+        org.joni.ast.CClassNode scalarClass = regex.wideScalarClasses[classIndex];
+        WideScalarCodec.Decoded decoded = decodeWideScalar();
+        if (decoded != null) {
+            if (!scalarClass.isScalarInCC(enc, decoded.value())) {
+                opFail();
+                return;
+            }
+            s = decoded.end();
+            sprev = sbegin;
+            return;
+        }
+
+        int length = enc.length(bytes, s, end);
+        if (length <= 0 || s + length > range) {
+            opFail();
+            return;
+        }
+        int value = enc.mbcToCode(bytes, s, s + length);
+        if (!scalarClass.isCodeInCC(enc, value)) {
+            opFail();
+            return;
+        }
+        s += length;
+        sprev = sbegin;
     }
 
     private void opAnyChar() {

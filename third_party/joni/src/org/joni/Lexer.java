@@ -727,10 +727,9 @@ class Lexer extends ScannerSupport {
 
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
             if (syntax.op2OptionPerl()) {
-                int num = scanPerlBracedCodePoint(16, 'x');
-                token.type = TokenType.CODE_POINT;
+                long num = scanPerlBracedCodePoint(16, 'x');
                 token.base = 16;
-                token.setCode(num);
+                setPerlBracedCodePointToken(num);
             } else {
                 scanOriginalBracedHexCodePoint(last);
             }
@@ -758,10 +757,9 @@ class Lexer extends ScannerSupport {
             return;
         }
 
-        int value = scanPerlBracedCodePoint(8, 'o');
-        token.type = TokenType.CODE_POINT;
+        long value = scanPerlBracedCodePoint(8, 'o');
         token.base = 8;
-        token.setCode(value);
+        setPerlBracedCodePointToken(value);
     }
 
     private boolean fetchTokenFor_namedCharacter() {
@@ -808,7 +806,8 @@ class Lexer extends ScannerSupport {
         }
     }
 
-    private int scanPerlBracedCodePoint(int radix, char escape) {
+    private long scanPerlBracedCodePoint(int radix, char escape) {
+        int sourceStart = token.backP;
         inc();
         int close = findPerlBracedEscapeClose(escape);
         int cursor = p;
@@ -827,11 +826,13 @@ class Lexer extends ScannerSupport {
             if (digit >= 0) {
                 sawDigit = true;
                 if (value != 0 || digit != 0) significantDigitCount++;
-                if (radix == 16 && significantDigitCount > 8) {
+                if (syntax.wideScalarCodec == null
+                        && radix == 16 && significantDigitCount > 8) {
                     newValueException(ERR_TOO_LONG_WIDE_CHAR_VALUE);
                 }
                 if (value > (Long.MAX_VALUE - digit) / radix) {
-                    newValueException(ERR_TOO_BIG_WIDE_CHAR_VALUE);
+                    newValueException(syntax.wideScalarCodec == null
+                            ? ERR_TOO_BIG_WIDE_CHAR_VALUE : PERL_WIDE_SCALAR_OVERFLOW);
                 }
                 value = value * radix + digit;
                 cursor = nextChar(cursor, close);
@@ -859,11 +860,28 @@ class Lexer extends ScannerSupport {
                     + "' terminates \\" + escape + " early. Resolved as \"\\"
                     + escape + "{" + formatPerlResolvedEscape(value, radix) + "}\"");
         }
-        if (value > 0x10ffff) newValueException(ERR_TOO_BIG_WIDE_CHAR_VALUE);
+        if (value > 0x10ffff && syntax.wideScalarCodec == null) {
+            newValueException(ERR_TOO_BIG_WIDE_CHAR_VALUE);
+        }
 
         p = close;
         inc();
-        return (int)value;
+        if (syntax.wideScalarCodec != null) {
+            syntax.wideScalarCodec.parsedNumericEscape(
+                    new WideScalarCodec.NumericEscape(
+                            escape, value, invalid, sourceStart, p));
+        }
+        return value;
+    }
+
+    private void setPerlBracedCodePointToken(long value) {
+        if (value <= 0x10ffff) {
+            token.type = TokenType.CODE_POINT;
+            token.setCode((int)value);
+        } else {
+            token.type = TokenType.WIDE_CODE_POINT;
+            token.setWideCode(value);
+        }
     }
 
     private int findPerlBracedEscapeClose(char escape) {
@@ -1163,9 +1181,8 @@ class Lexer extends ScannerSupport {
         int last = p;
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
             if (syntax.op2OptionPerl()) {
-                int num = scanPerlBracedCodePoint(16, 'x');
-                token.type = TokenType.CODE_POINT;
-                token.setCode(num);
+                long num = scanPerlBracedCodePoint(16, 'x');
+                setPerlBracedCodePointToken(num);
             } else {
                 scanOriginalBracedHexCodePoint(last);
             }

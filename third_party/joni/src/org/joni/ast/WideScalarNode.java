@@ -17,36 +17,43 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.joni.constants.internal;
+package org.joni.ast;
 
-public enum TokenType {
-      EOT,            /* end of token */
-      RAW_BYTE,
-      CHAR,
-      STRING,
-      CODE_POINT,
-      WIDE_CODE_POINT,
-      ANYCHAR,
-      CHAR_TYPE,
-      BACKREF,
-      CALL,
-      ANCHOR,
-      OP_REPEAT,
-      INTERVAL,
-      ANYCHAR_ANYTIME,  /* SQL '%' == .* */
-      ALT,
-      SUBEXP_OPEN,
-      SUBEXP_CLOSE,
-      CC_OPEN,
-      QUOTE_OPEN,
-      CHAR_PROPERTY,    /* \p{...}, \P{...} */
-      LINEBREAK,
-      EXTENDED_GRAPHEME_CLUSTER,
-      KEEP,
-      /* in cc */
-      CC_CLOSE,
-      CC_RANGE,
-      POSIX_BRACKET_OPEN,
-      CC_AND,             /* && */
-      CC_CC_OPEN          /* [ */
+import org.jcodings.Encoding;
+
+/** One Perl scalar atom whose numeric value is outside Unicode. */
+public final class WideScalarNode extends StringNode {
+    public final long value;
+
+    public WideScalarNode(long value, byte[] encoded) {
+        super(encoded, 0, encoded.length);
+        this.value = value;
+        // Treat this host-defined atom as opaque to Analyser.  CANY has the
+        // same one-character width but disables StringNode byte-prefix and
+        // automatic-possessification reasoning that cannot understand the
+        // codec representation.  Compiler dispatches on the concrete node.
+        type = CANY;
+        setRaw();
+        setDontGetOptInfo();
+    }
+
+    @Override
+    public int length(Encoding enc) {
+        return 1;
+    }
+
+    @Override
+    public boolean canBeSplit(Encoding enc) {
+        return false;
+    }
+
+    @Override
+    public StringNode splitLastChar(Encoding enc) {
+        return null;
+    }
+
+    @Override
+    public String getName() {
+        return "Wide Scalar";
+    }
 }

@@ -51,6 +51,7 @@ import org.joni.ast.ListNode;
 import org.joni.ast.Node;
 import org.joni.ast.QuantifierNode;
 import org.joni.ast.StringNode;
+import org.joni.ast.WideScalarNode;
 import org.joni.constants.internal.AnchorType;
 import org.joni.constants.internal.EncloseType;
 import org.joni.constants.internal.NodeType;
@@ -251,6 +252,13 @@ class Parser extends Lexer {
                 arg.to = token.getCode();
                 arg.toIsRaw = true;
                 parseCharClassValEntry(cc, ascCc, foldCc, arg); // val_entry:, val_entry2
+                break;
+
+            case WIDE_CODE_POINT:
+                arg.to = token.getWideCode();
+                arg.toIsRaw = true;
+                arg.inType = CCVALTYPE.WIDE_SCALAR;
+                parseCharClassValEntry2(cc, ascCc, foldCc, arg);
                 break;
 
             case POSIX_BRACKET_OPEN:
@@ -456,7 +464,12 @@ class Parser extends Lexer {
 
     private void parseCharClassValEntry(CClassNode cc, CClassNode ascCc,
                                         CClassNode foldCc, CCStateArg arg) {
-        int len = enc.codeToMbcLength(arg.to);
+        if (arg.to > 0x10ffffL) {
+            arg.inType = CCVALTYPE.WIDE_SCALAR;
+            parseCharClassValEntry2(cc, ascCc, foldCc, arg);
+            return;
+        }
+        int len = enc.codeToMbcLength((int)arg.to);
         arg.inType = len == 1 ? CCVALTYPE.SB : CCVALTYPE.CODE_POINT;
         parseCharClassValEntry2(cc, ascCc, foldCc, arg); // val_entry2:
     }
@@ -1219,6 +1232,13 @@ class Parser extends Lexer {
 
         case CODE_POINT:
             return parseStringLoop(StringNode.fromCodePoint(token.getCode(), enc), group);
+
+        case WIDE_CODE_POINT: {
+            WideScalarNode wide = new WideScalarNode(token.getWideCode(),
+                    syntax.wideScalarCodec.encode(token.getWideCode(), enc));
+            fetchToken();
+            return parseExpRepeat(wide, group);
+        }
 
         case QUOTE_OPEN:
             node = parseQuoteOpen();

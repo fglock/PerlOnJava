@@ -14,6 +14,7 @@ import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Region;
 import org.joni.Syntax;
+import org.joni.WideScalarCodec;
 
 import static org.joni.constants.SyntaxProperties.ALLOW_MULTIPLEX_DEFINITION_NAME_CALL;
 import static org.joni.constants.SyntaxProperties.OP2_ESC_H_HORIZONTAL_WHITESPACE;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.WeakHashMap;
 
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.runtimetypes.*;
 
 /**
@@ -39,6 +41,45 @@ import org.perlonjava.runtime.runtimetypes.*;
 final class JoniRegexPattern {
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
+    private static final WideScalarCodec PERL_SCALAR_CODEC = new WideScalarCodec() {
+        @Override
+        public byte[] encode(long value, Encoding encoding) {
+            return PerlUtfString.encodeInternalCodePoint(value)
+                    .getBytes(encoding == ISO8859_1Encoding.INSTANCE
+                            ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public Decoded decode(byte[] bytes, int p, int end, Encoding encoding) {
+            int cursor;
+            if (encoding == UTF8Encoding.INSTANCE && p + 6 <= end
+                    && (bytes[p] & 0xff) == 0xef
+                    && (bytes[p + 1] & 0xff) == 0xbf
+                    && (bytes[p + 2] & 0xff) == 0xbd
+                    && bytes[p + 3] == '<') {
+                cursor = p + 4;
+            } else if (encoding == ISO8859_1Encoding.INSTANCE && p + 4 <= end
+                    && bytes[p] == '?' && bytes[p + 1] == '<') {
+                cursor = p + 2;
+            } else {
+                return null;
+            }
+            long value = 0;
+            int digits = 0;
+            while (cursor < end && bytes[cursor] != '>') {
+                int digit = Character.digit((char)(bytes[cursor] & 0xff), 16);
+                if (digit < 0 || digits == 16
+                        || value > (Long.MAX_VALUE - digit) / 16) {
+                    return null;
+                }
+                value = value * 16 + digit;
+                digits++;
+                cursor++;
+            }
+            if (digits == 0 || cursor >= end || bytes[cursor] != '>') return null;
+            return new Decoded(value, cursor + 1);
+        }
+    };
 
     // Ruby syntax defaults \w to ASCII even for a Unicode encoding. Perl's
     // default and /u modes use Unicode character classes; /a adds ASCII_RANGE
@@ -54,7 +95,8 @@ final class JoniRegexPattern {
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable,
             JoniRegexPattern::resolveNamedCharacter,
-            JoniRegexPattern::resolveCharacterProperty);
+            JoniRegexPattern::resolveCharacterProperty,
+            PERL_SCALAR_CODEC);
 
     private static int resolveNamedCharacter(byte[] bytes, int p, int end,
                                              Encoding encoding) {
@@ -507,14 +549,12 @@ final class JoniRegexPattern {
                                            int trustedCalloutCount,
                                            boolean resolveNamedCharacters) {
         pattern = translateDefineBlocks(pattern);
-        pattern = translateBeyondUnicodeClassMembers(pattern);
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
         boolean atClassStart = false;
         boolean classAllowsLeadingClose = false;
         int posixClassDepth = 0;
-        boolean wrapsInternalScalarMarker = false;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (escaped) {
@@ -573,14 +613,6 @@ final class JoniRegexPattern {
                         continue;
                     }
                 }
-                if (!inClass && i + 1 < pattern.length() && pattern.charAt(i + 1) == '^') {
-                    // Surrogate and beyond-Unicode Perl scalars use one
-                    // Java-safe marker string internally. A negated class
-                    // accepts those scalars, but must consume the complete
-                    // marker as one Perl character.
-                    out.append("(?:\\x{FFFD}<[0-9A-F]{1,16}>|");
-                    wrapsInternalScalarMarker = true;
-                }
                 inClass = true;
                 atClassStart = true;
                 classAllowsLeadingClose = true;
@@ -617,10 +649,6 @@ final class JoniRegexPattern {
                 inClass = false;
                 atClassStart = false;
                 classAllowsLeadingClose = false;
-                if (wrapsInternalScalarMarker) {
-                    out.append(')');
-                    wrapsInternalScalarMarker = false;
-                }
                 continue;
             }
             if (inClass) {
@@ -690,134 +718,6 @@ final class JoniRegexPattern {
             out.append(ch);
         }
         return out.toString();
-    }
-
-    /**
-     * Perl scalar strings can contain values above Unicode's maximum code point.
-     * They are represented internally as {@code U+FFFD<HEX>}, which Joni can
-     * match as ordinary text, but Joni rejects the original {@code \\x{...}}
-     * class member before matching begins. Lift standalone beyond-Unicode class
-     * members into alternatives that match the complete internal marker.
-     */
-    private static String translateBeyondUnicodeClassMembers(String pattern) {
-        StringBuilder translated = new StringBuilder(pattern.length());
-        boolean escaped = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                translated.append(ch);
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                translated.append(ch);
-                escaped = true;
-                continue;
-            }
-            if (ch != '[') {
-                translated.append(ch);
-                continue;
-            }
-
-            int close = findStandardClassClose(pattern, i + 1);
-            if (close < 0) {
-                translated.append(ch);
-                continue;
-            }
-            String replacement = translateBeyondUnicodeClassContent(
-                    pattern.substring(i + 1, close));
-            if (replacement == null) {
-                translated.append(pattern, i, close + 1);
-            } else {
-                translated.append(replacement);
-            }
-            i = close;
-        }
-        return translated.toString();
-    }
-
-    private static int findStandardClassClose(String pattern, int start) {
-        boolean escaped = false;
-        boolean leading = true;
-        int posixDepth = 0;
-        for (int i = start; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                leading = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                leading = false;
-                continue;
-            }
-            if (ch == '[' && i + 1 < pattern.length()
-                    && (pattern.charAt(i + 1) == ':'
-                            || pattern.charAt(i + 1) == '.'
-                            || pattern.charAt(i + 1) == '=')) {
-                posixDepth++;
-                leading = false;
-                continue;
-            }
-            if (ch == ']' && posixDepth > 0) {
-                posixDepth--;
-                continue;
-            }
-            if (ch == ']' && leading) {
-                leading = false;
-                continue;
-            }
-            if (ch == ']') return i;
-            if (ch != '^' || !leading) leading = false;
-        }
-        return -1;
-    }
-
-    private static String translateBeyondUnicodeClassContent(String content) {
-        if (content.startsWith("^")) return null;
-
-        StringBuilder retained = new StringBuilder(content.length());
-        List<String> markers = new ArrayList<>();
-        for (int i = 0; i < content.length();) {
-            if (content.startsWith("\\\\", i)) {
-                retained.append("\\\\");
-                i += 2;
-                continue;
-            }
-            if (content.startsWith("\\x{", i)) {
-                int close = content.indexOf('}', i + 3);
-                if (close > i + 3) {
-                    String hex = content.substring(i + 3, close);
-                    try {
-                        long value = Long.parseUnsignedLong(hex, 16);
-                        boolean rangeMember = (i > 0 && content.charAt(i - 1) == '-')
-                                || (close + 1 < content.length()
-                                        && content.charAt(close + 1) == '-');
-                        if (Long.compareUnsigned(value, 0x10FFFFL) > 0 && !rangeMember) {
-                            markers.add(Long.toUnsignedString(value, 16).toUpperCase(
-                                    java.util.Locale.ROOT));
-                            i = close + 1;
-                            continue;
-                        }
-                    } catch (NumberFormatException ignored) {
-                        // Let Joni produce the normal malformed-escape diagnostic.
-                    }
-                }
-            }
-            retained.append(content.charAt(i++));
-        }
-        if (markers.isEmpty()) return null;
-
-        StringBuilder replacement = new StringBuilder("(?:");
-        for (int i = 0; i < markers.size(); i++) {
-            if (i > 0) replacement.append('|');
-            replacement.append("\\x{FFFD}<").append(markers.get(i)).append('>');
-        }
-        if (!retained.isEmpty()) {
-            replacement.append("|[").append(retained).append(']');
-        }
-        return replacement.append(')').toString();
     }
 
     private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,
