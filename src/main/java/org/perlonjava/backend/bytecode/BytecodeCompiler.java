@@ -2112,10 +2112,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit HASH_GET / HASH_GET_FOR_LOCAL (see localHashLvalueCompileDepth)
                 int rd = allocateOutputRegister();
-                emit(opcodeForHashElementGet());
-                emitReg(rd);
-                emitReg(hashReg);
-                emitReg(keyReg);
+                emitHashElementGet(node, rd, hashReg, keyReg);
 
                 lastResultReg = rd;
             } else {
@@ -2129,22 +2126,32 @@ public class BytecodeCompiler implements Visitor {
                 int keyReg = lastResultReg;
 
                 int rd = allocateOutputRegister();
-                emit(opcodeForHashElementGet());
-                emitReg(rd);
-                emitReg(hashReg);
-                emitReg(keyReg);
+                emitHashElementGet(node, rd, hashReg, keyReg);
 
                 lastResultReg = rd;
             }
         } else {
             int keyReg = compileMultidimensionalHashKey(keyNode);
             int rd = allocateOutputRegister();
-            emit(opcodeForHashElementGet());
+            emitHashElementGet(node, rd, hashReg, keyReg);
+            lastResultReg = rd;
+        }
+    }
+
+    private void emitHashElementGet(BinaryOperatorNode node, int rd, int hashReg, int keyReg) {
+        String interpolationHashName = (String) node.getAnnotation("stringInterpolationHashName");
+        if (interpolationHashName != null && !shouldEmitHashFetchForLocal()) {
+            emit(Opcodes.HASH_GET_STRING_INTERPOLATION);
             emitReg(rd);
             emitReg(hashReg);
             emitReg(keyReg);
-            lastResultReg = rd;
+            emit(addToStringPool(interpolationHashName));
+            return;
         }
+        emit(opcodeForHashElementGet());
+        emitReg(rd);
+        emitReg(hashReg);
+        emitReg(keyReg);
     }
 
     /**

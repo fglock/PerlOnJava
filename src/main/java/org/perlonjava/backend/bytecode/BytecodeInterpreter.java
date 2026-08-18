@@ -1496,6 +1496,17 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashGet(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_GET_STRING_INTERPOLATION -> {
+                                int rd = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                int keyReg = bytecode[pc++];
+                                int hashNameIdx = bytecode[pc++];
+                                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                                registers[rd] = hash.getForStringInterpolation(
+                                        key, code.stringPool[hashNameIdx]);
+                            }
+
                             case Opcodes.HASH_GET_FOR_LOCAL -> {
                                 // Like HASH_GET but always returns a RuntimeHashProxyEntry.
                                 // Used by local $hash{key} so the proxy can re-resolve

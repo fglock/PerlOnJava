@@ -487,8 +487,16 @@ public class Dereference {
                     // Special case: string literal - use get(String) directly
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                     emitterVisitor.ctx.mv.visitLdcInsn(((StringNode) nodeZero).value);
+                    String interpolationHashName = (String) node.getAnnotation("stringInterpolationHashName");
+                    boolean interpolationGet = interpolationHashName != null && hashOperation.equals("get");
+                    if (interpolationGet) {
+                        emitterVisitor.ctx.mv.visitLdcInsn(interpolationHashName);
+                    }
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                            hashOperation, "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                            interpolationGet ? "getForStringInterpolation" : hashOperation,
+                            interpolationGet
+                                    ? "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                    : "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 } else if (nodeRight.elements.size() == 1) {
                     // Single element but not a string literal
                     Node elem = nodeRight.elements.getFirst();
@@ -503,8 +511,16 @@ public class Dereference {
 
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keySlot);
+                    String interpolationHashName = (String) node.getAnnotation("stringInterpolationHashName");
+                    boolean interpolationGet = interpolationHashName != null && hashOperation.equals("get");
+                    if (interpolationGet) {
+                        emitterVisitor.ctx.mv.visitLdcInsn(interpolationHashName);
+                    }
                     emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
-                            hashOperation, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                            interpolationGet ? "getForStringInterpolation" : hashOperation,
+                            interpolationGet
+                                    ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                    : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
                     if (pooledKey) {
                         emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
