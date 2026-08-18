@@ -999,6 +999,15 @@ public class UnicodeResolver {
                 || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(name)) {
             if (perlNumericWildcardBody(value) != null) return null;
             caseFold = false;
+        } else if (isCanonicalCombiningClassProperty(name)
+                || PerlUnicodeBidiClassData.isPropertyAlias(name)
+                || PerlUnicodeDecompositionTypeData.isPropertyAlias(name)
+                || PerlUnicodeEastAsianWidthData.isPropertyAlias(name)) {
+            caseFold = false;
+        } else if (PerlUnicodeNumericValueData.isPropertyAlias(name)
+                || PerlUnicodeJoiningGroupData.isPropertyAlias(name)) {
+            if (perlNumericWildcardBody(value) != null) return null;
+            caseFold = false;
         } else {
             return null;
         }
