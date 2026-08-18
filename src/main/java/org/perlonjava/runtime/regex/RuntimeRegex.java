@@ -78,6 +78,32 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // already-compiled literal in re-debug output.
     private static final Set<String> REPORTED_DEBUG_COMPILATIONS =
             ConcurrentHashMap.newKeySet();
+    private static final ThreadLocal<Deque<LinkedHashMap<String, CompileWarning>>>
+            COMPILE_WARNING_STACK = ThreadLocal.withInitial(ArrayDeque::new);
+
+    private record CompileWarning(String message, String category) {}
+
+    static void recordCompileWarning(String message, String category) {
+        Deque<LinkedHashMap<String, CompileWarning>> stack = COMPILE_WARNING_STACK.get();
+        if (stack.isEmpty()) {
+            WarnDie.warnWithCategory(new RuntimeScalar(message),
+                    RuntimeScalarCache.scalarEmptyString, category);
+            return;
+        }
+        stack.peek().putIfAbsent(category + "\u0000" + message,
+                new CompileWarning(message, category));
+    }
+
+    private static void beginCompileWarningCapture() {
+        COMPILE_WARNING_STACK.get().push(new LinkedHashMap<>());
+    }
+
+    private static List<CompileWarning> endCompileWarningCapture() {
+        Deque<LinkedHashMap<String, CompileWarning>> stack = COMPILE_WARNING_STACK.get();
+        List<CompileWarning> warnings = List.copyOf(stack.pop().values());
+        if (stack.isEmpty()) COMPILE_WARNING_STACK.remove();
+        return warnings;
+    }
 
     private static String makeDelimitedTokenRepetitionsPossessive(String pattern) {
         Deque<DelimitedGroup> groups = new ArrayDeque<>();
@@ -218,6 +244,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // only empty match/substitution string syntax reuses the previous match.
     private boolean quoteConstruction = false;
     private List<String> warningsOnUse = new ArrayList<>();
+    private List<CompileWarning> compileWarnings = List.of();
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
     private static final String DYNAMIC_PATTERN_ERROR =
@@ -446,6 +473,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
     }
 
+    private void emitCompileWarnings() {
+        for (CompileWarning warning : compileWarnings) {
+            WarnDie.warnWithCategory(new RuntimeScalar(warning.message()),
+                    RuntimeScalarCache.scalarEmptyString, warning.category());
+        }
+    }
+
     /**
      * Perl accepts scalar values above Unicode's maximum code point. Applying
      * a Unicode property to one emits a use-site {@code non_unicode} warning,
@@ -622,6 +656,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             String javaPattern = null;
+            beginCompileWarningCapture();
             try {
                 boolean usesRecursiveBackend = RegexBackendPolicy.useJoni(compilePatternString);
                 if (usesRecursiveBackend
@@ -814,6 +849,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 } else {
                     throw unimplEx;
                 }
+            } finally {
+                regex.compileWarnings = endCompileWarningCapture();
             }
 
             // Cache the result if the cache is not full
@@ -829,6 +866,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 System.err.println("  cache hit, reusing cached regex");
             }
         }
+        if (!literalSyntaxValidation) regex.emitCompileWarnings();
         return regex;
     }
 

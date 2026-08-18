@@ -724,6 +724,8 @@ public class UnicodeResolver {
                     isPerlIsPrefixedBreakPropertyWildcard(property);
             boolean isPrefixedBinaryWildcard =
                     isPerlIsPrefixedBinaryWildcard(property);
+            boolean isPrefixedSpecializedBinaryWildcard =
+                    isPerlIsPrefixedSpecializedBinaryWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
@@ -748,6 +750,10 @@ public class UnicodeResolver {
             if (isPrefixedBinaryWildcard) {
                 throw new IllegalArgumentException(
                         "Can't find Unicode property definition for Is-prefixed binary-property wildcard");
+            }
+            if (isPrefixedSpecializedBinaryWildcard) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition for Is-prefixed specialized binary-property wildcard");
             }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
@@ -980,8 +986,29 @@ public class UnicodeResolver {
     }
 
     static boolean isPerlBuiltInPropertyAlias(String property) {
-        return !normalizePerlIsPropertyAssignment(property).equals(property)
+        return isPerlSpecializedBinarySyntax(property)
+                || !normalizePerlIsPropertyAssignment(property).equals(property)
                 || resolvePerlBuiltInPropertyAlias(property) != null;
+    }
+
+    private static boolean isPerlSpecializedBinarySyntax(String property) {
+        if (property == null) return false;
+        String alias = normalizePerlIsPropertyAssignment(property).trim();
+        int assignment = propertyValueDelimiter(alias);
+        String propertyName = assignment > 0 ? alias.substring(0, assignment) : alias;
+        if (assignment < 0) {
+            String isPrefixed = exactIsPrefixedPropertyName(propertyName);
+            if (isPrefixed != null) propertyName = isPrefixed;
+        }
+        if (!PerlUnicodeSpecializedBinaryData.isPropertyAlias(propertyName)) return false;
+        if (assignment > 0 && assignment < alias.length() - 1) {
+            String wildcard = perlBinaryWildcardBody(alias.substring(assignment + 1));
+            if (wildcard != null && wildcard.indexOf('*') >= 0) {
+                throw new IllegalArgumentException(
+                        "quantifier '*' is not allowed in Unicode property value wildcard");
+            }
+        }
+        return true;
     }
 
     private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
@@ -993,6 +1020,12 @@ public class UnicodeResolver {
                 && PerlUnicodeBinaryPropertyData.assignmentProperty(
                         alias.substring(0, assignment))
                         != PerlUnicodeBinaryPropertyData.INVALID) {
+            throw new IllegalArgumentException(
+                    "Unicode property wildcard not terminated");
+        }
+        if (assignment == alias.length() - 1
+                && PerlUnicodeSpecializedBinaryData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
             throw new IllegalArgumentException(
                     "Unicode property wildcard not terminated");
         }
@@ -1103,6 +1136,11 @@ public class UnicodeResolver {
                     alias.substring(0, assignment), alias.substring(assignment + 1));
         }
         if (assignment > 0 && assignment < alias.length() - 1) {
+            String propertyName = alias.substring(0, assignment);
+            if (PerlUnicodeSpecializedBinaryData.isPropertyAlias(propertyName)) {
+                return resolvePerlSpecializedBinaryProperty(
+                        propertyName, alias.substring(assignment + 1), alias);
+            }
             short binaryProperty = PerlUnicodeBinaryPropertyData.assignmentProperty(
                     alias.substring(0, assignment));
             if (binaryProperty != PerlUnicodeBinaryPropertyData.INVALID) {
@@ -1144,6 +1182,12 @@ public class UnicodeResolver {
         String binaryShortcut = alias;
         String isPrefixedBinary = exactIsPrefixedPropertyName(alias);
         if (isPrefixedBinary != null) binaryShortcut = isPrefixedBinary;
+        UnicodeSet specializedBinary =
+                PerlUnicodeSpecializedBinaryData.yesSet(binaryShortcut);
+        if (specializedBinary != null) {
+            warnDeprecatedSpecializedBinary(binaryShortcut, alias);
+            return specializedBinary;
+        }
         UnicodeSet pinnedBinary = PerlUnicodeBinaryPropertyData.set(binaryShortcut);
         if (pinnedBinary != null) return pinnedBinary;
         if (isRejectedPerlBinaryPropertyAlias(binaryShortcut)) {
@@ -1304,6 +1348,16 @@ public class UnicodeResolver {
         return propertyName != null
                 && PerlUnicodeBinaryPropertyData.property(propertyName)
                         != PerlUnicodeBinaryPropertyData.INVALID
+                && perlBinaryWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
+    private static boolean isPerlIsPrefixedSpecializedBinaryWildcard(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String propertyName = exactIsPrefixedPropertyName(
+                property.substring(0, assignment));
+        return propertyName != null
+                && PerlUnicodeSpecializedBinaryData.isPropertyAlias(propertyName)
                 && perlBinaryWildcardBody(property.substring(assignment + 1)) != null;
     }
 
@@ -1537,6 +1591,72 @@ public class UnicodeResolver {
         UnicodeSet set = PerlUnicodeBinaryPropertyData.set(property);
         if (includeTrue && includeFalse) return new UnicodeSet(0, 0x10FFFF).freeze();
         return includeTrue ? set : new UnicodeSet(set).complement().freeze();
+    }
+
+    private static UnicodeSet resolvePerlSpecializedBinaryProperty(
+            String property, String value, String originalAlias) {
+        String wildcard = perlBinaryWildcardBody(value);
+        if (wildcard == null) {
+            UnicodeSet set = PerlUnicodeSpecializedBinaryData.valueSet(property, value);
+            if (set == null) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition \"" + originalAlias + "\"");
+            }
+            warnDeprecatedSpecializedBinary(property, originalAlias);
+            return set;
+        }
+        if (wildcard.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+        if (wildcard.contains("\\p") || wildcard.contains("\\P")) {
+            throw new IllegalArgumentException(
+                    "Unicode properties are not allowed in a property value wildcard");
+        }
+
+        Pattern valuePattern;
+        try {
+            valuePattern = Pattern.compile(wildcard, Pattern.CASE_INSENSITIVE);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        boolean includeTrue = false;
+        boolean includeFalse = false;
+        for (String candidate : new String[] {
+                "Y", "Yes", "T", "True", "N", "No", "F", "False"}) {
+            if (!valuePattern.matcher(candidate).find()) continue;
+            UnicodeSet candidateSet =
+                    PerlUnicodeSpecializedBinaryData.valueSet(property, candidate);
+            if (candidateSet == null) continue;
+            if (candidate.equals("Y") || candidate.equals("Yes")
+                    || candidate.equals("T") || candidate.equals("True")) {
+                includeTrue = true;
+            } else {
+                includeFalse = true;
+            }
+        }
+        if (!includeTrue && !includeFalse) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches binary property");
+        }
+
+        warnDeprecatedSpecializedBinary(property, originalAlias);
+        UnicodeSet yes = PerlUnicodeSpecializedBinaryData.yesSet(property);
+        if (includeTrue && includeFalse) return new UnicodeSet(0, 0x10FFFF).freeze();
+        return includeTrue ? yes : new UnicodeSet(yes).complement().freeze();
+    }
+
+    private static void warnDeprecatedSpecializedBinary(
+            String property, String originalAlias) {
+        if (!PerlUnicodeSpecializedBinaryData.isDeprecated(property)) return;
+        RuntimeRegex.recordCompileWarning(
+                "Use of '" + originalAlias
+                        + "' in \\p{} or \\P{} is deprecated because: "
+                        + "Supplanted by Line_Break property values; "
+                        + "see www.unicode.org/reports/tr14",
+                "deprecated");
     }
 
     private static String perlBinaryWildcardBody(String value) {
