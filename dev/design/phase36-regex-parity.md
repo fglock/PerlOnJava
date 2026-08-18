@@ -258,10 +258,17 @@ deprecation warnings; its focused oracle passes 73/73 on standard Perl, JVM,
 and interpreter, its protected boundary gate passes 169/169 per backend, and
 its warning-free `make` passes. Its exact chunks 01–04 numbered differential
 reaches 147,119/167,506 on both backends, gaining 904 assertions with zero
-losses. QC/HST, five residual enumerated families, and InPC/InSC are
-independently complete and awaiting coordinator stacking. The first
-preprocessor dead-state deletion and retirement audit are complete, and a
-one-file mechanical cleanup is awaiting its full-build result.
+losses. The first preprocessor dead-state deletion and retirement audit are
+complete, and a one-file mechanical cleanup is complete at `40c9067c9`. The fresh
+`wip/phase36-residual-enumerated-integration` stack combines QC/HST, five
+residual enumerated families, and InPC/InSC on PR #1045; its focused resolver
+gate passes 408/408 and protected boundaries pass 169/169 per backend, and its
+warning-free `make` passes in 5m39s. Exact chunks 01–04 reach
+150,741/167,506 on both backends, gaining 3,622 numbered assertions over PR
+#1045 with zero losses and exact backend maps. The independent branch gains
+were previously overcounted by 16 because each affected Line_Break surrogate
+source line emits a passing membership assertion and a still-failing required
+deprecation-warning assertion; the semantic stack omits no accepted correction.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -743,13 +750,23 @@ is retained for now.
     both backends, gaining 904 numbered assertions with zero losses and exact
     backend maps. The warning-context correction passes a warning-free 4m52s
     `make`.
+  - [x] Completed the independent pinned Unicode 17 normalization Quick_Check
+    (`NFC_QC`, `NFD_QC`, `NFKC_QC`, and `NFKD_QC`) and
+    `Hangul_Syllable_Type` resolver slice. Its focused oracle passes 113/113
+    and protected boundaries pass 169/169 on both backends; chunk 02 gains 696
+    numbered assertions with zero losses and exact backend maps.
+  - [x] Completed the independent pinned Unicode 17 `Bidi_Paired_Bracket_Type`,
+    `Indic_Conjunct_Break`, `Joining_Type`, `Numeric_Type`, and
+    `Vertical_Orientation` resolver slice. Its focused oracle passes 116/116
+    and protected boundaries pass 169/169 on both backends; chunks 01–04 gain
+    826 numbered assertions with zero losses and exact backend maps.
   - [x] Completed the independent pinned Unicode 17
     `Indic_Positional_Category`/`InPC` and
     `Indic_Syllabic_Category`/`InSC` resolver slice. Its focused oracle passes
     179/179 and protected boundaries pass 169/169 on both backends; chunks
     01–04 gain 2,116 numbered assertions with zero losses and exact backend
-    maps. Commit `71b56a4bcedd73486b32d8b91e98b8f3b35c5df5` is awaiting
-    coordinator stacking.
+    maps. Accepted source commit `71b56a4bcedd73486b32d8b91e98b8f3b35c5df5`
+    is stacked in the active combined WIP.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -803,9 +820,10 @@ is retained for now.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Publish draft PR #1045's completed exact numbered differential and
-   documentation, then integrate the independently completed QC/HST,
-   five-family enumerated, and InPC/InSC resolvers.
+3. Publish the active combined QC/HST, five-family enumerated, and InPC/InSC
+   WIP with its completed exact chunks 01–04 map. Then stack the accepted
+   one-file preprocessor cleanup and independently generated Identifier and
+   `kEH_Core` data slices as their gates complete.
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
