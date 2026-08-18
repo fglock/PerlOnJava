@@ -267,8 +267,11 @@ The PR #1042 parity repair ledger is active:
 - The `.=` overload root is complete and pushed as `8e9a45b07`; warning-free
   `make` and JVM/interpreter corpus gates recover all 43 assertions
   (`op/bop.t` +39 and `op/concat2.t` +4) to exact PR #958 parity.
-- Ordinary byte-backed eval decoding has an 8/8 standard-Perl reducer and is
-  in full-build validation before its four-file corpus gate.
+- Ordinary byte-backed eval decoding has an 8/8 standard-Perl reducer. A
+  runtime context probe proved that the eval-site `unicode_eval` metadata is
+  already correct and reduced the remaining failure to one late byte-source
+  decode condition in `StringParser`; the corrected lane is in warning-free
+  full-build validation before its four-file corpus gate.
 - Named-CV replacement is complete and pushed as `d7e39c808`: duplicate
   `B.pm` constant declarations are removed, named sort comparators resolve and
   snapshot at sort entry, and direct calls follow visible typeglob replacement
@@ -276,10 +279,17 @@ The PR #1042 parity repair ledger is active:
   JVM/interpreter reducers, and the affected imported assertions are green at
   exact PR #958 counts.
 - Tied/environment concat materialization and tied regex interpolation are in
-  an independent follow-up on top of `8e9a45b07`.
-- Foreach active-lexical rebinding, glob identity/error rendering, and the
-  warning-aware hash interpolation assertion remain independently owned repair
-  roots.
+  an independent follow-up on top of `8e9a45b07`. Its warning-free `make` is
+  green and focused JVM/interpreter plus imported corpus validation is active.
+- Glob identity and qualified `SUPER` error rendering are implemented as
+  ordered commits `ebbf41d47` and `8e0b9b379`; their standard-Perl reducers
+  are green and warning-free build validation is active.
+- Warning-aware hash interpolation is implemented in an isolated lane with a
+  4/4 standard-Perl reducer. It preserves the source hash name and runtime key
+  only for quoted-string interpolation under lexical `uninitialized`
+  warnings; build and dual-backend validation remain.
+- Foreach active-lexical rebinding remains the final independently owned
+  repair root and is under read-only reduction while the tied lane validates.
 - Native branch-reset named/numeric calls are complete and pushed as
   `7f9e7f8d3`: the direct-Joni matrix, upstream recursive-capture tests,
   warning-free `make`, and focused `pat_advanced*` comparison are green. JVM
@@ -815,14 +825,15 @@ is retained for now.
 
 ### Next Steps
 
-1. Make PR #1042 mergeable without weakening the PR #958 baseline: fix the
-   seven mapped residual roots in the
-   documented priority order, and add narrowly tested normalization for the
-   two known legacy transcript artifacts while retaining raw counts. Rerun
-   each root's focused files before a combined 14-file gate, then require a
-   fresh complete 622-file comparison with zero unexplained negative per-file
-   deltas. Keep explicit Joni and Joni-only constructs forced to Joni
-   throughout.
+1. Make PR #1042 mergeable without weakening the PR #958 baseline: finish and
+   integrate the mapped repair lanes, and add narrowly tested normalization
+   for the two known legacy transcript artifacts while retaining raw counts.
+   Rerun each root's focused files before a combined 14-file gate, then require
+   a fresh complete 622-file comparison with zero unexplained negative
+   per-file deltas. Temporary ordinary-pattern Java routing may remain only
+   where required to meet this gate; explicit Joni and Joni-only constructs
+   stay forced to Joni. Record every such exception as removal debt tied to an
+   already validated native commit or the next native implementation slice.
 2. Integrate validated native commits `43b4981a6` (nested lookahead inside
    lookbehind) and `b2f225c11` (outside-class `\N`) after PR #1042 stabilizes.
    Remove each temporary routing exception as soon as its native replacement
