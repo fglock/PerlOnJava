@@ -995,7 +995,14 @@ public class UnicodeResolver {
         property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
-            return null;
+            String looseIsValue = looseIsShortcutValue(property);
+            if (looseIsValue == null
+                    || PerlUnicodeScriptData.canonicalValue(looseIsValue) != null
+                    || PerlUnicodeBlockData.set(looseIsValue) != null) {
+                return null;
+            }
+            UnicodeSet bareSet = resolvePerlBuiltInPropertyAlias(property);
+            return bareSet == null ? null : joniPropertyResult(bareSet, true);
         }
         String name = property.substring(0, assignment);
         String value = property.substring(assignment + 1);
@@ -1033,6 +1040,11 @@ public class UnicodeResolver {
         UnicodeSet set = resolvePerlBuiltInPropertyAlias(property);
         if (set == null) return null;
 
+        return joniPropertyResult(set, caseFold);
+    }
+
+    private static CharacterPropertyResolver.Result joniPropertyResult(
+            UnicodeSet set, boolean caseFold) {
         int[] ranges = new int[set.getRangeCount() * 2 + 1];
         ranges[0] = set.getRangeCount();
         for (int i = 0; i < set.getRangeCount(); i++) {
@@ -1232,6 +1244,19 @@ public class UnicodeResolver {
                 }
             }
         }
+        String looseIsValue = looseIsShortcutValue(alias);
+        boolean inheritedBareIs = looseIsValue != null
+                && PerlUnicodeScriptData.canonicalValue(looseIsValue) == null
+                && PerlUnicodeBlockData.set(looseIsValue) == null;
+        if (inheritedBareIs) {
+            // Keep General_Category ahead of binary aliases in the shared Is
+            // shortcut namespace, before Block's ambiguity guard runs.
+            UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(looseIsValue);
+            if (category != null) return category;
+            if (isIcuBinaryPropertyAlias(looseIsValue)) {
+                return new UnicodeSet().applyPropertyAlias(looseIsValue, "True");
+            }
+        }
         if (alias.equalsIgnoreCase("L&")) {
             UnicodeSet casedLetters = unicodePropertyValueSet(
                     UProperty.GENERAL_CATEGORY, "UppercaseLetter");
@@ -1334,7 +1359,15 @@ public class UnicodeResolver {
             // representation debt is closed; explicit Block=/In forms remain pinned.
             return null;
         }
-        return block;
+        if (block != null) return block;
+
+        if (inheritedBareIs) {
+            // Only inherit aliases whose unprefixed spelling already resolves.
+            // This preserves user-property lookup and leaves missing bare bases
+            // (for example All and Unicode) for their owning property slices.
+            return resolveStandardPropertyAsSet(looseIsValue, new LinkedHashSet<>());
+        }
+        return null;
     }
 
     private static Boolean perlBooleanPropertyValue(String value) {
@@ -1361,6 +1394,29 @@ public class UnicodeResolver {
         } catch (IllegalArgumentException unsupported) {
             return false;
         }
+    }
+
+    private static String looseIsShortcutValue(String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        int prefixStart = 0;
+        while (prefixStart < property.length()) {
+            char separator = property.charAt(prefixStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            prefixStart++;
+        }
+        if (property.length() - prefixStart <= 2
+                || !property.regionMatches(true, prefixStart, "is", 0, 2)) {
+            return null;
+        }
+        int valueStart = prefixStart + 2;
+        while (valueStart < property.length()) {
+            char separator = property.charAt(valueStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            valueStart++;
+        }
+        return valueStart < property.length() ? property.substring(valueStart) : null;
     }
 
     private static boolean isPerlIsPrefixedNumericWildcard(String property) {
