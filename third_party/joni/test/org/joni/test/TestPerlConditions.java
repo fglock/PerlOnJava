@@ -20,6 +20,7 @@
 package org.joni.test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 import java.nio.charset.StandardCharsets;
 
@@ -28,6 +29,7 @@ import org.joni.Matcher;
 import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Syntax;
+import org.joni.exception.SyntaxException;
 import org.junit.Test;
 
 public class TestPerlConditions {
@@ -72,5 +74,43 @@ public class TestPerlConditions {
                 .search(0, 9, Option.NONE));
         assertEquals(0, matcher("(x)(?<A>foo(?(R&A)bar))?\\g<A>", "xfoofoobar")
                 .search(0, 10, Option.NONE));
+    }
+
+    @Test
+    public void perlCaptureConditionsSelectRequiredAndAlternateBranches() {
+        assertEquals(0, matcher("^(a)(?(1)b)$", "ab")
+                .search(0, 2, Option.NONE));
+        assertEquals(-1, matcher("^(a)(?(1)b)$", "a")
+                .search(0, 1, Option.NONE));
+        assertEquals(0, matcher("^(a)?(?(1)b|c)$", "c")
+                .search(0, 1, Option.NONE));
+    }
+
+    @Test
+    public void perlNamedConditionsPreserveYesOnlySemantics() {
+        assertEquals(0, matcher("^(?<x>x)(?(<x>)y)$", "xy")
+                .search(0, 2, Option.NONE));
+        assertEquals(-1, matcher("^(?<x>x)(?(<x>)y)$", "x")
+                .search(0, 1, Option.NONE));
+        assertEquals(0, matcher("^(?<x>x)?(?(<x>)y|z)$", "z")
+                .search(0, 1, Option.NONE));
+    }
+
+    @Test
+    public void perlCaptureConditionIsReevaluatedAfterBacktracking() {
+        Matcher matcher = matcher("^(a)?(?(1)b|ac)$", "ac");
+        assertEquals(0, matcher.search(0, 2, Option.NONE));
+        assertEquals(-1, matcher.getRegion().getBeg(1));
+        assertEquals(-1, matcher.getRegion().getEnd(1));
+    }
+
+    @Test
+    public void malformedPerlConditionsRemainRejected() {
+        assertThrows(SyntaxException.class,
+                () -> matcher("(?(1)x|y|z)", ""));
+        assertThrows(SyntaxException.class,
+                () -> matcher("(?(bogus)x|y)", ""));
+        assertThrows(SyntaxException.class,
+                () -> matcher("(?(1)x", ""));
     }
 }

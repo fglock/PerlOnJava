@@ -95,8 +95,8 @@ final class JoniRegexPattern {
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
                      boolean forceAsciiClasses, boolean byteMode,
                      boolean byteBackedPattern) {
-        KeepSyntax keepSyntax = analyzeKeepSyntax(perlPattern, flags.isExtended());
-        if (keepSyntax.inLookaround()) {
+        PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(perlPattern, flags.isExtended());
+        if (syntaxFeatures.keepInLookaround()) {
             throw new PerlCompilerException("\\K not permitted in lookahead/lookbehind in regex");
         }
         this.flags = flags;
@@ -342,7 +342,10 @@ final class JoniRegexPattern {
         // implementation passes its combined imported-corpus gate. Explicit
         // Joni mode still exercises the native implementation directly.
         boolean branchResetCallUsesJava = pattern.contains("(?|") && hasSubroutineCall;
-        return analyzeKeepSyntax(pattern, flags != null && flags.isExtended()).present()
+        PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(
+                pattern, flags != null && flags.isExtended());
+        return syntaxFeatures.keepPresent()
+                || syntaxFeatures.conditionalPresent()
                 || pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(*ACCEPT)")
@@ -352,24 +355,22 @@ final class JoniRegexPattern {
                 || pattern.contains("(*COMMIT")
                 || pattern.contains("(*MARK")
                 || pattern.contains("(*:")
-                || pattern.contains("(?(DEFINE)")
-                || pattern.contains("(?(?{=CALL:")
-                || pattern.contains("(?(R")
-                || pattern.contains("(?(<")
-                || pattern.contains("(?('")
                 || (hasSubroutineCall && !branchResetCallUsesJava);
     }
 
-    private record KeepSyntax(boolean present, boolean inLookaround) {}
+    private record PerlSyntaxFeatures(boolean keepPresent,
+                                      boolean keepInLookaround,
+                                      boolean conditionalPresent) {}
 
-    private static KeepSyntax analyzeKeepSyntax(String pattern, boolean extended) {
+    private static PerlSyntaxFeatures analyzePerlSyntax(String pattern, boolean extended) {
         boolean quoted = false;
         boolean inClass = false;
         boolean classStart = false;
         int extendedClassDepth = 0;
         int lookaroundDepth = 0;
         java.util.ArrayDeque<Boolean> groups = new java.util.ArrayDeque<>();
-        boolean present = false;
+        boolean keepPresent = false;
+        boolean conditionalPresent = false;
 
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
@@ -431,8 +432,10 @@ final class JoniRegexPattern {
                 if (escaped == 'Q') {
                     quoted = true;
                 } else if (escaped == 'K') {
-                    present = true;
-                    if (lookaroundDepth > 0) return new KeepSyntax(true, true);
+                    keepPresent = true;
+                    if (lookaroundDepth > 0) {
+                        return new PerlSyntaxFeatures(true, true, conditionalPresent);
+                    }
                 }
                 continue;
             }
@@ -443,6 +446,7 @@ final class JoniRegexPattern {
                     i = close;
                     continue;
                 }
+                if (pattern.startsWith("(?(", i)) conditionalPresent = true;
                 boolean lookaround = pattern.startsWith("(?=", i)
                         || pattern.startsWith("(?!", i)
                         || pattern.startsWith("(?<=", i)
@@ -453,7 +457,7 @@ final class JoniRegexPattern {
                 if (groups.pop()) lookaroundDepth--;
             }
         }
-        return new KeepSyntax(present, false);
+        return new PerlSyntaxFeatures(keepPresent, false, conditionalPresent);
     }
 
     private static boolean hasControlVerbState(String pattern) {
