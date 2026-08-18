@@ -40,9 +40,6 @@ sub property_matches {
     is(chr($cp) =~ $regex ? 1 : 0, $expected, $name);
 }
 
-TODO: {
-local $TODO = 'HST and Quick_Check resolver wiring is a separate Phase 36 slice';
-
 my @hst_values = (
     [ L   => 'Leading_Jamo',   0x1100, 0x1161 ],
     [ V   => 'Vowel_Jamo',     0x1161, 0x11A8 ],
@@ -171,6 +168,5 @@ property_matches('NFKD_QC=N', 0xA7F1, $a7f1_expected,
     'U+A7F1 NFKD_QC follows bundled Unicode version');
 property_matches('NFC_QC=Y', 0xA7F1, 1, 'U+A7F1 remains NFC_QC Yes');
 property_matches('NFD_QC=Y', 0xA7F1, 1, 'U+A7F1 remains NFD_QC Yes');
-}
 
 done_testing();
