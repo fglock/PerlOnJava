@@ -3926,6 +3926,22 @@ public class BytecodeCompiler implements Visitor {
                         if (sigilOp.operand instanceof IdentifierNode) {
                             String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
 
+                            // Match the single-variable declaration path: a later
+                            // list-form `our` under another package establishes a
+                            // new lexical alias for the same bare name. Reusing the
+                            // old entry would make subsequent reads keep loading the
+                            // preceding package's global even though this declaration
+                            // itself loaded the correct package variable.
+                            if (hasVariable(varName) && isOurVariable(varName)) {
+                                SymbolTable.SymbolEntry entry =
+                                        symbolTable.getSymbolEntry(varName);
+                                if (entry != null
+                                        && !getCurrentPackage().equals(
+                                                entry.perlPackage())) {
+                                    addVariable(varName, "our");
+                                }
+                            }
+
                             int reg;
                             // Check if already declared in current scope
                             if (hasVariable(varName)) {
