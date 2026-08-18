@@ -1222,6 +1222,14 @@ final class ArrayCompiler extends Compiler {
             addOpcode(OPCode.NOT_WORD_BREAK_BOUNDARY);
             break;
 
+        case AnchorType.LINE_BOUNDARY:
+            addOpcode(OPCode.LINE_BOUNDARY);
+            break;
+
+        case AnchorType.NOT_LINE_BOUNDARY:
+            addOpcode(OPCode.NOT_LINE_BOUNDARY);
+            break;
+
         case AnchorType.WORD_BEGIN:
             if (Config.USE_WORD_BEGIN_END) {
                 if (node.asciiRange) {

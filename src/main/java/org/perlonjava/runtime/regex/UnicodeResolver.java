@@ -936,6 +936,34 @@ public class UnicodeResolver {
         if (property == null) return null;
 
         String alias = property.trim();
+        int assignment = propertyValueDelimiter(alias);
+        if (assignment > 0 && assignment < alias.length() - 1
+                && isGeneralCategoryProperty(alias.substring(0, assignment))) {
+            UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(
+                    alias.substring(assignment + 1));
+            if (category == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported General_Category value: "
+                                + alias.substring(assignment + 1).trim());
+            }
+            return category;
+        }
+        if (assignment > 0 && assignment < alias.length() - 1) {
+            Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
+            if (value != null) {
+                UnicodeSet binaryProperty = resolvePerlBuiltInPropertyAlias(
+                        alias.substring(0, assignment));
+                if (binaryProperty == null
+                        && loosePropertyName(alias.substring(0, assignment))
+                                .matches("(?:asciihexdigit|ahex)")) {
+                    binaryProperty = new UnicodeSet()
+                            .applyPropertyAlias("ASCII_Hex_Digit", "True");
+                }
+                if (binaryProperty != null) {
+                    return value ? binaryProperty : binaryProperty.complement();
+                }
+            }
+        }
         if (alias.equalsIgnoreCase("L&")) {
             UnicodeSet casedLetters = unicodePropertyValueSet(
                     UProperty.GENERAL_CATEGORY, "UppercaseLetter");
@@ -944,12 +972,6 @@ public class UnicodeResolver {
             casedLetters.addAll(unicodePropertyValueSet(
                     UProperty.GENERAL_CATEGORY, "TitlecaseLetter"));
             return casedLetters;
-        }
-
-        int equals = alias.indexOf('=');
-        if (equals > 0 && loosePropertyName(alias.substring(0, equals)).equals("category")) {
-            return unicodePropertyValueSet(
-                    UProperty.GENERAL_CATEGORY, alias.substring(equals + 1));
         }
 
         String blockAlias = alias;
@@ -962,7 +984,7 @@ public class UnicodeResolver {
             }
             if (valueStart >= alias.length()) return null;
             blockAlias = alias.substring(valueStart);
-        } else if (equals >= 0 || unicodePropertyValue(UProperty.SCRIPT, alias) >= 0) {
+        } else if (assignment >= 0 || unicodePropertyValue(UProperty.SCRIPT, alias) >= 0) {
             return null;
         }
 
@@ -975,6 +997,34 @@ public class UnicodeResolver {
             return null;
         }
         return new UnicodeSet().applyIntPropertyValue(UProperty.BLOCK, blockValue);
+    }
+
+    private static Boolean perlBooleanPropertyValue(String value) {
+        return switch (loosePropertyName(value)) {
+            case "true", "yes", "y", "t" -> true;
+            case "false", "no", "n", "f" -> false;
+            default -> null;
+        };
+    }
+
+    private static boolean isGeneralCategoryProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "gc", "generalcategory", "category" -> true;
+            default -> false;
+        };
+    }
+
+    private static int propertyValueDelimiter(String property) {
+        int equals = property.indexOf('=');
+        if (equals >= 0) return equals;
+        for (int i = 1; i < property.length() - 1; i++) {
+            if (property.charAt(i) == ':'
+                    && property.charAt(i - 1) != ':'
+                    && property.charAt(i + 1) != ':') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static String loosePropertyName(String value) {

@@ -256,6 +256,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_SENTENCE_BOUNDARY:      opSentenceBoundary(true);  continue;
                 case OPCode.WORD_BREAK_BOUNDARY:        opWordBreakBoundary(false); continue;
                 case OPCode.NOT_WORD_BREAK_BOUNDARY:    opWordBreakBoundary(true);  continue;
+                case OPCode.LINE_BOUNDARY:              opLineBoundary(false);     continue;
+                case OPCode.NOT_LINE_BOUNDARY:          opLineBoundary(true);      continue;
                 case OPCode.WORD_BEGIN:                 opWordBegin();             continue;
                 case OPCode.WORD_END:                   opWordEnd();               continue;
 
@@ -419,6 +421,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_SENTENCE_BOUNDARY:      opSentenceBoundary(true);    continue;
                 case OPCode.WORD_BREAK_BOUNDARY:        opWordBreakBoundary(false);  continue;
                 case OPCode.NOT_WORD_BREAK_BOUNDARY:    opWordBreakBoundary(true);   continue;
+                case OPCode.LINE_BOUNDARY:              opLineBoundary(false);       continue;
+                case OPCode.NOT_LINE_BOUNDARY:          opLineBoundary(true);        continue;
                 case OPCode.WORD_BEGIN:                 opWordBeginSb();             continue;
                 case OPCode.WORD_END:                   opWordEndSb();               continue;
 
@@ -1385,6 +1389,341 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 || property == WordBreakData.NUMERIC
                 || property == WordBreakData.KATAKANA
                 || property == WordBreakData.EXTEND_NUM_LET;
+    }
+
+    private void opLineBoundary(boolean negated) {
+        if (isLineBoundary() == negated) opFail();
+    }
+
+    private boolean isLineBoundary() {
+        if (s <= str) return false; // LB2
+        if (s >= end) return true;  // LB3
+
+        int rawLeftPosition = enc.prevCharHead(bytes, str, s, end);
+        short rawLeft = rawLinePropertyAt(rawLeftPosition);
+        short rawRight = rawLinePropertyAt(s);
+        short rawLeftClass = lineClass(rawLeft);
+        short rawRightClass = lineClass(rawRight);
+
+        if (rawLeftClass == LineBreakData.CR && rawRightClass == LineBreakData.LF) return false; // LB5
+        if (isLineHardBreak(rawLeftClass)) return true; // LB4, LB5
+        if (isLineHardBreak(rawRightClass)) return false; // LB6
+        if (rawRightClass == LineBreakData.SP || rawRightClass == LineBreakData.ZW) return false; // LB7
+
+        int scan = rawLeftPosition;
+        while (scan >= str && lineClass(effectiveLinePropertyAt(scan)) == LineBreakData.SP) {
+            scan = previousRawLinePosition(scan);
+        }
+        if (scan >= str && lineClass(effectiveLinePropertyAt(scan)) == LineBreakData.ZW) return true; // LB8
+        if (rawLeftClass == LineBreakData.ZWJ) return false; // LB8a
+
+        if ((rawRightClass == LineBreakData.CM || rawRightClass == LineBreakData.ZWJ)
+                && !isLineCombiningException(lineClass(effectiveLinePropertyAt(rawLeftPosition)))) {
+            return false; // LB9
+        }
+
+        int leftPosition = previousLinePosition(s);
+        int rightPosition = nextLinePosition(s);
+        if (leftPosition < str || rightPosition >= end) return true;
+        short leftProperty = effectiveLinePropertyAt(leftPosition);
+        short rightProperty = effectiveLinePropertyAt(rightPosition);
+        short left = lineClass(leftProperty);
+        short right = lineClass(rightProperty);
+
+        if (left == LineBreakData.WJ || right == LineBreakData.WJ) return false; // LB11
+        if (left == LineBreakData.GL) return false; // LB12
+        if (right == LineBreakData.GL
+                && left != LineBreakData.SP && left != LineBreakData.BA
+                && left != LineBreakData.HY && left != LineBreakData.HH) return false; // LB12a
+        if (right == LineBreakData.CL || right == LineBreakData.CP
+                || right == LineBreakData.EX || right == LineBreakData.SY) return false; // LB13
+        if (lineOpenBeforeSpaces(leftPosition)) return false; // LB14
+        if (lineInitialQuoteBeforeSpaces(leftPosition)) return false; // LB15a
+        if (lineFinalQuoteAt(rightPosition, rightProperty)) return false; // LB15b
+        if (left == LineBreakData.SP && right == LineBreakData.IS
+                && lineClassAt(nextLinePositionAfter(rightPosition)) == LineBreakData.NU) return true; // LB15c
+        if (right == LineBreakData.IS) return false; // LB15d
+        if (right == LineBreakData.NS && lineCloseBeforeSpaces(leftPosition)) return false; // LB16
+        if (right == LineBreakData.B2 && lineB2BeforeSpaces(leftPosition)) return false; // LB17
+        if (left == LineBreakData.SP) return true; // LB18
+        if ((right == LineBreakData.QU && !hasLineFlag(rightProperty, LineBreakData.INITIAL_PUNCTUATION))
+                || (left == LineBreakData.QU && !hasLineFlag(leftProperty, LineBreakData.FINAL_PUNCTUATION))) return false; // LB19
+        if (lineQuoteEastAsianSuppression(leftPosition, rightPosition, leftProperty, rightProperty)) return false; // LB19a
+        if (left == LineBreakData.CB || right == LineBreakData.CB) return true; // LB20
+        if (lineWordInitialHyphen(leftPosition, left, right)) return false; // LB20a
+        if (right == LineBreakData.BA || right == LineBreakData.HH
+                || right == LineBreakData.HY || right == LineBreakData.NS
+                || left == LineBreakData.BB) return false; // LB21
+        if (lineHebrewHyphenSuppression(leftPosition, left, right)) return false; // LB21a
+        if (left == LineBreakData.SY && right == LineBreakData.HL) return false; // LB21b
+        if (right == LineBreakData.IN) return false; // LB22
+        if ((isLineAlphabetic(left) && right == LineBreakData.NU)
+                || (left == LineBreakData.NU && isLineAlphabetic(right))) return false; // LB23
+        if ((left == LineBreakData.PR && isLineIdeographicEmoji(right))
+                || (isLineIdeographicEmoji(left) && right == LineBreakData.PO)) return false; // LB23a
+        if ((isLinePrefixPostfix(left) && isLineAlphabetic(right))
+                || (isLineAlphabetic(left) && isLinePrefixPostfix(right))) return false; // LB24
+        if (lineNumericSuppression(leftPosition, rightPosition, left, right)) return false; // LB25
+        if (lineHangulSuppression(left, right)) return false; // LB26
+        if ((isLineHangul(left) && right == LineBreakData.PO)
+                || (left == LineBreakData.PR && isLineHangul(right))) return false; // LB27
+        if (isLineAlphabetic(left) && isLineAlphabetic(right)) return false; // LB28
+        if (lineBrahmicSuppression(leftPosition, rightPosition, left, right)) return false; // LB28a
+        if (left == LineBreakData.IS && isLineAlphabetic(right)) return false; // LB29
+        if ((isLineAlphaNumeric(left) && right == LineBreakData.OP
+                    && !hasLineFlag(rightProperty, LineBreakData.EAST_ASIAN))
+                || (left == LineBreakData.CP && !hasLineFlag(leftProperty, LineBreakData.EAST_ASIAN)
+                    && isLineAlphaNumeric(right))) return false; // LB30
+        if (left == LineBreakData.RI && right == LineBreakData.RI
+                && (precedingLineRun(leftPosition, LineBreakData.RI) & 1) == 1) return false; // LB30a
+        if ((left == LineBreakData.EB
+                    || hasLineFlag(leftProperty, LineBreakData.UNASSIGNED_EXTENDED_PICTOGRAPHIC))
+                && right == LineBreakData.EM) return false; // LB30b
+        return true; // LB31
+    }
+
+    private short rawLinePropertyAt(int position) {
+        return LineBreakData.propertyOf(enc.mbcToCode(bytes, position, end));
+    }
+
+    private short effectiveLinePropertyAt(int position) {
+        short property = rawLinePropertyAt(position);
+        short propertyClass = lineClass(property);
+        if (propertyClass != LineBreakData.CM && propertyClass != LineBreakData.ZWJ) return property;
+
+        int cursor = position;
+        while (cursor > str) {
+            cursor = previousRawLinePosition(cursor);
+            short previous = rawLinePropertyAt(cursor);
+            short previousClass = lineClass(previous);
+            if (previousClass != LineBreakData.CM && previousClass != LineBreakData.ZWJ) {
+                return isLineCombiningException(previousClass) ? LineBreakData.AL : previous;
+            }
+        }
+        return LineBreakData.AL;
+    }
+
+    private short lineClass(short property) {
+        return (short)(property & LineBreakData.CLASS_MASK);
+    }
+
+    private short lineClassAt(int position) {
+        return position >= str && position < end
+                ? lineClass(effectiveLinePropertyAt(position)) : -1;
+    }
+
+    private boolean hasLineFlag(short property, short flag) {
+        return (property & flag) != 0;
+    }
+
+    private int previousRawLinePosition(int position) {
+        return position > str ? enc.prevCharHead(bytes, str, position, end) : -1;
+    }
+
+    private int previousLinePosition(int position) {
+        int previous = previousRawLinePosition(position);
+        while (previous >= str && isIgnoredLinePosition(previous)) previous = previousRawLinePosition(previous);
+        return previous;
+    }
+
+    private int nextLinePosition(int position) {
+        int next = position;
+        while (next < end && isIgnoredLinePosition(next)) next += enc.length(bytes, next, end);
+        return next;
+    }
+
+    private int nextLinePositionAfter(int position) {
+        if (position < str || position >= end) return end;
+        return nextLinePosition(position + enc.length(bytes, position, end));
+    }
+
+    private boolean isIgnoredLinePosition(int position) {
+        short raw = lineClass(rawLinePropertyAt(position));
+        if (raw != LineBreakData.CM && raw != LineBreakData.ZWJ) return false;
+        int previous = previousRawLinePosition(position);
+        return previous >= str && !isLineCombiningException(lineClass(effectiveLinePropertyAt(previous)));
+    }
+
+    private boolean isLineCombiningException(short value) {
+        return value == LineBreakData.BK || value == LineBreakData.CR || value == LineBreakData.LF
+                || value == LineBreakData.NL || value == LineBreakData.SP || value == LineBreakData.ZW;
+    }
+
+    private boolean isLineHardBreak(short value) {
+        return value == LineBreakData.BK || value == LineBreakData.CR
+                || value == LineBreakData.LF || value == LineBreakData.NL;
+    }
+
+    private boolean isLineAlphabetic(short value) {
+        return value == LineBreakData.AL || value == LineBreakData.HL;
+    }
+
+    private boolean isLineAlphaNumeric(short value) {
+        return isLineAlphabetic(value) || value == LineBreakData.NU;
+    }
+
+    private boolean isLinePrefixPostfix(short value) {
+        return value == LineBreakData.PR || value == LineBreakData.PO;
+    }
+
+    private boolean isLineIdeographicEmoji(short value) {
+        return value == LineBreakData.ID || value == LineBreakData.EB || value == LineBreakData.EM;
+    }
+
+    private boolean isLineHangul(short value) {
+        return value == LineBreakData.JL || value == LineBreakData.JV || value == LineBreakData.JT
+                || value == LineBreakData.H2 || value == LineBreakData.H3;
+    }
+
+    private boolean lineOpenBeforeSpaces(int leftPosition) {
+        int cursor = leftPosition;
+        while (cursor >= str && lineClassAt(cursor) == LineBreakData.SP) cursor = previousLinePosition(cursor);
+        return cursor >= str && lineClassAt(cursor) == LineBreakData.OP;
+    }
+
+    private boolean lineInitialQuoteBeforeSpaces(int leftPosition) {
+        int cursor = leftPosition;
+        while (cursor >= str && lineClassAt(cursor) == LineBreakData.SP) cursor = previousLinePosition(cursor);
+        if (cursor < str) return false;
+        short quote = effectiveLinePropertyAt(cursor);
+        if (lineClass(quote) != LineBreakData.QU
+                || !hasLineFlag(quote, LineBreakData.INITIAL_PUNCTUATION)) return false;
+        cursor = previousLinePosition(cursor);
+        if (cursor < str) return true;
+        short value = lineClassAt(cursor);
+        return isLineHardBreak(value) || value == LineBreakData.OP || value == LineBreakData.QU
+                || value == LineBreakData.GL || value == LineBreakData.SP || value == LineBreakData.ZW;
+    }
+
+    private boolean lineFinalQuoteAt(int rightPosition, short rightProperty) {
+        if (lineClass(rightProperty) != LineBreakData.QU
+                || !hasLineFlag(rightProperty, LineBreakData.FINAL_PUNCTUATION)) return false;
+        int next = nextLinePositionAfter(rightPosition);
+        if (next >= end) return true;
+        short value = lineClassAt(next);
+        return value == LineBreakData.SP || value == LineBreakData.GL || value == LineBreakData.WJ
+                || value == LineBreakData.CL || value == LineBreakData.QU || value == LineBreakData.CP
+                || value == LineBreakData.EX || value == LineBreakData.IS || value == LineBreakData.SY
+                || isLineHardBreak(value) || value == LineBreakData.ZW;
+    }
+
+    private boolean lineCloseBeforeSpaces(int leftPosition) {
+        int cursor = leftPosition;
+        while (cursor >= str && lineClassAt(cursor) == LineBreakData.SP) cursor = previousLinePosition(cursor);
+        if (cursor < str) return false;
+        short value = lineClassAt(cursor);
+        return value == LineBreakData.CL || value == LineBreakData.CP;
+    }
+
+    private boolean lineB2BeforeSpaces(int leftPosition) {
+        int cursor = leftPosition;
+        while (cursor >= str && lineClassAt(cursor) == LineBreakData.SP) cursor = previousLinePosition(cursor);
+        return cursor >= str && lineClassAt(cursor) == LineBreakData.B2;
+    }
+
+    private boolean lineQuoteEastAsianSuppression(int leftPosition, int rightPosition,
+            short leftProperty, short rightProperty) {
+        if (lineClass(rightProperty) == LineBreakData.QU) {
+            if (!hasLineFlag(leftProperty, LineBreakData.EAST_ASIAN)) return true;
+            int next = nextLinePositionAfter(rightPosition);
+            if (next >= end || !hasLineFlag(effectiveLinePropertyAt(next), LineBreakData.EAST_ASIAN)) return true;
+        }
+        if (lineClass(leftProperty) == LineBreakData.QU) {
+            if (!hasLineFlag(rightProperty, LineBreakData.EAST_ASIAN)) return true;
+            int previous = previousLinePosition(leftPosition);
+            if (previous < str || !hasLineFlag(effectiveLinePropertyAt(previous), LineBreakData.EAST_ASIAN)) return true;
+        }
+        return false;
+    }
+
+    private boolean lineWordInitialHyphen(int leftPosition, short left, short right) {
+        if (right != LineBreakData.AL && right != LineBreakData.HL) return false;
+        if (left != LineBreakData.HY && left != LineBreakData.HH) return false;
+        int previous = previousLinePosition(leftPosition);
+        if (previous < str) return true;
+        short value = lineClassAt(previous);
+        return isLineHardBreak(value) || value == LineBreakData.SP || value == LineBreakData.ZW
+                || value == LineBreakData.CB || value == LineBreakData.GL;
+    }
+
+    private boolean lineHebrewHyphenSuppression(int leftPosition, short left, short right) {
+        if (right == LineBreakData.HL || (left != LineBreakData.HY && left != LineBreakData.HH)) return false;
+        int previous = previousLinePosition(leftPosition);
+        return previous >= str && lineClassAt(previous) == LineBreakData.HL;
+    }
+
+    private boolean lineNumericSuppression(int leftPosition, int rightPosition, short left, short right) {
+        if ((left == LineBreakData.PR || left == LineBreakData.PO)
+                && (right == LineBreakData.NU || lineOpenStartsNumeric(rightPosition))) return true;
+        if ((left == LineBreakData.HY || left == LineBreakData.IS) && right == LineBreakData.NU) return true;
+        if (right == LineBreakData.NU) {
+            int cursor = leftPosition;
+            while (cursor >= str) {
+                short value = lineClassAt(cursor);
+                if (value != LineBreakData.SY && value != LineBreakData.IS) return value == LineBreakData.NU;
+                cursor = previousLinePosition(cursor);
+            }
+        }
+        if (right == LineBreakData.PR || right == LineBreakData.PO) {
+            int cursor = leftPosition;
+            if (lineClassAt(cursor) == LineBreakData.CL || lineClassAt(cursor) == LineBreakData.CP) {
+                cursor = previousLinePosition(cursor);
+            }
+            while (cursor >= str) {
+                short value = lineClassAt(cursor);
+                if (value != LineBreakData.SY && value != LineBreakData.IS) return value == LineBreakData.NU;
+                cursor = previousLinePosition(cursor);
+            }
+        }
+        return false;
+    }
+
+    private boolean lineOpenStartsNumeric(int rightPosition) {
+        if (lineClassAt(rightPosition) != LineBreakData.OP) return false;
+        int next = nextLinePositionAfter(rightPosition);
+        if (lineClassAt(next) == LineBreakData.IS) next = nextLinePositionAfter(next);
+        return lineClassAt(next) == LineBreakData.NU;
+    }
+
+    private boolean lineHangulSuppression(short left, short right) {
+        return (left == LineBreakData.JL && (right == LineBreakData.JL || right == LineBreakData.JV
+                    || right == LineBreakData.H2 || right == LineBreakData.H3))
+                || ((left == LineBreakData.JV || left == LineBreakData.H2)
+                    && (right == LineBreakData.JV || right == LineBreakData.JT))
+                || ((left == LineBreakData.JT || left == LineBreakData.H3) && right == LineBreakData.JT);
+    }
+
+    private boolean lineBrahmicSuppression(int leftPosition, int rightPosition, short left, short right) {
+        boolean leftBase = left == LineBreakData.AK || left == LineBreakData.AS || lineCodePointAt(leftPosition) == 0x25cc;
+        boolean rightBase = right == LineBreakData.AK || right == LineBreakData.AS || lineCodePointAt(rightPosition) == 0x25cc;
+        if (left == LineBreakData.AP && rightBase) return true;
+        if (leftBase && (right == LineBreakData.VF || right == LineBreakData.VI)) return true;
+        if (left == LineBreakData.VI && (right == LineBreakData.AK || lineCodePointAt(rightPosition) == 0x25cc)) {
+            int previous = previousLinePosition(leftPosition);
+            if (previous >= str) {
+                short value = lineClassAt(previous);
+                if (value == LineBreakData.AK || value == LineBreakData.AS || lineCodePointAt(previous) == 0x25cc) return true;
+            }
+        }
+        if (leftBase && rightBase) {
+            int next = nextLinePositionAfter(rightPosition);
+            return lineClassAt(next) == LineBreakData.VF;
+        }
+        return false;
+    }
+
+    private int lineCodePointAt(int position) {
+        return position >= str && position < end ? enc.mbcToCode(bytes, position, end) : -1;
+    }
+
+    private int precedingLineRun(int position, short value) {
+        int count = 0;
+        int cursor = position;
+        while (cursor >= str && lineClassAt(cursor) == value) {
+            count++;
+            cursor = previousLinePosition(cursor);
+        }
+        return count;
     }
 
     private boolean isSentenceBoundary() {
