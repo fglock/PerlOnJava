@@ -1937,6 +1937,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeScalar posScalar = null;
         boolean isPosDefined = false;
         int startPos = 0;
+        boolean nativeGlobalPosition = false;
         // Flag to skip the first find() when the notempty variant already found a match
         boolean skipFirstFind = false;
         
@@ -2017,6 +2018,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
+        if (regex.useGAssertion) {
+            nativeGlobalPosition = matcher.setGlobalPosition(startPos);
+        }
+
         if (regex.requiredLiteral != null && !inputStr.contains(regex.requiredLiteral)) {
             if (DEBUG_REGEX) {
                 System.err.println("  required literal prefilter failed: " + regex.requiredLiteral);
@@ -2040,7 +2045,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Start matching from the current position if defined
         // (skip if notempty variant already found a match - region() would reset the matcher)
         if (isPosDefined && !skipFirstFind) {
-            matcher.region(startPos, inputStr.length());
+            matcher.region(nativeGlobalPosition ? 0 : startPos, inputStr.length());
             // Disable anchoring bounds so ^ and $ in /m mode anchor only at real
             // line breaks in the input, not at the artificial region boundary.
             // Java's default useAnchoringBounds(true) would let ^ match at startPos
@@ -2074,7 +2079,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 skipFirstFind = false;
                 // If \G is used, ensure the match starts at the expected position.
                 // When pos() is undefined, \G anchors at 0 (the default startPos).
-                if (regex.useGAssertion && matcher.start() != startPos) {
+                if (regex.useGAssertion && !nativeGlobalPosition
+                        && matcher.start() != startPos) {
                     break;
                 }
 
@@ -2159,6 +2165,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         break; // Break out of the loop after the first match in SCALAR context
                     } else {
                         startPos = matchEnd;
+                        if (nativeGlobalPosition) matcher.setGlobalPosition(startPos);
                         if (posScalar != null) {
                             posScalar.set(RuntimePosLvalue.fromMatcherOffset(
                                     string, inputStr, startPos));
@@ -2790,6 +2797,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 ? compileNonEmptySubstitutionPattern(pattern)
                 : null;
         int searchStart = 0;
+        int globalPosition = 0;
+        boolean nativeGlobalPosition = false;
 
         // Honor pos() when \G is used. `s/\G.../.../` should anchor at
         // pos($string) so a substitution inserted right after a previous /g
@@ -2803,9 +2812,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 int startPos = RuntimePosLvalue.toMatcherOffset(
                         string, inputStr, posScalar.getInt());
                 if (startPos >= 0 && startPos <= inputStr.length()) {
-                    searchStart = startPos;
+                    globalPosition = startPos;
                 }
             }
+            nativeGlobalPosition = matcher.setGlobalPosition(globalPosition);
+            if (!nativeGlobalPosition) searchStart = globalPosition;
         }
 
         // The result string after substitutions
@@ -2837,6 +2848,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         try {
             while (searchStart <= inputStr.length()) {
                 setSubstitutionRegion(matcher, searchStart, inputStr.length(), true);
+                if (nativeGlobalPosition) matcher.setGlobalPosition(globalPosition);
                 if (!matcher.find()) {
                     break;
                 }
@@ -2902,6 +2914,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 if (matcher.end() > matcher.start()) {
                     searchStart = matcher.end();
+                    globalPosition = searchStart;
                     continue;
                 }
 
@@ -2917,6 +2930,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                     // so a zero-length match at the region start is rejected.
                     setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
+                    if (nativeGlobalPosition) retryMatcher.setGlobalPosition(zeroLengthOffset);
                     boolean retryFound = nonEmptySubstitutionPattern != null
                             ? retryMatcher.find() : retryMatcher.findNotEmpty();
                     if (retryFound
@@ -2966,12 +2980,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             }
                         }
                         searchStart = retryMatcher.end();
+                        globalPosition = searchStart;
                         consumedNonEmptyRetry = true;
                     }
                 }
 
                 if (!consumedNonEmptyRetry) {
                     searchStart = bumpGlobalMatchPosition(inputStr, zeroLengthOffset);
+                    globalPosition = searchStart;
                 }
             }
         } catch (RegexTimeoutException e) {

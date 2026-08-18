@@ -165,12 +165,13 @@ final class JoniRegexPattern {
                     "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*=.*");
+            boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
             if (frontendProperty && extendedClassBracketDepth > 0) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
             }
-            if (!userDefined && !scriptExtensions && !frontendProperty) {
+            if (!userDefined && !scriptExtensions && !frontendProperty && !perlBuiltInAlias) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
@@ -629,6 +630,7 @@ final class JoniRegexPattern {
         private int regionStart;
         private int regionEnd;
         private int nextStart;
+        private int globalPosition = -1;
         private boolean matched;
         private int committedLastClosedCapture = -1;
         private final boolean hasControlVerbState;
@@ -679,9 +681,15 @@ final class JoniRegexPattern {
             }
             int result;
             try {
-                result = anchored
-                        ? matcher.match(charToByte[nextStart], charToByte[regionEnd], option)
-                        : matcher.search(charToByte[nextStart], charToByte[regionEnd], option);
+                if (globalPosition >= 0) {
+                    result = matcher.search(charToByte[globalPosition], charToByte[nextStart],
+                            charToByte[regionEnd], option);
+                    if (anchored && result != charToByte[nextStart]) result = -1;
+                } else {
+                    result = anchored
+                            ? matcher.match(charToByte[nextStart], charToByte[regionEnd], option)
+                            : matcher.search(charToByte[nextStart], charToByte[regionEnd], option);
+                }
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
                 throw failure;
@@ -723,6 +731,12 @@ final class JoniRegexPattern {
 
         @Override public void useAnchoringBounds(boolean enabled) { }
         @Override public void useTransparentBounds(boolean enabled) { }
+        @Override
+        public boolean setGlobalPosition(int position) {
+            if (position < 0 || position > input.length()) return false;
+            globalPosition = position;
+            return true;
+        }
         @Override public int start() { return toCharOffset(matcher.getBegin()); }
         @Override public int end() { return toCharOffset(matcher.getEnd()); }
         @Override public int start(int index) { return groupOffset(index, true); }

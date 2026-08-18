@@ -19,6 +19,12 @@ public interface RegexMatcher {
 
     void useTransparentBounds(boolean enabled);
 
+    /**
+     * Set an independent Perl {@code \G} anchor while retaining the current
+     * search start. Backends without a separate gpos cursor return false.
+     */
+    default boolean setGlobalPosition(int position) { return false; }
+
     int start();
 
     int end();
