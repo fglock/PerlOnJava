@@ -749,15 +749,34 @@ public class EmitSubroutine {
             String directName = NameNormalizer.normalizeVariableName(
                     identifierNode.name,
                     emitterVisitor.ctx.symbolTable.getCurrentPackage());
-            if (!(operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar)) {
-                GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
+            RuntimeScalar parseTimeCodeRef = operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                    ? codeRef
+                    : null;
+            RuntimeScalar emissionTimeCodeRef = parseTimeCodeRef == null
+                    ? null
+                    : GlobalVariable.getGlobalCodeRefForDirectCall(directName);
+            if (parseTimeCodeRef != null && emissionTimeCodeRef != parseTimeCodeRef) {
+                // A BEGIN block displaced this call site's original CV while
+                // the surrounding file was still compiling. Perl keeps that
+                // already-compiled call bound to the original CV.
+                int codeRefId = GlobalVariable.registerCompiledCodeRef(parseTimeCodeRef);
+                mv.visitLdcInsn(codeRefId);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                        "getCompiledCodeRef",
+                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            } else {
+                if (parseTimeCodeRef == null) {
+                    GlobalVariable.getGlobalCodeRefForFreshLookup(directName);
+                }
+                mv.visitLdcInsn(directName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                        "getGlobalCodeRefForDirectCall",
+                        "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
             }
-            mv.visitLdcInsn(directName);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                    "getGlobalCodeRefForDirectCall",
-                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                    false);
         } else if (node.left instanceof OperatorNode operatorNode
                 && operatorNode.operator.equals("&")
                 && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {

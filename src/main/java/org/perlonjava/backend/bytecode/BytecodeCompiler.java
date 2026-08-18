@@ -5028,7 +5028,28 @@ public class BytecodeCompiler implements Visitor {
                     // An unresolved call compiled after a stash deletion must
                     // install a new undefined slot instead of falling through
                     // to the old pinned CV at execution time.
-                    if (!(node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar)) {
+                    RuntimeScalar parseTimeCodeRef = node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
+                            ? codeRef
+                            : null;
+                    RuntimeScalar emissionTimeCodeRef = parseTimeCodeRef == null
+                            ? null
+                            : GlobalVariable.getGlobalCodeRefForDirectCall(subName);
+                    if (parseTimeCodeRef != null && emissionTimeCodeRef != parseTimeCodeRef) {
+                        // A BEGIN block displaced this call site's original CV
+                        // during compilation. Snapshot the original CV just as
+                        // an ordinary compiled code reference does.
+                        RuntimeScalar codeSnapshot = new RuntimeScalar();
+                        codeSnapshot.type = parseTimeCodeRef.type;
+                        codeSnapshot.value = parseTimeCodeRef.value;
+                        int rd = allocateOutputRegister();
+                        int constIdx = addToConstantPool(codeSnapshot);
+                        emit(Opcodes.LOAD_CONST);
+                        emitReg(rd);
+                        emit(constIdx);
+                        lastResultReg = rd;
+                        return;
+                    }
+                    if (parseTimeCodeRef == null) {
                         GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                     }
                     int rd = allocateOutputRegister();
