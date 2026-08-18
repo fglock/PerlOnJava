@@ -165,7 +165,18 @@ allocate callback state or callback frames.
    suite whose regex capability policy is removed.
 5. Run warning-free `make`, Joni upstream tests, packaging and license checks,
    and the thread release matrix.
-6. Rebase each focused delivery slice onto current master. Require green Ubuntu
+6. Rewrite `dev/implementation/regex.md` to describe the final as-implemented
+   matcher architecture and ownership boundaries, and update
+   `docs/design/joni-callout-fork.md` to match the shipped fork API, namespace,
+   packaging, callback/unwind contract, and Unicode responsibilities. Review
+   both documents for a clear reader path, consistent terminology, and removal
+   of superseded proposals or predictions. Audit the remaining regex/Joni
+   design documents: delete only content that is wholly redundant and retains
+   no useful rationale; otherwise replace historical implementation plans with
+   concise summaries that preserve decisions and point to the canonical
+   implementation and fork documents. Preserve copyright and authorship
+   notices in every retained or consolidated third-party description.
+7. Rebase each focused delivery slice onto current master. Require green Ubuntu
    and Windows CI before merging and beginning the next slice.
 
 Exit criteria: all semantic gates pass, no previously passing file regresses,
@@ -224,7 +235,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1038, stacked
+The published integration stack is preserved through draft PR #1039, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -239,10 +250,11 @@ empty-property rendering. PR #1032 integrates native numeric escapes through
 U+10FFFF; PR #1033 adds pinned Bidi_Class sets; PR #1034 integrates native
 vertical-whitespace escapes; PR #1035 adds Decomposition_Type and PR #1036
 adds East_Asian_Width, PR #1037 adds Numeric_Value, and PR #1038 adds
-Joining_Group. The current WIP integrates Block; independently validated
-Script/Script_Extensions, break-property values, generic and specialized
-binary-property data, and the first preprocessor dead-state deletion are ready
-for focused integration.
+Joining_Group, and PR #1039 adds Block. The current WIP integrates
+Script/Script_Extensions; independently validated break-property values,
+generic and specialized binary-property data, residual enumerated-property
+families, and the first preprocessor dead-state deletion are ready for focused
+integration.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -383,6 +395,20 @@ The two focused precedence reducers pass 12/12 on all runtimes, protected
 boundary smoke remains 169/169 per backend, and chunks 01–04 gain 8,324
 assertions with zero numbered regressions and exact backend identity. Current
 generated evidence is 369,462/407,367.
+
+`Script`/`sc` and `Script_Extensions`/`scx` assignments now resolve all 176
+values from pinned Unicode 17 partitions and Script_Extensions overrides.
+Explicit `sc` retains strict Script semantics while Perl's bare Script-value
+shortcuts use Script_Extensions; the composite `Katakana_Or_Hiragana`/`Hrkt`
+value remains explicit-only as required by Perl. Loose aliases, `Qaac`/`Qaai`,
+wildcards, exact `Is` assignment policy, precedence over Block shortcuts, and
+positive or complemented properties inside ordinary character classes are
+covered. The 84-assertion oracle passes system Perl, JVM, and interpreter; the
+focused precedence, class-negation, and bare-scx reducers pass 7/7, 8/8, and
+10/10 respectively on all three runtimes. Protected boundary smoke remains
+169/169 per backend. Chunks 01–04 gain 8,126 assertions with zero numbered
+regressions and exact JVM/interpreter counts, raising current generated
+evidence to 377,588/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -657,6 +683,12 @@ is retained for now.
     partition with official aliases, ordered `No_Block` gaps, wildcard policy,
     and Script/category/binary precedence. Chunks 01–04 gain 8,324 assertions
     with zero numbered regressions and exact backend identity.
+  - [x] Generated and integrated complete pinned Unicode 17.0 Script and
+    Script_Extensions sets, including Perl's bare-scx policy, strict explicit
+    Script assignments, composite-value rejection, aliases, wildcards,
+    precedence, and ordinary character-class complements. The focused oracle
+    passes 84/84; chunks 01–04 gain 8,126 assertions with zero numbered
+    regressions and exact backend counts.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -702,15 +734,15 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1038. Publish the validated
-   Block integration in a separate focused WIP PR, preserving the
-   independently reviewed data commit.
+1. Land review-ready PR #1024 and draft PRs #1025–#1039. Publish the validated
+   Script/Script_Extensions integration in a separate focused WIP PR,
+   preserving the independently reviewed data commit.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Integrate the independently generated Script/Script_Extensions and
-   break-property value slices, then the generic
-   and specialized binary-property families currently advancing in parallel.
+3. Integrate the independently generated break-property value slice, then the
+   generic and specialized binary-property families and residual enumerated
+   families currently advancing in parallel.
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
@@ -722,9 +754,14 @@ is retained for now.
    Move matcher semantics into Joni, retain only source-policy scanning, delete
    Java-only rewrites and compiled-pattern variants, and remove the temporary
    Java backend selector after the performance gate passes.
-6. Reconcile `docs/reference/feature-matrix.md` with the final corpus: replace
-   stale Unicode limitations, add any still-missing regex features, and link
-   each limitation to a reducer or explicit optimizer/debug exclusion.
+6. Reconcile `docs/reference/feature-matrix.md` with the final corpus; update
+   `dev/implementation/regex.md` and `docs/design/joni-callout-fork.md` to the
+   as-implemented architecture and review both for clarity and structure.
+   Audit redundant regex/Joni documents, deleting only wholly redundant text
+   and summarizing historically useful rationale with links to the canonical
+   documents. Replace stale Unicode limitations, add any still-missing regex
+   features, and link each limitation to a reducer or explicit optimizer/debug
+   exclusion.
 7. Run unchanged CPAN consumers, the direct/thread release matrix, packaging
    and license checks, and warning-free `make`; then rebase each focused PR and
    require green Ubuntu and Windows CI.
