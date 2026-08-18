@@ -117,6 +117,7 @@ final class JoniRegexPattern {
             String pattern, RegexFlags flags) {
         StringBuilder translated = new StringBuilder(pattern.length());
         boolean deferred = false;
+        int extendedClassBracketDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (ch == '\\' && i + 1 < pattern.length() && pattern.charAt(i + 1) == '\\') {
@@ -124,10 +125,31 @@ final class JoniRegexPattern {
                 i++;
                 continue;
             }
+            if (extendedClassBracketDepth == 0 && pattern.startsWith("(?[", i)) {
+                translated.append("(?[");
+                extendedClassBracketDepth = 1;
+                i += 2;
+                continue;
+            }
+            if (extendedClassBracketDepth > 0 && ch == '[') {
+                extendedClassBracketDepth++;
+                translated.append(ch);
+                continue;
+            }
+            if (extendedClassBracketDepth > 0 && ch == ']') {
+                extendedClassBracketDepth--;
+                translated.append(ch);
+                continue;
+            }
             if (ch != '\\' || i + 3 >= pattern.length()
                     || (pattern.charAt(i + 1) != 'p' && pattern.charAt(i + 1) != 'P')
                     || pattern.charAt(i + 2) != '{') {
-                translated.append(ch);
+                if (ch == '\\' && i + 1 < pattern.length()) {
+                    translated.append(pattern, i, i + 2);
+                    i++;
+                } else {
+                    translated.append(ch);
+                }
                 continue;
             }
             int end = pattern.indexOf('}', i + 3);
@@ -143,6 +165,11 @@ final class JoniRegexPattern {
                     "(?i)^(?:scx|script[_ ]?extensions)\\s*=.*");
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|block|blk|age|in|present[_ ]?in)\\s*=.*");
+            if (frontendProperty && extendedClassBracketDepth > 0) {
+                translated.append(pattern, i, end + 1);
+                i = end;
+                continue;
+            }
             if (!userDefined && !scriptExtensions && !frontendProperty) {
                 translated.append(pattern, i, end + 1);
                 i = end;
