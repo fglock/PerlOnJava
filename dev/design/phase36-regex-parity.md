@@ -224,16 +224,17 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1028, stacked
+The published integration stack is preserved through draft PR #1029, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
 first 524 lines of retired Java-only preprocessor code. Every published slice
 has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
 boundaries; PR #1028 adds independently validated alpha assertion aliases and
-native word boundaries. The current WIP integrates corrected global zero-width
-`/g` progression and pinned Perl 5.44 Unicode 17.0 Age properties while line
-boundaries remain a parallel integration slice.
+native word boundaries. PR #1029 integrates corrected global zero-width `/g`
+progression and pinned Perl 5.44 Unicode 17.0 Age properties. The new WIP is
+closing combined-corpus regressions while line boundaries remain a parallel
+integration slice.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -340,6 +341,19 @@ complete in `dev/design/phase36-regex-differential-20260817.md`; Phase 1's exit
 criterion is not met because Joni loses Java-passing assertions and introduces
 matcher-specific timeouts on both execution backends.
 
+The post-PR-#1028 plus `/g` combined forced-Joni refresh executes all 80 files
+at 74,603/331,826 on JVM and 74,607/331,826 on interpreter. Four generated
+property chunks time out after producing partial TAP and require the narrow
+600-second rerun; chunks 05 and 10 are exact while chunks 06–09 expose only the
+assigned line-boundary gap. Six regressions versus the preceding Joni result
+reduced to two fatal roots. Binary `ASCII_Hex_Digit=True` routing is now closed:
+the focused Perl boolean-value oracle passes 16/16 on system Perl, JVM, and
+interpreter, and `pat.t` is restored from its zero-TAP abort to the independently
+tracked test-239 runtime-eval gate. PerlOnJava3 owns the remaining unbraced byte
+escape `too short multibyte code string` root in `pat_advanced{,_thr}.t` and
+`pat_rt_report{,_thr}.t` as part of the overlapping native Joni numeric-escape
+parser slice.
+
 ### Completed Phases
 
 - [x] Phase 0: Reproducible differential baseline (2026-08-17)
@@ -381,6 +395,9 @@ matcher-specific timeouts on both execution backends.
     first alternative (`0703725c8`, integrated as `402102446`). The focused
     oracle passes 23/23, the raw omniholder reducer improves from 7/10 to 10/10
     in all six Java/Joni × JVM/interpreter modes, and DBIx::Simple remains 69/69.
+  - [x] Reran the combined forced-Joni 80-file corpus on JVM and interpreter,
+    published the complete file-by-file comparison, and reduced its six actual
+    regressions to two fatal roots with narrow owners and rerun gates.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -489,6 +506,9 @@ matcher-specific timeouts on both execution backends.
     Perl 5.44 Unicode 17.0 data, including loose version, wildcard, and
     unassigned aliases. The focused oracle passes 14/14 and chunk 01 gains 511
     assertions with no numbered regression.
+  - [x] Routed Perl boolean values for the built-in `ASCII_Hex_Digit`/`AHex`
+    property through the frontend set resolver. All eight true/false aliases
+    pass 16/16 on system Perl, JVM, and interpreter, restoring `pat.t` startup.
   - [ ] Implement the native Joni line boundary algorithm, then
     close the remaining property and boundary failures before marking Phase 3
     complete.
@@ -533,9 +553,9 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1028. Publish the current
-   post-#1028 WIP containing the completed zero-width `/g` adapter integration,
-   then rerun the combined forced-backend differential.
+1. Land review-ready PR #1024 and draft PRs #1025–#1029. Integrate native Joni
+   unbraced-byte and underscored numeric escape parsing, then rerun the affected
+   direct/thread files and confirm the last combined-corpus fatal root is closed.
 2. Continue boundary semantics natively in Joni with line breaks
    (0/205,380 in chunks 06–09). PerlOnJava4 owns the non-overlapping line slice;
    word boundaries are complete at 19,510/19,510 in chunk 10. Use pinned Perl 5.44 Unicode data and
@@ -546,10 +566,10 @@ matcher-specific timeouts on both execution backends.
    break-property values. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Close underscored numeric escapes with focused standard-Perl gates.
-4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
-   head. Save complete JSON and logs, publish the missing differential report,
-   and compare every file with both the Phase 0 result and PR 958 under the
-   no-regression gate.
+4. Rerun generated property chunks 01–04 on both backends with the classified
+   600-second bound and retain complete TAP/JSON. After the two fatal roots and
+   native line boundaries integrate, refresh the complete forced-Joni 80-file
+   corpus and apply the no-regression gate against Phase 0 and PR 958.
 5. Audit every `RegexPreprocessor` rule against the final ownership boundary.
    Move matcher semantics into Joni, retain only source-policy scanning, delete
    Java-only rewrites and compiled-pattern variants, and remove the temporary

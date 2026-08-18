@@ -936,6 +936,23 @@ public class UnicodeResolver {
         if (property == null) return null;
 
         String alias = property.trim();
+        int assignment = alias.indexOf('=');
+        if (assignment > 0 && assignment < alias.length() - 1) {
+            Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
+            if (value != null) {
+                UnicodeSet binaryProperty = resolvePerlBuiltInPropertyAlias(
+                        alias.substring(0, assignment));
+                if (binaryProperty == null
+                        && loosePropertyName(alias.substring(0, assignment))
+                                .matches("(?:asciihexdigit|ahex)")) {
+                    binaryProperty = new UnicodeSet()
+                            .applyPropertyAlias("ASCII_Hex_Digit", "True");
+                }
+                if (binaryProperty != null) {
+                    return value ? binaryProperty : binaryProperty.complement();
+                }
+            }
+        }
         if (alias.equalsIgnoreCase("L&")) {
             UnicodeSet casedLetters = unicodePropertyValueSet(
                     UProperty.GENERAL_CATEGORY, "UppercaseLetter");
@@ -975,6 +992,14 @@ public class UnicodeResolver {
             return null;
         }
         return new UnicodeSet().applyIntPropertyValue(UProperty.BLOCK, blockValue);
+    }
+
+    private static Boolean perlBooleanPropertyValue(String value) {
+        return switch (loosePropertyName(value)) {
+            case "true", "yes", "y", "t" -> true;
+            case "false", "no", "n", "f" -> false;
+            default -> null;
+        };
     }
 
     private static String loosePropertyName(String value) {

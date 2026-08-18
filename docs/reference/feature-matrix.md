@@ -378,7 +378,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is supported.
 - ✅  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
 - ✅  **Basic Unicode Properties**: Common `\p{...}` and `\P{...}` forms such as `\p{L}` execute through Joni.
-- 🟡  **Perl Unicode Property Syntax**: Perl-specific properties and focused Script/Block aliases execute through Joni. `Age` and cumulative `In`/`Present_In` are generated from pinned Perl 5.44 Unicode 17.0 data, including loose versions and `Unassigned`/`NA`; other generated property/value aliases still have pinned acceptance/rejection gaps.
+- 🟡  **Perl Unicode Property Syntax**: Perl-specific properties and focused Script/Block aliases execute through Joni. `Age` and cumulative `In`/`Present_In` are generated from pinned Perl 5.44 Unicode 17.0 data, including loose versions and `Unassigned`/`NA`; `ASCII_Hex_Digit`/`AHex` accepts Perl's eight boolean value aliases. Other generated property/value aliases still have pinned acceptance/rejection gaps.
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, and `{n,m}+`, which disable backtracking, are supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
 - ✅  **`\K` assertion**: Keep left — in `s///`, text before `\K` is preserved; match variables reflect only the portion after `\K`.
