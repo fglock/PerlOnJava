@@ -1,0 +1,10 @@
+--- perl5/lib/overloading.pm
++++ src/main/perl/lib/overloading.pm
+@@ -27,6 +27,7 @@
+ 	delete $^H{overloading};
+ 	$^H &= ~$HINT_NO_AMAGIC;
+     }
++
+ }
+ 
+ sub unimport ($, @ops) {
