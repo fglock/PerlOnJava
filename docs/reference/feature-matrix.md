@@ -359,7 +359,10 @@ my @copy = @{$z};         # ERROR
 - ✅  **Transliteration**: `tr` and `y` transliteration operators are implemented.
 - ✅  **`pos`**: `pos` operator is implemented.
 - ✅  **`\G`**: `\G` operator in regex is implemented.
-- ✅  **`\N{name}`**: `\N{name}` and `\N{U+hex}` operator for named characters in regex is implemented.
+- 🟡  **`\N{name}`**: `\N{name}` and `\N{U+hex}` work, but named-character
+  resolution still crosses the PerlOnJava frontend. Native Joni resolver
+  injection, class handling, byte mode, and structural diagnostics remain an
+  active migration gate.
 - ✅  **`\N`**: Not-newline operator.
 - ✅  **lvalue `pos`**: lvalue `pos` operator is implemented.
 - ✅  **`m?pat?`** one-time match is implemented.
@@ -382,7 +385,9 @@ my @copy = @{$z};         # ERROR
 - 🟡  **Perl Unicode Property Syntax**: Perl-specific properties execute through Joni. `Age`, cumulative `In`/`Present_In`, General_Category, Canonical_Combining_Class, Bidi_Class, Decomposition_Type, East_Asian_Width, Numeric_Value, Joining_Group, Block, Script, and Script_Extensions assignments are generated from pinned Perl 5.44 Unicode 17.0 data with loose and wildcard aliases, ordered missing defaults, official compact aliases and shortcuts, Script-versus-Script_Extensions policy, reserved or composite values, exact rationals, and Perl's generated decimal keyword aliases; `ASCII_Hex_Digit`/`AHex` accepts Perl's eight boolean value aliases. Other generated property/value aliases still have pinned acceptance/rejection gaps.
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, and `{n,m}+`, which disable backtracking, are supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
-- ✅  **`\K` assertion**: Keep left — in `s///`, text before `\K` is preserved; match variables reflect only the portion after `\K`.
+- 🟡  **`\K` assertion**: Keep-left semantics work and Joni has a native KEEP
+  opcode, but ordinary auto-selected patterns still use Java marker state.
+  Native-only routing and removal of the Java marker snapshot are pending.
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
 - ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
 - ✅  **Python-style named groups**: `(?P<name>...)` and `(?P=name)` are parsed natively by Joni with Perl capture numbering, duplicate-name behavior, and malformed/unknown-name diagnostics.
@@ -394,10 +399,20 @@ my @copy = @{$z};         # ERROR
 - ✅  **Backtracking Control Verbs**: `(*ACCEPT)`, `(*FAIL)`/`(*F)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` execute through Joni with matcher-owned cut boundaries. Atomic groups `(?>...)` are supported.
 - ✅  **Marks and named skip targets**: `(*MARK:NAME)` and its `(*:NAME)` shorthand, named `(*SKIP:NAME)`, `$REGMARK`, and `$REGERROR` execute through Joni and follow the selected backtracking path.
 - ✅  **Regex Definitions**: `(?(DEFINE)...)` containers and numbered or named calls to their subpatterns execute through Joni.
-- ✅  **Lookbehind Assertions**: Fixed and bounded variable-length positive and negative lookbehind assertions execute through Joni.
-- ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
+- 🟡  **Lookbehind Assertions**: Joni implements fixed and bounded
+  variable-length positive and negative lookbehind. Ordinary auto-selected
+  lookbehind remains temporarily routed to Java until nested lookahead is
+  admitted inside Joni lookbehind analysis and the full corpus is preserved.
+- 🟡  **Branch Reset Groups**: Joni resets logical capture numbering across
+  alternatives. Native duplicate-name physical publication and branch-reset
+  subroutine-call integration remain required before temporary ordinary-pattern
+  Java routing can be removed.
 - ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
-- ✅  **Conditional Expressions**: Numbered and named capture conditions, positive and negative assertion conditions, recursion conditions `(?(R))`, `(?(R1))`, and `(?(R&name))`, executable callback conditions, and optimistic predicates execute through Joni.
+- 🟡  **Conditional Expressions**: Joni implements numbered and named capture
+  conditions, assertion conditions, recursion conditions, executable callback
+  conditions, and optimistic predicates. Callback/recursive/Joni-only forms
+  execute in Joni; ordinary numeric and assertion conditionals still require
+  native-only routing and deletion of Java conditional rewrites.
 - 🟡  **Extended Unicode Regex Features**: Complete pinned Script, Script_Extensions, and Block sets, `Extended_Pictographic`, `Age`, `In`/`Present_In`, General_Category, Canonical_Combining_Class, Bidi_Class, Decomposition_Type, East_Asian_Width, Numeric_Value, Joining_Group, and invalid-property gates execute through Joni, and `regexp_unicode_prop.t` passes 1,110/1,110. Current generated evidence is 377,602/407,367: the complete boundary corpus passes, while chunks 01–04 expose the remaining property/value alias gaps.
 - ✅  **Extended Grapheme Clusters**: Native `\b{gcb}`/`\B{gcb}` implement GB1–GB13 and GB999, and `\X` includes repeated GB9c Indic conjuncts. The complete 8,516-assertion GCB/`\X` section of authoritative chunk 05 passes identically on JVM and interpreter.
 - ✅  **Unicode Sentence Boundaries**: Native `\b{sb}`/`\B{sb}` implement SB1–SB11 and SB998 from the reproducible Perl 5.44 Unicode 17.0 sentence-break table. Authoritative chunk 05 passes 14,976/14,976 identically on JVM and interpreter.
