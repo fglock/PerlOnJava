@@ -4,8 +4,6 @@ use utf8;
 use Test::More;
 no warnings 'experimental::uniprop_wildcards';
 
-local $TODO = 'Core binary property resolver wiring is a separate Phase 36 slice';
-
 sub compile_property {
     my ($property, $sigil) = @_;
     $sigil //= 'p';
