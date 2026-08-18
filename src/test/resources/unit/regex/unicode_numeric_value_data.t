@@ -16,9 +16,6 @@ sub matches_property {
     return defined($regex) && chr($code_point) =~ $regex;
 }
 
-TODO: {
-    local $TODO = 'Numeric_Value resolver wiring is a separate Phase 36 slice';
-
     ok(matches_property('nv=1', 0x0031), 'short property name and integer value');
     ok(matches_property('Numeric_Value:1', 0x0031), 'long property name and colon');
     ok(matches_property('nU-mErIc value=+ 000_001', 0x0031),
@@ -62,6 +59,4 @@ TODO: {
         ok(matches_property('nv=3/2', 0x16FF5), 'Unicode 17 fractional-value boundary');
         ok(!matches_property('nv=3/2', 0x16FF6), 'Unicode 17 adjacent nonmatch boundary');
     }
-}
-
 done_testing;

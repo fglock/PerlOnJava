@@ -6,6 +6,8 @@ import com.ibm.icu.text.UnicodeSet;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -695,7 +697,13 @@ public class UnicodeResolver {
                 property = property.substring(1).trim();
                 negated = !negated;
             }
+            boolean isPrefixedNumericWildcard =
+                    isPerlIsPrefixedNumericWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
+            if (isPrefixedNumericWildcard) {
+                throw new IllegalArgumentException(
+                        "Is-prefixed Numeric_Value properties do not accept wildcard values");
+            }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
                 if (!userPropertyName.matches("[A-Za-z_][A-Za-z0-9_]*")) {
@@ -997,6 +1005,18 @@ public class UnicodeResolver {
             }
             return eastAsianWidth;
         }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeNumericValueData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            UnicodeSet numericValue = resolvePerlNumericValue(
+                    alias.substring(assignment + 1));
+            if (numericValue == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported Numeric_Value value: "
+                                + alias.substring(assignment + 1).trim());
+            }
+            return numericValue;
+        }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1054,6 +1074,134 @@ public class UnicodeResolver {
             case "false", "no", "n", "f" -> false;
             default -> null;
         };
+    }
+
+    private static boolean isPerlIsPrefixedNumericWildcard(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String name = property.substring(0, assignment);
+        return name.length() > 2
+                && name.charAt(0) == 'I'
+                && name.charAt(1) == 's'
+                && PerlUnicodeNumericValueData.isPropertyAlias(name)
+                && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
+    private static UnicodeSet resolvePerlNumericValue(String value) {
+        String wildcard = perlNumericWildcardBody(value);
+        if (wildcard != null) {
+            Pattern valuePattern;
+            try {
+                valuePattern = Pattern.compile(wildcard);
+            } catch (RuntimeException invalidPattern) {
+                return null;
+            }
+            UnicodeSet result = new UnicodeSet();
+            for (int index = 0; index < PerlUnicodeNumericValueData.valueCount(); index++) {
+                if (valuePattern.matcher(
+                        PerlUnicodeNumericValueData.canonicalValue(index)).matches()) {
+                    result.addAll(PerlUnicodeNumericValueData.set(index));
+                }
+            }
+            if (valuePattern.matcher("NaN").matches()) {
+                result.addAll(PerlUnicodeNumericValueData.nanSet());
+            }
+            return result.isEmpty() ? null : result.freeze();
+        }
+
+        if (loosePropertyName(value).equals("nan")) {
+            return PerlUnicodeNumericValueData.nanSet();
+        }
+
+        short index = perlNumericValueIndex(value);
+        return index == PerlUnicodeNumericValueData.INVALID
+                ? null
+                : PerlUnicodeNumericValueData.set(index);
+    }
+
+    private static String perlNumericWildcardBody(String value) {
+        String trimmed = value.trim();
+        if (trimmed.startsWith("/\\A") && trimmed.endsWith("\\z/")
+                && trimmed.length() > 6) {
+            return trimmed.substring(3, trimmed.length() - 3);
+        }
+        if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
+                && trimmed.length() > 6) {
+            return trimmed.substring(3, trimmed.length() - 3);
+        }
+        return null;
+    }
+
+    private static short perlNumericValueIndex(String value) {
+        try {
+            if (value.indexOf('/') >= 0) {
+                return perlRationalValueIndex(value);
+            }
+
+            String normalized = removePerlNumericLooseCharacters(value);
+            if (!normalized.matches("(?:\\+?[0-9]+(?:\\.[0-9]*)?"
+                    + "|-[0-9]*(?:\\.[0-9]+)?)(?:[eE][+-]?[0-9]+)?")) {
+                return PerlUnicodeNumericValueData.INVALID;
+            }
+            BigDecimal decimal = new BigDecimal(normalized);
+            BigInteger numerator = decimal.unscaledValue();
+            BigInteger denominator = BigInteger.ONE;
+            if (decimal.scale() > 0) {
+                denominator = BigInteger.TEN.pow(decimal.scale());
+            } else if (decimal.scale() < 0) {
+                numerator = numerator.multiply(BigInteger.TEN.pow(-decimal.scale()));
+            }
+            return rationalValueIndex(numerator, denominator);
+        } catch (ArithmeticException | NumberFormatException invalidValue) {
+            return PerlUnicodeNumericValueData.INVALID;
+        }
+    }
+
+    private static short perlRationalValueIndex(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (character == ' ' || character >= '\t' && character <= '\r') {
+                return PerlUnicodeNumericValueData.INVALID;
+            }
+        }
+        String[] parts = value.split("/", -1);
+        if (parts.length != 2 || parts[0].endsWith("_")) {
+            return PerlUnicodeNumericValueData.INVALID;
+        }
+        String numeratorText = parts[0].replace("_", "");
+        String denominatorText = parts[1];
+        if (denominatorText.startsWith("+")) denominatorText = denominatorText.substring(1);
+        while (denominatorText.startsWith("_")) denominatorText = denominatorText.substring(1);
+        denominatorText = denominatorText.replace("_", "");
+        if (!numeratorText.matches("[+-]?[0-9]+")
+                || !denominatorText.matches("[0-9]+")) {
+            return PerlUnicodeNumericValueData.INVALID;
+        }
+        return rationalValueIndex(
+                new BigInteger(numeratorText), new BigInteger(denominatorText));
+    }
+
+    private static short rationalValueIndex(BigInteger numerator, BigInteger denominator) {
+        if (denominator.signum() == 0) return PerlUnicodeNumericValueData.INVALID;
+        BigInteger divisor = numerator.gcd(denominator);
+        numerator = numerator.divide(divisor);
+        denominator = denominator.divide(divisor);
+        if (numerator.bitLength() > 63 || denominator.bitLength() > 63) {
+            return PerlUnicodeNumericValueData.INVALID;
+        }
+        return PerlUnicodeNumericValueData.valueForRational(
+                numerator.longValueExact(), denominator.longValueExact());
+    }
+
+    private static String removePerlNumericLooseCharacters(String value) {
+        StringBuilder normalized = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (character == '_' || character == ' '
+                    || character >= '\t' && character <= '\r') continue;
+            normalized.append(character);
+        }
+        return normalized.toString();
     }
 
     private static boolean isGeneralCategoryProperty(String property) {
