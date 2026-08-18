@@ -258,7 +258,11 @@ if they expose a semantic defect.
    - retire the next ordinary-pattern fallbacks in this priority order:
      1. route ordinary lookbehind through Joni and delete the Java-only
         lookbehind length analyzer after the 27-assertion four-leg reducer and
-        six imported owner-file pass sets are non-regressing;
+        six imported owner-file pass sets are non-regressing; before enabling
+        that routing, Joni must enforce Perl's 255-character ceiling, accept
+        valid folded-class and nested-assertion lookbehinds, and preserve
+        `(*ACCEPT)`-reachable effective widths; do not replace these native
+        prerequisites with a narrower permanent Java fallback;
      2. route branch-reset groups and delete their exclusive rewrite only after
         the named/numeric-call reducers and complete imported branch-reset gate
         pass without the temporary automatic-Java guard;
