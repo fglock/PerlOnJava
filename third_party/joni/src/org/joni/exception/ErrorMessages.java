@@ -91,6 +91,9 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
     String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
             "Missing right brace on \\x{}";
+    String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
+            "Missing right brace on \\N{}";
+    String PERL_EMPTY_NAMED_CHARACTER_ESCAPE = "Empty \\N{}";
 
     /* values error (syntax error) */
     String TOO_BIG_NUMBER = "too big number";

@@ -683,6 +683,34 @@ class Lexer extends ScannerSupport {
         token.setCode(value);
     }
 
+    private boolean fetchTokenFor_namedCharacter() {
+        NamedCharacterResolver resolver = syntax.namedCharacterResolver;
+        if (resolver == null || !syntax.op2OptionPerl() || !left() || !peekIs('{')) {
+            return false;
+        }
+
+        inc();
+        int nameStart = p;
+        while (left()) {
+            int nameEnd = p;
+            fetch();
+            if (c != '}') continue;
+            if (nameStart == nameEnd) {
+                newSyntaxException(PERL_EMPTY_NAMED_CHARACTER_ESCAPE);
+            }
+            int codePoint = resolver.resolve(bytes, nameStart, nameEnd, enc);
+            if (codePoint < 0 || codePoint > 0x10ffff) {
+                newValueException(ERR_INVALID_CODE_POINT_VALUE);
+            }
+            token.type = TokenType.CODE_POINT;
+            token.setCode(codePoint);
+            return true;
+        }
+
+        newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE);
+        return true; // not reached
+    }
+
     private void scanOriginalBracedHexCodePoint(int last) {
         inc();
         int num = scanUnsignedHexadecimalNumber(0, 8);
@@ -949,6 +977,16 @@ class Lexer extends ScannerSupport {
                 break;
             case 'u':
                 fetchTokenInCCFor_u();
+                break;
+            case 'N':
+                if (!fetchTokenFor_namedCharacter()) {
+                    unfetch();
+                    fetchEscapedValue();
+                    if (token.getC() != c) {
+                        token.setCode(c);
+                        token.type = TokenType.CODE_POINT;
+                    }
+                }
                 break;
             case '0':
             case '1':
@@ -1411,6 +1449,22 @@ class Lexer extends ScannerSupport {
                     break;
                 case 'u':
                     fetchTokenFor_uHex();
+                    break;
+                case 'N':
+                    if (!fetchTokenFor_namedCharacter()) {
+                        unfetch();
+                        fetchEscapedValue();
+                        if (token.getC() != c) {
+                            token.type = TokenType.CODE_POINT;
+                            token.setCode(c);
+                        } else {
+                            int encLength = enc.length(bytes, token.backP, stop);
+                            if (encLength == Encoding.CHAR_INVALID) {
+                                throw new IllegalArgumentException("Invalid character found.");
+                            }
+                            p = token.backP + encLength;
+                        }
+                    }
                     break;
                 case '1':
                 case '2':
