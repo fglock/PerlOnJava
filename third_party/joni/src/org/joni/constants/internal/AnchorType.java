@@ -43,6 +43,8 @@ public interface AnchorType {
     int END_BUF_MASK      = (END_BUF | SEMI_END_BUF);
 
     int KEEP              = (1<<16);
+    int GRAPHEME_BOUNDARY = (1<<17);
+    int NOT_GRAPHEME_BOUNDARY = (1<<18);
 
     int ALLOWED_IN_LB =     ( LOOK_BEHIND |
                                     LOOK_BEHIND_NOT |
@@ -53,6 +55,8 @@ public interface AnchorType {
                                     KEEP |
                                     WORD_BOUND |
                                     NOT_WORD_BOUND |
+                                    GRAPHEME_BOUNDARY |
+                                    NOT_GRAPHEME_BOUNDARY |
                                     WORD_BEGIN |
                                     WORD_END );
 
@@ -66,6 +70,8 @@ public interface AnchorType {
                                     KEEP |
                                     WORD_BOUND |
                                     NOT_WORD_BOUND |
+                                    GRAPHEME_BOUNDARY |
+                                    NOT_GRAPHEME_BOUNDARY |
                                     WORD_BEGIN |
                                     WORD_END );
 }

@@ -154,6 +154,8 @@ public interface OPCode {
     int RECURSION_CONDITION           = 110;          /* active subpattern call conditional */
     int CHECK_POS_END                 = 111;          /* require current position at saved positive boundary */
     int CHECK_LOOK_BEHIND_END         = 112;          /* require current position at saved negative boundary */
+    int GRAPHEME_BOUNDARY             = 113;          /* Perl \b{gcb} */
+    int NOT_GRAPHEME_BOUNDARY         = 114;          /* Perl \B{gcb} */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -270,6 +272,8 @@ public interface OPCode {
         "recursion-condition", /*OP_RECURSION_CONDITION*/
         "check-pos-end", /*OP_CHECK_POS_END*/
         "check-look-behind-end", /*OP_CHECK_LOOK_BEHIND_END*/
+        "grapheme-boundary", /*OP_GRAPHEME_BOUNDARY*/
+        "not-grapheme-boundary", /*OP_NOT_GRAPHEME_BOUNDARY*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -387,5 +391,7 @@ public interface OPCode {
         Arguments.SPECIAL, /*OP_RECURSION_CONDITION*/
         Arguments.NON, /*OP_CHECK_POS_END*/
         Arguments.NON, /*OP_CHECK_LOOK_BEHIND_END*/
+        Arguments.NON, /*OP_GRAPHEME_BOUNDARY*/
+        Arguments.NON, /*OP_NOT_GRAPHEME_BOUNDARY*/
     } : null;
 }

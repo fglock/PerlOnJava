@@ -224,7 +224,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The current integration stack is preserved through draft PR #1023. It includes
+The current integration stack is preserved through review-ready PR #1024. It includes
 the completed callback/runtime slices, lossless generated Unicode fixtures,
 explicit `Is_*` property/value normalization, fatal Joni syntax diagnostics,
 and the first 524 lines of retired Java-only preprocessor code. Every published
@@ -237,17 +237,22 @@ and interpreter, and the exact upstream marker-stage reducer improves from 2/4
 to 4/4 on both execution backends. Generated chunks 05–10 consequently execute
 239,843 genuine boundary assertions rather than matching literal UTF-8 marker
 text. JVM and interpreter have exact per-file parity at 2,192/239,843 with every
-plan complete, exit 0, and no child timeout; all current passes are in the GCB
-chunk (2,192/14,953), while the line, sentence, and word boundary chunks expose
-zero passing assertions. The runner classifies zero-pass files as `error`, but
-their recorded plans, actual counts, and process exits are complete.
+plan complete, exit 0, and no child timeout at the pre-GCB baseline. The runner
+classifies zero-pass files as `error`, but their recorded plans, actual counts,
+and process exits are complete.
+
+Native Joni GCB assertions now implement GB1–GB13 and GB999, including Indic
+conjunct and emoji-ZWJ context, and `\X` consumes repeated GB9c conjuncts. The
+focused 29-assertion oracle passes on system Perl, JVM, and interpreter.
+Authoritative chunk 05 improves by 6,324 assertions from 2,192/14,953 to
+8,516/14,976 identically on JVM and interpreter: its complete GCB/`\X` section
+passes, leaving only the 6,460 sentence-boundary assertions in that chunk.
 
 The most recent exact property chunks 01–04 remain 98,092/167,501 on both
-execution backends. Combined with the newly authoritative boundary chunks, the
-current generated evidence is 100,284/407,344. A current-head refresh of chunks
-01–04 is running in a reduced resource lane because an oversubscribed first
-attempt reached the runner's no-output deadline; retain the prior exact counts
-until that refresh completes.
+execution backends. Combined with the native-GCB result and unchanged chunks
+06–10, current generated evidence is 106,608/407,367. A resource-contended
+current-head refresh did not reproduce a complete exact JVM/interpreter pair,
+so it does not replace that accepted baseline.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -345,6 +350,10 @@ matcher-specific timeouts on both execution backends.
     non-ASCII substitutions under lexical `use bytes`. Upgraded, byte-backed,
     and compiled byte-backed patterns pass 12/12 on all runtimes, and the
     generated Unicode marker stage passes 4/4 on JVM and interpreter.
+  - [ ] Close `/g` same-position retry and capture semantics after a zero-width
+    first alternative. The standard-Perl omniholder reducer currently passes
+    7/10 in all PerlOnJava modes even though the DBIx substitution contract
+    passes; this is independent of the Java-only alternative-reorder rewrite.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -426,11 +435,18 @@ matcher-specific timeouts on both execution backends.
   - [x] Rejected 40 invalid Perl inline option/group-name forms in forked Joni
     with exact JVM/interpreter `reg_mesg.t` parity, reducing residual Joni-only
     acceptance differences from 198 to 158 (`028602adc`).
+  - [x] Validated native Python-style named captures and backreferences plus
+    removal of their frontend conversion (`afbe2bc34`). The 20-case oracle
+    passes on both execution backends with exact malformed/unknown diagnostics;
+    integration into the coordinator stack remains queued.
   - [x] Fixed byte-mode substitution of upgraded marker regexes so chunks 05–10
     exercise real boundary subjects with exact JVM/interpreter plans.
-  - [ ] Implement native Joni GCB, line, sentence, and word boundary algorithms,
-    then close the remaining property and boundary failures before marking
-    Phase 3 complete.
+  - [x] Implemented native Joni GCB assertions for GB1–GB13 and GB999 and aligned
+    `\X` with repeated GB9c Indic conjunct behavior. The focused oracle passes
+    29/29 and generated chunk 05 reaches 8,516/14,976 on both execution backends.
+  - [ ] Implement native Joni line, sentence, and word boundary algorithms, then
+    close the remaining property and boundary failures before marking Phase 3
+    complete.
 - [x] Phase 4: Runtime source and diagnostics (2026-08-17; semantic gate
   complete at 550/555)
   - [x] Preserved mixed executable-source provenance, nested dynamic callback
@@ -461,26 +477,32 @@ matcher-specific timeouts on both execution backends.
     (`c5343aca2`; 80 preprocessor lines removed) after greedy backtracking and
     20,000-character gates passed default and forced-Java policy on both
     execution backends.
+  - [x] Validated removal of the Java-only terminated lazy-negated-class
+    possessification pass (`625ea97a2`; 252 preprocessor lines removed) with
+    leftmost-capture and 20,000-character gates in all four backend modes.
+  - [x] Retired the Java-only DBIx omniholder alternative reorder
+    (`18e71a532`; 50 lines removed) after exact substitution and bundled
+    DBIx::Simple gates passed without changing the separately tracked raw `/g`
+    7/10 result.
 - [ ] Phase 6: Integration and release
 
 ### Next Steps
 
-1. Publish the byte-mode Joni pattern slice after its warning-free `make` and
-   authoritative boundary-corpus measurement. Then integrate the validated
-   braced-octal, braced-hex, and terminated-whitespace slices as focused
-   stacked PRs; add lazy-negated-class retirement after its validation completes.
-2. Implement boundary semantics natively in Joni in measured order: GCB first
-   (2,192/14,953 currently pass), followed by line, sentence, and word breaks
-   (currently 0/224,890). Use bundled Perl 5.44 Unicode data and the generated
-   chunks as the release oracle; remove the simplified Java boundary rewrites
-   only after native parity.
+1. Land review-ready PR #1024, publish the native-GCB slice as its own stacked
+   PR, then integrate the validated braced-octal, braced-hex,
+   terminated-whitespace, and lazy-negated-class slices as focused stacked PRs.
+2. Continue boundary semantics natively in Joni in measured order: sentence
+   breaks next (0/6,460 in the remainder of chunk 05), followed by line and word
+   breaks (0/224,890 in chunks 06–10). Use bundled Perl 5.44 Unicode data and
+   the generated chunks as the release oracle; remove each simplified Java
+   boundary rewrite only after native parity.
 3. Implement the remaining property clusters in measured order: Block,
    Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
    break-property values, and Age/In/Present_In. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
-   Close the independently reduced Joni syntax gaps for Python-style named
-   groups, alpha assertion aliases, underscored numeric escapes, and braced
-   octal parsing with focused standard-Perl gates.
+   Integrate the validated Python-style named-group and braced-octal slices,
+   then close alpha assertion aliases and underscored numeric escapes with
+   focused standard-Perl gates.
 4. Rerun the forced-Joni 80-file corpus on JVM and interpreter from the combined
    head. Save complete JSON and logs, publish the missing differential report,
    and compare every file with both the Phase 0 result and PR 958 under the
