@@ -54,6 +54,8 @@ public interface AnchorType {
 
     int ALLOWED_IN_LB =     ( LOOK_BEHIND |
                                     LOOK_BEHIND_NOT |
+                                    PREC_READ |
+                                    PREC_READ_NOT |
                                     BEGIN_LINE |
                                     END_LINE |
                                     BEGIN_BUF |
@@ -75,6 +77,8 @@ public interface AnchorType {
 
     int ALLOWED_IN_LB_NOT = ( LOOK_BEHIND |
                                     LOOK_BEHIND_NOT |
+                                    PREC_READ |
+                                    PREC_READ_NOT |
                                     BEGIN_LINE |
                                     END_LINE |
                                     BEGIN_BUF |
