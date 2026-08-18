@@ -146,15 +146,12 @@ allocate callback state or callback frames.
 
 ### Phase 6 — Integration and release
 
-1. Retire regex-test accommodations incrementally. Whenever a PerlOnJava fix
-   makes a `dev/import-perl5/patches/pat.t.patch` hunk unnecessary, remove that
-   hunk and rerun `perl dev/import-perl5/sync.pl --only perl5/t/re/pat.t` to
-   restore the unchanged upstream assertions. Do not hand-edit the imported
-   test to approximate upstream content.
-2. Delete the `pat.t.patch` configuration entry and patch file once its final
-   hunk is obsolete. Rerun the targeted sync twice and require the second run to
-   produce no diff, proving that the checked-in test is the unpatched Perl 5.44
-   source and the import is idempotent.
+1. Keep regex core tests unpatched. The import manifest entry for
+   `perl5/t/re/pat.t` must not name a patch, and no regex-test patch file may
+   replace or weaken upstream assertions.
+2. Run `perl dev/import-perl5/sync.pl --only perl5/t/re/pat.t` twice and require
+   the second run to produce no diff. If an upstream assertion fails after
+   sync, fix PerlOnJava rather than editing the imported test.
 3. Run the complete direct and `_thr.t` regex matrix on JVM and interpreter
    backends and compare it file-by-file with both the Phase 0 result and PR 958.
 4. Run unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and every CPAN
@@ -180,21 +177,13 @@ the regex corpus is reproduced from `dev/import-perl5/sync.pl` without a regex
 test patch, and documentation reports optimizer/debug-only exclusions
 explicitly.
 
-### Upstream patch retirement queue
+### Imported-test provenance gate
 
-`pat.t.patch` is reduced in place as these gates close; the corresponding
-upstream hunk is restored by the targeted importer before its result is counted:
-
-| Upstream section | Gate before restoring the hunk |
-|---|---|
-| `(*ACCEPT)` capture-close cases | Exact success and capture values pass without converting fatal setup failures to warnings |
-| `pos` inside `(?{...})` | Callback-visible `pos`, captures, and unwind behavior pass on JVM and interpreter |
-| reference stringification diagnostics | Unqualified `diag` resolves in the original lexical/package context |
-| `${^LAST_SUCCESSFUL_PATTERN}` | Dynamic empty-pattern reuse, copying, matching, and substitution pass |
-| `(??{...})` code blocks interpolated from arrays | All original runtime-eval and side-effect assertions pass without an enclosing compatibility `eval` |
-
-The queue is complete only when `config.yaml` no longer names `pat.t.patch`, the
-patch file is gone, and two consecutive targeted syncs leave a clean tree.
+- `dev/import-perl5/config.yaml` imports `perl5/t/re/pat.t` without a patch.
+- No regex-specific import patch weakens or skips upstream assertions.
+- A targeted sync restores the exact configured upstream source.
+- A second consecutive targeted sync is idempotent and leaves the tree clean.
+- The synchronized direct and thread tests run unchanged on JVM and interpreter.
 
 ## Test Contract
 
