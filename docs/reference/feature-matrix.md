@@ -386,7 +386,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
 - ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
 - ✅  **Python-style named groups**: `(?P<name>...)` and `(?P=name)` are parsed natively by Joni with Perl capture numbering, duplicate-name behavior, and malformed/unknown-name diagnostics.
-- ✅  **Alpha assertion aliases**: `(*pla:...)`, `(*plb:...)`, `(*nla:...)`, `(*nlb:...)`, and `(*atomic:...)` are parsed natively by Joni with Perl nesting, capture numbering, backtracking, and malformed-form diagnostics.
+- ✅  **Alpha assertion aliases**: `(*pla:...)`, `(*plb:...)`, `(*nla:...)`, `(*nlb:...)`, `(*atomic:...)`, and the corresponding long spellings are parsed natively by Joni with Perl nesting, capture numbering, backtracking, assertion-condition predicates, and malformed-form diagnostics.
 - 🟡  **Underscored numeric regex escapes**: Joni natively parses Perl spellings such as `\x{0_0_4_1}` and `\o{0_0_1_0_1}` through U+10FFFF, including literal/class forms, bare high-octal UTF-8 code points, truncation behavior, and structural diagnostics. The frontend normalization remains for forced-Java compatibility; exact `use re 'strict'` diagnostics and Perl code points above U+10FFFF through signed IV max remain source-policy/representation debt.
 
 - ✅  **Dynamically-scoped regex variables**: Provisional captures, `$^R`, `$^N`, match positions, and callback locals follow matcher paths and unwind on backtracking.

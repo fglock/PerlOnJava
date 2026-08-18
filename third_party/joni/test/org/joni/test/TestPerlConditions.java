@@ -54,6 +54,14 @@ public class TestPerlConditions {
     }
 
     @Test
+    public void alphaAssertionConditionsSelectTheMatchingBranch() {
+        assertEquals(0, matcher("(?(*pla:a)a|b)", "a").search(0, 1, Option.NONE));
+        assertEquals(0, matcher("(?(*pla:a)a|b)", "b").search(0, 1, Option.NONE));
+        assertEquals(0, matcher("(?(*nla:a)b|a)", "a").search(0, 1, Option.NONE));
+        assertEquals(0, matcher("(?(*nla:a)b|a)", "b").search(0, 1, Option.NONE));
+    }
+
+    @Test
     public void assertionCapturesRemainVisibleToTheSelectedBranch() {
         Matcher matcher = matcher("(?(?=(a))\\1|b)", "a");
         assertEquals(0, matcher.search(0, 1, Option.NONE));
