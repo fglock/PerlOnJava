@@ -1020,8 +1020,15 @@ public class UnicodeResolver {
 
     static boolean isPerlBuiltInPropertyAlias(String property) {
         return isPerlSpecializedBinarySyntax(property)
+                || isPerlJoniClassAlias(property)
                 || !normalizePerlIsPropertyAssignment(property).equals(property)
                 || resolvePerlBuiltInPropertyAlias(property) != null;
+    }
+
+    private static boolean isPerlJoniClassAlias(String property) {
+        return "IsDigit".equals(property)
+                || "IsLower".equals(property)
+                || "IsUpper".equals(property);
     }
 
     private static boolean isPerlSpecializedBinarySyntax(String property) {
