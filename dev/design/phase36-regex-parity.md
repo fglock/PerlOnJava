@@ -224,7 +224,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1034, stacked
+The published integration stack is preserved through draft PR #1035, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -237,9 +237,9 @@ binary `ASCII_Hex_Digit` values, pinned General_Category sets, and exact native
 line boundaries. PR #1031 adds pinned Canonical_Combining_Class sets and valid
 empty-property rendering. PR #1032 integrates native numeric escapes through
 U+10FFFF; PR #1033 adds pinned Bidi_Class sets; PR #1034 integrates native
-vertical-whitespace escapes. The current WIP integrates Decomposition_Type;
-East_Asian_Width is ready for the next focused integration, while Numeric_Value
-and Joining_Group data slices advance independently.
+vertical-whitespace escapes; PR #1035 adds Decomposition_Type. The current WIP
+integrates East_Asian_Width; Numeric_Value and Joining_Group are ready, while
+Block and Script/Script_Extensions data slices advance independently.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -337,6 +337,16 @@ The focused oracle passes 45/45 on system Perl, JVM, and interpreter. Chunk 01
 gains 640 assertions to 34,892/41,843 identically on both execution backends
 with zero numbered regressions, raising current generated evidence to
 342,656/407,367.
+
+`East_Asian_Width`/`ea` assignments now resolve all six values from a complete
+pinned Unicode 17 partition, including the ordered CJK `Wide` and general
+`Neutral` missing defaults. Short/long and loose aliases are covered, and
+surrogate range endpoints render as explicit Joni hex escapes rather than
+lossy literal surrogates. The focused oracle passes 31/31 on system Perl, JVM,
+and interpreter; protected boundary smoke remains 169/169 per backend. Chunk
+01 gains 216 assertions to 35,108/41,843 identically on both execution backends
+with zero numbered regressions, raising current generated evidence to
+342,872/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -593,6 +603,11 @@ is retained for now.
     value and exact `Is` prefix policy. The focused oracle passes 45/45 and
     chunk 01 gains 640 assertions to 34,892/41,843 on both backends with zero
     numbered regressions.
+  - [x] Generated and integrated a complete pinned Unicode 17.0
+    East_Asian_Width partition with all ordered missing defaults and lossless
+    surrogate-range rendering. The focused oracle passes 31/31 and chunk 01
+    gains 216 assertions to 35,108/41,843 on both backends with zero numbered
+    regressions.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -638,14 +653,14 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1034. Publish the validated
-   Decomposition_Type integration in a separate focused WIP PR, then integrate
-   East_Asian_Width without squashing the independently reviewed data commit.
+1. Land review-ready PR #1024 and draft PRs #1025–#1035. Publish the validated
+   East_Asian_Width integration in a separate focused WIP PR, preserving the
+   independently reviewed data commit.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Integrate the independently generated East_Asian_Width, Numeric_Value, and
-   Joining_Group slices, then continue the measured residual order: binary
+3. Integrate the independently generated Numeric_Value and Joining_Group
+   slices, then continue the measured residual order: binary
    property values, Block, Script/Script_Extensions, and break-property values.
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
