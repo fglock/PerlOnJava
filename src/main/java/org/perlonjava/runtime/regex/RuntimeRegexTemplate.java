@@ -58,7 +58,7 @@ public final class RuntimeRegexTemplate {
     }
 
     public static RuntimeScalar build(RuntimeList parts) {
-        parts = flattenJoinedParts(parts);
+        parts = materializeTiedParts(flattenJoinedParts(parts));
         if (parts.elements.size() == 1) {
             RuntimeScalar only = parts.elements.getFirst().scalar();
             // A lone interpolation must retain its runtime type so qr
@@ -87,11 +87,6 @@ public final class RuntimeRegexTemplate {
         boolean tainted = false;
         for (RuntimeBase part : parts.elements) {
             RuntimeScalar scalar = part.scalar();
-            // Interpolation is one scalar read. Resolve tied magic once, then
-            // use that materialized value for type inspection, taint, and text.
-            if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
-                scalar = scalar.tiedFetch();
-            }
             tainted |= scalar.isTainted();
             if (scalar.value instanceof RuntimeRegexCallback callback) {
                 int id = callbacks.size();
@@ -248,6 +243,17 @@ public final class RuntimeRegexTemplate {
             }
         }
         return flattened;
+    }
+
+    /** Resolve each tied interpolation exactly once before any type inspection. */
+    private static RuntimeList materializeTiedParts(RuntimeList input) {
+        RuntimeList materialized = new RuntimeList();
+        for (RuntimeBase part : input.elements) {
+            RuntimeScalar scalar = part.scalar();
+            materialized.add(scalar.type == RuntimeScalarType.TIED_SCALAR
+                    ? scalar.tiedFetch() : part);
+        }
+        return materialized;
     }
 
     private static void appendEmbeddedRegex(StringBuilder pattern,

@@ -527,13 +527,14 @@ public class StringOperators {
             if (result != null) {
                 // Assignment overloads return the value Perl assigns back to
                 // the lvalue. Preserve that reference instead of stringifying it.
-                runtimeScalar.set(result);
-                return runtimeScalar;
+                return result;
             }
         }
-        RuntimeScalar result = stringConcat(runtimeScalar, b, false);
-        runtimeScalar.set(result);
-        return runtimeScalar;
+        // The JVM and interpreter compound-assignment drivers perform the
+        // single lvalue store. Returning the materialized value here avoids a
+        // second tied FETCH/STORE and preserves proxy metadata such as %ENV
+        // taint when that driver writes the result back.
+        return stringConcat(runtimeScalar, b, false);
     }
 
     private static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b,
