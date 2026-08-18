@@ -350,6 +350,7 @@ final class JoniRegexPattern {
                 pattern, flags != null && flags.isExtended());
         return syntaxFeatures.keepPresent()
                 || syntaxFeatures.conditionalPresent()
+                || syntaxFeatures.alphaAssertionPresent()
                 || pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(*ACCEPT)")
@@ -364,7 +365,8 @@ final class JoniRegexPattern {
 
     private record PerlSyntaxFeatures(boolean keepPresent,
                                       boolean keepInLookaround,
-                                      boolean conditionalPresent) {}
+                                      boolean conditionalPresent,
+                                      boolean alphaAssertionPresent) {}
 
     private static PerlSyntaxFeatures analyzePerlSyntax(String pattern, boolean extended) {
         boolean quoted = false;
@@ -375,6 +377,7 @@ final class JoniRegexPattern {
         java.util.ArrayDeque<Boolean> groups = new java.util.ArrayDeque<>();
         boolean keepPresent = false;
         boolean conditionalPresent = false;
+        boolean alphaAssertionPresent = false;
 
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
@@ -438,7 +441,8 @@ final class JoniRegexPattern {
                 } else if (escaped == 'K') {
                     keepPresent = true;
                     if (lookaroundDepth > 0) {
-                        return new PerlSyntaxFeatures(true, true, conditionalPresent);
+                        return new PerlSyntaxFeatures(true, true, conditionalPresent,
+                                alphaAssertionPresent);
                     }
                 }
                 continue;
@@ -451,6 +455,24 @@ final class JoniRegexPattern {
                     continue;
                 }
                 if (pattern.startsWith("(?(", i)) conditionalPresent = true;
+                if (pattern.startsWith("(*", i)) {
+                    int nameEnd = i + 2;
+                    while (nameEnd < pattern.length()) {
+                        char nameChar = pattern.charAt(nameEnd);
+                        if (!Character.isLetter(nameChar) && nameChar != '_') break;
+                        nameEnd++;
+                    }
+                    String name = pattern.substring(i + 2, nameEnd);
+                    alphaAssertionPresent |= name.equals("pla")
+                            || name.equals("positive_lookahead")
+                            || name.equals("plb")
+                            || name.equals("positive_lookbehind")
+                            || name.equals("nla")
+                            || name.equals("negative_lookahead")
+                            || name.equals("nlb")
+                            || name.equals("negative_lookbehind")
+                            || name.equals("atomic");
+                }
                 boolean lookaround = pattern.startsWith("(?=", i)
                         || pattern.startsWith("(?!", i)
                         || pattern.startsWith("(?<=", i)
@@ -461,7 +483,8 @@ final class JoniRegexPattern {
                 if (groups.pop()) lookaroundDepth--;
             }
         }
-        return new PerlSyntaxFeatures(keepPresent, false, conditionalPresent);
+        return new PerlSyntaxFeatures(keepPresent, false, conditionalPresent,
+                alphaAssertionPresent);
     }
 
     private static boolean hasControlVerbState(String pattern) {

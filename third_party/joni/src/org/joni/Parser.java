@@ -636,6 +636,12 @@ class Parser extends Lexer {
                                 ? AnchorType.PREC_READ : AnchorType.PREC_READ_NOT);
                         fetchToken();
                         assertionCondition.setTarget(parseSubExp(term));
+                    } else if (c == '*') {
+                        Node alphaCondition = parseAlphaAssertion();
+                        if (!(alphaCondition instanceof AnchorNode)) {
+                            newSyntaxException(INVALID_CONDITION_PATTERN);
+                        }
+                        assertionCondition = (AnchorNode)alphaCondition;
                     } else if (c == 'R') {
                         recursionConditionGroup = 0;
                         if (!left()) newSyntaxException(INVALID_CONDITION_PATTERN);
@@ -997,12 +1003,15 @@ class Parser extends Lexer {
         int cursor = p;
         while (cursor < stop) {
             int code = enc.mbcToCode(bytes, cursor, stop);
-            if (!Character.isLetter(code)) break;
+            if (!Character.isLetter(code) && code != '_') break;
             cursor += enc.length(bytes, cursor, stop);
         }
         String name = new String(bytes, nameStart, cursor - nameStart, StandardCharsets.UTF_8);
-        if (!name.equals("pla") && !name.equals("plb") && !name.equals("nla")
-                && !name.equals("nlb") && !name.equals("atomic")) {
+        if (!name.equals("pla") && !name.equals("positive_lookahead")
+                && !name.equals("plb") && !name.equals("positive_lookbehind")
+                && !name.equals("nla") && !name.equals("negative_lookahead")
+                && !name.equals("nlb") && !name.equals("negative_lookbehind")
+                && !name.equals("atomic")) {
             return null;
         }
         if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != ':') {
@@ -1012,16 +1021,16 @@ class Parser extends Lexer {
 
         Node node;
         switch (name) {
-        case "pla":
+        case "pla", "positive_lookahead":
             node = new AnchorNode(AnchorType.PREC_READ);
             break;
-        case "plb":
+        case "plb", "positive_lookbehind":
             node = new AnchorNode(AnchorType.LOOK_BEHIND);
             break;
-        case "nla":
+        case "nla", "negative_lookahead":
             node = new AnchorNode(AnchorType.PREC_READ_NOT);
             break;
-        case "nlb":
+        case "nlb", "negative_lookbehind":
             node = new AnchorNode(AnchorType.LOOK_BEHIND_NOT);
             break;
         default:
