@@ -35,6 +35,8 @@ import org.perlonjava.runtime.runtimetypes.*;
 final class JoniRegexPattern {
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
+    private static final String INTERNAL_SCALAR_BOUNDARY_GUARD =
+            internalScalarBoundaryGuard();
 
     // Ruby syntax defaults \w to ASCII even for a Unicode encoding. Perl's
     // default and /u modes use Unicode character classes; /a adds ASCII_RANGE
@@ -325,7 +327,7 @@ final class JoniRegexPattern {
     private static String translatePattern(String pattern, RegexFlags flags,
                                            int trustedCalloutCount) {
         pattern = translateDefineBlocks(pattern);
-        pattern = translateBeyondUnicodeClassMembers(pattern);
+        pattern = translateInternalScalarClassMembers(pattern);
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
@@ -503,13 +505,14 @@ final class JoniRegexPattern {
     }
 
     /**
-     * Perl scalar strings can contain values above Unicode's maximum code point.
+     * Perl scalar strings can contain surrogate and beyond-Unicode values.
      * They are represented internally as {@code U+FFFD<HEX>}, which Joni can
-     * match as ordinary text, but Joni rejects the original {@code \\x{...}}
-     * class member before matching begins. Lift standalone beyond-Unicode class
-     * members into alternatives that match the complete internal marker.
+     * match as ordinary text, but not as one logical character. Lift those
+     * members and surrogate ranges into alternatives that consume a complete
+     * internal marker. For complemented classes, exclude selected marker
+     * payloads while still consuming every other marker atomically.
      */
-    private static String translateBeyondUnicodeClassMembers(String pattern) {
+    private static String translateInternalScalarClassMembers(String pattern) {
         StringBuilder translated = new StringBuilder(pattern.length());
         boolean escaped = false;
         for (int i = 0; i < pattern.length(); i++) {
@@ -534,7 +537,7 @@ final class JoniRegexPattern {
                 translated.append(ch);
                 continue;
             }
-            String replacement = translateBeyondUnicodeClassContent(
+            String replacement = translateInternalScalarClassContent(
                     pattern.substring(i + 1, close));
             if (replacement == null) {
                 translated.append(pattern, i, close + 1);
@@ -584,50 +587,170 @@ final class JoniRegexPattern {
         return -1;
     }
 
-    private static String translateBeyondUnicodeClassContent(String content) {
-        if (content.startsWith("^")) return null;
+    private record HexEscape(long value, int endExclusive) {}
 
+    private static String translateInternalScalarClassContent(String content) {
+        boolean negated = content.startsWith("^");
+        int contentStart = negated ? 1 : 0;
         StringBuilder retained = new StringBuilder(content.length());
-        List<String> markers = new ArrayList<>();
-        for (int i = 0; i < content.length();) {
+        List<String> exactMarkers = new ArrayList<>();
+        List<int[]> surrogateRanges = new ArrayList<>();
+        for (int i = contentStart; i < content.length();) {
             if (content.startsWith("\\\\", i)) {
                 retained.append("\\\\");
                 i += 2;
                 continue;
             }
-            if (content.startsWith("\\x{", i)) {
-                int close = content.indexOf('}', i + 3);
-                if (close > i + 3) {
-                    String hex = content.substring(i + 3, close);
-                    try {
-                        long value = Long.parseUnsignedLong(hex, 16);
-                        boolean rangeMember = (i > 0 && content.charAt(i - 1) == '-')
-                                || (close + 1 < content.length()
-                                        && content.charAt(close + 1) == '-');
-                        if (Long.compareUnsigned(value, 0x10FFFFL) > 0 && !rangeMember) {
-                            markers.add(Long.toUnsignedString(value, 16).toUpperCase(
-                                    java.util.Locale.ROOT));
-                            i = close + 1;
-                            continue;
-                        }
-                    } catch (NumberFormatException ignored) {
-                        // Let Joni produce the normal malformed-escape diagnostic.
+            HexEscape first = parseHexEscape(content, i);
+            if (first != null) {
+                HexEscape last = first.endExclusive() < content.length()
+                                && content.charAt(first.endExclusive()) == '-'
+                        ? parseHexEscape(content, first.endExclusive() + 1) : null;
+                if (last != null && first.value() <= last.value()
+                        && first.value() <= 0x10FFFFL && last.value() <= 0x10FFFFL
+                        && first.value() <= Character.MAX_SURROGATE
+                        && last.value() >= Character.MIN_SURROGATE) {
+                    int surrogateStart = (int) Math.max(
+                            first.value(), Character.MIN_SURROGATE);
+                    int surrogateEnd = (int) Math.min(
+                            last.value(), Character.MAX_SURROGATE);
+                    surrogateRanges.add(new int[] {surrogateStart, surrogateEnd});
+                    if (first.value() < Character.MIN_SURROGATE) {
+                        appendHexClassRange(retained, first.value(),
+                                Character.MIN_SURROGATE - 1L);
                     }
+                    if (last.value() > Character.MAX_SURROGATE) {
+                        appendHexClassRange(retained,
+                                Character.MAX_SURROGATE + 1L, last.value());
+                    }
+                    i = last.endExclusive();
+                    continue;
+                }
+                if (isSurrogate(first.value())) {
+                    int value = (int) first.value();
+                    surrogateRanges.add(new int[] {value, value});
+                    i = first.endExclusive();
+                    continue;
+                }
+                if (Long.compareUnsigned(first.value(), 0x10FFFFL) > 0
+                        && last == null) {
+                    exactMarkers.add(Long.toUnsignedString(first.value(), 16)
+                            .toUpperCase(java.util.Locale.ROOT));
+                    i = first.endExclusive();
+                    continue;
                 }
             }
             retained.append(content.charAt(i++));
         }
-        if (markers.isEmpty()) return null;
+        if (exactMarkers.isEmpty() && surrogateRanges.isEmpty()) return null;
 
-        StringBuilder replacement = new StringBuilder("(?:");
-        for (int i = 0; i < markers.size(); i++) {
-            if (i > 0) replacement.append('|');
-            replacement.append("\\x{FFFD}<").append(markers.get(i)).append('>');
+        List<String> payloads = new ArrayList<>(
+                exactMarkers.size() + surrogateRanges.size());
+        payloads.addAll(exactMarkers);
+        for (int[] range : surrogateRanges) {
+            payloads.add(fixedWidthHexRange(range[0], range[1], 4));
         }
-        if (!retained.isEmpty()) {
-            replacement.append("|[").append(retained).append(']');
+        String payload = payloads.size() == 1
+                ? payloads.get(0) : "(?:" + String.join("|", payloads) + ")";
+        String anyMarker = "\\x{FFFD}<[0-9A-F]+>";
+        String markerBoundary = INTERNAL_SCALAR_BOUNDARY_GUARD;
+
+        List<String> alternatives = new ArrayList<>(2);
+        if (negated) {
+            alternatives.add("\\x{FFFD}<(?!(?:" + payload + ")>)[0-9A-F]+>");
+            StringBuilder ordinary = new StringBuilder("(?!")
+                    .append(anyMarker).append(')');
+            if (!retained.isEmpty()) {
+                ordinary.append("(?![").append(retained).append("])" );
+            }
+            alternatives.add(markerBoundary + ordinary.append("[\\s\\S]").toString());
+        } else {
+            alternatives.add("\\x{FFFD}<" + payload + ">");
+            if (!retained.isEmpty()) {
+                alternatives.add(markerBoundary + "(?!" + anyMarker + ")["
+                        + retained + "]");
+            }
         }
-        return replacement.append(')').toString();
+        return alternatives.size() == 1 ? alternatives.get(0)
+                : "(?:" + String.join("|", alternatives) + ")";
+    }
+
+    private static HexEscape parseHexEscape(String content, int offset) {
+        if (offset < 0 || !content.startsWith("\\x{", offset)) return null;
+        int close = content.indexOf('}', offset + 3);
+        if (close <= offset + 3) return null;
+        try {
+            return new HexEscape(Long.parseUnsignedLong(
+                    content.substring(offset + 3, close), 16), close + 1);
+        } catch (NumberFormatException ignored) {
+            // Let Joni produce the normal malformed-escape diagnostic.
+            return null;
+        }
+    }
+
+    private static boolean isSurrogate(long value) {
+        return value >= Character.MIN_SURROGATE
+                && value <= Character.MAX_SURROGATE;
+    }
+
+    private static void appendHexClassRange(StringBuilder out, long start, long end) {
+        out.append("\\x{")
+                .append(Long.toHexString(start).toUpperCase(java.util.Locale.ROOT))
+                .append('}');
+        if (start != end) {
+            out.append("-\\x{")
+                    .append(Long.toHexString(end).toUpperCase(java.util.Locale.ROOT))
+                    .append('}');
+        }
+    }
+
+    private static String fixedWidthHexRange(int start, int end, int width) {
+        if (width <= 0) return "";
+        int divisor = 1 << ((width - 1) * 4);
+        int startDigit = start / divisor;
+        int endDigit = end / divisor;
+        int startRemainder = start % divisor;
+        int endRemainder = end % divisor;
+        if (startDigit == endDigit) {
+            return hexDigit(startDigit)
+                    + fixedWidthHexRange(startRemainder, endRemainder, width - 1);
+        }
+
+        List<String> alternatives = new ArrayList<>();
+        alternatives.add(hexDigit(startDigit)
+                + fixedWidthHexRange(startRemainder, divisor - 1, width - 1));
+        for (int digit = startDigit + 1; digit < endDigit; digit++) {
+            alternatives.add(hexDigit(digit) + fullHexSuffix(width - 1));
+        }
+        alternatives.add(hexDigit(endDigit)
+                + fixedWidthHexRange(0, endRemainder, width - 1));
+        return alternatives.size() == 1 ? alternatives.get(0)
+                : "(?:" + String.join("|", alternatives) + ")";
+    }
+
+    private static String fullHexSuffix(int width) {
+        if (width <= 0) return "";
+        return width == 1 ? "[0-9A-F]" : "[0-9A-F]{" + width + "}";
+    }
+
+    private static char hexDigit(int value) {
+        return "0123456789ABCDEF".charAt(value);
+    }
+
+    /**
+     * Keep an ordinary class alternative from starting inside the visible
+     * payload of an internal scalar marker during an unanchored search. Each
+     * lookbehind is fixed-width for Joni; an unsigned Perl UV has at most 16
+     * hexadecimal digits.
+     */
+    private static String internalScalarBoundaryGuard() {
+        StringBuilder guard = new StringBuilder("(?<!\\x{FFFD})");
+        guard.append("(?<!\\x{FFFD}<)");
+        for (int digits = 1; digits <= 16; digits++) {
+            guard.append("(?<!\\x{FFFD}<[0-9A-F]{")
+                    .append(digits).append("})");
+        }
+        return guard.toString();
     }
 
     private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,

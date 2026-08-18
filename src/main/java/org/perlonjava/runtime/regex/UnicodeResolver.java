@@ -1026,7 +1026,8 @@ public class UnicodeResolver {
     }
 
     private static boolean isPerlJoniClassAlias(String property) {
-        return "IsDigit".equals(property)
+        return "Cs".equals(property)
+                || "IsDigit".equals(property)
                 || "IsLower".equals(property)
                 || "IsUpper".equals(property);
     }
