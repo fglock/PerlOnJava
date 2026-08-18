@@ -1062,7 +1062,12 @@ final class Analyser extends Parser {
             AnchorNode an = (AnchorNode)node;
             if ((an.type & anchorMask) == 0) return true;
 
-            if (an.target != null) invalid = checkTypeTree(an.target, typeMask, encloseMask, anchorMask);
+            boolean perlLookAhead = syntax.op2OptionPerl()
+                    && (an.type == AnchorType.PREC_READ
+                            || an.type == AnchorType.PREC_READ_NOT);
+            if (!perlLookAhead && an.target != null) {
+                invalid = checkTypeTree(an.target, typeMask, encloseMask, anchorMask);
+            }
             break;
 
         default:

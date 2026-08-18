@@ -553,7 +553,7 @@ final class JoniRegexPattern {
                     // Java-safe marker string internally. A negated class
                     // accepts those scalars, but must consume the complete
                     // marker as one Perl character.
-                    out.append("(?:\\x{FFFD}<[0-9A-F]+>|");
+                    out.append("(?:\\x{FFFD}<[0-9A-F]{1,16}>|");
                     wrapsInternalScalarMarker = true;
                 }
                 inClass = true;
