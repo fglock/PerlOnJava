@@ -63,6 +63,19 @@ public class TestPerl extends Test {
         x2s("\\x{61}", "a", 0, 1);
         ns("\\x{}", "");
         ns("\\x{X}", "");
+        x2s("(?P<word>a)(?P=word)", "aa", 0, 2);
+        ns("(?P<word>a)(?P=word)", "ab");
+        x2s("(?:(?P<x>a)|(?P<x>b))(?P=x)", "aa", 0, 2);
+        x2s("(?:(?P<x>a)|(?P<x>b))(?P=x)", "bb", 0, 2);
+        ns("(?:(?P<x>a)|(?P<x>b))(?P=x)", "ab");
+        xerrs("(?P=missing)", ErrorMessages.PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP);
+        xerrs("(?P<)", ErrorMessages.PERL_GROUP_NAME_MUST_START_WITH_WORD);
+        xerrs("(?P=)", ErrorMessages.PERL_GROUP_NAME_MUST_START_WITH_WORD);
+        xerrs("(?PX<n>foo)", "Sequence (?PX...) not recognized");
+        xerrs("(?P<name", ErrorMessages.PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED);
+        xerrs("(?P=name", ErrorMessages.PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
+        ns("[(?P<x>)]", "z");
+        x2s("\\(\\?P<x>", "(?P<x>", 0, 6);
     }
 
     @org.junit.Test(timeout = 5000)
