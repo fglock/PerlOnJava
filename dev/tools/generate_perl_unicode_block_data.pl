@@ -8,7 +8,22 @@ use FindBin;
 binmode STDOUT, ':raw';
 
 my $expected_version = '17.0.0';
-my $unicore = File::Spec->catdir($FindBin::Bin, '..', '..', 'perl5', 'lib', 'unicore');
+my @required_sources = qw(version Blocks.txt PropertyAliases.txt PropValueAliases.txt);
+my $local_unicore = File::Spec->catdir($FindBin::Bin, '..', '..', 'perl5', 'lib', 'unicore');
+my $vendored_unicore = File::Spec->catdir($FindBin::Bin, '..', 'unicode', $expected_version);
+
+sub missing_sources {
+    my ($root) = @_;
+    return grep { !-f File::Spec->catfile($root, $_) } @required_sources;
+}
+
+my @local_missing = missing_sources($local_unicore);
+my @vendored_missing = missing_sources($vendored_unicore);
+my $unicore = !@local_missing ? $local_unicore
+    : !@vendored_missing ? $vendored_unicore
+    : die "No complete Unicode $expected_version source tree: local missing "
+        . join(', ', @local_missing) . '; vendored missing '
+        . join(', ', @vendored_missing) . "\n";
 my %sources = (
     Version => [File::Spec->catfile($unicore, 'version'),
         '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac'],

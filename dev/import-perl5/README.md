@@ -37,6 +37,22 @@ perl dev/import-perl5/sync.pl --only File-DosGlob
 
 Substring match against each row’s `source:` and `target:` fields. Prefer this after adding a single module so unrelated trees under `src/main/perl/lib/` are not overwritten. Run `perl dev/import-perl5/sync.pl --help` for details.
 
+### Refresh the pinned Unicode generator snapshot
+
+The six tracked payloads under `dev/unicode/17.0.0/` are ordinary manifest
+imports from the pinned `perl5/lib/unicore` checkout. Refresh only that complete
+group with its unique target prefix:
+
+```bash
+perl dev/import-perl5/sync.pl --only dev/unicode/17.0.0
+```
+
+The command updates `version`, the three alias/block files, and the two
+`extracted/` property files. Their repository-authored `README.md` is not an
+import target and remains untouched. Review source/target hashes and regenerate
+the affected checked-in Java data after intentionally advancing the pinned Perl
+or Unicode baseline.
+
 ### Add a New Module
 
 ```bash
@@ -66,6 +82,7 @@ Main synchronization script that imports files from perl5/ based on config.yaml.
 
 **Features:**
 - Copies individual files or entire directories
+- Refreshes the minimal tracked Unicode generator snapshot through explicit manifest rows
 - Generates pinned-source test artifacts such as `unicore/TestProp.pl`
 - Applies patches automatically
 - Creates necessary directories

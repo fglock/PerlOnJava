@@ -95,6 +95,33 @@ imports:
     target: perl5_t/Porting
     type: directory
 
+  # Minimal pinned Unicode 17.0 generator inputs. Keep these as explicit file
+  # imports so clean checkouts can reproduce the checked-in Java data without
+  # importing the complete perl5/lib/unicore tree.
+  - source: perl5/lib/unicore/version
+    target: dev/unicode/17.0.0/version
+    type: file
+
+  - source: perl5/lib/unicore/Blocks.txt
+    target: dev/unicode/17.0.0/Blocks.txt
+    type: file
+
+  - source: perl5/lib/unicore/PropertyAliases.txt
+    target: dev/unicode/17.0.0/PropertyAliases.txt
+    type: file
+
+  - source: perl5/lib/unicore/PropValueAliases.txt
+    target: dev/unicode/17.0.0/PropValueAliases.txt
+    type: file
+
+  - source: perl5/lib/unicore/extracted/DDecompositionType.txt
+    target: dev/unicode/17.0.0/extracted/DDecompositionType.txt
+    type: file
+
+  - source: perl5/lib/unicore/extracted/DNumValues.txt
+    target: dev/unicode/17.0.0/extracted/DNumValues.txt
+    type: file
+
   # perl5_t/lib otherwise remains empty to avoid module loading conflicts.
   # TestProp.pl is generated from the pinned Unicode inputs because upstream
   # does not store this build artifact in the perl5 source tree.
