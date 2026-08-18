@@ -1433,7 +1433,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (left == LineBreakData.WJ || right == LineBreakData.WJ) return false; // LB11
         if (left == LineBreakData.GL) return false; // LB12
         if (right == LineBreakData.GL
-                && left != LineBreakData.SP && left != LineBreakData.BA && left != LineBreakData.HY) return false; // LB12a
+                && left != LineBreakData.SP && left != LineBreakData.BA
+                && left != LineBreakData.HY && left != LineBreakData.HH) return false; // LB12a
         if (right == LineBreakData.CL || right == LineBreakData.CP
                 || right == LineBreakData.EX || right == LineBreakData.SY) return false; // LB13
         if (lineOpenBeforeSpaces(leftPosition)) return false; // LB14
@@ -1449,10 +1450,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 || (left == LineBreakData.QU && !hasLineFlag(leftProperty, LineBreakData.FINAL_PUNCTUATION))) return false; // LB19
         if (lineQuoteEastAsianSuppression(leftPosition, rightPosition, leftProperty, rightProperty)) return false; // LB19a
         if (left == LineBreakData.CB || right == LineBreakData.CB) return true; // LB20
-        if (lineWordInitialHyphen(leftPosition, rightPosition, left, right)) return false; // LB20a
-        if (right == LineBreakData.BA || right == LineBreakData.HY || right == LineBreakData.NS
+        if (lineWordInitialHyphen(leftPosition, left, right)) return false; // LB20a
+        if (right == LineBreakData.BA || right == LineBreakData.HH
+                || right == LineBreakData.HY || right == LineBreakData.NS
                 || left == LineBreakData.BB) return false; // LB21
-        if (lineHebrewHyphenSuppression(leftPosition, leftProperty, left, right)) return false; // LB21a
+        if (lineHebrewHyphenSuppression(leftPosition, left, right)) return false; // LB21a
         if (left == LineBreakData.SY && right == LineBreakData.HL) return false; // LB21b
         if (right == LineBreakData.IN) return false; // LB22
         if ((isLineAlphabetic(left) && right == LineBreakData.NU)
@@ -1634,10 +1636,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return false;
     }
 
-    private boolean lineWordInitialHyphen(int leftPosition, int rightPosition, short left, short right) {
-        if (right != LineBreakData.AL) return false;
-        int codePoint = enc.mbcToCode(bytes, leftPosition, end);
-        if (left != LineBreakData.HY && codePoint != 0x2010) return false;
+    private boolean lineWordInitialHyphen(int leftPosition, short left, short right) {
+        if (right != LineBreakData.AL && right != LineBreakData.HL) return false;
+        if (left != LineBreakData.HY && left != LineBreakData.HH) return false;
         int previous = previousLinePosition(leftPosition);
         if (previous < str) return true;
         short value = lineClassAt(previous);
@@ -1645,9 +1646,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 || value == LineBreakData.CB || value == LineBreakData.GL;
     }
 
-    private boolean lineHebrewHyphenSuppression(int leftPosition, short leftProperty, short left, short right) {
-        if (right == LineBreakData.HL || (left != LineBreakData.HY && left != LineBreakData.BA)) return false;
-        if (left == LineBreakData.BA && hasLineFlag(leftProperty, LineBreakData.EAST_ASIAN)) return false;
+    private boolean lineHebrewHyphenSuppression(int leftPosition, short left, short right) {
+        if (right == LineBreakData.HL || (left != LineBreakData.HY && left != LineBreakData.HH)) return false;
         int previous = previousLinePosition(leftPosition);
         return previous >= str && lineClassAt(previous) == LineBreakData.HL;
     }
