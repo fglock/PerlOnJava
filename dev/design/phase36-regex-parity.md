@@ -274,10 +274,16 @@ if they expose a semantic defect.
         prove every remaining failure is understood;
    - never move callback, condition, control-verb, or dynamic-source patterns
      back to Java.
-   - after the current native stack is integrated, refresh the four-leg
-     `perl5_t/t/re` matrix (forced Java/Joni × JVM/interpreter) against one
-     current artifact and establish new exact counts; the stale pre-migration
-     counts are not a release gate for the progressive backend.
+   - use the current forced-Joni JVM gate of 363,164/391,977 assertions across
+     the same 80 regex files as the active migration manifest; it has 19
+     per-file pass-count regressions against PR 958 that must reach zero;
+   - first remove the fatal loose-binary-property blocker that leaves both
+     `pat.t` variants at 631/1,302 executed assertions, then remove the wide
+     scalar fatal that leaves both `pat_advanced.t` variants at zero TAP;
+   - after those native patches are integrated, refresh all four legs (forced
+     Java/Joni × JVM/interpreter) against one current artifact. Reject zero-TAP,
+     timeout, incomplete, or negative-file results before a long acceptance run
+     is offered for user testing.
 3. Complete the remaining Unicode ownership boundary:
    - parse `\h` and `\H` natively as Perl's exact horizontal-whitespace set in
      direct and character-class forms, including scoped `/a` and `/aa`, without
