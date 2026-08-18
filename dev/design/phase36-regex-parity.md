@@ -237,22 +237,11 @@ if they expose a semantic defect.
 
 ### Current critical path
 
-1. Make the current integration PR match the PR 958 baseline without weakening
-   raw comparison:
-   - integrate each validated runtime repair as an independently reviewable
-     commit;
-   - run the combined focused-file gate;
-   - generate a pre-acceptance manifest containing every negative file from the
-     latest comparison, rerun every manifest entry on the final integrated
-     artifact, and require exact explained counts before a full corpus run;
-   - normalize only proven legacy baseline artifacts while always retaining raw
-     counts;
-   - run the real normalized comparator against the targeted manifest before
-     authorizing the long user-acceptance run; no unexplained negative file may
-     be deferred to the 622-file run for discovery;
-   - run a fresh 622-file comparison and require zero unexplained negative
-     per-file deltas;
-   - require warning-free `make` and green Ubuntu and Windows CI before review.
+1. Land the validated baseline-parity integration PR after user review, then
+   rebase the native-Joni delivery stack onto its merged master descendant.
+   Preserve the negative-file manifest and normalized comparator as mandatory
+   pre-acceptance gates for every later full-corpus run; no unexplained negative
+   file may be deferred to a long acceptance run for discovery.
 2. Remove temporary ordinary-pattern Java routing as native Joni replacements
    become green:
    - land the combined nested-lookaround and native KEEP stack, then replace
