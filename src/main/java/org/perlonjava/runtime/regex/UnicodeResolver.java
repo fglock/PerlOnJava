@@ -1053,6 +1053,13 @@ public class UnicodeResolver {
         if (property == null) return null;
 
         String alias = property.trim();
+        int malformedBlockWildcard = alias.indexOf(":=");
+        if (malformedBlockWildcard > 0
+                && PerlUnicodeBlockData.isPropertyAlias(
+                        alias.substring(0, malformedBlockWildcard))) {
+            throw new IllegalArgumentException(
+                    "Unicode property wildcard not terminated");
+        }
         int malformedEgyptianWildcard = alias.indexOf(":=");
         if (malformedEgyptianWildcard > 0
                 && PerlUnicodeEgyptianHieroglyphCoreData.isPropertyAlias(
@@ -1099,6 +1106,8 @@ public class UnicodeResolver {
                     || PerlUnicodeIdentifierData.isPropertyAlias(
                         alias.substring(0, assignment))
                     || PerlUnicodeEgyptianHieroglyphCoreData.isPropertyAlias(
+                        alias.substring(0, assignment))
+                    || PerlUnicodeBlockData.isPropertyAlias(
                         alias.substring(0, assignment))
                     || PerlUnicodeIndicCategoryData.isPropertyAlias(
                         alias.substring(0, assignment)))) {
@@ -1363,6 +1372,10 @@ public class UnicodeResolver {
         }
         if (!blockShortcut && (isIcuBinaryPropertyAlias(blockAlias)
                 || isIcuGeneralCategoryAlias(blockAlias))) return null;
+        if (blockShortcut && looseAsciiPropertyName(blockAlias).equals("kana")) {
+            throw new IllegalArgumentException(
+                    "Can't find Unicode property definition \"" + alias + "\"");
+        }
         UnicodeSet block = PerlUnicodeBlockData.set(blockAlias);
         if (isBlockShortcut && block != null && block.containsSome(0xD800, 0xDFFF)) {
             // Joni's UTF-8 subject path cannot represent an isolated surrogate.
@@ -1761,10 +1774,14 @@ public class UnicodeResolver {
             UnicodeSet exact = PerlUnicodeBlockData.set(value);
             if (exact == null) {
                 throw new IllegalArgumentException(
-                        "Unsupported Block value: " + value.trim());
+                        "Can't find Unicode property definition \"Block="
+                                + value.trim() + "\"");
             }
             return exact;
         }
+        RuntimeRegex.recordCompileWarning(
+                "The Unicode property wildcards feature is experimental",
+                "experimental::uniprop_wildcards");
         if (wildcard.indexOf('*') >= 0) {
             throw new IllegalArgumentException(
                     "quantifier '*' is not allowed in Unicode property value wildcard");
@@ -1772,7 +1789,7 @@ public class UnicodeResolver {
 
         Pattern valuePattern;
         try {
-            valuePattern = Pattern.compile(wildcard);
+            valuePattern = Pattern.compile(wildcard, Pattern.CASE_INSENSITIVE);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -1784,6 +1801,14 @@ public class UnicodeResolver {
             if (valuePattern.matcher(candidate).matches()
                     || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
                 result.addAll(PerlUnicodeBlockData.set(valueId));
+            }
+        }
+        for (int aliasId = 0;
+                aliasId < PerlUnicodeBlockData.wildcardAliasCount(); aliasId++) {
+            String candidate = PerlUnicodeBlockData.wildcardAlias(aliasId);
+            if (valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(looseAsciiPropertyName(candidate)).matches()) {
+                result.addAll(PerlUnicodeBlockData.wildcardAliasSet(aliasId));
             }
         }
         if (result.isEmpty()) {
@@ -2072,8 +2097,10 @@ public class UnicodeResolver {
 
     private static String perlBlockWildcardBody(String value) {
         String trimmed = value.trim();
-        if (!trimmed.startsWith("#") || !trimmed.endsWith("#")
-                || trimmed.length() <= 2) {
+        if (trimmed.length() <= 2) return null;
+        char delimiter = trimmed.charAt(0);
+        if ((delimiter != '#' && delimiter != ':' && delimiter != '/')
+                || trimmed.charAt(trimmed.length() - 1) != delimiter) {
             return null;
         }
         String body = trimmed.substring(1, trimmed.length() - 1);

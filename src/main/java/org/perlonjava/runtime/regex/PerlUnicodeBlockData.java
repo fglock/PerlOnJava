@@ -329,6 +329,120 @@ final class PerlUnicodeBlockData {
         67, 158, 185, 157, 344, 307, 240, 212, 120, 120, 123, 122, 243, 292, 292,
     };
 
+    private static final String[] WILDCARD_ALIASES = {
+        "ASCII", "Adlam", "Aegean_Numbers", "Ahom", "Alchemical", "Alchemical_Symbols",
+        "Alphabetic_PF", "Alphabetic_Presentation_Forms", "Anatolian_Hieroglyphs", "Ancient_Greek_Music", "Ancient_Greek_Musical_Notation", "Ancient_Greek_Numbers",
+        "Ancient_Symbols", "Arabic", "Arabic_Ext_A", "Arabic_Ext_B", "Arabic_Ext_C", "Arabic_Extended_A",
+        "Arabic_Extended_B", "Arabic_Extended_C", "Arabic_Math", "Arabic_Mathematical_Alphabetic_Symbols", "Arabic_PF_A", "Arabic_PF_B",
+        "Arabic_Presentation_Forms-A", "Arabic_Presentation_Forms_A", "Arabic_Presentation_Forms_B", "Arabic_Sup", "Arabic_Supplement", "Armenian",
+        "Arrows", "Avestan", "Balinese", "Bamum", "Bamum_Sup", "Bamum_Supplement",
+        "Basic_Latin", "Bassa_Vah", "Batak", "Bengali", "Beria_Erfe", "Bhaiksuki",
+        "Block_Elements", "Bopomofo", "Bopomofo_Ext", "Bopomofo_Extended", "Box_Drawing", "Brahmi",
+        "Braille", "Braille_Patterns", "Buginese", "Buhid", "Byzantine_Music", "Byzantine_Musical_Symbols",
+        "CJK", "CJK_Compat", "CJK_Compat_Forms", "CJK_Compat_Ideographs", "CJK_Compat_Ideographs_Sup", "CJK_Compatibility",
+        "CJK_Compatibility_Forms", "CJK_Compatibility_Ideographs", "CJK_Compatibility_Ideographs_Supplement", "CJK_Ext_A", "CJK_Ext_B", "CJK_Ext_C",
+        "CJK_Ext_D", "CJK_Ext_E", "CJK_Ext_F", "CJK_Ext_G", "CJK_Ext_H", "CJK_Ext_I",
+        "CJK_Ext_J", "CJK_Radicals_Sup", "CJK_Radicals_Supplement", "CJK_Strokes", "CJK_Symbols", "CJK_Symbols_And_Punctuation",
+        "CJK_Unified_Ideographs", "CJK_Unified_Ideographs_Extension_A", "CJK_Unified_Ideographs_Extension_B", "CJK_Unified_Ideographs_Extension_C", "CJK_Unified_Ideographs_Extension_D", "CJK_Unified_Ideographs_Extension_E",
+        "CJK_Unified_Ideographs_Extension_F", "CJK_Unified_Ideographs_Extension_G", "CJK_Unified_Ideographs_Extension_H", "CJK_Unified_Ideographs_Extension_I", "CJK_Unified_Ideographs_Extension_J", "Canadian_Syllabics",
+        "Carian", "Caucasian_Albanian", "Chakma", "Cham", "Cherokee", "Cherokee_Sup",
+        "Cherokee_Supplement", "Chess_Symbols", "Chorasmian", "Combining_Diacritical_Marks", "Combining_Diacritical_Marks_Extended", "Combining_Diacritical_Marks_For_Symbols",
+        "Combining_Diacritical_Marks_Supplement", "Combining_Half_Marks", "Combining_Marks_For_Symbols", "Common_Indic_Number_Forms", "Compat_Jamo", "Control_Pictures",
+        "Coptic", "Coptic_Epact_Numbers", "Counting_Rod", "Counting_Rod_Numerals", "Cuneiform", "Cuneiform_Numbers",
+        "Cuneiform_Numbers_And_Punctuation", "Currency_Symbols", "Cypriot_Syllabary", "Cypro_Minoan", "Cyrillic", "Cyrillic_Ext_A",
+        "Cyrillic_Ext_B", "Cyrillic_Ext_C", "Cyrillic_Ext_D", "Cyrillic_Extended_A", "Cyrillic_Extended_B", "Cyrillic_Extended_C",
+        "Cyrillic_Extended_D", "Cyrillic_Sup", "Cyrillic_Supplement", "Cyrillic_Supplementary", "Deseret", "Devanagari",
+        "Devanagari_Ext", "Devanagari_Ext_A", "Devanagari_Extended", "Devanagari_Extended_A", "Diacriticals", "Diacriticals_Ext",
+        "Diacriticals_For_Symbols", "Diacriticals_Sup", "Dingbats", "Dives_Akuru", "Dogra", "Domino",
+        "Domino_Tiles", "Duployan", "Early_Dynastic_Cuneiform", "Egyptian_Hieroglyph_Format_Controls", "Egyptian_Hieroglyphs", "Egyptian_Hieroglyphs_Ext_A",
+        "Egyptian_Hieroglyphs_Extended_A", "Elbasan", "Elymaic", "Emoticons", "Enclosed_Alphanum", "Enclosed_Alphanum_Sup",
+        "Enclosed_Alphanumeric_Supplement", "Enclosed_Alphanumerics", "Enclosed_CJK", "Enclosed_CJK_Letters_And_Months", "Enclosed_Ideographic_Sup", "Enclosed_Ideographic_Supplement",
+        "Ethiopic", "Ethiopic_Ext", "Ethiopic_Ext_A", "Ethiopic_Ext_B", "Ethiopic_Extended", "Ethiopic_Extended_A",
+        "Ethiopic_Extended_B", "Ethiopic_Sup", "Ethiopic_Supplement", "Garay", "General_Punctuation", "Geometric_Shapes",
+        "Geometric_Shapes_Ext", "Geometric_Shapes_Extended", "Georgian", "Georgian_Ext", "Georgian_Extended", "Georgian_Sup",
+        "Georgian_Supplement", "Glagolitic", "Glagolitic_Sup", "Glagolitic_Supplement", "Gothic", "Grantha",
+        "Greek", "Greek_And_Coptic", "Greek_Ext", "Greek_Extended", "Gujarati", "Gunjala_Gondi",
+        "Gurmukhi", "Gurung_Khema", "Half_And_Full_Forms", "Half_Marks", "Halfwidth_And_Fullwidth_Forms", "Hangul",
+        "Hangul_Compatibility_Jamo", "Hangul_Jamo", "Hangul_Jamo_Extended_A", "Hangul_Jamo_Extended_B", "Hangul_Syllables", "Hanifi_Rohingya",
+        "Hanunoo", "Hatran", "Hebrew", "High_PU_Surrogates", "High_Private_Use_Surrogates", "High_Surrogates",
+        "Hiragana", "IDC", "IPA_Ext", "IPA_Extensions", "Ideographic_Description_Characters", "Ideographic_Symbols",
+        "Ideographic_Symbols_And_Punctuation", "Imperial_Aramaic", "Indic_Number_Forms", "Indic_Siyaq_Numbers", "Inscriptional_Pahlavi", "Inscriptional_Parthian",
+        "Jamo", "Jamo_Ext_A", "Jamo_Ext_B", "Javanese", "Kaithi", "Kaktovik_Numerals",
+        "Kana_Ext_A", "Kana_Ext_B", "Kana_Extended_A", "Kana_Extended_B", "Kana_Sup", "Kana_Supplement",
+        "Kanbun", "Kangxi", "Kangxi_Radicals", "Kannada", "Katakana", "Katakana_Ext",
+        "Katakana_Phonetic_Extensions", "Kawi", "Kayah_Li", "Kharoshthi", "Khitan_Small_Script", "Khmer",
+        "Khmer_Symbols", "Khojki", "Khudawadi", "Kirat_Rai", "Lao", "Latin_1",
+        "Latin_1_Sup", "Latin_1_Supplement", "Latin_Ext_A", "Latin_Ext_Additional", "Latin_Ext_B", "Latin_Ext_C",
+        "Latin_Ext_D", "Latin_Ext_E", "Latin_Ext_F", "Latin_Ext_G", "Latin_Extended_A", "Latin_Extended_Additional",
+        "Latin_Extended_B", "Latin_Extended_C", "Latin_Extended_D", "Latin_Extended_E", "Latin_Extended_F", "Latin_Extended_G",
+        "Lepcha", "Letterlike_Symbols", "Limbu", "Linear_A", "Linear_B_Ideograms", "Linear_B_Syllabary",
+        "Lisu", "Lisu_Sup", "Lisu_Supplement", "Low_Surrogates", "Lycian", "Lydian",
+        "Mahajani", "Mahjong", "Mahjong_Tiles", "Makasar", "Malayalam", "Mandaic",
+        "Manichaean", "Marchen", "Masaram_Gondi", "Math_Alphanum", "Math_Operators", "Mathematical_Alphanumeric_Symbols",
+        "Mathematical_Operators", "Mayan_Numerals", "Medefaidrin", "Meetei_Mayek", "Meetei_Mayek_Ext", "Meetei_Mayek_Extensions",
+        "Mende_Kikakui", "Meroitic_Cursive", "Meroitic_Hieroglyphs", "Miao", "Misc_Arrows", "Misc_Math_Symbols_A",
+        "Misc_Math_Symbols_B", "Misc_Pictographs", "Misc_Symbols", "Misc_Symbols_Sup", "Misc_Technical", "Miscellaneous_Mathematical_Symbols_A",
+        "Miscellaneous_Mathematical_Symbols_B", "Miscellaneous_Symbols", "Miscellaneous_Symbols_And_Arrows", "Miscellaneous_Symbols_And_Pictographs", "Miscellaneous_Symbols_Supplement", "Miscellaneous_Technical",
+        "Modi", "Modifier_Letters", "Modifier_Tone_Letters", "Mongolian", "Mongolian_Sup", "Mongolian_Supplement",
+        "Mro", "Multani", "Music", "Musical_Symbols", "Myanmar", "Myanmar_Ext_A",
+        "Myanmar_Ext_B", "Myanmar_Ext_C", "Myanmar_Extended_A", "Myanmar_Extended_B", "Myanmar_Extended_C", "NB",
+        "NKo", "Nabataean", "Nag_Mundari", "Nandinagari", "New_Tai_Lue", "Newa",
+        "No_Block", "Number_Forms", "Nushu", "Nyiakeng_Puachue_Hmong", "OCR", "Ogham",
+        "Ol_Chiki", "Ol_Onal", "Old_Hungarian", "Old_Italic", "Old_North_Arabian", "Old_Permic",
+        "Old_Persian", "Old_Sogdian", "Old_South_Arabian", "Old_Turkic", "Old_Uyghur", "Optical_Character_Recognition",
+        "Oriya", "Ornamental_Dingbats", "Osage", "Osmanya", "Ottoman_Siyaq_Numbers", "PUA",
+        "Pahawh_Hmong", "Palmyrene", "Pau_Cin_Hau", "Phags_Pa", "Phaistos", "Phaistos_Disc",
+        "Phoenician", "Phonetic_Ext", "Phonetic_Ext_Sup", "Phonetic_Extensions", "Phonetic_Extensions_Supplement", "Playing_Cards",
+        "Private_Use", "Private_Use_Area", "Psalter_Pahlavi", "Punctuation", "Rejang", "Rumi",
+        "Rumi_Numeral_Symbols", "Runic", "Samaritan", "Saurashtra", "Sharada", "Sharada_Sup",
+        "Sharada_Supplement", "Shavian", "Shorthand_Format_Controls", "Siddham", "Sidetic", "Sinhala",
+        "Sinhala_Archaic_Numbers", "Small_Form_Variants", "Small_Forms", "Small_Kana_Ext", "Small_Kana_Extension", "Sogdian",
+        "Sora_Sompeng", "Soyombo", "Spacing_Modifier_Letters", "Specials", "Sundanese", "Sundanese_Sup",
+        "Sundanese_Supplement", "Sunuwar", "Sup_Arrows_A", "Sup_Arrows_B", "Sup_Arrows_C", "Sup_Math_Operators",
+        "Sup_PUA_A", "Sup_PUA_B", "Sup_Punctuation", "Sup_Symbols_And_Pictographs", "Super_And_Sub", "Superscripts_And_Subscripts",
+        "Supplemental_Arrows_A", "Supplemental_Arrows_B", "Supplemental_Arrows_C", "Supplemental_Mathematical_Operators", "Supplemental_Punctuation", "Supplemental_Symbols_And_Pictographs",
+        "Supplementary_Private_Use_Area_A", "Supplementary_Private_Use_Area_B", "Sutton_SignWriting", "Syloti_Nagri", "Symbols_And_Pictographs_Ext_A", "Symbols_And_Pictographs_Extended_A",
+        "Symbols_For_Legacy_Computing", "Symbols_For_Legacy_Computing_Sup", "Symbols_For_Legacy_Computing_Supplement", "Syriac", "Syriac_Sup", "Syriac_Supplement",
+        "Tagalog", "Tagbanwa", "Tags", "Tai_Le", "Tai_Tham", "Tai_Viet",
+        "Tai_Xuan_Jing", "Tai_Xuan_Jing_Symbols", "Tai_Yo", "Takri", "Tamil", "Tamil_Sup",
+        "Tamil_Supplement", "Tangsa", "Tangut", "Tangut_Components", "Tangut_Components_Sup", "Tangut_Components_Supplement",
+        "Tangut_Sup", "Tangut_Supplement", "Telugu", "Thaana", "Thai", "Tibetan",
+        "Tifinagh", "Tirhuta", "Todhri", "Tolong_Siki", "Toto", "Transport_And_Map",
+        "Transport_And_Map_Symbols", "Tulu_Tigalari", "UCAS", "UCAS_Ext", "UCAS_Ext_A", "Ugaritic",
+        "Unified_Canadian_Aboriginal_Syllabics", "Unified_Canadian_Aboriginal_Syllabics_Extended", "Unified_Canadian_Aboriginal_Syllabics_Extended_A", "VS", "VS_Sup", "Vai",
+        "Variation_Selectors", "Variation_Selectors_Supplement", "Vedic_Ext", "Vedic_Extensions", "Vertical_Forms", "Vithkuqi",
+        "Wancho", "Warang_Citi", "Yezidi", "Yi_Radicals", "Yi_Syllables", "Yijing",
+        "Yijing_Hexagram_Symbols", "Zanabazar_Square", "Znamenny_Music", "Znamenny_Musical_Notation",
+    };
+
+    private static final short[] WILDCARD_ALIAS_VALUE_IDS = {
+        1, 313, 167, 238, 326, 326, 155, 155, 266, 295, 295, 168, 169, 13, 22, 21, 213, 22, 21, 213,
+        316, 316, 156, 162, 156, 156, 162, 15, 15, 11, 79, 203, 59, 127, 268, 268, 1, 271, 61, 24,
+        275, 250, 86, 111, 114, 114, 85, 219, 92, 92, 56, 47, 293, 293, 121, 118, 160, 154, 339, 118,
+        160, 154, 339, 119, 333, 334, 335, 336, 337, 340, 341, 338, 342, 105, 105, 115, 108, 108, 121, 119,
+        333, 334, 335, 336, 337, 340, 341, 338, 342, 42, 172, 184, 222, 140, 41, 146, 146, 330, 217, 7,
+        58, 76, 70, 159, 76, 131, 112, 82, 99, 173, 299, 299, 259, 260, 260, 75, 189, 262, 9, 103,
+        126, 64, 304, 103, 126, 64, 304, 10, 10, 10, 179, 23, 134, 247, 134, 247, 7, 58, 76, 70,
+        89, 241, 239, 318, 318, 288, 261, 264, 263, 265, 265, 183, 218, 323, 84, 320, 320, 84, 117, 117,
+        321, 321, 39, 102, 144, 311, 102, 144, 311, 40, 40, 210, 73, 87, 327, 327, 37, 65, 65, 100,
+        100, 97, 303, 303, 175, 229, 8, 8, 72, 72, 26, 253, 25, 267, 163, 159, 163, 148, 112, 38,
+        137, 149, 148, 209, 46, 193, 12, 151, 151, 150, 109, 107, 5, 5, 107, 277, 277, 190, 131, 314,
+        205, 204, 38, 137, 149, 138, 220, 296, 285, 283, 285, 283, 284, 284, 113, 106, 106, 30, 110, 116,
+        116, 256, 135, 199, 280, 49, 55, 226, 228, 273, 34, 2, 2, 2, 3, 71, 4, 98, 129, 145,
+        188, 302, 3, 71, 4, 98, 129, 145, 188, 302, 62, 77, 52, 187, 166, 165, 124, 257, 257, 152,
+        171, 195, 223, 317, 317, 255, 31, 19, 202, 251, 252, 300, 80, 300, 80, 297, 274, 147, 143, 143,
+        312, 198, 197, 276, 96, 90, 94, 322, 88, 291, 81, 90, 94, 88, 96, 322, 291, 81, 234, 6,
+        128, 50, 235, 235, 269, 227, 294, 294, 36, 141, 139, 237, 141, 139, 237, 0, 17, 192, 308, 242,
+        54, 231, 0, 78, 287, 305, 83, 43, 63, 309, 208, 174, 201, 176, 178, 214, 200, 207, 216, 83,
+        27, 324, 182, 181, 315, 153, 272, 191, 246, 132, 170, 170, 194, 68, 69, 68, 69, 319, 153, 153,
+        206, 73, 136, 211, 211, 44, 18, 133, 224, 248, 248, 180, 289, 233, 196, 32, 225, 161, 161, 286,
+        286, 215, 221, 244, 6, 164, 60, 66, 66, 249, 91, 93, 328, 95, 345, 346, 104, 329, 74, 74,
+        91, 93, 328, 95, 104, 329, 345, 346, 301, 130, 331, 331, 332, 290, 290, 14, 20, 20, 45, 48,
+        343, 53, 57, 142, 298, 298, 310, 236, 28, 258, 258, 270, 278, 279, 282, 282, 281, 281, 29, 16,
+        33, 35, 101, 232, 186, 254, 306, 325, 325, 230, 42, 51, 245, 177, 42, 51, 245, 157, 344, 125,
+        157, 344, 67, 67, 158, 185, 307, 240, 212, 123, 122, 120, 120, 243, 292, 292,
+    };
+
     private static final UnicodeSet[] SETS = buildSets();
 
     static int valueCount() {
@@ -339,12 +453,24 @@ final class PerlUnicodeBlockData {
         return ALIAS_KEYS.length;
     }
 
+    static int wildcardAliasCount() {
+        return WILDCARD_ALIASES.length;
+    }
+
     static int rangeCount() {
         return RANGES.length / 3;
     }
 
     static String canonicalValue(int valueId) {
         return VALUE_NAMES[valueId];
+    }
+
+    static String wildcardAlias(int aliasId) {
+        return WILDCARD_ALIASES[aliasId];
+    }
+
+    static UnicodeSet wildcardAliasSet(int aliasId) {
+        return SETS[WILDCARD_ALIAS_VALUE_IDS[aliasId]];
     }
 
     static UnicodeSet set(int valueId) {

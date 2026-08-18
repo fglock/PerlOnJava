@@ -211,12 +211,24 @@ die "Expected 51 No_Block ranges and 810,304 code points\n"
     unless $no_block_ranges == 51 && $no_block_count == 810_304;
 
 my %alias_value_id;
+my %wildcard_alias_value_id;
 for my $key (keys %row_for_alias) {
     my $value_id = $value_id_for_row{$row_for_alias{$key}};
     die "Block alias '$key' has no reachable value\n" unless defined $value_id;
     $alias_value_id{$key} = $value_id;
 }
+for my $row (0 .. $#value_rows) {
+    my $value_id = $value_id_for_row{$row};
+    die "Block alias row $row has no reachable value\n" unless defined $value_id;
+    for my $alias (@{$value_rows[$row]}) {
+        die "Exact Block alias '$alias' collides across values\n"
+            if exists $wildcard_alias_value_id{$alias}
+                && $wildcard_alias_value_id{$alias} != $value_id;
+        $wildcard_alias_value_id{$alias} = $value_id;
+    }
+}
 my @alias_keys = sort keys %alias_value_id;
+my @wildcard_aliases = sort keys %wildcard_alias_value_id;
 
 print <<'HEADER';
 package org.perlonjava.runtime.regex;
@@ -262,6 +274,17 @@ for (my $i = 0; $i < @alias_keys; $i += 20) {
     my $end = $i + 19 < $#alias_keys ? $i + 19 : $#alias_keys;
     print "        ", join(', ', map { $alias_value_id{$alias_keys[$_]} } $i .. $end), ",\n";
 }
+print "    };\n\n    private static final String[] WILDCARD_ALIASES = {\n";
+for (my $i = 0; $i < @wildcard_aliases; $i += 6) {
+    my $end = $i + 5 < $#wildcard_aliases ? $i + 5 : $#wildcard_aliases;
+    print "        ", join(', ', map { qq{"$wildcard_aliases[$_]"} } $i .. $end), ",\n";
+}
+print "    };\n\n    private static final short[] WILDCARD_ALIAS_VALUE_IDS = {\n";
+for (my $i = 0; $i < @wildcard_aliases; $i += 20) {
+    my $end = $i + 19 < $#wildcard_aliases ? $i + 19 : $#wildcard_aliases;
+    print "        ", join(', ', map { $wildcard_alias_value_id{$wildcard_aliases[$_]} }
+            $i .. $end), ",\n";
+}
 print <<'FOOTER';
     };
 
@@ -275,12 +298,24 @@ print <<'FOOTER';
         return ALIAS_KEYS.length;
     }
 
+    static int wildcardAliasCount() {
+        return WILDCARD_ALIASES.length;
+    }
+
     static int rangeCount() {
         return RANGES.length / 3;
     }
 
     static String canonicalValue(int valueId) {
         return VALUE_NAMES[valueId];
+    }
+
+    static String wildcardAlias(int aliasId) {
+        return WILDCARD_ALIASES[aliasId];
+    }
+
+    static UnicodeSet wildcardAliasSet(int aliasId) {
+        return SETS[WILDCARD_ALIAS_VALUE_IDS[aliasId]];
     }
 
     static UnicodeSet set(int valueId) {
