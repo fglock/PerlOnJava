@@ -1,0 +1,4 @@
+interface:
+  display_name: "File Mailbox Coordination"
+  short_description: "Coordinate local agents through durable files"
+  default_prompt: "Use $file-mailbox-coordination to join or operate a file-backed multi-agent worker pool."
