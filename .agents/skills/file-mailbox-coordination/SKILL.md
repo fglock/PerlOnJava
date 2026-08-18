@@ -232,8 +232,9 @@ Before starting a local build, require the worker to:
 
 1. append a build-intent claim with task, checkout, command class, log path,
    start deadline, and unique claim token;
-2. reread all relevant mailboxes after a short jitter and count non-stale active
-   claims;
+2. reread all relevant mailboxes after a short jitter and count every unexpired
+   intent or running claim as a reservation, even when its process is not yet
+   visible;
 3. inspect exact build processes and current machine load without killing or
    classifying processes from CPU percentage alone;
 4. start only when the published concurrency and load policy permits;
@@ -242,10 +243,14 @@ Before starting a local build, require the worker to:
 
 Make simultaneous claims deterministic: sort by mailbox timestamp and claim
 token, and let only the first available claims up to the global limit start.
-Expire an intent that misses its start deadline. Treat a running process as
-authoritative even when its mailbox heartbeat is delayed; verify checkout,
-command, PID, and start time before recovering a stale claim. Workers that
-cannot inspect load or exact processes must wait rather than guess.
+An earlier unexpired intent consumes capacity until it records release or
+misses its start deadline; a later worker must not infer a free slot merely
+because the earlier process has not appeared yet. Immediately before launch,
+reread the mailboxes and exact process list a second time. Expire an intent that
+misses its start deadline. Treat a running process as authoritative even when
+its mailbox heartbeat is delayed; verify checkout, command, PID, and start time
+before recovering a stale claim. Workers that cannot inspect load or exact
+processes must wait rather than guess.
 
 This protocol removes approval round trips, not the resource limit. The
 coordinator publishes or changes the limit, audits claims, resolves stale or
