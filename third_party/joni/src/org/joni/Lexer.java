@@ -1130,12 +1130,14 @@ class Lexer extends ScannerSupport {
                     break;
                 case 'b':
                     if (syntax.opEscBWordBound()) {
+                        if (fetchTokenForPerlGraphemeBoundary(false)) break;
                         fetchTokenFor_anchor(AnchorType.WORD_BOUND);
                         token.setAnchorASCIIRange(isAsciiRange(env.option) && !isWordBoundAllRange(env.option));
                     }
                     break;
                 case 'B':
                     if (syntax.opEscBWordBound()) {
+                        if (fetchTokenForPerlGraphemeBoundary(true)) break;
                         fetchTokenFor_anchor(AnchorType.NOT_WORD_BOUND);
                         token.setAnchorASCIIRange(isAsciiRange(env.option) && !isWordBoundAllRange(env.option));
                     }
@@ -1341,6 +1343,34 @@ class Lexer extends ScannerSupport {
 
             break;
         } // while
+    }
+
+    private boolean fetchTokenForPerlGraphemeBoundary(boolean negated) {
+        if (!syntax.op2OptionPerl() || !left() || peek() != '{') return false;
+
+        mark();
+        fetch(); // '{'
+        StringBuilder name = new StringBuilder(4);
+        while (left()) {
+            fetch();
+            if (c == '}') {
+                if (name.toString().equals("gcb")) {
+                    fetchTokenFor_anchor(negated
+                            ? AnchorType.NOT_GRAPHEME_BOUNDARY
+                            : AnchorType.GRAPHEME_BOUNDARY);
+                    return true;
+                }
+                restore();
+                return false;
+            }
+            if (name.length() >= 8 || c > 0x7f) {
+                restore();
+                return false;
+            }
+            name.append((char)c);
+        }
+        restore();
+        return false;
     }
 
     private void greedyCheck() {

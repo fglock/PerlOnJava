@@ -1198,6 +1198,14 @@ final class ArrayCompiler extends Compiler {
             }
             break;
 
+        case AnchorType.GRAPHEME_BOUNDARY:
+            addOpcode(OPCode.GRAPHEME_BOUNDARY);
+            break;
+
+        case AnchorType.NOT_GRAPHEME_BOUNDARY:
+            addOpcode(OPCode.NOT_GRAPHEME_BOUNDARY);
+            break;
+
         case AnchorType.WORD_BEGIN:
             if (Config.USE_WORD_BEGIN_END) {
                 if (node.asciiRange) {

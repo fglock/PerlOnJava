@@ -32,6 +32,7 @@ import static org.joni.Option.isNotEol;
 import org.jcodings.CodeRange;
 import org.jcodings.Encoding;
 import org.jcodings.IntHolder;
+import org.jcodings.unicode.UnicodeCodeRange;
 import org.joni.constants.internal.OPCode;
 import org.joni.constants.internal.OPSize;
 import org.joni.exception.ErrorMessages;
@@ -249,6 +250,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_WORD:                   opNotWord();               break;
                 case OPCode.WORD_BOUND:                 opWordBound();             continue;
                 case OPCode.NOT_WORD_BOUND:             opNotWordBound();          continue;
+                case OPCode.GRAPHEME_BOUNDARY:          opGraphemeBoundary(false); continue;
+                case OPCode.NOT_GRAPHEME_BOUNDARY:      opGraphemeBoundary(true);  continue;
                 case OPCode.WORD_BEGIN:                 opWordBegin();             continue;
                 case OPCode.WORD_END:                   opWordEnd();               continue;
 
@@ -406,6 +409,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NOT_WORD:                   opNotWordSb();               break;
                 case OPCode.WORD_BOUND:                 opWordBoundSb();             continue;
                 case OPCode.NOT_WORD_BOUND:             opNotWordBoundSb();          continue;
+                case OPCode.GRAPHEME_BOUNDARY:          opGraphemeBoundary(false);   continue;
+                case OPCode.NOT_GRAPHEME_BOUNDARY:      opGraphemeBoundary(true);    continue;
                 case OPCode.WORD_BEGIN:                 opWordBeginSb();             continue;
                 case OPCode.WORD_END:                   opWordEndSb();               continue;
 
@@ -1236,6 +1241,106 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         } else {
             if (enc.isMbcWord(bytes, s, end) == enc.isMbcWord(bytes, sprev, end)) {opFail(); return;}
         }
+    }
+
+    private void opGraphemeBoundary(boolean negated) {
+        if (isGraphemeBoundary() == negated) opFail();
+    }
+
+    private boolean isGraphemeBoundary() {
+        if (s <= str || s >= end) return true; // GB1, GB2
+
+        int leftPosition = enc.prevCharHead(bytes, str, s, end);
+        int left = enc.mbcToCode(bytes, leftPosition, end);
+        int right = enc.mbcToCode(bytes, s, end);
+
+        if (isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CR)
+                && isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LF)) return false; // GB3
+        if (isGcbControl(left) || isGcbControl(right)) return true; // GB4, GB5
+
+        if (isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_L)
+                && (isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_L)
+                        || isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_V)
+                        || isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LV)
+                        || isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LVT))) return false; // GB6
+        if ((isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LV)
+                    || isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_V))
+                && (isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_V)
+                    || isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_T))) return false; // GB7
+        if ((isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LVT)
+                    || isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_T))
+                && isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_T)) return false; // GB8
+
+        if (isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_EXTEND)
+                || isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_ZWJ)) return false; // GB9
+        if (isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_SPACINGMARK)) return false; // GB9a
+        if (isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_PREPEND)) return false; // GB9b
+        if (isIndicConjunctBoundary(leftPosition, right)) return false; // GB9c
+        if (isExtendedPictographicBoundary(leftPosition, right)) return false; // GB11
+        if (isRegionalIndicatorBoundary(leftPosition, left, right)) return false; // GB12, GB13
+
+        return true; // GB999
+    }
+
+    private boolean isGcbControl(int codePoint) {
+        return isGcb(codePoint, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CR)
+                || isGcb(codePoint, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LF)
+                || isGcb(codePoint, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CONTROL);
+    }
+
+    private boolean isGcb(int codePoint, UnicodeCodeRange range) {
+        return enc.isCodeCType(codePoint, range.getCType());
+    }
+
+    private boolean isIndicConjunctBoundary(int leftPosition, int right) {
+        if (!isGcb(right, UnicodeCodeRange.INCBCONSONANT)) return false;
+        boolean sawLinker = false;
+        int position = leftPosition;
+        while (position >= str) {
+            int codePoint = enc.mbcToCode(bytes, position, end);
+            if (isGcb(codePoint, UnicodeCodeRange.INCBLINKER)) {
+                sawLinker = true;
+            } else if (!isGcb(codePoint, UnicodeCodeRange.INCBEXTEND)) {
+                return sawLinker && isGcb(codePoint, UnicodeCodeRange.INCBCONSONANT);
+            }
+            if (position == str) break;
+            position = enc.prevCharHead(bytes, str, position, end);
+        }
+        return false;
+    }
+
+    private boolean isExtendedPictographicBoundary(int leftPosition, int right) {
+        if (!isGcb(right, UnicodeCodeRange.EXTENDEDPICTOGRAPHIC)
+                || !isGcb(
+                        enc.mbcToCode(bytes, leftPosition, end),
+                        UnicodeCodeRange.GRAPHEMECLUSTERBREAK_ZWJ)) return false;
+        if (leftPosition == str) return false;
+        int position = enc.prevCharHead(bytes, str, leftPosition, end);
+        while (position >= str) {
+            int codePoint = enc.mbcToCode(bytes, position, end);
+            if (!isGcb(codePoint, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_EXTEND)) {
+                return isGcb(codePoint, UnicodeCodeRange.EXTENDEDPICTOGRAPHIC);
+            }
+            if (position == str) break;
+            position = enc.prevCharHead(bytes, str, position, end);
+        }
+        return false;
+    }
+
+    private boolean isRegionalIndicatorBoundary(int leftPosition, int left, int right) {
+        if (!isGcb(left, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_REGIONALINDICATOR)
+                || !isGcb(right, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_REGIONALINDICATOR)) {
+            return false;
+        }
+        int count = 1;
+        int position = leftPosition;
+        while (position > str) {
+            position = enc.prevCharHead(bytes, str, position, end);
+            int codePoint = enc.mbcToCode(bytes, position, end);
+            if (!isGcb(codePoint, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_REGIONALINDICATOR)) break;
+            count++;
+        }
+        return (count & 1) == 1;
     }
 
     private void opWordBoundSb() {

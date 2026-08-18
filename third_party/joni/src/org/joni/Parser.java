@@ -1180,7 +1180,7 @@ class Parser extends Lexer {
         return np;
     }
 
-    private static final int NODE_COMMON_SIZE = 16;
+    private static final int NODE_COMMON_SIZE = 20;
     private Node parseExtendedGraphemeCluster() {
         final Node[] nodes = new Node[NODE_COMMON_SIZE];
         final int anyTargetPosition;
@@ -1247,8 +1247,24 @@ class Parser extends Lexer {
                         quantifierNode(nodes, XPList + 1, 0, QuantifierNode.REPEAT_INFINITE);
                         createNodeFromArray(true, nodes, coreAlts + 4, XPList);
                     }
+                    {
+                        int incbList = coreAlts + 8;
+                        createPropertyNode(nodes, incbList + 0, UnicodeCodeRange.INCBCONSONANT);
+                        int conjunctTail = incbList + 2;
+                        createPropertyNode(nodes, conjunctTail + 0, UnicodeCodeRange.INCBEXTEND);
+                        quantifierNode(nodes, conjunctTail + 0, 0, QuantifierNode.REPEAT_INFINITE);
+                        createPropertyNode(nodes, conjunctTail + 1, UnicodeCodeRange.INCBLINKER);
+                        quantifierNode(nodes, conjunctTail + 1, 1, QuantifierNode.REPEAT_INFINITE);
+                        createPropertyNode(nodes, conjunctTail + 2, UnicodeCodeRange.INCBEXTEND);
+                        addPropertyToCC((CClassNode)nodes[conjunctTail + 2], UnicodeCodeRange.INCBLINKER, false);
+                        quantifierNode(nodes, conjunctTail + 2, 0, QuantifierNode.REPEAT_INFINITE);
+                        createPropertyNode(nodes, conjunctTail + 3, UnicodeCodeRange.INCBCONSONANT);
+                        createNodeFromArray(true, nodes, incbList + 1, conjunctTail);
+                        quantifierNode(nodes, incbList + 1, 1, QuantifierNode.REPEAT_INFINITE);
+                        createNodeFromArray(true, nodes, coreAlts + 5, incbList);
+                    }
                     cc = new CClassNode();
-                    nodes[coreAlts + 5] = cc;
+                    nodes[coreAlts + 6] = cc;
                     if (enc.minLength() > 1) {
                         addPropertyToCC(cc, UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CONTROL, false);
                         cc.addCodeRange(env, 0x000A, 0x000A);
