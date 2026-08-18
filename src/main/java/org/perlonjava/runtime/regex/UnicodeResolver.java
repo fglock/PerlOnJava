@@ -985,6 +985,18 @@ public class UnicodeResolver {
             }
             return PERL_DECOMPOSITION_TYPE_SETS[value];
         }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeEastAsianWidthData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            UnicodeSet eastAsianWidth = PerlUnicodeEastAsianWidthData.valueSet(
+                    alias.substring(assignment + 1));
+            if (eastAsianWidth == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported East_Asian_Width value: "
+                                + alias.substring(assignment + 1).trim());
+            }
+            return eastAsianWidth;
+        }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1310,8 +1322,12 @@ public class UnicodeResolver {
     }
 
     private static void appendJavaPatternChar(StringBuilder sb, int codePoint) {
-        if (codePoint >= 0x10000) {
-            // Use \x{XXXX} for supplementary characters to avoid surrogate pair issues
+        if (codePoint >= 0x10000
+                || (codePoint >= Character.MIN_SURROGATE
+                        && codePoint <= Character.MAX_SURROGATE)) {
+            // Use \x{XXXX} for supplementary characters and surrogate code
+            // points. Literal unpaired surrogates cannot be encoded losslessly
+            // for Joni and can turn an otherwise valid range into an empty one.
             sb.append(String.format("\\x{%X}", codePoint));
         } else {
             // Escape special regex metacharacters inside character classes
