@@ -269,6 +269,19 @@ warning-free `make` passes in 5m39s. Exact chunks 01–04 reach
 were previously overcounted by 16 because each affected Line_Break surrogate
 source line emits a passing membership assertion and a still-failing required
 deprecation-warning assertion; the semantic stack omits no accepted correction.
+Draft PR #1046 publishes that exact combined stack. The follow-on
+`wip/phase36-post-enumerated-integration` includes the validated mechanical
+preprocessor cleanup and pinned Unicode 17 `Identifier_Status`/
+`Identifier_Type` data and resolver. Its focused oracle passes 40/40 and
+protected boundaries pass 169/169 on both backends; chunk 02 reaches
+41,774/42,010, exactly +280 with zero losses and identical 42,010-assertion
+backend maps. Pinned `kEH_Core` data and resolver are also integrated: chunk
+02 reaches 41,870/42,010 on both backends, exactly +96 with zero losses and
+identical assertion maps. The focused oracle passes 167/169 on both backends;
+the only remaining assertions are the isolated-surrogate marker representation
+lane. The property corpus therefore reaches 151,117/167,506 and the complete
+property-plus-boundary evidence reaches 390,983/407,372, leaving 16,389
+property assertions.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -572,6 +585,15 @@ is retained for now.
   - [x] Reran the combined forced-Joni 80-file corpus on JVM and interpreter,
     published the complete file-by-file comparison, and reduced its six actual
     regressions to two fatal roots with narrow owners and rerun gates.
+  - [x] Routed the complete explicit Perl alias switch through the Joni
+    property adapter, removing the `Titlecase`, `XPosixSpace`, and `PosixUpper`
+    first-abort regressions without changing the default backend (PR #1042).
+  - [ ] Parse Perl's unbraced relative backreference `\g-N` natively in the
+    forked Joni lexer; the independent implementation slice is active.
+  - [ ] Parse Perl's `(*:NAME)` MARK shorthand natively and rerun the affected
+    `pat_rt_report{,_thr}.t` blocks. Long-form `(*MARK:NAME)` remains complete.
+  - [ ] Rerun the nine dominant acceptance files and complete 622-file baseline
+    comparison after the independently classified parser slices land.
 - [x] Phase 2: Conditions and backtracking-visible state (2026-08-17)
   - [x] Implemented executable callback conditions, control verbs including
     `(*MARK:NAME)`, and callback-visible recursive capture state in Joni.
@@ -767,6 +789,23 @@ is retained for now.
     01–04 gain 2,116 numbered assertions with zero losses and exact backend
     maps. Accepted source commit `71b56a4bcedd73486b32d8b91e98b8f3b35c5df5`
     is stacked in the active combined WIP.
+  - [x] Integrated pinned Unicode 17 `Identifier_Status` and
+    `Identifier_Type`, including short/long ASCII-loose aliases, explicit
+    Restricted and Not_Character defaults, overlapping type values, wildcard
+    unions, exact-`Is` policy, and malformed/unknown rejection. The focused
+    oracle passes 40/40 and protected boundaries pass 169/169 on JVM and
+    interpreter; chunk 02 gains exactly 280 numbered assertions with zero
+    losses and exact backend maps, reaching 151,021/167,506 properties.
+  - [x] Integrated pinned Unicode 17 provisional `kEH_Core` C/L/default-N
+    data and resolver policy, including exact-`Is`, wildcard unions and
+    warnings, malformed forms, and compile-warning-before-error ordering.
+    Chunk 02 gains exactly 96 numbered assertions with zero losses and exact
+    backend maps, reaching 151,117/167,506 properties. The focused oracle is
+    167/169 per backend; U+D800 membership remains in the shared marker-aware
+    surrogate renderer slice.
+  - [ ] Render resolved surrogate property subsets as Perl scalar markers so
+    positive, complemented, class, capture, substitution, and `/g` membership
+    preserve the exact U+D800..U+DFFF truth table.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -820,10 +859,11 @@ is retained for now.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Publish the active combined QC/HST, five-family enumerated, and InPC/InSC
-   WIP with its completed exact chunks 01–04 map. Then stack the accepted
-   one-file preprocessor cleanup and independently generated Identifier and
-   `kEH_Core` data slices as their gates complete.
+3. Preserve draft PR #1046's completed combined QC/HST, five-family enumerated,
+   and InPC/InSC map. Publish the follow-on mechanical-cleanup, Identifier, and
+   `kEH_Core` checkpoint. Integrate the independently validated importer-owned
+   Unikemet snapshot, then take Block/Blk value wildcards as the next isolated
+   property slice (expected +2,776 with zero losses).
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
