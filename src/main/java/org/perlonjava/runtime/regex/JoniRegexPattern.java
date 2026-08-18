@@ -294,6 +294,7 @@ final class JoniRegexPattern {
                 || pattern.contains("(*THEN")
                 || pattern.contains("(*COMMIT")
                 || pattern.contains("(*MARK")
+                || pattern.contains("(*:")
                 || pattern.contains("(?(DEFINE)")
                 || pattern.contains("(?(?{=CALL:")
                 || pattern.contains("(?(R")
@@ -307,7 +308,8 @@ final class JoniRegexPattern {
     }
 
     private static boolean hasControlVerbState(String pattern) {
-        return pattern.contains("(*MARK") || pattern.contains("(*PRUNE")
+        return pattern.contains("(*MARK") || pattern.contains("(*:")
+                || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP") || pattern.contains("(*THEN")
                 || pattern.contains("(*COMMIT");
     }
@@ -719,7 +721,6 @@ final class JoniRegexPattern {
             if (nextStart > regionEnd) {
                 matched = false;
                 committedLastClosedCapture = -1;
-                if (hasControlVerbState) RuntimeRegex.updateControlVerbVariables(null, null);
                 return false;
             }
             matcher = regex.matcher(bytes);
@@ -744,7 +745,7 @@ final class JoniRegexPattern {
                 throw failure;
             }
             matched = result >= 0;
-            if (hasControlVerbState || matcher.hasEncounteredControlVerb()) {
+            if (matcher.hasEncounteredControlVerb() || (hasControlVerbState && matched)) {
                 RuntimeRegex.updateControlVerbVariables(
                         matcher.getControlMark(), matcher.getControlError());
             }
