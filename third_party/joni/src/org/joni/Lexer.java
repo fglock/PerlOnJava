@@ -1129,15 +1129,39 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenFor_subexpCall() {
-        if (syntax.op2OptionPerl() && left() && peek() >= '0' && peek() <= '9') {
-            int backref = scanUnsignedNumber();
-            if (backref <= 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
-            token.type = TokenType.BACKREF;
-            token.setBackrefByName(false);
-            token.setBackrefNum(1);
-            token.setBackrefRef1(backref);
-            if (Config.USE_BACKREF_WITH_LEVEL) token.setBackrefExistLevel(false);
-            return;
+        if (syntax.op2OptionPerl() && left()) {
+            int next = peek();
+            if (next >= '0' && next <= '9') {
+                int backref = scanUnsignedNumber();
+                if (backref <= 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
+                token.type = TokenType.BACKREF;
+                token.setBackrefByName(false);
+                token.setBackrefNum(1);
+                token.setBackrefRef1(backref);
+                if (Config.USE_BACKREF_WITH_LEVEL) token.setBackrefExistLevel(false);
+                return;
+            }
+            if (next == '-') {
+                inc();
+                int distance = scanUnsignedNumber();
+                if (distance == 0) {
+                    newValueException("Reference to invalid group 0 in regex");
+                }
+                if (distance < 0) {
+                    newValueException(INVALID_BACKREF);
+                }
+                int backref = backrefRelToAbs(-distance);
+                if (backref <= 0 || backref > env.numMem || env.memNodes == null
+                        || env.memNodes[backref] == null) {
+                    newValueException("Reference to nonexistent or unclosed group in regex");
+                }
+                token.type = TokenType.BACKREF;
+                token.setBackrefByName(false);
+                token.setBackrefNum(1);
+                token.setBackrefRef1(backref);
+                if (Config.USE_BACKREF_WITH_LEVEL) token.setBackrefExistLevel(false);
+                return;
+            }
         }
         if (Config.USE_NAMED_GROUP) {
             if (syntax.op2EscGBraceBackref() && left()) {
