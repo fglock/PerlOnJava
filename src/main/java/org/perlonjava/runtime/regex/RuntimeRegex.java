@@ -766,6 +766,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                 regex.regexFlags.isExtended());
                 if (e instanceof SyntaxException && !validatesExecutableSource) {
                     String message = e.getMessage();
+                    if ("Empty \\N{}".equals(message)) {
+                        throw new PerlCompilerException("Unknown charname ''");
+                    }
                     if (literalSyntaxValidation && message != null
                             && (message.contains("premature end of char-class")
                                     || message.contains("Unclosed character class"))) {
