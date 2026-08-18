@@ -238,7 +238,7 @@ identifiers, dates, and completed repair narratives belong in Git history.
 - [ ] Phase 1 — Joni ordinary-pattern parity
 - [x] Phase 2 — conditions and backtracking-visible state
 - [ ] Phase 3 — Unicode and pattern syntax completion
-- [x] Phase 4 — runtime source and diagnostics
+- [ ] Phase 4 — runtime source and diagnostics
 - [ ] Phase 5 — remove the Java matching backend
 - [ ] Phase 6 — integration and release
 
