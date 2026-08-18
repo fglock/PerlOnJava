@@ -192,7 +192,7 @@ public abstract class Matcher extends IntHolder {
         msaInit(option, at, at);
 
         if (Config.USE_CEC) {
-            int offset = at = str;
+            int offset = at - str;
             stateCheckBuffInit(end - str, offset, regex.numCombExpCheck); // move it to construction?
         } // USE_COMBINATION_EXPLOSION_CHECK
 
