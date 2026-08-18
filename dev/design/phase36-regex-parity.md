@@ -235,7 +235,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1039, stacked
+The published integration stack is preserved through review-ready PR #1040, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -250,11 +250,15 @@ empty-property rendering. PR #1032 integrates native numeric escapes through
 U+10FFFF; PR #1033 adds pinned Bidi_Class sets; PR #1034 integrates native
 vertical-whitespace escapes; PR #1035 adds Decomposition_Type and PR #1036
 adds East_Asian_Width, PR #1037 adds Numeric_Value, and PR #1038 adds
-Joining_Group, and PR #1039 adds Block. The current WIP integrates
-Script/Script_Extensions; independently validated break-property values,
-generic and specialized binary-property data, residual enumerated-property
-families, and the first preprocessor dead-state deletion are ready for focused
-integration.
+Joining_Group, PR #1039 adds Block, and PR #1040 adds
+Script/Script_Extensions. The current WIP integrates pinned break-property
+values. Generic binary-property support has been semantically stacked on that
+checkpoint and is undergoing post-stack validation; QC/HST resolver support is
+independently complete and awaiting coordinator stacking, and five residual
+enumerated families remain active with the parallel engineer. Specialized
+binary-property data, the other residual enumerated families, and the first
+preprocessor dead-state deletion remain queued or independently advancing for
+focused integration.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -410,6 +414,19 @@ focused precedence, class-negation, and bare-scx reducers pass 7/7, 8/8, and
 169/169 per backend. Chunks 01–04 gain 8,140 assertions with zero numbered
 regressions and exact JVM/interpreter counts, raising current generated
 evidence to 377,602/407,367.
+
+`Grapheme_Cluster_Break`/`gcb`, `Sentence_Break`/`sb`,
+`Word_Break`/`wb`, and `Line_Break`/`lb` assignments now resolve every pinned
+Unicode 17 value. Short, long, loose, colon, wildcard, missing-value, and exact
+case-sensitive `Is` forms follow Perl while unmatched, nested-property, star,
+and `Is`-wildcard forms retain the required diagnostics. The focused oracle
+passes 92/92 on system Perl, JVM, and interpreter; protected boundary smoke
+remains 169/169 per backend. A data-only detached baseline accounts for the
+five runtime-discovered chunk-01 records: chunks 01, 02, and 04 gain 5, 2,424,
+and 1,424 successful assertions respectively, chunk 03 is unchanged, and no
+previous logical or numbered success is lost. Baseline and current maps are
+backend-identical. Property chunks reach 141,591/167,506 and complete generated
+evidence reaches 381,455/407,372.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -690,6 +707,11 @@ is retained for now.
     aliases, precedence, and ordinary character-class complements. The focused oracle
     passes 95/95; chunks 01–04 gain 8,140 assertions with zero numbered
     regressions and exact backend counts.
+  - [x] Generated and integrated pinned Unicode 17.0 GCB/SB/WB/LB property
+    values with official aliases, loose and wildcard policy, exact `Is`
+    rejection rules, and complete defaults. The focused oracle passes 92/92;
+    chunks 01, 02, and 04 gain 5, 2,424, and 1,424 assertions with zero lost
+    logical/numbered passes and exact backend maps.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -735,15 +757,18 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1039. Publish the validated
-   Script/Script_Extensions integration in a separate focused WIP PR,
-   preserving the independently reviewed data commit.
+1. Integrate PRs #1024–#1040 in dependency order through the coordinated
+   unified review branch. Preserve one attributed review unit per source PR and
+   the independently reviewed data commits. Permit at most two simultaneous
+   full builds on this host, with explicit slot ownership and release; focused
+   bounded tests and corpus comparisons may continue independently.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Integrate the independently generated break-property value slice, then the
-   generic and specialized binary-property families and residual enumerated
-   families currently advancing in parallel.
+3. Finish and publish the active break-property value slice, then the stacked
+   generic and specialized binary-property families. Review and semantically
+   stack the independently completed QC/HST resolver and the five-family
+   enumerated resolver before the remaining enumerated families.
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
