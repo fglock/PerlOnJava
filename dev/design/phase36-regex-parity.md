@@ -233,8 +233,9 @@ has a warning-free combined `make` checkpoint. PR #1027 adds native sentence
 boundaries; PR #1028 adds independently validated alpha assertion aliases and
 native word boundaries. PR #1029 integrates corrected global zero-width `/g`
 progression and pinned Perl 5.44 Unicode 17.0 Age properties. The new WIP is
-closing combined-corpus regressions while line boundaries remain a parallel
-integration slice.
+closing combined-corpus property regressions and adding pinned
+General_Category sets while line boundaries remain a parallel integration
+slice.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -281,6 +282,15 @@ version. The focused oracle passes 14/14 on system Perl, JVM, and interpreter.
 Stable chunk 01 validation improves from 30,194 to 30,705 passing assertions
 identically on JVM and interpreter, with no numbered regression. This raises
 current generated evidence by 511 to 133,089/407,367.
+
+`General_Category`/`gc`/`Category` assignments now resolve all atomic and
+aggregate values from repository-pinned Perl 5.44 Unicode 17.0 data. Short,
+long, `Is_`, colon, wildcard, and loose value aliases are generated
+reproducibly without the host ICU category table. The focused oracle passes
+18/18 on system Perl, JVM, and interpreter; Age remains 14/14 and invalid
+property diagnostics remain 39/39. Chunk 01 improves by another 606 assertions
+to 31,311/41,843 identically on both execution backends with no numbered
+regression, raising pre-line generated evidence to 133,695/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -509,6 +519,9 @@ parser slice.
   - [x] Routed Perl boolean values for the built-in `ASCII_Hex_Digit`/`AHex`
     property through the frontend set resolver. All eight true/false aliases
     pass 16/16 on system Perl, JVM, and interpreter, restoring `pat.t` startup.
+  - [x] Generated pinned Unicode 17.0 General_Category atomic and aggregate
+    sets with Perl property/value aliases. The focused oracle passes 18/18 and
+    chunk 01 gains 606 assertions on both backends with zero regressions.
   - [ ] Implement the native Joni line boundary algorithm, then
     close the remaining property and boundary failures before marking Phase 3
     complete.
@@ -562,7 +575,7 @@ parser slice.
    the generated chunks as the release oracle; remove each simplified Java
    boundary rewrite only after native parity.
 3. Implement the remaining property clusters in measured order: Block,
-   Script/Script_Extensions, Numeric_Value, Joining_Group, General_Category,
+   Script/Script_Extensions, Numeric_Value, Joining_Group,
    break-property values. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Close underscored numeric escapes with focused standard-Perl gates.
