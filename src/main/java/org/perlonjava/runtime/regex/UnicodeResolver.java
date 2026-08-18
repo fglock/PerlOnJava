@@ -22,6 +22,15 @@ public class UnicodeResolver {
             "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*$");
     private static final UnicodeSet[] PERL_DECOMPOSITION_TYPE_SETS =
             buildPerlDecompositionTypeSets();
+    private static final UnicodeSet PERL_UNICODE_BASE_SET =
+            new UnicodeSet(0, 0x10FFFF).freeze();
+    private static final UnicodeSet PERL_VERTICAL_SPACE_SET =
+            buildPerlVerticalSpaceSet();
+    private static final UnicodeSet PERL_HORIZONTAL_SPACE_SET =
+            buildPerlHorizontalSpaceSet();
+    private static final UnicodeSet PERL_WORD_SET = buildPerlWordSet();
+    private static final UnicodeSet PERL_COMPOSITION_EXCLUSION_SET =
+            buildPerlCompositionExclusionSet();
 
     /**
      * Cache for user-defined property subroutine results.
@@ -766,6 +775,10 @@ public class UnicodeResolver {
 
             UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(property);
             if (perlBuiltInAlias != null) {
+                if (caseInsensitive && resolvePerlMissingBaseAlias(property) != null) {
+                    perlBuiltInAlias = new UnicodeSet(perlBuiltInAlias)
+                            .closeOver(UnicodeSet.CASE_INSENSITIVE);
+                }
                 return wrapCharClass(unicodeSetToJavaPattern(perlBuiltInAlias), negated);
             }
 
@@ -996,8 +1009,11 @@ public class UnicodeResolver {
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
             String looseIsValue = looseIsShortcutValue(property);
-            if (looseIsValue == null
-                    || PerlUnicodeScriptData.canonicalValue(looseIsValue) != null
+            if (looseIsValue == null) {
+                UnicodeSet bareSet = resolvePerlMissingBaseAlias(property);
+                return bareSet == null ? null : joniPropertyResult(bareSet, true);
+            }
+            if (PerlUnicodeScriptData.canonicalValue(looseIsValue) != null
                     || PerlUnicodeBlockData.set(looseIsValue) != null) {
                 return null;
             }
@@ -1127,6 +1143,10 @@ public class UnicodeResolver {
 
         String alias = normalizePerlIsPropertyAssignment(property.trim());
         int assignment = propertyValueDelimiter(alias);
+        if (assignment < 0) {
+            UnicodeSet baseAlias = resolvePerlMissingBaseAlias(alias);
+            if (baseAlias != null) return baseAlias;
+        }
         if (assignment == alias.length() - 1
                 && (PerlUnicodeScriptData.isScriptPropertyAlias(
                         alias.substring(0, assignment))
@@ -1376,6 +1396,68 @@ public class UnicodeResolver {
             case "false", "no", "n", "f" -> false;
             default -> null;
         };
+    }
+
+    private static UnicodeSet resolvePerlMissingBaseAlias(String alias) {
+        return switch (loosePropertyName(alias)) {
+            case "unicode" -> PERL_UNICODE_BASE_SET;
+            case "vertspace" -> PERL_VERTICAL_SPACE_SET;
+            case "word" -> PERL_WORD_SET;
+            case "title", "titlecase" -> PerlUnicodeGeneralCategoryData.resolve("Lt");
+            case "ce", "compositionexclusion" -> PERL_COMPOSITION_EXCLUSION_SET;
+            case "horizspace" -> PERL_HORIZONTAL_SPACE_SET;
+            default -> null;
+        };
+    }
+
+    private static UnicodeSet buildPerlVerticalSpaceSet() {
+        return new UnicodeSet()
+                .add(0x000A, 0x000D)
+                .add(0x0085)
+                .add(0x2028, 0x2029)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlHorizontalSpaceSet() {
+        return new UnicodeSet()
+                .add(0x0009)
+                .add(0x0020)
+                .add(0x00A0)
+                .add(0x1680)
+                .add(0x2000, 0x200A)
+                .add(0x202F)
+                .add(0x205F)
+                .add(0x3000)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlWordSet() {
+        // ICU4J 78.3 and Perl 5.44 are both pinned to Unicode 17.0. Perl's
+        // Word definition is Alphabetic + marks + Nd + Pc + Join_Control.
+        return new UnicodeSet()
+                .applyPropertyAlias("Alphabetic", "True")
+                .addAll(PerlUnicodeGeneralCategoryData.resolve("M"))
+                .addAll(PerlUnicodeGeneralCategoryData.resolve("Nd"))
+                .addAll(PerlUnicodeGeneralCategoryData.resolve("Pc"))
+                .add(0x200C, 0x200D)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlCompositionExclusionSet() {
+        // Exact Unicode 17 Composition_Exclusion inversion list used by Perl
+        // 5.44. Keep this explicit rather than discovering a host-ICU property.
+        return new UnicodeSet()
+                .add(0x0958, 0x095F).add(0x09DC, 0x09DD).add(0x09DF)
+                .add(0x0A33).add(0x0A36).add(0x0A59, 0x0A5B).add(0x0A5E)
+                .add(0x0B5C, 0x0B5D).add(0x0F43).add(0x0F4D).add(0x0F52)
+                .add(0x0F57).add(0x0F5C).add(0x0F69).add(0x0F76)
+                .add(0x0F78).add(0x0F93).add(0x0F9D).add(0x0FA2)
+                .add(0x0FA7).add(0x0FAC).add(0x0FB9).add(0x2ADC)
+                .add(0xFB1D).add(0xFB1F).add(0xFB2A, 0xFB36)
+                .add(0xFB38, 0xFB3C).add(0xFB3E).add(0xFB40, 0xFB41)
+                .add(0xFB43, 0xFB44).add(0xFB46, 0xFB4E)
+                .add(0x1D15E, 0x1D164).add(0x1D1BB, 0x1D1C0)
+                .freeze();
     }
 
     private static boolean isIcuBinaryPropertyAlias(String alias) {
