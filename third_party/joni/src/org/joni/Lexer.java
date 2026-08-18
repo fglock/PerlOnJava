@@ -1695,20 +1695,55 @@ class Lexer extends ScannerSupport {
         }
     }
 
-    protected final int fetchCharPropertyToCType() {
+    protected static final class CharProperty {
+        final int ctype;
+        final int[] ranges;
+
+        CharProperty(int ctype, int[] ranges) {
+            this.ctype = ctype;
+            this.ranges = ranges;
+        }
+    }
+
+    protected final CharProperty fetchCharProperty() {
         mark();
 
         while (left()) {
             int last = p;
             fetch();
             if (c == '}') {
-                return enc.propertyNameToCType(bytes, _p, last);
+                if (syntax.characterPropertyResolver != null) {
+                    int[] ranges = syntax.characterPropertyResolver.resolve(
+                            bytes, _p, last, enc);
+                    if (ranges != null) {
+                        validateCharacterPropertyRanges(ranges);
+                        return new CharProperty(0, ranges);
+                    }
+                }
+                return new CharProperty(
+                        enc.propertyNameToCType(bytes, _p, last), null);
             } else if (c == '(' || c == ')' || c == '{' || c == '|') {
                 throw new CharacterPropertyException(EncodingError.ERR_INVALID_CHAR_PROPERTY_NAME, bytes, _p, last);
             }
         }
         newValueException(PROPERTY_NAME_NEVER_TERMINATED, _p, stop);
-        return 0; // not reached
+        return null; // not reached
+    }
+
+    private static void validateCharacterPropertyRanges(int[] ranges) {
+        if (ranges.length == 0 || ranges.length != ranges[0] * 2 + 1) {
+            throw new IllegalArgumentException("invalid character property ranges");
+        }
+        int previousEnd = -1;
+        for (int i = 0; i < ranges[0]; i++) {
+            int from = ranges[i * 2 + 1];
+            int to = ranges[i * 2 + 2];
+            if (from < 0 || from > to || to > CodeRangeBuffer.LAST_CODE_POINT
+                    || from <= previousEnd) {
+                throw new IllegalArgumentException("invalid character property ranges");
+            }
+            previousEnd = to;
+        }
     }
 
     protected final void syntaxWarn(String message, char c) {
