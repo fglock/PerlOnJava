@@ -156,6 +156,8 @@ public interface OPCode {
     int CHECK_LOOK_BEHIND_END         = 112;          /* require current position at saved negative boundary */
     int GRAPHEME_BOUNDARY             = 113;          /* Perl \b{gcb} */
     int NOT_GRAPHEME_BOUNDARY         = 114;          /* Perl \B{gcb} */
+    int SENTENCE_BOUNDARY             = 115;          /* Perl \b{sb} */
+    int NOT_SENTENCE_BOUNDARY         = 116;          /* Perl \B{sb} */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -274,6 +276,8 @@ public interface OPCode {
         "check-look-behind-end", /*OP_CHECK_LOOK_BEHIND_END*/
         "grapheme-boundary", /*OP_GRAPHEME_BOUNDARY*/
         "not-grapheme-boundary", /*OP_NOT_GRAPHEME_BOUNDARY*/
+        "sentence-boundary", /*OP_SENTENCE_BOUNDARY*/
+        "not-sentence-boundary", /*OP_NOT_SENTENCE_BOUNDARY*/
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -393,5 +397,7 @@ public interface OPCode {
         Arguments.NON, /*OP_CHECK_LOOK_BEHIND_END*/
         Arguments.NON, /*OP_GRAPHEME_BOUNDARY*/
         Arguments.NON, /*OP_NOT_GRAPHEME_BOUNDARY*/
+        Arguments.NON, /*OP_SENTENCE_BOUNDARY*/
+        Arguments.NON, /*OP_NOT_SENTENCE_BOUNDARY*/
     } : null;
 }
