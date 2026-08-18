@@ -870,12 +870,12 @@ public class RegexPreprocessor {
                     break;
 
                 case '[':   // Handle character classes
-                    offset = handleCharacterClass(s, regexFlags.isExtendedWhitespace(), sb, c, offset);
+                    offset = handleCharacterClass(s, regexFlags.isExtendedWhitespace(), sb, offset);
                     lastWasQuantifiable = true; // Character classes can be quantified
                     break;
 
                 case '(':
-                    offset = handleParentheses(s, offset, length, sb, c, regexFlags, stopAtClosingParen);
+                    offset = handleParentheses(s, offset, length, sb, regexFlags);
                     lastWasQuantifiable = true;
                     break;
 
@@ -992,7 +992,7 @@ public class RegexPreprocessor {
                 before + marker + after + "/");
     }
 
-    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, int c, RegexFlags regexFlags, boolean stopAtClosingParen) {
+    private static int handleParentheses(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
         // Check for incomplete (?
         if (offset + 1 >= length) {
             regexError(s, offset + 1, "Sequence (? incomplete");
@@ -1177,7 +1177,7 @@ public class RegexPreprocessor {
                 offset = handleRegex(s, offset + 4, sb, regexFlags, true);
             } else if (c3 == '<' && (isAlphabetic(c4) || c4 == '_')) {
                 // Handle named capture (?<name> ... ) - name can start with letter or underscore
-                offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
+                offset = handleNamedCapture(c3, s, offset, sb, regexFlags);
             } else if (c3 == '<') {
                 // Invalid character after (?<
                 if (offset + 3 < length) {
@@ -1189,17 +1189,13 @@ public class RegexPreprocessor {
                 }
             } else if (c3 == '\'') {
                 // Handle named capture (?'name' ... )
-                offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
+                offset = handleNamedCapture(c3, s, offset, sb, regexFlags);
             } else if (c3 == '[') {
                 // Handle extended bracketed character class (?[...])
                 return ExtendedCharClass.handleExtendedCharacterClass(s, offset, sb, regexFlags);
             } else if ((c3 >= 'a' && c3 <= 'z') || c3 == '-' || c3 == '^' || c3 == ':' || c3 == ')') {
                 // Handle (?modifiers: ... ) construct and non-capturing groups
                 return RegexPreprocessorHelper.handleFlagModifiers(s, offset, sb, regexFlags);
-            } else if (c3 == ':') {
-                // Handle non-capturing group (?:...)
-                sb.append("(?:");
-                offset = handleRegex(s, offset + 3, sb, regexFlags, true);
             } else if (c3 == '=') {
                 // Positive lookahead (?=...)
                 sb.append("(?=");
@@ -1268,7 +1264,7 @@ public class RegexPreprocessor {
         return handleRegex(s, offset + 1, sb, regexFlags, true);
     }
 
-    private static int handleNamedCapture(int c, String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
+    private static int handleNamedCapture(int c, String s, int offset, StringBuilder sb, RegexFlags regexFlags) {
         int start = offset + 3; // Skip past '(?<'
         int end = c == '<'
                 ? s.indexOf('>', start)
@@ -1447,10 +1443,10 @@ public class RegexPreprocessor {
         return offset;
     }
 
-    private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
+    private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int offset) {
         final int length = s.length();
         int classStart = sb.length();
-        sb.append(Character.toChars(c));  // Append the '['
+        sb.append('[');
         offset++;
 
 
@@ -1514,46 +1510,6 @@ public class RegexPreprocessor {
         // Note: rejected is kept for future use but currently \b is handled by direct substitution to \x08
         return offset;
     }
-
-//    public static void hexPrinter(String emojiString) {
-//        // Print each code point as a hex value
-//        System.out.println("String: <<" + emojiString + ">>");
-//        System.out.println("Hexadecimal representation:");
-//        emojiString.codePoints()
-//                .forEach(codePoint -> System.out.printf("U+%04X ", codePoint));
-//
-//        // Optional: Print raw UTF-16 encoding
-//        System.out.println("\nUTF-16 Encoding:");
-//        for (char c : emojiString.toCharArray()) {
-//            System.out.printf("\\u%04X ", (int) c);
-//        }
-//        System.out.println("\n\n");
-//    }
-
-//    private static String generateGraphemeClusterRegex() {
-//        return "(?x:                                # Free-spacing mode\n" +
-//                "      # Basic grapheme cluster\n" +
-//                "      \\P{M}\\p{M}*\n" +
-//                "      |\n" +
-//
-//                "      \\uD83D\\uDC4B\\uD83C\\uDFFB" +  // Special case
-//                "      |\n" +
-//                "      \\uD83C \\uDDFA \\uD83C \\uDDF8" +  // Special case
-//                "      |\n" +
-//
-//                "      # Regional indicators for flags\n" +
-//                "      (?:[\uD83C][\uDDE6-\uDDFF]){2}\n" +
-//                "      |\n" +
-//                "      # Emoji with modifiers and ZWJ sequences\n" +
-//                "      (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
-//                "      (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
-//                "      (?:\u200D\n" +
-//                "        (?:[\uD83C-\uDBFF\uDC00-\uDFFF]|[\u2600-\u27BF])\n" +
-//                "        (?:[\uD83C][\uDFFB-\uDFFF])?\n" +
-//                "      )*\n" +
-//                "      (?:[\uFE00-\uFE0F])?\n" +
-//                ")";
-//    }
 
     /**
      * Handles predefined character classes within the regex.
