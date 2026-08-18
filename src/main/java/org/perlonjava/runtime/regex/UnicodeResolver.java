@@ -359,6 +359,7 @@ public class UnicodeResolver {
      * @return A UnicodeSet, or null if the property cannot be resolved
      */
     private static UnicodeSet resolveStandardPropertyAsSet(String property, Set<String> recursionSet) {
+        property = canonicalPerlPosixPropertyAlias(property);
         UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(property);
         if (perlBuiltInAlias != null) return perlBuiltInAlias;
 
@@ -713,6 +714,7 @@ public class UnicodeResolver {
                 property = property.substring(1).trim();
                 negated = !negated;
             }
+            property = canonicalPerlPosixPropertyAlias(property);
             boolean isPrefixedNumericWildcard =
                     isPerlIsPrefixedNumericWildcard(property);
             boolean isPrefixedJoiningGroupWildcard =
@@ -752,6 +754,12 @@ public class UnicodeResolver {
                         property, recursionSet, caseInsensitive);
                 if (userProp != null) {
                     return wrapCharClass(userProp, negated);
+                }
+                String looseUserProperty = loosePropertyName(property);
+                if (looseUserProperty.startsWith("isxposix")
+                        || looseUserProperty.startsWith("isposix")) {
+                    throw new IllegalArgumentException(
+                            "Can't find Unicode property definition \"" + property + "\"");
                 }
                 // Property not found - fall through to throw error below
             }
@@ -974,6 +982,7 @@ public class UnicodeResolver {
 
     static boolean isPerlBuiltInPropertyAlias(String property) {
         if (property == null) return false;
+        property = canonicalPerlPosixPropertyAlias(property);
         return isPerlSpecialPropertyAlias(property.trim())
                 || !normalizePerlIsPropertyAssignment(property).equals(property)
                 || resolvePerlBuiltInPropertyAlias(property) != null;
@@ -1058,6 +1067,46 @@ public class UnicodeResolver {
                     "XIDC", "XIDCont", "XID_Continue",
                     "_Perl_IDStart", "_Perl_IDCont" -> true;
             default -> false;
+        };
+    }
+
+    private static String canonicalPerlPosixPropertyAlias(String property) {
+        if (property == null) return null;
+        String loose = loosePropertyName(property);
+        if (loose.startsWith("is")) {
+            String unprefixed = loose.substring(2);
+            if (unprefixed.startsWith("xposix") || unprefixed.startsWith("posix")) {
+                loose = unprefixed;
+            }
+        }
+        return switch (loose) {
+            case "xposixalnum" -> "XPosixAlnum";
+            case "xposixalpha" -> "XPosixAlpha";
+            case "xposixblank" -> "XPosixBlank";
+            case "xposixcntrl" -> "XPosixCntrl";
+            case "xposixdigit" -> "XPosixDigit";
+            case "xposixgraph" -> "XPosixGraph";
+            case "xposixlower" -> "XPosixLower";
+            case "xposixprint" -> "XPosixPrint";
+            case "xposixpunct" -> "XPosixPunct";
+            case "xposixspace" -> "XPosixSpace";
+            case "xposixupper" -> "XPosixUpper";
+            case "xposixword" -> "XPosixWord";
+            case "xposixxdigit" -> "XPosixXDigit";
+            case "posixalnum" -> "PosixAlnum";
+            case "posixalpha" -> "PosixAlpha";
+            case "posixblank" -> "PosixBlank";
+            case "posixcntrl" -> "PosixCntrl";
+            case "posixdigit" -> "PosixDigit";
+            case "posixgraph" -> "PosixGraph";
+            case "posixlower" -> "PosixLower";
+            case "posixprint" -> "PosixPrint";
+            case "posixpunct" -> "PosixPunct";
+            case "posixspace" -> "PosixSpace";
+            case "posixupper" -> "PosixUpper";
+            case "posixword" -> "PosixWord";
+            case "posixxdigit" -> "PosixXDigit";
+            default -> property;
         };
     }
 

@@ -355,11 +355,12 @@ public class RegexPreprocessorHelper {
                     // Perl allows user-defined properties (InFoo/IsFoo) to be unknown at compile time;
                     // they are resolved at runtime when the property sub is available.
                     // If it's currently undefined, emit a placeholder that compiles in Java and mark for recompilation.
-                    // But if the error already contains "in expansion of", it is a real user-property definition error
-                    // that should be reported (not deferred).
+                    // Explicit missing-property and "in expansion of" diagnostics are
+                    // real user-property errors that should be reported, not deferred.
                     String msg = e.getMessage();
                     if (UnicodeResolver.isUserDefinedPropertyName(property)
-                            && (msg == null || !msg.contains("in expansion of"))) {
+                            && (msg == null || (!msg.contains("in expansion of")
+                                    && !msg.startsWith("Can't find Unicode property definition")))) {
                         RegexPreprocessor.markDeferredUnicodePropertyEncountered();
                         sb.setLength(sb.length() - 1); // Remove the backslash
                         // Placeholder: match any single character, including newline

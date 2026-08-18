@@ -273,7 +273,9 @@ final class JoniRegexPattern {
                         .append(')');
             } catch (IllegalArgumentException error) {
                 String message = error.getMessage();
-                if (!userDefined || message != null && message.contains("in expansion of")) {
+                if (!userDefined || message != null
+                        && (message.contains("in expansion of")
+                                || message.startsWith("Can't find Unicode property definition"))) {
                     throw error;
                 }
                 translated.append("[\\s\\S]");
