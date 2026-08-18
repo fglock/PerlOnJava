@@ -250,9 +250,14 @@ of those displayed losses as baseline-transcript artifacts: `op/do.t` had
 duplicated its first 28 assertions (94/99 instead of canonical 68/71 unique
 behavior), and `japh/abigail.t` reconstructs at the current 109/130 rather than
 the logged 110/130. Of the remaining net deficit of 72, 43 assertions belong
-to one confirmed `.=` overload regression and 29 across 14 files remain under
-audit. Explicit Joni and patterns containing callbacks, dynamic source,
-conditions, control verbs, or other Joni-only semantics remain Joni.
+to one confirmed `.=` overload regression. The remaining net 29 across 14
+files are mapped to seven roots in repair order: ordinary byte-backed eval
+decoding (-9), foreach active-lexical rebinding (-6), interpreted named-CV
+replacement (-5), concat/tied materialization plus regex interpolation (-6),
+glob identity and method-error rendering (net -2 after retained gains), and
+warning-aware hash interpolation (-1). Explicit Joni and patterns containing
+callbacks, dynamic source, conditions, control verbs, or other Joni-only
+semantics remain Joni.
 These exceptions are merge scaffolding, not the target architecture. PR #1042
 cannot leave draft until a fresh 622-file run has zero per-file losses against
 PR #958.
@@ -787,9 +792,10 @@ is retained for now.
 ### Next Steps
 
 1. Make PR #1042 mergeable without weakening the PR #958 baseline: fix the
-   confirmed `.=` regression, classify and repair the remaining 29 exact-
-   rebuild losses, and add narrowly tested normalization for the two known
-   legacy transcript artifacts while retaining raw counts. Then require a
+   confirmed `.=` regression, repair the seven mapped residual roots in the
+   documented priority order, and add narrowly tested normalization for the
+   two known legacy transcript artifacts while retaining raw counts. Rerun
+   each root's focused files before a combined 14-file gate, then require a
    fresh complete 622-file comparison with zero unexplained negative per-file
    deltas. Keep explicit Joni and Joni-only constructs forced to Joni
    throughout.
