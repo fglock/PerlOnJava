@@ -99,6 +99,8 @@ my @rejected = (
         qr/Unicode property wildcard not terminated/, 'missing Script value'],
     [q{qr/\p{sc=:\A.*\z:}/},
         qr/quantifier '\*' is not allowed/i, 'star-quantifier wildcard'],
+    [q{qr/\p{Hrkt}/},
+        qr/Can't find Unicode property definition/, 'bare composite Script value'],
 );
 for my $rejected (@rejected) {
     my ($source, $error_pattern, $description) = @$rejected;

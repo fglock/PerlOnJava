@@ -1122,9 +1122,12 @@ public class UnicodeResolver {
         if (assignment < 0
                 && !isIcuBinaryPropertyAlias(scriptShortcut)
                 && !isIcuGeneralCategoryAlias(scriptShortcut)) {
-            UnicodeSet scriptExtensions =
-                    PerlUnicodeScriptData.scriptExtensionsSet(scriptShortcut);
-            if (scriptExtensions != null) return scriptExtensions;
+            String canonicalScript = PerlUnicodeScriptData.canonicalValue(scriptShortcut);
+            if (!"Katakana_Or_Hiragana".equals(canonicalScript)) {
+                UnicodeSet scriptExtensions =
+                        PerlUnicodeScriptData.scriptExtensionsSet(scriptShortcut);
+                if (scriptExtensions != null) return scriptExtensions;
+            }
         }
 
         String blockAlias = alias;
