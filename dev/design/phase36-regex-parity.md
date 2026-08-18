@@ -279,8 +279,13 @@ backend maps. Pinned `kEH_Core` data and resolver are also integrated: chunk
 02 reaches 41,870/42,010 on both backends, exactly +96 with zero losses and
 identical assertion maps. The focused oracle passes 167/169 on both backends;
 the only remaining assertions are the isolated-surrogate marker representation
-lane. The property corpus therefore reaches 151,117/167,506 and the complete
-property-plus-boundary evidence reaches 390,983/407,372, leaving 16,389
+lane. Block/Blk value wildcards now preserve all official Unicode 17 aliases,
+Perl-loose and case-insensitive matching, colon and slash delimiters, warning
+order, and the `InKana` collision policy. The focused oracle passes 38 ordinary
+assertions with nine isolated-surrogate TODOs on both backends; chunk 01 reaches
+41,176/41,848, exactly +2,765 with zero losses and identical assertion maps.
+The property corpus therefore reaches 153,882/167,506 and the complete
+property-plus-boundary evidence reaches 393,748/407,372, leaving 13,624
 property assertions.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
@@ -803,6 +808,13 @@ is retained for now.
     backend maps, reaching 151,117/167,506 properties. The focused oracle is
     167/169 per backend; U+D800 membership remains in the shared marker-aware
     surrogate renderer slice.
+  - [x] Completed pinned Unicode 17 Block/Blk value-wildcard matching across
+    canonical and official alternate aliases, Perl-loose and case-insensitive
+    forms, colon/slash delimiters, unions, complements, warning/error order,
+    and the `InKana` precedence collision. The focused oracle passes 38/47
+    with only nine isolated-surrogate TODOs; chunk 01 gains exactly 2,765
+    numbered assertions with zero losses and exact 41,848-assertion backend
+    identity, reaching 153,882/167,506 properties.
   - [ ] Render resolved surrogate property subsets as Perl scalar markers so
     positive, complemented, class, capture, substitution, and `/g` membership
     preserve the exact U+D800..U+DFFF truth table.
@@ -860,12 +872,14 @@ is retained for now.
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
 3. Preserve draft PR #1046's completed combined QC/HST, five-family enumerated,
-   and InPC/InSC map. Publish the follow-on mechanical-cleanup, Identifier, and
-   `kEH_Core` checkpoint. Integrate the independently validated importer-owned
-   Unikemet snapshot, then take Block/Blk value wildcards as the next isolated
-   property slice (expected +2,776 with zero losses).
-   Preserve pinned Perl 5.44
+   and InPC/InSC map plus the follow-on mechanical-cleanup, Identifier,
+   `kEH_Core`, and Block/Blk wildcard checkpoints. Integrate the independently
+   validated importer-owned Unikemet snapshot, then complete the shared
+   marker-aware isolated-surrogate property renderer. Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
+   The post-Block generated residual is 13,624 assertions: 12,797
+   alias/precedence, 476 wildcard, 346 diagnostic/value-policy, and five shared
+   runtime assertions.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
 4. Rerun generated property chunks 01–04 on both backends with the classified
    600-second bound and retain complete TAP/JSON. After the two fatal roots and
