@@ -755,11 +755,15 @@ class Parser extends Lexer {
             case 'd':
             case 'l':
             case 'u':
+            case 'c':
+            case 'g':
+            case 'o':
                 boolean neg = false;
                 int asciiModifierCount = 0;
                 boolean sawDefaultCharset = false;
                 boolean sawLocaleCharset = false;
                 boolean sawUnicodeCharset = false;
+                boolean sawContinueModifier = false;
                 while (true) {
                     switch(c) {
                     case ':':
@@ -804,6 +808,25 @@ class Parser extends Lexer {
                         // no matcher option bit, but is valid inline syntax.
                         if (!syntax.op2OptionPerl()) {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
+                        }
+                        break;
+
+                    case 'c':
+                        if (!syntax.op2OptionPerl()) {
+                            newSyntaxException(UNDEFINED_GROUP_OPTION);
+                        }
+                        env.warnings.warn("Useless (?" + (neg ? "-" : "") + "c)");
+                        sawContinueModifier = true;
+                        break;
+
+                    case 'g':
+                    case 'o':
+                        if (!syntax.op2OptionPerl()) {
+                            newSyntaxException(UNDEFINED_GROUP_OPTION);
+                        }
+                        if (c != 'g' || !sawContinueModifier) {
+                            env.warnings.warn("Useless (?" + (neg ? "-" : "")
+                                    + (char)c + ")");
                         }
                         break;
 

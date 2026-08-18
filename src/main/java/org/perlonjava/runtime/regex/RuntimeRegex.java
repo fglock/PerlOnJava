@@ -665,6 +665,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty()
                                     || regex.recursivePatternUnicode
                                             .hasDeferredUserDefinedUnicodeProperty();
+                    regex.warningsOnUse.addAll(regex.recursivePattern.compileWarnings());
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                             || RegexFlags.hasInlinePreserveModifier(compilePatternString);
                     regex.hasBranchReset = false;

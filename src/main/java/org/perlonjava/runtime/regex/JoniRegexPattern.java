@@ -14,6 +14,7 @@ import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Region;
 import org.joni.Syntax;
+import org.joni.WarnCallback;
 import org.joni.WideScalarCodec;
 
 import static org.joni.constants.SyntaxProperties.ALLOW_MULTIPLEX_DEFINITION_NAME_CALL;
@@ -122,6 +123,7 @@ final class JoniRegexPattern {
     private final boolean hasControlVerbState;
     private final boolean hasDeferredUserDefinedUnicodeProperty;
     private final boolean byteMode;
+    private final List<String> compileWarnings;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0, false);
@@ -149,11 +151,12 @@ final class JoniRegexPattern {
         UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
         hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
         sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
+        compileWarnings = new ArrayList<>();
         byte[] bytes = sourcePattern.getBytes(byteMode && byteBackedPattern
                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
-                PERLONJAVA_SYNTAX);
+                PERLONJAVA_SYNTAX, compileWarnings::add);
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
@@ -208,6 +211,10 @@ final class JoniRegexPattern {
 
     boolean hasDeferredUserDefinedUnicodeProperty() {
         return hasDeferredUserDefinedUnicodeProperty;
+    }
+
+    List<String> compileWarnings() {
+        return List.copyOf(compileWarnings);
     }
 
     private record UserPropertyTranslation(String pattern, boolean deferred) {}
