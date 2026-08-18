@@ -1921,6 +1921,34 @@ final class Analyser extends Parser {
         return false;
     }
 
+    private Node perlAsciiStrictProtectedFoldNode(byte[] bytes, int p, int end) {
+        StringNode exact = new StringNode(bytes, p, end);
+        exact.setRaw();
+        ListNode alternatives = newAlt(exact, null);
+        ListNode tail = alternatives;
+
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlag, bytes, p, end);
+        for (CaseFoldCodeItem item : items) {
+            boolean allNonAscii = true;
+            for (int foldedCodePoint : item.code) {
+                if (Encoding.isAscii(foldedCodePoint)) {
+                    allNonAscii = false;
+                    break;
+                }
+            }
+            if (!allNonAscii) continue;
+
+            StringNode folded = new StringNode();
+            for (int foldedCodePoint : item.code) folded.catCode(foldedCodePoint, enc);
+            folded.setRaw();
+            ListNode alternative = newAlt(folded, null);
+            tail.setTail(alternative);
+            tail = alternative;
+        }
+        return alternatives.tail == null ? exact : alternatives;
+    }
+
     private Node protectPerlAsciiStrictCrossings(StringNode source, int state) {
         byte[] bytes = source.bytes;
         int segmentStart = source.p;
@@ -1941,9 +1969,8 @@ final class Analyser extends Parser {
                     tail = segment;
                 }
 
-                StringNode exact = new StringNode(bytes, p, next);
-                exact.setRaw();
-                ListNode segment = ListNode.newList(exact, null);
+                ListNode segment = ListNode.newList(
+                        perlAsciiStrictProtectedFoldNode(bytes, p, next), null);
                 if (root == null) root = segment;
                 else tail.setTail(segment);
                 tail = segment;
