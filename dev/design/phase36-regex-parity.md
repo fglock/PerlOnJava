@@ -224,7 +224,7 @@ compatibility contract.
 
 ### Current Status: Phases 0, 2, and 4 complete; Phases 1 and 3 corpus gates active
 
-The published integration stack is preserved through draft PR #1035, stacked
+The published integration stack is preserved through draft PR #1036, stacked
 on draft PRs #1025–#1026 and review-ready PR #1024. It includes the completed callback/runtime slices,
 lossless generated Unicode fixtures, explicit `Is_*` property/value
 normalization, fatal Joni syntax diagnostics, native GCB semantics, and the
@@ -237,9 +237,11 @@ binary `ASCII_Hex_Digit` values, pinned General_Category sets, and exact native
 line boundaries. PR #1031 adds pinned Canonical_Combining_Class sets and valid
 empty-property rendering. PR #1032 integrates native numeric escapes through
 U+10FFFF; PR #1033 adds pinned Bidi_Class sets; PR #1034 integrates native
-vertical-whitespace escapes; PR #1035 adds Decomposition_Type. The current WIP
-integrates East_Asian_Width; Numeric_Value and Joining_Group are ready, while
-Block and Script/Script_Extensions data slices advance independently.
+vertical-whitespace escapes; PR #1035 adds Decomposition_Type and PR #1036
+adds East_Asian_Width. The current WIP integrates Numeric_Value; independently
+validated Joining_Group, Block, Script/Script_Extensions, and break-property
+value data are ready, while generic and specialized binary-property slices
+advance independently.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -347,6 +349,17 @@ and interpreter; protected boundary smoke remains 169/169 per backend. Chunk
 01 gains 216 assertions to 35,108/41,843 identically on both execution backends
 with zero numbered regressions, raising current generated evidence to
 342,872/407,367.
+
+`Numeric_Value`/`nv` assignments now resolve all 144 exact rational values and
+the `NaN` complement from pinned Perl 5.44 Unicode 17 data. Integer, decimal,
+exponent, reduced-rational, loose, wildcard, and exact case-sensitive `Is`
+forms follow Perl's generated keyword aliases and binary-NV canonicalization,
+including four-significant-digit decimal spellings without heuristic tolerance.
+The focused oracle passes 50/50
+on system Perl, JVM, and interpreter; protected boundary smoke remains 169/169
+per backend. Chunks 02–03 gain 13,976 assertions with zero numbered regressions
+and exact JVM/interpreter success sets, raising current generated evidence to
+356,848/407,367.
 
 Joni now accepts Perl's top-level, scoped, combined, and negative inline `p`
 syntax as matcher-neutral policy. PerlOnJava publishes that policy while
@@ -608,6 +621,11 @@ is retained for now.
     surrogate-range rendering. The focused oracle passes 31/31 and chunk 01
     gains 216 assertions to 35,108/41,843 on both backends with zero numbered
     regressions.
+  - [x] Generated and integrated pinned Perl 5.44 Unicode 17.0 Numeric_Value
+    sets for all 144 rationals plus NaN, including exact rational reduction,
+    generated decimal keyword aliases, loose forms, and wildcard policy. The
+    focused oracle passes 50/50; chunks 02–03 gain 13,976 assertions with zero
+    numbered regressions and exact backend identity.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.
@@ -653,15 +671,15 @@ is retained for now.
 
 ### Next Steps
 
-1. Land review-ready PR #1024 and draft PRs #1025–#1035. Publish the validated
-   East_Asian_Width integration in a separate focused WIP PR, preserving the
+1. Land review-ready PR #1024 and draft PRs #1025–#1036. Publish the validated
+   Numeric_Value integration in a separate focused WIP PR, preserving the
    independently reviewed data commit.
 2. Preserve the now-complete native Joni boundary corpus at 239,866/239,866:
    sentence chunk 05, line chunks 06–09, and word chunk 10 must remain exact on
    JVM and interpreter while property and parser work continues.
-3. Integrate the independently generated Numeric_Value and Joining_Group
-   slices, then continue the measured residual order: binary
-   property values, Block, Script/Script_Extensions, and break-property values.
+3. Integrate the independently generated Joining_Group, Block,
+   Script/Script_Extensions, and break-property value slices, then the generic
+   and specialized binary-property families currently advancing in parallel.
    Preserve pinned Perl 5.44
    acceptance and rejection semantics rather than inheriting host ICU breadth.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
