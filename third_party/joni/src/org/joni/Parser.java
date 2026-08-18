@@ -61,9 +61,21 @@ import org.joni.exception.SyntaxException;
 class Parser extends Lexer {
     protected int returnCode; // return code used by parser methods (they itself return parsed nodes)
                               // this approach will not affect recursive calls
+    private EncloseNode[] lexicalMemNodes;
 
     protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex, syntax, bytes, p, end, warnings);
+    }
+
+    private void setLexicalMemNode(EncloseNode node) {
+        if (lexicalMemNodes == null) {
+            lexicalMemNodes = new EncloseNode[Config.SCANENV_MEMNODES_SIZE];
+        } else if (node.regNum >= lexicalMemNodes.length) {
+            EncloseNode[] expanded = new EncloseNode[lexicalMemNodes.length << 1];
+            System.arraycopy(lexicalMemNodes, 0, expanded, 0, lexicalMemNodes.length);
+            lexicalMemNodes = expanded;
+        }
+        lexicalMemNodes[node.regNum] = node;
     }
 
     private static final int POSIX_BRACKET_NAME_MIN_LEN            = 4;
@@ -886,6 +898,10 @@ class Parser extends Lexer {
             EncloseNode en = EncloseNode.newMemory(env.option, false);
             en.regNum = env.addMemEntry();
             node = en;
+        }
+
+        if (node instanceof EncloseNode en && en.type == EncloseType.MEMORY) {
+            setLexicalMemNode(en);
         }
 
         fetchToken();
@@ -1750,12 +1766,16 @@ class Parser extends Lexer {
 
     private Node parseCall() {
         int gNum = token.getCallGNum();
+        boolean backwardRelative = gNum < 0;
         if (gNum < 0 || token.getCallRel()) {
             if (gNum > 0) gNum--;
             gNum = backrefRelToAbs(gNum);
             if (gNum <= 0) newValueException(INVALID_BACKREF);
         }
-        Node node = new CallNode(bytes, token.getCallNameP(), token.getCallNameEnd(), gNum);
+        CallNode node = new CallNode(bytes, token.getCallNameP(), token.getCallNameEnd(), gNum);
+        if (backwardRelative && lexicalMemNodes != null && gNum < lexicalMemNodes.length) {
+            node.lexicalTarget = lexicalMemNodes[gNum];
+        }
         env.numCall++;
         return node;
     }

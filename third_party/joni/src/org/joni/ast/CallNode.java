@@ -27,6 +27,7 @@ public final class CallNode extends StateNode {
     public final int nameEnd;
 
     public int groupNum;
+    public EncloseNode lexicalTarget;
     public EncloseNode target;
     public UnsetAddrList unsetAddrList;
 
