@@ -24,13 +24,15 @@ import org.joni.ast.ListNode;
 
 final class ApplyCaseFoldArg {
     final ScanEnvironment env;
-    final CClassNode cc, ascCc;
+    final CClassNode cc, ascCc, foldCc;
     ListNode altRoot;
     ListNode tail;
 
-    ApplyCaseFoldArg(ScanEnvironment env, CClassNode cc, CClassNode ascCc) {
+    ApplyCaseFoldArg(ScanEnvironment env, CClassNode cc, CClassNode ascCc,
+                     CClassNode foldCc) {
         this.env = env;
         this.cc = cc;
         this.ascCc = ascCc;
+        this.foldCc = foldCc;
     }
 }

@@ -415,31 +415,37 @@ public final class CClassNode extends Node {
         public CCSTATE state;
     }
 
-    public void nextStateClass(CCStateArg arg, CClassNode ascCC, ScanEnvironment env) {
+    public void nextStateClass(CCStateArg arg, CClassNode ascCc,
+                               CClassNode foldCc, ScanEnvironment env) {
         if (arg.state == CCSTATE.RANGE) throw new SyntaxException(ErrorMessages.CHAR_CLASS_VALUE_AT_END_OF_RANGE);
 
         if (arg.state == CCSTATE.VALUE && arg.type != CCVALTYPE.CLASS) {
             if (arg.type == CCVALTYPE.SB) {
                 bs.set(env, arg.from);
-                if (ascCC != null) ascCC.bs.set(arg.from);
+                if (ascCc != null) ascCc.bs.set(arg.from);
+                if (foldCc != null) foldCc.bs.set(arg.from);
             } else if (arg.type == CCVALTYPE.CODE_POINT) {
                 addCodeRange(env, arg.from, arg.from);
-                if (ascCC != null) ascCC.addCodeRange(env, arg.from, arg.from, false);
+                if (ascCc != null) ascCc.addCodeRange(env, arg.from, arg.from, false);
+                if (foldCc != null) foldCc.addCodeRange(env, arg.from, arg.from, false);
             }
         }
         arg.state = CCSTATE.VALUE;
         arg.type = CCVALTYPE.CLASS;
     }
 
-    public void nextStateValue(CCStateArg arg, CClassNode ascCc, ScanEnvironment env) {
+    public void nextStateValue(CCStateArg arg, CClassNode ascCc,
+                               CClassNode foldCc, ScanEnvironment env) {
         switch(arg.state) {
         case VALUE:
             if (arg.type == CCVALTYPE.SB) {
                 bs.set(env, arg.from);
                 if (ascCc != null) ascCc.bs.set(arg.from);
+                if (foldCc != null) foldCc.bs.set(arg.from);
             } else if (arg.type == CCVALTYPE.CODE_POINT) {
                 addCodeRange(env, arg.from, arg.from);
                 if (ascCc != null) ascCc.addCodeRange(env, arg.from, arg.from, false);
+                if (foldCc != null) foldCc.addCodeRange(env, arg.from, arg.from, false);
             }
             break;
 
@@ -459,9 +465,11 @@ public final class CClassNode extends Node {
                     }
                     bs.setRange(env, arg.from, arg.to);
                     if (ascCc != null) ascCc.bs.setRange(null, arg.from, arg.to);
+                    if (foldCc != null) foldCc.bs.setRange(null, arg.from, arg.to);
                 } else {
                     addCodeRange(env, arg.from, arg.to);
                     if (ascCc != null) ascCc.addCodeRange(env, arg.from, arg.to, false);
+                    if (foldCc != null) foldCc.addCodeRange(env, arg.from, arg.to, false);
                 }
             } else {
                 if (arg.from > arg.to) {
@@ -478,6 +486,10 @@ public final class CClassNode extends Node {
                 if (ascCc != null) {
                     ascCc.bs.setRange(null, arg.from, arg.to < 0xff ? arg.to : 0xff);
                     ascCc.addCodeRange(env, arg.from, arg.to, false);
+                }
+                if (foldCc != null) {
+                    foldCc.bs.setRange(null, arg.from, arg.to < 0xff ? arg.to : 0xff);
+                    foldCc.addCodeRange(env, arg.from, arg.to, false);
                 }
             }
             // ccs_range_end:

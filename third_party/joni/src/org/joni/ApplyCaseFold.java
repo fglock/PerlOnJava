@@ -36,6 +36,7 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
         Encoding enc = env.enc;
         CClassNode cc = arg.cc;
         CClassNode ascCc = arg.ascCc;
+        CClassNode foldCc = arg.foldCc;
         BitSet bs = cc.bs;
         boolean addFlag;
 
@@ -44,13 +45,12 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
             return;
         }
 
-        if (ascCc == null) {
+        if (!isEligible(foldCc, enc, from) || ascCc == null) {
             addFlag = false;
         } else if (Encoding.isAscii(from) == Encoding.isAscii(to[0])) {
             addFlag = true;
         } else {
-            addFlag = ascCc.isCodeInCC(enc, from);
-            if (ascCc.isNot()) addFlag = !addFlag;
+            addFlag = isEligible(ascCc, enc, from);
         }
 
         if (length == 1) {
@@ -84,7 +84,8 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
             } // CASE_FOLD_IS_APPLIED_INSIDE_NEGATIVE_CCLASS
 
         } else {
-            if (cc.isCodeInCC(enc, from) && (!Config.CASE_FOLD_IS_APPLIED_INSIDE_NEGATIVE_CCLASS || !cc.isNot())) {
+            if (addFlag && cc.isCodeInCC(enc, from)
+                    && (!Config.CASE_FOLD_IS_APPLIED_INSIDE_NEGATIVE_CCLASS || !cc.isNot())) {
                 StringNode node = null;
                 for (int i=0; i<length; i++) {
                     if (i == 0) {
@@ -108,6 +109,12 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
 
         }
 
+    }
+
+    static boolean isEligible(CClassNode ascCc, Encoding enc, int code) {
+        if (ascCc == null) return false;
+        boolean eligible = ascCc.isCodeInCC(enc, code);
+        return ascCc.isNot() ? !eligible : eligible;
     }
 
     static final ApplyCaseFold INSTANCE = new ApplyCaseFold();
