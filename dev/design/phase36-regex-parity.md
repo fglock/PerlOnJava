@@ -299,12 +299,13 @@ renderer. Its standard-Perl-first focused oracle passes 27/27 on standard
 Perl, JVM, and interpreter; direct Joni tests, packaging verification, and a
 warning-free 4m58s `make` pass. Positive and complemented properties,
 ordinary and negated classes, captures, substitution, and `/g` now consume
-U+D800..U+DFFF markers as one Perl scalar. The exact generated chunks 01–04
-map remains the acceptance gate before changing the totals above. The first
-two map attempts were discarded rather than counted because one read a JAR
-while `shadowJar` replaced it and the next exceeded its resource bound while
-overlapping the full-tree acceptance suite. The rerun must use the stable JAR
-at lower parallelism after competing heavy workers finish.
+U+D800..U+DFFF markers as one Perl scalar. The authoritative stable-JAR,
+two-worker chunks 01–04 map passes 154,132/167,506 on both JVM and interpreter
+with exact numbered-test identity, 250 gains, zero losses, and no missing
+assertions. Combined with the complete boundary corpus, generated evidence is
+393,998/407,372 and the residual property surface is 13,374 assertions. The
+first two resource-collided attempts remain explicitly discarded and do not
+contribute to these totals.
 
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
@@ -874,9 +875,10 @@ the ordinary `regexp*` matrix. They are not accepted limitations.
     preserve the exact U+D800..U+DFFF truth table. The focused oracle passes
     27/27 on standard Perl, JVM, and interpreter; warning-free `make`, direct
     Joni, and packaging gates pass in draft PR #1049.
-  - [ ] Complete the authoritative stable-JAR chunks 01–04 map for the
-    surrogate renderer with exact JVM/interpreter identity, zero losses, and
-    no missing numbered assertions before updating aggregate totals.
+  - [x] Completed the authoritative stable-JAR chunks 01–04 map for the
+    surrogate renderer at 154,132/167,506 on both backends: exactly 250 gains,
+    zero losses, no missing numbered assertions, and exact backend identity.
+    Generated property-plus-boundary evidence is 393,998/407,372.
   - [ ] Prevent unanchored native Joni properties/classes that contain no
     translated surrogate range from beginning inside the visible payload of
     an internal scalar marker. The isolated reducer at
@@ -939,13 +941,13 @@ the ordinary `regexp*` matrix. They are not accepted limitations.
 3. Preserve draft PR #1046's completed combined QC/HST, five-family enumerated,
    and InPC/InSC map plus the follow-on mechanical-cleanup, Identifier,
    `kEH_Core`, and Block/Blk wildcard checkpoints. Integrate the independently
-   validated importer-owned Unikemet snapshot, then complete PR #1049's
-   stable-JAR generated map and the separate native-property marker-boundary
-   reducer. Preserve pinned Perl 5.44 acceptance and rejection semantics
+   validated importer-owned Unikemet snapshot, preserve PR #1049's completed
+   stable-JAR generated map, and integrate the separate native-property
+   marker-boundary reducer. Preserve pinned Perl 5.44 acceptance and rejection semantics
    rather than inheriting host ICU breadth.
-   The post-Block generated residual is 13,624 assertions: 12,797
-   alias/precedence, 476 wildcard, 346 diagnostic/value-policy, and five shared
-   runtime assertions.
+   The post-surrogate-renderer generated residual is 13,374 assertions; retain
+   the exact numbered differential as the classification source for subsequent
+   alias/precedence, wildcard, diagnostic/value-policy, and shared-runtime work.
    Keep native `\v`/`\V` exact at 2,560/2,560 in `reg_posixcc.t`.
 4. Rerun generated property chunks 01–04 on both backends with the classified
    600-second bound and retain complete TAP/JSON. After the two fatal roots and
