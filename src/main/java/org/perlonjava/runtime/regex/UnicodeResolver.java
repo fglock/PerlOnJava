@@ -665,14 +665,8 @@ public class UnicodeResolver {
                 // translator here would turn that intentional forward reference
                 // into an early "unsupported property" fatal before the
                 // placeholder path can run.
-                String resolved = tryUserDefinedProperty(
-                        property, new LinkedHashSet<>(), caseInsensitive,
+                tryUserDefinedProperty(property, new LinkedHashSet<>(), caseInsensitive,
                         qualifyBareDiagnosticName);
-                if (qualifyBareDiagnosticName && resolved == null) {
-                    throw new IllegalArgumentException(
-                            "Can't find Unicode property definition \""
-                                    + property + "\"");
-                }
             }
             slash = end;
         }
