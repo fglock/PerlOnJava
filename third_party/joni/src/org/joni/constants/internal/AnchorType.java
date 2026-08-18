@@ -92,4 +92,7 @@ public interface AnchorType {
                                     NOT_LINE_BOUNDARY |
                                     WORD_BEGIN |
                                     WORD_END );
+
+    int ALLOWED_IN_PERL_LB = ALLOWED_IN_LB | PREC_READ | PREC_READ_NOT;
+    int ALLOWED_IN_PERL_LB_NOT = ALLOWED_IN_LB_NOT | PREC_READ | PREC_READ_NOT;
 }
