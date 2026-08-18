@@ -87,4 +87,13 @@ class PerlUnicodeEastAsianWidthDataTest {
         assertEquals(0x110000, union.size());
         assertTrue(union.contains(0, 0x10FFFF));
     }
+
+    @Test
+    void rendersNeutralSurrogateRangeWithoutLiteralSurrogates() {
+        String pattern = UnicodeResolver.unicodeSetToJavaPattern(
+                PerlUnicodeEastAsianWidthData.valueSet("Neutral"));
+
+        assertTrue(pattern.contains("\\x{DFFF}"));
+        assertFalse(pattern.matches(".*[\\uD800-\\uDFFF].*"));
+    }
 }
