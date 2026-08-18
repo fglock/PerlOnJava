@@ -36,10 +36,16 @@ import org.joni.constants.internal.TokenType;
 import org.joni.exception.ErrorMessages;
 
 class Lexer extends ScannerSupport {
+    private static final int[] PERL_VERTICAL_WHITESPACE_CODES = {
+        0x0a, 0x0d, 0x85, 0x2028, 0x2029
+    };
+
     protected final Regex regex;
     protected final ScanEnvironment env;
     protected final Syntax syntax;              // fast access to syntax
     protected final Token token = new Token();  // current token
+    private int perlVerticalWhitespaceTokenIndex = -1;
+    private boolean perlVerticalWhitespaceNegated;
 
     protected Lexer(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex.enc, bytes, p, end);
@@ -546,6 +552,70 @@ class Lexer extends ScannerSupport {
         token.setPropNot(flag);
     }
 
+    private boolean usesPerlVerticalWhitespaceEscape() {
+        return syntax.op2EscVVerticalWhiteSpace()
+                || syntax.op2OptionPerl() && (syntax == Syntax.Perl
+                        || syntax == Syntax.PerlNG || "PERLONJAVA".equals(syntax.name));
+    }
+
+    private void startPerlVerticalWhitespace(boolean negated, TokenType openType) {
+        perlVerticalWhitespaceTokenIndex = 0;
+        perlVerticalWhitespaceNegated = negated;
+        token.type = openType;
+    }
+
+    private TokenType fetchPerlVerticalWhitespaceToken() {
+        token.base = 0;
+        token.escaped = false;
+
+        int index = perlVerticalWhitespaceTokenIndex++;
+        if (perlVerticalWhitespaceNegated) {
+            if (index == 0) {
+                token.type = TokenType.CHAR;
+                token.setC('^');
+                return token.type;
+            }
+            index--;
+        }
+
+        switch (index) {
+        case 0:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(PERL_VERTICAL_WHITESPACE_CODES[0]);
+            break;
+        case 1:
+            token.type = TokenType.CC_RANGE;
+            token.setC('-');
+            break;
+        case 2:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(PERL_VERTICAL_WHITESPACE_CODES[1]);
+            break;
+        case 3:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(PERL_VERTICAL_WHITESPACE_CODES[2]);
+            break;
+        case 4:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(PERL_VERTICAL_WHITESPACE_CODES[3]);
+            break;
+        case 5:
+            token.type = TokenType.CC_RANGE;
+            token.setC('-');
+            break;
+        case 6:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(PERL_VERTICAL_WHITESPACE_CODES[4]);
+            break;
+        default:
+            token.type = TokenType.CC_CLOSE;
+            token.setC(']');
+            perlVerticalWhitespaceTokenIndex = -1;
+            break;
+        }
+        return token.type;
+    }
+
     private void fetchTokenInCCFor_p() {
         int c2 = peek(); // !!! migrate to peekIs
         if (c2 == '{' && syntax.op2EscPBraceCharProperty()) {
@@ -816,6 +886,9 @@ class Lexer extends ScannerSupport {
     }
 
     protected final TokenType fetchTokenInCC() {
+        if (perlVerticalWhitespaceTokenIndex >= 0) {
+            return fetchPerlVerticalWhitespaceToken();
+        }
         if (!left()) {
             token.type = TokenType.EOT;
             return token.type;
@@ -887,6 +960,14 @@ class Lexer extends ScannerSupport {
             case '7':
                 fetchTokenInCCFor_digit();
                 break;
+
+            case 'v':
+            case 'V':
+                if (usesPerlVerticalWhitespaceEscape()) {
+                    startPerlVerticalWhitespace(c == 'V', TokenType.CC_CC_OPEN);
+                    break;
+                }
+                // fall through
 
             default:
                 unfetch();
@@ -1367,6 +1448,13 @@ class Lexer extends ScannerSupport {
                 case 'K':
                     if (syntax.op2EscCapitalKKeep()) token.type = TokenType.KEEP;
                     break;
+                case 'v':
+                case 'V':
+                    if (usesPerlVerticalWhitespaceEscape()) {
+                        startPerlVerticalWhitespace(c == 'V', TokenType.CC_OPEN);
+                        break;
+                    }
+                    // fall through
                 default:
                     unfetch();
                     fetchEscapedValue();
