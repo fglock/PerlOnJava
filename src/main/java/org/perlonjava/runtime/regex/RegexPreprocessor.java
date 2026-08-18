@@ -60,7 +60,6 @@ public class RegexPreprocessor {
     static int captureGroupCount;
     static boolean deferredUnicodePropertyEncountered;
     static boolean inlinePFlagEncountered;
-    static boolean branchResetEncountered;
     static boolean backslashKEncountered;
     /**
      * Tracks named capture groups already emitted in the current pattern.
@@ -98,10 +97,6 @@ public class RegexPreprocessor {
 
     static boolean hadInlinePFlag() {
         return inlinePFlagEncountered;
-    }
-
-    static boolean hadBranchReset() {
-        return branchResetEncountered;
     }
 
     static void markBackslashK() {
@@ -143,7 +138,6 @@ public class RegexPreprocessor {
         captureGroupCount = 0;
         deferredUnicodePropertyEncountered = false;
         inlinePFlagEncountered = false;
-        branchResetEncountered = false;
         backslashKEncountered = false;
         seenNamedCaptures.clear();
         emittedNamedCaptures.clear();
@@ -1321,9 +1315,6 @@ public class RegexPreprocessor {
      * @return New offset after processing the branch reset group
      */
     private static int handleBranchReset(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
-        // Mark that this pattern uses branch reset
-        branchResetEncountered = true;
-        
         // Save the starting group count
         int startGroupCount = captureGroupCount;
 
@@ -1621,11 +1612,6 @@ public class RegexPreprocessor {
         return offset;  // possible error - end of comment not found
     }
 
-    // Lookbehind errors don't show position
-    static void regexErrorNoPosition(String errMsg) {
-        throw new PerlCompilerException(errMsg);
-    }
-
     /**
      * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
      */
@@ -1647,10 +1633,6 @@ public class RegexPreprocessor {
         if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more
             throw new PerlJavaUnimplementedException("Lookbehind longer than 255 not implemented in regex m/" + s + "/");
         }
-    }
-
-    static void regexErrorSimple(String s, String errMsg) {
-        throw new PerlCompilerException(errMsg + " in regex m/" + s + "/");
     }
 
     /**
@@ -1829,47 +1811,6 @@ public class RegexPreprocessor {
         } else {
             return Integer.parseInt(quantifier);
         }
-    }
-
-    private static int findClosingBrace(String s, int start, int length) {
-        int depth = 1;
-        int pos = start;
-        while (pos < length && depth > 0) {
-            char ch = s.charAt(pos);
-            if (ch == '{') {
-                depth++;
-            } else if (ch == '}') {
-                depth--;
-                if (depth == 0) {
-                    return pos;
-                }
-            } else if (ch == '\\' && pos + 1 < length) {
-                pos++; // Skip escaped character
-            }
-            pos++;
-        }
-        return -1; // Not found
-    }
-
-    // Find matching parenthesis
-    private static int findMatchingParen(String s, int start, int length) {
-        int depth = 1;
-        int pos = start + 1;  // Start after the opening paren
-        while (pos < length && depth > 0) {
-            char ch = s.charAt(pos);
-            if (ch == '(') {
-                depth++;
-            } else if (ch == ')') {
-                depth--;
-                if (depth == 0) {
-                    return pos;
-                }
-            } else if (ch == '\\' && pos + 1 < length) {
-                pos++; // Skip escaped character
-            }
-            pos++;
-        }
-        return -1; // Not found
     }
 
     // Handle conditional patterns

@@ -212,7 +212,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private boolean matched = false;
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
     private boolean deferredUserDefinedUnicodeProperties = false;
-    private boolean hasBranchReset = false;  // True if pattern uses (?|...) branch reset
     private boolean hasBackslashK = false;   // True if pattern uses \K (keep assertion)
     // An empty qr// object keeps its own empty pattern when interpolated;
     // only empty match/substitution string syntax reuses the previous match.
@@ -258,7 +257,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.regexFlags = this.regexFlags;
         copy.hasCodeBlockCaptures = this.hasCodeBlockCaptures;
         copy.deferredUserDefinedUnicodeProperties = this.deferredUserDefinedUnicodeProperties;
-        copy.hasBranchReset = this.hasBranchReset;
         copy.hasBackslashK = this.hasBackslashK;
         copy.quoteConstruction = this.quoteConstruction;
         copy.warningsOnUse = new ArrayList<>(this.warningsOnUse);
@@ -667,14 +665,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                             .hasDeferredUserDefinedUnicodeProperty();
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                             || RegexFlags.hasInlinePreserveModifier(compilePatternString);
-                    regex.hasBranchReset = false;
                     regex.hasBackslashK = false;
                 } else {
                     regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                             || RegexFlags.hasInlinePreserveModifier(compilePatternString)
                             || RegexPreprocessor.hadInlinePFlag();
-                    regex.hasBranchReset = RegexPreprocessor.hadBranchReset();
                     regex.hasBackslashK = RegexPreprocessor.hadBackslashK();
                     regex.warningsOnUse.addAll(RegexPreprocessor.getWarningsOnUse());
                 }
@@ -1637,7 +1633,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.quoteConstruction = resolvedRegex.quoteConstruction;
         regex.useGAssertion = resolvedRegex.useGAssertion;
         regex.patternFlags = resolvedRegex.patternFlags;
-        regex.hasBranchReset = resolvedRegex.hasBranchReset;
         regex.hasBackslashK = resolvedRegex.hasBackslashK;
         regex.hasCodeBlockCaptures = resolvedRegex.hasCodeBlockCaptures;
         regex.warningsOnUse = new ArrayList<>(resolvedRegex.warningsOnUse);
@@ -1676,7 +1671,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.hasPreservesMatch = recompiledRegex.hasPreservesMatch;
                 regex.useGAssertion = recompiledRegex.useGAssertion;
                 regex.patternFlags = recompiledRegex.patternFlags;
-                regex.hasBranchReset = recompiledRegex.hasBranchReset;
                 regex.hasBackslashK = recompiledRegex.hasBackslashK;
                 regex.hasCodeBlockCaptures = recompiledRegex.hasCodeBlockCaptures;
                 regex.warningsOnUse = new ArrayList<>(recompiledRegex.warningsOnUse);
