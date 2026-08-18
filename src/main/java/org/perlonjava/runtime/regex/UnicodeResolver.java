@@ -1335,6 +1335,13 @@ public class UnicodeResolver {
     private static UnicodeSet resolvePerlScript(String value, boolean extensions) {
         String wildcard = perlNumericWildcardBody(value);
         if (wildcard == null) {
+            if ("Katakana_Or_Hiragana".equals(
+                    PerlUnicodeScriptData.canonicalValue(value))) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition \""
+                                + (extensions ? "Script_Extensions" : "Script")
+                                + "=" + value.trim() + "\"");
+            }
             UnicodeSet exact = extensions
                     ? PerlUnicodeScriptData.scriptExtensionsSet(value)
                     : PerlUnicodeScriptData.scriptSet(value);
@@ -1360,6 +1367,10 @@ public class UnicodeResolver {
 
         UnicodeSet result = new UnicodeSet();
         for (String candidate : PerlUnicodeScriptData.wildcardValues()) {
+            if ("Katakana_Or_Hiragana".equals(
+                    PerlUnicodeScriptData.canonicalValue(candidate))) {
+                continue;
+            }
             if (valuePattern.matcher(candidate).matches()
                     || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
                 UnicodeSet match = extensions

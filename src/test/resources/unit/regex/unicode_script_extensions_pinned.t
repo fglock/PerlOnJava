@@ -92,6 +92,13 @@ for my $wildcard (@accepted_wildcards) {
     like(chr($code_point), $pattern, "$description matches");
 }
 
+my $composite_union = eval q{qr/\p{sc=:\A(?:Hrkt|Latin)\z:}/};
+ok(defined $composite_union, 'wildcard may combine composite and valid Script names')
+    or diag($@);
+like('A', $composite_union, 'wildcard retains the valid Script member');
+unlike(chr(0x3042), $composite_union,
+    'wildcard excludes the invalid composite Script member');
+
 my @rejected = (
     [q{qr/\p{Is_sc=:\ALatin\z:}/},
         qr/Can't find Unicode property definition/, 'Is-prefixed wildcard'],
@@ -101,6 +108,17 @@ my @rejected = (
         qr/quantifier '\*' is not allowed/i, 'star-quantifier wildcard'],
     [q{qr/\p{Hrkt}/},
         qr/Can't find Unicode property definition/, 'bare composite Script value'],
+    [q{qr/\p{sc=Hrkt}/},
+        qr/Can't find Unicode property definition/, 'explicit composite Script value'],
+    [q{qr/\p{scx=Katakana_Or_Hiragana}/},
+        qr/Can't find Unicode property definition/,
+        'explicit composite Script_Extensions value'],
+    [q{qr/\p{sc=:\AHrkt\z:}/},
+        qr/No Unicode property value wildcard matches/,
+        'composite-only Script wildcard'],
+    [q{qr/\p{scx=:\AKatakana_Or_Hiragana\z:}/},
+        qr/No Unicode property value wildcard matches/,
+        'composite-only Script_Extensions wildcard'],
 );
 for my $rejected (@rejected) {
     my ($source, $error_pattern, $description) = @$rejected;
