@@ -61,7 +61,6 @@ public class RegexPreprocessor {
     static boolean deferredUnicodePropertyEncountered;
     static boolean inlinePFlagEncountered;
     static boolean branchResetEncountered;
-    static boolean backslashKEncountered;
     /**
      * Tracks named capture groups already emitted in the current pattern.
      * Used to detect duplicate names like `(?<x>a)|(?<x>b)` (legal in Perl,
@@ -104,14 +103,6 @@ public class RegexPreprocessor {
         return branchResetEncountered;
     }
 
-    static void markBackslashK() {
-        backslashKEncountered = true;
-    }
-
-    static boolean hadBackslashK() {
-        return backslashKEncountered;
-    }
-
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
@@ -144,7 +135,6 @@ public class RegexPreprocessor {
         deferredUnicodePropertyEncountered = false;
         inlinePFlagEncountered = false;
         branchResetEncountered = false;
-        backslashKEncountered = false;
         seenNamedCaptures.clear();
         emittedNamedCaptures.clear();
         duplicateNameCounter = 0;
