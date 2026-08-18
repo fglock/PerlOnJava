@@ -371,6 +371,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Inline comments**: `(?#comment)` in regex is implemented.
 - ✅  **caret modifier**: `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
 - ✅  **\b inside character class**: `[\b]` is supported in regex.
+- ✅  **Vertical whitespace escapes**: Native Joni `\v` matches U+000A..U+000D, U+0085, U+2028, and U+2029; `\V` matches the complement. Direct and character-class forms match Perl, and `reg_posixcc.t` passes 2,560/2,560 on both execution backends.
 - ✅  **Unicode boundary assertions**: `\b{gcb}`, `\b{sb}`, `\b{wb}`, and `\b{lb}` (and their `\B` forms) execute natively in Joni from reproducible pinned Perl 5.44 Unicode 17.0 data. The complete 239,866-assertion generated boundary corpus passes on both backends.
 - ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
 - ✅  **Non-capturing groups**: `(?:...)` is implemented.
