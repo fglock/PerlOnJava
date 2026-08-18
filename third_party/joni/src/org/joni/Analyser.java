@@ -1930,6 +1930,7 @@ final class Analyser extends Parser {
         CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
                 regex.caseFoldFlag, bytes, p, end);
         for (CaseFoldCodeItem item : items) {
+            if (item.byteLen != end - p) continue;
             boolean allNonAscii = true;
             for (int foldedCodePoint : item.code) {
                 if (Encoding.isAscii(foldedCodePoint)) {
@@ -1949,6 +1950,36 @@ final class Analyser extends Parser {
         return alternatives.tail == null ? exact : alternatives;
     }
 
+    private boolean perlAsciiStrictAllNonAscii(byte[] bytes, int p, int end) {
+        while (p < end) {
+            if (Encoding.isAscii(enc.mbcToCode(bytes, p, end))) return false;
+            p += enc.length(bytes, p, end);
+        }
+        return true;
+    }
+
+    private int perlAsciiStrictSafeMultiSourceEnd(byte[] bytes, int p, int end,
+                                                   int singleEnd) {
+        int safeEnd = singleEnd;
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlag, bytes, p, end);
+        for (CaseFoldCodeItem item : items) {
+            int itemEnd = p + item.byteLen;
+            if (itemEnd <= singleEnd || itemEnd > end ||
+                    !perlAsciiStrictAllNonAscii(bytes, p, itemEnd)) continue;
+
+            boolean allNonAscii = true;
+            for (int foldedCodePoint : item.code) {
+                if (Encoding.isAscii(foldedCodePoint)) {
+                    allNonAscii = false;
+                    break;
+                }
+            }
+            if (allNonAscii && itemEnd > safeEnd) safeEnd = itemEnd;
+        }
+        return safeEnd;
+    }
+
     private Node protectPerlAsciiStrictCrossings(StringNode source, int state) {
         byte[] bytes = source.bytes;
         int segmentStart = source.p;
@@ -1961,6 +1992,8 @@ final class Analyser extends Parser {
             int next = p + enc.length(bytes, p, source.end);
             if (perlAsciiStrictSourceCrossesIntoAscii(
                     bytes, p, source.end, codePoint)) {
+                next = perlAsciiStrictSafeMultiSourceEnd(
+                        bytes, p, source.end, next);
                 if (segmentStart < p) {
                     ListNode segment = ListNode.newList(
                             new StringNode(bytes, segmentStart, p), null);
