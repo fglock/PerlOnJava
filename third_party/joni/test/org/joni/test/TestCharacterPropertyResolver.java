@@ -19,6 +19,7 @@
  */
 package org.joni.test;
 
+import static org.joni.constants.SyntaxProperties.OP2_CCLASS_SET_OP;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
@@ -38,16 +39,17 @@ public class TestCharacterPropertyResolver {
                 String name = new String(bytes, p, end - p, StandardCharsets.UTF_8);
                 return switch (name) {
                     case "Fake" -> new CharacterPropertyResolver.Result(
-                            new int[] {2, 'A', 'A', 0x1f642, 0x1f642}, true);
+                            new int[] {3, 'A', 'A', 0xdf, 0xdf, 0x1f642, 0x1f642}, true);
                     case "FakeNoFold" -> new CharacterPropertyResolver.Result(
-                            new int[] {1, 'A', 'A'}, false);
+                            new int[] {2, 'A', 'A', 0xdf, 0xdf}, false);
                     default -> null;
                 };
             };
 
     private static Syntax syntax(CharacterPropertyResolver resolver) {
         return new Syntax("CharacterPropertyResolver", Syntax.PerlNG.op,
-                Syntax.PerlNG.op2, Syntax.PerlNG.op3, Syntax.PerlNG.behavior,
+                Syntax.PerlNG.op2 | OP2_CCLASS_SET_OP, Syntax.PerlNG.op3,
+                Syntax.PerlNG.behavior,
                 Syntax.PerlNG.options, Syntax.PerlNG.metaCharTable, null, resolver);
     }
 
@@ -74,6 +76,36 @@ public class TestCharacterPropertyResolver {
         assertEquals(-1, search("(?i)\\P{Fake}", "A"));
         assertEquals(0, search("(?i)\\p{FakeNoFold}", "A"));
         assertEquals(-1, search("(?i)\\p{FakeNoFold}", "a"));
+    }
+
+    @Test
+    public void preservesFoldPolicyInsidePositiveAndNegativeClasses() {
+        assertEquals(0, search("(?i)[\\p{Fake}]", "a"));
+        assertEquals(0, search("(?i)[\\p{FakeNoFold}]", "A"));
+        assertEquals(-1, search("(?i)[\\p{FakeNoFold}]", "a"));
+        assertEquals(-1, search("(?i)[\\P{FakeNoFold}]", "A"));
+        assertEquals(0, search("(?i)[\\P{FakeNoFold}]", "a"));
+        assertEquals(-1, search("(?i)[^\\p{FakeNoFold}]", "A"));
+        assertEquals(0, search("(?i)[^\\p{FakeNoFold}]", "a"));
+    }
+
+    @Test
+    public void composesFoldPolicyThroughUnionsIntersectionsAndNestedClasses() {
+        assertEquals(0, search("(?i)[\\p{FakeNoFold}\\p{Fake}]", "a"));
+        assertEquals(0, search("(?i)[\\p{Fake}&&\\p{FakeNoFold}]", "A"));
+        assertEquals(-1, search("(?i)[\\p{Fake}&&\\p{FakeNoFold}]", "a"));
+        assertEquals(0, search("(?i)[[\\p{FakeNoFold}]B]", "A"));
+        assertEquals(-1, search("(?i)[[\\p{FakeNoFold}]B]", "a"));
+        assertEquals(0, search("(?i)[[\\p{FakeNoFold}]B]", "b"));
+    }
+
+    @Test
+    public void foldsOnlyEligibleMembersOfMixedClasses() {
+        assertEquals(0, search("(?i)[B\\p{FakeNoFold}]", "A"));
+        assertEquals(-1, search("(?i)[B\\p{FakeNoFold}]", "a"));
+        assertEquals(0, search("(?i)[B\\p{FakeNoFold}]", "b"));
+        assertEquals(0, search("(?i)[\\p{Fake}]", "ss"));
+        assertEquals(-1, search("(?i)[\\p{FakeNoFold}]", "ss"));
     }
 
     @Test

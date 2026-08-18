@@ -69,7 +69,8 @@ class Parser extends Lexer {
     private static final int POSIX_BRACKET_NAME_MIN_LEN            = 4;
     private static final int POSIX_BRACKET_CHECK_LIMIT_LENGTH      = 20;
     private static final byte[] BRACKET_END                        = ":]".getBytes();
-    private boolean parsePosixBracket(CClassNode cc, CClassNode ascCc) {
+    private boolean parsePosixBracket(CClassNode cc, CClassNode ascCc,
+                                      CClassNode foldCc) {
         mark();
 
         boolean not;
@@ -96,6 +97,9 @@ class Parser extends Lexer {
                         if (ctype != CharacterType.WORD && ctype != CharacterType.ASCII && !asciiRange) {
                             ascCc.addCType(ctype, not, asciiRange, env, this);
                         }
+                    }
+                    if (foldCc != null) {
+                        foldCc.addCType(ctype, not, asciiRange, env, this);
                     }
                     inc();
                     inc();
@@ -145,9 +149,12 @@ class Parser extends Lexer {
         return false;
     }
 
-    private CClassNode parseCharClass(ObjPtr<CClassNode> ascNode) {
+    private CClassNode parseCharClass(ObjPtr<CClassNode> ascNode,
+                                      ObjPtr<CClassNode> foldNode) {
         final boolean neg;
-        CClassNode cc, prevCc = null, ascCc = null, ascPrevCc = null, workCc = null, ascWorkCc = null;
+        CClassNode cc, prevCc = null, ascCc = null, ascPrevCc = null,
+                workCc = null, ascWorkCc = null, foldCc = null,
+                foldPrevCc = null, foldWorkCc = null;
         CCStateArg arg = new CCStateArg();
 
         fetchTokenInCC();
@@ -167,6 +174,7 @@ class Parser extends Lexer {
         cc = new CClassNode();
         if (isIgnoreCase(env.option)) {
             ascCc = ascNode.p = new CClassNode();
+            foldCc = foldNode.p = new CClassNode();
         }
 
         boolean andStart = false;
@@ -184,7 +192,7 @@ class Parser extends Lexer {
                 }
                 arg.to = token.getC();
                 arg.toIsRaw = false;
-                parseCharClassValEntry2(cc, ascCc, arg); // goto val_entry2
+                parseCharClassValEntry2(cc, ascCc, foldCc, arg); // goto val_entry2
                 break;
 
             case RAW_BYTE:
@@ -224,25 +232,25 @@ class Parser extends Lexer {
                     arg.inType = CCVALTYPE.SB; // raw_single:
                 }
                 arg.toIsRaw = true;
-                parseCharClassValEntry2(cc, ascCc, arg); // goto val_entry2
+                parseCharClassValEntry2(cc, ascCc, foldCc, arg); // goto val_entry2
                 break;
 
             case CODE_POINT:
                 arg.to = token.getCode();
                 arg.toIsRaw = true;
-                parseCharClassValEntry(cc, ascCc, arg); // val_entry:, val_entry2
+                parseCharClassValEntry(cc, ascCc, foldCc, arg); // val_entry:, val_entry2
                 break;
 
             case POSIX_BRACKET_OPEN:
-                if (parsePosixBracket(cc, ascCc)) { /* true: is not POSIX bracket */
+                if (parsePosixBracket(cc, ascCc, foldCc)) { /* true: is not POSIX bracket */
                     env.ccEscWarn("[");
                     p = token.backP;
                     arg.to = token.getC();
                     arg.toIsRaw = false;
-                    parseCharClassValEntry(cc, ascCc, arg); // goto val_entry
+                    parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
                     break;
                 }
-                cc.nextStateClass(arg, ascCc, env); // goto next_class
+                cc.nextStateClass(arg, ascCc, foldCc, env); // goto next_class
                 break;
 
             case CHAR_TYPE:
@@ -252,13 +260,17 @@ class Parser extends Lexer {
                         ascCc.addCType(token.getPropCType(), token.getPropNot(), isAsciiRange(env.option), env, this);
                     }
                 }
-                cc.nextStateClass(arg, ascCc, env); // next_class:
+                if (foldCc != null) {
+                    foldCc.addCType(token.getPropCType(), token.getPropNot(),
+                            isAsciiRange(env.option), env, this);
+                }
+                cc.nextStateClass(arg, ascCc, foldCc, env); // next_class:
                 break;
 
             case CHAR_PROPERTY:
                 CharProperty property = fetchCharProperty(true);
-                addCharProperty(cc, ascCc, property, token.getPropNot());
-                cc.nextStateClass(arg, ascCc, env); // goto next_class
+                addCharProperty(cc, ascCc, foldCc, property, token.getPropNot());
+                cc.nextStateClass(arg, ascCc, foldCc, env); // goto next_class
                 break;
 
             case CC_RANGE:
@@ -266,11 +278,11 @@ class Parser extends Lexer {
                     fetchTokenInCC();
                     fetched = true;
                     if (token.type == TokenType.CC_CLOSE) { /* allow [x-] */
-                        parseCharClassRangeEndVal(cc, ascCc, arg); // range_end_val:, goto val_entry;
+                        parseCharClassRangeEndVal(cc, ascCc, foldCc, arg); // range_end_val:, goto val_entry;
                         break;
                     } else if (token.type == TokenType.CC_AND) {
                         env.ccEscWarn("-");
-                        parseCharClassRangeEndVal(cc, ascCc, arg); // goto range_end_val
+                        parseCharClassRangeEndVal(cc, ascCc, foldCc, arg); // goto range_end_val
                         break;
                     }
                     if (arg.type == CCVALTYPE.CLASS) newValueException(UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS);
@@ -281,28 +293,28 @@ class Parser extends Lexer {
                     fetchTokenInCC();
                     fetched = true;
                     if (token.type == TokenType.CC_RANGE || andStart) env.ccEscWarn("-"); /* [--x] or [a&&-x] is warned. */
-                    parseCharClassValEntry(cc, ascCc, arg); // goto val_entry
+                    parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
                     break;
                 } else if (arg.state == CCSTATE.RANGE) {
                     env.ccEscWarn("-");
-                    parseCharClassSbChar(cc, ascCc, arg); // goto sb_char /* [!--x] is allowed */
+                    parseCharClassSbChar(cc, ascCc, foldCc, arg); // goto sb_char /* [!--x] is allowed */
                     break;
                 } else { /* CCS_COMPLETE */
                     fetchTokenInCC();
                     fetched = true;
                     if (token.type == TokenType.CC_CLOSE) { /* allow [a-b-] */
-                        parseCharClassRangeEndVal(cc, ascCc, arg); // goto range_end_val
+                        parseCharClassRangeEndVal(cc, ascCc, foldCc, arg); // goto range_end_val
                         break;
                     } else if (token.type == TokenType.CC_AND) {
                         env.ccEscWarn("-");
-                        parseCharClassRangeEndVal(cc, ascCc, arg); // goto range_end_val
+                        parseCharClassRangeEndVal(cc, ascCc, foldCc, arg); // goto range_end_val
                         break;
                     }
 
                     if (syntax.allowDoubleRangeOpInCC()) {
                         env.ccEscWarn("-");
                         // parseCharClassSbChar(cc, ascCc, arg); // goto sb_char /* [0-9-a] is allowed as [0-9\-a] */
-                        parseCharClassRangeEndVal(cc, ascCc, arg); // goto range_end_val
+                        parseCharClassRangeEndVal(cc, ascCc, foldCc, arg); // goto range_end_val
                         break;
                     }
                     newSyntaxException(UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS);
@@ -311,10 +323,14 @@ class Parser extends Lexer {
 
             case CC_CC_OPEN: /* [ */
                 ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
-                CClassNode acc = parseCharClass(ascPtr);
+                ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
+                CClassNode acc = parseCharClass(ascPtr, foldPtr);
                 cc.or(acc, env);
                 if (ascPtr.p != null) {
                     ascCc.or(ascPtr.p, env);
+                }
+                if (foldPtr.p != null) {
+                    foldCc.or(foldPtr.p, env);
                 }
                 break;
 
@@ -322,7 +338,7 @@ class Parser extends Lexer {
                 if (arg.state == CCSTATE.VALUE) {
                     arg.to = 0;
                     arg.toIsRaw = false;
-                    cc.nextStateValue(arg, ascCc, env);
+                    cc.nextStateValue(arg, ascCc, foldCc, env);
                 }
                 /* initialize local variables */
                 andStart = true;
@@ -331,6 +347,9 @@ class Parser extends Lexer {
                     prevCc.and(cc, env);
                     if (ascCc != null) {
                         ascPrevCc.and(ascCc, env);
+                    }
+                    if (foldCc != null) {
+                        foldPrevCc.and(foldCc, env);
                     }
                 } else {
                     prevCc = cc;
@@ -341,9 +360,15 @@ class Parser extends Lexer {
                         if (ascWorkCc == null) ascWorkCc = new CClassNode();
                         ascCc = ascWorkCc;
                     }
+                    if (foldCc != null) {
+                        foldPrevCc = foldCc;
+                        if (foldWorkCc == null) foldWorkCc = new CClassNode();
+                        foldCc = foldWorkCc;
+                    }
                 }
                 cc.clear();
                 if (ascCc != null) ascCc.clear();
+                if (foldCc != null) foldCc.clear();
                 break;
 
             case EOT:
@@ -360,7 +385,7 @@ class Parser extends Lexer {
         if (arg.state == CCSTATE.VALUE) {
             arg.to = 0;
             arg.toIsRaw = false;
-            cc.nextStateValue(arg, ascCc, env);
+            cc.nextStateValue(arg, ascCc, foldCc, env);
         }
 
         if (prevCc != null) {
@@ -370,14 +395,20 @@ class Parser extends Lexer {
                 ascPrevCc.and(ascCc, env);
                 ascCc = ascPrevCc;
             }
+            if (foldCc != null) {
+                foldPrevCc.and(foldCc, env);
+                foldCc = foldPrevCc;
+            }
         }
 
         if (neg) {
             cc.setNot();
             if (ascCc != null) ascCc.setNot();
+            if (foldCc != null) foldCc.setNot();
         } else {
             cc.clearNot();
             if (ascCc != null) ascCc.clearNot();
+            if (foldCc != null) foldCc.clearNot();
         }
 
         if (cc.isNot() && syntax.notNewlineInNegativeCC()) {
@@ -396,27 +427,31 @@ class Parser extends Lexer {
         return cc;
     }
 
-    private void parseCharClassSbChar(CClassNode cc, CClassNode ascCc, CCStateArg arg) {
+    private void parseCharClassSbChar(CClassNode cc, CClassNode ascCc,
+                                      CClassNode foldCc, CCStateArg arg) {
         arg.inType = CCVALTYPE.SB;
         arg.to = token.getC();
         arg.toIsRaw = false;
-        parseCharClassValEntry2(cc, ascCc, arg); // goto val_entry2
+        parseCharClassValEntry2(cc, ascCc, foldCc, arg); // goto val_entry2
     }
 
-    private void parseCharClassRangeEndVal(CClassNode cc, CClassNode ascCc, CCStateArg arg) {
+    private void parseCharClassRangeEndVal(CClassNode cc, CClassNode ascCc,
+                                           CClassNode foldCc, CCStateArg arg) {
         arg.to = '-';
         arg.toIsRaw = false;
-        parseCharClassValEntry(cc, ascCc, arg); // goto val_entry
+        parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
     }
 
-    private void parseCharClassValEntry(CClassNode cc, CClassNode ascCc, CCStateArg arg) {
+    private void parseCharClassValEntry(CClassNode cc, CClassNode ascCc,
+                                        CClassNode foldCc, CCStateArg arg) {
         int len = enc.codeToMbcLength(arg.to);
         arg.inType = len == 1 ? CCVALTYPE.SB : CCVALTYPE.CODE_POINT;
-        parseCharClassValEntry2(cc, ascCc, arg); // val_entry2:
+        parseCharClassValEntry2(cc, ascCc, foldCc, arg); // val_entry2:
     }
 
-    private void parseCharClassValEntry2(CClassNode cc, CClassNode ascCc, CCStateArg arg) {
-        cc.nextStateValue(arg, ascCc, env);
+    private void parseCharClassValEntry2(CClassNode cc, CClassNode ascCc,
+                                         CClassNode foldCc, CCStateArg arg) {
+        cc.nextStateValue(arg, ascCc, foldCc, env);
     }
 
     private Node parseEnclose(TokenType term) {
@@ -1174,12 +1209,18 @@ class Parser extends Lexer {
 
         case CC_OPEN: {
             ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
-            CClassNode cc = parseCharClass(ascPtr);
+            ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
+            CClassNode cc = parseCharClass(ascPtr, foldPtr);
             int code = cc.isOneChar();
-            if (code != -1) return parseStringLoop(StringNode.fromCodePoint(code, enc), group);
+            if (code != -1 && (!isIgnoreCase(env.option)
+                    || ApplyCaseFold.isEligible(foldPtr.p, enc, code))) {
+                return parseStringLoop(StringNode.fromCodePoint(code, enc), group);
+            }
 
             node = cc;
-            if (isIgnoreCase(env.option)) node = cClassCaseFold(node, cc, ascPtr.p);
+            if (isIgnoreCase(env.option)) {
+                node = cClassCaseFold(node, cc, ascPtr.p, foldPtr.p);
+            }
             break;
             }
 
@@ -1619,8 +1660,9 @@ class Parser extends Lexer {
         return node;
     }
 
-    private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc) {
-        ApplyCaseFoldArg arg = new ApplyCaseFoldArg(env, cc, ascCc);
+    private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc,
+                                CClassNode foldCc) {
+        ApplyCaseFoldArg arg = new ApplyCaseFoldArg(env, cc, ascCc, foldCc);
         enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
         if (arg.altRoot != null) {
             node = ListNode.newAlt(node, arg.altRoot);
@@ -1632,28 +1674,37 @@ class Parser extends Lexer {
         CharProperty property = fetchCharProperty(false);
         CClassNode cc = new CClassNode();
         Node node = cc;
-        addCharProperty(cc, null, property, false);
+        addCharProperty(cc, null, null, property, false);
         if (token.getPropNot()) cc.setNot();
 
         if (isIgnoreCase(env.option) && property.caseFold) {
             if (property.ranges != null || property.ctype != CharacterType.ASCII) {
-                node = cClassCaseFold(node, cc, cc);
+                node = cClassCaseFold(node, cc, cc, cc);
             }
         }
         return node;
     }
 
     private void addCharProperty(CClassNode cc, CClassNode ascCc,
-                                 CharProperty property, boolean not) {
+                                 CClassNode foldCc, CharProperty property,
+                                 boolean not) {
         if (property.ranges == null) {
             cc.addCType(property.ctype, not, false, env, this);
             if (ascCc != null && property.ctype != CharacterType.ASCII) {
                 ascCc.addCType(property.ctype, not, false, env, this);
             }
+            if (foldCc != null) {
+                foldCc.addCType(property.ctype, not, false, env, this);
+            }
             return;
         }
         cc.addCodeRanges(property.ranges, not, env);
-        if (ascCc != null) ascCc.addCodeRanges(property.ranges, not, env);
+        if (ascCc != null) {
+            ascCc.addCodeRanges(property.ranges, not, env);
+        }
+        if (foldCc != null && property.caseFold) {
+            foldCc.addCodeRanges(property.ranges, not, env);
+        }
     }
 
     private Node parseAnycharAnytime() {
