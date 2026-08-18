@@ -384,9 +384,9 @@ my @copy = @{$z};         # ERROR
 - ✅  **`\K` assertion**: Keep left — in `s///`, text before `\K` is preserved; match variables reflect only the portion after `\K`.
 - ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
 - ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
-- ❌  **Python-style named groups**: `(?P<name>...)` and `(?P=name)` are accepted by Perl but are not yet parsed by Joni.
+- ✅  **Python-style named groups**: `(?P<name>...)` and `(?P=name)` are parsed natively by Joni with Perl capture numbering, duplicate-name behavior, and malformed/unknown-name diagnostics.
 - ❌  **Alpha assertion aliases**: `(*pla:...)`, `(*plb:...)`, `(*nla:...)`, `(*nlb:...)`, and `(*atomic:...)` are not yet parsed by Joni.
-- ❌  **Underscored numeric regex escapes**: Perl spellings such as `\x{0_0_4_1}` and `\o{0_0_1_0_1}` are not yet parsed by Joni. Valid braced octal and unconditional missing-close/empty diagnostics are implemented in the pending parser stack; three `use re 'strict'` non-octal cases remain deferred.
+- ❌  **Underscored numeric regex escapes**: Perl spellings such as `\x{0_0_4_1}` and `\o{0_0_1_0_1}` still rely on frontend normalization rather than native Joni parsing. Valid braced octal and unconditional missing-close/empty diagnostics are native; three `use re 'strict'` non-octal cases remain deferred.
 
 - ✅  **Dynamically-scoped regex variables**: Provisional captures, `$^R`, `$^N`, match positions, and callback locals follow matcher paths and unwind on backtracking.
 - ✅  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, nested alternatives participate in outer backtracking without changing outer grouping or capture numbering, and callback and pure-pattern recursion have engine-owned depth ceilings.

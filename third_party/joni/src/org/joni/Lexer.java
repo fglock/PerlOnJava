@@ -575,6 +575,7 @@ class Lexer extends ScannerSupport {
         int last = p;
 
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
+            validatePerlBracedHexClose();
             inc();
             int num = scanUnsignedHexadecimalNumber(0, 8);
             if (num < 0) newValueException(ERR_TOO_BIG_WIDE_CHAR_VALUE);
@@ -607,6 +608,80 @@ class Lexer extends ScannerSupport {
                 token.setC(num);
             }
         }
+    }
+
+    private void validatePerlBracedHexClose() {
+        if (!syntax.op2OptionPerl()) return;
+
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == '}') return;
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE);
+    }
+
+    private void fetchTokenFor_oBrace() {
+        int afterO = p;
+        if (!syntax.op2OptionPerl() || !left() || !peekIs('{')) {
+            c = env.convertBackslashValue('o');
+            token.setC(c);
+            return;
+        }
+
+        inc();
+        int cursor = p;
+        int close = -1;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == '}') {
+                close = cursor;
+                break;
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        if (close < 0) {
+            newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE);
+        }
+
+        boolean sawDigit = false;
+        boolean trailingWhitespace = false;
+        boolean invalid = false;
+        int value = 0;
+        cursor = p;
+        while (cursor < close) {
+            int code = enc.mbcToCode(bytes, cursor, close);
+            if (code == ' ' || code == '\t' || code == '\n'
+                    || code == '\r' || code == '\f') {
+                if (sawDigit) trailingWhitespace = true;
+            } else if (code >= '0' && code <= '7' && !trailingWhitespace) {
+                sawDigit = true;
+                if (value > (Integer.MAX_VALUE - (code - '0')) / 8) {
+                    newValueException(TOO_BIG_NUMBER);
+                }
+                value = value * 8 + code - '0';
+            } else {
+                invalid = true;
+            }
+            cursor += enc.length(bytes, cursor, close);
+        }
+
+        if (invalid) {
+            p = afterO;
+            c = env.convertBackslashValue('o');
+            token.setC(c);
+            return;
+        }
+        if (!sawDigit) {
+            newSyntaxException(PERL_EMPTY_OCTAL_ESCAPE);
+        }
+
+        p = close;
+        inc();
+        token.type = TokenType.CODE_POINT;
+        token.base = 8;
+        token.setCode(value);
     }
 
     private void fetchTokenInCCFor_u() {
@@ -734,6 +809,9 @@ class Lexer extends ScannerSupport {
             case 'x':
                 fetchTokenInCCFor_x();
                 break;
+            case 'o':
+                fetchTokenFor_oBrace();
+                break;
             case 'u':
                 fetchTokenInCCFor_u();
                 break;
@@ -803,6 +881,7 @@ class Lexer extends ScannerSupport {
 
         int last = p;
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
+            validatePerlBracedHexClose();
             inc();
             int num = scanUnsignedHexadecimalNumber(0, 8);
             if (num < 0) newValueException(ERR_TOO_BIG_WIDE_CHAR_VALUE);
@@ -1192,6 +1271,9 @@ class Lexer extends ScannerSupport {
                     break;
                 case 'x':
                     fetchTokenFor_xBrace();
+                    break;
+                case 'o':
+                    fetchTokenFor_oBrace();
                     break;
                 case 'u':
                     fetchTokenFor_uHex();

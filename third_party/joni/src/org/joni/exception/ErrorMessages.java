@@ -59,6 +59,14 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String INVALID_CONDITION_PATTERN = "invalid conditional pattern";
     String PERL_GROUP_NAME_MUST_START_WITH_WORD =
             "Group name must start with a non-digit word character";
+    String PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP =
+            "Reference to nonexistent named group";
+    String PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED =
+            "Sequence (?P%n...) not recognized";
+    String PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED =
+            "Sequence (?<... not terminated";
+    String PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED =
+            "Sequence ?P=... not terminated";
     String PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED =
             "Sequence (?^-...) not recognized";
     String PERL_CARET_D_OPTION_NOT_RECOGNIZED =
@@ -71,6 +79,11 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Regexp modifier \"l\" may not appear twice";
     String PERL_MODIFIER_A_MAXIMUM_TWICE =
             "Regexp modifier \"a\" may appear a maximum of twice";
+    String PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE =
+            "Missing right brace on \\o{}";
+    String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
+    String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
+            "Missing right brace on \\x{}";
 
     /* values error (syntax error) */
     String TOO_BIG_NUMBER = "too big number";

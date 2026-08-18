@@ -51,6 +51,31 @@ public class TestPerl extends Test {
         xerrs("(?da:foo)", ErrorMessages.PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
         xerrs("(?lil:foo)", ErrorMessages.PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE);
         xerrs("(?aaia:foo)", ErrorMessages.PERL_MODIFIER_A_MAXIMUM_TWICE);
+        xerrs("\\o{7", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE);
+        xerrs("[\\o{7]", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE);
+        xerrs("\\o{}", ErrorMessages.PERL_EMPTY_OCTAL_ESCAPE);
+        xerrs("[\\o{}]", ErrorMessages.PERL_EMPTY_OCTAL_ESCAPE);
+        x2s("\\o{141}", "a", 0, 1);
+        x2s("\\o{ 141 }", "a", 0, 1);
+        ns("\\o{789}", "");
+        xerrs("\\x{X", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE);
+        xerrs("[\\x{X]", ErrorMessages.PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE);
+        x2s("\\x{61}", "a", 0, 1);
+        ns("\\x{}", "");
+        ns("\\x{X}", "");
+        x2s("(?P<word>a)(?P=word)", "aa", 0, 2);
+        ns("(?P<word>a)(?P=word)", "ab");
+        x2s("(?:(?P<x>a)|(?P<x>b))(?P=x)", "aa", 0, 2);
+        x2s("(?:(?P<x>a)|(?P<x>b))(?P=x)", "bb", 0, 2);
+        ns("(?:(?P<x>a)|(?P<x>b))(?P=x)", "ab");
+        xerrs("(?P=missing)", ErrorMessages.PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP);
+        xerrs("(?P<)", ErrorMessages.PERL_GROUP_NAME_MUST_START_WITH_WORD);
+        xerrs("(?P=)", ErrorMessages.PERL_GROUP_NAME_MUST_START_WITH_WORD);
+        xerrs("(?PX<n>foo)", "Sequence (?PX...) not recognized");
+        xerrs("(?P<name", ErrorMessages.PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED);
+        xerrs("(?P=name", ErrorMessages.PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
+        ns("[(?P<x>)]", "z");
+        x2s("\\(\\?P<x>", "(?P<x>", 0, 6);
     }
 
     @org.junit.Test(timeout = 5000)
