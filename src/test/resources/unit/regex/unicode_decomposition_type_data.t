@@ -30,9 +30,6 @@ sub matches_property {
     return defined($regex) && chr($code_point) =~ $regex;
 }
 
-TODO: {
-    local $TODO = 'Decomposition_Type resolver wiring is a separate Phase 36 slice';
-
     for my $case (@cases) {
         my ($short, $long, $code_point) = @$case;
         ok(matches_property('dt', $short, $code_point),
@@ -62,6 +59,4 @@ TODO: {
         'Perl Is prefix remains case-sensitive');
     ok(!matches_property("Decomposition\x{1680}Type", 'Can', 0x00C0),
         'Perl loose matching does not ignore Unicode whitespace');
-}
-
 done_testing;
