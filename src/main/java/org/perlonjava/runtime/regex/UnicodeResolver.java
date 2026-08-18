@@ -676,6 +676,21 @@ public class UnicodeResolver {
         return translateUnicodeProperty(property, negated, new LinkedHashSet<>(), false);
     }
 
+    static String translateUnicodePropertyForCharClass(String property, boolean negated) {
+        String normalized = property.trim();
+        if (normalized.startsWith("^")) {
+            normalized = normalized.substring(1).trim();
+            negated = !negated;
+        }
+        UnicodeSet set = resolveStandardPropertyAsSet(normalized, new LinkedHashSet<>());
+        if (set == null) {
+            throw new IllegalArgumentException(
+                    "Invalid or unsupported Unicode property: " + property);
+        }
+        if (negated) set = new UnicodeSet(set).complement();
+        return unicodeSetToJavaPattern(set);
+    }
+
     static String translateUnicodeProperty(
             String property, boolean negated, boolean caseInsensitive) {
         return translateUnicodeProperty(property, negated, new LinkedHashSet<>(), caseInsensitive);
@@ -703,6 +718,8 @@ public class UnicodeResolver {
                     isPerlIsPrefixedJoiningGroupWildcard(property);
             boolean isPrefixedBlockWildcard =
                     isPerlIsPrefixedBlockWildcard(property);
+            boolean isPrefixedScriptWildcard =
+                    isPerlIsPrefixedScriptWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
@@ -715,6 +732,10 @@ public class UnicodeResolver {
             if (isPrefixedBlockWildcard) {
                 throw new IllegalArgumentException(
                         "Can't find Unicode property definition for Is-prefixed Block wildcard");
+            }
+            if (isPrefixedScriptWildcard) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition for Is-prefixed Script wildcard");
             }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
@@ -960,6 +981,14 @@ public class UnicodeResolver {
 
         String alias = property.trim();
         int assignment = propertyValueDelimiter(alias);
+        if (assignment == alias.length() - 1
+                && (PerlUnicodeScriptData.isScriptPropertyAlias(
+                        alias.substring(0, assignment))
+                    || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(
+                        alias.substring(0, assignment)))) {
+            throw new IllegalArgumentException(
+                    "Unicode property wildcard not terminated");
+        }
         if (assignment > 0 && assignment < alias.length() - 1
                 && isGeneralCategoryProperty(alias.substring(0, assignment))) {
             UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(
@@ -1040,6 +1069,16 @@ public class UnicodeResolver {
                         alias.substring(0, assignment))) {
             return resolvePerlBlock(alias.substring(assignment + 1));
         }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeScriptData.isScriptPropertyAlias(
+                        alias.substring(0, assignment))) {
+            return resolvePerlScript(alias.substring(assignment + 1), false);
+        }
+        if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(
+                        alias.substring(0, assignment))) {
+            return resolvePerlScript(alias.substring(assignment + 1), true);
+        }
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1065,6 +1104,30 @@ public class UnicodeResolver {
             casedLetters.addAll(unicodePropertyValueSet(
                     UProperty.GENERAL_CATEGORY, "TitlecaseLetter"));
             return casedLetters;
+        }
+
+        // Perl's bare script-value shortcuts use Script_Extensions semantics.
+        // Keep binary and General_Category names ahead of this value namespace.
+        String scriptShortcut = alias;
+        if (alias.length() > 2 && alias.startsWith("Is")) {
+            int valueStart = 2;
+            while (valueStart < alias.length()) {
+                char separator = alias.charAt(valueStart);
+                if (!Character.isWhitespace(separator)
+                        && separator != '-' && separator != '_') break;
+                valueStart++;
+            }
+            if (valueStart < alias.length()) scriptShortcut = alias.substring(valueStart);
+        }
+        if (assignment < 0
+                && !isIcuBinaryPropertyAlias(scriptShortcut)
+                && !isIcuGeneralCategoryAlias(scriptShortcut)) {
+            String canonicalScript = PerlUnicodeScriptData.canonicalValue(scriptShortcut);
+            if (!"Katakana_Or_Hiragana".equals(canonicalScript)) {
+                UnicodeSet scriptExtensions =
+                        PerlUnicodeScriptData.scriptExtensionsSet(scriptShortcut);
+                if (scriptExtensions != null) return scriptExtensions;
+            }
         }
 
         String blockAlias = alias;
@@ -1167,6 +1230,17 @@ public class UnicodeResolver {
                 && perlBlockWildcardBody(property.substring(assignment + 1)) != null;
     }
 
+    private static boolean isPerlIsPrefixedScriptWildcard(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String propertyName = exactIsPrefixedPropertyName(
+                property.substring(0, assignment));
+        return propertyName != null
+                && (PerlUnicodeScriptData.isScriptPropertyAlias(propertyName)
+                    || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(propertyName))
+                && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
     private static String exactIsPrefixedPropertyName(String name) {
         if (name.length() <= 2 || name.charAt(0) != 'I' || name.charAt(1) != 's') {
             return null;
@@ -1254,6 +1328,61 @@ public class UnicodeResolver {
         if (result.isEmpty()) {
             throw new IllegalArgumentException(
                     "No Unicode property value wildcard matches Block");
+        }
+        return result.freeze();
+    }
+
+    private static UnicodeSet resolvePerlScript(String value, boolean extensions) {
+        String wildcard = perlNumericWildcardBody(value);
+        if (wildcard == null) {
+            if ("Katakana_Or_Hiragana".equals(
+                    PerlUnicodeScriptData.canonicalValue(value))) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition \""
+                                + (extensions ? "Script_Extensions" : "Script")
+                                + "=" + value.trim() + "\"");
+            }
+            UnicodeSet exact = extensions
+                    ? PerlUnicodeScriptData.scriptExtensionsSet(value)
+                    : PerlUnicodeScriptData.scriptSet(value);
+            if (exact == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported " + (extensions ? "Script_Extensions" : "Script")
+                                + " value: " + value.trim());
+            }
+            return exact;
+        }
+        if (wildcard.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        Pattern valuePattern;
+        try {
+            valuePattern = Pattern.compile(wildcard);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (String candidate : PerlUnicodeScriptData.wildcardValues()) {
+            if ("Katakana_Or_Hiragana".equals(
+                    PerlUnicodeScriptData.canonicalValue(candidate))) {
+                continue;
+            }
+            if (valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+                UnicodeSet match = extensions
+                        ? PerlUnicodeScriptData.scriptExtensionsSet(candidate)
+                        : PerlUnicodeScriptData.scriptSet(candidate);
+                if (match != null) result.addAll(match);
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches "
+                            + (extensions ? "Script_Extensions" : "Script"));
         }
         return result.freeze();
     }
