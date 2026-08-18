@@ -82,6 +82,18 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void translatesPerlOnlyUnicodePropertyAliasesBeforeJoniCompilation() {
+        assertTrue(new JoniRegexPattern("\\p{Titlecase}", FLAGS)
+                .matcher("\u01c5", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\p{XPosixSpace}", FLAGS)
+                .matcher("\u00a0", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\p{PosixUpper}", FLAGS)
+                .matcher("A", java.util.List.of()).find());
+        assertTrue(new JoniRegexPattern("\\p{_Perl_IDStart}", FLAGS)
+                .matcher("_", java.util.List.of()).find());
+    }
+
+    @Test
     void acceptsPerlNumericGBackrefsAndHexCodePoints() {
         assertTrue(new JoniRegexPattern("(a)(b)(c)\\g1\\g2\\g3", FLAGS)
                 .matcher("abcabc", java.util.List.of()).find());

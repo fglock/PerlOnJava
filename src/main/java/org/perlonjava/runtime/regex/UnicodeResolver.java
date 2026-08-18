@@ -972,8 +972,38 @@ public class UnicodeResolver {
     }
 
     static boolean isPerlBuiltInPropertyAlias(String property) {
-        return !normalizePerlIsPropertyAssignment(property).equals(property)
+        if (property == null) return false;
+        return isPerlSpecialPropertyAlias(property.trim())
+                || !normalizePerlIsPropertyAssignment(property).equals(property)
                 || resolvePerlBuiltInPropertyAlias(property) != null;
+    }
+
+    private static boolean isPerlSpecialPropertyAlias(String property) {
+        return switch (property) {
+            case "lb=cr", "lb=CR",
+                    "XPosixSpace", "XPerlSpace", "SpacePerl", "Space", "White_Space",
+                    "XPosixAlnum", "Alnum",
+                    "XPosixAlpha", "Alpha", "Alphabetic",
+                    "XPosixBlank", "Blank", "HorizSpace",
+                    "XPosixCntrl", "Cc", "Cntrl", "Control",
+                    "XPosixDigit", "Decimal_Number", "Digit", "Nd",
+                    "XPosixGraph", "Graph",
+                    "XPosixLower", "Lower", "Lowercase",
+                    "XPosixPrint", "Print",
+                    "XPosixPunct", "Punct", "Punctuation",
+                    "XPosixUpper", "Upper", "Uppercase",
+                    "Titlecase", "TitlecaseLetter", "Titlecase_Letter", "Lt",
+                    "XPosixWord", "Word", "IsWord",
+                    "XPosixXDigit", "Hex", "Hex_Digit", "XDigit",
+                    "PosixAlnum", "PosixAlpha", "PosixBlank", "PosixCntrl",
+                    "PosixDigit", "PosixGraph", "PosixLower", "PosixPrint",
+                    "PosixPunct", "PosixSpace", "PosixUpper", "PosixWord",
+                    "PosixXDigit",
+                    "XIDS", "XIDStart", "XID_Start",
+                    "XIDC", "XIDCont", "XID_Continue",
+                    "_Perl_IDStart", "_Perl_IDCont" -> true;
+            default -> false;
+        };
     }
 
     private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
