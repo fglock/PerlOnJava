@@ -232,8 +232,11 @@ final class JoniRegexPattern {
             try {
                 String propertyClass = UnicodeResolver.translateUnicodeProperty(
                         property, pattern.charAt(i + 1) == 'P', flags.isCaseInsensitive());
+                String joniPropertyClass = normalizeGeneratedPropertyClassForJoni(
+                        propertyClass);
                 translated.append("(?-i:")
-                        .append(normalizeGeneratedPropertyClassForJoni(propertyClass))
+                        .append(translateInternalScalarClassMembers(
+                                joniPropertyClass, true))
                         .append(')');
             } catch (IllegalArgumentException error) {
                 String message = error.getMessage();
@@ -509,10 +512,17 @@ final class JoniRegexPattern {
      * They are represented internally as {@code U+FFFD<HEX>}, which Joni can
      * match as ordinary text, but not as one logical character. Lift those
      * members and surrogate ranges into alternatives that consume a complete
-     * internal marker. For complemented classes, exclude selected marker
+     * internal marker. Generated Unicode-property classes additionally guard
+     * ordinary members so an unanchored search cannot begin inside the visible
+     * marker payload. For complemented classes, exclude selected marker
      * payloads while still consuming every other marker atomically.
      */
     private static String translateInternalScalarClassMembers(String pattern) {
+        return translateInternalScalarClassMembers(pattern, false);
+    }
+
+    private static String translateInternalScalarClassMembers(
+            String pattern, boolean guardOrdinaryClasses) {
         StringBuilder translated = new StringBuilder(pattern.length());
         boolean escaped = false;
         for (int i = 0; i < pattern.length(); i++) {
@@ -538,7 +548,7 @@ final class JoniRegexPattern {
                 continue;
             }
             String replacement = translateInternalScalarClassContent(
-                    pattern.substring(i + 1, close));
+                    pattern.substring(i + 1, close), guardOrdinaryClasses);
             if (replacement == null) {
                 translated.append(pattern, i, close + 1);
             } else {
@@ -589,7 +599,8 @@ final class JoniRegexPattern {
 
     private record HexEscape(long value, int endExclusive) {}
 
-    private static String translateInternalScalarClassContent(String content) {
+    private static String translateInternalScalarClassContent(
+            String content, boolean guardOrdinaryClass) {
         boolean negated = content.startsWith("^");
         int contentStart = negated ? 1 : 0;
         StringBuilder retained = new StringBuilder(content.length());
@@ -642,7 +653,16 @@ final class JoniRegexPattern {
             }
             retained.append(content.charAt(i++));
         }
-        if (exactMarkers.isEmpty() && surrogateRanges.isEmpty()) return null;
+        String anyMarker = "\\x{FFFD}<[0-9A-F]+>";
+        String markerBoundary = INTERNAL_SCALAR_BOUNDARY_GUARD;
+        if (exactMarkers.isEmpty() && surrogateRanges.isEmpty()) {
+            if (!guardOrdinaryClass) return null;
+            if (negated) {
+                return "(?:" + anyMarker + "|" + markerBoundary
+                        + "(?!" + anyMarker + ")[" + content + "])";
+            }
+            return markerBoundary + "(?!" + anyMarker + ")[" + content + "]";
+        }
 
         List<String> payloads = new ArrayList<>(
                 exactMarkers.size() + surrogateRanges.size());
@@ -652,9 +672,6 @@ final class JoniRegexPattern {
         }
         String payload = payloads.size() == 1
                 ? payloads.get(0) : "(?:" + String.join("|", payloads) + ")";
-        String anyMarker = "\\x{FFFD}<[0-9A-F]+>";
-        String markerBoundary = INTERNAL_SCALAR_BOUNDARY_GUARD;
-
         List<String> alternatives = new ArrayList<>(2);
         if (negated) {
             alternatives.add("\\x{FFFD}<(?!(?:" + payload + ")>)[0-9A-F]+>");

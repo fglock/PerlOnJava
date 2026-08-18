@@ -306,6 +306,16 @@ while `shadowJar` replaced it and the next exceeded its resource bound while
 overlapping the full-tree acceptance suite. The rerun must use the stable JAR
 at lower parallelism after competing heavy workers finish.
 
+The stacked native-property marker-boundary slice prevents generated property
+classes from beginning inside a visible marker payload and splits every
+generated range crossing U+D800..U+DFFF into explicit pre-surrogate, surrogate,
+and post-surrogate segments. That keeps real default-property membership while
+removing accidental hexadecimal-payload matches. Its unchanged standard-Perl
+oracle passes 10/10 on standard Perl, JVM, and interpreter; the protected HST/
+quick-check and surrogate-renderer gates pass 113/113 and 27/27 respectively on
+both execution backends. Direct Joni, packaging, and warning-free `make` pass
+in 4m02s.
+
 Lexical `use bytes` now compiles non-ASCII substitution patterns with a
 single-byte Joni encoding while preserving upgraded, byte-backed, and compiled
 `qr//` source provenance. The focused oracle passes 12/12 on system Perl, JVM,
@@ -846,12 +856,12 @@ is retained for now.
   - [ ] Complete the authoritative stable-JAR chunks 01–04 map for the
     surrogate renderer with exact JVM/interpreter identity, zero losses, and
     no missing numbered assertions before updating aggregate totals.
-  - [ ] Prevent unanchored native Joni properties/classes that contain no
-    translated surrogate range from beginning inside the visible payload of
-    an internal scalar marker. The isolated reducer at
-    `/tmp/phase36-native-property-marker-boundary.t` passes 2/2 on standard
-    Perl and 1/2 on PerlOnJava; this is separate from PR #1049's
-    surrogate-bearing translated-class renderer.
+  - [x] Prevented generated Joni property classes from beginning inside the
+    visible payload of an internal scalar marker, while splitting generated
+    ranges crossing U+D800..U+DFFF so true surrogate membership remains
+    atomic. The standard-Perl-first oracle passes 10/10; protected HST/quick-
+    check and surrogate-renderer gates pass 113/113 and 27/27 on JVM and
+    interpreter; warning-free `make`, direct Joni, and packaging pass.
   - [x] Integrated native Perl `\v`/`\V` dispatch inside and outside character
     classes (`1eff1db97`, integrated as `6328935cd`). The focused oracle passes
     92/92 and unchanged `reg_posixcc.t` passes 2,560/2,560 on both backends.

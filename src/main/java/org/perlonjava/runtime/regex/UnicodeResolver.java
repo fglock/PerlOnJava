@@ -2507,13 +2507,30 @@ public class UnicodeResolver {
         for (int i = 0; i < set.getRangeCount(); i++) {
             int start = set.getRangeStart(i);
             int end = set.getRangeEnd(i);
-            appendJavaPatternChar(sb, start);
-            if (start != end) {
-                sb.append('-');
-                appendJavaPatternChar(sb, end);
+            if (start <= Character.MAX_SURROGATE
+                    && end >= Character.MIN_SURROGATE) {
+                if (start < Character.MIN_SURROGATE) {
+                    appendJavaPatternRange(sb, start, Character.MIN_SURROGATE - 1);
+                }
+                appendJavaPatternRange(sb,
+                        Math.max(start, Character.MIN_SURROGATE),
+                        Math.min(end, Character.MAX_SURROGATE));
+                if (end > Character.MAX_SURROGATE) {
+                    appendJavaPatternRange(sb, Character.MAX_SURROGATE + 1, end);
+                }
+            } else {
+                appendJavaPatternRange(sb, start, end);
             }
         }
         return sb.toString();
+    }
+
+    private static void appendJavaPatternRange(StringBuilder sb, int start, int end) {
+        appendJavaPatternChar(sb, start);
+        if (start != end) {
+            sb.append('-');
+            appendJavaPatternChar(sb, end);
+        }
     }
 
     private static void appendJavaPatternChar(StringBuilder sb, int codePoint) {
