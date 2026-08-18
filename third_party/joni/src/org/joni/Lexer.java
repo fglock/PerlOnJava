@@ -44,6 +44,9 @@ class Lexer extends ScannerSupport {
     protected final ScanEnvironment env;
     protected final Syntax syntax;              // fast access to syntax
     protected final Token token = new Token();  // current token
+    private int perlHorizontalWhitespaceTokenIndex = -1;
+    private boolean perlHorizontalWhitespaceNegated;
+    private boolean perlHorizontalWhitespaceSingleByte;
     private int perlVerticalWhitespaceTokenIndex = -1;
     private boolean perlVerticalWhitespaceNegated;
 
@@ -552,6 +555,84 @@ class Lexer extends ScannerSupport {
         token.setPropNot(flag);
     }
 
+    private void startPerlHorizontalWhitespace(boolean negated, TokenType openType) {
+        perlHorizontalWhitespaceTokenIndex = 0;
+        perlHorizontalWhitespaceNegated = negated;
+        perlHorizontalWhitespaceSingleByte = enc.isSingleByte();
+        token.type = openType;
+    }
+
+    private TokenType fetchPerlHorizontalWhitespaceToken() {
+        token.base = 0;
+        token.escaped = false;
+
+        int index = perlHorizontalWhitespaceTokenIndex++;
+        if (perlHorizontalWhitespaceNegated) {
+            if (index == 0) {
+                token.type = TokenType.CHAR;
+                token.setC('^');
+                return token.type;
+            }
+            index--;
+        }
+
+        if (perlHorizontalWhitespaceSingleByte && index >= 3) {
+            token.type = TokenType.CC_CLOSE;
+            token.setC(']');
+            perlHorizontalWhitespaceTokenIndex = -1;
+            return token.type;
+        }
+
+        switch (index) {
+        case 0:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x09);
+            break;
+        case 1:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x20);
+            break;
+        case 2:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0xa0);
+            break;
+        case 3:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x1680);
+            break;
+        case 4:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x2000);
+            break;
+        case 5:
+            token.type = TokenType.CC_RANGE;
+            token.setC('-');
+            break;
+        case 6:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x200a);
+            break;
+        case 7:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x202f);
+            break;
+        case 8:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x205f);
+            break;
+        case 9:
+            token.type = TokenType.CODE_POINT;
+            token.setCode(0x3000);
+            break;
+        default:
+            token.type = TokenType.CC_CLOSE;
+            token.setC(']');
+            perlHorizontalWhitespaceTokenIndex = -1;
+            break;
+        }
+        return token.type;
+    }
+
     private boolean usesPerlVerticalWhitespaceEscape() {
         return syntax.op2EscVVerticalWhiteSpace()
                 || syntax.op2OptionPerl() && (syntax == Syntax.Perl
@@ -914,6 +995,9 @@ class Lexer extends ScannerSupport {
     }
 
     protected final TokenType fetchTokenInCC() {
+        if (perlHorizontalWhitespaceTokenIndex >= 0) {
+            return fetchPerlHorizontalWhitespaceToken();
+        }
         if (perlVerticalWhitespaceTokenIndex >= 0) {
             return fetchPerlVerticalWhitespaceToken();
         }
@@ -959,10 +1043,26 @@ class Lexer extends ScannerSupport {
                 fetchTokenInCCFor_charType(true, CharacterType.SPACE);
                 break;
             case 'h':
-                if (syntax.op2EscHXDigit()) fetchTokenInCCFor_charType(false, CharacterType.XDIGIT);
+                if (syntax.op2EscHHorizontalWhiteSpace()) {
+                    if (enc.isSingleByte() || isAsciiRange(env.option)) {
+                        startPerlHorizontalWhitespace(false, TokenType.CC_CC_OPEN);
+                    } else {
+                        fetchTokenInCCFor_charType(false, CharacterType.BLANK);
+                    }
+                } else if (syntax.op2EscHXDigit()) {
+                    fetchTokenInCCFor_charType(false, CharacterType.XDIGIT);
+                }
                 break;
             case 'H':
-                if (syntax.op2EscHXDigit()) fetchTokenInCCFor_charType(true, CharacterType.XDIGIT);
+                if (syntax.op2EscHHorizontalWhiteSpace()) {
+                    if (enc.isSingleByte() || isAsciiRange(env.option)) {
+                        startPerlHorizontalWhitespace(true, TokenType.CC_CC_OPEN);
+                    } else {
+                        fetchTokenInCCFor_charType(true, CharacterType.BLANK);
+                    }
+                } else if (syntax.op2EscHXDigit()) {
+                    fetchTokenInCCFor_charType(true, CharacterType.XDIGIT);
+                }
                 break;
             case 'p':
             case 'P':
@@ -1418,10 +1518,26 @@ class Lexer extends ScannerSupport {
                     if (syntax.opEscDDigit()) fetchTokenInCCFor_charType(true, CharacterType.DIGIT);
                     break;
                 case 'h':
-                    if (syntax.op2EscHXDigit()) fetchTokenInCCFor_charType(false, CharacterType.XDIGIT);
+                    if (syntax.op2EscHHorizontalWhiteSpace()) {
+                        if (enc.isSingleByte()) {
+                            startPerlHorizontalWhitespace(false, TokenType.CC_OPEN);
+                        } else {
+                            fetchTokenInCCFor_charType(false, CharacterType.BLANK);
+                        }
+                    } else if (syntax.op2EscHXDigit()) {
+                        fetchTokenInCCFor_charType(false, CharacterType.XDIGIT);
+                    }
                     break;
                 case 'H':
-                    if (syntax.op2EscHXDigit()) fetchTokenInCCFor_charType(true, CharacterType.XDIGIT);
+                    if (syntax.op2EscHHorizontalWhiteSpace()) {
+                        if (enc.isSingleByte()) {
+                            startPerlHorizontalWhitespace(true, TokenType.CC_OPEN);
+                        } else {
+                            fetchTokenInCCFor_charType(true, CharacterType.BLANK);
+                        }
+                    } else if (syntax.op2EscHXDigit()) {
+                        fetchTokenInCCFor_charType(true, CharacterType.XDIGIT);
+                    }
                     break;
                 case 'A':
                     if (syntax.opEscAZBufAnchor()) fetchTokenFor_anchor(AnchorType.BEGIN_BUF);
