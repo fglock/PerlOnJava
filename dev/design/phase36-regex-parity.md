@@ -461,10 +461,10 @@ matcher-specific timeouts on both execution backends.
 
 ### Next Steps
 
-1. Publish the integrated inline-option parser slice after combined-stack
-   focused gates and warning-free `make`, then integrate the validated PRUNE
-   and dead invalid-brace preprocessor retirement commits `5760874e4` and
-   `4be6a48e3` as the next stacked slice.
+1. Publish the integrated PRUNE and dead invalid-brace preprocessor retirement
+   slice after its warning-free combined `make`, then integrate the validated
+   forked-Joni braced-octal diagnostics/tokenization slice. Continue retiring
+   independently proven Java-only preprocessor rewrites as they complete.
 2. Fix lexical `use bytes` substitution when an upgraded marker regex matches a
    byte subject, without patching generated fixtures. Regenerate the lossless
    corpus and prove that chunks 05–10 no longer match literal boundary markers
