@@ -720,6 +720,10 @@ public class UnicodeResolver {
                     isPerlIsPrefixedBlockWildcard(property);
             boolean isPrefixedScriptWildcard =
                     isPerlIsPrefixedScriptWildcard(property);
+            boolean isPrefixedIndicCategoryAssignment =
+                    isPerlIsPrefixedIndicCategoryAssignment(property);
+            boolean isPrefixedIndicCategoryWildcard =
+                    isPerlIsPrefixedIndicCategoryWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
@@ -736,6 +740,10 @@ public class UnicodeResolver {
             if (isPrefixedScriptWildcard) {
                 throw new IllegalArgumentException(
                         "Can't find Unicode property definition for Is-prefixed Script wildcard");
+            }
+            if (isPrefixedIndicCategoryWildcard) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition for Is-prefixed Indic category wildcard");
             }
             if (property.startsWith("utf8::")) {
                 String userPropertyName = property.substring("utf8::".length());
@@ -755,7 +763,8 @@ public class UnicodeResolver {
                 // Property not found - fall through to throw error below
             }
 
-            UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(property);
+            UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(
+                    property, isPrefixedIndicCategoryAssignment);
             if (perlBuiltInAlias != null) {
                 return wrapCharClass(unicodeSetToJavaPattern(perlBuiltInAlias), negated);
             }
@@ -977,6 +986,11 @@ public class UnicodeResolver {
     }
 
     private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
+        return resolvePerlBuiltInPropertyAlias(property, false);
+    }
+
+    private static UnicodeSet resolvePerlBuiltInPropertyAlias(
+            String property, boolean isPrefixedIndicCategoryAssignment) {
         if (property == null) return null;
 
         String alias = property.trim();
@@ -985,6 +999,8 @@ public class UnicodeResolver {
                 && (PerlUnicodeScriptData.isScriptPropertyAlias(
                         alias.substring(0, assignment))
                     || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(
+                        alias.substring(0, assignment))
+                    || PerlUnicodeIndicCategoryData.isPropertyAlias(
                         alias.substring(0, assignment)))) {
             throw new IllegalArgumentException(
                     "Unicode property wildcard not terminated");
@@ -1065,6 +1081,13 @@ public class UnicodeResolver {
             return resolvePerlJoiningGroup(alias.substring(assignment + 1));
         }
         if (assignment > 0 && assignment < alias.length() - 1
+                && PerlUnicodeIndicCategoryData.isPropertyAlias(
+                        alias.substring(0, assignment))) {
+            return resolvePerlIndicCategory(
+                    alias.substring(0, assignment), alias.substring(assignment + 1),
+                    isPrefixedIndicCategoryAssignment);
+        }
+        if (assignment > 0 && assignment < alias.length() - 1
                 && PerlUnicodeBlockData.isPropertyAlias(
                         alias.substring(0, assignment))) {
             return resolvePerlBlock(alias.substring(assignment + 1));
@@ -1095,6 +1118,10 @@ public class UnicodeResolver {
                             : new UnicodeSet(binaryProperty).complement().freeze();
                 }
             }
+        }
+        if (assignment < 0 && PerlUnicodeIndicCategoryData.isPropertyAlias(alias)) {
+            throw new IllegalArgumentException(
+                    "Can't find Unicode property definition \"" + alias + "\"");
         }
         if (alias.equalsIgnoreCase("L&")) {
             UnicodeSet casedLetters = unicodePropertyValueSet(
@@ -1241,6 +1268,21 @@ public class UnicodeResolver {
                 && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
     }
 
+    private static boolean isPerlIsPrefixedIndicCategoryWildcard(String property) {
+        if (!isPerlIsPrefixedIndicCategoryAssignment(property)) return false;
+        int assignment = propertyValueDelimiter(property);
+        return perlNumericWildcardBody(property.substring(assignment + 1)) != null;
+    }
+
+    private static boolean isPerlIsPrefixedIndicCategoryAssignment(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return false;
+        String propertyName = exactIsPrefixedPropertyName(
+                property.substring(0, assignment));
+        return propertyName != null
+                && PerlUnicodeIndicCategoryData.isPropertyAlias(propertyName);
+    }
+
     private static String exactIsPrefixedPropertyName(String name) {
         if (name.length() <= 2 || name.charAt(0) != 'I' || name.charAt(1) != 's') {
             return null;
@@ -1290,6 +1332,48 @@ public class UnicodeResolver {
         if (result.isEmpty()) {
             throw new IllegalArgumentException(
                     "No Unicode property value wildcard matches Joining_Group");
+        }
+        return result.freeze();
+    }
+
+    private static UnicodeSet resolvePerlIndicCategory(
+            String property, String value, boolean isPrefixedAssignment) {
+        String wildcard = perlNumericWildcardBody(value);
+        if (wildcard == null) {
+            String canonical = PerlUnicodeIndicCategoryData.canonicalValue(property, value);
+            if (canonical == null
+                    || (canonical.equals("Not_Applicable")
+                        && !isPrefixedAssignment
+                        && !looseAsciiPropertyName(value).equals("na"))) {
+                throw new IllegalArgumentException(
+                        "Can't find Unicode property definition \""
+                                + property.trim() + "=" + value.trim() + "\"");
+            }
+            return PerlUnicodeIndicCategoryData.valueSet(property, value);
+        }
+        if (wildcard.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        Pattern valuePattern;
+        try {
+            valuePattern = Pattern.compile(wildcard);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (String candidate : PerlUnicodeIndicCategoryData.wildcardValues(property)) {
+            if (valuePattern.matcher(candidate).matches()
+                    || valuePattern.matcher(looseAsciiPropertyName(candidate)).matches()) {
+                result.addAll(PerlUnicodeIndicCategoryData.valueSet(property, candidate));
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches " + property.trim());
         }
         return result.freeze();
     }
@@ -1575,6 +1659,16 @@ public class UnicodeResolver {
             if (!Character.isWhitespace(ch) && ch != '-' && ch != '_') {
                 normalized.append(Character.toLowerCase(ch));
             }
+        }
+        return normalized.toString();
+    }
+
+    private static String looseAsciiPropertyName(String value) {
+        StringBuilder normalized = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch == ' ' || ch == '_' || ch == '-' || ch >= '\t' && ch <= '\r') continue;
+            normalized.append(ch >= 'A' && ch <= 'Z' ? (char) (ch + ('a' - 'A')) : ch);
         }
         return normalized.toString();
     }
