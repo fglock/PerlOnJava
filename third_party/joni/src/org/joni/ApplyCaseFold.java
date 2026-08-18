@@ -41,7 +41,7 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
         boolean addFlag;
 
         if (Option.isPerlAsciiStrict(env.option)
-                && Encoding.isAscii(from) != Encoding.isAscii(to[0])) {
+                && perlAsciiStrictRelationCrossesAscii(from, to, length)) {
             return;
         }
 
@@ -109,6 +109,15 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
 
         }
 
+    }
+
+    private static boolean perlAsciiStrictRelationCrossesAscii(int from, int[] to,
+                                                                int length) {
+        boolean fromAscii = Encoding.isAscii(from);
+        for (int i = 0; i < length; i++) {
+            if (fromAscii != Encoding.isAscii(to[i])) return true;
+        }
+        return false;
     }
 
     static boolean isEligible(CClassNode ascCc, Encoding enc, int code) {
