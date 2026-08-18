@@ -751,10 +751,13 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenFor_oBrace() {
-        if (!syntax.op2OptionPerl() || !left() || !peekIs('{')) {
+        if (!syntax.op2OptionPerl()) {
             c = env.convertBackslashValue('o');
             token.setC(c);
             return;
+        }
+        if (!left() || !peekIs('{')) {
+            newSyntaxException(PERL_MISSING_BRACES_ON_OCTAL_ESCAPE);
         }
 
         long value = scanPerlBracedCodePoint(8, 'o');
@@ -852,7 +855,10 @@ class Lexer extends ScannerSupport {
         }
 
         if (!sawDigit && invalid < 0) {
-            if (escape == 'o') newSyntaxException(PERL_EMPTY_OCTAL_ESCAPE);
+            if (escape == 'o') {
+                newSyntaxException(PERL_EMPTY_OCTAL_ESCAPE,
+                        close + enc.length(bytes, close, stop) - getBegin());
+            }
             value = 0;
         } else if (invalid >= 0) {
             String kind = escape == 'o' ? "octal" : "hex";

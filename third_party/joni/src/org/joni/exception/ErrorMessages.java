@@ -92,6 +92,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Regexp modifier \"a\" may appear a maximum of twice";
     String PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE =
             "Missing right brace on \\o{}";
+    String PERL_MISSING_BRACES_ON_OCTAL_ESCAPE = "Missing braces on \\o{}";
     String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
     String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
             "Missing right brace on \\x{}";

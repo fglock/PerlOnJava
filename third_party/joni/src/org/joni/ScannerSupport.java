@@ -53,6 +53,10 @@ abstract class ScannerSupport extends IntHolder implements ErrorMessages {
         return end;
     }
 
+    protected final int getPatternPosition() {
+        return p - begin;
+    }
+
     private static final int INT_SIGN_BIT = 1 << 31;
     protected final int scanUnsignedNumber() {
         int last = c;
@@ -160,19 +164,24 @@ abstract class ScannerSupport extends IntHolder implements ErrorMessages {
     }
 
     protected void newSyntaxException(String message) {
-        throw new SyntaxException(message);
+        throw new SyntaxException(message, getPatternPosition());
+    }
+
+    protected void newSyntaxException(String message, int patternPosition) {
+        throw new SyntaxException(message, patternPosition);
     }
 
     protected void newValueException(String message) {
-        throw new ValueException(message);
+        throw new ValueException(message, getPatternPosition());
     }
 
     protected void newValueException(String message, String str) {
-        throw new ValueException(message, str);
+        throw new ValueException(message, str, getPatternPosition());
     }
 
     protected void newValueException(String message, int p, int end) {
-        throw new ValueException(message, new String(bytes, p, end - p));
+        throw new ValueException(message, new String(bytes, p, end - p),
+                getPatternPosition());
     }
 
     protected void newInternalException(String message) {

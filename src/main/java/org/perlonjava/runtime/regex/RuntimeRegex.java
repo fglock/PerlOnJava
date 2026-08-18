@@ -10,6 +10,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
@@ -772,6 +773,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         throw new PerlCompilerException("Unmatched [ in regex m/"
                                 + originalPatternString + "/");
                     }
+                    int bytePosition = ((SyntaxException) e).getPatternPosition();
+                    if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
+                        int characterPosition = utf8ByteOffsetToCharacterOffset(
+                                compilePatternString, bytePosition);
+                        throw new PerlCompilerException(RegexDiagnosticFormatter.marked(
+                                originalPatternString, characterPosition, message));
+                    }
                     throw new PerlCompilerException(message);
                 }
                 // PerlJavaUnimplementedException extends PerlCompilerException, so check
@@ -840,6 +848,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         start += prefix.length();
         int end = message.indexOf('>', start);
         return end < 0 ? null : message.substring(start, end);
+    }
+
+    private static int utf8ByteOffsetToCharacterOffset(String pattern, int byteOffset) {
+        if (pattern == null || byteOffset <= 0) return 0;
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        int boundedOffset = Math.min(byteOffset, bytes.length);
+        return new String(bytes, 0, boundedOffset, StandardCharsets.UTF_8).length();
     }
 
     private static int debugMode(String modifiers) {

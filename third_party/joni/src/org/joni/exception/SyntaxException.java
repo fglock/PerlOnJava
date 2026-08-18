@@ -21,8 +21,25 @@ package org.joni.exception;
 
 public class SyntaxException extends JOniException{
     private static final long serialVersionUID = 7862720128961874288L;
+    public static final int UNKNOWN_PATTERN_POSITION = -1;
+
+    private final int patternPosition;
 
     public SyntaxException(String message) {
+        this(message, UNKNOWN_PATTERN_POSITION);
+    }
+
+    public SyntaxException(String message, int patternPosition) {
         super(message);
+        this.patternPosition = patternPosition;
+    }
+
+    /**
+     * Returns the byte offset in the pattern at which compilation detected the
+     * error, or {@link #UNKNOWN_PATTERN_POSITION} when the producer cannot
+     * provide one.
+     */
+    public int getPatternPosition() {
+        return patternPosition;
     }
 }
