@@ -264,6 +264,10 @@ if they expose a semantic defect.
      the most assertions to pure Joni;
    - never move callback, condition, control-verb, or dynamic-source patterns
      back to Java.
+   - after the current native stack is integrated, refresh the four-leg
+     `perl5_t/t/re` matrix (forced Java/Joni × JVM/interpreter) against one
+     current artifact and establish new exact counts; the stale pre-migration
+     counts are not a release gate for the progressive backend.
 3. Complete the Unicode ownership boundary:
    - extend the runtime-neutral Joni range resolver from General_Category to
      the remaining pinned property families;
