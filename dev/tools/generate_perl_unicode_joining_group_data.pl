@@ -277,4 +277,3 @@ print <<'FOOTER';
     }
 }
 FOOTER
-
