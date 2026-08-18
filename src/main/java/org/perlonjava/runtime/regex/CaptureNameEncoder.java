@@ -269,9 +269,9 @@ public class CaptureNameEncoder {
      * from user-visible variables like %+ and %-.
      *
      * @param captureName The capture group name to check
-     * @return true if this is an internal capture (code block or \K marker)
+     * @return true if this is an internal code-block capture
      */
     public static boolean isInternalCapture(String captureName) {
-        return isCodeBlockCapture(captureName) || "perlK".equals(captureName);
+        return isCodeBlockCapture(captureName);
     }
 }

@@ -84,6 +84,10 @@ final class JoniRegexPattern {
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
                      boolean forceAsciiClasses, boolean byteMode,
                      boolean byteBackedPattern) {
+        KeepSyntax keepSyntax = analyzeKeepSyntax(perlPattern, flags.isExtended());
+        if (keepSyntax.inLookaround()) {
+            throw new PerlCompilerException("\\K not permitted in lookahead/lookbehind in regex");
+        }
         this.flags = flags;
         this.byteMode = byteMode;
         hasControlVerbState = hasControlVerbState(perlPattern);
@@ -305,14 +309,14 @@ final class JoniRegexPattern {
     }
 
     static boolean requiresJoniBackend(String pattern) {
+        return requiresJoniBackend(pattern,
+                pattern == null ? null : RegexFlags.fromModifiers("", pattern));
+    }
+
+    static boolean requiresJoniBackend(String pattern, RegexFlags flags) {
         if (pattern == null) return false;
-        boolean hasSubroutineCall = pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*")
-                || pattern.contains("(?&")
-                || pattern.contains("(?P>");
-        // Temporary parity fallback: Java handles the branch-reset named-call
-        // corpus until Joni's native named-call admission patch is complete.
-        boolean branchResetCallUsesJava = pattern.contains("(?|") && hasSubroutineCall;
-        return pattern.contains("(?{=CALL:")
+        return analyzeKeepSyntax(pattern, flags != null && flags.isExtended()).present()
+                || pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
                 || pattern.contains("(*ACCEPT)")
                 || pattern.contains("(*PRUNE")
@@ -326,7 +330,105 @@ final class JoniRegexPattern {
                 || pattern.contains("(?(R")
                 || pattern.contains("(?(<")
                 || pattern.contains("(?('")
-                || (hasSubroutineCall && !branchResetCallUsesJava);
+                || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*")
+                || pattern.contains("(?&")
+                || pattern.contains("(?P>");
+    }
+
+    private record KeepSyntax(boolean present, boolean inLookaround) {}
+
+    private static KeepSyntax analyzeKeepSyntax(String pattern, boolean extended) {
+        boolean quoted = false;
+        boolean inClass = false;
+        boolean classStart = false;
+        int extendedClassDepth = 0;
+        int lookaroundDepth = 0;
+        java.util.ArrayDeque<Boolean> groups = new java.util.ArrayDeque<>();
+        boolean present = false;
+
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (quoted) {
+                if (ch == '\\' && i + 1 < pattern.length()
+                        && pattern.charAt(i + 1) == 'E') {
+                    quoted = false;
+                    i++;
+                }
+                continue;
+            }
+            if (extendedClassDepth > 0) {
+                if (ch == '\\' && i + 1 < pattern.length()) {
+                    i++;
+                } else if (ch == '[') {
+                    extendedClassDepth++;
+                } else if (ch == ']' && --extendedClassDepth == 0) {
+                    // The following ')' closes the extended-class construct.
+                }
+                continue;
+            }
+            if (inClass) {
+                if (ch == '\\' && i + 1 < pattern.length()) {
+                    i++;
+                    classStart = false;
+                    continue;
+                }
+                if (ch == '[' && i + 1 < pattern.length()
+                        && (pattern.charAt(i + 1) == ':'
+                                || pattern.charAt(i + 1) == '.'
+                                || pattern.charAt(i + 1) == '=')) {
+                    char delimiter = pattern.charAt(i + 1);
+                    int close = pattern.indexOf("" + delimiter + ']', i + 2);
+                    if (close >= 0) i = close + 1;
+                    classStart = false;
+                    continue;
+                }
+                if (ch == ']' && !classStart) inClass = false;
+                else if (!(classStart && ch == '^')) classStart = false;
+                continue;
+            }
+            if (extended && ch == '#') {
+                while (i + 1 < pattern.length()
+                        && pattern.charAt(i + 1) != '\n') i++;
+                continue;
+            }
+            if (pattern.startsWith("(?[", i)) {
+                extendedClassDepth = 1;
+                i += 2;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                classStart = true;
+                continue;
+            }
+            if (ch == '\\' && i + 1 < pattern.length()) {
+                char escaped = pattern.charAt(++i);
+                if (escaped == 'Q') {
+                    quoted = true;
+                } else if (escaped == 'K') {
+                    present = true;
+                    if (lookaroundDepth > 0) return new KeepSyntax(true, true);
+                }
+                continue;
+            }
+            if (ch == '(') {
+                if (pattern.startsWith("(?#", i)) {
+                    int close = pattern.indexOf(')', i + 3);
+                    if (close < 0) break;
+                    i = close;
+                    continue;
+                }
+                boolean lookaround = pattern.startsWith("(?=", i)
+                        || pattern.startsWith("(?!", i)
+                        || pattern.startsWith("(?<=", i)
+                        || pattern.startsWith("(?<!", i);
+                groups.push(lookaround);
+                if (lookaround) lookaroundDepth++;
+            } else if (ch == ')' && !groups.isEmpty()) {
+                if (groups.pop()) lookaroundDepth--;
+            }
+        }
+        return new KeepSyntax(present, false);
     }
 
     private static boolean hasControlVerbState(String pattern) {
