@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.regex;
 
 import com.ibm.icu.text.UnicodeSet;
+import java.math.BigDecimal;
 
 /*
  * Generated from Perl 5.44's pinned Unicode Character Database by
@@ -18,6 +19,10 @@ final class PerlUnicodeNumericValueData {
 
     private static final String[] CANONICAL_VALUES = {
         "-1/2", "0", "1/320", "1/160", "1/80", "1/64", "1/40", "1/32", "3/80", "3/64", "1/20", "1/16", "1/12", "1/10", "1/9", "1/8", "1/7", "3/20", "1/6", "3/16", "1/5", "1/4", "1/3", "3/8", "2/5", "5/12", "1/2", "7/12", "3/5", "5/8", "2/3", "3/4", "4/5", "5/6", "7/8", "11/12", "1", "3/2", "2", "5/2", "3", "7/2", "4", "9/2", "5", "11/2", "6", "13/2", "7", "15/2", "8", "17/2", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "60", "70", "80", "90", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "2000", "3000", "4000", "5000", "6000", "7000", "8000", "9000", "10000", "20000", "30000", "40000", "50000", "60000", "70000", "80000", "90000", "100000", "200000", "216000", "300000", "400000", "432000", "500000", "600000", "700000", "800000", "900000", "1000000", "10000000", "20000000", "100000000", "1000000000", "10000000000", "1000000000000", "10000000000000000"
+    };
+
+    private static final String[] DECIMAL_ALIASES = {
+        "-5.000e-01", "0.000e+00", "3.125e-03", "6.250e-03", "1.250e-02", "1.562e-02", "2.500e-02", "3.125e-02", "3.750e-02", "4.688e-02", "5.000e-02", "6.250e-02", "8.333e-02", "1.000e-01", "1.111e-01", "1.250e-01", "1.429e-01", "1.500e-01", "1.667e-01", "1.875e-01", "2.000e-01", "2.500e-01", "3.333e-01", "3.750e-01", "4.000e-01", "4.167e-01", "5.000e-01", "5.833e-01", "6.000e-01", "6.250e-01", "6.667e-01", "7.500e-01", "8.000e-01", "8.333e-01", "8.750e-01", "9.167e-01", "1.000e+00", "1.500e+00", "2.000e+00", "2.500e+00", "3.000e+00", "3.500e+00", "4.000e+00", "4.500e+00", "5.000e+00", "5.500e+00", "6.000e+00", "6.500e+00", "7.000e+00", "7.500e+00", "8.000e+00", "8.500e+00", "9.000e+00", "1.000e+01", "1.100e+01", "1.200e+01", "1.300e+01", "1.400e+01", "1.500e+01", "1.600e+01", "1.700e+01", "1.800e+01", "1.900e+01", "2.000e+01", "2.100e+01", "2.200e+01", "2.300e+01", "2.400e+01", "2.500e+01", "2.600e+01", "2.700e+01", "2.800e+01", "2.900e+01", "3.000e+01", "3.100e+01", "3.200e+01", "3.300e+01", "3.400e+01", "3.500e+01", "3.600e+01", "3.700e+01", "3.800e+01", "3.900e+01", "4.000e+01", "4.100e+01", "4.200e+01", "4.300e+01", "4.400e+01", "4.500e+01", "4.600e+01", "4.700e+01", "4.800e+01", "4.900e+01", "5.000e+01", "6.000e+01", "7.000e+01", "8.000e+01", "9.000e+01", "1.000e+02", "2.000e+02", "3.000e+02", "4.000e+02", "5.000e+02", "6.000e+02", "7.000e+02", "8.000e+02", "9.000e+02", "1.000e+03", "2.000e+03", "3.000e+03", "4.000e+03", "5.000e+03", "6.000e+03", "7.000e+03", "8.000e+03", "9.000e+03", "1.000e+04", "2.000e+04", "3.000e+04", "4.000e+04", "5.000e+04", "6.000e+04", "7.000e+04", "8.000e+04", "9.000e+04", "1.000e+05", "2.000e+05", "2.160e+05", "3.000e+05", "4.000e+05", "4.320e+05", "5.000e+05", "6.000e+05", "7.000e+05", "8.000e+05", "9.000e+05", "1.000e+06", "1.000e+07", "2.000e+07", "1.000e+08", "1.000e+09", "1.000e+10", "1.000e+12", "1.000e+16"
     };
 
     private static final long[] NUMERATORS = {
@@ -441,6 +446,7 @@ final class PerlUnicodeNumericValueData {
     };
 
     private static final UnicodeSet[] SETS = buildSets();
+    private static final BigDecimal[] DECIMALS = buildDecimals();
     private static final UnicodeSet ASSIGNED = buildAssignedSet();
     private static final UnicodeSet NAN = new UnicodeSet(0, 0x10ffff)
             .removeAll(ASSIGNED).freeze();
@@ -455,6 +461,23 @@ final class PerlUnicodeNumericValueData {
 
     static long numerator(int index) {
         return NUMERATORS[index];
+    }
+
+    static short valueForDecimal(BigDecimal decimal) {
+        int low = 0;
+        int high = DECIMALS.length - 1;
+        while (low <= high) {
+            int middle = (low + high) >>> 1;
+            int comparison = DECIMALS[middle].compareTo(decimal);
+            if (comparison < 0) {
+                low = middle + 1;
+            } else if (comparison > 0) {
+                high = middle - 1;
+            } else {
+                return (short) middle;
+            }
+        }
+        return INVALID;
     }
 
     static int denominator(int index) {
@@ -514,6 +537,17 @@ final class PerlUnicodeNumericValueData {
             sets[value] = set.freeze();
         }
         return sets;
+    }
+
+    private static BigDecimal[] buildDecimals() {
+        BigDecimal[] decimals = new BigDecimal[DECIMAL_ALIASES.length];
+        for (int index = 0; index < decimals.length; index++) {
+            decimals[index] = new BigDecimal(DECIMAL_ALIASES[index]);
+            if (index > 0 && decimals[index - 1].compareTo(decimals[index]) >= 0) {
+                throw new IllegalStateException("Numeric_Value decimals are not sorted");
+            }
+        }
+        return decimals;
     }
 
     private static UnicodeSet buildAssignedSet() {

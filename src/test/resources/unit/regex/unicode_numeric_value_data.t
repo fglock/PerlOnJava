@@ -35,7 +35,11 @@ sub matches_property {
     ok(matches_property('Numeric_Value: -0000001/0000002', 0x0F33),
         'leading loose whitespace is accepted before a rational value');
     ok(matches_property('nv=8.333e-02', 0x109F6),
-        'a sufficiently precise decimal approximation matches one twelfth');
+        'the pinned decimal alias matches one twelfth');
+    ok(matches_property('nv=0.1667', 0x2159),
+        'the pinned rounded decimal alias matches one sixth');
+    ok(!defined(compile_property('nv=0.1668')),
+        'a nearby decimal outside the pinned aliases is rejected');
 
     ok(matches_property('nv=10000000000000000', 0x4EAC),
         'maximum Unicode numeric value fits an exact integer');
@@ -53,6 +57,8 @@ sub matches_property {
         'wildcard value matches the canonical rational spelling');
     ok(matches_property('nv=:\A300\z:', 0x1011B),
         'alternate wildcard delimiter matches an integer value');
+    ok(matches_property('nv=:\Anan\z:', 0x0041),
+        'wildcard value matches the lowercase NaN alias');
     ok(!defined(compile_property('Is_Nv=/\A1\z/')),
         'Is-prefixed property names reject wildcard values');
     ok(!defined(compile_property('nv=*')), 'bare wildcard marker is rejected');

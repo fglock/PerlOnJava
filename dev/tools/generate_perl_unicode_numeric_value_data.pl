@@ -136,7 +136,10 @@ for my $line (split /\n/, $data_text) {
 
     if (!exists $value_index{$canonical}) {
         $value_index{$canonical} = scalar @values;
-        push @values, [$canonical, 0 + $numerator, 0 + $denominator];
+        my $perl_decimal_alias = sprintf '%.3e', $numerator / $denominator;
+        push @values, [
+            $canonical, 0 + $numerator, 0 + $denominator, $perl_decimal_alias
+        ];
     }
     push @ranges, [$first, $last, $value_index{$canonical}];
     $record_count++;
@@ -158,6 +161,15 @@ die "Expected 144 distinct decimal spellings, found " . scalar(keys %decimal_val
 my %decimal_canonical = map { $decimal_value{$_} => 1 } keys %decimal_value;
 die "Decimal spellings do not map one-to-one to the 144 exact values\n"
     unless keys(%decimal_canonical) == 144;
+my %perl_decimal_for = map { $_->[0] => $_->[3] } @values;
+for my $expected (
+    ['1/12', '8.333e-02'], ['1/64', '1.562e-02'],
+    ['1/7', '1.429e-01'], ['1/6', '1.667e-01'], ['3/64', '4.688e-02'],
+) {
+    die "Unexpected Perl decimal alias for $expected->[0]: "
+            . ($perl_decimal_for{$expected->[0]} // '<missing>') . "\n"
+        unless ($perl_decimal_for{$expected->[0]} // '') eq $expected->[1];
+}
 
 @ranges = sort { $a->[0] <=> $b->[0] } @ranges;
 for my $index (0 .. $#ranges) {
@@ -204,6 +216,7 @@ print <<'HEADER';
 package org.perlonjava.runtime.regex;
 
 import com.ibm.icu.text.UnicodeSet;
+import java.math.BigDecimal;
 
 /*
  * Generated from Perl 5.44's pinned Unicode Character Database by
@@ -222,6 +235,9 @@ print "    static final String UNICODE_VERSION = \"$expected_version\";\n";
 print "    static final short INVALID = -1;\n\n";
 print "    private static final String[] CANONICAL_VALUES = {\n        ";
 print join(', ', map { qq{"$_->[0]"} } @values);
+print "\n    };\n\n";
+print "    private static final String[] DECIMAL_ALIASES = {\n        ";
+print join(', ', map { qq{"$_->[3]"} } @values);
 print "\n    };\n\n";
 print "    private static final long[] NUMERATORS = {\n        ";
 print join(', ', map { "$_->[1]L" } @values);
@@ -243,6 +259,7 @@ print <<'FOOTER';
     };
 
     private static final UnicodeSet[] SETS = buildSets();
+    private static final BigDecimal[] DECIMALS = buildDecimals();
     private static final UnicodeSet ASSIGNED = buildAssignedSet();
     private static final UnicodeSet NAN = new UnicodeSet(0, 0x10ffff)
             .removeAll(ASSIGNED).freeze();
@@ -257,6 +274,23 @@ print <<'FOOTER';
 
     static long numerator(int index) {
         return NUMERATORS[index];
+    }
+
+    static short valueForDecimal(BigDecimal decimal) {
+        int low = 0;
+        int high = DECIMALS.length - 1;
+        while (low <= high) {
+            int middle = (low + high) >>> 1;
+            int comparison = DECIMALS[middle].compareTo(decimal);
+            if (comparison < 0) {
+                low = middle + 1;
+            } else if (comparison > 0) {
+                high = middle - 1;
+            } else {
+                return (short) middle;
+            }
+        }
+        return INVALID;
     }
 
     static int denominator(int index) {
@@ -316,6 +350,17 @@ print <<'FOOTER';
             sets[value] = set.freeze();
         }
         return sets;
+    }
+
+    private static BigDecimal[] buildDecimals() {
+        BigDecimal[] decimals = new BigDecimal[DECIMAL_ALIASES.length];
+        for (int index = 0; index < decimals.length; index++) {
+            decimals[index] = new BigDecimal(DECIMAL_ALIASES[index]);
+            if (index > 0 && decimals[index - 1].compareTo(decimals[index]) >= 0) {
+                throw new IllegalStateException("Numeric_Value decimals are not sorted");
+            }
+        }
+        return decimals;
     }
 
     private static UnicodeSet buildAssignedSet() {

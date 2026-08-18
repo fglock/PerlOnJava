@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -80,6 +81,20 @@ class PerlUnicodeNumericValueDataTest {
                 PerlUnicodeNumericValueData.valueForRational(7, 11));
         assertEquals(PerlUnicodeNumericValueData.INVALID,
                 PerlUnicodeNumericValueData.valueForRational(Long.MIN_VALUE, 1));
+    }
+
+    @Test
+    void exposesPinnedPerlDecimalKeywordAliases() {
+        assertEquals(index("1/12"),
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("8.333e-02")));
+        assertEquals(index("1/64"),
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.01562")));
+        assertEquals(index("1/6"),
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.1667")));
+        assertEquals(index("3/64"),
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("4.688e-02")));
+        assertEquals(PerlUnicodeNumericValueData.INVALID,
+                PerlUnicodeNumericValueData.valueForDecimal(new BigDecimal("0.1668")));
     }
 
     @Test
