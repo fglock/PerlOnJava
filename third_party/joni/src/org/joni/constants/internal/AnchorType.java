@@ -47,6 +47,8 @@ public interface AnchorType {
     int NOT_GRAPHEME_BOUNDARY = (1<<18);
     int SENTENCE_BOUNDARY = (1<<19);
     int NOT_SENTENCE_BOUNDARY = (1<<20);
+    int LINE_BOUNDARY = (1<<21);
+    int NOT_LINE_BOUNDARY = (1<<22);
 
     int ALLOWED_IN_LB =     ( LOOK_BEHIND |
                                     LOOK_BEHIND_NOT |
@@ -61,6 +63,8 @@ public interface AnchorType {
                                     NOT_GRAPHEME_BOUNDARY |
                                     SENTENCE_BOUNDARY |
                                     NOT_SENTENCE_BOUNDARY |
+                                    LINE_BOUNDARY |
+                                    NOT_LINE_BOUNDARY |
                                     WORD_BEGIN |
                                     WORD_END );
 
@@ -78,6 +82,8 @@ public interface AnchorType {
                                     NOT_GRAPHEME_BOUNDARY |
                                     SENTENCE_BOUNDARY |
                                     NOT_SENTENCE_BOUNDARY |
+                                    LINE_BOUNDARY |
+                                    NOT_LINE_BOUNDARY |
                                     WORD_BEGIN |
                                     WORD_END );
 }
