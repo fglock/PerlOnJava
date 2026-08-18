@@ -978,6 +978,26 @@ public class UnicodeResolver {
                 || resolvePerlBuiltInPropertyAlias(property) != null;
     }
 
+    /** Returns pinned Perl-property ranges in Joni's native range-array format. */
+    static int[] resolveJoniPropertyRanges(String property) {
+        if (property == null) return null;
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isGeneralCategoryProperty(property.substring(0, assignment))) {
+            return null;
+        }
+        UnicodeSet set = resolvePerlBuiltInPropertyAlias(property);
+        if (set == null) return null;
+
+        int[] ranges = new int[set.getRangeCount() * 2 + 1];
+        ranges[0] = set.getRangeCount();
+        for (int i = 0; i < set.getRangeCount(); i++) {
+            ranges[i * 2 + 1] = set.getRangeStart(i);
+            ranges[i * 2 + 2] = set.getRangeEnd(i);
+        }
+        return ranges;
+    }
+
     private static boolean isPerlSpecialPropertyAlias(String property) {
         return switch (property) {
             case "lb=cr", "lb=CR",

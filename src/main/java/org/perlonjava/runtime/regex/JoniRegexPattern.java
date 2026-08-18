@@ -50,13 +50,22 @@ final class JoniRegexPattern {
             Syntax.RUBY.options & ~(Option.ASCII_RANGE
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable,
-            JoniRegexPattern::resolveNamedCharacter);
+            JoniRegexPattern::resolveNamedCharacter,
+            JoniRegexPattern::resolveCharacterProperty);
 
     private static int resolveNamedCharacter(byte[] bytes, int p, int end,
                                              Encoding encoding) {
         return UnicodeResolver.getCodePointFromName(new String(bytes, p, end - p,
                 encoding == ISO8859_1Encoding.INSTANCE
                         ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8));
+    }
+
+    private static int[] resolveCharacterProperty(byte[] bytes, int p, int end,
+                                                  Encoding encoding) {
+        String property = new String(bytes, p, end - p,
+                encoding == ISO8859_1Encoding.INSTANCE
+                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
+        return UnicodeResolver.resolveJoniPropertyRanges(property);
     }
 
     private final Regex regex;
@@ -218,6 +227,14 @@ final class JoniRegexPattern {
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
             boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
+            boolean joniResolvedProperty = UnicodeResolver.resolveJoniPropertyRanges(
+                    unnegated) != null;
+            if (!userDefined && joniResolvedProperty
+                    && (frontendProperty || scriptExtensions || perlBuiltInAlias)) {
+                translated.append(pattern, i, end + 1);
+                i = end;
+                continue;
+            }
             if ((frontendProperty || scriptExtensions || perlBuiltInAlias)
                     && extendedClassBracketDepth > 0) {
                 translated.append(pattern, i, end + 1);
