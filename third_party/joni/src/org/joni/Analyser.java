@@ -1446,6 +1446,9 @@ final class Analyser extends Parser {
                 min = Math.min(min, acceptLengths.normalMin);
                 max = Math.max(max, acceptLengths.normalMax);
             }
+            if (syntax.op2OptionPerl() && max > 255) {
+                newSyntaxException(PERL_LOOK_BEHIND_LONGER_THAN_255);
+            }
             if (max <= 255) {
                 node.variableLookBehindMin = min;
                 node.variableLookBehindMax = max;
@@ -1458,10 +1461,18 @@ final class Analyser extends Parser {
         int len = getCharLengthTree(node.target);
         switch(returnCode) {
         case 0:
+            if (syntax.op2OptionPerl() && len > 255) {
+                newSyntaxException(PERL_LOOK_BEHIND_LONGER_THAN_255);
+            }
             node.charLength = len;
             break;
         case GET_CHAR_LEN_VARLEN:
             if (!setupBoundedQuantifierLookBehind(node)) {
+                CharLengthRange range = syntax.op2OptionPerl()
+                        ? getCharLengthRange(node.target) : null;
+                if (syntax.op2OptionPerl() && (range == null || range.max > 255)) {
+                    newSyntaxException(PERL_LOOK_BEHIND_LONGER_THAN_255);
+                }
                 newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
             }
             break;
