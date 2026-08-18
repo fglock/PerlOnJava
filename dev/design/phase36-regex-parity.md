@@ -267,11 +267,10 @@ The PR #1042 parity repair ledger is active:
 - The `.=` overload root is complete and pushed as `8e9a45b07`; warning-free
   `make` and JVM/interpreter corpus gates recover all 43 assertions
   (`op/bop.t` +39 and `op/concat2.t` +4) to exact PR #958 parity.
-- Ordinary byte-backed eval decoding has an 8/8 standard-Perl reducer. A
-  runtime context probe proved that the eval-site `unicode_eval` metadata is
-  already correct and reduced the remaining failure to one late byte-source
-  decode condition in `StringParser`; the corrected lane is in warning-free
-  full-build validation before its four-file corpus gate.
+- Ordinary byte-backed eval decoding is complete and pushed as `3f7529f4c`.
+  Its warning-free build, 15/15 focused controls per backend, and four-file
+  imported gate recover nine assertions to exact PR #958 counts with no
+  losses.
 - Named-CV replacement is complete and pushed as `d7e39c808`: duplicate
   `B.pm` constant declarations are removed, named sort comparators resolve and
   snapshot at sort entry, and direct calls follow visible typeglob replacement
@@ -284,10 +283,11 @@ The PR #1042 parity repair ledger is active:
 - Glob identity and qualified `SUPER` error rendering are implemented as
   ordered commits `ebbf41d47` and `8e0b9b379`; their standard-Perl reducers
   are green and warning-free build validation is active.
-- Warning-aware hash interpolation is implemented in an isolated lane with a
-  4/4 standard-Perl reducer. It preserves the source hash name and runtime key
-  only for quoted-string interpolation under lexical `uninitialized`
-  warnings; build and dual-backend validation remain.
+- Warning-aware hash interpolation is complete and pushed as `5303811d1`.
+  It preserves the source hash name and runtime key only for quoted-string
+  interpolation under lexical `uninitialized` warnings. Warning-free `make`,
+  the 6/6 standard/JVM/interpreter reducer, and imported `op/hashwarn.t` 20/20
+  on both backends are green.
 - Foreach active-lexical rebinding remains the final independently owned
   repair root and is under read-only reduction while the tied lane validates.
 - Native branch-reset named/numeric calls are complete and pushed as
