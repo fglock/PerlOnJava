@@ -2,8 +2,10 @@ package org.perlonjava.runtime.regex;
 
 /**
  * Temporary migration policy for comparing the legacy Java-first routing with
- * the canonical Joni matcher. This class and its controls are removed when the
- * Java matching backend is retired.
+ * the canonical Joni matcher. Ordinary lookbehind also remains on Java until
+ * Joni's nested-lookahead admission is complete; other Joni-only constructs in
+ * the same pattern still force Joni. This class and its controls are removed
+ * when the Java matching backend is retired.
  */
 final class RegexBackendPolicy {
     static final String PROPERTY = "jperl.regex.backend";

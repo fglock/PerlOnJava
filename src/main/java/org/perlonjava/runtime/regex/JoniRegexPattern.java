@@ -305,8 +305,6 @@ final class JoniRegexPattern {
                 || pattern.contains("(?(DEFINE)")
                 || pattern.contains("(?(?{=CALL:")
                 || pattern.contains("(?(R")
-                || pattern.contains("(?<=")
-                || pattern.contains("(?<!")
                 || pattern.contains("(?(<")
                 || pattern.contains("(?('")
                 || pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*" )

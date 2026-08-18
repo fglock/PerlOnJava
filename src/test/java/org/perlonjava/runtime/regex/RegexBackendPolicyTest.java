@@ -29,28 +29,33 @@ class RegexBackendPolicyTest {
     }
 
     @Test
-    void defaultModeUsesJavaForOrdinaryPatterns() {
+    void defaultModeTemporarilyUsesJavaForOrdinaryLookbehind() {
         assertFalse(RegexBackendPolicy.useJoni("ordinary"));
+        assertFalse(RegexBackendPolicy.useJoni("(?<=x)y"));
+        assertFalse(RegexBackendPolicy.useJoni("(?<!x)y"));
         assertTrue(RegexBackendPolicy.useJoni("(?&recursive)"));
     }
 
     @Test
-    void autoModeUsesJavaForOrdinaryPatterns() {
+    void autoModeTemporarilyUsesJavaForOrdinaryLookbehind() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "auto");
 
         assertFalse(RegexBackendPolicy.useJoni("ordinary"));
         assertFalse(RegexBackendPolicy.useJoni("\\p{Titlecase}"));
         assertFalse(RegexBackendPolicy.useJoni("\\p{XPosixSpace}"));
+        assertFalse(RegexBackendPolicy.useJoni("(?<=x)y"));
+        assertFalse(RegexBackendPolicy.useJoni("(?<!x)y"));
     }
 
     @Test
-    void autoModeRetainsRequiredAdvancedJoniRouting() {
+    void autoModeRetainsJoniRoutingWhenLookbehindHasJoniOnlyConstructs() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "auto");
 
         assertTrue(RegexBackendPolicy.useJoni("(?{=CALL:0})"));
         assertTrue(RegexBackendPolicy.useJoni("(?{=DYNAMIC:0})"));
-        assertTrue(RegexBackendPolicy.useJoni("(?<=x)"));
         assertTrue(RegexBackendPolicy.useJoni("(*:mark)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<=x)(?{=CALL:0})"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<!x)(*:mark)"));
     }
 
     @Test
@@ -66,6 +71,7 @@ class RegexBackendPolicyTest {
         System.setProperty(RegexBackendPolicy.PROPERTY, "joni");
 
         assertTrue(RegexBackendPolicy.useJoni("ordinary"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<=x)y"));
     }
 
     @Test
