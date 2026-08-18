@@ -55,6 +55,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String UNDEFINED_GROUP_OPTION = "undefined group option";
     String INVALID_POSIX_BRACKET_TYPE = "invalid POSIX bracket type";
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
+    String PERL_LOOK_BEHIND_LONGER_THAN_255 =
+            "Lookbehind longer than 255 not implemented in regex";
     String PERL_KEEP_NOT_PERMITTED_IN_LOOKAROUND =
             "\\K not permitted in lookahead/lookbehind in regex";
     String INVALID_REPEAT_RANGE_PATTERN = "invalid repeat range {lower,upper}";
