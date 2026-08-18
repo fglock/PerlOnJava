@@ -146,6 +146,27 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void passesExactAgePropertiesToJoniWithoutTextExpansion() {
+        String[][] cases = {
+                {"\\p{Age=2.1}", "\u20AC"},
+                {"\\p{In=3.0}", "\u20AC"},
+                {"\\p{Present_In=3.0}", "\u20AC"},
+                {"\\p{Is_Age=6.1}", "\uD83D\uDE00"},
+                {"\\p{Age=Unassigned}", "\uD88D\uDC7A"},
+        };
+
+        for (String[] testCase : cases) {
+            JoniRegexPattern pattern = new JoniRegexPattern(testCase[0], FLAGS);
+            assertEquals(testCase[0], pattern.patternDescription());
+            assertTrue(pattern.matcher(testCase[1], java.util.List.of()).find());
+        }
+
+        JoniRegexPattern wildcard = new JoniRegexPattern(
+                "\\p{Age=:\\AV16_0\\z:}", FLAGS);
+        assertFalse(wildcard.patternDescription().contains("Age="));
+    }
+
+    @Test
     void flattensTranslatedPropertiesInsideOrdinaryCharacterClasses() {
         JoniRegexPattern pattern = new JoniRegexPattern(
                 "[\\p{IsDigit}\\p{IsLower}\\p{IsUpper}]", FLAGS);

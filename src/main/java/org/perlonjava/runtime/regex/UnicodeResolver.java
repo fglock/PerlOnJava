@@ -983,6 +983,7 @@ public class UnicodeResolver {
     static CharacterPropertyResolver.Result resolveJoniProperty(
             String property, boolean inCharacterClass) {
         if (property == null) return null;
+        property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
             return null;
@@ -1007,6 +1008,9 @@ public class UnicodeResolver {
         } else if (PerlUnicodeNumericValueData.isPropertyAlias(name)
                 || PerlUnicodeJoiningGroupData.isPropertyAlias(name)) {
             if (perlNumericWildcardBody(value) != null) return null;
+            caseFold = false;
+        } else if (isPerlAgeProperty(name)) {
+            if (isPerlAgeWildcard(value)) return null;
             caseFold = false;
         } else {
             return null;
@@ -1060,7 +1064,7 @@ public class UnicodeResolver {
     private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
         if (property == null) return null;
 
-        String alias = property.trim();
+        String alias = normalizePerlIsPropertyAssignment(property.trim());
         int assignment = propertyValueDelimiter(alias);
         if (assignment == alias.length() - 1
                 && (PerlUnicodeScriptData.isScriptPropertyAlias(
@@ -1081,6 +1085,8 @@ public class UnicodeResolver {
             }
             return category;
         }
+        UnicodeSet age = resolvePerlAgeProperty(alias, true);
+        if (age != null) return age;
         if (assignment > 0 && assignment < alias.length() - 1
                 && isCanonicalCombiningClassProperty(alias.substring(0, assignment))) {
             UnicodeSet combiningClass = PerlUnicodeCombiningClassData.resolve(
@@ -1722,26 +1728,33 @@ public class UnicodeResolver {
     }
 
     private static String translatePerlAgeProperty(String property, boolean negated) {
-        int delimiter = property.indexOf('=');
-        int colon = property.indexOf(':');
-        if (delimiter < 0 || colon > 0 && colon < delimiter) delimiter = colon;
+        UnicodeSet result = resolvePerlAgeProperty(property, true);
+        return result == null ? null
+                : wrapCharClass(unicodeSetToJavaPattern(result), negated);
+    }
+
+    private static UnicodeSet resolvePerlAgeProperty(
+            String property, boolean allowWildcard) {
+        property = normalizePerlIsPropertyAssignment(property);
+        int delimiter = propertyValueDelimiter(property);
         if (delimiter <= 0 || delimiter == property.length() - 1) return null;
 
-        String name = property.substring(0, delimiter)
-                .replace("_", "").replace("-", "").replace(" ", "");
+        String name = property.substring(0, delimiter);
         boolean exact;
-        if (name.equalsIgnoreCase("Age")) {
+        String looseName = loosePropertyName(name);
+        if (looseName.equals("age")) {
             exact = true;
-        } else if (name.equalsIgnoreCase("In") || name.equalsIgnoreCase("PresentIn")) {
+        } else if (looseName.equals("in") || looseName.equals("presentin")) {
             exact = false;
         } else {
             return null;
         }
 
-        String requested = normalizeUnicodeAgeVersion(property.substring(delimiter + 1));
+        String value = property.substring(delimiter + 1);
+        if (!allowWildcard && isPerlAgeWildcard(value)) return null;
+        String requested = normalizeUnicodeAgeVersion(value);
         if (requested.equalsIgnoreCase("NA") || requested.equalsIgnoreCase("Unassigned")) {
-            return wrapCharClass(
-                    unicodeSetToJavaPattern(PerlUnicodeAgeData.unassignedSet()), negated);
+            return PerlUnicodeAgeData.unassignedSet();
         }
 
         UnicodeSet result = exact
@@ -1750,7 +1763,18 @@ public class UnicodeResolver {
         if (result == null) {
             throw new IllegalArgumentException("Unsupported Unicode age version: " + requested);
         }
-        return wrapCharClass(unicodeSetToJavaPattern(result), negated);
+        return result;
+    }
+
+    private static boolean isPerlAgeProperty(String name) {
+        String looseName = loosePropertyName(name);
+        return looseName.equals("age") || looseName.equals("in")
+                || looseName.equals("presentin");
+    }
+
+    private static boolean isPerlAgeWildcard(String value) {
+        String trimmed = value.trim();
+        return trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:");
     }
 
     private static String normalizeUnicodeAgeVersion(String value) {
