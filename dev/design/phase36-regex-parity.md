@@ -285,8 +285,8 @@ if they expose a semantic defect.
      close the remaining 117 failures without relying on the runner's status
      heuristic or treating optimizer/debug transcripts as semantic parity;
    - the current forced-Joni `reg_mesg.t` gate executes 2,595 assertions and
-     passes 1,692 after malformed `\g` diagnostics; finish typed warning
-     collection, Perl wording/categories, source markers, strict-mode
+     passes 1,694 after malformed backreference diagnostics; finish typed
+     warning collection, Perl wording/categories, source markers, strict-mode
      classification, and fatal-versus-warning behavior in the native frontend
      and source-policy renderer;
    - after those native patches are integrated, refresh all four legs (forced
@@ -303,12 +303,10 @@ if they expose a semantic defect.
    - preserve per-member fold policy in Joni's composed-class AST through union,
      intersection, negation, and nested classes, then remove the corresponding
      adapter translation;
-   - close ASCII-strict multi-character folds and the remaining `/aa` imported
-     owner families before deleting their Java fold routing; the current exact
-     forced-Joni `/aa` envelope executes 837 assertions and passes 833 after
-     strict literal, mixed-class, and scoped mixed-source fold repairs; the four
-     remaining failed assertions report 48 concrete backreference records and
-     10 aggregate summaries, with JVM/interpreter identity;
+   - the exact forced-Joni `/aa` envelope now passes 837/837 on JVM and
+     interpreter, including strict literal, mixed-class, scoped mixed-source,
+     and backreference folds; remove its temporary Java fold routing after the
+     combined 80-file gate confirms no owner-file regression;
    - represent property-value wildcard parsing and diagnostics with a dedicated
      Joni syntax node rather than flattening wildcard behavior into literal
      ranges prematurely;
