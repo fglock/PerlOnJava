@@ -29,22 +29,22 @@ class RegexBackendPolicyTest {
     }
 
     @Test
-    void defaultModeTemporarilyUsesJavaForOrdinaryLookbehind() {
+    void defaultModeRoutesOrdinaryLookbehindToJoni() {
         assertFalse(RegexBackendPolicy.useJoni("ordinary"));
-        assertFalse(RegexBackendPolicy.useJoni("(?<=x)y"));
-        assertFalse(RegexBackendPolicy.useJoni("(?<!x)y"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<=x)y"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<!x)y"));
         assertTrue(RegexBackendPolicy.useJoni("(?&recursive)"));
     }
 
     @Test
-    void autoModeTemporarilyUsesJavaForOrdinaryLookbehind() {
+    void autoModeRoutesOrdinaryLookbehindToJoni() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "auto");
 
         assertFalse(RegexBackendPolicy.useJoni("ordinary"));
         assertFalse(RegexBackendPolicy.useJoni("\\p{Titlecase}"));
         assertFalse(RegexBackendPolicy.useJoni("\\p{XPosixSpace}"));
-        assertFalse(RegexBackendPolicy.useJoni("(?<=x)y"));
-        assertFalse(RegexBackendPolicy.useJoni("(?<!x)y"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<=x)y"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<!x)y"));
     }
 
     @Test
@@ -59,11 +59,11 @@ class RegexBackendPolicyTest {
     }
 
     @Test
-    void autoModeTemporarilyUsesJavaForBranchResetSubroutineCalls() {
+    void autoModeRoutesBranchResetSubroutineCallsToJoni() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "auto");
 
-        assertFalse(RegexBackendPolicy.useJoni("(?|(?<digit>1)|(?<digit>2))(?&digit)"));
-        assertFalse(RegexBackendPolicy.useJoni("(?|(1)|(2))(?1)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?|(?<digit>1)|(?<digit>2))(?&digit)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?|(1)|(2))(?1)"));
         assertTrue(RegexBackendPolicy.useJoni("(?<digit>1)(?&digit)"));
         assertTrue(RegexBackendPolicy.useJoni(
                 "(?|(?<digit>1)|(?<digit>2))(?&digit)(?{=CALL:0})"));
