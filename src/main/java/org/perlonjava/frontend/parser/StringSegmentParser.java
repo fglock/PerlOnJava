@@ -1480,8 +1480,9 @@ public abstract class StringSegmentParser {
      */
     void handleUnicodeNameEscape() {
         if (!"{".equals(TokenUtils.peekChar(parser))) {
-            // Not a Unicode name escape, treat as literal
-            appendToCurrentSegment("N");
+            // In a regex, plain \N is Perl's non-newline atom. Keep the escape
+            // intact for the regex backend; quoted strings still treat it as N.
+            appendToCurrentSegment(isRegex ? "\\N" : "N");
             return;
         }
 
@@ -1498,6 +1499,12 @@ public abstract class StringSegmentParser {
         if ("}".equals(chr)) {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
+            if (isRegex && isPlainNonNewlineInterval(name)) {
+                // A brace immediately following plain \N can be its quantifier,
+                // not a named character. Leave both pieces for the regex lexer.
+                appendToCurrentSegment("\\N{" + name + "}");
+                return;
+            }
             NamedCharacterExpansion.SourceMode sourceMode =
                     ctx.compilerOptions.isByteStringSource
                             || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
@@ -1518,7 +1525,7 @@ public abstract class StringSegmentParser {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
-                        parser.throwError(expansion.diagnostic());
+                        throwNamedCharacterDiagnostic(expansion.diagnostic());
                     }
                 }
                 appendToCurrentSegment("\\N{" + name + "}");
@@ -1528,16 +1535,24 @@ public abstract class StringSegmentParser {
                     NamedCharacterExpansion.resolve(name, sourceMode);
             if (expansion.resolved()) {
                 appendToCurrentSegment(expansion.sequence());
-            } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
-                parser.throwError(expansion.diagnostic());
             } else {
-                // Preserve the historical literal fallback when no standard
-                // name or lexical translator resolves this escape.
-                appendToCurrentSegment("N{" + name + "}");
+                throwNamedCharacterDiagnostic(expansion.diagnostic());
             }
         } else {
             throwMissingNamedCharacterBraceDiagnostic();
         }
+    }
+
+    private boolean isPlainNonNewlineInterval(String contents) {
+        return contents.matches("(?:[0-9]+(?:,[0-9]*)?|,[0-9]+)");
+    }
+
+    private void throwNamedCharacterDiagnostic(String diagnostic) {
+        int errorIndex = this.tokenIndex;
+        var location = ctx.errorUtil.getSourceLocationAccurate(errorIndex);
+        throw new PerlParserException(diagnostic
+                + " at " + location.fileName() + " line " + location.lineNumber()
+                + ", within " + (isRegex ? "pattern" : "string") + "\n");
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {

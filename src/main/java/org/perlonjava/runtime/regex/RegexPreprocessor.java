@@ -60,7 +60,6 @@ public class RegexPreprocessor {
     static int captureGroupCount;
     static boolean deferredUnicodePropertyEncountered;
     static boolean inlinePFlagEncountered;
-    static boolean branchResetEncountered;
     /**
      * Tracks named capture groups already emitted in the current pattern.
      * Used to detect duplicate names like `(?<x>a)|(?<x>b)` (legal in Perl,
@@ -99,10 +98,6 @@ public class RegexPreprocessor {
         return inlinePFlagEncountered;
     }
 
-    static boolean hadBranchReset() {
-        return branchResetEncountered;
-    }
-
     /**
      * Preprocesses a given regex string to make it compatible with Java's regex engine.
      * This involves handling various constructs and escape sequences that Java does not
@@ -134,7 +129,6 @@ public class RegexPreprocessor {
         captureGroupCount = 0;
         deferredUnicodePropertyEncountered = false;
         inlinePFlagEncountered = false;
-        branchResetEncountered = false;
         seenNamedCaptures.clear();
         emittedNamedCaptures.clear();
         duplicateNameCounter = 0;
@@ -1107,16 +1101,6 @@ public class RegexPreprocessor {
             } else if (c3 == '\\') {
                 // (?\...) is not recognized - marker should be after \
                 regexError(s, offset + 3, "Sequence (?\\...) not recognized");
-            } else if (c3 == '<' && c4 == '=') {
-                // Positive lookbehind (?<=...)
-                validateLookbehindLength(s, offset);
-                sb.append("(?<=");
-                offset = handleRegex(s, offset + 4, sb, regexFlags, true);
-            } else if (c3 == '<' && c4 == '!') {
-                // Negative lookbehind (?<!...)
-                validateLookbehindLength(s, offset);
-                sb.append("(?<!");
-                offset = handleRegex(s, offset + 4, sb, regexFlags, true);
             } else if (c3 == '<' && (isAlphabetic(c4) || c4 == '_')) {
                 // Handle named capture (?<name> ... ) - name can start with letter or underscore
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
@@ -1154,9 +1138,6 @@ public class RegexPreprocessor {
                 // Atomic group (?>...) - non-backtracking group
                 sb.append("(?>");
                 offset = handleRegex(s, offset + 3, sb, regexFlags, true);
-            } else if (c3 == '|') {
-                // Handle (?|...) branch reset groups
-                offset = handleBranchReset(s, offset, length, sb, regexFlags);
             } else if (Character.isDigit(c3)) {
                 // Recursive subpattern reference (?1), (?2), etc.
                 // These refer to the subpattern with that number and are recursive
@@ -1243,150 +1224,6 @@ public class RegexPreprocessor {
             return java.util.Collections.singletonList(encodedName);
         }
         return emitted;
-    }
-
-    /**
-     * Handles branch reset groups (?|alt1|alt2|alt3)
-     * <p>
-     * Branch reset groups reset capture group numbering for each alternative.
-     * In Perl, (?|(a)|(b)) means both alternatives capture to $1.
-     * <p>
-     * Phase 1 Implementation: Converts to non-capturing group with alternatives.
-     * This allows compilation and works for same-structure alternatives.
-     * Full runtime remapping would be needed for perfect Perl emulation.
-     *
-     * @param s          The regex string
-     * @param offset     Current position (at '(' of '(?|')
-     * @param length     Length of regex string
-     * @param sb         StringBuilder for output
-     * @param regexFlags Regex flags
-     * @return New offset after processing the branch reset group
-     */
-    private static int handleBranchReset(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
-        // Mark that this pattern uses branch reset
-        branchResetEncountered = true;
-        
-        // Save the starting group count
-        int startGroupCount = captureGroupCount;
-
-        // Skip past '(?|'
-        offset += 3;
-
-        // First pass: collect raw alternative strings
-        java.util.List<String> rawAlternatives = new java.util.ArrayList<>();
-        StringBuilder altSb = new StringBuilder();
-        int parenDepth = 1; // We're inside the (?| already
-        boolean inEscape = false;
-        boolean inCharClass = false;
-
-        while (offset < length && parenDepth > 0) {
-            char c = s.charAt(offset);
-
-            if (inEscape) {
-                altSb.append(c);
-                inEscape = false;
-                offset++;
-                continue;
-            }
-
-            if (c == '\\') {
-                altSb.append(c);
-                inEscape = true;
-                offset++;
-                continue;
-            }
-
-            if (inCharClass) {
-                altSb.append(c);
-                if (c == ']') {
-                    inCharClass = false;
-                }
-                offset++;
-                continue;
-            }
-
-            if (c == '[') {
-                altSb.append(c);
-                inCharClass = true;
-                offset++;
-                continue;
-            }
-
-            if (c == '(') {
-                parenDepth++;
-                altSb.append(c);
-                offset++;
-                continue;
-            }
-
-            if (c == ')') {
-                parenDepth--;
-                if (parenDepth == 0) {
-                    // End of branch reset group - save last alternative
-                    rawAlternatives.add(altSb.toString());
-                    break;
-                }
-                altSb.append(c);
-                offset++;
-                continue;
-            }
-
-            if (c == '|' && parenDepth == 1) {
-                // End of this alternative, start of next
-                rawAlternatives.add(altSb.toString());
-                altSb = new StringBuilder();
-                offset++;
-                continue;
-            }
-
-            // Regular character
-            altSb.append(c);
-            offset++;
-        }
-
-        if (parenDepth != 0) {
-            regexError(s, offset, "Unmatched ( in branch reset group");
-        }
-
-        // Second pass: process each alternative and track capture counts
-        java.util.List<String> processedAlternatives = new java.util.ArrayList<>();
-        java.util.List<Integer> captureCounts = new java.util.ArrayList<>();
-
-        for (String rawAlt : rawAlternatives) {
-            // Reset capture count for this alternative
-            captureGroupCount = startGroupCount;
-
-            // Process this alternative through handleRegex
-            StringBuilder processedAlt = new StringBuilder();
-            handleRegex(rawAlt, 0, processedAlt, regexFlags, false);
-
-            processedAlternatives.add(processedAlt.toString());
-            captureCounts.add(captureGroupCount - startGroupCount);
-        }
-
-        // Find the maximum capture count across all alternatives
-        int maxCaptures = 0;
-        for (int count : captureCounts) {
-            if (count > maxCaptures) {
-                maxCaptures = count;
-            }
-        }
-
-        // Set the final capture group count to start + max captures
-        captureGroupCount = startGroupCount + maxCaptures;
-
-        // Build the output: (?:alt1|alt2|alt3)
-        // This is a non-capturing wrapper with all alternatives
-        // Note: We don't append the closing ')' here - the caller (handleParentheses) will do that
-        sb.append("(?:");
-        for (int i = 0; i < processedAlternatives.size(); i++) {
-            if (i > 0) {
-                sb.append('|');
-            }
-            sb.append(processedAlternatives.get(i));
-        }
-
-        return offset;
     }
 
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
@@ -1568,29 +1405,6 @@ public class RegexPreprocessor {
         throw new PerlCompilerException(errMsg);
     }
 
-    /**
-     * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
-     */
-    private static void validateLookbehindLength(String s, int offset) {
-        // System.err.println("DEBUG: validateLookbehindLength called with string length " + s.length());
-        // System.err.println("DEBUG: String codepoints: ");
-        // s.codePoints().forEach(cp -> System.err.printf("U+%04X ", cp));
-        // System.err.println();
-
-        int start = offset + 4; // Skip past (?<= or (?<!
-        // A recursive subpattern has no finite maximum that this backend can
-        // prove. Perl reports this through its over-255 lookbehind diagnostic.
-        if (s.indexOf("(?&", start) >= 0) {
-            throw new PerlJavaUnimplementedException(
-                    "Lookbehind longer than 255 not implemented in regex m/" + s + "/");
-        }
-        int maxLength = calculateMaxLength(s, start);
-
-        if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more
-            throw new PerlJavaUnimplementedException("Lookbehind longer than 255 not implemented in regex m/" + s + "/");
-        }
-    }
-
     static void regexErrorSimple(String s, String errMsg) {
         throw new PerlCompilerException(errMsg + " in regex m/" + s + "/");
     }
@@ -1652,125 +1466,6 @@ public class RegexPreprocessor {
         return "warn".equals(
                 GlobalVariable.getGlobalHash("main::ENV")
                         .get("JPERL_UNIMPLEMENTED").toString());
-    }
-
-    /**
-     * Calculates the maximum length a pattern can match.
-     * Returns -1 if the pattern can match unlimited length.
-     */
-    private static int calculateMaxLength(String pattern, int start) {
-        int pos = start;
-        int totalLength = 0;
-        int depth = 1; // We're inside the lookbehind parentheses
-
-        while (pos < pattern.length() && depth > 0) {
-            char ch = pattern.charAt(pos);
-
-            if (ch == '(') {
-                depth++;
-                pos++;
-            } else if (ch == ')') {
-                depth--;
-                if (depth == 0) break;
-                pos++;
-            } else if (ch == '\\' && pos + 1 < pattern.length()) {
-                // Handle escape sequences
-                pos += 2;
-                totalLength++;
-            } else if (ch == '[') {
-                // A character class inside lookbehind has fixed width 1.
-                // Skip over its contents so literal braces like [${FOO}]
-                // are not misread as {n,m} quantifiers.
-                pos++;
-                boolean inEscape = false;
-                boolean first = true;
-                while (pos < pattern.length()) {
-                    char cc = pattern.charAt(pos);
-                    if (inEscape) {
-                        inEscape = false;
-                        pos++;
-                        first = false;
-                        continue;
-                    }
-                    if (cc == '\\') {
-                        inEscape = true;
-                        pos++;
-                        first = false;
-                        continue;
-                    }
-                    if (cc == ']' && !first) {
-                        pos++;
-                        break;
-                    }
-                    if (cc == '^' && first) {
-                        pos++;
-                        first = false;
-                        continue;
-                    }
-                    pos++;
-                    first = false;
-                }
-                totalLength++;
-            } else if (ch == '.') {
-                // Check if followed by * or +
-                if (pos + 1 < pattern.length()) {
-                    char next = pattern.charAt(pos + 1);
-                    if (next == '*' || next == '+') {
-                        return -1; // Unlimited length
-                    }
-                }
-                totalLength++;
-                pos++;
-            } else if (ch == '*' || ch == '+') {
-                return -1; // Previous element can repeat unlimited times
-            } else if (ch == '?') {
-                // Handle special case of (? which might be a group
-                if (pos + 1 < pattern.length() && pattern.charAt(pos + 1) == '&') {
-                    // This is (?&...) which is a subroutine call
-                    return -1; // Can match unlimited
-                }
-                pos++;
-            } else if (ch == '{') {
-                // Handle {n,m} quantifiers
-                int endBrace = pattern.indexOf('}', pos);
-                if (endBrace > pos && isValidQuantifierAt(pattern, pos)) {
-                    String quantifier = pattern.substring(pos + 1, endBrace);
-                    int multiplier = parseQuantifierMax(quantifier);
-                    if (multiplier == -1) {
-                        return -1; // Unlimited
-                    }
-                    // The quantifier applies to the immediately preceding atom
-                    totalLength = totalLength - 1 + multiplier;
-                    pos = endBrace + 1;
-                } else {
-                    totalLength++;
-                    pos++;
-                }
-            } else {
-                // Regular character
-                totalLength++;
-                pos++;
-            }
-        }
-
-        return totalLength;
-    }
-
-    /**
-     * Parses a quantifier like "200", "0,255", "1000" and returns the maximum count.
-     * Returns -1 if unbounded (e.g., "5,").
-     */
-    private static int parseQuantifierMax(String quantifier) {
-        quantifier = quantifier.trim();
-        if (quantifier.contains(",")) {
-            String[] parts = quantifier.split(",");
-            if (parts.length == 1 || parts[1].trim().isEmpty()) {
-                return -1; // {n,} is unbounded
-            }
-            return Integer.parseInt(parts[1].trim());
-        } else {
-            return Integer.parseInt(quantifier);
-        }
     }
 
     private static int findClosingBrace(String s, int start, int length) {

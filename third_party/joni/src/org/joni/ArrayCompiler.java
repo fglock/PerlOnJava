@@ -977,6 +977,9 @@ final class ArrayCompiler extends Compiler {
         case EncloseType.ABSENT:
             len = OPSize.PUSH_ABSENT_POS + OPSize.ABSENT + tlen + OPSize.ABSENT_END;
             break;
+        case EncloseType.DEFINE:
+            len = OPSize.JUMP + tlen;
+            break;
         default:
             newInternalException(PARSER_BUG);
             return 0; // not reached
@@ -1137,6 +1140,11 @@ final class ArrayCompiler extends Compiler {
             addOpcodeRelAddr(OPCode.ABSENT, len + OPSize.ABSENT_END);
             compileTree(node.target);
             addOpcode(OPCode.ABSENT_END);
+            break;
+
+        case EncloseType.DEFINE:
+            addOpcodeRelAddr(OPCode.JUMP, compileLengthTree(node.target));
+            compileTree(node.target);
             break;
 
         default:

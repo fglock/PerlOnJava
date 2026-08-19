@@ -419,6 +419,9 @@ final class Analyser extends Parser {
                 info = quantifiersMemoryInfo(en.target);
                 break;
 
+            case EncloseType.DEFINE:
+                break;
+
             default:
                 break;
             } // inner switch
@@ -540,6 +543,7 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseType.ABSENT:
+            case EncloseType.DEFINE:
                 break;
             } // inner switch
             break;
@@ -653,6 +657,7 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseType.ABSENT:
+            case EncloseType.DEFINE:
                 break;
             } // inner switch
             break;
@@ -767,6 +772,7 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseType.ABSENT:
+            case EncloseType.DEFINE:
                 break;
             } // inner switch
             break;
@@ -1018,6 +1024,7 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseType.ABSENT:
+            case EncloseType.DEFINE:
                 break;
             } // inner switch
             break;
@@ -1315,16 +1322,32 @@ final class Analyser extends Parser {
         EncloseNode en = cn.lexicalTarget != null
                 ? cn.lexicalTarget
                 : env.memNodes[cn.groupNum];
-        if (en == null) newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
+        if (en == null) {
+            if (syntax.op2OptionPerl()) {
+                newValueException(PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP);
+            }
+            newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
+        }
         // Perl subroutine calls do not replace captures already visible in the
-        // caller. Reused branch-reset numbers need the existing snapshot path.
-        if (cn.lexicalTarget == null && env.isMultiplexMemNode(cn.groupNum)) {
+        // caller. Reused branch-reset numbers and DEFINE-only groups need the
+        // existing call-frame snapshot path.
+        if ((cn.lexicalTarget == null && env.isMultiplexMemNode(cn.groupNum))
+                || (isInsideDefine(en) && !isInsideDefine(cn))) {
             cn.setRecursion();
         }
         en.setCalled();
         cn.setTarget(en);
         env.btMemStart = BitStatus.bsOnAt(env.btMemStart, cn.groupNum);
         cn.unsetAddrList = env.unsetAddrList;
+    }
+
+    private static boolean isInsideDefine(Node node) {
+        for (Node current = node.parent; current != null; current = current.parent) {
+            if (current instanceof EncloseNode en && en.type == EncloseType.DEFINE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     protected final void setupSubExpCall(Node node) {
@@ -1382,6 +1405,9 @@ final class Analyser extends Parser {
                         NameEntry ne = regex.nameToGroupNumbers(cn.name, cn.nameP, cn.nameEnd);
 
                         if (ne == null) {
+                            if (syntax.op2OptionPerl()) {
+                                newValueException(PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP);
+                            }
                             newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
                         } else if (ne.backNum > 1 && !syntax.allowMultiplexDefinitionNameCall()) {
                             newValueException(MULTIPLEX_DEFINITION_NAME_CALL, cn.nameP, cn.nameEnd);
@@ -1647,6 +1673,11 @@ final class Analyser extends Parser {
         case NodeType.ENCLOSE: {
             EncloseNode enclose = (EncloseNode)node;
             if (enclose.type == EncloseType.ABSENT) return null;
+            if (enclose.type == EncloseType.DEFINE) {
+                AcceptLengthInfo info = new AcceptLengthInfo();
+                info.addNormal(0, 0);
+                return info;
+            }
             return getAcceptLengthInfo(enclose.target);
         }
         case NodeType.ANCHOR: {
@@ -1710,6 +1741,7 @@ final class Analyser extends Parser {
         case NodeType.ENCLOSE: {
             EncloseNode enclose = (EncloseNode)node;
             if (enclose.type == EncloseType.ABSENT) return null;
+            if (enclose.type == EncloseType.DEFINE) return new CharLengthRange(0, 0);
             return getCharLengthRange(enclose.target);
         }
         case NodeType.ANCHOR:
@@ -2481,6 +2513,10 @@ final class Analyser extends Parser {
             case EncloseType.ABSENT:
                 setupTree(en.target, state);
                 break;
+
+            case EncloseType.DEFINE:
+                setupTree(en.target, state);
+                break;
             } // inner switch
             break;
 
@@ -2827,6 +2863,10 @@ final class Analyser extends Parser {
 
             case EncloseType.ABSENT:
                 opt.length.set(0, MinMaxLen.INFINITE_DISTANCE);
+                break;
+
+            case EncloseType.DEFINE:
+                opt.length.set(0, 0);
                 break;
             } // inner switch
             break;
