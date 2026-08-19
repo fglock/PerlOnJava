@@ -1049,6 +1049,7 @@ final class JoniRegexPattern {
         private int regionStart;
         private int regionEnd;
         private int nextStart;
+        private int consumedStart = -1;
         private int globalPosition = -1;
         private boolean matched;
         private int committedLastClosedCapture = -1;
@@ -1105,6 +1106,7 @@ final class JoniRegexPattern {
                 matcher.setCalloutHandler(calloutHandler);
             }
             int result;
+            boolean directMatch = globalPosition < 0 && anchored;
             try {
                 if (globalPosition >= 0) {
                     result = matcher.search(charToByte[globalPosition], charToByte[nextStart],
@@ -1126,9 +1128,11 @@ final class JoniRegexPattern {
             }
             if (calloutHandler != null) calloutHandler.finish(matched);
             if (!matched) {
+                consumedStart = -1;
                 committedLastClosedCapture = -1;
                 return false;
             }
+            consumedStart = directMatch ? nextStart : toCharOffset(result);
             captures = Region.newRegion(regex.numberOfCaptures() + 1);
             for (int group = 0; group <= regex.numberOfCaptures(); group++) {
                 captures.setBeg(group, matcher.captureBegin(group));
@@ -1142,7 +1146,7 @@ final class JoniRegexPattern {
             }
             int start = start();
             int end = end();
-            nextStart = end > start ? end : advanceCodePoint(end);
+            nextStart = end > consumedStart ? end : advanceCodePoint(end);
             return true;
         }
 
@@ -1151,6 +1155,7 @@ final class JoniRegexPattern {
             regionStart = Math.max(0, Math.min(start, input.length()));
             regionEnd = Math.max(regionStart, Math.min(end, input.length()));
             nextStart = regionStart;
+            consumedStart = -1;
             matched = false;
         }
 
@@ -1163,6 +1168,7 @@ final class JoniRegexPattern {
             return true;
         }
         @Override public int start() { return toCharOffset(matcher.getBegin()); }
+        @Override public int consumedStart() { return consumedStart; }
         @Override public int end() { return toCharOffset(matcher.getEnd()); }
         @Override public int start(int index) { return groupOffset(index, true); }
         @Override public int end(int index) { return groupOffset(index, false); }

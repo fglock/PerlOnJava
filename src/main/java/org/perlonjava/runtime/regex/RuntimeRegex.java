@@ -2162,7 +2162,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // If \G is used, ensure the match starts at the expected position.
                 // When pos() is undefined, \G anchors at 0 (the default startPos).
                 if (regex.useGAssertion && !nativeGlobalPosition
-                        && matcher.start() != startPos) {
+                        && matcher.consumedStart() != startPos) {
                     break;
                 }
 
@@ -2202,8 +2202,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (regex.regexFlags.isGlobalMatch()) {
                     // Update the position for the next match
                     int matchStart = matcher.start();
+                    int consumedStart = matcher.consumedStart();
                     int matchEnd = matcher.end();
-                    boolean zeroLengthMatch = matchEnd == matchStart;
+                    boolean zeroLengthMatch = matchEnd == consumedStart;
                     boolean forcedAdvance = false;
 
                     // Detect zero-length match that would cause infinite loop
@@ -2772,7 +2773,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 ? retryMatcher.findNotEmpty()
                 : retryMatcher.find();
         return found
-                && retryMatcher.start() == startPos
+                && retryMatcher.consumedStart() == startPos
                 && retryMatcher.end() > startPos
                 ? retryMatcher : null;
     }
@@ -3029,7 +3030,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     break;
                 }
 
-                if (matcher.end() > matcher.start()) {
+                if (matcher.end() > matcher.consumedStart()) {
                     searchStart = matcher.end();
                     globalPosition = searchStart;
                     continue;
