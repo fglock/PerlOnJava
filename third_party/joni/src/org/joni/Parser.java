@@ -1145,7 +1145,11 @@ class Parser extends Lexer {
                         returnCode = 0;
                         return node;
                     }
-                    if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
+                    if (!left()) {
+                        newSyntaxException(syntax.op2OptionPerl()
+                                ? PERL_OPTION_GROUP_NOT_TERMINATED
+                                : END_PATTERN_IN_GROUP);
+                    }
                     fetch();
                 } // while
 
