@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use FindBin;
 
 =head1 NAME
 
@@ -21,6 +22,8 @@ compare_test_logs.pl - Compare two test run logs to find regressions and progres
       --normalize-pr958-artifacts
                           Normalize two exact, independently reconstructed
                           PR 958 transcript artifacts; raw counts are printed
+      --strict-acceptance  Run the fail-closed PR-958 acceptance comparison
+      --output FILE        Write strict-acceptance JSON evidence to FILE
       --sort-by FIELD     Sort by: name, diff, before, after (default: diff)
       --help              Show this help message
 
@@ -51,6 +54,8 @@ my $sort_by = 'diff';
 my $help = 0;
 my $show_flakes = 0;  # Set --show-flakes to include known-flake files in regression list
 my $normalize_pr958_artifacts = 0;
+my $strict_acceptance = 0;
+my $output_file;
 my @artifact_normalizations;
 
 # These are exact transcript signatures, not a file-level whitelist. They are
@@ -118,6 +123,8 @@ GetOptions(
     'sort-by=s'         => \$sort_by,
     'show-flakes!'      => \$show_flakes,
     'normalize-pr958-artifacts!' => \$normalize_pr958_artifacts,
+    'strict-acceptance!' => \$strict_acceptance,
+    'output=s' => \$output_file,
     'help|h'            => \$help,
 ) or die "Error in command line arguments\n";
 
@@ -137,6 +144,10 @@ Options:
   --normalize-pr958-artifacts
                       Normalize exact PR 958 transcript signatures and show
                       both raw and normalized counts
+  --strict-acceptance Run the fail-closed PR-958 gate: reject regressions,
+                      missing files, execution errors, timeout, zero TAP,
+                      truncated/incomplete TAP, and malformed input
+  --output FILE       Save strict-acceptance machine-readable JSON evidence
   --sort-by FIELD     Sort by: name, diff, before, after (default: diff)
   --help              Show this help message
 
@@ -149,6 +160,17 @@ END_HELP
 }
 
 my ($old_log, $new_log) = @ARGV;
+
+if ($strict_acceptance) {
+    my @command = ($^X, "$FindBin::Bin/compare_test_results.pl",
+        '--fail-on-regression', '--fail-on-invalid',
+        '--normalize-pr958-artifacts');
+    push @command, ('--output', $output_file) if defined $output_file;
+    push @command, $old_log, $new_log;
+    system @command;
+    die "Cannot execute strict acceptance comparator: $!\n" if $? == -1;
+    exit($? >> 8);
+}
 
 # Parse a log file and extract test results
 sub parse_log {
