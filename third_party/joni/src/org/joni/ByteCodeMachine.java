@@ -637,8 +637,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                             && i == completed.frame.getCallFrameNum()
                             && callerCaptures[i] != INVALID_INDEX
                             && callerCaptures[captureCount + i] != INVALID_INDEX;
+                    boolean enclosingCallerCapture = callerCaptures != null
+                            && callerCaptures[i] != INVALID_INDEX
+                            && callerCaptures[captureCount + i] == INVALID_INDEX
+                            && captureClosedAfterReturn(i, completed.returnIndex);
                     int me = repeatStk[memEndStk + i];
-                    if (preserveCallerCapture) {
+                    if (preserveCallerCapture || enclosingCallerCapture) {
                         region.setBeg(i, captureBegin(i));
                         region.setEnd(i, captureEnd(i));
                     } else if (me != INVALID_INDEX) {
@@ -3076,7 +3080,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         checkCapture(capture);
         if (capture == 0) return sstart - str;
         int value = visibleCapturePointer(capture, true);
-        if (value == INVALID_INDEX) return Region.REGION_NOTPOS;
+        if (value == INVALID_INDEX) {
+            int committed = committedCaptureOffset(capture, true);
+            return committed;
+        }
         return (bsAt(regex.btMemStart, capture) ? stack[value].getMemPStr() : value) - str;
     }
 
@@ -3085,8 +3092,26 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         checkCapture(capture);
         if (capture == 0) return s - str;
         int value = visibleCapturePointer(capture, false);
-        if (value == INVALID_INDEX) return Region.REGION_NOTPOS;
+        if (value == INVALID_INDEX) {
+            int committed = committedCaptureOffset(capture, false);
+            return committed;
+        }
         return (bsAt(regex.btMemEnd, capture) ? stack[value].getMemPStr() : value) - str;
+    }
+
+    private int committedCaptureOffset(int capture, boolean begin) {
+        CompletedRecursiveCall completed = completedRecursiveCall();
+        if (completed == null || msaRegion == null || isFindLongest(regex.options | msaOptions)
+                || capture >= msaRegion.getNumRegs()) {
+            return Region.REGION_NOTPOS;
+        }
+        int[] snapshot = completed.frame.getCallFrameCaptureSnapshot();
+        int count = regex.numMem + 1;
+        if (snapshot[capture] == INVALID_INDEX
+                || snapshot[count + capture] != INVALID_INDEX) {
+            return Region.REGION_NOTPOS;
+        }
+        return begin ? msaRegion.getBeg(capture) : msaRegion.getEnd(capture);
     }
 
     @Override
@@ -3177,6 +3202,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 return snapshot[capture];
             }
             return current;
+        }
+        if (snapshot[capture] != INVALID_INDEX
+                && snapshot[count + capture] == INVALID_INDEX
+                && captureClosedAfterReturn(capture, completed.returnIndex)) {
+            int closed = previousClosedCapturePointer(capture, begin);
+            if (closed != INVALID_INDEX) return closed;
         }
         return snapshot[(begin ? 0 : count) + capture];
     }

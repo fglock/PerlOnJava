@@ -62,6 +62,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String INVALID_REPEAT_RANGE_PATTERN = "invalid repeat range {lower,upper}";
     String PERL_INVALID_QUANTIFIER = "Invalid quantifier in {,}";
     String INVALID_CONDITION_PATTERN = "invalid conditional pattern";
+    String PERL_DEFINE_DOES_NOT_ALLOW_BRANCHES =
+            "(?(DEFINE)....) does not allow branches";
     String PERL_GROUP_NAME_MUST_START_WITH_WORD =
             "Group name must start with a non-digit word character";
     String PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP =

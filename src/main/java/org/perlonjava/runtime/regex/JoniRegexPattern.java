@@ -711,7 +711,6 @@ final class JoniRegexPattern {
     private static String translatePattern(String pattern, RegexFlags flags,
                                            int trustedCalloutCount,
                                            boolean resolveNamedCharacters) {
-        pattern = translateDefineBlocks(pattern);
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
@@ -966,84 +965,6 @@ final class JoniRegexPattern {
             }
         }
         out.append(']');
-    }
-
-    /**
-     * Ruby/Oniguruma syntax supports named subexpression calls but not PCRE's
-     * {@code (?(DEFINE) ...)} container. Keep the definitions in the compiled
-     * graph inside a negative lookahead whose body is forced to fail; the
-     * lookahead therefore always succeeds without consuming input, while the
-     * named groups remain available to later {@code (?&name)} calls.
-     */
-    private static String translateDefineBlocks(String pattern) {
-        StringBuilder out = new StringBuilder(pattern.length() + 16);
-        boolean escaped = false;
-        boolean inClass = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                out.append(ch);
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                out.append(ch);
-                escaped = true;
-                continue;
-            }
-            if (ch == '[') {
-                inClass = true;
-                out.append(ch);
-                continue;
-            }
-            if (ch == ']' && inClass) {
-                inClass = false;
-                out.append(ch);
-                continue;
-            }
-            if (!inClass && pattern.startsWith("(?(DEFINE)", i)) {
-                int end = findGroupEnd(pattern, i);
-                if (end > i) {
-                    String definitions = pattern.substring(i + 10, end);
-                    out.append("(?!(?:")
-                            .append(translateDefineBlocks(definitions))
-                            .append(")(?!))");
-                    i = end;
-                    continue;
-                }
-            }
-            out.append(ch);
-        }
-        return out.toString();
-    }
-
-    private static int findGroupEnd(String pattern, int start) {
-        int depth = 0;
-        boolean escaped = false;
-        boolean inClass = false;
-        for (int i = start; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (ch == '[') {
-                inClass = true;
-                continue;
-            }
-            if (ch == ']' && inClass) {
-                inClass = false;
-                continue;
-            }
-            if (inClass) continue;
-            if (ch == '(') depth++;
-            else if (ch == ')' && --depth == 0) return i;
-        }
-        return -1;
     }
 
     private record NamedGroupMaps(Map<String, Integer> logical,

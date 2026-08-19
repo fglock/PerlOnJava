@@ -106,6 +106,7 @@ public final class EncloseNode extends StateNode implements EncloseType {
         if (isOption()) types.append("OPTION ");
         if (isCondition()) types.append("CONDITION ");
         if (isAbsent()) types.append("ABSENT ");
+        if (isDefine()) types.append("DEFINE ");
         return types.toString();
     }
 
@@ -135,5 +136,9 @@ public final class EncloseNode extends StateNode implements EncloseType {
 
     public boolean isAbsent() {
         return (type & ABSENT) != 0;
+    }
+
+    public boolean isDefine() {
+        return (type & DEFINE) != 0;
     }
 }

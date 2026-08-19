@@ -882,7 +882,11 @@ class Parser extends Lexer {
                     int recursionConditionNameP = -1;
                     int recursionConditionNameEnd = -1;
                     fetch();
-                    if (c == '?' && left() && peekIs('{')) {
+                    if (c == 'D' && startsWith("EFINE)")) {
+                        p += "EFINE)".length();
+                        node = new EncloseNode(EncloseType.DEFINE);
+                        break;
+                    } else if (c == '?' && left() && peekIs('{')) {
                         fetch();
                         calloutConditionId = parseInternalCalloutId();
                     } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
@@ -1150,6 +1154,9 @@ class Parser extends Lexer {
             }
         } else {
             EncloseNode en = (EncloseNode)node;
+            if (en.type == EncloseType.DEFINE && target.getType() == NodeType.ALT) {
+                newSyntaxException(PERL_DEFINE_DOES_NOT_ALLOW_BRANCHES);
+            }
             en.setTarget(target);
             if (en.type == EncloseType.MEMORY) {
                 if (syntax.op3OptionECMAScript()) {
