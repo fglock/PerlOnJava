@@ -80,6 +80,8 @@ public abstract class StringSegmentParser {
     private boolean regexCharClassEscape = false;
     private boolean inRegexComment = false;
     private boolean regexCommentEscape = false;
+    private boolean inRegexLineComment = false;
+    private boolean regexExtended = false;
     /**
      * List of AST nodes representing string segments (literals and interpolated expressions)
      */
@@ -161,11 +163,21 @@ public abstract class StringSegmentParser {
      * Subclasses may suppress them while parsing a quoting region such as {@code \Q...\E}.
      */
     protected boolean regexCodeBlocksAreActive() {
-        return !inRegexCharClass && !inRegexComment;
+        return !inRegexCharClass && !inRegexComment && !inRegexLineComment;
+    }
+
+    void setRegexExtended(boolean regexExtended) {
+        this.regexExtended = regexExtended;
     }
 
     private void updateRegexCharClassState(char c) {
         if (!isRegex) {
+            return;
+        }
+        if (inRegexLineComment) {
+            if (c == '\n') {
+                inRegexLineComment = false;
+            }
             return;
         }
         if (inRegexComment) {
@@ -191,6 +203,8 @@ public abstract class StringSegmentParser {
         } else if (c == '[') {
             inRegexCharClass = true;
             regexCharClassFirst = true;
+        } else if (c == '#' && regexExtended) {
+            inRegexLineComment = true;
         }
     }
 
@@ -824,7 +838,7 @@ public abstract class StringSegmentParser {
      * @return true if the token was handled specially, false if it should be treated as literal text
      */
     protected boolean handleSpecialToken(String text) {
-        if (isRegex && inRegexComment) {
+        if (isRegex && (inRegexComment || inRegexLineComment)) {
             return false;
         }
         return switch (text) {
@@ -840,7 +854,7 @@ public abstract class StringSegmentParser {
                 yield false;
             }
             case "(" -> {
-                if (isRegex && startsRegexComment()) {
+                if (isRegex && regexCodeBlocksAreActive() && startsRegexComment()) {
                     inRegexComment = true;
                     yield false;
                 }

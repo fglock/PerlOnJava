@@ -378,6 +378,7 @@ public class StringParser {
 
     static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser, String modifiers, boolean isRegexQuoteConstruction) {
         Node parsed;
+        boolean hasXModifier = modifiers != null && modifiers.contains("x");
 
         if (rawStr.startDelim == '\'') {
             // An apostrophe delimiter suppresses ordinary interpolation, but
@@ -387,11 +388,8 @@ public class StringParser {
             parsed = StringDoubleQuoted.parseDoubleQuotedString(
                     ctx, rawStr, false, false, true,
                     parser != null ? parser.getHeredocNodes() : null,
-                    null, true, isRegexQuoteConstruction);
+                    null, true, isRegexQuoteConstruction, hasXModifier);
         } else {
-            // Check if /x modifier is present
-            boolean hasXModifier = modifiers != null && modifiers.contains("x");
-            
             String patternStr = rawStr.buffers.getFirst();
             if (hasXModifier && mayInterpolateRegex(patternStr)) {
                 // With /x modifier, strip comments before variable interpolation
@@ -410,7 +408,8 @@ public class StringParser {
             // interpolate variables, but ignore the escapes, keep `\$` if present
             // Pass shared heredoc nodes to handle heredocs inside regex patterns
             parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true,
-                    parser != null ? parser.getHeredocNodes() : null, null, true, isRegexQuoteConstruction);
+                    parser != null ? parser.getHeredocNodes() : null, null, true,
+                    isRegexQuoteConstruction, hasXModifier);
         }
         return parsed;
     }
