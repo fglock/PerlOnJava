@@ -833,17 +833,6 @@ final class JoniRegexPattern {
                     continue;
                 }
             }
-            if (!inClass && ch == '(' && i + 3 < pattern.length() && pattern.charAt(i + 1) == '?') {
-                int p = i + 2;
-                if (pattern.charAt(p) == '+' || pattern.charAt(p) == '-') p++;
-                int digits = p;
-                while (p < pattern.length() && Character.isDigit(pattern.charAt(p))) p++;
-                if (p > digits && p < pattern.length() && pattern.charAt(p) == ')') {
-                    out.append("\\g<").append(pattern, i + 2, p).append('>');
-                    i = p;
-                    continue;
-                }
-            }
             out.append(ch);
         }
         return out.toString();

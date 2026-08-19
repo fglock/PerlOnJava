@@ -66,6 +66,9 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Group name must start with a non-digit word character";
     String PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP =
             "Reference to nonexistent named group";
+    String PERL_INVALID_REFERENCE_TO_GROUP = "Invalid reference to group";
+    String PERL_REFERENCE_TO_NONEXISTENT_GROUP =
+            "Reference to nonexistent group";
     String PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED =
             "Sequence (?P%n...) not recognized";
     String PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED =

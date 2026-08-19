@@ -648,6 +648,13 @@ class Parser extends Lexer {
             boolean listCapture = false;
 
             fetch();
+            if (syntax.op2OptionPerl() && enc.isDigit(c)) {
+                return parsePerlNumberedCall(c);
+            }
+            if (syntax.op2OptionPerl() && (c == '+' || c == '-')
+                    && left() && enc.isDigit(peek())) {
+                return parsePerlRelativeCall(c);
+            }
             switch(c) {
             case '{':
                 return parseInternalCallout();
@@ -1996,6 +2003,70 @@ class Parser extends Lexer {
             node.lexicalTarget = lexicalMemNodes[gNum];
         }
         env.numCall++;
+        return node;
+    }
+
+    private Node parsePerlRelativeCall(int sign) {
+        int nameP = enc.prevCharHead(bytes, getBegin(), p, stop);
+        int number = 0;
+        boolean overflow = false;
+        while (left() && enc.isDigit(peek())) {
+            int digit = Encoding.digitVal(peek());
+            if (number > (Integer.MAX_VALUE - digit) / 10) {
+                overflow = true;
+            } else if (!overflow) {
+                number = number * 10 + digit;
+            }
+            inc();
+        }
+        int nameEnd = p;
+        if (!left() || !peekIs(')')) newSyntaxException(UNDEFINED_GROUP_OPTION);
+        if (overflow) newValueException(PERL_INVALID_REFERENCE_TO_GROUP);
+
+        inc();
+        long absolute = sign == '+'
+                ? (long)env.numMem + number
+                : (long)env.numMem + 1 - number;
+        if (absolute <= 0) {
+            newValueException(sign == '+' ? PERL_INVALID_REFERENCE_TO_GROUP
+                    : PERL_REFERENCE_TO_NONEXISTENT_GROUP);
+        }
+        if (absolute > Integer.MAX_VALUE) {
+            newValueException(PERL_INVALID_REFERENCE_TO_GROUP);
+        }
+
+        CallNode node = new CallNode(bytes, nameP, nameEnd, (int)absolute);
+        if (sign == '-' && lexicalMemNodes != null
+                && absolute < lexicalMemNodes.length) {
+            node.lexicalTarget = lexicalMemNodes[(int)absolute];
+        }
+        env.numCall++;
+        returnCode = 0;
+        return node;
+    }
+
+    private Node parsePerlNumberedCall(int firstDigit) {
+        int nameP = enc.prevCharHead(bytes, getBegin(), p, stop);
+        int number = Encoding.digitVal(firstDigit);
+        boolean overflow = false;
+        while (left() && enc.isDigit(peek())) {
+            int digit = Encoding.digitVal(peek());
+            if (number > (Integer.MAX_VALUE - digit) / 10) {
+                overflow = true;
+            } else if (!overflow) {
+                number = number * 10 + digit;
+            }
+            inc();
+        }
+        int nameEnd = p;
+        if (!left() || !peekIs(')')) newSyntaxException(UNDEFINED_GROUP_OPTION);
+        if (overflow) newValueException(PERL_INVALID_REFERENCE_TO_GROUP);
+        inc();
+
+        CallNode node = new CallNode(bytes, number == 0 ? nameEnd : nameP,
+                nameEnd, number);
+        env.numCall++;
+        returnCode = 0;
         return node;
     }
 
