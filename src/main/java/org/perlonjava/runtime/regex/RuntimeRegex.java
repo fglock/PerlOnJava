@@ -1076,18 +1076,34 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static boolean isValidQuantifier(String pattern, int offset) {
         int cursor = offset + 1;
+        while (cursor < pattern.length()
+                && isPerlIntervalWhitespace(pattern.charAt(cursor))) cursor++;
         int digitStart = cursor;
         while (cursor < pattern.length() && Character.isDigit(pattern.charAt(cursor))) {
             cursor++;
         }
-        if (cursor == digitStart) return false;
+        boolean hasLow = cursor > digitStart;
+        while (cursor < pattern.length()
+                && isPerlIntervalWhitespace(pattern.charAt(cursor))) cursor++;
         if (cursor < pattern.length() && pattern.charAt(cursor) == ',') {
             cursor++;
+            while (cursor < pattern.length()
+                    && isPerlIntervalWhitespace(pattern.charAt(cursor))) cursor++;
+            int highStart = cursor;
             while (cursor < pattern.length() && Character.isDigit(pattern.charAt(cursor))) {
                 cursor++;
             }
+            boolean hasHigh = cursor > highStart;
+            while (cursor < pattern.length()
+                    && isPerlIntervalWhitespace(pattern.charAt(cursor))) cursor++;
+            return (hasLow || hasHigh) && cursor < pattern.length()
+                    && pattern.charAt(cursor) == '}';
         }
-        return cursor < pattern.length() && pattern.charAt(cursor) == '}';
+        return hasLow && cursor < pattern.length() && pattern.charAt(cursor) == '}';
+    }
+
+    private static boolean isPerlIntervalWhitespace(char ch) {
+        return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f';
     }
 
     private static boolean isAllowedLiteralLeftBrace(String pattern, int offset) {
@@ -1139,7 +1155,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             cursor++;
             while (cursor < close && pattern.charAt(cursor) == ' ') cursor++;
             int digits = cursor;
-            while (cursor < close && isHexDigit(pattern.charAt(cursor))) cursor++;
+            while (cursor < close) {
+                if (isHexDigit(pattern.charAt(cursor))) {
+                    cursor++;
+                    continue;
+                }
+                if (pattern.charAt(cursor) == '_' && cursor > digits
+                        && cursor + 1 < close
+                        && isHexDigit(pattern.charAt(cursor + 1))) {
+                    cursor++;
+                    continue;
+                }
+                break;
+            }
             if (cursor == digits || cursor == close) {
                 i = close;
                 continue;
