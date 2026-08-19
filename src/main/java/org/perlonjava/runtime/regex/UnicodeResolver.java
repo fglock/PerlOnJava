@@ -1083,6 +1083,9 @@ public class UnicodeResolver {
         } else if (isPerlSentenceBreakProperty(name)) {
             if (resolvePerlSentenceBreakProperty(property) == null) return null;
             caseFold = false;
+        } else if (isPerlVerticalOrientationProperty(name)) {
+            if (resolvePerlVerticalOrientationProperty(property) == null) return null;
+            caseFold = false;
         } else if (isPerlAgeProperty(name)) {
             if (isPerlAgeWildcard(value)) return null;
             caseFold = false;
@@ -1101,7 +1104,10 @@ public class UnicodeResolver {
                         binaryAssignment.propertyName, new LinkedHashSet<>());
         if (set == null) return null;
 
-        return joniPropertyResult(set, caseFold);
+        long[] wideRanges = isPerlVerticalOrientationDefault(property)
+                ? new long[] {1, 0x110000L, Long.MAX_VALUE}
+                : null;
+        return joniPropertyResult(set, wideRanges, caseFold);
     }
 
     private static boolean isPerlAllProperty(String property, String looseIsValue) {
@@ -1111,13 +1117,18 @@ public class UnicodeResolver {
 
     private static CharacterPropertyResolver.Result joniPropertyResult(
             UnicodeSet set, boolean caseFold) {
+        return joniPropertyResult(set, null, caseFold);
+    }
+
+    private static CharacterPropertyResolver.Result joniPropertyResult(
+            UnicodeSet set, long[] wideRanges, boolean caseFold) {
         int[] ranges = new int[set.getRangeCount() * 2 + 1];
         ranges[0] = set.getRangeCount();
         for (int i = 0; i < set.getRangeCount(); i++) {
             ranges[i * 2 + 1] = set.getRangeStart(i);
             ranges[i * 2 + 2] = set.getRangeEnd(i);
         }
-        return new CharacterPropertyResolver.Result(ranges, caseFold);
+        return new CharacterPropertyResolver.Result(ranges, wideRanges, caseFold);
     }
 
     private static boolean isPerlSpecialPropertyAlias(String property) {
@@ -1301,6 +1312,8 @@ public class UnicodeResolver {
         if (wordBreak != null) return wordBreak;
         UnicodeSet sentenceBreak = resolvePerlSentenceBreakProperty(alias);
         if (sentenceBreak != null) return sentenceBreak;
+        UnicodeSet verticalOrientation = resolvePerlVerticalOrientationProperty(alias);
+        if (verticalOrientation != null) return verticalOrientation;
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1476,6 +1489,36 @@ public class UnicodeResolver {
             case "sb", "sentencebreak" -> true;
             default -> false;
         };
+    }
+
+    private static UnicodeSet resolvePerlVerticalOrientationProperty(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlVerticalOrientationProperty(
+                        property.substring(0, assignment))) {
+            return null;
+        }
+        return unicodePropertyValueSet(
+                UProperty.VERTICAL_ORIENTATION, property.substring(assignment + 1));
+    }
+
+    private static boolean isPerlVerticalOrientationProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "vo", "verticalorientation" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isPerlVerticalOrientationDefault(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlVerticalOrientationProperty(
+                        property.substring(0, assignment))) {
+            return false;
+        }
+        int value = unicodePropertyValue(
+                UProperty.VERTICAL_ORIENTATION, property.substring(assignment + 1));
+        return value >= 0 && value == unicodePropertyValue(UProperty.VERTICAL_ORIENTATION, "R");
     }
 
     private static Boolean perlBooleanPropertyValue(String value) {
