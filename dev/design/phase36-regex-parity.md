@@ -71,7 +71,7 @@ affected corpus before taking another slice.
   integrated signed-IV range fix removes row 1651 with zero introductions in
   exact A/B evidence; a fresh combined serial gate remains required because a
   later run stopped before the complete plan under concurrent CPAN load.
-- The current imported `reg_mesg.t` passes 1,710/2,603 on each backend with an
+- The current imported `reg_mesg.t` passes 1,794/2,613 on each backend with an
   identical status/test-number vector.
 - Forced-Joni Unicode property comparison is 83,648/83,648 on both backends.
   The Hyphen/IsHyphen warning correction removes the final exact 32 residuals
@@ -89,25 +89,33 @@ affected corpus before taking another slice.
   the temporary `=POJSEQ=` transport. Generated and lexical multi-code-point
   names and ordinary scalar names resolve through Joni; the temporary
   generated-sequence-only routing distinction is deleted.
-- PR 1078 passed exact-head Ubuntu and Windows CI and is merged into `master`.
-- PR 1079 is rebased onto that master and contains native `(?(DEFINE)...)`,
-  ordinary lookbehind, branch reset, and plain `\N` on top of the validated
-  malformed/unknown named-character diagnostics. Its rebased warning-free
-  `make` passes all 17 tasks; Ubuntu and Windows CI are the merge gate.
+- `master` contains the validated named-character diagnostics plus native
+  `(?(DEFINE)...)`, ordinary lookbehind, branch reset, and plain `\N`; its exact
+  head passed warning-free local, Ubuntu, and Windows gates.
+- The successor integration batch carries byte/Unicode provenance and fold
+  policy, dotted-U+ diagnostics, the ordinary-pattern Joni default, a dynamic-
+  pattern edge contract, and the first obsolete import retirement. Its fold,
+  property, and resolver-cache residuals are closed; the exact semantic head
+  passes a warning-free 17-task `make`. The prospective PR head also includes
+  three independent runtime-diagnostic corrections and passes the same full
+  combined gate.
 - Native DEFINE, ordinary lookbehind, and branch reset now route through Joni;
   their feature-specific Java rewrites and branch-reset capture-map adapter are
   deleted. Plain Perl `\N` is a native Joni non-line-feed atom, including
   intervals, `/s` independence, and Perl's character-class diagnostic.
-- Unknown, empty, malformed U+, and missing-brace named-character groups have
-  native frontend/runtime diagnostics. The remaining dotted-U+ unmatched-class
-  identity is an active bounded runtime diagnostic correction.
+- Unknown, empty, malformed/dotted U+, and missing-brace named-character groups
+  have native frontend/runtime diagnostics.
 - Forced-Joni `pat_re_eval.t` now executes and passes 555/555 on both JVM and
   interpreter. Perl's release-build `-D` diagnostic is preserved without
   enabling PerlOnJava's unrelated internal compiler trace.
-- Each `pat.t` variant executes 1,301/1,302 and passes 1,223.
-- The current 80-file forced-Joni gate passes 363,164/391,977 and has 19
-  per-file pass-count regressions against PR 958. These figures must be refreshed
-  after the current native stack is integrated.
+- Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
+  passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
+- The four Java/Joni × JVM/interpreter legs now have one 80-file comparison
+  ledger on the pre-successor artifact. It identifies stable extended-class,
+  regexp, charset, fold-grind, and bounded-speed negative clusters plus several
+  zero-TAP/execution records. The complete matrix must be repeated on the exact
+  successor artifact before acceptance; older aggregate figures are not release
+  evidence.
 - Exact `/aa` routing/folding gates pass on native Joni, and the Java `/aa`
   workaround is removed.
 
@@ -221,9 +229,8 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Merge PR 1079 only after exact-head Ubuntu and Windows CI pass, then rebase
-   the next integration batch onto the resulting `master` without combining its
-   independent semantic commits.
+1. Open the validated successor review PR against `master` and require
+   exact-head Ubuntu/Windows CI.
 2. Complete byte/Unicode pattern provenance through runtime interpolation and
    template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal
    and backreference folding from generated data. Require direct Joni plus
@@ -233,12 +240,13 @@ behavior.
    unwind, backtracking re-evaluation, and recursion safety. Route every embedded
    closure to Joni and delete constant inlining, progressive errors, and the
    dynamic Java adapter as their gates pass.
-4. Finish the dotted-U+ runtime unmatched-class correction and the next uniform
-   `reg_mesg.t` warning/source-position groups. Refresh complete `reg_mesg.t`,
-   `pat.t`, and `pat_advanced.t` maps after each combined diagnostics batch.
-5. Complete the four-leg 80-file Java/Joni × JVM/interpreter matrix on one exact
-   artifact and compare every file with the PR 958 log. Resolve every regression,
-   zero-TAP record, timeout, truncation, or incomplete file before user acceptance.
+4. Carry lexical `use re 'strict'` policy through regex compilation and close
+   the unescaped-brace/non-hex diagnostic families. Refresh complete
+   `reg_mesg.t`, `pat.t`, and `pat_advanced.t` maps after each combined batch.
+5. Repeat the four-leg 80-file Java/Joni × JVM/interpreter matrix on the exact
+   successor artifact and compare every file with the PR 958 log. Resolve every
+   regression, zero-TAP record, timeout, truncation, or incomplete file before
+   user acceptance.
 6. Remove each proven-obsolete regex transformation from `dev/import-perl5`
    sync sources, regenerate a private unpatched corpus twice, prove byte-for-byte
    idempotence, and run the affected upstream tests without editing them.
@@ -326,7 +334,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Pinned Perl simple/full/reverse case-fold data
 - [x] Native fold adapter and unsafe optimizer-boundary suppression
 - [x] Property/class fold closure
-- [ ] Fold-mode and byte/Unicode provenance context
+- [x] Fold-mode and byte/Unicode provenance context
 - [ ] Forward/reverse literal expansion and backreference folding
 - [x] Generated Perl named-sequence lookup and native sequence resolution
 - [x] Remove temporary named-sequence encoding from native Joni pattern source
