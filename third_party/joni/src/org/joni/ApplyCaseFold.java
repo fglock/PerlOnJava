@@ -126,5 +126,24 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
         return ascCc.isNot() ? !eligible : eligible;
     }
 
+    static void applyPerlSimpleClassClosure(ApplyCaseFoldArg arg) {
+        for (int classIndex = 0; classIndex < PerlUnicodeCaseFoldData.simpleClassCount();
+                classIndex++) {
+            int length = PerlUnicodeCaseFoldData.simpleClassLengthAt(classIndex);
+            for (int fromIndex = 0; fromIndex < length; fromIndex++) {
+                int from = PerlUnicodeCaseFoldData.simpleClassCodePointAt(
+                        classIndex, fromIndex);
+                if (PerlCaseFold.isTurkicSourceExcluded(from)) continue;
+                for (int toIndex = 0; toIndex < length; toIndex++) {
+                    if (toIndex == fromIndex) continue;
+                    int to = PerlUnicodeCaseFoldData.simpleClassCodePointAt(
+                            classIndex, toIndex);
+                    if (PerlCaseFold.isTurkicSourceExcluded(to)) continue;
+                    INSTANCE.apply(from, new int[] {to}, 1, arg);
+                }
+            }
+        }
+    }
+
     static final ApplyCaseFold INSTANCE = new ApplyCaseFold();
 }

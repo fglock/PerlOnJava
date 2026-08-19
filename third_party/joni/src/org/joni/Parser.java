@@ -2225,6 +2225,9 @@ class Parser extends Lexer {
                                 CClassNode foldCc) {
         ApplyCaseFoldArg arg = new ApplyCaseFoldArg(env, cc, ascCc, foldCc);
         enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
+        if (syntax.op2OptionPerl()) {
+            ApplyCaseFold.applyPerlSimpleClassClosure(arg);
+        }
         if (arg.altRoot != null) {
             node = ListNode.newAlt(node, arg.altRoot);
         }

@@ -1301,6 +1301,11 @@ public class UnicodeResolver {
         property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
+            UnicodeSet foldableBareProperty = resolvePerlCaseFoldableBareProperty(
+                    property, caseInsensitive);
+            if (foldableBareProperty != null) {
+                return joniPropertyResult(foldableBareProperty, true);
+            }
             UnicodeSet blockBinaryPrecedence =
                     resolvePerlBlockBinaryPrecedenceAlias(property);
             if (blockBinaryPrecedence != null) {
@@ -1413,6 +1418,27 @@ public class UnicodeResolver {
                 ? new long[] {1, 0x110000L, Long.MAX_VALUE}
                 : null;
         return joniPropertyResult(set, wideRanges, caseFold);
+    }
+
+    private static UnicodeSet resolvePerlCaseFoldableBareProperty(
+            String property, boolean caseInsensitive) {
+        return switch (property) {
+            case "Uppercase", "XPosixLower", "XPosixUpper" ->
+                    resolveStandardPropertyAsSet(
+                            property, new LinkedHashSet<>());
+            case "Titlecase", "TitlecaseLetter", "Titlecase_Letter", "Lt" -> caseInsensitive
+                    ? perlCasedPropertySet()
+                    : resolveStandardPropertyAsSet(property, new LinkedHashSet<>());
+            case "PosixLower" -> new UnicodeSet('a', 'z').freeze();
+            case "PosixUpper" -> new UnicodeSet('A', 'Z').freeze();
+            default -> null;
+        };
+    }
+
+    private static UnicodeSet perlCasedPropertySet() {
+        return new UnicodeSet()
+                .applyPropertyAlias("Cased", "True")
+                .freeze();
     }
 
     private static boolean isPerlAllProperty(String property, String looseIsValue) {
