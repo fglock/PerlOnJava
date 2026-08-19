@@ -1304,6 +1304,7 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenFor_subexpCall() {
+        rejectMalformedPerlBackref();
         if (syntax.op2OptionPerl() && left() && peek() >= '0' && peek() <= '9') {
             int backref = scanUnsignedNumber();
             if (backref <= 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
@@ -1357,6 +1358,46 @@ class Lexer extends ScannerSupport {
                     syntaxWarn("invalid subexp call");
                     unfetch();
                 }
+            }
+        }
+    }
+
+    private void rejectMalformedPerlBackref() {
+        if (!syntax.op2OptionPerl()) return;
+        if (!left()) {
+            newSyntaxException(PERL_UNTERMINATED_G_PATTERN);
+        }
+        if (!peekIs('{')) return;
+
+        int contentStart = nextChar(p, stop);
+        int cursor = contentStart;
+        while (cursor < stop && codeAt(cursor, stop) != '}') {
+            cursor = nextChar(cursor, stop);
+        }
+        if (cursor >= stop) {
+            if (contentStart == stop) {
+                newSyntaxException(PERL_G_SEQUENCE_NOT_TERMINATED,
+                        stop - getBegin());
+            }
+            boolean digitsOnly = true;
+            for (int digit = contentStart; digit < stop; digit = nextChar(digit, stop)) {
+                int code = codeAt(digit, stop);
+                if (code < '0' || code > '9') {
+                    digitsOnly = false;
+                    break;
+                }
+            }
+            newSyntaxException(digitsOnly
+                            ? PERL_UNTERMINATED_G_BRACE_PATTERN
+                            : PERL_G_SEQUENCE_NOT_TERMINATED,
+                    stop - getBegin());
+        }
+
+        if (contentStart < cursor && codeAt(contentStart, cursor) == '-') {
+            int nameStart = nextChar(contentStart, cursor);
+            if (nameStart < cursor && !enc.isDigit(codeAt(nameStart, cursor))) {
+                newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
+                        nameStart - getBegin());
             }
         }
     }
