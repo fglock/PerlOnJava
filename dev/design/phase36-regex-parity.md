@@ -142,8 +142,9 @@ affected corpus before taking another slice.
   remove the corresponding `regexp.t` identities with no introductions.
 - Runtime `(??{...})` sources execute through native Joni continuations; the
   dynamic Java fallback adapter is gone. Callback aggregate mutations unwind
-  on ordinary backtracking while destructive control verbs commit the cut
-  path, including across a dynamic continuation.
+  when the complete match fails, remain visible when another alternative
+  succeeds, and commit when destructive control verbs cut the path, including
+  across a dynamic continuation.
 
 ## Execution Phases
 
