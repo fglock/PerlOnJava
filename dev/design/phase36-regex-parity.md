@@ -71,13 +71,14 @@ affected corpus before taking another slice.
   the exact 110-row reference set.
 - The current imported `reg_mesg.t` passes 1,710/2,603 on each backend with an
   identical status/test-number vector.
-- Forced-Joni Unicode property comparison has 900/83,648 residual records on
-  each backend, with an identical residual identity set. A corpus-proven
-  property-value-wildcard slice reduces this to 332 and awaits integration.
+- Forced-Joni Unicode property comparison has 332/83,648 residual records on
+  each backend, with a byte-identical residual set. The integrated wildcard
+  slice removed 568 rows without introductions.
 - The shared deterministic pinned-Perl Unicode generator covers all 11 current
-  families. General_Category compatibility aliases and native named-call/parser
-  safety are integrated; generated case-fold metadata, signed-IV user-property
-  ranges, and native extended classes are active independent slices.
+  families. General_Category compatibility aliases, native named-call/parser
+  safety, and a runtime-neutral Joni property-value matcher are integrated;
+  generated case-fold metadata, signed-IV user-property ranges, native extended
+  classes, and removal of Java wildcard execution are active independent slices.
 - Each `pat.t` variant executes 1,301/1,302 and passes 1,223.
 - The current 80-file forced-Joni gate passes 363,164/391,977 and has 19
   per-file pass-count regressions against PR 958. These figures must be refreshed
@@ -198,12 +199,12 @@ behavior.
 1. Keep the canonical native-Joni PR and this plan branch durable. Require exact
    commit/file review, warning-free `make`, and green stacked CI before moving a
    PR from draft to user acceptance.
-2. Integrate the proven Unicode value-wildcard slice, then batch its follow-ups:
-   signed-IV user-property ranges, the exact 152-row POSIX/Perl compatibility
-   family, and the remaining 96 Block plus 84 binary/diagnostic rows. Replace
-   all temporary `java.util.regex.Pattern` value-wildcard execution—including
-   older Age/Block/Script/Numeric helpers—with one vendored-Joni evaluator
-   before Java matcher removal.
+2. Wire every property-value wildcard family to the integrated vendored-Joni
+   evaluator and remove all temporary `java.util.regex.Pattern` wildcard
+   execution, including older Age/Block/Script/Numeric helpers. In parallel,
+   finish signed-IV user-property ranges, the exact 152-row POSIX/Perl
+   compatibility family, and the remaining 96 Block plus 84 binary/diagnostic
+   rows.
 3. Complete generated Perl case-fold metadata through the shared deterministic
    pipeline, then wire the reviewed Joni fold API for literals, classes,
    properties, backreferences, and optimizer search. Keep `/d`, `/u`, `/a`,
