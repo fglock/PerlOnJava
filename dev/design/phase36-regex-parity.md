@@ -82,13 +82,23 @@ affected corpus before taking another slice.
   safety, the runtime-neutral Joni property-value matcher, signed-IV user-
   property ranges, POSIX compatibility, and generated fold data are integrated.
   The analyser fold-safety slice, final binary aliases, generated named-sequence
-  lookup, property-wildcard execution, and Hyphen diagnostics are integrated in
-  local staging. Native extended classes, property/class fold closure, and
-  nested property-wildcard lexing are active independent slices.
-- Draft PR 1078 is durable at `29a6de3fd`. Its integration source through
-  `29e4a1b7e` passes warning-free `make`, all 17 tasks, Joni tests, five unit
-  shards, packaging, and generated-data checks; the final isolated named-
-  diagnostic commit passes its focused all-17-task make.
+  lookup, property-wildcard execution, Hyphen diagnostics, native extended
+  classes, property/class fold closure, and nested property-wildcard lexing are
+  integrated in local staging.
+- Raw `\N{name}` source now survives frontend and matcher compilation without
+  the temporary `=POJSEQ=` transport. Generated and lexical multi-code-point
+  names resolve through Joni; ordinary scalar names retain one explicit routing
+  gate only until the native `/aa` Kelvin fold correction lands.
+- Draft PR 1078 is durable remotely through `29a6de3fd`; current local staging
+  is `00d461a71`. That exact head passes warning-free `make`, all 17 tasks,
+  Joni tests, five unit shards, packaging, and generated-data checks. The new
+  missing-brace diagnostic fixture passes system Perl, JVM, and interpreter
+  8/8. The named-scalar Kelvin fixture passes system Perl 9/9 but ordinary JVM
+  and interpreter 8/9 until the explicit temporary ordinary-name routing gate
+  is deleted; PR publication waits for that already-owned correction.
+- Forced-Joni `pat_re_eval.t` now executes and passes 555/555 on both JVM and
+  interpreter. Perl's release-build `-D` diagnostic is preserved without
+  enabling PerlOnJava's unrelated internal compiler trace.
 - Each `pat.t` variant executes 1,301/1,302 and passes 1,223.
 - The current 80-file forced-Joni gate passes 363,164/391,977 and has 19
   per-file pass-count regressions against PR 958. These figures must be refreshed
@@ -209,45 +219,35 @@ behavior.
 1. Keep the canonical native-Joni PR and this plan branch durable. Require exact
    commit/file review, warning-free `make`, and green stacked CI before moving a
    PR from draft to user acceptance.
-2. Finish the exact remaining binary aliases and 32 Hyphen diagnostic Unicode
-   rows. Then wire every property-value wildcard family to the integrated vendored-
-   Joni evaluator in one conflict-free commit and remove all temporary
-   `java.util.regex.Pattern` wildcard execution, including Age/Block/Script/
-   Numeric helpers. Generate the complete named-sequence lookup from Perl's
-   pinned `NamedSequences.txt` in parallel and route standard `\N{name}` through
-   it without reimplementing the table by hand.
-3. Integrate the generated fold table through bounded native slices: package-
-   local adapter and analyser optimizer safety; property/class closure; explicit
-   fold/provenance context; literal forward/reverse expansion; backreferences;
-   and final optimizer proof. Keep `/d`, `/u`, `/a`, `/aa`, locale, Turkic, and
-   byte/Unicode provenance policy explicit and hand-reviewed.
-4. Finish native Joni `(?[...])` grammar/AST/evaluation and delete the textual
-   lowering. Require operand-local `/i`, scoped `^`/`a`/`aa`/`d`/`u` modifier
-   isolation, wide-domain algebra, literal/comment scanning, exact-three-digit
-   octal handling, nested-POSIX boundaries, empty/multi-code-point `\N{}`
-   legality, nesting, and exact diagnostics with zero `reg_mesg.t`
-   introductions. Then replace the `(?(DEFINE)...)` adapter rewrite with a
-   native non-executing definition container.
-5. Refresh `reg_mesg.t`, `pat.t`, `pat_advanced.t`, and the 83,648-record Unicode
-   corpus on each combined batch. Close the largest semantically uniform
-   native-Joni groups with a system-Perl-first reducer and zero-introduction
-   complete gate for each; compare stable test identities when diagnostics
-   contain backend-specific source-location or binary rendering.
-6. Refresh all four 80-file legs on one combined artifact. Resolve all 19
+2. Finish fold provenance in isolated native slices: `/d`/`u`/`a`/`aa`, locale,
+   Turkic, byte/Unicode source identity, forward/reverse literal expansion, and
+   backreferences. Correct named-scalar Kelvin `/aa`, then delete the temporary
+   generated-sequence routing distinction so every ordinary `\N{name}` pattern
+   uses Joni.
+3. Land native `(?(DEFINE)...)` with exact enclosing-capture publication and
+   delete its adapter. Reuse the validated variable-lookbehind candidate, finish
+   Perl's character/byte 255/256-width and diagnostic rules, then route ordinary
+   lookbehind through Joni and delete its Java translation.
+4. Restore the remaining unknown/empty/malformed named-character diagnostics.
+   Refresh `reg_mesg.t`, `pat.t`, `pat_advanced.t`, the 83,648-record Unicode
+   corpus, and stable fold files after each combined native batch with zero
+   introduced identities.
+5. Refresh all four 80-file legs on one combined artifact. Resolve all 19
    per-file PR 958 regressions; do not offer a long user acceptance run while
    any negative, zero-TAP, timeout, or incomplete file is unexplained.
-7. Use the integration report to retire ordinary Java fallbacks in impact order:
-   lookbehind, branch reset, alphabetic assertions, then remaining constant
-   patterns. Delete each route and its semantic preprocessor rule in the same
-   validated slice.
-8. Complete runtime source/eval semantics and diagnostics, then close
-   `pat_re_eval.t`.
-9. Remove obsolete regex import patches. Run
+6. Use the integration report to retire remaining Java fallbacks in impact order:
+   lookbehind, branch reset, then ordinary constants. Alphabetic assertions are
+   already native and their focused 19-case oracle is green on system Perl and
+   both forced-Joni execution backends. Delete each route and its semantic
+   preprocessor rule in the same validated slice.
+7. Keep `pat_re_eval.t` at 555/555 on both backends while completing remaining
+   runtime source, warning/source-position, and eval diagnostic matrices.
+8. Remove obsolete regex import patches. Run
    `perl dev/import-perl5/sync.pl --only perl5/t` twice; verify the configured
    upstream `re/pat.t` hash and require the second sync to be content-idempotent.
-10. Remove Java matching and the selector, rerun the complete semantic and CPAN
+9. Remove Java matching and the selector, rerun the complete semantic and CPAN
    matrix, then execute performance and release gates.
-11. Finish feature-matrix and as-implemented documentation, consolidate
+10. Finish feature-matrix and as-implemented documentation, consolidate
     redundant plans, rebase the final stack onto current master, and require
     green Ubuntu/Windows CI before merge.
 
@@ -324,11 +324,11 @@ gates may reopen it if a semantic regression appears.
 - [x] Complete Hyphen warning/category/source-position diagnostics
 - [x] Pinned Perl simple/full/reverse case-fold data
 - [x] Native fold adapter and unsafe optimizer-boundary suppression
-- [ ] Property/class fold closure
+- [x] Property/class fold closure
 - [ ] Fold-mode and byte/Unicode provenance context
 - [ ] Forward/reverse literal expansion and backreference folding
 - [x] Generated Perl named-sequence lookup and native sequence resolution
-- [ ] Remove temporary named-sequence encoding from native Joni pattern source
+- [x] Remove temporary named-sequence encoding from native Joni pattern source
 - [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
 - [ ] Restore remaining Perl diagnostics for unknown named sequences
 - [x] Native `(?[...])` with zero diagnostic regressions
