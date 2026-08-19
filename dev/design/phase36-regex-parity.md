@@ -320,14 +320,18 @@ gates may reopen it if a semantic regression appears.
 - [x] General Category, Script, Block, POSIX, binary-membership, and signed-wide
       property ranges
 - [x] Runtime-neutral Joni property-value matcher
-- [ ] Replace every Java property-wildcard execution site with the Joni matcher
+- [x] Replace every Java property-wildcard execution site with the Joni matcher
+- [ ] Parse nested property-value regex syntax in Joni and remove adapter
+      materialization of the selected ranges
 - [ ] Complete Hyphen warning/category/source-position diagnostics
 - [x] Pinned Perl simple/full/reverse case-fold data
 - [x] Native fold adapter and unsafe optimizer-boundary suppression
 - [ ] Property/class fold closure
 - [ ] Fold-mode and byte/Unicode provenance context
 - [ ] Forward/reverse literal expansion and backreference folding
-- [ ] Generated Perl named-sequence lookup and native `\N{name}` completion
+- [x] Generated Perl named-sequence lookup and native sequence resolution
+- [ ] Remove temporary named-sequence encoding from native Joni pattern source
+- [ ] Restore Perl diagnostics for unknown and encoded named sequences
 - [ ] Native `(?[...])` with zero diagnostic regressions
 - [ ] Native `(?(DEFINE)...)` and removal of its adapter rewrite
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
