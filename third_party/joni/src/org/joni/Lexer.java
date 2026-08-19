@@ -1400,6 +1400,29 @@ class Lexer extends ScannerSupport {
                         nameStart - getBegin());
             }
         }
+
+        int tokenStart = contentStart;
+        while (tokenStart < cursor
+                && Character.isWhitespace(codeAt(tokenStart, cursor))) {
+            tokenStart = nextChar(tokenStart, cursor);
+        }
+        int tokenCursor = tokenStart;
+        if (tokenCursor < cursor && codeAt(tokenCursor, cursor) == '-') {
+            tokenCursor = nextChar(tokenCursor, cursor);
+        }
+        if (tokenCursor < cursor && enc.isDigit(codeAt(tokenCursor, cursor))) {
+            do {
+                tokenCursor = nextChar(tokenCursor, cursor);
+            } while (tokenCursor < cursor && enc.isDigit(codeAt(tokenCursor, cursor)));
+            while (tokenCursor < cursor
+                    && Character.isWhitespace(codeAt(tokenCursor, cursor))) {
+                tokenCursor = nextChar(tokenCursor, cursor);
+            }
+            if (tokenCursor < cursor) {
+                newSyntaxException(PERL_G_SEQUENCE_NOT_TERMINATED,
+                        tokenCursor - getBegin());
+            }
+        }
     }
 
     protected void fetchNamedBackrefToken() {

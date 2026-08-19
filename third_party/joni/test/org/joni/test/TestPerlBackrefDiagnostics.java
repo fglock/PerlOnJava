@@ -56,6 +56,8 @@ public class TestPerlBackrefDiagnostics {
         assertInvalid("\\g{1", "Unterminated \\g{...} pattern", 4);
         assertInvalid("\\g{-abc}",
                 "Group name must start with a non-digit word character", 4);
+        assertInvalid("\\g{1-1}", "Sequence \\g{... not terminated", 4);
+        assertInvalid("\\g{ -1 foo }", "Sequence \\g{... not terminated", 7);
     }
 
     @Test
