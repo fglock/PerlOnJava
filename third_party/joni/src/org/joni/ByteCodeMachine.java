@@ -3217,7 +3217,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             StackEntry entry = stack[i];
             if (entry.type == RETURN) {
                 returns.push(i);
-            } else if (entry.type == CALL_FRAME && !returns.isEmpty()) {
+            } else if (entry.type == CALL_FRAME) {
+                if (returns.isEmpty()) break;
                 int returnIndex = returns.pop();
                 if (entry.getCallFrameCaptureSnapshot() != null
                         && (visible == null || returnIndex > visible.returnIndex)) {
