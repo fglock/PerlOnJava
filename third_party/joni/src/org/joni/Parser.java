@@ -914,6 +914,7 @@ class Parser extends Lexer {
                 if (left() && syntax.op2QMarkLParenCondition()) {
                     int num = -1;
                     int name = -1;
+                    int physicalNamedCondition = -1;
                     int calloutConditionId = -1;
                     AnchorNode assertionCondition = null;
                     int recursionConditionGroup = -1;
@@ -977,6 +978,10 @@ class Parser extends Lexer {
                                 fetchNamedBackrefToken();
                                 inc();
                                 num = token.getBackrefNum() > 1 ? token.getBackrefRefs()[0] : token.getBackrefRef1();
+                                NameEntry named = regex.nameToGroupNumbers(bytes, name, value);
+                                if (named != null && named.backNum == 1) {
+                                    physicalNamedCondition = named.getPhysicalBackRefs()[0];
+                                }
                             }
                         } else { // USE_NAMED_GROUP
                             newSyntaxException(INVALID_CONDITION_PATTERN);
@@ -984,6 +989,7 @@ class Parser extends Lexer {
                     }
                     EncloseNode en = new EncloseNode(EncloseType.CONDITION);
                     en.regNum = num;
+                    en.physicalNamedCondition = physicalNamedCondition;
                     en.calloutConditionId = calloutConditionId;
                     en.assertionCondition = assertionCondition;
                     en.recursionConditionGroup = recursionConditionGroup;
