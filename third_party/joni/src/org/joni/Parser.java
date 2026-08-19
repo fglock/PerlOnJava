@@ -738,7 +738,11 @@ class Parser extends Lexer {
 
         if (peekIs('?') && syntax.op2QMarkGroupEffect()) {
             inc();
-            if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
+            if (!left()) {
+                newSyntaxException(syntax.op2OptionPerl()
+                        ? PERL_GROUP_EFFECT_INCOMPLETE
+                        : END_PATTERN_IN_GROUP);
+            }
 
             boolean listCapture = false;
 

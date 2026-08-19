@@ -57,6 +57,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String END_PATTERN_IN_GROUP = "end pattern in group";
     String PERL_OPTION_GROUP_NOT_TERMINATED = "Sequence (?... not terminated";
     String PERL_COMMENT_GROUP_NOT_TERMINATED = "Sequence (?#... not terminated";
+    String PERL_GROUP_EFFECT_INCOMPLETE = "Sequence (? incomplete";
     String UNDEFINED_GROUP_OPTION = "undefined group option";
     String INVALID_POSIX_BRACKET_TYPE = "invalid POSIX bracket type";
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
