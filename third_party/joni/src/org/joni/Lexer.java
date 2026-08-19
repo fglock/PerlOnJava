@@ -86,6 +86,7 @@ class Lexer extends ScannerSupport {
         int low = scanUnsignedNumber();
         if (low < 0) newSyntaxException(ErrorMessages.TOO_BIG_NUMBER_FOR_REPEAT_RANGE);
         if (low > Config.MAX_REPEAT_NUM) newSyntaxException(ErrorMessages.TOO_BIG_NUMBER_FOR_REPEAT_RANGE);
+        rejectPerlLeadingZeroQuantifier(lowStart, p);
 
         boolean nonLow = false;
         if (p == lowStart) { /* can't read low */
@@ -109,6 +110,7 @@ class Lexer extends ScannerSupport {
             up = scanUnsignedNumber();
             if (up < 0) newValueException(TOO_BIG_NUMBER_FOR_REPEAT_RANGE);
             if (up > Config.MAX_REPEAT_NUM) newValueException(TOO_BIG_NUMBER_FOR_REPEAT_RANGE);
+            rejectPerlLeadingZeroQuantifier(prev, p);
 
             if (p == prev) {
                 if (nonLow) return invalidRangeQuantifier(synAllow);
@@ -143,6 +145,16 @@ class Lexer extends ScannerSupport {
         token.setRepeatUpper(up);
 
         return ret; /* 0: normal {n,m}, 2: fixed {n} */
+    }
+
+    private void rejectPerlLeadingZeroQuantifier(int numberStart, int numberEnd) {
+        if (!syntax.op2OptionPerl() || numberStart >= numberEnd
+                || codeAt(numberStart, numberEnd) != '0') {
+            return;
+        }
+        if (nextChar(numberStart, numberEnd) < numberEnd) {
+            newSyntaxException(ErrorMessages.PERL_INVALID_QUANTIFIER);
+        }
     }
 
     private void skipPerlIntervalWhitespace() {

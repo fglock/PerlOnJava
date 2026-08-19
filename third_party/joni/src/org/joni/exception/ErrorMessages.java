@@ -60,6 +60,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_KEEP_NOT_PERMITTED_IN_LOOKAROUND =
             "\\K not permitted in lookahead/lookbehind in regex";
     String INVALID_REPEAT_RANGE_PATTERN = "invalid repeat range {lower,upper}";
+    String PERL_INVALID_QUANTIFIER = "Invalid quantifier in {,}";
     String INVALID_CONDITION_PATTERN = "invalid conditional pattern";
     String PERL_GROUP_NAME_MUST_START_WITH_WORD =
             "Group name must start with a non-digit word character";
