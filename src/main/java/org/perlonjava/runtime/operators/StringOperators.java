@@ -549,7 +549,11 @@ public class StringOperators {
         // enclosing call site was compiled, so retain a cheap undef-only
         // runtime guard here as well. WarnDie performs the lexical category
         // check and dispatches a localized __WARN__ handler when applicable.
-        if (warnUninitialized
+        String callSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
+        boolean callSiteWarnsUninitialized = callSiteWarningBits == null
+                || WarningFlags.areWarningsForcedOn()
+                || WarningFlags.isEnabledInBits(callSiteWarningBits, "uninitialized");
+        if (warnUninitialized && callSiteWarnsUninitialized
                 && (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean())) {
             WarnDie.warnWithCategory(
                     new RuntimeScalar("Use of uninitialized value in concatenation (.)"),

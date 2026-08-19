@@ -315,6 +315,12 @@ public class SlowOpcodeHandler {
         }
         evalTrace("EVAL_STRING opcode enter rd=r" + rd + " strReg=r" + stringReg +
                 " ctx=" + evalCallContext + " evalSite=" + evalSiteIndex +
+                " warnUninitialized=" + (siteWarningBits != null
+                        && org.perlonjava.runtime.runtimetypes.WarningFlags.isEnabledInBits(
+                                siteWarningBits, "uninitialized")) +
+                " fatalUninitialized=" + (siteWarningBits != null
+                        && org.perlonjava.runtime.runtimetypes.WarningFlags.isFatalInBits(
+                                siteWarningBits, "uninitialized")) +
                 " codeType=" + codeScalar.type + " codeLen=" + codeScalar.toString().length() +
                 " src=" + (code != null ? code.sourceName : "null"));
 
