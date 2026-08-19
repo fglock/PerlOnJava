@@ -827,6 +827,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
                                 compilePatternString, bytePosition);
+                        if ("undefined group option".equals(message)
+                                && originalPatternString != null
+                                && characterPosition >= 3
+                                && originalPatternString.regionMatches(
+                                        characterPosition - 3, "(?\\", 0, 3)) {
+                            message = "Sequence (?\\...) not recognized";
+                        }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
                                 originalPatternString, characterPosition, message));
                     }
