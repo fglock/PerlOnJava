@@ -145,6 +145,12 @@ affected corpus before taking another slice.
   when the complete match fails, remain visible when another alternative
   succeeds, and commit when destructive control verbs cut the path, including
   across a dynamic continuation.
+- Native Joni parses bounded decimal, braced, relative, and overflow numeric
+  backreferences without Java-side rewriting. The focused four-backend fixture
+  passes 63/63, and the exact `regexp.t` numeric tranche has zero introductions.
+- Native Joni distinguishes non-ASCII unfinished ranges and accepts Perl false
+  class ranges around `\d`, `\s`, and POSIX classes. The focused system-Perl,
+  direct-Joni, four-backend, and imported-row gates agree.
 
 ## Execution Phases
 
@@ -256,38 +262,38 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Integrate the native `/xx`, adjacent full-fold partition, and `L_` alias
-   batch on the exact merged predecessor. Run one warning-free full build plus
-   zero-introduction `regexp.t` and fold/property gates, then publish a review
-   PR and require exact-head Ubuntu/Windows CI.
-2. Complete recursive and runtime `(??{...})` as native nested Joni execution:
-   preserve captures, `$^R`, `pos`, modes, byte/Unicode provenance, callback
-   unwind, backtracking re-evaluation, and recursion safety. Route every embedded
-   closure to Joni and delete constant inlining, progressive errors, and the
-   dynamic Java adapter as their gates pass.
-3. Complete byte/Unicode pattern provenance through runtime interpolation and
-   template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal,
-   class, property, and backreference folding from generated data. Require
-   direct Joni plus ordinary/forced JVM/interpreter zero-introduction gates.
-4. Finish the remaining lexical `use re 'strict'`, unescaped-brace, and non-hex
-   diagnostic families. Refresh complete
-   `reg_mesg.t`, `pat.t`, and `pat_advanced.t` maps after each combined batch.
-5. Repeat the four-leg 80-file Java/Joni × JVM/interpreter matrix on the exact
-   successor artifact and compare every file with the PR 958 log. Resolve every
-   regression, zero-TAP record, timeout, truncation, or incomplete file before
-   user acceptance.
-6. Remove each proven-obsolete regex transformation from `dev/import-perl5`
-   sync sources, regenerate a private unpatched corpus twice, prove byte-for-byte
-   idempotence, and run the affected upstream tests without editing them.
-7. Use the refreshed impact report to move all remaining ordinary constants to
-   native Joni, deleting their Java routes and matcher-semantic preprocessing in
-   the same validated slices. Keep `pat_re_eval.t` at 555/555 throughout.
-8. Delete Java matching, selector, fallback state, and unreachable preprocessors;
-   then run direct/thread regex, CPAN, performance, packaging, notice/license,
-   warning-free build, Ubuntu, Windows, and full CI gates.
+1. Complete and integrate the current non-overlapping native-Joni batch:
+   ordinary repeated-capture clearing, physical branch-reset names/conditions,
+   named-character grammar/diagnostics, numeric backreferences, and class-range
+   semantics. Run one warning-free full `make`, four-backend focused fixtures,
+   and an exact zero-introduction `regexp.t` comparison on the combined SHA.
+2. Close the remaining capture/region identities, including inactive named and
+   numeric branch-reset slots, final successful quantified iterations, failed
+   alternatives, recursive-frame publication, and nested match-state restore.
+3. Move remaining Perl named-character, escape, strict-mode, brace, control-
+   character, and warning semantics into Joni lexer/compiler internals. Remove
+   each corresponding `JoniRegexPattern`/preprocessor rewrite in the same gated
+   slice; keep only source-policy and final diagnostic rendering outside Joni.
+4. Finish whole-pattern recursion `(?R)`, recursive numbered/named calls,
+   recursion conditions, capture publication, and recursion safety. Keep
+   runtime `(??{...})`, callback unwind, and `pat_re_eval.t` 555/555 green.
+5. Finish `/d`/`u`/`a`/`aa` forward/reverse literal and backreference folding
+   from generated data, then rerun complete Unicode, `pat.t`, `pat_advanced.t`,
+   `reg_mesg.t`, and bounded speed/psycho gates on one immutable artifact.
+6. Use the refreshed impact ledger to close every remaining semantic regex
+   identity and move all ordinary constants to Joni. Reject zero-TAP, timeout,
+   truncated, incomplete, JVM/interpreter, or direct/thread mismatches.
+7. Remove proven-obsolete `dev/import-perl5` regex patches, rerun targeted sync
+   twice, prove byte-for-byte idempotence, and validate the restored unchanged
+   upstream tests.
+8. Delete Java matching, the backend selector, fallback state, matcher-semantic
+   preprocessors, and unreachable adapter code. Prove performance, CPAN,
+   packaging, notice/license, and warning-free build gates before removal is
+   accepted.
 9. Update the feature matrix and final as-implemented/fork documents, remove or
-   summarize redundant design documents, rebase the final stack on `master`, and
-   run the complete PR 958 parity audit before declaring Phase 36 complete.
+   summarize redundant design documents, rebase each final PR on `master`, pass
+   Ubuntu/Windows CI, and compare the complete runner output file-by-file with
+   the immutable PR 958 baseline.
 
 ## Parallel Work
 
@@ -375,6 +381,14 @@ gates may reopen it if a semantic regression appears.
 - [x] Native branch reset and removal of its capture-map adapter
 - [x] Native plain `\N` non-newline atom and interval forms
 - [x] Native recursive/runtime `(??{...})` and removal of dynamic adapters
+- [x] Native bounded numeric backreference parsing and removal of Joni-side
+      brace-backreference rewriting
+- [x] Native Perl false-class ranges and unfinished non-ASCII range diagnostics
+- [ ] Final-iteration, optional, alternation, and failed-path capture clearing
+- [ ] Physical branch-reset named calls, conditions, and inactive-slot publication
+- [ ] Native named-character whitespace/missing-brace/comment diagnostics and
+      removal of the duplicate Java translation path
+- [ ] Whole-pattern `(?R)` recursion and recursive capture publication
 - [ ] Retire proven-obsolete `dev/import-perl5` regex patches
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       80-file forced-Joni gates on one integrated artifact
