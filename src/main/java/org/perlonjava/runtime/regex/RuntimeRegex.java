@@ -782,7 +782,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
                                 compilePatternString, bytePosition);
-                        throw new PerlCompilerException(RegexDiagnosticFormatter.marked(
+                        throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
                                 originalPatternString, characterPosition, message));
                     }
                     throw new PerlCompilerException(message);
