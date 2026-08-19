@@ -733,6 +733,11 @@ public class UnicodeResolver {
             boolean isPrefixedScriptWildcard =
                     isPerlIsPrefixedScriptWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
+            String looseIsValue = looseIsShortcutValue(property);
+            if (!isUserDefinedPropertyName(property)
+                    && isPerlAllProperty(property, looseIsValue)) {
+                return negated ? "\\P{All}" : "\\p{All}";
+            }
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
                         "Is-prefixed Numeric_Value properties do not accept wildcard values");
@@ -1009,6 +1014,10 @@ public class UnicodeResolver {
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
             String looseIsValue = looseIsShortcutValue(property);
+            if (isPerlAllProperty(property, looseIsValue)) {
+                return new CharacterPropertyResolver.Result(
+                        null, new long[] {1, 0, Long.MAX_VALUE}, false);
+            }
             if (looseIsValue == null) {
                 UnicodeSet bareSet = resolvePerlMissingBaseAlias(property);
                 return bareSet == null ? null : joniPropertyResult(bareSet, true);
@@ -1057,6 +1066,11 @@ public class UnicodeResolver {
         if (set == null) return null;
 
         return joniPropertyResult(set, caseFold);
+    }
+
+    private static boolean isPerlAllProperty(String property, String looseIsValue) {
+        return loosePropertyName(looseIsValue == null ? property : looseIsValue)
+                .equals("all");
     }
 
     private static CharacterPropertyResolver.Result joniPropertyResult(
