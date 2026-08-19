@@ -1294,6 +1294,10 @@ class Lexer extends ScannerSupport {
             if (syntax.op2EscKNamedBackref() && left()) {
                 fetch();
                 if (c =='<' || c == '\'') {
+                    if (syntax.op2OptionPerl() && c == '<' && !left()) {
+                        newSyntaxException(PERL_K_SEQUENCE_NOT_TERMINATED,
+                                p - getBegin());
+                    }
                     fetchNamedBackrefToken();
                 } else {
                     unfetch();
