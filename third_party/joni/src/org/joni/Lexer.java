@@ -745,7 +745,11 @@ class Lexer extends ScannerSupport {
     private boolean isPerlNonNewlineIntervalAhead() {
         if (!left() || !peekIs('{')) return false;
 
-        int cursor = nextChar(p, stop);
+        return isPerlNonNewlineIntervalAt(p);
+    }
+
+    private boolean isPerlNonNewlineIntervalAt(int brace) {
+        int cursor = nextChar(brace, stop);
         boolean sawLow = false;
         boolean sawComma = false;
         boolean sawHigh = false;
@@ -754,7 +758,10 @@ class Lexer extends ScannerSupport {
             if (code == '}') {
                 return sawComma ? sawLow || sawHigh : sawLow;
             }
-            if (code >= '0' && code <= '9') {
+            if (Character.isWhitespace(code)) {
+                cursor = nextChar(cursor, stop);
+                continue;
+            } else if (code >= '0' && code <= '9') {
                 if (sawComma) sawHigh = true;
                 else sawLow = true;
             } else if (code == ',' && !sawComma) {
@@ -944,7 +951,8 @@ class Lexer extends ScannerSupport {
             }
             break;
         }
-        return skipped && cursor < stop && bytes[cursor] == '{';
+        return skipped && cursor < stop && bytes[cursor] == '{'
+                && !isPerlNonNewlineIntervalAt(cursor);
     }
 
     private void scanOriginalBracedHexCodePoint(int last) {
