@@ -40,6 +40,7 @@ final class Search {
         holder.value = p;
         while (tP < tEnd) {
             int lowlen = enc.mbcCaseFold(caseFoldFlag, bytes, holder, end, buf);
+            if (lowlen > tEnd - tP) return false;
             if (lowlen == 1) {
                 if (t[tP++] != buf[0])
                     return false;
