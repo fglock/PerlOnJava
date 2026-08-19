@@ -126,6 +126,10 @@ public class UnicodeResolver {
      * @throws IllegalArgumentException If the name is invalid, not found, or is a named sequence.
      */
     public static int getCodePointFromName(String name) {
+        String trimmed = name.strip();
+        if (trimmed.regionMatches(true, 0, "U+", 0, 2)) {
+            name = trimmed;
+        }
         int codePoint;
         if (name.startsWith("U+")) {
             try {
