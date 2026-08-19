@@ -146,8 +146,6 @@ final class JoniRegexPattern {
                 String name = new String(bytes, p, end - p,
                         encoding == ISO8859_1Encoding.INSTANCE
                                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
-                int[] encoded = NamedCharacterExpansion.decodeRegexToken(name);
-                if (encoded != null) return encoded;
                 NamedCharacterExpansion expansion = cache.resolve(name, sourceMode);
                 if (!expansion.resolved()) {
                     throw new IllegalArgumentException(expansion.diagnostic());
@@ -299,7 +297,7 @@ final class JoniRegexPattern {
     }
 
     String patternDescription() {
-        return NamedCharacterExpansion.restoreRegexTokens(sourcePattern);
+        return sourcePattern;
     }
 
     Regex engineRegex() {
@@ -518,7 +516,10 @@ final class JoniRegexPattern {
                 || syntaxFeatures.alphaAssertionPresent()
                 || pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
-                || pattern.contains("\\N{=POJSEQ=")
+                // Temporary gate: ordinary scalar names retain their predecessor
+                // route until Joni /aa scalar folding is corrected. Delete this
+                // distinction and route all named escapes through Joni then.
+                || containsGeneratedNamedSequence(pattern)
                 || pattern.contains("(*ACCEPT)")
                 || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP")
@@ -527,6 +528,48 @@ final class JoniRegexPattern {
                 || pattern.contains("(*MARK")
                 || pattern.contains("(*:")
                 || (hasSubroutineCall && !branchResetCallUsesJava);
+    }
+
+    static boolean containsNamedCharacterEscape(String pattern) {
+        if (pattern == null) return false;
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            if (pattern.charAt(i) != '\\') continue;
+            int endSlashes = i;
+            while (endSlashes < pattern.length()
+                    && pattern.charAt(endSlashes) == '\\') {
+                endSlashes++;
+            }
+            if (((endSlashes - i) & 1) != 0 && endSlashes + 1 < pattern.length()
+                    && pattern.charAt(endSlashes) == 'N'
+                    && pattern.charAt(endSlashes + 1) == '{') {
+                return true;
+            }
+            i = endSlashes - 1;
+        }
+        return false;
+    }
+
+    private static boolean containsGeneratedNamedSequence(String pattern) {
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            if (pattern.charAt(i) != '\\') continue;
+            int endSlashes = i;
+            while (endSlashes < pattern.length()
+                    && pattern.charAt(endSlashes) == '\\') {
+                endSlashes++;
+            }
+            if (((endSlashes - i) & 1) == 0 || endSlashes + 1 >= pattern.length()
+                    || pattern.charAt(endSlashes) != 'N'
+                    || pattern.charAt(endSlashes + 1) != '{') {
+                i = endSlashes - 1;
+                continue;
+            }
+            int close = pattern.indexOf('}', endSlashes + 2);
+            if (close < 0) return false;
+            String name = pattern.substring(endSlashes + 2, close);
+            if (PerlUnicodeNamedSequenceData.sequence(name) != null) return true;
+            i = close;
+        }
+        return false;
     }
 
     private record PerlSyntaxFeatures(boolean keepPresent,

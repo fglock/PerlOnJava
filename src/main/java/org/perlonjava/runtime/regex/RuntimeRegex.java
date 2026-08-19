@@ -572,8 +572,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             System.err.println("  caller stack: " + Thread.currentThread().getStackTrace()[2]);
         }
 
-        String originalPatternString =
-                org.perlonjava.runtime.NamedCharacterExpansion.restoreRegexTokens(patternString);
+        String originalPatternString = patternString;
         String compilePatternString = patternString;
         boolean hasDynamicPattern = compilePatternString != null
                 && compilePatternString.contains(RegexMarkers.RECURSIVE_PATTERN);
@@ -602,9 +601,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Dynamic patterns compile differently in normal and warn modes. Do not
         // let a placeholder cached in one mode leak into the other. Lexical
         // regex debugging also changes the compiled representation.
-        // Cache by the internal semantic source, not the restored display
-        // spelling. Distinct lexical charname expansions intentionally share
-        // the same external `\N{name}` text but must compile independently.
+        // A lexical charname translator may return a different expansion for
+        // each compilation of the same spelling. Literal syntax validation is
+        // the first leg of one logical compilation: refresh the raw-source
+        // cache entry there, then let the runtime leg reuse that exact result.
+        boolean refreshLexicalNamedCharacter = literalSyntaxValidation
+                && org.perlonjava.runtime.NamedCharacterExpansion
+                        .usesCustomTranslator(namedCharacterTranslator)
+                && patternString != null
+                && patternString.contains("\\N{");
         String cacheKey = patternString + "/" + modifiers
                 + "#debug=" + lexicalDebugMode
                 + "#callouts=" + trustedCalloutCount
@@ -614,7 +619,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
 
         // Check if the regex is already cached
-        RuntimeRegex regex = state().compiledRegexCache.get(cacheKey);
+        RuntimeRegex regex = refreshLexicalNamedCharacter
+                ? null : state().compiledRegexCache.get(cacheKey);
         if (regex == null) {
             if (DEBUG_REGEX) {
                 System.err.println("  cache miss, compiling new regex");
@@ -643,8 +649,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             String javaPattern = null;
             try {
-                boolean usesRecursiveBackend = RegexBackendPolicy.useJoni(
-                        compilePatternString, regex.regexFlags);
+                boolean usesRecursiveBackend = org.perlonjava.runtime.NamedCharacterExpansion
+                        .usesCustomTranslator(namedCharacterTranslator)
+                        && JoniRegexPattern.containsNamedCharacterEscape(compilePatternString)
+                        || RegexBackendPolicy.useJoni(
+                                compilePatternString, regex.regexFlags);
                 if (usesRecursiveBackend
                         && compilePatternString.contains("(?&")
                         && (compilePatternString.contains("(?<=")
@@ -851,7 +860,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             // Cache the result if the cache is not full
-            if (state().compiledRegexCache.size() < MAX_REGEX_CACHE_SIZE) {
+            if (state().compiledRegexCache.size() < MAX_REGEX_CACHE_SIZE
+                    || state().compiledRegexCache.containsKey(cacheKey)) {
                 state().compiledRegexCache.put(cacheKey, regex);
             }
             if (lexicalDebugMode != 0 && REPORTED_DEBUG_COMPILATIONS.add(cacheKey)) {

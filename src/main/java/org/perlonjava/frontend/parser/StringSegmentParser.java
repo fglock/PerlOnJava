@@ -7,6 +7,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
@@ -1508,19 +1509,19 @@ public abstract class StringSegmentParser {
                 // Resolving \N{NUMBER SIGN} to '#' here is observably wrong under
                 // /x: the resolved character is then mistaken for a comment and
                 // any following capture groups disappear from the pattern.
-                NamedCharacterExpansion expansion =
-                        NamedCharacterExpansion.resolve(name, sourceMode);
-                if (expansion.resolved()) {
+                boolean customTranslator = NamedCharacterExpansion.usesCustomTranslator(
+                        HintHashRegistry.getCompileTimeHint("charnames"));
+                if (!customTranslator || currentSegment.toString().endsWith("(?[")) {
+                    NamedCharacterExpansion expansion =
+                            NamedCharacterExpansion.resolve(name, sourceMode);
                     if (isIncompleteExtendedClassNamedSequence(expansion)) {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
-                    appendToCurrentSegment("\\N{" + NamedCharacterExpansion.encodeRegexToken(
-                            name, expansion.sequence()) + "}");
-                } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
-                    parser.throwError(expansion.diagnostic());
-                } else {
-                    appendToCurrentSegment("\\N{" + name + "}");
+                    if (!expansion.resolved()) {
+                        parser.throwError(expansion.diagnostic());
+                    }
                 }
+                appendToCurrentSegment("\\N{" + name + "}");
                 return;
             }
             NamedCharacterExpansion expansion =
