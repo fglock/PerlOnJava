@@ -314,6 +314,25 @@ failure blocks backend removal, not semantic fixes.
 A checked phase means its focused semantic implementation is complete. Release
 gates may reopen it if a semantic regression appears.
 
+### Active phase detail
+
+- [x] Pinned Perl Unicode property-data generators and freshness gates
+- [x] General Category, Script, Block, POSIX, binary-membership, and signed-wide
+      property ranges
+- [x] Runtime-neutral Joni property-value matcher
+- [ ] Replace every Java property-wildcard execution site with the Joni matcher
+- [ ] Complete Hyphen warning/category/source-position diagnostics
+- [x] Pinned Perl simple/full/reverse case-fold data
+- [x] Native fold adapter and unsafe optimizer-boundary suppression
+- [ ] Property/class fold closure
+- [ ] Fold-mode and byte/Unicode provenance context
+- [ ] Forward/reverse literal expansion and backreference folding
+- [ ] Generated Perl named-sequence lookup and native `\N{name}` completion
+- [ ] Native `(?[...])` with zero diagnostic regressions
+- [ ] Native `(?(DEFINE)...)` and removal of its adapter rewrite
+- [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
+      80-file forced-Joni gates on one integrated artifact
+
 ## Final Acceptance
 
 - [ ] Every semantic regex test passing in PR 958 still passes.
