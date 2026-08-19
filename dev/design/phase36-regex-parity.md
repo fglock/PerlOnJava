@@ -73,21 +73,18 @@ affected corpus before taking another slice.
   later run stopped before the complete plan under concurrent CPAN load.
 - The current imported `reg_mesg.t` passes 1,710/2,603 on each backend with an
   identical status/test-number vector.
-- Forced-Joni Unicode property comparison has 84/83,648 residual records on
-  each backend after the wildcard, POSIX/Perl compatibility, and Block slices.
-  The Block slice removed its exact assigned 96 rows with zero introductions.
-  The binary-alias candidate removes another exact 52 rows on the complete JVM
-  corpus, leaving only 32 Hyphen diagnostic rows; matching interpreter evidence
-  and integration remain required.
+- Forced-Joni Unicode property comparison is 83,648/83,648 on both backends.
+  The Hyphen/IsHyphen warning correction removes the final exact 32 residuals
+  with zero introductions while preserving dynamic property interpolation.
 - The shared deterministic pinned-Perl Unicode generator covers all current
   property families plus compact Perl default simple/full/reverse case-fold
   metadata. General_Category compatibility aliases, native named-call/parser
   safety, the runtime-neutral Joni property-value matcher, signed-IV user-
   property ranges, POSIX compatibility, and generated fold data are integrated.
-  The analyser fold-safety slice is integrated in local staging. Native extended
-  classes, the final binary aliases, generated named-sequence lookup, property/
-  class fold closure, and removal of Java wildcard execution are active
-  independent slices.
+  The analyser fold-safety slice, final binary aliases, generated named-sequence
+  lookup, property-wildcard execution, and Hyphen diagnostics are integrated in
+  local staging. Native extended classes, property/class fold closure, and
+  nested property-wildcard lexing are active independent slices.
 - Draft PR 1078 is durable at `e50c667d7`; that exact head passes warning-free
   `make`, all 17 tasks, Joni tests, five unit shards, packaging, and generated-
   data checks.
@@ -323,7 +320,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Replace every Java property-wildcard execution site with the Joni matcher
 - [ ] Parse nested property-value regex syntax in Joni and remove adapter
       materialization of the selected ranges
-- [ ] Complete Hyphen warning/category/source-position diagnostics
+- [x] Complete Hyphen warning/category/source-position diagnostics
 - [x] Pinned Perl simple/full/reverse case-fold data
 - [x] Native fold adapter and unsafe optimizer-boundary suppression
 - [ ] Property/class fold closure
