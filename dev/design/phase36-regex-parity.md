@@ -85,9 +85,10 @@ affected corpus before taking another slice.
   lookup, property-wildcard execution, and Hyphen diagnostics are integrated in
   local staging. Native extended classes, property/class fold closure, and
   nested property-wildcard lexing are active independent slices.
-- Draft PR 1078 is durable at `e50c667d7`; that exact head passes warning-free
-  `make`, all 17 tasks, Joni tests, five unit shards, packaging, and generated-
-  data checks.
+- Draft PR 1078 is durable at `29a6de3fd`. Its integration source through
+  `29e4a1b7e` passes warning-free `make`, all 17 tasks, Joni tests, five unit
+  shards, packaging, and generated-data checks; the final isolated named-
+  diagnostic commit passes its focused all-17-task make.
 - Each `pat.t` variant executes 1,301/1,302 and passes 1,223.
 - The current 80-file forced-Joni gate passes 363,164/391,977 and has 19
   per-file pass-count regressions against PR 958. These figures must be refreshed
@@ -318,7 +319,7 @@ gates may reopen it if a semantic regression appears.
       property ranges
 - [x] Runtime-neutral Joni property-value matcher
 - [x] Replace every Java property-wildcard execution site with the Joni matcher
-- [ ] Parse nested property-value regex syntax in Joni and remove adapter
+- [x] Parse nested property-value regex syntax in Joni and remove adapter
       materialization of the selected ranges
 - [x] Complete Hyphen warning/category/source-position diagnostics
 - [x] Pinned Perl simple/full/reverse case-fold data
@@ -328,8 +329,9 @@ gates may reopen it if a semantic regression appears.
 - [ ] Forward/reverse literal expansion and backreference folding
 - [x] Generated Perl named-sequence lookup and native sequence resolution
 - [ ] Remove temporary named-sequence encoding from native Joni pattern source
-- [ ] Restore Perl diagnostics for unknown and encoded named sequences
-- [ ] Native `(?[...])` with zero diagnostic regressions
+- [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
+- [ ] Restore remaining Perl diagnostics for unknown named sequences
+- [x] Native `(?[...])` with zero diagnostic regressions
 - [ ] Native `(?(DEFINE)...)` and removal of its adapter rewrite
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       80-file forced-Joni gates on one integrated artifact
