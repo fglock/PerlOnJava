@@ -144,9 +144,6 @@ imports:
     target: perl5_t/t/test.pl
     patch: test.pl.patch
 
-  - source: perl5/t/re/pat.t
-    target: perl5_t/t/re/pat.t
-
   - source: perl5/t/porting/manifest.t
     target: perl5_t/t/porting/manifest.t
     patch: manifest.t.patch
