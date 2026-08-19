@@ -657,6 +657,7 @@ public class StringParser {
         elements.add(modifiers);
         ListNode list = new ListNode(elements, rawStr.index);
         OperatorNode node = new OperatorNode(operator, list, rawStr.index);
+        node.setAnnotation("syntacticQuoteRegex", isQuoteRegex);
         node.setAnnotation("regexWarningsEnabled",
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
         node.setAnnotation("regexWarningsFatal",

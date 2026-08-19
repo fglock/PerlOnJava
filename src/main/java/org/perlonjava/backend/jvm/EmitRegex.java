@@ -319,8 +319,11 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        String markMethod = node.getBooleanAnnotation("syntacticQuoteRegex")
+                ? "markSyntacticQuoteConstruction"
+                : "markQuoteConstruction";
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/regex/RuntimeRegex", "markQuoteConstruction",
+                "org/perlonjava/runtime/regex/RuntimeRegex", markMethod,
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

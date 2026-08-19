@@ -218,6 +218,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // only empty match/substitution string syntax reuses the previous match.
     private boolean quoteConstruction = false;
     private List<String> warningsOnUse = new ArrayList<>();
+    private List<String> inlineModifierWarnings = new ArrayList<>();
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
     private static final String DYNAMIC_PATTERN_ERROR =
@@ -261,6 +262,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.hasBranchReset = this.hasBranchReset;
         copy.quoteConstruction = this.quoteConstruction;
         copy.warningsOnUse = new ArrayList<>(this.warningsOnUse);
+        copy.inlineModifierWarnings = new ArrayList<>(this.inlineModifierWarnings);
         copy.lexicalDebugMode = this.lexicalDebugMode;
         // replacement and callerArgs are not copied — they are set per-substitution
         // matched is not copied — each qr// object tracks its own m?PAT? state
@@ -665,7 +667,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty()
                                     || regex.recursivePatternUnicode
                                             .hasDeferredUserDefinedUnicodeProperty();
-                    regex.warningsOnUse.addAll(regex.recursivePattern.compileWarnings());
+                    regex.inlineModifierWarnings.addAll(
+                            regex.recursivePattern.compileWarnings());
+                    regex.warningsOnUse.addAll(regex.inlineModifierWarnings);
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                             || RegexFlags.hasInlinePreserveModifier(compilePatternString);
                     regex.hasBranchReset = false;
@@ -965,6 +969,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.deferredUserDefinedUnicodeProperties = recompiled.deferredUserDefinedUnicodeProperties;
         regex.requiredLiteral = recompiled.requiredLiteral;
         regex.warningsOnUse = new ArrayList<>(recompiled.warningsOnUse);
+        regex.inlineModifierWarnings = new ArrayList<>(recompiled.inlineModifierWarnings);
         regex.lexicalDebugMode = recompiled.lexicalDebugMode;
         return regex;
     }
@@ -1403,6 +1408,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
             regex.quoteConstruction = originalRegex.quoteConstruction;
             regex.warningsOnUse = new ArrayList<>(originalRegex.warningsOnUse);
+            regex.inlineModifierWarnings = new ArrayList<>(originalRegex.inlineModifierWarnings);
             regex.lexicalDebugMode = callSiteDebugMode != 0
                     ? callSiteDebugMode : originalRegex.lexicalDebugMode;
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
@@ -1446,6 +1452,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.hasPreservesMatch = originalRegex.hasPreservesMatch;
                     regex.quoteConstruction = originalRegex.quoteConstruction;
                     regex.warningsOnUse = new ArrayList<>(originalRegex.warningsOnUse);
+                    regex.inlineModifierWarnings = new ArrayList<>(originalRegex.inlineModifierWarnings);
                     regex.lexicalDebugMode = callSiteDebugMode != 0
                             ? callSiteDebugMode : originalRegex.lexicalDebugMode;
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
@@ -1551,7 +1558,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     /** Mark a compiled value as originating from Perl's qr// constructor. */
     public static RuntimeScalar markQuoteConstruction(RuntimeScalar quotedRegex) {
-        resolveRegex(quotedRegex).quoteConstruction = true;
+        RuntimeRegex regex = resolveRegex(quotedRegex);
+        regex.quoteConstruction = true;
+        return quotedRegex;
+    }
+
+    /** Mark a syntactic qr// value and emit diagnostics that belong to its construction. */
+    public static RuntimeScalar markSyntacticQuoteConstruction(RuntimeScalar quotedRegex) {
+        RuntimeRegex regex = resolveRegex(quotedRegex);
+        regex.quoteConstruction = true;
+        for (String warning : regex.inlineModifierWarnings) {
+            RegexQuoteMeta.warnAtConstruction(warning);
+            regex.warningsOnUse.remove(warning);
+        }
+        regex.inlineModifierWarnings.clear();
         return quotedRegex;
     }
 
@@ -1656,6 +1676,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.hasBranchReset = resolvedRegex.hasBranchReset;
         regex.hasCodeBlockCaptures = resolvedRegex.hasCodeBlockCaptures;
         regex.warningsOnUse = new ArrayList<>(resolvedRegex.warningsOnUse);
+        regex.inlineModifierWarnings = new ArrayList<>(resolvedRegex.inlineModifierWarnings);
         regex.lexicalDebugMode = callSiteDebugMode != 0
                 ? callSiteDebugMode : resolvedRegex.lexicalDebugMode;
 
@@ -1694,6 +1715,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.hasBranchReset = recompiledRegex.hasBranchReset;
                 regex.hasCodeBlockCaptures = recompiledRegex.hasCodeBlockCaptures;
                 regex.warningsOnUse = new ArrayList<>(recompiledRegex.warningsOnUse);
+                regex.inlineModifierWarnings = new ArrayList<>(
+                        recompiledRegex.inlineModifierWarnings);
             } else {
                 // Just update the flags without recompiling.  A compiled qr// used
                 // as the whole substitution pattern keeps its own pattern flags;
@@ -1933,6 +1956,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.requiredLiteral = regexState.lastSuccessfulPattern.requiredLiteral;
                 tempRegex.hasPreservesMatch = regexState.lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.warningsOnUse = new ArrayList<>(regexState.lastSuccessfulPattern.warningsOnUse);
+                tempRegex.inlineModifierWarnings = new ArrayList<>(
+                        regexState.lastSuccessfulPattern.inlineModifierWarnings);
                 tempRegex.lexicalDebugMode = regex.lexicalDebugMode != 0
                         ? regex.lexicalDebugMode
                         : regexState.lastSuccessfulPattern.lexicalDebugMode;
@@ -2837,6 +2862,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.javaPatternString = state().lastSuccessfulPattern.javaPatternString;
                 tempRegex.hasPreservesMatch = state().lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.warningsOnUse = new ArrayList<>(state().lastSuccessfulPattern.warningsOnUse);
+                tempRegex.inlineModifierWarnings = new ArrayList<>(
+                        state().lastSuccessfulPattern.inlineModifierWarnings);
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
                 tempRegex.replacement = replacement;

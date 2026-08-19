@@ -936,6 +936,7 @@ public class Opcodes {
     /**
      * Quote regex operator: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg)
      * Format: QUOTE_REGEX rd pattern_reg flags_reg implicit_unicode_strings_u warning_state warning_bits_index quote_construction
+     * quote_construction: 0 = match, 1 = scalar coercion, 2 = syntactic qr//.
      */
     public static final short QUOTE_REGEX = 159;
 
@@ -1835,6 +1836,7 @@ public class Opcodes {
     /**
      * Quote regex with /o modifier support: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg, callsite_id)
      * Format: QUOTE_REGEX_O rd pattern_reg flags_reg callsite_id implicit_unicode_strings_u warning_state warning_bits_index quote_construction
+     * quote_construction: 0 = match, 1 = scalar coercion, 2 = syntactic qr//.
      */
     public static final short QUOTE_REGEX_O = 374;
 

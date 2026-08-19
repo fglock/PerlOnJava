@@ -1151,7 +1151,7 @@ public class CompileOperator {
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                     bytecodeCompiler.emit(regexWarningState(node));
                     bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
-                    bytecodeCompiler.emit(1);
+                    bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
                 } else {
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
                     bytecodeCompiler.emitReg(rd);
@@ -1160,7 +1160,7 @@ public class CompileOperator {
                     bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                     bytecodeCompiler.emit(regexWarningState(node));
                     bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
-                    bytecodeCompiler.emit(1);
+                    bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
                 }
                 bytecodeCompiler.lastResultReg = rd;
             }
