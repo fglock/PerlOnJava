@@ -614,6 +614,14 @@ class Parser extends Lexer {
                 break;
 
             case EOT:
+                // Perl distinguishes an unfinished range after a non-ASCII
+                // class value (for example /[\xdf-/i) from a bare unmatched
+                // opening bracket. Preserve the ordinary EOT diagnostic for
+                // ASCII ranges such as /[a-/.
+                if (arg.state == CCSTATE.RANGE && arg.to >= 0x80
+                        && env.usesPerlDiagnostics()) {
+                    newSyntaxException(PERL_INVALID_RANGE_IN_CHAR_CLASS);
+                }
                 newSyntaxException(PREMATURE_END_OF_CHAR_CLASS);
 
             default:
