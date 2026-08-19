@@ -1318,7 +1318,8 @@ final class JoniRegexPattern {
     private static final class PerlCalloutHandler implements CalloutHandler {
         private record Token(int localLevel, RegexState regexState, RuntimeScalar previousR,
                              RuntimeScalar result, boolean block, boolean dynamic,
-                             CaptureSnapshot previousDynamicView) {}
+                             CaptureSnapshot previousDynamicView,
+                             RegexCallbackMutationSnapshot mutations) {}
 
         private record CaptureSnapshot(int position, int[] begins, int[] ends,
                                        int lastClosed, String controlMark) implements MatchView {
@@ -1491,6 +1492,9 @@ final class JoniRegexPattern {
                 }
             }
             CaptureSnapshot priorDynamicView = previousDynamicView;
+            RegexCallbackMutationSnapshot mutations =
+                    callback.kind == RuntimeRegexCallback.Kind.BLOCK && parent == null
+                            ? RegexCallbackMutationSnapshot.capture(callback.code) : null;
             MatchView provisional = callback.kind == RuntimeRegexCallback.Kind.DYNAMIC
                     ? dynamicCaptureView(match, priorDynamicView) : match;
             publishProvisional(provisional);
@@ -1533,7 +1537,7 @@ final class JoniRegexPattern {
                 Token token = new Token(localLevel, savedRegex, previousR,
                         result.clone(), block,
                         callback.kind == RuntimeRegexCallback.Kind.DYNAMIC,
-                        priorDynamicView);
+                        priorDynamicView, mutations);
                 return new Evaluation(result, token);
             } catch (RuntimeException | Error failure) {
                 // The matcher cannot register an unwind token when the callout
@@ -1558,12 +1562,12 @@ final class JoniRegexPattern {
 
         @Override
         public void unwind(Object value) {
-            restore((Token) value, false);
+            restore((Token) value, false, true);
         }
 
         @Override
         public void complete(Object value) {
-            restore((Token) value, true);
+            restore((Token) value, true, false);
         }
 
         @Override
@@ -1604,10 +1608,11 @@ final class JoniRegexPattern {
             DynamicVariableManager.popToLocalLevel(initialLocalLevel);
         }
 
-        private void restore(Token token, boolean completed) {
+        private void restore(Token token, boolean completed, boolean backtracked) {
             if (!completed) {
                 DynamicVariableManager.popToLocalLevel(token.localLevel());
                 previousDynamicView = token.previousDynamicView();
+                if (backtracked && token.mutations() != null) token.mutations().restore();
             }
             token.regexState().restore();
             if (!completed || !token.dynamic()) {

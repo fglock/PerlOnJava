@@ -109,4 +109,48 @@ public class TestPerlDynamicExecution {
                 "nested-finish:true",
                 "outer-complete:outer-dynamic"), events);
     }
+
+    @Test
+    public void destructiveControlsCommitCalloutsButMarkDoesNot() {
+        String[] committing = {"FAIL", "PRUNE)(*FAIL", "SKIP)(*FAIL",
+                "THEN)(*FAIL", "COMMIT)(*FAIL"};
+        for (String control : committing) {
+            List<String> events = new ArrayList<>();
+            Regex pattern = regex("a(?{=CALL:1})(*" + control + ")");
+            assertEquals(-1, search(pattern, "a", recordingHandler(events)));
+            assertEquals(control, Arrays.asList("execute:1", "complete:1"), events);
+        }
+
+        List<String> markEvents = new ArrayList<>();
+        Regex mark = regex("a(?{=CALL:1})(*MARK:seen)b");
+        assertEquals(-1, search(mark, "a", recordingHandler(markEvents)));
+        assertEquals(Arrays.asList("execute:1", "unwind:1"), markEvents);
+    }
+
+    private static int search(Regex regex, String input, CalloutHandler handler) {
+        byte[] bytes = input.getBytes(StandardCharsets.US_ASCII);
+        Matcher matcher = regex.matcher(bytes);
+        matcher.setCalloutHandler(handler);
+        return matcher.search(0, bytes.length, Option.NONE);
+    }
+
+    private static CalloutHandler recordingHandler(List<String> events) {
+        return new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                events.add("execute:" + id);
+                return CalloutResult.continueWith(id);
+            }
+
+            @Override
+            public void unwind(Object token) {
+                events.add("unwind:" + token);
+            }
+
+            @Override
+            public void complete(Object token) {
+                events.add("complete:" + token);
+            }
+        };
+    }
 }

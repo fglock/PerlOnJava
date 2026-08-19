@@ -578,7 +578,14 @@ abstract class StackMachine extends Matcher implements StackType {
 
     private void unwindCallout(StackEntry entry) {
         Object token = entry.takeCalloutToken();
-        if (token != null) getCalloutHandler().unwind(token);
+        if (token == null) return;
+        if (completeCalloutsOnUnwind()) getCalloutHandler().complete(token);
+        else getCalloutHandler().unwind(token);
+    }
+
+    /** Whether the current failure path commits callback side effects. */
+    protected boolean completeCalloutsOnUnwind() {
+        return false;
     }
 
     private void completeDynamic(StackEntry entry) {
