@@ -516,10 +516,7 @@ final class JoniRegexPattern {
                 || syntaxFeatures.alphaAssertionPresent()
                 || pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
-                // Temporary gate: ordinary scalar names retain their predecessor
-                // route until Joni /aa scalar folding is corrected. Delete this
-                // distinction and route all named escapes through Joni then.
-                || containsGeneratedNamedSequence(pattern)
+                || containsNamedCharacterEscape(pattern)
                 || pattern.contains("(*ACCEPT)")
                 || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP")
@@ -545,29 +542,6 @@ final class JoniRegexPattern {
                 return true;
             }
             i = endSlashes - 1;
-        }
-        return false;
-    }
-
-    private static boolean containsGeneratedNamedSequence(String pattern) {
-        for (int i = 0; i + 2 < pattern.length(); i++) {
-            if (pattern.charAt(i) != '\\') continue;
-            int endSlashes = i;
-            while (endSlashes < pattern.length()
-                    && pattern.charAt(endSlashes) == '\\') {
-                endSlashes++;
-            }
-            if (((endSlashes - i) & 1) == 0 || endSlashes + 1 >= pattern.length()
-                    || pattern.charAt(endSlashes) != 'N'
-                    || pattern.charAt(endSlashes + 1) != '{') {
-                i = endSlashes - 1;
-                continue;
-            }
-            int close = pattern.indexOf('}', endSlashes + 2);
-            if (close < 0) return false;
-            String name = pattern.substring(endSlashes + 2, close);
-            if (PerlUnicodeNamedSequenceData.sequence(name) != null) return true;
-            i = close;
         }
         return false;
     }
