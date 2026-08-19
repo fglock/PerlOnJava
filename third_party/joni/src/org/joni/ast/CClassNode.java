@@ -637,7 +637,21 @@ public final class CClassNode extends Node {
 
     public void nextStateClass(CCStateArg arg, CClassNode ascCc,
                                CClassNode foldCc, ScanEnvironment env) {
-        if (arg.state == CCSTATE.RANGE) throw new SyntaxException(ErrorMessages.CHAR_CLASS_VALUE_AT_END_OF_RANGE);
+        if (arg.state == CCSTATE.RANGE) {
+            if (!env.usesPerlDiagnostics()) {
+                throw new SyntaxException(ErrorMessages.CHAR_CLASS_VALUE_AT_END_OF_RANGE);
+            }
+
+            // Perl accepts a character class as a false range endpoint, such
+            // as [a-\d].  The hyphen is literal and both operands remain
+            // members of the surrounding class.
+            arg.state = CCSTATE.VALUE;
+            nextStateValue(arg, ascCc, foldCc, env);
+            arg.to = '-';
+            arg.toIsRaw = false;
+            arg.inType = CCVALTYPE.SB;
+            nextStateValue(arg, ascCc, foldCc, env);
+        }
 
         if (arg.state == CCSTATE.VALUE && arg.type != CCVALTYPE.CLASS) {
             if (arg.type == CCVALTYPE.SB) {
