@@ -1991,7 +1991,7 @@ class Lexer extends ScannerSupport {
             int characterStart = p;
             fetch();
             if (c == '}') {
-                String boundaryName = name.toString();
+                String boundaryName = name.toString().trim();
                 if (boundaryName.equals("gcb")) {
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_GRAPHEME_BOUNDARY

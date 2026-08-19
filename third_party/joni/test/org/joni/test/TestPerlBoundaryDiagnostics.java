@@ -66,6 +66,8 @@ public class TestPerlBoundaryDiagnostics {
         for (String name : new String[] {"gcb", "sb", "wb", "lb"}) {
             compile("\\b{" + name + "}", Syntax.PerlNG);
             compile("\\B{" + name + "}", Syntax.PerlNG);
+            compile("\\b{ " + name + " }", Syntax.PerlNG);
+            compile("\\B{ " + name + " }", Syntax.PerlNG);
         }
     }
 
