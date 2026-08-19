@@ -151,6 +151,11 @@ affected corpus before taking another slice.
 - Native Joni distinguishes non-ASCII unfinished ranges and accepts Perl false
   class ranges around `\d`, `\s`, and POSIX classes. The focused system-Perl,
   direct-Joni, four-backend, and imported-row gates agree.
+- Physical branch-reset names now bind named calls and named conditions to the
+  correct definition without changing numeric condition operands. The combined
+  numeric-backreference, class-range, and branch-reset boundary passes full
+  `make`; exact `regexp.t` is 2,074/2,210, fixing 57 identities from the prior
+  integrated boundary with no newly failing identity.
 
 ## Execution Phases
 
@@ -262,11 +267,12 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Complete and integrate the current non-overlapping native-Joni batch:
-   ordinary repeated-capture clearing, physical branch-reset names/conditions,
-   named-character grammar/diagnostics, numeric backreferences, and class-range
-   semantics. Run one warning-free full `make`, four-backend focused fixtures,
-   and an exact zero-introduction `regexp.t` comparison on the combined SHA.
+1. Complete and integrate the active non-overlapping successor lanes: dynamic
+   source boundaries, ordinary repeated-capture clearing, native named-character
+   and escape diagnostics, and whole-pattern recursion. Preserve each lane as
+   reviewable semantic commits, then run one warning-free full `make`, four-leg
+   focused fixtures, and an exact zero-introduction `regexp.t` comparison on the
+   combined SHA.
 2. Close the remaining capture/region identities, including inactive named and
    numeric branch-reset slots, final successful quantified iterations, failed
    alternatives, recursive-frame publication, and nested match-state restore.
@@ -385,7 +391,8 @@ gates may reopen it if a semantic regression appears.
       brace-backreference rewriting
 - [x] Native Perl false-class ranges and unfinished non-ASCII range diagnostics
 - [ ] Final-iteration, optional, alternation, and failed-path capture clearing
-- [ ] Physical branch-reset named calls, conditions, and inactive-slot publication
+- [x] Physical branch-reset named calls and conditions
+- [ ] Inactive branch-reset slot publication
 - [ ] Native named-character whitespace/missing-brace/comment diagnostics and
       removal of the duplicate Java translation path
 - [ ] Whole-pattern `(?R)` recursion and recursive capture publication
