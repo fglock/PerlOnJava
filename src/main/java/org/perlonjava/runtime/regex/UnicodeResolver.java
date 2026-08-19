@@ -1066,6 +1066,10 @@ public class UnicodeResolver {
                 return new CharacterPropertyResolver.Result(
                         null, new long[] {1, 0, Long.MAX_VALUE}, false);
             }
+            UnicodeSet generalCategory = resolvePerlBareGeneralCategory(property);
+            if (generalCategory != null) {
+                return joniPropertyResult(generalCategory, true);
+            }
             UnicodeSet blockShortcut = resolvePerlBareBlockShortcut(property);
             if (blockShortcut != null) {
                 return joniPropertyResult(blockShortcut, false);
@@ -1259,6 +1263,8 @@ public class UnicodeResolver {
             if (bareAlias != null) return bareAlias.set;
             UnicodeSet baseAlias = resolvePerlMissingBaseAlias(alias);
             if (baseAlias != null) return baseAlias;
+            UnicodeSet generalCategory = resolvePerlBareGeneralCategory(alias);
+            if (generalCategory != null) return generalCategory;
             UnicodeSet blockShortcut = resolvePerlBareBlockShortcut(alias);
             if (blockShortcut != null) return blockShortcut;
         }
@@ -1751,6 +1757,24 @@ public class UnicodeResolver {
             valueStart++;
         }
         return valueStart < property.length() ? property.substring(valueStart) : null;
+    }
+
+    private static UnicodeSet resolvePerlBareGeneralCategory(String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        String looseIsValue = looseIsShortcutValue(property);
+        String alias = looseIsValue == null ? property : looseIsValue;
+
+        // Perl's shared bare namespace gives scripts and binary properties
+        // precedence over General_Category compatibility names. Blocks are
+        // considered afterward by resolvePerlBareBlockShortcut.
+        if (PerlUnicodeScriptData.canonicalValue(alias) != null
+                || isIcuBinaryPropertyAlias(alias)) {
+            return null;
+        }
+        if (loosePropertyName(alias).equals("l&")) {
+            return PerlUnicodeGeneralCategoryData.resolve("LC");
+        }
+        return PerlUnicodeGeneralCategoryData.resolve(alias);
     }
 
     private static UnicodeSet resolvePerlBareBlockShortcut(String property) {
