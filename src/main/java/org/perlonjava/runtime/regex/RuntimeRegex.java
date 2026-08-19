@@ -589,8 +589,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             System.err.println("  caller stack: " + Thread.currentThread().getStackTrace()[2]);
         }
 
-        String originalPatternString = patternString;
-        String compilePatternString = patternString;
+        boolean literalUselessCaseEscape = patternString != null
+                && patternString.contains(RegexMarkers.LITERAL_USELESS_CASE_ESCAPE);
+        String literalFrontendDiagnostic =
+                RegexMarkers.firstLiteralDiagnostic(patternString);
+        String originalPatternString = RegexMarkers.stripLiteralDiagnostics(patternString);
+        if (literalUselessCaseEscape) {
+            originalPatternString = originalPatternString.replace(
+                    RegexMarkers.LITERAL_USELESS_CASE_ESCAPE, "");
+        }
+        String compilePatternString = originalPatternString;
         List<String> quoteMetaWarningsOnUse = new ArrayList<>();
         if (compilePatternString != null && compilePatternString.contains("\\Q")) {
             // Interpolated-pattern warnings are lexical diagnostics for each
@@ -645,7 +653,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             LeftBraceIssue leftBraceIssue = unescapedLeftBraceIssue(
                     originalPatternString);
             String sourcePolicyWarning = null;
-            String constructionPolicyWarning = null;
+            String constructionPolicyWarning = literalUselessCaseEscape
+                    ? "Useless use of \\E"
+                    : null;
             if (leftBraceIssue != null) {
                 String message = leftBraceIssue.alwaysFatal || lexicalReStrict
                         ? "Unescaped left brace in regex is illegal here"
@@ -818,6 +828,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
             } catch (Exception e) {
+                if (literalFrontendDiagnostic != null) {
+                    String backendDiagnostic = e.getMessage();
+                    if (backendDiagnostic != null
+                            && backendDiagnostic.startsWith("Unknown charname '")
+                            && !backendDiagnostic.endsWith(" in regex")) {
+                        backendDiagnostic += " in regex";
+                    }
+                    throw new PerlCompilerException(literalFrontendDiagnostic
+                            + "\n" + backendDiagnostic);
+                }
                 if (e instanceof PatternSyntaxException syntaxError
                         && "Illegal character range".equals(syntaxError.getDescription())) {
                     throw new PerlCompilerException("Invalid [] range");

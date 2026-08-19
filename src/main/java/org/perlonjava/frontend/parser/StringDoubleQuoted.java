@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -500,6 +501,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
                 // Pop and apply the most recent case modifier
                 if (!caseModifiers.isEmpty()) {
                     applyCaseModifier(caseModifiers.pop());
+                } else {
+                    appendToCurrentSegment(RegexMarkers.LITERAL_USELESS_CASE_ESCAPE);
                 }
             }
 
