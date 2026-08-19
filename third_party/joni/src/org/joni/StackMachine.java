@@ -243,6 +243,10 @@ abstract class StackMachine extends Matcher implements StackType {
         push(ALT, pat, s, prev, pkeep);
     }
 
+    protected final void pushBranchAlt(int pat, int s, int prev, int pkeep) {
+        push(BRANCH_ALT, pat, s, prev, pkeep);
+    }
+
     protected final void pushPos(int target, int s, int prev, int pkeep) {
         push(POS, target, s, prev, pkeep);
     }
@@ -550,8 +554,10 @@ abstract class StackMachine extends Matcher implements StackType {
                     || entry.type == LOOK_BEHIND_NOT)) {
                 break;
             }
-            if (entry.type != ALT && entry.type != DYNAMIC_ALT) continue;
-            if (preserveNearest && !preserved) {
+            if (entry.type != ALT && entry.type != BRANCH_ALT
+                    && entry.type != DYNAMIC_ALT) continue;
+            if (preserveNearest && !preserved
+                    && (entry.type == BRANCH_ALT || entry.type == DYNAMIC_ALT)) {
                 preserved = true;
                 if (current >= 0) {
                     entry.setStatePStr(current);

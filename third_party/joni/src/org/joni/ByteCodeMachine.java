@@ -352,6 +352,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 case OPCode.JUMP:                       opJump();                  continue;
                 case OPCode.PUSH:                       opPush();                  continue;
+                case OPCode.PUSH_BRANCH:                opPushBranch();            continue;
 
                 case OPCode.POP:                        opPop();                   continue;
                 case OPCode.PUSH_OR_JUMP_EXACT1:        opPushOrJumpExact1();      continue;
@@ -521,6 +522,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 case OPCode.JUMP:                       opJump();                  continue;
                 case OPCode.PUSH:                       opPush();                  continue;
+                case OPCode.PUSH_BRANCH:                opPushBranch();            continue;
 
                 case OPCode.POP:                        opPop();                   continue;
                 case OPCode.PUSH_OR_JUMP_EXACT1:        opPushOrJumpExact1();      continue;
@@ -2529,6 +2531,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         switch(code[ip++]) {
         case OPCode.JUMP:
         case OPCode.PUSH:
+        case OPCode.PUSH_BRANCH:
             ip++;       // p += SIZE_RELADDR;
             break;
         case OPCode.REPEAT_INC:
@@ -2600,6 +2603,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opPush() {
         int addr = code[ip++];
         pushAlt(ip + addr, s, sprev, pkeep);
+    }
+
+    private void opPushBranch() {
+        int addr = code[ip++];
+        pushBranchAlt(ip + addr, s, sprev, pkeep);
     }
 
     // CEC

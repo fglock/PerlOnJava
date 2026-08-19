@@ -151,7 +151,7 @@ final class ArrayCompiler extends Compiler {
         do {
             len += compileLengthTree(aln.value);
             if (aln.tail != null) {
-                len += OPSize.PUSH + OPSize.JUMP;
+                len += OPSize.PUSH_BRANCH + OPSize.JUMP;
             }
         } while ((aln = aln.tail) != null);
 
@@ -162,7 +162,7 @@ final class ArrayCompiler extends Compiler {
             len = compileLengthTree(aln.value);
             if (aln.tail != null) {
                 regex.requireStack = true;
-                addOpcodeRelAddr(OPCode.PUSH, len + OPSize.JUMP);
+                addOpcodeRelAddr(OPCode.PUSH_BRANCH, len + OPSize.JUMP);
             }
             compileTree(aln.value);
             if (aln.tail != null) {
