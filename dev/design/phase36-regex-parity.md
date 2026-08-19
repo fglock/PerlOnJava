@@ -231,7 +231,7 @@ identifiers, dates, and completed repair narratives belong in Git history.
 - [ ] Phase 1 — Joni ordinary-pattern parity
 - [x] Phase 2 — conditions and backtracking-visible state
 - [ ] Phase 3 — Unicode and pattern syntax completion
-- [x] Phase 4 — runtime source and diagnostics
+- [ ] Phase 4 — runtime source and diagnostics
 - [ ] Phase 5 — remove the Java matching backend
 - [ ] Phase 6 — integration and release
 
@@ -280,8 +280,15 @@ if they expose a semantic defect.
    - the current combined candidate clears the loose-binary-property fatal:
      each `pat.t` variant executes 1,301/1,302 assertions and passes 1,223;
      classify and close the remaining 79 failures plus the one-test plan
-     shortfall, then remove the wide-scalar fatal that leaves both
-     `pat_advanced.t` variants at zero TAP;
+     shortfall; each `pat_advanced.t` variant now executes all 1,687 assertions
+     and passes 1,570 on both JVM and interpreter backends, so classify and
+     close the remaining 117 failures without relying on the runner's status
+     heuristic or treating optimizer/debug transcripts as semantic parity;
+   - the current forced-Joni `reg_mesg.t` gate executes 2,595 assertions and
+     passes 1,692 after malformed `\g` diagnostics; finish typed warning
+     collection, Perl wording/categories, source markers, strict-mode
+     classification, and fatal-versus-warning behavior in the native frontend
+     and source-policy renderer;
    - after those native patches are integrated, refresh all four legs (forced
      Java/Joni × JVM/interpreter) against one current artifact. Reject zero-TAP,
      timeout, incomplete, or negative-file results before a long acceptance run
@@ -297,12 +304,18 @@ if they expose a semantic defect.
      intersection, negation, and nested classes, then remove the corresponding
      adapter translation;
    - close ASCII-strict multi-character folds and the remaining `/aa` imported
-     owner families before deleting their Java fold routing;
+     owner families before deleting their Java fold routing; the current exact
+     forced-Joni `/aa` envelope executes 837 assertions and passes 833 after
+     strict literal, mixed-class, and scoped mixed-source fold repairs; the four
+     remaining failed assertions report 48 concrete backreference records and
+     10 aggregate summaries, with JVM/interpreter identity;
    - represent property-value wildcard parsing and diagnostics with a dedicated
      Joni syntax node rather than flattening wildcard behavior into literal
      ranges prematurely;
    - close the remaining generated property/value alias gaps against the pinned
-     Perl 5.44 corpus;
+     Perl 5.44 corpus while retaining native `All` through Perl's signed-IV-wide
+     scalar domain via the long-range property result rather than truncating to
+     Java `int`;
    - keep Perl lexical/source policy in the adapter;
    - prefer bundled Perl Unicode data over duplicating ICU behavior or depending
      on the host JDK Unicode version.
@@ -396,6 +409,11 @@ detection and do not replace implementation work.
   remain preserved and unmerged until the user explicitly approves a test
   replacement/update policy; implementation must not disguise the new route to
   keep a stale assertion green.
+- Production diagnostics use Perl's exact trailing space after an
+  end-of-pattern `<-- HERE` marker. The obsolete no-trailing-space formatter
+  entry point remains only because its current unit test asserts that legacy
+  rendering; deleting it requires the same explicit existing-test update
+  policy.
 - Optimizer/debug transcript assertions are reported separately from semantic
   behavior and must never silently alter the raw baseline comparison.
 - A runtime or shared-language defect that prevents a regex test from executing
