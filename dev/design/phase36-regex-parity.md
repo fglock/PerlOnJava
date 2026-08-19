@@ -107,7 +107,7 @@ affected corpus before taking another slice.
   enabling PerlOnJava's unrelated internal compiler trace.
 - Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
   passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
-- Exact `re/regexp.t` executes 2,210/2,210 with 2,156 passing and 54 explicit
+- Exact `re/regexp.t` executes 2,210/2,210 with 2,159 passing and 51 explicit
   residuals. Non-nullable quantified captures now preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
   final iteration, and restore state on backtracking. Lexical warning masks
@@ -289,9 +289,9 @@ behavior.
    alternatives, recursive-frame publication, and nested match-state restore.
    Preserve Joni null-loop detection with a dedicated nullable-repeat invariant
    and direct stress tests.
-2. Finish runtime-source diagnostics for unterminated executable groups and
-   regexp rows 575/576/581, then close the remaining `pat.t` dynamic code-array
-   rows without changing the already-green `pat_re_eval.t` 555/555 contract.
+2. Close the remaining `pat.t` dynamic code-array rows without changing the
+   native unterminated executable-group diagnostics or the already-green
+   `pat_re_eval.t` 555/555 contract.
 3. Move remaining Perl named-character, escape, strict-mode, brace, control-
    character, and warning semantics into Joni lexer/compiler internals. Resolve
    the Perl-version diagnostic policy for regexp row 1521 without editing an
@@ -416,7 +416,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Native whole-pattern `(?R)` parsing and execution
 - [ ] Recursive call capture publication and recursion safety
 - [x] Runtime-source comment/class masking and `/aa` propagation
-- [ ] Unterminated runtime-source diagnostics and dynamic code-array residuals
+- [x] Unterminated runtime-source diagnostics for regexp rows 575/576/581
+- [ ] Remaining dynamic code-array residuals
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [ ] Retire proven-obsolete `dev/import-perl5` regex patches
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and

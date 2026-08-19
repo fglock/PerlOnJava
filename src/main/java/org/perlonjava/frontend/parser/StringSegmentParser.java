@@ -1005,19 +1005,85 @@ public abstract class StringSegmentParser {
 
         // Consume the "{" token
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        int codeBodyStart = parser.tokenIndex;
+        Node block;
+        try {
+            // Parse the block content using the Block parser - this handles heredocs properly
+            block = parseBlock(parser);
 
-        // Parse the block content using the Block parser - this handles heredocs properly
-        Node block = parseBlock(parser);
+            // Consume the closing "}"
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // Consume the closing "}"
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-
-        // Consume the closing ")" that completes the (?{...}) construct  
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+            // Consume the closing ")" that completes the (?{...}) construct
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        } catch (RuntimeException original) {
+            int closingBrace = findRegexCodeBlockClosingBrace(codeBodyStart);
+            if (closingBrace < 0) {
+                int failureIndex = Whitespace.skipWhitespace(
+                        parser, parser.tokenIndex, parser.tokens);
+                if (failureIndex >= parser.tokens.size()
+                        || parser.tokens.get(failureIndex).type == LexerTokenType.EOF) {
+                    throw PerlCompilerException.withSourceLocation(
+                            savedTokenIndex,
+                            "Missing right curly or square bracket",
+                            ctx.errorUtil);
+                }
+                // Perl reports an earlier expression syntax error before the
+                // structural EOF diagnostic when the callback parser stopped
+                // on a concrete bad token (for example `(?{(^{})`).
+                throw original;
+            }
+            int afterBrace = Whitespace.skipWhitespace(
+                    parser, closingBrace + 1, parser.tokens);
+            if (afterBrace >= parser.tokens.size()
+                    || !")".equals(parser.tokens.get(afterBrace).text)) {
+                throw PerlCompilerException.withSourceLocation(
+                        savedTokenIndex,
+                        "Sequence (?{...}) not terminated with ')'",
+                        ctx.errorUtil);
+            }
+            throw original;
+        }
 
         String kind = isRecursive ? "DYNAMIC" : "BLOCK";
         segments.add(regexCallback(block, kind, savedTokenIndex, sourceLine,
                 "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
+    }
+
+    /**
+     * Finds the structural brace that closes a Perl regex callback. Braces in
+     * ordinary quoted strings do not affect callback depth. This scanner is
+     * used only after the full Perl block parser rejects the source, so valid
+     * heredocs and quote-like operators continue to be owned by that parser.
+     */
+    private int findRegexCodeBlockClosingBrace(int codeBodyStart) {
+        int depth = 1;
+        String quote = null;
+        for (int i = codeBodyStart; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.EOF) {
+                return -1;
+            }
+            String text = token.text;
+            if ("\\".equals(text) && i + 1 < parser.tokens.size()) {
+                i++;
+                continue;
+            }
+            if (quote != null) {
+                if (quote.equals(text)) {
+                    quote = null;
+                }
+                continue;
+            }
+            if ("'".equals(text) || "\"".equals(text)) {
+                quote = text;
+            } else if ("{".equals(text)) {
+                depth++;
+            } else if ("}".equals(text) && --depth == 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private String regexSourceTokens(int start, int end) {
