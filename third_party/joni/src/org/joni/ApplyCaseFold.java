@@ -40,7 +40,7 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
         BitSet bs = cc.bs;
         boolean addFlag;
 
-        if (Option.isPerlAsciiStrict(env.option)
+        if (!arg.preservePropertyAsciiCrossings && Option.isPerlAsciiStrict(env.option)
                 && perlAsciiStrictRelationCrossesAscii(from, to, length)) {
             return;
         }

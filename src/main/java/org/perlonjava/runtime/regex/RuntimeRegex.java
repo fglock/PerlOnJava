@@ -1529,8 +1529,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // so the cached RuntimeRegex is not corrupted by refCount changes)
         RuntimeRegex compiled = compile(patternString.toString(), modifierStr,
                 callSiteDebugMode, 0,
-                patternString.type == RuntimeScalarType.BYTE_STRING
-                        && containsNonAscii(patternString.toString())).cloneTracked();
+                patternString.type == RuntimeScalarType.BYTE_STRING).cloneTracked();
         return new RuntimeScalar(compiled).propagateTaint(patternString);
     }
 

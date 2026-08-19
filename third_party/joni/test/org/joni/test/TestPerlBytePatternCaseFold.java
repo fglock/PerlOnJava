@@ -16,6 +16,7 @@ import static org.junit.Assert.assertEquals;
 import java.nio.charset.StandardCharsets;
 
 import org.jcodings.specific.ISO8859_1Encoding;
+import org.jcodings.specific.UTF8Encoding;
 import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Syntax;
@@ -40,8 +41,19 @@ public class TestPerlBytePatternCaseFold {
     }
 
     @Test
-    public void bytePatternsKeepLatinOneSimpleFolds() {
-        assertEquals(0, search("^\u00e4$", "\u00c4"));
-        assertEquals(0, search("^(\u00e4)\\1$", "\u00c4\u00e4"));
+    public void bytePatternsKeepAsciiButRejectLatinOneFolds() {
+        assertEquals(0, search("^a$", "A"));
+        assertEquals(-1, search("^\u00e4$", "\u00c4"));
+        assertEquals(-1, search("^(\u00e4)\\1$", "\u00c4\u00e4"));
+    }
+
+    @Test
+    public void asciiStrictPropertyClosureRetainsUnicodePropertyMembership() {
+        byte[] pattern = "^\\p{Lowercase}$".getBytes(StandardCharsets.UTF_8);
+        byte[] kelvin = "\u212a".getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(pattern, 0, pattern.length,
+                Option.IGNORECASE | Option.PERL_ASCII_STRICT,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG);
+        assertEquals(0, regex.matcher(kelvin).search(0, kelvin.length, Option.NONE));
     }
 }
