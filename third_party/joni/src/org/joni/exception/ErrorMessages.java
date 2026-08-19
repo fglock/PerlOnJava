@@ -113,6 +113,12 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_UNTERMINATED_G_BRACE_PATTERN = "Unterminated \\g{...} pattern";
     String PERL_G_SEQUENCE_NOT_TERMINATED = "Sequence \\g{... not terminated";
     String PERL_K_SEQUENCE_NOT_TERMINATED = "Sequence \\k<... not terminated";
+    String PERL_BARE_K_SEQUENCE_NOT_TERMINATED = "Sequence \\k... not terminated";
+    String PERL_K_QUOTE_SEQUENCE_NOT_TERMINATED = "Sequence \\k'... not terminated";
+    String PERL_K_BRACE_SEQUENCE_NOT_TERMINATED = "Sequence \\k{... not terminated";
+    String PERL_NAMED_CALL_NOT_TERMINATED = "Sequence (?&... not terminated";
+    String PERL_QUANTIFIER_ON_ZERO_LENGTH =
+            "Quantifier unexpected on zero-length expression";
     String PERL_WIDE_SCALAR_OVERFLOW =
             "Use of code point is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF";
 

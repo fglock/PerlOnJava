@@ -648,6 +648,9 @@ class Parser extends Lexer {
             boolean listCapture = false;
 
             fetch();
+            if (syntax.op2OptionPerl() && c == '&') {
+                return parsePerlNamedCall();
+            }
             if (syntax.op2OptionPerl() && enc.isDigit(c)) {
                 return parsePerlNumberedCall(c);
             }
@@ -782,6 +785,9 @@ class Parser extends Lexer {
                     }
                     returnCode = 0;
                     return parseBackref();
+                }
+                if (c == '>') {
+                    return parsePerlNamedCall();
                 }
                 newValueException(PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED,
                         new String(Character.toChars(c)));
@@ -2043,6 +2049,43 @@ class Parser extends Lexer {
         env.numCall++;
         returnCode = 0;
         return node;
+    }
+
+    private Node parsePerlNamedCall() {
+        int nameP = p;
+        if (!left()) {
+            newSyntaxException(PERL_NAMED_CALL_NOT_TERMINATED,
+                    stop - getBegin());
+        }
+
+        int cursor = p;
+        int first = enc.mbcToCode(bytes, cursor, stop);
+        int firstEnd = cursor + enc.length(bytes, cursor, stop);
+        if (first == ')' || enc.isDigit(first) || !enc.isWord(first)) {
+            newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
+                    firstEnd - getBegin());
+        }
+
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == ')') {
+                int nameEnd = cursor;
+                p = cursor + enc.length(bytes, cursor, stop);
+                CallNode node = new CallNode(bytes, nameP, nameEnd, 0);
+                env.numCall++;
+                returnCode = 0;
+                return node;
+            }
+            if (!enc.isWord(code)) {
+                newSyntaxException(PERL_NAMED_CALL_NOT_TERMINATED,
+                        cursor - getBegin());
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+
+        newSyntaxException(PERL_NAMED_CALL_NOT_TERMINATED,
+                stop - getBegin());
+        return null;
     }
 
     private Node parsePerlNumberedCall(int firstDigit) {

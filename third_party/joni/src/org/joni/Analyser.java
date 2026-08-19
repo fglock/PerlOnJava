@@ -2316,10 +2316,20 @@ final class Analyser extends Parser {
             QuantifierNode qn = (QuantifierNode)node;
             Node target = qn.target;
 
+            int perlTargetMin = -1;
+            if (syntax.op2OptionPerl() && qn.isByNumber()
+                    && target.getType() == NodeType.CALL) {
+                perlTargetMin = getMinMatchLength(target);
+                if (perlTargetMin == 0) {
+                    perlSyntaxWarn(PERL_QUANTIFIER_ON_ZERO_LENGTH);
+                }
+            }
+
             if ((state & IN_REPEAT) != 0) qn.setInRepeat();
 
             if (isRepeatInfinite(qn.upper) || qn.lower >= 1) {
-                int d = getMinMatchLength(target);
+                int d = perlTargetMin >= 0
+                        ? perlTargetMin : getMinMatchLength(target);
                 if (d == 0) {
                     qn.targetEmptyInfo = TargetInfo.IS_EMPTY;
                     if (Config.USE_MONOMANIAC_CHECK_CAPTURES_IN_ENDLESS_REPEAT) {

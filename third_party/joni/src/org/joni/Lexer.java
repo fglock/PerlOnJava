@@ -1317,15 +1317,37 @@ class Lexer extends ScannerSupport {
 
     private void fetchTokenFor_NamedBackref() {
         if (Config.USE_NAMED_GROUP) {
-            if (syntax.op2EscKNamedBackref() && left()) {
-                fetch();
-                if (c =='<' || c == '\'') {
-                    if (syntax.op2OptionPerl() && c == '<' && !left()) {
-                        newSyntaxException(PERL_K_SEQUENCE_NOT_TERMINATED,
+            if (syntax.op2EscKNamedBackref()) {
+                if (!left()) {
+                    if (syntax.op2OptionPerl()) {
+                        newSyntaxException(PERL_BARE_K_SEQUENCE_NOT_TERMINATED,
                                 p - getBegin());
+                    }
+                    return;
+                }
+                fetch();
+                if (c == '<' || c == '\'' || syntax.op2OptionPerl() && c == '{') {
+                    if (syntax.op2OptionPerl()) {
+                        if (!left()) {
+                            String message = c == '<' ? PERL_K_SEQUENCE_NOT_TERMINATED
+                                    : c == '\'' ? PERL_K_QUOTE_SEQUENCE_NOT_TERMINATED
+                                    : PERL_K_BRACE_SEQUENCE_NOT_TERMINATED;
+                            newSyntaxException(message, p - getBegin());
+                        }
+                        int first = peek();
+                        if (first == nameEndCodePoint(c)) {
+                            fetch();
+                            newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
+                                    p - getBegin());
+                        }
                     }
                     fetchNamedBackrefToken();
                 } else {
+                    if (syntax.op2OptionPerl()) {
+                        int invalid = enc.prevCharHead(bytes, getBegin(), p, stop);
+                        newSyntaxException(PERL_BARE_K_SEQUENCE_NOT_TERMINATED,
+                                invalid - getBegin());
+                    }
                     unfetch();
                     syntaxWarn("invalid back reference");
                 }
@@ -2063,6 +2085,13 @@ class Lexer extends ScannerSupport {
     protected final void syntaxWarn(String message, int bytePosition) {
         if (env.warnings != WarnCallback.NONE) {
             env.warnings.warn(message, bytePosition);
+        }
+    }
+
+    protected final void perlSyntaxWarn(String message) {
+        if (env.warnings != WarnCallback.NONE) {
+            env.warnings.warn(message + " in regex m/"
+                    + new String(bytes, getBegin(), getEnd() - getBegin()) + "/");
         }
     }
 }
