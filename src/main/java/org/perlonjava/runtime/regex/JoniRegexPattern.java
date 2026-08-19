@@ -148,6 +148,10 @@ final class JoniRegexPattern {
                 String name = new String(bytes, p, end - p,
                         encoding == ISO8859_1Encoding.INSTANCE
                                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
+                String trimmed = name.strip();
+                if (trimmed.regionMatches(true, 0, "U+", 0, 2)) {
+                    name = trimmed;
+                }
                 NamedCharacterExpansion expansion = cache.resolve(name, sourceMode);
                 if (!expansion.resolved()) {
                     throw new IllegalArgumentException(expansion.diagnostic());

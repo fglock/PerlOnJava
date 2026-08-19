@@ -843,7 +843,13 @@ class Lexer extends ScannerSupport {
 
     private boolean fetchTokenFor_namedCharacter(boolean inCharacterClass) {
         NamedCharacterResolver resolver = syntax.namedCharacterResolver;
-        if (resolver == null || !syntax.op2OptionPerl() || !left() || !peekIs('{')) {
+        if (resolver == null || !syntax.op2OptionPerl() || !left()) {
+            return false;
+        }
+        if (!peekIs('{')) {
+            if (!inCharacterClass && hasSeparatedNamedCharacterBrace()) {
+                newSyntaxException(PERL_MISSING_BRACES_ON_NAMED_CHARACTER_ESCAPE);
+            }
             return false;
         }
         if (usesPerlNonNewlineEscape() && isPerlNonNewlineIntervalAhead()) {
@@ -884,6 +890,40 @@ class Lexer extends ScannerSupport {
 
         newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE);
         return true; // not reached
+    }
+
+    private boolean hasSeparatedNamedCharacterBrace() {
+        int cursor = p;
+        boolean skipped = false;
+        while (cursor < stop) {
+            int next = bytes[cursor] & 0xff;
+            if (isExtend(env.option) && (next == ' ' || next == '\t'
+                    || next == '\n' || next == '\r' || next == '\f')) {
+                cursor++;
+                skipped = true;
+                continue;
+            }
+            if (cursor + 2 < stop && next == '('
+                    && bytes[cursor + 1] == '?' && bytes[cursor + 2] == '#') {
+                int comment = cursor + 3;
+                boolean closed = false;
+                while (comment < stop) {
+                    int value = bytes[comment++] & 0xff;
+                    if (value == '\\' && comment < stop) {
+                        comment++;
+                    } else if (value == ')') {
+                        closed = true;
+                        break;
+                    }
+                }
+                if (!closed) return false;
+                cursor = comment;
+                skipped = true;
+                continue;
+            }
+            break;
+        }
+        return skipped && cursor < stop && bytes[cursor] == '{';
     }
 
     private void scanOriginalBracedHexCodePoint(int last) {
