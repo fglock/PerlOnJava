@@ -1545,7 +1545,9 @@ class Parser extends Lexer {
         case INTERVAL:
             if (syntax.contextIndepRepeatOps()) {
                 if (syntax.contextInvalidRepeatOps()) {
-                    newSyntaxException(TARGET_OF_REPEAT_OPERATOR_NOT_SPECIFIED);
+                    newSyntaxException(env.usesPerlDiagnostics()
+                            ? PERL_QUANTIFIER_FOLLOWS_NOTHING
+                            : TARGET_OF_REPEAT_OPERATOR_NOT_SPECIFIED);
                 } else {
                     node = StringNode.EMPTY; // node_new_empty
                 }

@@ -65,4 +65,14 @@ public class TestPerlCharacterClassDiagnostics {
         assertEquals("Unmatched [", error.getMessage());
         assertEquals(2, error.getPatternPosition());
     }
+
+    @Test
+    public void leadingQuantifierUsesPerlDiagnostic() {
+        byte[] bytes = "*a".getBytes(StandardCharsets.UTF_8);
+        SyntaxException error = assertThrows(SyntaxException.class,
+                () -> new Regex(bytes, 0, bytes.length, Option.NONE,
+                        UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE));
+        assertEquals("Quantifier follows nothing", error.getMessage());
+        assertEquals(1, error.getPatternPosition());
+    }
 }
