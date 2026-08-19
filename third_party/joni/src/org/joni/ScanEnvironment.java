@@ -162,6 +162,10 @@ public final class ScanEnvironment {
 
     void ccEscWarn(String s) {
         if (warnings != WarnCallback.NONE) {
+            // Perl accepts a leading ']' as a literal character in a class
+            // without warning.  Ruby/Oniguruma warns for this spelling, but
+            // PerlNG must preserve Perl's warning policy as well as its parse.
+            if (syntax.op2OptionPerl() && "]".equals(s)) return;
             if (syntax.warnCCOpNotEscaped() && syntax.backSlashEscapeInCC()) {
                 warnings.warn("character class has '" + s + "' without escape");
             }
@@ -174,8 +178,22 @@ public final class ScanEnvironment {
         }
     }
 
+    public String emptyRangeError() {
+        return usesPerlDiagnostics()
+                ? ErrorMessages.PERL_INVALID_RANGE_IN_CHAR_CLASS
+                : ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS;
+    }
+
+    public boolean usesPerlDiagnostics() {
+        return "PerlNG".equals(syntax.name) || "PERLONJAVA".equals(syntax.name);
+    }
+
     void closeBracketWithoutEscapeWarn(String s) {
         if (warnings != WarnCallback.NONE) {
+            // A closing bracket outside a character class is an ordinary
+            // literal in Perl (except at the start, which the lexer already
+            // permits separately) and does not produce a regexp warning.
+            if (syntax.op2OptionPerl() && "]".equals(s)) return;
             if (syntax.warnCCOpNotEscaped()) {
                 warnings.warn("regular expression has '" + s + "' without escape");
             }

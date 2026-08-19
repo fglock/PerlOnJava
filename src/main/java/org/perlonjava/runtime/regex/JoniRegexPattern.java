@@ -525,7 +525,24 @@ final class JoniRegexPattern {
                 || pattern.contains("(*COMMIT")
                 || pattern.contains("(*MARK")
                 || pattern.contains("(*:")
+                || containsPerlEmptyCharacterClass(pattern)
                 || hasSubroutineCall;
+    }
+
+    private static boolean containsPerlEmptyCharacterClass(String pattern) {
+        boolean quoted = false;
+        for (int i = 0; i + 1 < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (ch == '\\') {
+                char next = pattern.charAt(i + 1);
+                if (quoted && next == 'E') quoted = false;
+                else if (!quoted && next == 'Q') quoted = true;
+                i++;
+                continue;
+            }
+            if (!quoted && ch == '[' && pattern.charAt(i + 1) == ']') return true;
+        }
+        return false;
     }
 
     static boolean containsNamedCharacterEscape(String pattern) {

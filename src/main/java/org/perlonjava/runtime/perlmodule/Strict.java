@@ -51,6 +51,7 @@ public class Strict extends PerlModuleBase {
     public static final int HINT_RE_TAINT = 0x00002000;      // use re 'taint'
     public static final int HINT_RE_DEBUG = 0x00004000;      // use re 'debug'
     public static final int HINT_RE_DEBUGCOLOR = 0x00008000; // use re 'debugcolor'
+    public static final int HINT_RE_STRICT = 0x00010000;     // use re 'strict'
 
     /**
      * Constructor for Strict.

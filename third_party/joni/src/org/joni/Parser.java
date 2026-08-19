@@ -195,6 +195,7 @@ class Parser extends Lexer {
         } else {
             not = false;
         }
+        int nameStart = p;
         if (enc.strLength(bytes, p, stop) >= POSIX_BRACKET_NAME_MIN_LEN + 3) { // else goto not_posix_bracket
             boolean asciiRange = isAsciiRange(env.option) && !isPosixBracketAllRange(env.option);
 
@@ -233,10 +234,19 @@ class Parser extends Lexer {
         }
 
         if (c == ':' && left()) {
+            int nameEnd = p;
             inc();
             if (left()) {
                 fetch();
-                if (c == ']') newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                if (c == ']') {
+                    if (env.usesPerlDiagnostics()) {
+                        String name = new String(bytes, nameStart,
+                                nameEnd - nameStart, StandardCharsets.US_ASCII);
+                        newSyntaxException("POSIX class [:" + (not ? "^" : "")
+                                + name + ":] unknown");
+                    }
+                    newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                }
             }
         }
         restore();
@@ -341,6 +351,7 @@ class Parser extends Lexer {
 
     private ParsedCharClass parseCharClass(ObjPtr<CClassNode> ascNode,
                                            ObjPtr<CClassNode> foldNode) {
+        int classContentStart = p - getBegin();
         final boolean neg;
         CClassNode cc, prevCc = null, ascCc = null, ascPrevCc = null,
                 workCc = null, ascWorkCc = null, foldCc = null,
@@ -357,7 +368,12 @@ class Parser extends Lexer {
         }
 
         if (token.type == TokenType.CC_CLOSE && !syntax.op3OptionECMAScript()) {
-            if (!codeExistCheck(']', true)) newSyntaxException(EMPTY_CHAR_CLASS);
+            if (!codeExistCheck(']', true)) {
+                if (env.usesPerlDiagnostics()) {
+                    newSyntaxException(PERL_UNMATCHED_OPEN_BRACKET, classContentStart);
+                }
+                newSyntaxException(EMPTY_CHAR_CLASS);
+            }
             env.ccEscWarn("]");
             token.type = TokenType.CHAR; /* allow []...] */
         }
@@ -1529,7 +1545,9 @@ class Parser extends Lexer {
         case INTERVAL:
             if (syntax.contextIndepRepeatOps()) {
                 if (syntax.contextInvalidRepeatOps()) {
-                    newSyntaxException(TARGET_OF_REPEAT_OPERATOR_NOT_SPECIFIED);
+                    newSyntaxException(env.usesPerlDiagnostics()
+                            ? PERL_QUANTIFIER_FOLLOWS_NOTHING
+                            : TARGET_OF_REPEAT_OPERATOR_NOT_SPECIFIED);
                 } else {
                     node = StringNode.EMPTY; // node_new_empty
                 }

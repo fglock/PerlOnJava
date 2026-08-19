@@ -1399,6 +1399,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean isWordBreakBoundary() {
+        if (str == end) return false;
         if (s <= str || s >= end) return true; // WB1, WB2
 
         int leftPosition = enc.prevCharHead(bytes, str, s, end);
@@ -1858,6 +1859,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean isSentenceBoundary() {
+        if (str == end) return false;
         if (s <= str || s >= end) return true; // SB1, SB2
 
         int leftPosition = enc.prevCharHead(bytes, str, s, end);
@@ -1981,6 +1983,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean isGraphemeBoundary() {
+        if (str == end) return false;
         if (s <= str || s >= end) return true; // GB1, GB2
 
         int leftPosition = enc.prevCharHead(bytes, str, s, end);

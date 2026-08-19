@@ -36,6 +36,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String END_PATTERN_AT_LEFT_BRACE = "end pattern at left brace";
     String END_PATTERN_AT_LEFT_BRACKET = "end pattern at left bracket";
     String EMPTY_CHAR_CLASS = "empty char-class";
+    String PERL_UNMATCHED_OPEN_BRACKET = "Unmatched [";
     String PREMATURE_END_OF_CHAR_CLASS = "premature end of char-class";
     String END_PATTERN_AT_ESCAPE = "end pattern at escape";
     String END_PATTERN_AT_META = "end pattern at meta";
@@ -46,6 +47,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String CHAR_CLASS_VALUE_AT_START_OF_RANGE = "char-class value at start of range";
     String UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS = "unmatched range specifier in char-class";
     String TARGET_OF_REPEAT_OPERATOR_NOT_SPECIFIED = "target of repeat operator is not specified";
+    String PERL_QUANTIFIER_FOLLOWS_NOTHING = "Quantifier follows nothing";
     String TARGET_OF_REPEAT_OPERATOR_INVALID = "target of repeat operator is invalid";
     String NESTED_REPEAT_NOT_ALLOWED = "nested repeat is not allowed";
     String NESTED_REPEAT_OPERATOR = "nested repeat operator";
@@ -147,6 +149,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String TOO_BIG_NUMBER_FOR_REPEAT_RANGE = "too big number for repeat range";
     String UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE = "upper is smaller than lower in repeat range";
     String EMPTY_RANGE_IN_CHAR_CLASS = "empty range in char class";
+    String PERL_INVALID_RANGE_IN_CHAR_CLASS = "Invalid [] range";
     String MISMATCH_CODE_LENGTH_IN_CLASS_RANGE = "mismatch multibyte code length in char-class range";
     String TOO_MANY_MULTI_BYTE_RANGES = "too many multibyte code ranges are specified";
     String TOO_SHORT_MULTI_BYTE_STRING = "too short multibyte code string";
