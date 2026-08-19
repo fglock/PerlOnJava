@@ -124,10 +124,16 @@ final class RuntimeRegexSourceCompiler {
 
             RuntimeList result = code.apply(new RuntimeArray(), RuntimeContextType.SCALAR);
             RuntimeScalar compiled = result.scalar().propagateTaint(pattern);
-            if (compiled.value instanceof RuntimeRegex && !modifiers.isEmpty()) {
+            // Pattern modifiers were already parsed by the synthetic qr// source
+            // above. Reapplying them through getQuotedRegex() merges flags again;
+            // that loses the second 'a' of /aa because ordinary flag merging
+            // deduplicates modifier characters. Only operation modifiers belong
+            // to the outer runtime regexp operation.
+            String operationModifiers = publicModifiers.replaceAll("[nimsxpadeul]", "");
+            if (compiled.value instanceof RuntimeRegex && !operationModifiers.isEmpty()) {
                 RuntimeScalar unmodified = compiled;
                 compiled = RuntimeRegex.getQuotedRegex(
-                        unmodified, new RuntimeScalar(modifiers)).propagateTaint(pattern);
+                        unmodified, new RuntimeScalar(operationModifiers)).propagateTaint(pattern);
                 if (compiled.value != unmodified.value
                         && unmodified.value instanceof RuntimeRegex temporary) {
                     temporary.releaseExecutableCallbacks();
