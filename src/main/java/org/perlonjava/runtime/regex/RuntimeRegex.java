@@ -827,6 +827,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     throw new PerlCompilerException(
                             "Reference to nonexistent group in regex");
                 }
+                if (e instanceof IllegalArgumentException
+                        && e.getMessage() != null
+                        && e.getMessage().startsWith("Unknown charname '")
+                        && !e.getMessage().endsWith(" in regex")) {
+                    throw new PerlCompilerException(e.getMessage() + " in regex");
+                }
                 String invalidProperty = invalidUnicodePropertyName(e.getMessage());
                 if (invalidProperty != null) {
                     if (MALFORMED_USER_DEFINED_PROPERTY_PATTERN.matcher(invalidProperty).find()) {
