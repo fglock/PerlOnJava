@@ -48,6 +48,13 @@ public class TestPerlBytePatternCaseFold {
     }
 
     @Test
+    public void bytePatternsRetainEverySegmentOfAsciiStrings() {
+        assertEquals(0, search("^dbi:$", "dbi:"));
+        assertEquals(0, search("^dbi:$", "DBI:"));
+        assertEquals(-1, search("^dbi:$", "dbx:"));
+    }
+
+    @Test
     public void asciiStrictPropertyClosureRetainsUnicodePropertyMembership() {
         byte[] pattern = "^\\p{Lowercase}$".getBytes(StandardCharsets.UTF_8);
         byte[] kelvin = "\u212a".getBytes(StandardCharsets.UTF_8);

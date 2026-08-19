@@ -2147,6 +2147,7 @@ final class Analyser extends Parser {
 
     private Node expandPerlByteAsciiFoldString(StringNode source, int state) {
         ListNode root = null;
+        ListNode sequenceTail = null;
         boolean expanded = false;
 
         for (int p = source.p; p < source.end;) {
@@ -2172,7 +2173,11 @@ final class Analyser extends Parser {
                 }
             }
 
-            root = ListNode.listAdd(root, alternatives.tail == null ? exact : alternatives);
+            Node part = alternatives.tail == null ? exact : alternatives;
+            ListNode segment = ListNode.newList(part, null);
+            if (root == null) root = segment;
+            else sequenceTail.setTail(segment);
+            sequenceTail = segment;
             p = next;
         }
 
