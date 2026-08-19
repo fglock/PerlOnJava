@@ -1379,6 +1379,17 @@ class Lexer extends ScannerSupport {
                     token.setCallNameEnd(nameEnd);
                     token.setCallGNum(gNum);
                     token.setCallRel(rel);
+                } else if (syntax.op2OptionPerl() && c == '-' && left()
+                        && enc.isDigit(peek())) {
+                    int nameP = enc.prevCharHead(bytes, getBegin(), p, stop);
+                    int gNum = scanUnsignedNumber();
+                    if (gNum <= 0) newValueException(gNum < 0
+                            ? TOO_BIG_NUMBER : INVALID_BACKREF);
+                    token.type = TokenType.CALL;
+                    token.setCallNameP(nameP);
+                    token.setCallNameEnd(p);
+                    token.setCallGNum(-gNum);
+                    token.setCallRel(false);
                 } else {
                     syntaxWarn("invalid subexp call");
                     unfetch();
