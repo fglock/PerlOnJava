@@ -702,7 +702,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             : new JoniRegexPattern(compilePatternString,
                                     regex.regexFlags, trustedCalloutCount, false,
                                     false, false, regex.namedCharacterCache);
-                    if (patternByteBacked && regex.regexFlags.isCaseInsensitive()) {
+                    if (patternByteBacked && regex.regexFlags.isCaseInsensitive()
+                            && !regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()) {
                         regex.recursivePatternBytes = new JoniRegexPattern(
                                 compilePatternString, regex.regexFlags, trustedCalloutCount,
                                 true, true, true, regex.namedCharacterCache);
