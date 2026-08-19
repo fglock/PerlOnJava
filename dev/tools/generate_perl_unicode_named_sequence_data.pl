@@ -1,6 +1,13 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use File::Spec;
+use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    read_pinned_source read_unicode_version repo_root select_unicode_root
+    verify_unicode_notice
+);
 
 # Unicode data source copyright:
 # © 2025 Unicode®, Inc.
@@ -8,24 +15,26 @@ use warnings;
 # the U.S. and other countries.
 # For terms of use and license, see https://www.unicode.org/terms_of_use.html
 
-my $unicode_root = 'perl5/lib/unicore';
 my $source_name = 'NamedSequences.txt';
 my $expected_unicode_version = '17.0.0';
+my $unicode_root = select_unicode_root(
+    repo_root => repo_root($FindBin::Bin),
+    version => $expected_unicode_version,
+    required => [qw(version NamedSequences.txt)]);
+my $unicode_version = read_unicode_version(
+    path => File::Spec->catfile($unicode_root, 'version'),
+    expected => $expected_unicode_version,
+    sha256 => '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac');
+my $sequence_path = File::Spec->catfile($unicode_root, $source_name);
+my $sequence_text = read_pinned_source(
+    path => $sequence_path,
+    sha256 => '360dac27d5abafdcd8c03a8597f47acf92e8ebf7f6ee28020c173ed8b2ed0cc5');
+verify_unicode_notice($sequence_path, $sequence_text);
 
-open my $version_fh, '<', "$unicode_root/version"
-    or die "Can't read Unicode version: $!\n";
-chomp(my $unicode_version = <$version_fh>);
-close $version_fh;
-die "Expected Unicode $expected_unicode_version, found $unicode_version\n"
-    unless $unicode_version eq $expected_unicode_version;
-
-open my $sequence_fh, '<', "$unicode_root/$source_name"
-    or die "Can't read $source_name: $!\n";
 my (@entries, $source_version);
-while (<$sequence_fh>) {
+for (split /\n/, $sequence_text) {
     $source_version = $1 if /^# NamedSequences-([0-9.]+)\.txt\s*$/;
     next if /^\s*(?:#|$)/;
-    chomp;
     my ($name, $code_points) = split /;/, $_, 2;
     die "Malformed $source_name line: $_\n"
         unless defined $name && defined $code_points
@@ -38,7 +47,6 @@ while (<$sequence_fh>) {
         unless @code_points >= 2;
     push @entries, [$name, \@code_points];
 }
-close $sequence_fh;
 
 die "Expected $source_name version $unicode_version, found "
         . (defined $source_version ? $source_version : 'no version') . "\n"
