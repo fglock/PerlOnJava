@@ -1445,6 +1445,7 @@ class Lexer extends ScannerSupport {
                 fetch();
                 if (c == '{') {
                     if (!fetchPerlNumericBackrefToken()) fetchNamedBackrefToken();
+                    return;
                 } else {
                     unfetch();
                 }
