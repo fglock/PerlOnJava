@@ -1071,7 +1071,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 || (offset >= 3 && pattern.charAt(offset - 3) == '\\')) {
             return false;
         }
-        return "pPxXoONkgb".indexOf(pattern.charAt(offset - 1)) >= 0;
+        return "pPxXoONkgbB".indexOf(pattern.charAt(offset - 1)) >= 0;
     }
 
     private static boolean isValidQuantifier(String pattern, int offset) {

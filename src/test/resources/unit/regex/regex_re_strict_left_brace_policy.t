@@ -63,4 +63,18 @@ for my $pattern ('^{', 'foo|{', '\\s*{', 'a{3,4}{', 'foo(:?{bar)') {
         "allowed brace context remains quiet: $pattern");
 }
 
+my @boundary_cases = (
+    ['\\B{gc}', qr/^'gc' is an unknown bound type in regex/],
+    ['\\B{}', qr/^Empty \\B\{\} in regex/],
+    ['a\\B{cde', qr/^Missing right brace on \\B\{\} in regex/],
+);
+for my $case (@boundary_cases) {
+    my ($pattern, $expected) = @$case;
+    for my $compiler (\&compile_default, \&compile_strict) {
+        ($value, $error, $warnings) = $compiler->($pattern);
+        ok(!defined($value) && $error =~ $expected && @$warnings == 0,
+            "boundary brace keeps its dedicated diagnostic: $pattern");
+    }
+}
+
 done_testing;
