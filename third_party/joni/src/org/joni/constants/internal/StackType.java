@@ -49,6 +49,7 @@ public interface StackType {
     int CONTROL_MARK                  = 0x0e00;  /* Perl (*MARK:name) backtrack state */
     int PHYSICAL_NAMED_CAPTURE        = 0x0f00;  /* physical named-group span */
     int DYNAMIC_ALT                   = 0x0004;  /* resumable nested-program alternative */
+    int BRANCH_ALT                    = 0x0005;  /* syntactic alternation continuation */
 
     /* stack type check mask */
     int MASK_POP_USED                 = 0x00ff;
