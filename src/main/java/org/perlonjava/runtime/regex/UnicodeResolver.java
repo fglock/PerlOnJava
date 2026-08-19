@@ -70,6 +70,21 @@ public class UnicodeResolver {
     private static final UnicodeSet PERL_HORIZONTAL_SPACE_SET =
             buildPerlHorizontalSpaceSet();
     private static final UnicodeSet PERL_WORD_SET = buildPerlWordSet();
+    private static final UnicodeSet PERL_ASCII_SPACE_SET =
+            new UnicodeSet().add(0x0009, 0x000D).add(0x0020).freeze();
+    private static final UnicodeSet PERL_ASCII_WORD_SET =
+            new UnicodeSet().add('0', '9').add('A', 'Z').add('_').add('a', 'z')
+                    .freeze();
+    private static final UnicodeSet PERL_UNICODE_SPACE_SET =
+            buildPerlUnicodeSpaceSet();
+    private static final UnicodeSet PERL_POSIX_GRAPH_SET =
+            buildPerlPosixGraphSet();
+    private static final UnicodeSet PERL_POSIX_PRINT_SET =
+            buildPerlPosixPrintSet();
+    private static final UnicodeSet PERL_POSIX_XDIGIT_SET =
+            new UnicodeSet().add('0', '9').add('A', 'F').add('a', 'f')
+                    .add(0xFF10, 0xFF19).add(0xFF21, 0xFF26)
+                    .add(0xFF41, 0xFF46).freeze();
     private static final UnicodeSet PERL_COMPOSITION_EXCLUSION_SET =
             buildPerlCompositionExclusionSet();
 
@@ -1274,9 +1289,16 @@ public class UnicodeResolver {
                         false);
             }
         }
+        property = canonicalPerlPosixPropertyAlias(property);
         property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
+            PerlBarePropertyAlias compatibility =
+                    resolvePerlPosixCompatibilityAlias(property);
+            if (compatibility != null) {
+                return joniPropertyResult(
+                        compatibility.set, null, compatibility.caseFold);
+            }
             String looseIsValue = looseIsShortcutValue(property);
             if (isPerlAllProperty(property, looseIsValue)) {
                 return new CharacterPropertyResolver.Result(
@@ -1413,6 +1435,7 @@ public class UnicodeResolver {
     private static boolean isPerlSpecialPropertyAlias(String property) {
         return switch (property) {
             case "lb=cr", "lb=CR",
+                    "PerlSpace", "PerlWord",
                     "XPosixSpace", "XPerlSpace", "SpacePerl", "Space", "White_Space",
                     "XPosixAlnum", "Alnum",
                     "XPosixAlpha", "Alpha", "Alphabetic",
@@ -1443,11 +1466,19 @@ public class UnicodeResolver {
         String loose = loosePropertyName(property);
         if (loose.startsWith("is")) {
             String unprefixed = loose.substring(2);
-            if (unprefixed.startsWith("xposix") || unprefixed.startsWith("posix")) {
+            if (unprefixed.startsWith("xposix") || unprefixed.startsWith("posix")
+                    || unprefixed.equals("perlspace")
+                    || unprefixed.equals("perlword")
+                    || unprefixed.equals("xperlspace")
+                    || unprefixed.equals("spaceperl")) {
                 loose = unprefixed;
             }
         }
         return switch (loose) {
+            case "perlspace" -> "PerlSpace";
+            case "perlword" -> "PerlWord";
+            case "xperlspace" -> "XPerlSpace";
+            case "spaceperl" -> "SpacePerl";
             case "xposixalnum" -> "XPosixAlnum";
             case "xposixalpha" -> "XPosixAlpha";
             case "xposixblank" -> "XPosixBlank";
@@ -1481,12 +1512,16 @@ public class UnicodeResolver {
     private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
         if (property == null) return null;
 
-        String alias = normalizePerlIsPropertyAssignment(property.trim());
+        String alias = canonicalPerlPosixPropertyAlias(property.trim());
+        alias = normalizePerlIsPropertyAssignment(alias);
         int assignment = propertyValueDelimiter(alias);
         PerlUnicodePropertyWildcard propertyWildcard =
                 resolvePerlUnicodePropertyWildcard(alias);
         if (propertyWildcard != null) return propertyWildcard.set;
         if (assignment < 0) {
+            PerlBarePropertyAlias compatibility =
+                    resolvePerlPosixCompatibilityAlias(alias);
+            if (compatibility != null) return compatibility.set;
             PerlBarePropertyAlias bareAlias = resolvePerlBarePropertyAlias(alias);
             if (bareAlias != null) return bareAlias.set;
             UnicodeSet baseAlias = resolvePerlMissingBaseAlias(alias);
@@ -2020,6 +2055,26 @@ public class UnicodeResolver {
         }
     }
 
+    private static PerlBarePropertyAlias resolvePerlPosixCompatibilityAlias(
+            String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        return switch (loosePropertyName(property)) {
+            case "perlspace" -> new PerlBarePropertyAlias(
+                    PERL_ASCII_SPACE_SET, false);
+            case "perlword" -> new PerlBarePropertyAlias(
+                    PERL_ASCII_WORD_SET, false);
+            case "xperlspace", "spaceperl" -> new PerlBarePropertyAlias(
+                    PERL_UNICODE_SPACE_SET, false);
+            case "xposixgraph" -> new PerlBarePropertyAlias(
+                    PERL_POSIX_GRAPH_SET, false);
+            case "xposixprint" -> new PerlBarePropertyAlias(
+                    PERL_POSIX_PRINT_SET, false);
+            case "xposixxdigit" -> new PerlBarePropertyAlias(
+                    PERL_POSIX_XDIGIT_SET, false);
+            default -> null;
+        };
+    }
+
     private static final class PerlBarePropertyAlias {
         private final UnicodeSet set;
         private final boolean caseFold;
@@ -2048,6 +2103,33 @@ public class UnicodeResolver {
                 .add(0x202F)
                 .add(0x205F)
                 .add(0x3000)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlUnicodeSpaceSet() {
+        return new UnicodeSet()
+                .add(0x0009, 0x000D).add(0x0020).add(0x0085).add(0x00A0)
+                .add(0x1680).add(0x2000, 0x200A).add(0x2028, 0x2029)
+                .add(0x202F).add(0x205F).add(0x3000)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlPosixGraphSet() {
+        return new UnicodeSet(PERL_UNICODE_BASE_SET)
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cc"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cs"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cn"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Z"))
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlPosixPrintSet() {
+        return new UnicodeSet(PERL_UNICODE_BASE_SET)
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cc"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cs"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cn"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Zl"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Zp"))
                 .freeze();
     }
 
