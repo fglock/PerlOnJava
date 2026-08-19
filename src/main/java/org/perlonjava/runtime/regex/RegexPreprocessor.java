@@ -144,8 +144,7 @@ public class RegexPreprocessor {
         s = normalizeQuantifiers(s);
 
         // Expand multi-character case folds when case-insensitive flag is set
-        if (regexFlags.isCaseInsensitive() && !regexFlags.isAsciiStrict()
-                && !containsInlineAsciiStrictModifier(s)) {
+        if (regexFlags.isCaseInsensitive() && !regexFlags.isAsciiStrict()) {
             s = expandMultiCharFolds(materializeFoldableHexEscapes(s), regexFlags);
         }
 
@@ -517,31 +516,6 @@ public class RegexPreprocessor {
             i += Character.charCount(codePoint);
         }
         return result.toString();
-    }
-
-    /**
-     * Full-fold rewriting currently operates on the whole pattern. Avoid
-     * applying it across a scoped (?aa:...) boundary, where Perl forbids
-     * ASCII/non-ASCII fold crossings. The regular parser still handles the
-     * scoped modifier itself.
-     */
-    private static boolean containsInlineAsciiStrictModifier(String pattern) {
-        for (int i = 0; i + 2 < pattern.length(); i++) {
-            if (pattern.charAt(i) != '(' || pattern.charAt(i + 1) != '?') continue;
-            int asciiModifiers = 0;
-            for (int j = i + 2; j < pattern.length(); j++) {
-                char modifier = pattern.charAt(j);
-                if (modifier == 'a') {
-                    asciiModifiers++;
-                    if (asciiModifiers == 2) return true;
-                } else if (modifier == ':' || modifier == ')' || modifier == '-') {
-                    break;
-                } else if (!Character.isLetter(modifier) && modifier != '^') {
-                    break;
-                }
-            }
-        }
-        return false;
     }
 
     private static String expandSpecialSingleCharFold(int codePoint) {

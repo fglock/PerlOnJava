@@ -424,7 +424,9 @@ final class JoniRegexPattern {
         boolean branchResetCallUsesJava = pattern.contains("(?|") && hasSubroutineCall;
         PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(
                 pattern, flags != null && flags.isExtended());
-        return syntaxFeatures.keepPresent()
+        return flags != null && flags.isAsciiStrict()
+                || syntaxFeatures.asciiStrictPresent()
+                || syntaxFeatures.keepPresent()
                 || syntaxFeatures.conditionalPresent()
                 || syntaxFeatures.alphaAssertionPresent()
                 || pattern.contains("(?{=CALL:")
@@ -442,7 +444,8 @@ final class JoniRegexPattern {
     private record PerlSyntaxFeatures(boolean keepPresent,
                                       boolean keepInLookaround,
                                       boolean conditionalPresent,
-                                      boolean alphaAssertionPresent) {}
+                                      boolean alphaAssertionPresent,
+                                      boolean asciiStrictPresent) {}
 
     private static PerlSyntaxFeatures analyzePerlSyntax(String pattern, boolean extended) {
         boolean quoted = false;
@@ -454,6 +457,7 @@ final class JoniRegexPattern {
         boolean keepPresent = false;
         boolean conditionalPresent = false;
         boolean alphaAssertionPresent = false;
+        boolean asciiStrictPresent = false;
 
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
@@ -518,7 +522,7 @@ final class JoniRegexPattern {
                     keepPresent = true;
                     if (lookaroundDepth > 0) {
                         return new PerlSyntaxFeatures(true, true, conditionalPresent,
-                                alphaAssertionPresent);
+                                alphaAssertionPresent, asciiStrictPresent);
                     }
                 }
                 continue;
@@ -531,6 +535,26 @@ final class JoniRegexPattern {
                     continue;
                 }
                 if (pattern.startsWith("(?(", i)) conditionalPresent = true;
+                if (pattern.startsWith("(?", i)) {
+                    int positiveAsciiModifiers = 0;
+                    boolean negativeModifiers = false;
+                    for (int j = i + 2; j < pattern.length(); j++) {
+                        char modifier = pattern.charAt(j);
+                        if (modifier == ':' || modifier == ')') {
+                            asciiStrictPresent |= positiveAsciiModifiers >= 2;
+                            break;
+                        }
+                        if (modifier == '-') {
+                            negativeModifiers = true;
+                            continue;
+                        }
+                        if (modifier == '^') continue;
+                        if (modifier < 'a' || modifier > 'z') break;
+                        if (modifier == 'a' && !negativeModifiers) {
+                            positiveAsciiModifiers++;
+                        }
+                    }
+                }
                 if (pattern.startsWith("(*", i)) {
                     int nameEnd = i + 2;
                     while (nameEnd < pattern.length()) {
@@ -560,7 +584,7 @@ final class JoniRegexPattern {
             }
         }
         return new PerlSyntaxFeatures(keepPresent, false, conditionalPresent,
-                alphaAssertionPresent);
+                alphaAssertionPresent, asciiStrictPresent);
     }
 
     private static boolean hasControlVerbState(String pattern) {
