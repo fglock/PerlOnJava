@@ -27,7 +27,14 @@ import static org.joni.Option.isIgnoreCase;
 import static org.joni.Option.isPosixBracketAllRange;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import org.jcodings.ApplyAllCaseFoldFunction;
 import org.jcodings.Encoding;
 import org.jcodings.ObjPtr;
 import org.jcodings.Ptr;
@@ -63,6 +70,100 @@ class Parser extends Lexer {
     protected int returnCode; // return code used by parser methods (they itself return parsed nodes)
                               // this approach will not affect recursive calls
     private EncloseNode[] lexicalMemNodes;
+
+    private static final class PerlAsciiStrictClassMultiFold
+            implements ApplyAllCaseFoldFunction {
+        private final Encoding enc;
+        private final CClassNode cc;
+        private final CClassNode foldCc;
+        private final Map<Integer, Set<Integer>> nonAsciiSiblings =
+                new LinkedHashMap<>();
+        private final List<int[]> crossingFolds = new ArrayList<>();
+
+        PerlAsciiStrictClassMultiFold(Encoding enc, CClassNode cc,
+                                      CClassNode foldCc) {
+            this.enc = enc;
+            this.cc = cc;
+            this.foldCc = foldCc;
+        }
+
+        @Override
+        public void apply(int from, int[] to, int length, Object unused) {
+            if (length == 1) {
+                collectNonAsciiSibling(from, to[0]);
+                return;
+            }
+
+            if (cc.isNot() || Encoding.isAscii(from)
+                    || !ApplyCaseFold.isEligible(foldCc, enc, from)
+                    || !cc.isCodeInCC(enc, from)) {
+                return;
+            }
+
+            for (int i = 0; i < length; i++) {
+                if (!Encoding.isAscii(to[i])) return;
+            }
+            crossingFolds.add(to.clone());
+        }
+
+        private void collectNonAsciiSibling(int from, int to) {
+            final int ascii;
+            final int nonAscii;
+            if (Encoding.isAscii(from) && !Encoding.isAscii(to)) {
+                ascii = from;
+                nonAscii = to;
+            } else if (!Encoding.isAscii(from) && Encoding.isAscii(to)) {
+                ascii = to;
+                nonAscii = from;
+            } else {
+                return;
+            }
+            nonAsciiSiblings.computeIfAbsent(ascii,
+                    ignored -> new LinkedHashSet<>()).add(nonAscii);
+        }
+
+        ListNode alternatives() {
+            ListNode root = null;
+            ListNode tail = null;
+            Set<String> seen = new LinkedHashSet<>();
+            for (int[] crossingFold : crossingFolds) {
+                int[] replacement = new int[crossingFold.length];
+                List<StringNode> generated = new ArrayList<>();
+                generate(crossingFold, replacement, 0, seen, generated);
+                for (StringNode node : generated) {
+                    ListNode alternative = ListNode.newAlt(node, null);
+                    if (root == null) root = alternative;
+                    else tail.setTail(alternative);
+                    tail = alternative;
+                }
+            }
+            return root;
+        }
+
+        private void generate(int[] folded, int[] replacement, int index,
+                              Set<String> seen, List<StringNode> generated) {
+            if (index == folded.length) {
+                StringBuilder key = new StringBuilder();
+                StringNode node = new StringNode();
+                for (int code : replacement) {
+                    key.append(code).append(',');
+                    node.catCode(code, enc);
+                }
+                if (seen.add(key.toString())) {
+                    node.setRaw();
+                    generated.add(node);
+                }
+                return;
+            }
+
+            Set<Integer> siblings = nonAsciiSiblings.get(folded[index]);
+            if (siblings == null) return;
+            for (int sibling : siblings) {
+                replacement[index] = sibling;
+                generate(folded, replacement, index + 1, seen, generated);
+            }
+        }
+    }
 
     protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex, syntax, bytes, p, end, warnings);
@@ -1734,6 +1835,13 @@ class Parser extends Lexer {
         enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
         if (arg.altRoot != null) {
             node = ListNode.newAlt(node, arg.altRoot);
+        }
+        if (Option.isPerlAsciiStrict(env.option) && !cc.isNot()) {
+            PerlAsciiStrictClassMultiFold strictFolds =
+                    new PerlAsciiStrictClassMultiFold(enc, cc, foldCc);
+            enc.applyAllCaseFold(regex.caseFoldFlag, strictFolds, null);
+            ListNode alternatives = strictFolds.alternatives();
+            if (alternatives != null) node = ListNode.newAlt(node, alternatives);
         }
         return node;
     }
