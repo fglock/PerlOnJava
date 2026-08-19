@@ -37,4 +37,17 @@ public interface WarnCallback {
     };
 
     void warn(String message);
+
+    /**
+     * Reports a warning at a byte offset relative to the compiled pattern.
+     * Existing callbacks retain their string-only behavior by default.
+     */
+    default void warn(String message, int bytePosition) {
+        warn(message);
+    }
+
+    /** Returns whether this callback consumes positioned warning payloads. */
+    default boolean supportsPositions() {
+        return false;
+    }
 }

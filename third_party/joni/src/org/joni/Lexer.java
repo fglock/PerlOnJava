@@ -876,9 +876,16 @@ class Lexer extends ScannerSupport {
             value = 0;
         } else if (invalid >= 0) {
             String kind = escape == 'o' ? "octal" : "hex";
-            syntaxWarn("Non-" + kind + " character '" + (char)invalid
-                    + "' terminates \\" + escape + " early. Resolved as \"\\"
-                    + escape + "{" + formatPerlResolvedEscape(value, radix) + "}\"");
+            String warning = "Non-" + kind + " character '" + (char)invalid
+                    + "' terminates \\" + escape + " early.";
+            String resolution = " Resolved as \"\\" + escape + "{"
+                    + formatPerlResolvedEscape(value, radix) + "}\"";
+            if (syntax.op2OptionPerl() && env.warnings.supportsPositions()) {
+                syntaxWarn(warning + " " + resolution,
+                        close + enc.length(bytes, close, stop) - getBegin());
+            } else {
+                syntaxWarn(warning + resolution);
+            }
         }
         if (value > 0x10ffff && syntax.wideScalarCodec == null) {
             newValueException(ERR_TOO_BIG_WIDE_CHAR_VALUE);
@@ -2020,6 +2027,12 @@ class Lexer extends ScannerSupport {
     protected final void syntaxWarn(String message) {
         if (env.warnings != WarnCallback.NONE) {
             env.warnings.warn(message + ": /" + new String(bytes, getBegin(), getEnd() - getBegin()) + "/");
+        }
+    }
+
+    protected final void syntaxWarn(String message, int bytePosition) {
+        if (env.warnings != WarnCallback.NONE) {
+            env.warnings.warn(message, bytePosition);
         }
     }
 }

@@ -152,11 +152,31 @@ final class JoniRegexPattern {
         hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
         sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
         compileWarnings = new ArrayList<>();
-        byte[] bytes = sourcePattern.getBytes(byteMode && byteBackedPattern
-                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
+        java.nio.charset.Charset sourceCharset = byteMode && byteBackedPattern
+                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+        byte[] bytes = sourcePattern.getBytes(sourceCharset);
+        WarnCallback warningCollector = new WarnCallback() {
+            @Override
+            public void warn(String message) {
+                compileWarnings.add(message);
+            }
+
+            @Override
+            public void warn(String message, int bytePosition) {
+                int bounded = Math.max(0, Math.min(bytePosition, bytes.length));
+                int characterOffset = new String(bytes, 0, bounded, sourceCharset).length();
+                compileWarnings.add(RegexDiagnosticFormatter.markedPerl(
+                        sourcePattern, characterOffset, message));
+            }
+
+            @Override
+            public boolean supportsPositions() {
+                return true;
+            }
+        };
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
-                PERLONJAVA_SYNTAX, compileWarnings::add);
+                PERLONJAVA_SYNTAX, warningCollector);
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
