@@ -223,7 +223,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (isMultiLine) flagString.append('m');
         if (isDotAll) flagString.append('s');
         if (isCaseInsensitive) flagString.append('i');
-        if (isExtended) flagString.append('x');
+        if (isExtendedWhitespace) flagString.append("xx");
+        else if (isExtended) flagString.append('x');
         if (isNonCapturing) flagString.append('n');
         if (isNonDestructive) flagString.append('r');
         if (taintResults) flagString.append('T');
@@ -243,7 +244,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (isMultiLine) sb.append('m');
         if (isDotAll) sb.append('s');
         if (isCaseInsensitive) sb.append('i');
-        if (isExtended) sb.append('x');
+        if (isExtendedWhitespace) sb.append("xx");
+        else if (isExtended) sb.append('x');
         if (isNonCapturing) sb.append('n');
         return sb.toString();
     }

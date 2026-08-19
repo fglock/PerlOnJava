@@ -125,6 +125,17 @@ affected corpus before taking another slice.
 - Negative lookbehind accepts capture enclosures and uses ACCEPT-aware width
   analysis in native Joni; named cut errors remain authoritative before an
   unnamed FAIL. The combined exact `regexp.t` differential has no introductions.
+- Perl `/xx` character-class whitespace and nested inline `x`/`xx` mode changes
+  are native Joni lexer/parser behavior. The corresponding `regexp.t` identities
+  pass without introductions on both execution backends.
+- Reverse full-fold alternatives can repartition across adjacent source
+  literals without changing single-literal lookbehind width. The targeted
+  `regexp.t` identity and the existing literal/backreference fold contract pass
+  on default and forced Joni for JVM and interpreter.
+- Perl's exact `L_` General_Category compatibility spelling resolves as `LC`
+  before loose alias normalization, so uncased letters no longer enter that
+  class. The focused system-Perl oracle, four runtime legs, and imported
+  `regexp.t` identity agree.
 
 ## Execution Phases
 
@@ -236,18 +247,19 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Run one warning-free full build and affected-corpus differential on the
-   integrated nested-quantifier, named-control-verb, and negative-lookbehind
-   batch, then open its review PR and require exact-head Ubuntu/Windows CI.
-2. Complete byte/Unicode pattern provenance through runtime interpolation and
-   template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal
-   and backreference folding from generated data. Require direct Joni plus
-   ordinary/forced JVM/interpreter zero-introduction gates.
-3. Implement recursive and runtime `(??{...})` as native nested Joni execution:
+1. Integrate the native `/xx`, adjacent full-fold partition, and `L_` alias
+   batch on the exact merged predecessor. Run one warning-free full build plus
+   zero-introduction `regexp.t` and fold/property gates, then publish a review
+   PR and require exact-head Ubuntu/Windows CI.
+2. Complete recursive and runtime `(??{...})` as native nested Joni execution:
    preserve captures, `$^R`, `pos`, modes, byte/Unicode provenance, callback
    unwind, backtracking re-evaluation, and recursion safety. Route every embedded
    closure to Joni and delete constant inlining, progressive errors, and the
    dynamic Java adapter as their gates pass.
+3. Complete byte/Unicode pattern provenance through runtime interpolation and
+   template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal,
+   class, property, and backreference folding from generated data. Require
+   direct Joni plus ordinary/forced JVM/interpreter zero-introduction gates.
 4. Finish the remaining lexical `use re 'strict'`, unescaped-brace, and non-hex
    diagnostic families. Refresh complete
    `reg_mesg.t`, `pat.t`, and `pat_advanced.t` maps after each combined batch.

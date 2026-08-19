@@ -992,6 +992,7 @@ class Parser extends Lexer {
                     option = bsOnOff(option, Option.SINGLELINE, false);
                     option = bsOnOff(option, Option.MULTILINE, true);
                     option = bsOnOff(option, Option.EXTEND, true);
+                    option = bsOnOff(option, Option.PERL_EXTEND_MORE, true);
                     option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, true);
                     option = bsOnOff(option, Option.CAPTURE_GROUP, false);
                     option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
@@ -1021,6 +1022,7 @@ class Parser extends Lexer {
             case 'g':
             case 'o':
                 boolean neg = false;
+                int positiveXCount = 0;
                 PerlCharsetOptionState charsetOptions = new PerlCharsetOptionState();
                 boolean sawContinueModifier = false;
                 while (true) {
@@ -1032,7 +1034,15 @@ class Parser extends Lexer {
                         neg = true;
                         break;
                     case 'x':
-                        option = bsOnOff(option, Option.EXTEND, neg);
+                        if (neg) {
+                            option = bsOnOff(option, Option.EXTEND, true);
+                            option = bsOnOff(option, Option.PERL_EXTEND_MORE, true);
+                        } else {
+                            positiveXCount++;
+                            option = bsOnOff(option, Option.EXTEND, false);
+                            option = bsOnOff(option, Option.PERL_EXTEND_MORE,
+                                    positiveXCount < 2);
+                        }
                         break;
                     case 'i':
                         option = bsOnOff(option, Option.IGNORECASE, neg);
@@ -1669,12 +1679,14 @@ class Parser extends Lexer {
                 nestedOption = bsOnOff(nestedOption, Option.SINGLELINE, false);
                 nestedOption = bsOnOff(nestedOption, Option.MULTILINE, true);
                 nestedOption = bsOnOff(nestedOption, Option.EXTEND, true);
+                nestedOption = bsOnOff(nestedOption, Option.PERL_EXTEND_MORE, true);
                 nestedOption = bsOnOff(nestedOption, Option.DONT_CAPTURE_GROUP, true);
                 nestedOption = bsOnOff(nestedOption, Option.CAPTURE_GROUP, false);
                 nestedOption = bsOnOff(nestedOption, Option.PERL_ASCII_STRICT, true);
                 inc();
             }
             boolean negateOption = false;
+            int positiveXCount = 0;
             PerlCharsetOptionState charsetOptions = new PerlCharsetOptionState();
             while (left() && !extendedClassAt(':')) {
                 int option = extendedClassCode();
@@ -1687,6 +1699,17 @@ class Parser extends Lexer {
                 if (option == '-') negateOption = true;
                 else if (option == 'i') {
                     nestedOption = bsOnOff(nestedOption, Option.IGNORECASE, negateOption);
+                } else if (option == 'x') {
+                    if (negateOption) {
+                        nestedOption = bsOnOff(nestedOption, Option.EXTEND, true);
+                        nestedOption = bsOnOff(
+                                nestedOption, Option.PERL_EXTEND_MORE, true);
+                    } else {
+                        positiveXCount++;
+                        nestedOption = bsOnOff(nestedOption, Option.EXTEND, false);
+                        nestedOption = bsOnOff(nestedOption,
+                                Option.PERL_EXTEND_MORE, positiveXCount < 2);
+                    }
                 } else if (option == 'a' || option == 'd'
                         || option == 'l' || option == 'u') {
                     nestedOption = charsetOptions.apply(

@@ -1128,12 +1128,17 @@ class Lexer extends ScannerSupport {
         if (perlVerticalWhitespaceTokenIndex >= 0) {
             return fetchPerlVerticalWhitespaceToken();
         }
-        if (!left()) {
-            token.type = TokenType.EOT;
-            return token.type;
+        while (true) {
+            if (!left()) {
+                token.type = TokenType.EOT;
+                return token.type;
+            }
+            fetch();
+            if (!syntax.op2OptionPerl() || !Option.isPerlExtendMore(env.option)
+                    || c != ' ' && c != '\t') {
+                break;
+            }
         }
-
-        fetch();
         token.type = TokenType.CHAR;
         token.base = 0;
         token.setC(c);
@@ -1635,8 +1640,10 @@ class Lexer extends ScannerSupport {
             token.setPropCType(enc.propertyNameToCType(bytes, nameStart, p));
             token.setPropNot(c == 'P');
         } else if (syntax.op2OptionPerl()) {
-            newSyntaxException(PERL_EMPTY_CHARACTER_PROPERTY.replace(
-                    "%n", Character.toString(c)));
+            String message = left()
+                    ? PERL_INVALID_CHARACTER_PROPERTY_FOLLOWER
+                    : PERL_EMPTY_CHARACTER_PROPERTY;
+            newSyntaxException(message.replace("%n", Character.toString(c)));
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
         }

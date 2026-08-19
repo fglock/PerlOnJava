@@ -482,6 +482,7 @@ final class JoniRegexPattern {
         int options = Option.NONE;
         if (flags.isCaseInsensitive()) options |= Option.IGNORECASE;
         if (flags.isExtended()) options |= Option.EXTEND;
+        if (flags.isExtendedWhitespace()) options |= Option.EXTEND | Option.PERL_EXTEND_MORE;
         // Oniguruma's MULTILINE option controls whether dot matches newline.
         if (flags.isDotAll()) options |= Option.MULTILINE;
         if (!flags.isMultiLine()) options |= Option.SINGLELINE;
@@ -730,6 +731,40 @@ final class JoniRegexPattern {
                 || pattern.contains("(*COMMIT");
     }
 
+    private static boolean hasInlineExtendedOption(String pattern) {
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass || ch != '(' || pattern.charAt(i + 1) != '?') continue;
+            for (int j = i + 2; j < pattern.length(); j++) {
+                char option = pattern.charAt(j);
+                if (option == ':' || option == ')') break;
+                if (option == 'x') return true;
+                if (option == '-' || option == '^'
+                        || option >= 'a' && option <= 'z') continue;
+                break;
+            }
+        }
+        return false;
+    }
+
     static String translatePattern(String pattern) {
         return translatePattern(pattern, RegexFlags.fromModifiers("", pattern), 0, true);
     }
@@ -747,6 +782,7 @@ final class JoniRegexPattern {
         boolean inClass = false;
         boolean atClassStart = false;
         boolean classAllowsLeadingClose = false;
+        boolean inlineExtendedOption = hasInlineExtendedOption(pattern);
         int posixClassDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
@@ -822,7 +858,8 @@ final class JoniRegexPattern {
                 i += 2;
                 continue;
             }
-            if (inClass && flags.isExtendedWhitespace() && Character.isWhitespace(ch)) {
+            if (inClass && flags.isExtendedWhitespace() && !inlineExtendedOption
+                    && Character.isWhitespace(ch)) {
                 continue;
             }
             if (inClass && atClassStart && ch == '^') {

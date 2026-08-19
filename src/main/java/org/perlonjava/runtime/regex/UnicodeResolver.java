@@ -2325,6 +2325,13 @@ public class UnicodeResolver {
         String looseIsValue = looseIsShortcutValue(property);
         String alias = looseIsValue == null ? property : looseIsValue;
 
+        // L_ is Perl's compatibility spelling for LC (cased letters).  Its
+        // trailing underscore is significant even though ordinary Unicode
+        // property aliases otherwise use loose matching.
+        if (alias.trim().equalsIgnoreCase("L_")) {
+            return PerlUnicodeGeneralCategoryData.resolve("LC");
+        }
+
         // Perl's shared bare namespace gives scripts and binary properties
         // precedence over General_Category compatibility names. Blocks are
         // considered afterward by resolvePerlBareBlockShortcut.
