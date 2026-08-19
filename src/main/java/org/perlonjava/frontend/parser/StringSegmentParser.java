@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 
 import java.math.BigInteger;
@@ -1510,6 +1511,9 @@ public abstract class StringSegmentParser {
                 NamedCharacterExpansion expansion =
                         NamedCharacterExpansion.resolve(name, sourceMode);
                 if (expansion.resolved()) {
+                    if (isIncompleteExtendedClassNamedSequence(expansion)) {
+                        throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
+                    }
                     appendToCurrentSegment("\\N{" + NamedCharacterExpansion.encodeRegexToken(
                             name, expansion.sequence()) + "}");
                 } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
@@ -1534,5 +1538,30 @@ public abstract class StringSegmentParser {
             // Unclosed brace, preserve literal
             appendToCurrentSegment("N{" + nameBuilder);
         }
+    }
+
+    private boolean isIncompleteExtendedClassNamedSequence(
+            NamedCharacterExpansion expansion) {
+        return expansion.sequence().codePointCount(0, expansion.sequence().length()) > 1
+                && currentSegment.toString().endsWith("(?[");
+    }
+
+    private String namedSequenceExtendedClassDiagnostic(String sequence) {
+        StringBuilder canonical = new StringBuilder();
+        sequence.codePoints().forEach(codePoint -> {
+            if (!canonical.isEmpty()) canonical.append('.');
+            canonical.append(Integer.toHexString(codePoint).toUpperCase(java.util.Locale.ROOT));
+        });
+        return "\\N{} here is restricted to one character in regex; "
+                + "marked by <-- HERE in m/" + currentSegment
+                + "\\N{U+" + canonical + " <-- HERE }/";
+    }
+
+    private void throwNamedSequenceExtendedClassDiagnostic(String sequence) {
+        var location = ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+        throw new PerlParserException(
+                namedSequenceExtendedClassDiagnostic(sequence)
+                        + " at " + location.fileName() + " line "
+                        + location.lineNumber() + ".\n");
     }
 }
