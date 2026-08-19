@@ -48,6 +48,9 @@ public interface StackType {
     int CALLOUT                       = 0x0d00;  /* match-time callback unwind token */
     int CONTROL_MARK                  = 0x0e00;  /* Perl (*MARK:name) backtrack state */
     int PHYSICAL_NAMED_CAPTURE        = 0x0f00;  /* physical named-group span */
+    int REPEAT_CAPTURE_BEGIN          = 0x1100;  /* repeat capture-lifetime scope */
+    int REPEAT_CAPTURE_SNAPSHOT       = 0x1200;  /* capture state at body entry */
+    int REPEAT_CAPTURE_CLEAR          = 0x1300;  /* cleared stale capture rollback */
     int DYNAMIC_ALT                   = 0x0004;  /* resumable nested-program alternative */
     int BRANCH_ALT                    = 0x0005;  /* syntactic alternation continuation */
 

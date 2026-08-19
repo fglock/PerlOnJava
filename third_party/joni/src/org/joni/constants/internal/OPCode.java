@@ -168,6 +168,8 @@ public interface OPCode {
     int WIDE_SCALAR_CLASS             = 124;
     int PUSH_BRANCH                   = 125;          /* push a syntactic alternation branch */
     int CONTROL_FAIL                  = 126;          /* explicit Perl (*FAIL[:name]) verb */
+    int REPEAT_CAPTURE_CLEAR          = 127;          /* begin repeat capture-lifetime scope */
+    int REPEAT_CAPTURE_CLEAR_END      = 128;          /* clear captures untouched by repeat body */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -298,6 +300,8 @@ public interface OPCode {
         "wide-scalar-class",
         "push-branch",
         "control-fail",
+        "repeat-capture-clear",
+        "repeat-capture-clear-end",
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -429,5 +433,7 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_WIDE_SCALAR_CLASS*/
         Arguments.RELADDR, /*OP_PUSH_BRANCH*/
         Arguments.MEMNUM, /*OP_CONTROL_FAIL*/
+        Arguments.MEMNUM, /*OP_REPEAT_CAPTURE_CLEAR*/
+        Arguments.MEMNUM, /*OP_REPEAT_CAPTURE_CLEAR_END*/
     } : null;
 }

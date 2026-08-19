@@ -368,6 +368,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.REPEAT_INC_SG:              opRepeatIncSG();           continue;
                 case OPCode.REPEAT_INC_NG:              opRepeatIncNG();           continue;
                 case OPCode.REPEAT_INC_NG_SG:           opRepeatIncNGSG();         continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR:       opRepeatCaptureClear();    continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR_END:   opRepeatCaptureClearEnd(); continue;
 
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
@@ -539,6 +541,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.REPEAT_INC_SG:              opRepeatIncSG();           continue;
                 case OPCode.REPEAT_INC_NG:              opRepeatIncNG();           continue;
                 case OPCode.REPEAT_INC_NG_SG:           opRepeatIncNGSG();         continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR:       opRepeatCaptureClear();    continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR_END:   opRepeatCaptureClearEnd(); continue;
 
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
@@ -2770,6 +2774,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int mem = code[ip++];
         int si = getRepeat(mem);
         repeatIncNG(mem, si);
+    }
+
+    private void opRepeatCaptureClear() {
+        int id = code[ip++];
+        beginRepeatCaptureIteration(id, regex.repeatCaptureClearGroups[id]);
+    }
+
+    private void opRepeatCaptureClearEnd() {
+        endRepeatCaptureIteration(code[ip++]);
     }
 
     private void opPushPos() {

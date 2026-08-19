@@ -309,6 +309,60 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
+    protected final void beginRepeatCaptureIteration(int id, int[] groups) {
+        StackEntry marker = ensure1();
+        marker.type = REPEAT_CAPTURE_BEGIN;
+        marker.setMemNum(id);
+        stk++;
+
+        for (int mnum : groups) {
+            int oldStart = repeatStk[memStartStk + mnum];
+            int oldEnd = repeatStk[memEndStk + mnum];
+            StackEntry e = ensure1();
+            e.type = REPEAT_CAPTURE_SNAPSHOT;
+            e.setMemNum(mnum);
+            e.setMemPstr(id);
+            e.setMemStart(oldStart);
+            e.setMemEnd(oldEnd);
+            stk++;
+        }
+    }
+
+    protected final void endRepeatCaptureIteration(int id) {
+        for (int index = stk - 1; index >= 0; index--) {
+            StackEntry e = stack[index];
+            if (e.type == REPEAT_CAPTURE_BEGIN && e.getMemNum() == id) {
+                return;
+            }
+            if (e.type != REPEAT_CAPTURE_SNAPSHOT || e.getMemPStr() != id) continue;
+
+            int mnum = e.getMemNum();
+            if (repeatStk[memStartStk + mnum] == e.getMemStart()
+                    && repeatStk[memEndStk + mnum] == e.getMemEnd()) {
+                pushRepeatCaptureClear(mnum, e.getMemStart(), e.getMemEnd());
+                repeatStk[memStartStk + mnum] = INVALID_INDEX;
+                repeatStk[memEndStk + mnum] = INVALID_INDEX;
+            }
+        }
+        // A combination-explosion guard can unwind the bookkeeping marker
+        // while preserving a continuation inside the optimized repeat body.
+        // In that path there is no surviving entry snapshot to finalize.
+    }
+
+    private void pushRepeatCaptureClear(int mnum, int oldStart, int oldEnd) {
+        StackEntry clear = ensure1();
+        clear.type = REPEAT_CAPTURE_CLEAR;
+        clear.setMemNum(mnum);
+        clear.setMemStart(oldStart);
+        clear.setMemEnd(oldEnd);
+        stk++;
+    }
+
+    private void restoreRepeatCaptureClear(StackEntry e) {
+        repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
+        repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
+    }
+
     protected final int getMemStart(int mnum) {
         int level = 0;
         int stkp = stk;
@@ -445,6 +499,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restoreControlMark(e.getPreviousControlMarkName());
             } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
                 restorePhysicalNamedCapture(e);
+            } else if (e.type == REPEAT_CAPTURE_CLEAR) {
+                restoreRepeatCaptureClear(e);
             } else if (USE_CEC) {
                 if (e.type == STATE_CHECK_MARK) stateCheckMark();
             }
@@ -462,6 +518,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restoreControlMark(e.getPreviousControlMarkName());
             } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
                 restorePhysicalNamedCapture(e);
+            } else if (e.type == REPEAT_CAPTURE_CLEAR) {
+                restoreRepeatCaptureClear(e);
             } else if (e.type == MEM_START) {
                 repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
                 repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -478,6 +536,8 @@ abstract class StackMachine extends Matcher implements StackType {
             restoreControlMark(e.getPreviousControlMarkName());
         } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
             restorePhysicalNamedCapture(e);
+        } else if (e.type == REPEAT_CAPTURE_CLEAR) {
+            restoreRepeatCaptureClear(e);
         } else if (e.type == MEM_START) {
             repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();

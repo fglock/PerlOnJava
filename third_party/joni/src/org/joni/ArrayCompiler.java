@@ -487,6 +487,99 @@ final class ArrayCompiler extends Compiler {
     }
 
     private static final int REPEAT_RANGE_ALLOC = 8;
+
+    private static void collectCaptureGroups(Node node, boolean[] groups) {
+        if (node == null) return;
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            for (ListNode item = (ListNode)node; item != null; item = item.tail) {
+                collectCaptureGroups(item.value, groups);
+            }
+            break;
+        case NodeType.QTFR:
+            collectCaptureGroups(((QuantifierNode)node).target, groups);
+            break;
+        case NodeType.ENCLOSE:
+            EncloseNode enclose = (EncloseNode)node;
+            if (enclose.isMemory() && enclose.regNum > 0 && enclose.regNum < groups.length) {
+                groups[enclose.regNum] = true;
+            }
+            collectCaptureGroups(enclose.target, groups);
+            break;
+        case NodeType.ANCHOR:
+            collectCaptureGroups(((AnchorNode)node).target, groups);
+            break;
+        default:
+            break;
+        }
+    }
+
+    private int[] captureGroups(Node target) {
+        boolean[] found = new boolean[regex.numMem + 1];
+        collectCaptureGroups(target, found);
+        int count = 0;
+        for (int group = 1; group < found.length; group++) {
+            if (found[group]) count++;
+        }
+        if (count == 0) return null;
+
+        int[] groups = new int[count];
+        int index = 0;
+        for (int group = 1; group < found.length; group++) {
+            if (found[group]) groups[index++] = group;
+        }
+        return groups;
+    }
+
+    private int entryRepeatCaptureClear(Node target) {
+        int[] groups = captureGroups(target);
+        if (groups == null) return -1;
+        int id = regex.numRepeatCaptureClearGroups++;
+        if (regex.repeatCaptureClearGroups == null) {
+            regex.repeatCaptureClearGroups = new int[REPEAT_RANGE_ALLOC][];
+        } else if (id >= regex.repeatCaptureClearGroups.length) {
+            int[][] expanded = new int[regex.repeatCaptureClearGroups.length + REPEAT_RANGE_ALLOC][];
+            System.arraycopy(regex.repeatCaptureClearGroups, 0, expanded, 0,
+                    regex.repeatCaptureClearGroups.length);
+            regex.repeatCaptureClearGroups = expanded;
+        }
+        regex.repeatCaptureClearGroups[id] = groups;
+        return id;
+    }
+
+    private int repeatCaptureClearLength(Node target) {
+        return captureGroups(target) == null ? 0
+                : OPSize.REPEAT_CAPTURE_CLEAR + OPSize.REPEAT_CAPTURE_CLEAR_END;
+    }
+
+    private void compileRepeatCaptureClear(int clearId) {
+        if (clearId < 0) return;
+        addOpcode(OPCode.REPEAT_CAPTURE_CLEAR);
+        addMemNum(clearId);
+    }
+
+    private void compileRepeatTree(Node target, int clearId) {
+        compileRepeatCaptureClear(clearId);
+        compileTree(target);
+        if (clearId >= 0) {
+            addOpcode(OPCode.REPEAT_CAPTURE_CLEAR_END);
+            addMemNum(clearId);
+        }
+    }
+
+    private void compileRepeatTreeNTimes(Node target, int count, int clearId) {
+        for (int i = 0; i < count; i++) compileRepeatTree(target, clearId);
+    }
+
+    private void compileRepeatTreeEmptyCheck(Node target, int emptyInfo, int clearId) {
+        if (emptyInfo == 0) {
+            compileRepeatTree(target, clearId);
+        } else {
+            compileTreeEmptyCheck(target, emptyInfo);
+        }
+    }
+
     private void entryRepeatRange(int id, int lower, int upper) {
         if (regex.repeatRangeLo == null) {
             regex.repeatRangeLo = new int[REPEAT_RANGE_ALLOC];
@@ -504,7 +597,8 @@ final class ArrayCompiler extends Compiler {
         regex.repeatRangeHi[id] = isRepeatInfinite(upper) ? 0x7fffffff : upper;
     }
 
-    private void compileRangeRepeatNode(QuantifierNode qn, int targetLen, int emptyInfo) {
+    private void compileRangeRepeatNode(QuantifierNode qn, int targetLen, int emptyInfo,
+                                        int clearId) {
         regex.requireStack = true;
         int numRepeat = regex.numRepeat;
         addOpcode(qn.greedy ? OPCode.REPEAT : OPCode.REPEAT_NG);
@@ -514,7 +608,7 @@ final class ArrayCompiler extends Compiler {
 
         entryRepeatRange(numRepeat, qn.lower, qn.upper);
 
-        compileTreeEmptyCheck(qn.target, emptyInfo);
+        compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
 
         if ((Config.USE_SUBEXP_CALL && regex.numCall > 0) || qn.isInRepeat()) {
             addOpcode(qn.greedy ? OPCode.REPEAT_INC_SG : OPCode.REPEAT_INC_NG_SG);
@@ -536,6 +630,10 @@ final class ArrayCompiler extends Compiler {
         int emptyInfo = qn.targetEmptyInfo;
 
         int tlen = compileLengthTree(qn.target);
+        // Empty and recursive-empty repeats use capture state in Joni's null
+        // loop detector. Their reset needs a separate null-check-aware design.
+        int repeatClearLen = emptyInfo == 0 ? repeatCaptureClearLength(qn.target) : 0;
+        int bodyLen = tlen + repeatClearLen;
         int ckn = regex.numCombExpCheck > 0 ? qn.combExpCheckNum : 0;
         int cklen = cknOn(ckn) ? OPSize.STATE_CHECK_NUM : 0;
 
@@ -552,9 +650,9 @@ final class ArrayCompiler extends Compiler {
 
         int modTLen;
         if (emptyInfo != 0) {
-            modTLen = tlen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
+            modTLen = bodyLen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
         } else {
-            modTLen = tlen;
+            modTLen = bodyLen;
         }
 
         int len;
@@ -583,15 +681,15 @@ final class ArrayCompiler extends Compiler {
         } else if (qn.upper == 1 && qn.greedy) {
             if (qn.lower == 0) {
                 if (cknOn(ckn)) {
-                    len = OPSize.STATE_CHECK_PUSH + tlen;
+                    len = OPSize.STATE_CHECK_PUSH + bodyLen;
                 } else {
-                    len = OPSize.PUSH + tlen;
+                    len = OPSize.PUSH + bodyLen;
                 }
             } else {
-                len = tlen;
+                len = bodyLen;
             }
         } else if (!qn.greedy && qn.upper == 1 && qn.lower == 0) { /* '??' */
-            len = OPSize.PUSH + cklen + OPSize.JUMP + tlen;
+            len = OPSize.PUSH + cklen + OPSize.JUMP + bodyLen;
         } else {
             len = OPSize.REPEAT_INC + modTLen + OPSize.OPCODE + OPSize.RELADDR + OPSize.MEMNUM;
 
@@ -609,6 +707,9 @@ final class ArrayCompiler extends Compiler {
         int emptyInfo = qn.targetEmptyInfo;
 
         int tlen = compileLengthTree(qn.target);
+        int clearId = emptyInfo == 0 ? entryRepeatCaptureClear(qn.target) : -1;
+        int bodyLen = tlen + (clearId < 0 ? 0
+                : OPSize.REPEAT_CAPTURE_CLEAR + OPSize.REPEAT_CAPTURE_CLEAR_END);
 
         int ckn = regex.numCombExpCheck > 0 ? qn.combExpCheckNum : 0;
 
@@ -649,9 +750,9 @@ final class ArrayCompiler extends Compiler {
 
         int modTLen;
         if (emptyInfo != 0) {
-            modTLen = tlen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
+            modTLen = bodyLen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
         } else {
-            modTLen = tlen;
+            modTLen = bodyLen;
         }
         if (infinite && qn.lower <= 1) {
             if (qn.greedy) {
@@ -666,7 +767,7 @@ final class ArrayCompiler extends Compiler {
                 } else {
                     addOpcodeRelAddr(OPCode.PUSH, modTLen + OPSize.JUMP);
                 }
-                compileTreeEmptyCheck(qn.target, emptyInfo);
+                compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
                 addOpcodeRelAddr(OPCode.JUMP, -(modTLen + OPSize.JUMP + (cknOn(ckn) ?
                                                                                OPSize.STATE_CHECK_PUSH :
                                                                                OPSize.PUSH)));
@@ -674,7 +775,7 @@ final class ArrayCompiler extends Compiler {
                 if (qn.lower == 0) {
                     addOpcodeRelAddr(OPCode.JUMP, modTLen);
                 }
-                compileTreeEmptyCheck(qn.target, emptyInfo);
+                compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
                 if (cknOn(ckn)) {
                     addOpcode(OPCode.STATE_CHECK_PUSH_OR_JUMP);
                     addStateCheckNum(ckn);
@@ -693,12 +794,12 @@ final class ArrayCompiler extends Compiler {
                 if (cknOn(ckn)) {
                     addOpcode(OPCode.STATE_CHECK_PUSH);
                     addStateCheckNum(ckn);
-                    addRelAddr(tlen);
+                    addRelAddr(bodyLen);
                 } else {
-                    addOpcodeRelAddr(OPCode.PUSH, tlen);
+                    addOpcodeRelAddr(OPCode.PUSH, bodyLen);
                 }
             }
-            compileTree(qn.target);
+            compileRepeatTree(qn.target, clearId);
         } else if (!qn.greedy && qn.upper == 1 && qn.lower == 0){ /* '??' */
             if (cknOn(ckn)) {
                 addOpcode(OPCode.STATE_CHECK_PUSH);
@@ -708,10 +809,10 @@ final class ArrayCompiler extends Compiler {
                 addOpcodeRelAddr(OPCode.PUSH, OPSize.JUMP);
             }
 
-            addOpcodeRelAddr(OPCode.JUMP, tlen);
-            compileTree(qn.target);
+            addOpcodeRelAddr(OPCode.JUMP, bodyLen);
+            compileRepeatTree(qn.target, clearId);
         } else {
-            compileRangeRepeatNode(qn, modTLen, emptyInfo);
+            compileRangeRepeatNode(qn, modTLen, emptyInfo, clearId);
             if (cknOn(ckn)) {
                 addOpcode(OPCode.STATE_CHECK);
                 addStateCheckNum(ckn);
@@ -724,6 +825,8 @@ final class ArrayCompiler extends Compiler {
         int emptyInfo = qn.targetEmptyInfo;
 
         int tlen = compileLengthTree(qn.target);
+        int repeatClearLen = emptyInfo == 0 ? repeatCaptureClearLength(qn.target) : 0;
+        int bodyLen = tlen + repeatClearLen;
 
         /* anychar repeat */
         if (qn.target.getType() == NodeType.CANY) {
@@ -738,17 +841,17 @@ final class ArrayCompiler extends Compiler {
 
         int modTLen;
         if (emptyInfo != 0) {
-            modTLen = tlen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
+            modTLen = bodyLen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
         } else {
-            modTLen = tlen;
+            modTLen = bodyLen;
         }
 
         int len;
-        if (infinite && (qn.lower <= 1 || tlen * qn.lower <= QUANTIFIER_EXPAND_LIMIT_SIZE)) {
-            if (qn.lower == 1 && tlen > QUANTIFIER_EXPAND_LIMIT_SIZE) {
+        if (infinite && (qn.lower <= 1 || bodyLen * qn.lower <= QUANTIFIER_EXPAND_LIMIT_SIZE)) {
+            if (qn.lower == 1 && bodyLen > QUANTIFIER_EXPAND_LIMIT_SIZE) {
                 len = OPSize.JUMP;
             } else {
-                len = tlen * qn.lower;
+                len = bodyLen * qn.lower;
             }
 
             if (qn.greedy) {
@@ -766,11 +869,11 @@ final class ArrayCompiler extends Compiler {
         } else if (qn.upper == 0 && qn.isRefered) { /* /(?<n>..){0}/ */
             len = OPSize.JUMP + tlen;
         } else if (!infinite && qn.greedy &&
-                  (qn.upper == 1 || (tlen + OPSize.PUSH) * qn.upper <= QUANTIFIER_EXPAND_LIMIT_SIZE )) {
-            len = tlen * qn.lower;
-            len += (OPSize.PUSH + tlen) * (qn.upper - qn.lower);
+                  (qn.upper == 1 || (bodyLen + OPSize.PUSH) * qn.upper <= QUANTIFIER_EXPAND_LIMIT_SIZE )) {
+            len = bodyLen * qn.lower;
+            len += (OPSize.PUSH + bodyLen) * (qn.upper - qn.lower);
         } else if (!qn.greedy && qn.upper == 1 && qn.lower == 0) { /* '??' */
-            len = OPSize.PUSH + OPSize.JUMP + tlen;
+            len = OPSize.PUSH + OPSize.JUMP + bodyLen;
         } else {
             len = OPSize.REPEAT_INC + modTLen + OPSize.OPCODE + OPSize.RELADDR + OPSize.MEMNUM;
         }
@@ -784,6 +887,9 @@ final class ArrayCompiler extends Compiler {
         int emptyInfo = qn.targetEmptyInfo;
 
         int tlen = compileLengthTree(qn.target);
+        int clearId = emptyInfo == 0 ? entryRepeatCaptureClear(qn.target) : -1;
+        int bodyLen = tlen + (clearId < 0 ? 0
+                : OPSize.REPEAT_CAPTURE_CLEAR + OPSize.REPEAT_CAPTURE_CLEAR_END);
 
         if (qn.isAnyCharStar()) {
             compileTreeNTimes(qn.target, qn.lower);
@@ -808,12 +914,12 @@ final class ArrayCompiler extends Compiler {
 
         int modTLen;
         if (emptyInfo != 0) {
-            modTLen = tlen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
+            modTLen = bodyLen + (OPSize.NULL_CHECK_START + OPSize.NULL_CHECK_END);
         } else {
-            modTLen = tlen;
+            modTLen = bodyLen;
         }
-        if (infinite && (qn.lower <= 1 || tlen * qn.lower <= QUANTIFIER_EXPAND_LIMIT_SIZE)) {
-            if (qn.lower == 1 && tlen > QUANTIFIER_EXPAND_LIMIT_SIZE) {
+        if (infinite && (qn.lower <= 1 || bodyLen * qn.lower <= QUANTIFIER_EXPAND_LIMIT_SIZE)) {
+            if (qn.lower == 1 && bodyLen > QUANTIFIER_EXPAND_LIMIT_SIZE) {
                 if (qn.greedy) {
                     if (qn.headExact != null) {
                         addOpcodeRelAddr(OPCode.JUMP, OPSize.PUSH_OR_JUMP_EXACT1);
@@ -826,7 +932,7 @@ final class ArrayCompiler extends Compiler {
                     addOpcodeRelAddr(OPCode.JUMP, OPSize.JUMP);
                 }
             } else {
-                compileTreeNTimes(qn.target, qn.lower);
+                compileRepeatTreeNTimes(qn.target, qn.lower, clearId);
             }
 
             if (qn.greedy) {
@@ -834,42 +940,42 @@ final class ArrayCompiler extends Compiler {
                     addOpcodeRelAddr(OPCode.PUSH_OR_JUMP_EXACT1, modTLen + OPSize.JUMP);
                     StringNode sn = (StringNode)qn.headExact;
                     addBytes(sn.bytes, sn.p, 1);
-                    compileTreeEmptyCheck(qn.target, emptyInfo);
+                    compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
                     addOpcodeRelAddr(OPCode.JUMP, -(modTLen + OPSize.JUMP + OPSize.PUSH_OR_JUMP_EXACT1));
                 } else if (qn.nextHeadExact != null) {
                     addOpcodeRelAddr(OPCode.PUSH_IF_PEEK_NEXT, modTLen + OPSize.JUMP);
                     StringNode sn = (StringNode)qn.nextHeadExact;
                     addBytes(sn.bytes, sn.p, 1);
-                    compileTreeEmptyCheck(qn.target, emptyInfo);
+                    compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
                     addOpcodeRelAddr(OPCode.JUMP, -(modTLen + OPSize.JUMP + OPSize.PUSH_IF_PEEK_NEXT));
                 } else {
                     addOpcodeRelAddr(OPCode.PUSH, modTLen + OPSize.JUMP);
-                    compileTreeEmptyCheck(qn.target, emptyInfo);
+                    compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
                     addOpcodeRelAddr(OPCode.JUMP, -(modTLen + OPSize.JUMP + OPSize.PUSH));
                 }
             } else {
                 addOpcodeRelAddr(OPCode.JUMP, modTLen);
-                compileTreeEmptyCheck(qn.target, emptyInfo);
+                compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
                 addOpcodeRelAddr(OPCode.PUSH, -(modTLen + OPSize.PUSH));
             }
         } else if (qn.upper == 0 && qn.isRefered) { /* /(?<n>..){0}/ */
             addOpcodeRelAddr(OPCode.JUMP, tlen);
             compileTree(qn.target);
         } else if (!infinite && qn.greedy &&
-                  (qn.upper == 1 || (tlen + OPSize.PUSH) * qn.upper <= QUANTIFIER_EXPAND_LIMIT_SIZE)) {
+                  (qn.upper == 1 || (bodyLen + OPSize.PUSH) * qn.upper <= QUANTIFIER_EXPAND_LIMIT_SIZE)) {
             int n = qn.upper - qn.lower;
-            compileTreeNTimes(qn.target, qn.lower);
+            compileRepeatTreeNTimes(qn.target, qn.lower, clearId);
 
             for (int i=0; i<n; i++) {
-                addOpcodeRelAddr(OPCode.PUSH, (n - i) * tlen + (n - i - 1) * OPSize.PUSH);
-                compileTree(qn.target);
+                addOpcodeRelAddr(OPCode.PUSH, (n - i) * bodyLen + (n - i - 1) * OPSize.PUSH);
+                compileRepeatTree(qn.target, clearId);
             }
         } else if (!qn.greedy && qn.upper == 1 && qn.lower == 0) { /* '??' */
             addOpcodeRelAddr(OPCode.PUSH, OPSize.JUMP);
-            addOpcodeRelAddr(OPCode.JUMP, tlen);
-            compileTree(qn.target);
+            addOpcodeRelAddr(OPCode.JUMP, bodyLen);
+            compileRepeatTree(qn.target, clearId);
         } else {
-            compileRangeRepeatNode(qn, modTLen, emptyInfo);
+            compileRangeRepeatNode(qn, modTLen, emptyInfo, clearId);
         }
     }
 

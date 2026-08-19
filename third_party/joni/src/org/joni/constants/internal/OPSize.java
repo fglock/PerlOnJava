@@ -45,6 +45,8 @@ public interface OPSize {
     int PUSH_IF_PEEK_NEXT             = (OPCODE + RELADDR + 1);
     int REPEAT_INC                    = (OPCODE + MEMNUM);
     int REPEAT_INC_NG                 = (OPCODE + MEMNUM);
+    int REPEAT_CAPTURE_CLEAR          = (OPCODE + MEMNUM);
+    int REPEAT_CAPTURE_CLEAR_END      = (OPCODE + MEMNUM);
     int PUSH_POS                      = (OPCODE + RELADDR);
     int PUSH_POS_NOT                  = (OPCODE + RELADDR);
     int POP_POS                       = OPCODE;
