@@ -65,7 +65,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // transformed before it becomes regex source. Perl therefore treats an
         // executable-looking group there as runtime-generated source, not as a
         // literal callback visible to the quote lexer.
-        return caseModifiers.isEmpty();
+        return caseModifiers.isEmpty() && super.regexCodeBlocksAreActive();
     }
 
     /**
