@@ -1928,7 +1928,11 @@ class Lexer extends ScannerSupport {
                             if (peekIs('#')) {
                                 fetch();
                                 while (true) {
-                                    if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
+                                    if (!left()) {
+                                        newSyntaxException(syntax.op2OptionPerl()
+                                                ? PERL_COMMENT_GROUP_NOT_TERMINATED
+                                                : END_PATTERN_IN_GROUP);
+                                    }
                                     fetch();
                                     if (c == syntax.metaCharTable.esc) {
                                         if (left()) fetch();
