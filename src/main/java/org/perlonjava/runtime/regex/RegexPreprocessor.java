@@ -1107,16 +1107,6 @@ public class RegexPreprocessor {
             } else if (c3 == '\\') {
                 // (?\...) is not recognized - marker should be after \
                 regexError(s, offset + 3, "Sequence (?\\...) not recognized");
-            } else if (c3 == '<' && c4 == '=') {
-                // Positive lookbehind (?<=...)
-                validateLookbehindLength(s, offset);
-                sb.append("(?<=");
-                offset = handleRegex(s, offset + 4, sb, regexFlags, true);
-            } else if (c3 == '<' && c4 == '!') {
-                // Negative lookbehind (?<!...)
-                validateLookbehindLength(s, offset);
-                sb.append("(?<!");
-                offset = handleRegex(s, offset + 4, sb, regexFlags, true);
             } else if (c3 == '<' && (isAlphabetic(c4) || c4 == '_')) {
                 // Handle named capture (?<name> ... ) - name can start with letter or underscore
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
@@ -1568,29 +1558,6 @@ public class RegexPreprocessor {
         throw new PerlCompilerException(errMsg);
     }
 
-    /**
-     * Validates that a lookbehind assertion doesn't potentially match more than 255 characters.
-     */
-    private static void validateLookbehindLength(String s, int offset) {
-        // System.err.println("DEBUG: validateLookbehindLength called with string length " + s.length());
-        // System.err.println("DEBUG: String codepoints: ");
-        // s.codePoints().forEach(cp -> System.err.printf("U+%04X ", cp));
-        // System.err.println();
-
-        int start = offset + 4; // Skip past (?<= or (?<!
-        // A recursive subpattern has no finite maximum that this backend can
-        // prove. Perl reports this through its over-255 lookbehind diagnostic.
-        if (s.indexOf("(?&", start) >= 0) {
-            throw new PerlJavaUnimplementedException(
-                    "Lookbehind longer than 255 not implemented in regex m/" + s + "/");
-        }
-        int maxLength = calculateMaxLength(s, start);
-
-        if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more
-            throw new PerlJavaUnimplementedException("Lookbehind longer than 255 not implemented in regex m/" + s + "/");
-        }
-    }
-
     static void regexErrorSimple(String s, String errMsg) {
         throw new PerlCompilerException(errMsg + " in regex m/" + s + "/");
     }
@@ -1652,125 +1619,6 @@ public class RegexPreprocessor {
         return "warn".equals(
                 GlobalVariable.getGlobalHash("main::ENV")
                         .get("JPERL_UNIMPLEMENTED").toString());
-    }
-
-    /**
-     * Calculates the maximum length a pattern can match.
-     * Returns -1 if the pattern can match unlimited length.
-     */
-    private static int calculateMaxLength(String pattern, int start) {
-        int pos = start;
-        int totalLength = 0;
-        int depth = 1; // We're inside the lookbehind parentheses
-
-        while (pos < pattern.length() && depth > 0) {
-            char ch = pattern.charAt(pos);
-
-            if (ch == '(') {
-                depth++;
-                pos++;
-            } else if (ch == ')') {
-                depth--;
-                if (depth == 0) break;
-                pos++;
-            } else if (ch == '\\' && pos + 1 < pattern.length()) {
-                // Handle escape sequences
-                pos += 2;
-                totalLength++;
-            } else if (ch == '[') {
-                // A character class inside lookbehind has fixed width 1.
-                // Skip over its contents so literal braces like [${FOO}]
-                // are not misread as {n,m} quantifiers.
-                pos++;
-                boolean inEscape = false;
-                boolean first = true;
-                while (pos < pattern.length()) {
-                    char cc = pattern.charAt(pos);
-                    if (inEscape) {
-                        inEscape = false;
-                        pos++;
-                        first = false;
-                        continue;
-                    }
-                    if (cc == '\\') {
-                        inEscape = true;
-                        pos++;
-                        first = false;
-                        continue;
-                    }
-                    if (cc == ']' && !first) {
-                        pos++;
-                        break;
-                    }
-                    if (cc == '^' && first) {
-                        pos++;
-                        first = false;
-                        continue;
-                    }
-                    pos++;
-                    first = false;
-                }
-                totalLength++;
-            } else if (ch == '.') {
-                // Check if followed by * or +
-                if (pos + 1 < pattern.length()) {
-                    char next = pattern.charAt(pos + 1);
-                    if (next == '*' || next == '+') {
-                        return -1; // Unlimited length
-                    }
-                }
-                totalLength++;
-                pos++;
-            } else if (ch == '*' || ch == '+') {
-                return -1; // Previous element can repeat unlimited times
-            } else if (ch == '?') {
-                // Handle special case of (? which might be a group
-                if (pos + 1 < pattern.length() && pattern.charAt(pos + 1) == '&') {
-                    // This is (?&...) which is a subroutine call
-                    return -1; // Can match unlimited
-                }
-                pos++;
-            } else if (ch == '{') {
-                // Handle {n,m} quantifiers
-                int endBrace = pattern.indexOf('}', pos);
-                if (endBrace > pos && isValidQuantifierAt(pattern, pos)) {
-                    String quantifier = pattern.substring(pos + 1, endBrace);
-                    int multiplier = parseQuantifierMax(quantifier);
-                    if (multiplier == -1) {
-                        return -1; // Unlimited
-                    }
-                    // The quantifier applies to the immediately preceding atom
-                    totalLength = totalLength - 1 + multiplier;
-                    pos = endBrace + 1;
-                } else {
-                    totalLength++;
-                    pos++;
-                }
-            } else {
-                // Regular character
-                totalLength++;
-                pos++;
-            }
-        }
-
-        return totalLength;
-    }
-
-    /**
-     * Parses a quantifier like "200", "0,255", "1000" and returns the maximum count.
-     * Returns -1 if unbounded (e.g., "5,").
-     */
-    private static int parseQuantifierMax(String quantifier) {
-        quantifier = quantifier.trim();
-        if (quantifier.contains(",")) {
-            String[] parts = quantifier.split(",");
-            if (parts.length == 1 || parts[1].trim().isEmpty()) {
-                return -1; // {n,} is unbounded
-            }
-            return Integer.parseInt(parts[1].trim());
-        } else {
-            return Integer.parseInt(quantifier);
-        }
     }
 
     private static int findClosingBrace(String s, int start, int length) {
