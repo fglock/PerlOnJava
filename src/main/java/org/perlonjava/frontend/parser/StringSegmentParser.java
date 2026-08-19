@@ -77,6 +77,9 @@ public abstract class StringSegmentParser {
     private boolean currentSegmentHasSourceNonAscii = false;
     private boolean inRegexCharClass = false;
     private boolean regexCharClassFirst = false;
+    private boolean regexCharClassEscape = false;
+    private boolean inRegexComment = false;
+    private boolean regexCommentEscape = false;
     /**
      * List of AST nodes representing string segments (literals and interpolated expressions)
      */
@@ -158,21 +161,44 @@ public abstract class StringSegmentParser {
      * Subclasses may suppress them while parsing a quoting region such as {@code \Q...\E}.
      */
     protected boolean regexCodeBlocksAreActive() {
-        return true;
+        return !inRegexCharClass && !inRegexComment;
     }
 
     private void updateRegexCharClassState(char c) {
         if (!isRegex) {
             return;
         }
-        if (c == '[' && !inRegexCharClass) {
+        if (inRegexComment) {
+            if (regexCommentEscape) {
+                regexCommentEscape = false;
+            } else if (c == '\\') {
+                regexCommentEscape = true;
+            } else if (c == ')') {
+                inRegexComment = false;
+            }
+            return;
+        }
+        if (inRegexCharClass) {
+            if (regexCharClassEscape) {
+                regexCharClassEscape = false;
+            } else if (c == '\\') {
+                regexCharClassEscape = true;
+            } else if (c == ']' && !regexCharClassFirst) {
+                inRegexCharClass = false;
+            } else if (regexCharClassFirst && c != '^') {
+                regexCharClassFirst = false;
+            }
+        } else if (c == '[') {
             inRegexCharClass = true;
             regexCharClassFirst = true;
-        } else if (c == ']' && inRegexCharClass && !regexCharClassFirst) {
-            inRegexCharClass = false;
-        } else if (inRegexCharClass && regexCharClassFirst && c != '^') {
-            regexCharClassFirst = false;
         }
+    }
+
+    private boolean startsRegexComment() {
+        int currentPos = parser.tokenIndex;
+        return currentPos + 1 < parser.tokens.size()
+                && "?".equals(parser.tokens.get(currentPos).text)
+                && "#".equals(parser.tokens.get(currentPos + 1).text);
     }
 
     /**
@@ -798,6 +824,9 @@ public abstract class StringSegmentParser {
      * @return true if the token was handled specially, false if it should be treated as literal text
      */
     protected boolean handleSpecialToken(String text) {
+        if (isRegex && inRegexComment) {
+            return false;
+        }
         return switch (text) {
             case "\\" -> {
                 parseEscapeSequence();
@@ -811,6 +840,10 @@ public abstract class StringSegmentParser {
                 yield false;
             }
             case "(" -> {
+                if (isRegex && startsRegexComment()) {
+                    inRegexComment = true;
+                    yield false;
+                }
                 // Check for (?{...}) and (??{...}) regex code blocks - only in regex context
                 if (isRegex && regexCodeBlocksAreActive() && isRegexCallbackCondition()) {
                     parseRegexCallbackCondition();

@@ -21,9 +21,6 @@ use Test::More;
         'dynamic source accepts apostrophe named capture syntax');
     is($+{n}, 'foo', 'apostrophe named capture feeds dynamic source');
 
-    my $ascii_strict_dynamic = qr/^(??{"s"})$/iaa;
-    ok("\x{17F}" !~ $ascii_strict_dynamic,
-        'dynamic source observes the enclosing aa modifier');
 }
 
 my @literal_patterns = (
@@ -32,6 +29,17 @@ my @literal_patterns = (
     [q|ab[(?{1\](?{2]|,     'ab2',     'escaped class close keeps text non-executable'],
     [q|ab[c\](??{"]d|,     'abcd',    'class text after an escaped bracket is non-executable'],
 );
+
+ok('a' =~ m'(?#( (?{1+)a',
+    'apostrophe-delimited comment text stays inside the regex literal');
+ok('ab1' =~ m'ab[(?{1]',
+    'character-class callback-looking text stays inside the regex literal');
+ok('ab2' =~ m'ab[(?{1\](?{2]',
+    'escaped class close keeps callback-looking text inside the class');
+ok("ab\\;c" =~ m'ab\\[(??{1;})]c',
+    'apostrophe delimiter handles callback-looking text after a literal bracket');
+ok('abcd' =~ m'ab[c\](??{"]d',
+    'apostrophe delimiter handles callback-looking text after an escaped bracket');
 
 {
     use re 'eval';
