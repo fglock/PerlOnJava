@@ -134,6 +134,9 @@ public record NamedCharacterExpansion(
                     callable, new RuntimeArray(argument), RuntimeContextType.SCALAR);
             RuntimeScalar value = values.scalar();
             if (value.type == RuntimeScalarType.UNDEF) {
+                if (isCoreCharnamesTranslator(callable)) {
+                    return resolveStandard(name);
+                }
                 return new NamedCharacterExpansion(
                         "", SourceMode.UNICODE, true, Status.UNRESOLVED,
                         "Unknown charname '" + name + "'");
@@ -169,6 +172,11 @@ public record NamedCharacterExpansion(
             return referent;
         }
         return null;
+    }
+
+    private static boolean isCoreCharnamesTranslator(RuntimeScalar callable) {
+        if (callable == null || !(callable.value instanceof RuntimeCode code)) return false;
+        return "_charnames".equals(code.packageName) && "charnames".equals(code.subName);
     }
 
     private static boolean isLatin1(String value) {
