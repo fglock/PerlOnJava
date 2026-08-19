@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
@@ -1565,14 +1566,15 @@ public abstract class StringSegmentParser {
                 // any following capture groups disappear from the pattern.
                 boolean customTranslator = NamedCharacterExpansion.usesCustomTranslator(
                         HintHashRegistry.getCompileTimeHint("charnames"));
-                if (!customTranslator || currentSegment.toString().endsWith("(?[")) {
+                if (!customTranslator) {
                     NamedCharacterExpansion expansion =
                             NamedCharacterExpansion.resolve(name, sourceMode);
                     if (isIncompleteExtendedClassNamedSequence(expansion)) {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
-                        throwNamedCharacterDiagnostic(expansion.diagnostic());
+                        appendToCurrentSegment(RegexMarkers.literalDiagnostic(
+                                namedCharacterDiagnostic(expansion.diagnostic())));
                     }
                 }
                 appendToCurrentSegment("\\N{" + name + "}");
@@ -1595,15 +1597,20 @@ public abstract class StringSegmentParser {
     }
 
     private boolean isPlainNonNewlineInterval(String contents) {
-        return contents.matches("(?:[0-9]+(?:,[0-9]*)?|,[0-9]+)");
+        return contents.replaceAll("\\s+", "")
+                .matches("(?:[0-9]+(?:,[0-9]*)?|,[0-9]+)");
     }
 
     private void throwNamedCharacterDiagnostic(String diagnostic) {
+        throw new PerlParserException(namedCharacterDiagnostic(diagnostic) + "\n");
+    }
+
+    private String namedCharacterDiagnostic(String diagnostic) {
         int errorIndex = this.tokenIndex;
         var location = ctx.errorUtil.getSourceLocationAccurate(errorIndex);
-        throw new PerlParserException(diagnostic
+        return diagnostic
                 + " at " + location.fileName() + " line " + location.lineNumber()
-                + ", within " + (isRegex ? "pattern" : "string") + "\n");
+                + ", within " + (isRegex ? "pattern" : "string");
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {
