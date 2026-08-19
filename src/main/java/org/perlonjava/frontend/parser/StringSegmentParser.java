@@ -1531,6 +1531,10 @@ public abstract class StringSegmentParser {
                 appendToCurrentSegment("\\N{" + name + "}");
                 return;
             }
+            if (name.matches("(?i)U\\+[0-9A-F]+(?:\\.[0-9A-F]+)+")) {
+                throwNamedCharacterDiagnostic(
+                        "Invalid hexadecimal number in \\N{U+...}");
+            }
             NamedCharacterExpansion expansion =
                     NamedCharacterExpansion.resolve(name, sourceMode);
             if (expansion.resolved()) {

@@ -555,8 +555,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String message = unsupported.getMessage();
             if (message != null && (message.contains("premature end of char-class")
                     || message.contains("Unclosed character class"))) {
-                throw new PerlCompilerException("Unmatched [ in regex m/"
-                        + patternString + "/");
+                throw new PerlCompilerException(
+                        unmatchedCharacterClassDiagnostic(patternString) + "\n");
             }
             if (message != null && (message.contains("Unclosed group")
                     || message.contains("Dangling meta character")
@@ -810,11 +810,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if ("Empty \\N{}".equals(message)) {
                         throw new PerlCompilerException("Unknown charname ''");
                     }
-                    if (literalSyntaxValidation && message != null
+                    if (message != null
                             && (message.contains("premature end of char-class")
                                     || message.contains("Unclosed character class"))) {
-                        throw new PerlCompilerException("Unmatched [ in regex m/"
-                                + originalPatternString + "/");
+                        String diagnostic = unmatchedCharacterClassDiagnostic(originalPatternString);
+                        if (literalSyntaxValidation) {
+                            diagnostic += "\n";
+                        }
+                        throw new PerlCompilerException(diagnostic);
                     }
                     int bytePosition = ((SyntaxException) e).getPatternPosition();
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
@@ -882,6 +885,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
         return regex;
+    }
+
+    private static String unmatchedCharacterClassDiagnostic(String pattern) {
+        int open = pattern == null ? -1 : pattern.indexOf('[');
+        return RegexDiagnosticFormatter.markedPerl(
+                pattern, open < 0 ? 0 : open + 1, "Unmatched [");
     }
 
     private static String invalidUnicodePropertyName(String message) {

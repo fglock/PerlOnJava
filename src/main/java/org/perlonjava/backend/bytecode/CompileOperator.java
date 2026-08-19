@@ -1128,7 +1128,13 @@ public class CompileOperator {
                             && !modifiers.contains("u")) {
                         modifiers += "u";
                     }
-                    RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers);
+                    try {
+                        RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers);
+                    } catch (PerlCompilerException exception) {
+                        throw PerlCompilerException.withSourceLocation(
+                                node.tokenIndex, exception.getMessage(),
+                                bytecodeCompiler.errorUtil);
+                    }
                 }
                 boolean needsCallsiteCache = false;
                 Node flagsNode = operand.elements.get(1);
