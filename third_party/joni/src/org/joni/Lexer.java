@@ -49,6 +49,7 @@ class Lexer extends ScannerSupport {
     private boolean perlHorizontalWhitespaceSingleByte;
     private int perlVerticalWhitespaceTokenIndex = -1;
     private boolean perlVerticalWhitespaceNegated;
+    private int perlCharacterPropertyEscape;
 
     protected Lexer(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex.enc, bytes, p, end);
@@ -712,6 +713,7 @@ class Lexer extends ScannerSupport {
     private void fetchTokenInCCFor_p() {
         int c2 = peek(); // !!! migrate to peekIs
         if (c2 == '{' && syntax.op2EscPBraceCharProperty()) {
+            perlCharacterPropertyEscape = c;
             inc();
             token.type = TokenType.CHAR_PROPERTY;
             token.setPropNot(c == 'P');
@@ -1419,6 +1421,7 @@ class Lexer extends ScannerSupport {
 
     private void fetchTokenFor_charProperty() {
         if (peekIs('{') && syntax.op2EscPBraceCharProperty()) {
+            perlCharacterPropertyEscape = c;
             inc();
             token.type = TokenType.CHAR_PROPERTY;
             token.setPropNot(c == 'P');
@@ -1437,6 +1440,9 @@ class Lexer extends ScannerSupport {
             token.type = TokenType.CHAR_TYPE;
             token.setPropCType(enc.propertyNameToCType(bytes, nameStart, p));
             token.setPropNot(c == 'P');
+        } else if (syntax.op2OptionPerl()) {
+            newSyntaxException(PERL_EMPTY_CHARACTER_PROPERTY.replace(
+                    "%n", Character.toString(c)));
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
         }
@@ -1872,6 +1878,11 @@ class Lexer extends ScannerSupport {
             int last = p;
             fetch();
             if (c == '}') {
+                if (syntax.op2OptionPerl() && last == _p) {
+                    newSyntaxException(PERL_EMPTY_CHARACTER_PROPERTY_BRACES.replace(
+                            "%n", Character.toString(perlCharacterPropertyEscape)),
+                            _p - getBegin());
+                }
                 if (syntax.characterPropertyResolver != null) {
                     CharacterPropertyResolver.Result resolved =
                             syntax.characterPropertyResolver.resolve(

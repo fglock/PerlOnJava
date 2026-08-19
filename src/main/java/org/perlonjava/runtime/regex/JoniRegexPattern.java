@@ -276,6 +276,13 @@ final class JoniRegexPattern {
                 continue;
             }
             String property = pattern.substring(i + 3, end).trim();
+            if (property.isEmpty()) {
+                // Malformed Perl property syntax belongs to Joni's lexer. Do
+                // not ask the adapter resolver to classify an empty name.
+                translated.append(pattern, i, end + 1);
+                i = end;
+                continue;
+            }
             String unnegated = property.startsWith("^")
                     ? property.substring(1).trim() : property;
             boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(unnegated);
