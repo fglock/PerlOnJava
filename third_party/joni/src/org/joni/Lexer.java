@@ -236,7 +236,12 @@ class Lexer extends ScannerSupport {
         if (c == '?') {
             c = 0177;
         } else {
-            if (c == syntax.metaCharTable.esc) fetchEscapedValue();
+            // Perl treats the escape character itself as the control argument:
+            // \c\ is FS (0x1c), and the following character begins a new token.
+            // Other syntaxes retain Oniguruma's recursive escaped-value rule.
+            if (c == syntax.metaCharTable.esc && !syntax.op2OptionPerl()) {
+                fetchEscapedValue();
+            }
             c &= 0x9f;
         }
     }
