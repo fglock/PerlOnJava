@@ -143,7 +143,8 @@ final class RuntimeRegexSourceCompiler {
                                          RuntimeRegexTemplate template,
                                          String modifiers) {
         RuntimeRegexTemplate.MaskedCallouts masked = template.maskCallouts();
-        RuntimeScalar compiled = compile(new RuntimeScalar(masked.pattern()), modifiers);
+        RuntimeScalar compiled = compile(RuntimeRegexTemplate.patternScalar(
+                masked.pattern(), template.byteBackedPattern()), modifiers);
         if (!(compiled.value instanceof RuntimeRegex sourceRegex)) {
             throw new IllegalStateException("runtime regex source did not compile to qr//");
         }
@@ -156,7 +157,7 @@ final class RuntimeRegexSourceCompiler {
         List<RuntimeRegexCallback> callbacks = new ArrayList<>(template.callbacks());
         callbacks.addAll(sourceRegex.executableCallbacks);
         RuntimeScalar result = RuntimeRegex.compileExecutableTemplate(
-                executablePattern, modifiers, callbacks, original);
+                executablePattern, modifiers, callbacks, original, template.byteBackedPattern());
         if (result.value != sourceRegex) {
             sourceRegex.releaseExecutableCallbacks();
         }

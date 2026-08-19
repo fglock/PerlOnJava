@@ -1063,7 +1063,7 @@ final class JoniRegexPattern {
             matcher = regex.matcher(bytes);
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
-                        input, byteToChar, callbacks, flags, hasControlVerbState, subject);
+                        input, byteToChar, callbacks, flags, hasControlVerbState, byteMode, subject);
                 matcher.setCalloutHandler(calloutHandler);
             }
             int result;
@@ -1281,6 +1281,7 @@ final class JoniRegexPattern {
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
         private final boolean publishesControlVerbState;
+        private final boolean byteMode;
         private final RuntimeScalar subject;
         private final int initialLocalLevel;
         private final RegexState initialRegexState;
@@ -1295,20 +1296,21 @@ final class JoniRegexPattern {
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                            RegexFlags outerFlags, boolean publishesControlVerbState,
-                           RuntimeScalar subject) {
+                           boolean byteMode, RuntimeScalar subject) {
             this(input, byteToChar, callbacks, outerFlags, publishesControlVerbState,
-                    subject, null);
+                    byteMode, subject, null);
         }
 
         private PerlCalloutHandler(
                 String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                 RegexFlags outerFlags, boolean publishesControlVerbState,
-                RuntimeScalar subject, PerlCalloutHandler parent) {
+                boolean byteMode, RuntimeScalar subject, PerlCalloutHandler parent) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
             this.publishesControlVerbState = publishesControlVerbState;
+            this.byteMode = byteMode;
             this.subject = subject;
             this.parent = parent;
             this.nestedDepth = parent == null ? 0 : parent.nestedDepth + 1;
@@ -1352,7 +1354,8 @@ final class JoniRegexPattern {
                 nestedCallbacks = runtimeRegex.executableCallbacks;
             } else if (value.value instanceof RuntimeRegexTemplate template) {
                 nestedPattern = new JoniRegexPattern(template.pattern(), outerFlags,
-                        template.callbacks().size());
+                        template.callbacks().size(), false,
+                        byteMode && template.byteBackedPattern(), template.byteBackedPattern());
                 nestedCallbacks = template.callbacks();
             } else {
                 String dynamicSource = value.toString();
@@ -1380,6 +1383,7 @@ final class JoniRegexPattern {
                                     && runtimeRegex.getRegexFlags() != null
                                     ? runtimeRegex.getRegexFlags() : outerFlags,
                             nestedPattern.hasControlVerbState,
+                            byteMode,
                             subject,
                             this);
             if (nestedHandler != null) executedNestedCallbackPattern = true;
