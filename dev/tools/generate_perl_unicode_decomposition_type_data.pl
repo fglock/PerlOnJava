@@ -1,9 +1,12 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    loose_name parse_range read_pinned_source repo_root select_unicode_root trim verify_unicode_notice
+);
 
 binmode STDOUT, ':raw';
 
@@ -12,21 +15,9 @@ my @required_sources = (
     'version', File::Spec->catfile('extracted', 'DDecompositionType.txt'),
     'PropertyAliases.txt', 'PropValueAliases.txt',
 );
-my $local_unicore = File::Spec->catdir($FindBin::Bin, '..', '..', 'perl5', 'lib', 'unicore');
-my $vendored_unicore = File::Spec->catdir($FindBin::Bin, '..', 'unicode', $expected_version);
-
-sub missing_sources {
-    my ($root) = @_;
-    return grep { !-f File::Spec->catfile($root, $_) } @required_sources;
-}
-
-my @local_missing = missing_sources($local_unicore);
-my @vendored_missing = missing_sources($vendored_unicore);
-my $unicore = !@local_missing ? $local_unicore
-    : !@vendored_missing ? $vendored_unicore
-    : die "No complete Unicode $expected_version source tree: local missing "
-        . join(', ', @local_missing) . '; vendored missing '
-        . join(', ', @vendored_missing) . "\n";
+my $unicore = select_unicode_root(
+    repo_root => repo_root($FindBin::Bin), version => $expected_version,
+    required => \@required_sources);
 my %sources = (
     Version => [File::Spec->catfile($unicore, 'version'),
         '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac'],
@@ -41,42 +32,11 @@ my %sources = (
 sub source_text {
     my ($name) = @_;
     my ($path, $expected_hash) = @{$sources{$name}};
-    open my $input, '<:raw', $path or die "Cannot read $path: $!\n";
-    local $/;
-    my $text = <$input>;
-    close $input or die "Cannot close $path: $!\n";
-    my $actual_hash = sha256_hex($text);
-    die "$path SHA-256 mismatch: expected $expected_hash, found $actual_hash\n"
-        unless $actual_hash eq $expected_hash;
-    return ($path, $text);
+    return ($path, read_pinned_source(path => $path, sha256 => $expected_hash));
 }
 
-sub trim {
-    my ($text) = @_;
-    $text =~ s/^\s+|\s+$//g;
-    return $text;
-}
-
-sub loose {
-    my ($text) = @_;
-    $text = lc $text;
-    $text =~ s/[\s_-]+//g;
-    return $text;
-}
-
-sub range_from_text {
-    my ($range) = @_;
-    my ($first, $last) = split /\.\./, $range;
-    return (hex($first), hex(defined $last ? $last : $first));
-}
-
-sub verify_unicode_notice {
-    my ($path, $text) = @_;
-    die "$path does not preserve the Unicode copyright notice\n"
-        unless $text =~ /^# © 2025 Unicode®, Inc\.$/m;
-    die "$path does not preserve the Unicode terms notice\n"
-        unless $text =~ m{^# For terms of use and license, see https://www\.unicode\.org/terms_of_use\.html$}m;
-}
+sub loose { return loose_name(@_); }
+sub range_from_text { return parse_range(@_); }
 
 my ($version_path, $version_text) = source_text('Version');
 $version_text =~ s/\s+\z//;

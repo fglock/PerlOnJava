@@ -1,21 +1,31 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use File::Spec;
+use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    emit_java_range_triples read_pinned_source read_unicode_version repo_root
+    select_unicode_root verify_unicode_notice
+);
 
-my $unicode_root = 'perl5/lib/unicore';
 my $expected_unicode_version = '17.0.0';
+my $unicode_root = select_unicode_root(
+    repo_root => repo_root($FindBin::Bin), version => $expected_unicode_version,
+    required => [qw(version DAge.txt)]);
 
-open my $version_fh, '<', "$unicode_root/version"
-    or die "Can't read Unicode version: $!\n";
-chomp(my $unicode_version = <$version_fh>);
-close $version_fh;
-die "Expected Unicode $expected_unicode_version, found $unicode_version\n"
-    unless $unicode_version eq $expected_unicode_version;
+my $unicode_version = read_unicode_version(
+    path => File::Spec->catfile($unicode_root, 'version'),
+    expected => $expected_unicode_version,
+    sha256 => '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac');
 
-open my $age_fh, '<', "$unicode_root/DAge.txt"
-    or die "Can't read Age data: $!\n";
+my $age_path = File::Spec->catfile($unicode_root, 'DAge.txt');
+my $age_text = read_pinned_source(
+    path => $age_path,
+    sha256 => 'f8ecdf768bdc210f201abd271d9bc587825618a86a7046a8146cc816393f1998');
+verify_unicode_notice($age_path, $age_text);
 my (@versions, %version_index, @ranges);
-while (<$age_fh>) {
+for (split /\n/, $age_text) {
     next unless /^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*([0-9]+\.[0-9]+)/;
     my ($start, $end, $version) = (hex($1), defined($2) ? hex($2) : hex($1), $3);
     if (!exists $version_index{$version}) {
@@ -29,7 +39,6 @@ while (<$age_fh>) {
         push @ranges, [$start, $end, $version_index{$version}];
     }
 }
-close $age_fh;
 
 die "Age data does not end at Unicode 17.0\n"
     unless @versions && $versions[-1] eq '17.0';
@@ -56,12 +65,7 @@ print "    private static final String[] VERSIONS = {\n        ";
 print join(', ', map { qq{"$_"} } @versions);
 print "\n    };\n\n";
 print "    private static final int[] RANGES = {\n";
-for (my $i = 0; $i < @ranges; $i += 4) {
-    my $end = $i + 3 < $#ranges ? $i + 3 : $#ranges;
-    print "        ", join(', ', map {
-        sprintf '0x%X, 0x%X, %d', @{$ranges[$_]}[0, 1, 2]
-    } $i .. $end), ",\n";
-}
+emit_java_range_triples(\@ranges);
 print <<'FOOTER';
     };
 

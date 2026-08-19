@@ -1,56 +1,35 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    read_pinned_source read_unicode_version repo_root select_unicode_root verify_unicode_notice
+);
 
 binmode STDOUT, ':raw';
 
 my $expected_version = '17.0.0';
 my $expected_date = '2025-07-21';
 my $expected_hash = '76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5';
-my $root = File::Spec->catdir($FindBin::Bin, '..', '..');
-my $local_unicore = File::Spec->catdir($root, 'perl5', 'lib', 'unicore');
-my $vendored_unicore = File::Spec->catdir($root, 'dev', 'unicode', $expected_version);
 my @required_sources = ('version', 'Unikemet.txt');
-sub missing_sources {
-    my ($source_root) = @_;
-    return grep { !-f File::Spec->catfile($source_root, $_) } @required_sources;
-}
-my @local_missing = missing_sources($local_unicore);
-my @vendored_missing = missing_sources($vendored_unicore);
-my $unicore = !@local_missing ? $local_unicore
-    : !@vendored_missing ? $vendored_unicore
-    : die "No complete Unicode $expected_version Unikemet source: local missing "
-        . join(', ', @local_missing) . '; vendored missing '
-        . join(', ', @vendored_missing) . "\n";
+my $unicore = select_unicode_root(
+    repo_root => repo_root($FindBin::Bin), version => $expected_version,
+    required => \@required_sources);
 my $source = File::Spec->catfile($unicore, 'Unikemet.txt');
 my $version_source = File::Spec->catfile($unicore, 'version');
 
-open my $version_input, '<:raw', $version_source
-    or die "Cannot read $version_source: $!\n";
-local $/;
-my $version = <$version_input>;
-close $version_input or die "Cannot close $version_source: $!\n";
-$version =~ s/\s+\z//;
-die "Expected Unicode $expected_version, found '$version' in $version_source\n"
-    unless $version eq $expected_version;
+my $version = read_unicode_version(
+    path => $version_source, expected => $expected_version,
+    sha256 => '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac');
 
-open my $input, '<:raw', $source or die "Cannot read $source: $!\n";
-my $text = <$input>;
-close $input or die "Cannot close $source: $!\n";
-my $actual_hash = sha256_hex($text);
-die "$source SHA-256 mismatch: expected $expected_hash, found $actual_hash\n"
-    unless $actual_hash eq $expected_hash;
+my $text = read_pinned_source(path => $source, sha256 => $expected_hash);
 die "$source is not pinned Unikemet $expected_version data\n"
     unless $text =~ /^# Unikemet-\Q$expected_version\E\.txt$/m;
 die "$source has an unexpected source date\n"
     unless $text =~ /^# Date: \Q$expected_date\E$/m;
-die "$source does not preserve the Unicode copyright notice\n"
-    unless $text =~ /^# © 2025 Unicode®, Inc\.$/m;
-die "$source does not preserve the Unicode terms notice\n"
-    unless $text =~ m{^# For terms of use and license, see https://www\.unicode\.org/terms_of_use\.html$}m;
+verify_unicode_notice($source, $text);
 
 my %points = (
     kEH_NoMirror => [],
