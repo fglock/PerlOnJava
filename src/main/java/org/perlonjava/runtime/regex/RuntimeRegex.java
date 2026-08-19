@@ -666,6 +666,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             LeftBraceIssue leftBraceIssue = unescapedLeftBraceIssue(
                     originalPatternString);
             String sourcePolicyWarning = null;
+            String constructionPolicyWarning = null;
             if (leftBraceIssue != null) {
                 String message = leftBraceIssue.alwaysFatal || lexicalReStrict
                         ? "Unescaped left brace in regex is illegal here"
@@ -676,6 +677,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     throw new PerlCompilerException(diagnostic);
                 }
                 sourcePolicyWarning = diagnostic;
+            }
+            NonHexIssue nonHexIssue = nonHexEscapeIssue(originalPatternString);
+            if (nonHexIssue != null) {
+                if (lexicalReStrict) {
+                    throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                            originalPatternString, nonHexIssue.offset + 1,
+                            "Non-hex character"));
+                }
+                if (!nonHexIssue.braced) {
+                    char invalid = originalPatternString.charAt(nonHexIssue.offset);
+                    char digit = originalPatternString.charAt(nonHexIssue.offset - 1);
+                    String message = "Non-hex character '" + invalid
+                            + "' terminates \\x early.  Resolved as \"\\x0"
+                            + digit + invalid + "\"";
+                    constructionPolicyWarning = RegexDiagnosticFormatter.markedPerl(
+                            originalPatternString, nonHexIssue.offset, message);
+                }
             }
             
             // Always compute Unicode flags - we need the Unicode variant for when
@@ -721,6 +739,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.inlineModifierWarnings.add(sourcePolicyWarning);
                     regex.warningsOnUse.add(sourcePolicyWarning);
                 }
+                if (constructionPolicyWarning != null) {
+                    regex.inlineModifierWarnings.add(constructionPolicyWarning);
+                }
                 if (hasDeferredDynamicPattern) {
                     regex.warningsOnUse.add(DYNAMIC_PATTERN_ERROR);
                 } else if (hasWarnDynamicFallback) {
@@ -747,8 +768,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty()
                                     || regex.recursivePatternUnicode
                                             .hasDeferredUserDefinedUnicodeProperty();
-                    regex.inlineModifierWarnings.addAll(
-                            regex.recursivePattern.compileWarnings());
+                    regex.inlineModifierWarnings.addAll(normalizeNonHexWarningCase(
+                            regex.recursivePattern.compileWarnings(),
+                            originalPatternString, nonHexIssue));
                     regex.warningsOnUse.addAll(regex.inlineModifierWarnings);
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                             || RegexFlags.hasInlinePreserveModifier(compilePatternString);
@@ -1093,6 +1115,81 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             this.offset = offset;
             this.alwaysFatal = alwaysFatal;
         }
+    }
+
+    private static NonHexIssue nonHexEscapeIssue(String pattern) {
+        if (pattern == null || pattern.contains("(?[")) return null;
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            if (pattern.charAt(i) != '\\' || pattern.charAt(i + 1) != 'x'
+                    || (i > 0 && pattern.charAt(i - 1) == '\\')) {
+                continue;
+            }
+            int cursor = i + 2;
+            if (pattern.charAt(cursor) != '{') {
+                if (isHexDigit(pattern.charAt(cursor))
+                        && cursor + 1 < pattern.length()
+                        && Character.isLetterOrDigit(pattern.charAt(cursor + 1))
+                        && !isHexDigit(pattern.charAt(cursor + 1))) {
+                    return new NonHexIssue(cursor + 1, false);
+                }
+                continue;
+            }
+            int close = pattern.indexOf('}', cursor + 1);
+            if (close < 0) continue;
+            cursor++;
+            while (cursor < close && pattern.charAt(cursor) == ' ') cursor++;
+            int digits = cursor;
+            while (cursor < close && isHexDigit(pattern.charAt(cursor))) cursor++;
+            if (cursor == digits || cursor == close) {
+                i = close;
+                continue;
+            }
+            if (pattern.charAt(cursor) != ' ') return new NonHexIssue(cursor, true);
+            int whitespace = cursor;
+            while (cursor < close && pattern.charAt(cursor) == ' ') cursor++;
+            if (cursor < close) return new NonHexIssue(whitespace, true);
+            i = close;
+        }
+        return null;
+    }
+
+    private static final class NonHexIssue {
+        final int offset;
+        final boolean braced;
+
+        NonHexIssue(int offset, boolean braced) {
+            this.offset = offset;
+            this.braced = braced;
+        }
+    }
+
+    private static List<String> normalizeNonHexWarningCase(
+            List<String> warnings, String pattern, NonHexIssue issue) {
+        if (issue == null || !issue.braced || warnings.isEmpty()) return warnings;
+        int opening = pattern.lastIndexOf('{', issue.offset);
+        if (opening < 0) return warnings;
+        String sourceDigits = pattern.substring(opening + 1, issue.offset).trim();
+        if (sourceDigits.isEmpty()) return warnings;
+        List<String> normalized = new ArrayList<>(warnings.size());
+        String prefix = "Resolved as \"\\x{";
+        for (String warning : warnings) {
+            int valueStart = warning.indexOf(prefix);
+            int valueEnd = valueStart < 0 ? -1 : warning.indexOf('}', valueStart + prefix.length());
+            if (valueEnd >= 0) {
+                String resolved = warning.substring(valueStart + prefix.length(), valueEnd);
+                if (resolved.equalsIgnoreCase(sourceDigits)) {
+                    warning = warning.substring(0, valueStart + prefix.length())
+                            + sourceDigits + warning.substring(valueEnd);
+                }
+            }
+            normalized.add(warning);
+        }
+        return normalized;
+    }
+
+    private static boolean isHexDigit(char ch) {
+        return ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f'
+                || ch >= 'A' && ch <= 'F';
     }
 
     private static int debugMode(String modifiers) {
