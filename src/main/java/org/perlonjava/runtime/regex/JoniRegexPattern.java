@@ -503,16 +503,13 @@ final class JoniRegexPattern {
         boolean hasSubroutineCall = pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*")
                 || pattern.contains("(?&")
                 || pattern.contains("(?P>");
-        // Keep automatic routing on Java until the native branch-reset call
-        // implementation passes its combined imported-corpus gate. Explicit
-        // Joni mode still exercises the native implementation directly.
-        boolean branchResetCallUsesJava = pattern.contains("(?|") && hasSubroutineCall;
         PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(
                 pattern, flags != null && flags.isExtended());
         return flags != null && flags.isAsciiStrict()
                 || syntaxFeatures.asciiStrictPresent()
                 || syntaxFeatures.keepPresent()
                 || syntaxFeatures.lookbehindPresent()
+                || syntaxFeatures.branchResetPresent()
                 || syntaxFeatures.conditionalPresent()
                 || syntaxFeatures.alphaAssertionPresent()
                 || pattern.contains("(?{=CALL:")
@@ -525,7 +522,7 @@ final class JoniRegexPattern {
                 || pattern.contains("(*COMMIT")
                 || pattern.contains("(*MARK")
                 || pattern.contains("(*:")
-                || (hasSubroutineCall && !branchResetCallUsesJava);
+                || hasSubroutineCall;
     }
 
     static boolean containsNamedCharacterEscape(String pattern) {
@@ -550,6 +547,7 @@ final class JoniRegexPattern {
     private record PerlSyntaxFeatures(boolean keepPresent,
                                       boolean keepInLookaround,
                                       boolean lookbehindPresent,
+                                      boolean branchResetPresent,
                                       boolean conditionalPresent,
                                       boolean alphaAssertionPresent,
                                       boolean asciiStrictPresent) {}
@@ -563,6 +561,7 @@ final class JoniRegexPattern {
         java.util.ArrayDeque<Boolean> groups = new java.util.ArrayDeque<>();
         boolean keepPresent = false;
         boolean lookbehindPresent = false;
+        boolean branchResetPresent = false;
         boolean conditionalPresent = false;
         boolean alphaAssertionPresent = false;
         boolean asciiStrictPresent = false;
@@ -629,7 +628,7 @@ final class JoniRegexPattern {
                 } else if (escaped == 'K') {
                     keepPresent = true;
                     if (lookaroundDepth > 0) {
-                        return new PerlSyntaxFeatures(true, true, lookbehindPresent, conditionalPresent,
+                        return new PerlSyntaxFeatures(true, true, lookbehindPresent, branchResetPresent, conditionalPresent,
                                 alphaAssertionPresent, asciiStrictPresent);
                     }
                 }
@@ -687,13 +686,14 @@ final class JoniRegexPattern {
                         || pattern.startsWith("(?<!", i);
                 lookbehindPresent |= pattern.startsWith("(?<=", i)
                         || pattern.startsWith("(?<!", i);
+                branchResetPresent |= pattern.startsWith("(?|", i);
                 groups.push(lookaround);
                 if (lookaround) lookaroundDepth++;
             } else if (ch == ')' && !groups.isEmpty()) {
                 if (groups.pop()) lookaroundDepth--;
             }
         }
-        return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, conditionalPresent,
+        return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, branchResetPresent, conditionalPresent,
                 alphaAssertionPresent, asciiStrictPresent);
     }
 

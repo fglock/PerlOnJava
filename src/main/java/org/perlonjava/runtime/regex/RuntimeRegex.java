@@ -190,7 +190,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private JoniRegexPattern.NamedCharacterCache namedCharacterCache;
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
-    int[] branchResetCaptureMap;
     int patternFlags;
     int patternFlagsUnicode;
     public String patternString;
@@ -214,7 +213,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private boolean matched = false;
     private boolean hasCodeBlockCaptures = false;  // True if regex has (?{...}) code blocks
     private boolean deferredUserDefinedUnicodeProperties = false;
-    private boolean hasBranchReset = false;  // True if pattern uses (?|...) branch reset
     // An empty qr// object keeps its own empty pattern when interpolated;
     // only empty match/substitution string syntax reuses the previous match.
     private boolean quoteConstruction = false;
@@ -249,7 +247,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.recursivePatternBytes = this.recursivePatternBytes;
         copy.namedCharacterCache = this.namedCharacterCache;
         copy.setExecutableCallbacks(this.executableCallbacks);
-        copy.branchResetCaptureMap = this.branchResetCaptureMap;
         copy.patternFlags = this.patternFlags;
         copy.patternFlagsUnicode = this.patternFlagsUnicode;
         copy.patternString = this.patternString;
@@ -261,7 +258,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.regexFlags = this.regexFlags;
         copy.hasCodeBlockCaptures = this.hasCodeBlockCaptures;
         copy.deferredUserDefinedUnicodeProperties = this.deferredUserDefinedUnicodeProperties;
-        copy.hasBranchReset = this.hasBranchReset;
         copy.quoteConstruction = this.quoteConstruction;
         copy.warningsOnUse = new ArrayList<>(this.warningsOnUse);
         copy.inlineModifierWarnings = new ArrayList<>(this.inlineModifierWarnings);
@@ -315,9 +311,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return selectRecursivePattern(string).matcher(input, executableCallbacks, string);
         }
         Pattern selected = selectPattern(string, input);
-        return new JavaRegexMatcher(
-                selected.matcher(new RegexTimeoutCharSequence(input)),
-                branchResetCaptureMap);
+        return new JavaRegexMatcher(selected.matcher(new RegexTimeoutCharSequence(input)));
     }
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
@@ -702,21 +696,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.warningsOnUse.addAll(regex.inlineModifierWarnings);
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                             || RegexFlags.hasInlinePreserveModifier(compilePatternString);
-                    regex.hasBranchReset = false;
                 } else {
                     regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
                     regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                             || RegexFlags.hasInlinePreserveModifier(compilePatternString)
                             || RegexPreprocessor.hadInlinePFlag();
-                    regex.hasBranchReset = RegexPreprocessor.hadBranchReset();
                     regex.warningsOnUse.addAll(RegexPreprocessor.getWarningsOnUse());
                 }
 
                 regex.patternString = originalPatternString;
                 regex.javaPatternString = javaPattern;
-                regex.branchResetCaptureMap = usesRecursiveBackend
-                        ? null
-                        : BranchResetCaptureMap.build(compilePatternString);
                 regex.requiredLiteral = usesRecursiveBackend
                         ? null
                         : findTopLevelRequiredLiteral(compilePatternString, regex.regexFlags);
@@ -991,7 +980,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.patternUnicode = recompiled.patternUnicode;
         regex.recursivePattern = recompiled.recursivePattern;
         regex.recursivePatternUnicode = recompiled.recursivePatternUnicode;
-        regex.branchResetCaptureMap = recompiled.branchResetCaptureMap;
         regex.patternNoInternalMarkers = recompiled.patternNoInternalMarkers;
         regex.patternUnicodeNoInternalMarkers = recompiled.patternUnicodeNoInternalMarkers;
         regex.patternFlags = recompiled.patternFlags;
@@ -1429,7 +1417,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.recursivePattern = originalRegex.recursivePattern;
             regex.recursivePatternUnicode = originalRegex.recursivePatternUnicode;
             regex.setExecutableCallbacks(originalRegex.executableCallbacks);
-            regex.branchResetCaptureMap = originalRegex.branchResetCaptureMap;
             regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
             regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
             regex.patternString = originalRegex.patternString;
@@ -1473,7 +1460,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.recursivePattern = originalRegex.recursivePattern;
                     regex.recursivePatternUnicode = originalRegex.recursivePatternUnicode;
                     regex.setExecutableCallbacks(originalRegex.executableCallbacks);
-                    regex.branchResetCaptureMap = originalRegex.branchResetCaptureMap;
                     regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
                     regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
                     regex.patternString = originalRegex.patternString;
@@ -1692,7 +1678,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.recursivePattern = resolvedRegex.recursivePattern;
         regex.recursivePatternUnicode = resolvedRegex.recursivePatternUnicode;
         regex.executableCallbacks = resolvedRegex.executableCallbacks;
-        regex.branchResetCaptureMap = resolvedRegex.branchResetCaptureMap;
         regex.patternNoInternalMarkers = resolvedRegex.patternNoInternalMarkers;
         regex.patternUnicodeNoInternalMarkers = resolvedRegex.patternUnicodeNoInternalMarkers;
         regex.patternString = resolvedRegex.patternString;
@@ -1704,7 +1689,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.quoteConstruction = resolvedRegex.quoteConstruction;
         regex.useGAssertion = resolvedRegex.useGAssertion;
         regex.patternFlags = resolvedRegex.patternFlags;
-        regex.hasBranchReset = resolvedRegex.hasBranchReset;
         regex.hasCodeBlockCaptures = resolvedRegex.hasCodeBlockCaptures;
         regex.warningsOnUse = new ArrayList<>(resolvedRegex.warningsOnUse);
         regex.inlineModifierWarnings = new ArrayList<>(resolvedRegex.inlineModifierWarnings);
@@ -1735,7 +1719,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.recursivePattern = recompiledRegex.recursivePattern;
                 regex.recursivePatternUnicode = recompiledRegex.recursivePatternUnicode;
                 regex.executableCallbacks = resolvedRegex.executableCallbacks;
-                regex.branchResetCaptureMap = recompiledRegex.branchResetCaptureMap;
                 regex.patternNoInternalMarkers = recompiledRegex.patternNoInternalMarkers;
                 regex.patternUnicodeNoInternalMarkers = recompiledRegex.patternUnicodeNoInternalMarkers;
                 regex.patternString = recompiledRegex.patternString;
@@ -1743,7 +1726,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.hasPreservesMatch = recompiledRegex.hasPreservesMatch;
                 regex.useGAssertion = recompiledRegex.useGAssertion;
                 regex.patternFlags = recompiledRegex.patternFlags;
-                regex.hasBranchReset = recompiledRegex.hasBranchReset;
                 regex.hasCodeBlockCaptures = recompiledRegex.hasCodeBlockCaptures;
                 regex.warningsOnUse = new ArrayList<>(recompiledRegex.warningsOnUse);
                 regex.inlineModifierWarnings = new ArrayList<>(
@@ -1979,7 +1961,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.recursivePatternUnicode =
                         regexState.lastSuccessfulPattern.recursivePatternUnicode;
                 tempRegex.executableCallbacks = regexState.lastSuccessfulPattern.executableCallbacks;
-                tempRegex.branchResetCaptureMap = regexState.lastSuccessfulPattern.branchResetCaptureMap;
                 tempRegex.patternNoInternalMarkers = regexState.lastSuccessfulPattern.patternNoInternalMarkers;
                 tempRegex.patternUnicodeNoInternalMarkers = regexState.lastSuccessfulPattern.patternUnicodeNoInternalMarkers;
                 tempRegex.patternString = regexState.lastSuccessfulPattern.patternString;
@@ -2039,7 +2020,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
                 pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
             }
-            matcher = new JavaRegexMatcher(pattern.matcher(matchInput), regex.branchResetCaptureMap);
+            matcher = new JavaRegexMatcher(pattern.matcher(matchInput));
         }
 
         // hexPrinter(inputStr);
@@ -2769,8 +2750,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     return null;
                 }
             }
-            retryMatcher = new JavaRegexMatcher(
-                    notemptyPattern.matcher(matchInput), regex.branchResetCaptureMap);
+            retryMatcher = new JavaRegexMatcher(notemptyPattern.matcher(matchInput));
             nativeNotEmpty = false;
         }
 
@@ -2887,7 +2867,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 tempRegex.recursivePatternUnicode =
                         state().lastSuccessfulPattern.recursivePatternUnicode;
                 tempRegex.executableCallbacks = state().lastSuccessfulPattern.executableCallbacks;
-                tempRegex.branchResetCaptureMap = state().lastSuccessfulPattern.branchResetCaptureMap;
                 tempRegex.patternNoInternalMarkers = state().lastSuccessfulPattern.patternNoInternalMarkers;
                 tempRegex.patternUnicodeNoInternalMarkers = state().lastSuccessfulPattern.patternUnicodeNoInternalMarkers;
                 tempRegex.patternString = state().lastSuccessfulPattern.patternString;
@@ -2928,7 +2907,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
                 pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
             }
-            matcher = new JavaRegexMatcher(pattern.matcher(matchInput), regex.branchResetCaptureMap);
+            matcher = new JavaRegexMatcher(pattern.matcher(matchInput));
         }
         Pattern nonEmptySubstitutionPattern = pattern != null
                 && regex.regexFlags != null && regex.regexFlags.isGlobalMatch()
@@ -3051,8 +3030,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if ((nonEmptySubstitutionPattern != null || regex.recursivePattern != null)
                         && zeroLengthOffset <= inputStr.length()) {
                     RegexMatcher retryMatcher = nonEmptySubstitutionPattern != null
-                            ? new JavaRegexMatcher(nonEmptySubstitutionPattern.matcher(matchInput),
-                                    regex.branchResetCaptureMap)
+                            ? new JavaRegexMatcher(nonEmptySubstitutionPattern.matcher(matchInput))
                             : regex.selectRecursivePattern(inputValue)
                                     .matcher(inputStr, regex.executableCallbacks, inputValue);
                     // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
