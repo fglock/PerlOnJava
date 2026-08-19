@@ -2997,7 +2997,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opControlFail() {
         controlVerbEncountered = true;
         String name = controlVerbName(code[ip++]);
-        controlError = name == null ? "1" : name;
+        // An unnamed FAIL terminates the current path without replacing a
+        // more specific PRUNE/SKIP/THEN/COMMIT error already encountered on
+        // that path.  A named FAIL remains authoritative.
+        if (name != null || controlError == null) {
+            controlError = name == null ? "1" : name;
+        }
         opFail();
     }
 
