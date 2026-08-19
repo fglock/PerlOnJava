@@ -17,6 +17,7 @@ import org.joni.Region;
 import org.joni.Syntax;
 import org.joni.WarnCallback;
 import org.joni.WideScalarCodec;
+import org.joni.exception.SyntaxException;
 
 import static org.joni.constants.SyntaxProperties.ALLOW_MULTIPLEX_DEFINITION_NAME_CALL;
 import static org.joni.constants.SyntaxProperties.OP2_ESC_H_HORIZONTAL_WHITESPACE;
@@ -1376,7 +1377,18 @@ final class JoniRegexPattern {
                             runtimeRegex.executableCallbacks.size());
                     nestedCallbacks = runtimeRegex.executableCallbacks;
                 } else {
-                    nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags);
+                    try {
+                        nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags);
+                    } catch (SyntaxException exception) {
+                        String message = exception.getMessage();
+                        if (message != null && (message.contains("premature end of char-class")
+                                || message.contains("Unclosed character class"))) {
+                            int open = dynamicSource.indexOf('[');
+                            throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                                    dynamicSource, open < 0 ? 0 : open + 1, "Unmatched ["));
+                        }
+                        throw exception;
+                    }
                 }
             }
             CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
