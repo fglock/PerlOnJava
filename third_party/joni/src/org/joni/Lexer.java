@@ -214,6 +214,7 @@ class Lexer extends ScannerSupport {
         case 'c':
             if (syntax.opEscCControl()) {
                 fetchEscapedValueControl();
+                if (syntax.op2OptionPerl()) break;
             }
             /* fall through */
 
@@ -235,6 +236,7 @@ class Lexer extends ScannerSupport {
             }
         }
         fetch();
+        int argument = c;
         if (c == '?') {
             c = 0177;
         } else {
@@ -244,8 +246,27 @@ class Lexer extends ScannerSupport {
             if (c == syntax.metaCharTable.esc && !syntax.op2OptionPerl()) {
                 fetchEscapedValue();
             }
-            c &= 0x9f;
+            if (syntax.op2OptionPerl()) {
+                if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+                c ^= 0x40;
+                warnObscurePerlControlEscape(argument, c);
+            } else {
+                c &= 0x9f;
+            }
         }
+    }
+
+    private void warnObscurePerlControlEscape(int argument, int resolved) {
+        if (argument >= 'A' && argument <= 'Z'
+                || argument >= 'a' && argument <= 'z'
+                || argument >= '@' && argument <= '_') {
+            return;
+        }
+        String replacement = resolved == ' ' ? "\\ "
+                : Character.toString((char)resolved);
+        syntaxWarn("\"\\c" + (char)argument
+                + "\" is more clearly written simply as \""
+                + replacement + "\"", p - getBegin());
     }
 
     private int nameEndCodePoint(int start) {
@@ -1453,6 +1474,20 @@ class Lexer extends ScannerSupport {
                             newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
                                     p - getBegin());
                         }
+                        int nameStart = p;
+                        if (c == '{') {
+                            while (nameStart < stop
+                                    && Character.isWhitespace(codeAt(nameStart, stop))) {
+                                nameStart = nextChar(nameStart, stop);
+                            }
+                        }
+                        if (nameStart < stop) {
+                            int initial = codeAt(nameStart, stop);
+                            if (enc.isDigit(initial) || !enc.isWord(initial)) {
+                                newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
+                                        nameStart - getBegin());
+                            }
+                        }
                     }
                     fetchNamedBackrefToken();
                 } else {
@@ -1643,6 +1678,7 @@ class Lexer extends ScannerSupport {
     }
 
     protected void fetchNamedBackrefToken() {
+        int delimiter = c;
         int last = p;
         int backNum;
         if (Config.USE_BACKREF_WITH_LEVEL) {
@@ -1655,6 +1691,17 @@ class Lexer extends ScannerSupport {
             backNum = fetchName(c, true);
         } // USE_BACKREF_AT_LEVEL
         int nameEnd = value; // set by fetchNameWithLevel/fetchName
+
+        if (syntax.op2OptionPerl() && delimiter == '{') {
+            while (last < nameEnd && Character.isWhitespace(codeAt(last, nameEnd))) {
+                last = nextChar(last, nameEnd);
+            }
+            while (last < nameEnd) {
+                int previous = enc.prevCharHead(bytes, last, nameEnd, stop);
+                if (!Character.isWhitespace(codeAt(previous, nameEnd))) break;
+                nameEnd = previous;
+            }
+        }
 
         if (backNum != 0) {
             if (backNum < 0) {
@@ -1672,7 +1719,13 @@ class Lexer extends ScannerSupport {
             token.setBackrefRef1(backNum);
         } else {
             NameEntry e = regex.nameToGroupNumbers(bytes, last, nameEnd);
-            if (e == null) newValueException(UNDEFINED_NAME_REFERENCE, last, nameEnd);
+            if (e == null) {
+                if (syntax.op2OptionPerl()) {
+                    newSyntaxException(PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP,
+                            nameEnd - getBegin());
+                }
+                newValueException(UNDEFINED_NAME_REFERENCE, last, nameEnd);
+            }
 
             if (syntax.strictCheckBackref()) {
                 if (e.backNum == 1) {
