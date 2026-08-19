@@ -1123,6 +1123,7 @@ final class ArrayCompiler extends Compiler {
                             : OPCode.CONDITION);
                     addMemNum(node.calloutConditionId >= 0 ? node.calloutConditionId
                             : node.recursionConditionGroup >= 0 ? node.recursionConditionGroup
+                            : node.physicalNamedCondition > 0 ? -node.physicalNamedCondition
                             : node.regNum);
                     addRelAddr(len + OPSize.JUMP);
                 }

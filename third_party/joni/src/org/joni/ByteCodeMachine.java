@@ -946,6 +946,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opCondition() {
         int mem = code[ip++];
         int addr = code[ip++];
+        if (mem < 0) {
+            int physical = -mem;
+            if (physicalNamedCaptureBeg == null
+                    || physical >= physicalNamedCaptureBeg.length
+                    || physicalNamedCaptureBeg[physical] == INVALID_INDEX
+                    || physicalNamedCaptureEnd[physical] == INVALID_INDEX) {
+                ip += addr;
+            }
+            return;
+        }
         if (mem > regex.numMem || repeatStk[memEndStk + mem] == INVALID_INDEX || repeatStk[memStartStk + mem] == INVALID_INDEX) {
             ip += addr;
         }
