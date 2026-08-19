@@ -617,11 +617,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         .usesCustomTranslator(namedCharacterTranslator)
                 && patternString != null
                 && patternString.contains("\\N{");
+        boolean effectivePatternByteBacked = patternByteBacked
+                && !hasUnicodePromotingPatternSyntax(patternString);
         String cacheKey = patternString + "/" + modifiers
                 + "#debug=" + lexicalDebugMode
                 + "#callouts=" + trustedCalloutCount
                 + "#backend=" + RegexBackendPolicy.cacheTag()
-                + "#bytepattern=" + patternByteBacked
+                + "#bytepattern=" + effectivePatternByteBacked
                 + (namedCharacterTranslator == null ? "" : "#charnames="
                         + namedCharacterTranslator.toString())
                 + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
@@ -634,7 +636,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 System.err.println("  cache miss, compiling new regex");
             }
             regex = new RuntimeRegex();
-            regex.patternByteBacked = patternByteBacked;
+            regex.patternByteBacked = effectivePatternByteBacked;
             regex.namedCharacterCache =
                     new JoniRegexPattern.NamedCharacterCache(namedCharacterTranslator);
             regex.lexicalDebugMode = lexicalDebugMode;
@@ -702,9 +704,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             : new JoniRegexPattern(compilePatternString,
                                     regex.regexFlags, trustedCalloutCount, false,
                                     false, false, regex.namedCharacterCache);
-                    if (patternByteBacked && regex.regexFlags.isCaseInsensitive()
-                            && !regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()
-                            && !hasUnicodePromotingPatternSyntax(compilePatternString)) {
+                    if (effectivePatternByteBacked && regex.regexFlags.isCaseInsensitive()
+                            && !regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()) {
                         regex.recursivePatternBytes = new JoniRegexPattern(
                                 compilePatternString, regex.regexFlags, trustedCalloutCount,
                                 true, true, true, regex.namedCharacterCache);
