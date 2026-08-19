@@ -353,7 +353,7 @@ failure blocks backend removal, not semantic fixes.
 
 - [x] Phase 0 — reproducible differential baseline
 - [ ] Phase 1 — ordinary-pattern Joni parity
-- [x] Phase 2 — conditions and backtracking-visible state
+- [ ] Phase 2 — conditions and backtracking-visible state
 - [ ] Phase 3 — Unicode and native pattern syntax
 - [ ] Phase 4 — runtime source and diagnostics
 - [ ] Phase 5 — remove migration scaffolding
