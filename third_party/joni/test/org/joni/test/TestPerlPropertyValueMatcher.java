@@ -56,6 +56,14 @@ public class TestPerlPropertyValueMatcher {
         assertFalse(matcher.matchesPropertyValue("NaN"));
     }
 
+    @Test
+    public void supportsCaseSensitivePropertyNameSelection() {
+        PerlPropertyValueMatcher matcher =
+                PerlPropertyValueMatcher.compile("KATAKANA", false);
+        assertTrue(matcher.matchesPropertyValue("KATAKANA LETTER NE"));
+        assertFalse(matcher.matchesPropertyValue("Katakana Letter Ne"));
+    }
+
     @Test(expected = SyntaxException.class)
     public void rejectsMalformedPerlPatterns() {
         PerlPropertyValueMatcher.compile("[");

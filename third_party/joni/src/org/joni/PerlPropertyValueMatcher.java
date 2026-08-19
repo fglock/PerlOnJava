@@ -40,9 +40,15 @@ public final class PerlPropertyValueMatcher {
     }
 
     public static PerlPropertyValueMatcher compile(String pattern) {
+        return compile(pattern, true);
+    }
+
+    public static PerlPropertyValueMatcher compile(
+            String pattern, boolean ignoreCase) {
         Objects.requireNonNull(pattern, "pattern");
         byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
-        Regex regex = new Regex(bytes, 0, bytes.length, Option.IGNORECASE,
+        Regex regex = new Regex(bytes, 0, bytes.length,
+                ignoreCase ? Option.IGNORECASE : Option.NONE,
                 UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE);
         return new PerlPropertyValueMatcher(regex);
     }

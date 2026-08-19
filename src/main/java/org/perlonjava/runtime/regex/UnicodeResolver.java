@@ -3,7 +3,9 @@ package org.perlonjava.runtime.regex;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
+import com.ibm.icu.util.ValueIterator;
 import org.joni.CharacterPropertyResolver;
+import org.joni.PerlPropertyValueMatcher;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -1344,6 +1346,13 @@ public class UnicodeResolver {
         }
         String name = property.substring(0, assignment);
         String value = property.substring(assignment + 1);
+        // Property-value regex syntax is evaluated by the Joni-backed matcher
+        // in the resolver, then materialized as a class by the adapter.  Keep
+        // the original property token out of Joni's character-property lexer,
+        // which does not yet parse nested regex constructs inside \p{...}.
+        if (isPerlNameProperty(name) && perlSlashWildcardBody(value) != null) {
+            return null;
+        }
         PerlUnicodePropertyWildcard propertyWildcard =
                 resolvePerlUnicodePropertyWildcard(property);
         if (propertyWildcard != null) {
@@ -1876,11 +1885,16 @@ public class UnicodeResolver {
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) return null;
 
+        String name = property.substring(0, assignment);
         String value = property.substring(assignment + 1);
-        Pattern wildcard = compilePerlUnicodePropertyWildcard(value);
+        if (isPerlNameProperty(name)) {
+            return resolvePerlNamePropertyWildcard(name, value);
+        }
+
+        PerlPropertyValueMatcher wildcard =
+                compilePerlUnicodePropertyWildcard(value);
         if (wildcard == null) return null;
 
-        String name = property.substring(0, assignment);
         if (isIcuBinaryPropertyAlias(name)) {
             return resolvePerlBinaryPropertyWildcard(name, wildcard);
         }
@@ -1904,7 +1918,7 @@ public class UnicodeResolver {
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlBinaryPropertyWildcard(
-            String propertyName, Pattern wildcard) {
+            String propertyName, PerlPropertyValueMatcher wildcard) {
         boolean positive = matchesPerlUnicodePropertyWildcard(
                 wildcard, "Y", "Yes", "T", "True");
         boolean negative = matchesPerlUnicodePropertyWildcard(
@@ -1932,7 +1946,7 @@ public class UnicodeResolver {
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlEnumeratedPropertyWildcard(
-            int property, Pattern wildcard, String propertyName,
+            int property, PerlPropertyValueMatcher wildcard, String propertyName,
             String[][] valueAliases, boolean wideDefaultRotated) {
         UnicodeSet result = new UnicodeSet();
         boolean matched = false;
@@ -1966,7 +1980,8 @@ public class UnicodeResolver {
                 result.freeze(), wideRanges, false);
     }
 
-    private static Pattern compilePerlUnicodePropertyWildcard(String value) {
+    private static PerlPropertyValueMatcher compilePerlUnicodePropertyWildcard(
+            String value) {
         String body = perlNumericWildcardBody(value);
         if (body == null) return null;
         if (body.indexOf('*') >= 0) {
@@ -1974,7 +1989,7 @@ public class UnicodeResolver {
                     "quantifier '*' is not allowed in Unicode property value wildcard");
         }
         try {
-            return Pattern.compile(body);
+            return PerlPropertyValueMatcher.compile(body);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -1982,14 +1997,61 @@ public class UnicodeResolver {
     }
 
     private static boolean matchesPerlUnicodePropertyWildcard(
-            Pattern wildcard, String... aliases) {
+            PerlPropertyValueMatcher wildcard, String... aliases) {
         for (String alias : aliases) {
-            if (alias != null && (wildcard.matcher(alias).matches()
-                    || wildcard.matcher(loosePropertyName(alias)).matches())) {
+            if (alias != null && (wildcard.matchesPropertyValue(alias)
+                    || wildcard.matchesPropertyValue(loosePropertyName(alias)))) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean isPerlNameProperty(String name) {
+        String trimmed = name.trim();
+        return trimmed.equals("name") || trimmed.equals("na");
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlNamePropertyWildcard(
+            String propertyName, String value) {
+        String body = perlSlashWildcardBody(value);
+        if (body == null) return null;
+        if (body.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        final PerlPropertyValueMatcher wildcard;
+        try {
+            wildcard = PerlPropertyValueMatcher.compile(body, false);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        ValueIterator names = UCharacter.getNameIterator();
+        ValueIterator.Element name = new ValueIterator.Element();
+        while (names.next(name)) {
+            if (name.value instanceof String unicodeName
+                    && wildcard.matchesPropertyValue(unicodeName)) {
+                result.add(name.integer);
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches "
+                            + propertyName.trim());
+        }
+        return new PerlUnicodePropertyWildcard(result.freeze(), null, true);
+    }
+
+    private static String perlSlashWildcardBody(String value) {
+        String trimmed = value.trim();
+        return trimmed.length() > 2 && trimmed.startsWith("/")
+                && trimmed.endsWith("/")
+                ? trimmed.substring(1, trimmed.length() - 1)
+                : null;
     }
 
     private static final class PerlUnicodePropertyWildcard {
@@ -2373,9 +2435,9 @@ public class UnicodeResolver {
                     "quantifier '*' is not allowed in Unicode property value wildcard");
         }
 
-        Pattern valuePattern;
+        PerlPropertyValueMatcher valuePattern;
         try {
-            valuePattern = Pattern.compile(wildcard);
+            valuePattern = PerlPropertyValueMatcher.compile(wildcard);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -2383,8 +2445,8 @@ public class UnicodeResolver {
 
         UnicodeSet result = new UnicodeSet();
         for (String candidate : PerlUnicodeJoiningGroupData.wildcardValues()) {
-            if (valuePattern.matcher(candidate).matches()
-                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+            if (valuePattern.matchesPropertyValue(candidate)
+                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate))) {
                 result.addAll(PerlUnicodeJoiningGroupData.valueSet(candidate));
             }
         }
@@ -2410,9 +2472,9 @@ public class UnicodeResolver {
                     "quantifier '*' is not allowed in Unicode property value wildcard");
         }
 
-        Pattern valuePattern;
+        PerlPropertyValueMatcher valuePattern;
         try {
-            valuePattern = Pattern.compile(wildcard);
+            valuePattern = PerlPropertyValueMatcher.compile(wildcard);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -2421,8 +2483,8 @@ public class UnicodeResolver {
         UnicodeSet result = new UnicodeSet();
         for (int valueId = 0; valueId < PerlUnicodeBlockData.valueCount(); valueId++) {
             String candidate = PerlUnicodeBlockData.canonicalValue(valueId);
-            boolean matches = valuePattern.matcher(candidate).matches()
-                    || valuePattern.matcher(loosePropertyName(candidate)).matches();
+            boolean matches = valuePattern.matchesPropertyValue(candidate)
+                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate));
             int icuValue = unicodePropertyValue(UProperty.BLOCK, candidate);
             for (int nameChoice = UProperty.NameChoice.SHORT;
                     !matches && icuValue >= 0 && nameChoice <= UProperty.NameChoice.LONG;
@@ -2430,9 +2492,9 @@ public class UnicodeResolver {
                 String officialAlias = UCharacter.getPropertyValueName(
                         UProperty.BLOCK, icuValue, nameChoice);
                 matches = officialAlias != null
-                        && (valuePattern.matcher(officialAlias).matches()
-                            || valuePattern.matcher(
-                                    loosePropertyName(officialAlias)).matches());
+                        && (valuePattern.matchesPropertyValue(officialAlias)
+                            || valuePattern.matchesPropertyValue(
+                                    loosePropertyName(officialAlias)));
             }
             if (matches) {
                 result.addAll(PerlUnicodeBlockData.set(valueId));
@@ -2470,9 +2532,9 @@ public class UnicodeResolver {
                     "quantifier '*' is not allowed in Unicode property value wildcard");
         }
 
-        Pattern valuePattern;
+        PerlPropertyValueMatcher valuePattern;
         try {
-            valuePattern = Pattern.compile(wildcard);
+            valuePattern = PerlPropertyValueMatcher.compile(wildcard);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -2484,8 +2546,8 @@ public class UnicodeResolver {
                     PerlUnicodeScriptData.canonicalValue(candidate))) {
                 continue;
             }
-            if (valuePattern.matcher(candidate).matches()
-                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+            if (valuePattern.matchesPropertyValue(candidate)
+                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate))) {
                 UnicodeSet match = extensions
                         ? PerlUnicodeScriptData.scriptExtensionsSet(candidate)
                         : PerlUnicodeScriptData.scriptSet(candidate);
@@ -2504,38 +2566,33 @@ public class UnicodeResolver {
         String trimmed = value.trim();
         if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
                 && trimmed.length() > 6) {
-            return trimmed.substring(3, trimmed.length() - 3);
+            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
         }
         if (!trimmed.startsWith("#") || !trimmed.endsWith("#")
                 || trimmed.length() <= 2) {
             return null;
         }
-        String body = trimmed.substring(1, trimmed.length() - 1);
-        if (body.startsWith("\\A") && body.endsWith("\\z")
-                && body.length() > 4) {
-            return body.substring(2, body.length() - 2);
-        }
-        return body;
+        return trimmed.substring(1, trimmed.length() - 1);
     }
 
     private static UnicodeSet resolvePerlNumericValue(String value) {
         String wildcard = perlNumericWildcardBody(value);
         if (wildcard != null) {
-            Pattern valuePattern;
+            PerlPropertyValueMatcher valuePattern;
             try {
-                valuePattern = Pattern.compile(wildcard);
+                valuePattern = PerlPropertyValueMatcher.compile(wildcard);
             } catch (RuntimeException invalidPattern) {
                 return null;
             }
             UnicodeSet result = new UnicodeSet();
             for (int index = 0; index < PerlUnicodeNumericValueData.valueCount(); index++) {
-                if (valuePattern.matcher(
-                        PerlUnicodeNumericValueData.canonicalValue(index)).matches()) {
+                if (valuePattern.matchesPropertyValue(
+                        PerlUnicodeNumericValueData.canonicalValue(index))) {
                     result.addAll(PerlUnicodeNumericValueData.set(index));
                 }
             }
-            if (valuePattern.matcher("NaN").matches()
-                    || valuePattern.matcher("nan").matches()) {
+            if (valuePattern.matchesPropertyValue("NaN")
+                    || valuePattern.matchesPropertyValue("nan")) {
                 result.addAll(PerlUnicodeNumericValueData.nanSet());
             }
             return result.isEmpty() ? null : result.freeze();
@@ -2555,11 +2612,11 @@ public class UnicodeResolver {
         String trimmed = value.trim();
         if (trimmed.startsWith("/\\A") && trimmed.endsWith("\\z/")
                 && trimmed.length() > 6) {
-            return trimmed.substring(3, trimmed.length() - 3);
+            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
         }
         if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
                 && trimmed.length() > 6) {
-            return trimmed.substring(3, trimmed.length() - 3);
+            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
         }
         return null;
     }
@@ -2782,6 +2839,9 @@ public class UnicodeResolver {
 
         String value = property.substring(delimiter + 1);
         if (!allowWildcard && isPerlAgeWildcard(value)) return null;
+        if (allowWildcard && isPerlAgeWildcard(value)) {
+            return resolvePerlAgeWildcard(value, exact);
+        }
         String requested = normalizeUnicodeAgeVersion(value);
         if (requested.equalsIgnoreCase("NA") || requested.equalsIgnoreCase("Unassigned")) {
             return PerlUnicodeAgeData.unassignedSet();
@@ -2794,6 +2854,47 @@ public class UnicodeResolver {
             throw new IllegalArgumentException("Unsupported Unicode age version: " + requested);
         }
         return result;
+    }
+
+    private static UnicodeSet resolvePerlAgeWildcard(
+            String value, boolean exact) {
+        String body = perlNumericWildcardBody(value);
+        if (body == null) return null;
+        if (body.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        final PerlPropertyValueMatcher wildcard;
+        try {
+            wildcard = PerlPropertyValueMatcher.compile(body);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (int index = 0; index < PerlUnicodeAgeData.valueCount(); index++) {
+            String version = PerlUnicodeAgeData.versionAt(index);
+            String compact = "v" + version.replace(".", "");
+            String longAlias = "V" + version.replace('.', '_');
+            if (wildcard.matchesPropertyValue(version)
+                    || wildcard.matchesPropertyValue(compact)
+                    || wildcard.matchesPropertyValue(longAlias)) {
+                result.addAll(exact
+                        ? PerlUnicodeAgeData.exactSet(version)
+                        : PerlUnicodeAgeData.cumulativeSet(version));
+            }
+        }
+        if (wildcard.matchesPropertyValue("NA")
+                || wildcard.matchesPropertyValue("Unassigned")) {
+            result.addAll(PerlUnicodeAgeData.unassignedSet());
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches Age");
+        }
+        return result.freeze();
     }
 
     private static boolean isPerlAgeProperty(String name) {
