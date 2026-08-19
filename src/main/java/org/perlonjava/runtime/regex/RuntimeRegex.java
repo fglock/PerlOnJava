@@ -835,6 +835,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             message = "Sequence (?\\...) not recognized";
                         } else if ("too big number for repeat range".equals(message)) {
                             message = "Quantifier in {,} bigger than 2147483646";
+                        } else if ("end pattern with unmatched parenthesis".equals(message)) {
+                            int unmatched = ordinaryUnmatchedOpeningParenthesis(
+                                    originalPatternString);
+                            if (unmatched >= 0) {
+                                message = "Unmatched (";
+                                characterPosition = unmatched + 1;
+                            }
                         }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
                                 originalPatternString, characterPosition, message));
@@ -921,6 +928,46 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
         int boundedOffset = Math.min(byteOffset, bytes.length);
         return new String(bytes, 0, boundedOffset, StandardCharsets.UTF_8).length();
+    }
+
+    /** Locate an unmatched ordinary group opener, excluding Perl's specialized {@code (?...} forms. */
+    private static int ordinaryUnmatchedOpeningParenthesis(String pattern) {
+        if (pattern == null) return -1;
+        Deque<Integer> openings = new ArrayDeque<>();
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass) continue;
+            if (ch == '(') {
+                openings.push(i);
+            } else if (ch == ')' && !openings.isEmpty()) {
+                openings.pop();
+            }
+        }
+        while (!openings.isEmpty()) {
+            int opening = openings.removeLast();
+            if (opening + 1 >= pattern.length() || pattern.charAt(opening + 1) != '?') {
+                return opening;
+            }
+        }
+        return -1;
     }
 
     private static int debugMode(String modifiers) {
