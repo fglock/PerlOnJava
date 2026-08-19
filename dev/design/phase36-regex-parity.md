@@ -92,13 +92,10 @@ affected corpus before taking another slice.
 - `master` contains the validated named-character diagnostics plus native
   `(?(DEFINE)...)`, ordinary lookbehind, branch reset, and plain `\N`; its exact
   head passed warning-free local, Ubuntu, and Windows gates.
-- The successor integration batch carries byte/Unicode provenance and fold
-  policy, dotted-U+ diagnostics, the ordinary-pattern Joni default, a dynamic-
-  pattern edge contract, and the first obsolete import retirement. Its fold,
-  property, and resolver-cache residuals are closed; the exact semantic head
-  passes a warning-free 17-task `make`. The prospective PR head also includes
-  three independent runtime-diagnostic corrections and passes the same full
-  combined gate.
+- Byte/Unicode provenance and fold policy, dotted-U+ diagnostics, the ordinary-
+  pattern Joni default, a dynamic-pattern edge contract, and the first obsolete
+  import retirement are integrated. Fold, property, resolver-cache, and the
+  classified runtime-diagnostic residuals are closed.
 - Native DEFINE, ordinary lookbehind, and branch reset now route through Joni;
   their feature-specific Java rewrites and branch-reset capture-map adapter are
   deleted. Plain Perl `\N` is a native Joni non-line-feed atom, including
@@ -118,6 +115,13 @@ affected corpus before taking another slice.
   evidence.
 - Exact `/aa` routing/folding gates pass on native Joni, and the Java `/aa`
   workaround is removed.
+- Perl grouped nested-quantifier semantics and extended-mode quantifier
+  modifiers are native Joni behavior; the exact `regexp.t` differential removes
+  seven failures with no introductions.
+- Named `(*ACCEPT:NAME)`, `(*FAIL:NAME)`, and `(*F:NAME)` carry control state
+  through native Joni bytecode and publish Perl-compatible `$REGMARK` and
+  `$REGERROR`; the exact `regexp.t` differential removes three failures with no
+  introductions.
 
 ## Execution Phases
 
@@ -229,8 +233,9 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Open the validated successor review PR against `master` and require
-   exact-head Ubuntu/Windows CI.
+1. Run one warning-free full build and affected-corpus differential on the
+   integrated nested-quantifier and named-control-verb batch, then open its
+   review PR and require exact-head Ubuntu/Windows CI.
 2. Complete byte/Unicode pattern provenance through runtime interpolation and
    template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal
    and backreference folding from generated data. Require direct Joni plus
@@ -240,8 +245,8 @@ behavior.
    unwind, backtracking re-evaluation, and recursion safety. Route every embedded
    closure to Joni and delete constant inlining, progressive errors, and the
    dynamic Java adapter as their gates pass.
-4. Carry lexical `use re 'strict'` policy through regex compilation and close
-   the unescaped-brace/non-hex diagnostic families. Refresh complete
+4. Finish the remaining lexical `use re 'strict'`, unescaped-brace, and non-hex
+   diagnostic families. Refresh complete
    `reg_mesg.t`, `pat.t`, and `pat_advanced.t` maps after each combined batch.
 5. Repeat the four-leg 80-file Java/Joni × JVM/interpreter matrix on the exact
    successor artifact and compare every file with the PR 958 log. Resolve every
