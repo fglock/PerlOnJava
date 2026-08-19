@@ -43,6 +43,12 @@ public class UnicodeResolver {
             "othernumber", "otherpunctuation", "regionalindicator",
             "sentenceterminal", "softdotted", "space", "spaceseparator", "uideo",
             "unassigned", "unifiedideograph", "xids", "xidstart");
+    private static final Set<String> PERL_REJECTED_OBSOLETE_BINARY_ALIASES =
+            Set.of("graphemelink", "grlink", "otheralphabetic", "oalpha",
+                    "otherdefaultignorablecodepoint", "odi",
+                    "othergraphemeextend", "ogrext", "otheridcontinue", "oidc",
+                    "otheridstart", "oids", "otherlowercase", "olower",
+                    "othermath", "omath", "otheruppercase", "oupper");
     private static final String[][] PERL_WORD_BREAK_WILDCARD_VALUES = {
             {"CR"}, {"DQ", "Double_Quote"}, {"EB", "E_Base"},
             {"EBG", "E_Base_GAZ"}, {"EM", "E_Modifier"},
@@ -1519,6 +1525,11 @@ public class UnicodeResolver {
 
         String alias = canonicalPerlPosixPropertyAlias(property.trim());
         alias = normalizePerlIsPropertyAssignment(alias);
+        if (PERL_REJECTED_OBSOLETE_BINARY_ALIASES.contains(
+                loosePropertyName(alias))) {
+            throw new IllegalArgumentException(
+                    "Unsupported obsolete Unicode property: " + property.trim());
+        }
         int assignment = propertyValueDelimiter(alias);
         PerlUnicodePropertyWildcard propertyWildcard =
                 resolvePerlUnicodePropertyWildcard(alias);
@@ -2073,11 +2084,13 @@ public class UnicodeResolver {
                     PERL_ASCII_WORD_SET, false);
             case "xperlspace", "spaceperl" -> new PerlBarePropertyAlias(
                     PERL_UNICODE_SPACE_SET, false);
+            case "whitespace" -> new PerlBarePropertyAlias(
+                    PERL_UNICODE_SPACE_SET, false);
             case "xposixgraph" -> new PerlBarePropertyAlias(
                     PERL_POSIX_GRAPH_SET, false);
-            case "xposixprint" -> new PerlBarePropertyAlias(
+            case "xposixprint", "print" -> new PerlBarePropertyAlias(
                     PERL_POSIX_PRINT_SET, false);
-            case "xposixxdigit" -> new PerlBarePropertyAlias(
+            case "xposixxdigit", "xdigit" -> new PerlBarePropertyAlias(
                     PERL_POSIX_XDIGIT_SET, false);
             default -> null;
         };
