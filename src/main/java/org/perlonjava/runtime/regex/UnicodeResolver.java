@@ -18,6 +18,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public class UnicodeResolver {
+    private static final String USER_PROPERTY_RANGE_ENCODING =
+            "\u0000POJ_USER_RANGES_V1:";
     private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
             "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*$");
     private static final UnicodeSet[] PERL_DECOMPOSITION_TYPE_SETS =
@@ -75,7 +77,7 @@ public class UnicodeResolver {
      * Cache for user-defined property subroutine results.
      * Perl only calls user-defined property subs once per unique name and caches the result.
      * Key: fully qualified sub name (e.g., "main::IsMyUpper")
-     * Value: the parsed character class pattern from parseUserDefinedProperty
+     * Value: the encoded lossless range result from parseUserDefinedProperty
      */
     private static Map<String, String> userPropertyCache() {
         return PerlRuntime.current().regexState().userUnicodePropertyCache;
@@ -213,9 +215,9 @@ public class UnicodeResolver {
      * @return A character class pattern
      */
     private static String parseUserDefinedProperty(String definition, Set<String> recursionSet, String propertyName) {
-        UnicodeSet resultSet = new UnicodeSet();
+        LongRangeSet resultSet = new LongRangeSet();
         boolean hasIntersection = false;
-        UnicodeSet intersectionSet = null;
+        LongRangeSet intersectionSet = null;
 
         String[] lines = definition.split("\\n");
         for (String line : lines) {
@@ -230,23 +232,31 @@ public class UnicodeResolver {
             if (line.startsWith("+")) {
                 // Add another property
                 String propName = stripDefinitionComment(line.substring(1));
-                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
+                LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                        propName, recursionSet, propertyName);
                 resultSet.addAll(propSet);
-            } else if (line.startsWith("-") || line.startsWith("!")) {
+            } else if (line.startsWith("-")) {
                 // Remove a property
                 String propName = stripDefinitionComment(line.substring(1));
                 // A leading minus may subtract a literal code point/range,
                 // e.g. "-61" in a consonant property definition.
-                if (!(line.startsWith("-") && removeHexRange(resultSet, propName))) {
-                    UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
+                if (!removeHexRange(resultSet, propName)) {
+                    LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                            propName, recursionSet, propertyName);
                     resultSet.removeAll(propSet);
                 }
+            } else if (line.startsWith("!")) {
+                String propName = stripDefinitionComment(line.substring(1));
+                LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                        propName, recursionSet, propertyName);
+                resultSet.addAll(propSet.complement());
             } else if (line.startsWith("&")) {
                 // Intersection with a property
                 String propName = stripDefinitionComment(line.substring(1));
-                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
+                LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                        propName, recursionSet, propertyName);
                 if (!hasIntersection) {
-                    intersectionSet = propSet;
+                    intersectionSet = propSet.copy();
                     hasIntersection = true;
                 } else {
                     intersectionSet.retainAll(propSet);
@@ -266,12 +276,7 @@ public class UnicodeResolver {
                     }
                     try {
                         long codePoint = Long.parseLong(hexStr, 16);
-                        if (codePoint > 0x10FFFF) {
-                            // JVM only supports Unicode up to U+10FFFF; silently clamp
-                            // (Perl supports 31-bit/32-bit code points, but Java doesn't)
-                            codePoint = 0x10FFFF;
-                        }
-                        resultSet.add((int) codePoint);
+                        resultSet.add(codePoint, codePoint);
                     } catch (NumberFormatException e) {
                         throw new IllegalArgumentException(
                                 "Code point too large in \"" + line
@@ -293,20 +298,11 @@ public class UnicodeResolver {
                         long start = Long.parseLong(startHex, 16);
                         long end = Long.parseLong(endHex, 16);
 
-                        // JVM only supports Unicode up to U+10FFFF; clamp values
-                        // (Perl supports 31-bit/32-bit code points, but Java doesn't)
-                        if (start > 0x10FFFF) {
-                            // Entire range is beyond JVM limit; skip it
-                            continue;
-                        }
-                        if (end > 0x10FFFF) {
-                            end = 0x10FFFF;
-                        }
                         if (start > end) {
                             throw new IllegalArgumentException("Illegal range in \"" + line.trim() + "\" in expansion of " + propertyName);
                         }
 
-                        resultSet.add((int) start, (int) end);
+                        resultSet.add(start, end);
                     } catch (NumberFormatException e) {
                         throw new IllegalArgumentException(
                                 "Code point too large in \"" + line
@@ -321,7 +317,7 @@ public class UnicodeResolver {
             resultSet.retainAll(intersectionSet);
         }
 
-        return unicodeSetToJavaPattern(resultSet);
+        return new UserUnicodePropertyResult(resultSet).encode();
     }
 
     private static String stripDefinitionComment(String propertyReference) {
@@ -329,7 +325,7 @@ public class UnicodeResolver {
         return (comment >= 0 ? propertyReference.substring(0, comment) : propertyReference).trim();
     }
 
-    private static boolean removeHexRange(UnicodeSet target, String definition) {
+    private static boolean removeHexRange(LongRangeSet target, String definition) {
         String[] endpoints = definition.split("\\t+|\\s+");
         if (endpoints.length < 1 || endpoints.length > 2) return false;
         for (String endpoint : endpoints) {
@@ -339,12 +335,185 @@ public class UnicodeResolver {
             long start = Long.parseLong(endpoints[0], 16);
             long end = endpoints.length == 1 ? start : Long.parseLong(endpoints[1], 16);
             if (start > end) return false;
-            if (start <= 0x10FFFF) {
-                target.remove((int) start, (int) Math.min(end, 0x10FFFF));
-            }
+            target.remove(start, end);
             return true;
         } catch (NumberFormatException invalidHex) {
             return false;
+        }
+    }
+
+    private static final class UserUnicodePropertyResult {
+        private final LongRangeSet ranges;
+
+        private UserUnicodePropertyResult(LongRangeSet ranges) {
+            this.ranges = ranges.copy();
+        }
+
+        private String encode() {
+            StringBuilder encoded = new StringBuilder(USER_PROPERTY_RANGE_ENCODING);
+            for (long[] range : ranges.values) {
+                encoded.append(Long.toHexString(range[0]))
+                        .append('-')
+                        .append(Long.toHexString(range[1]))
+                        .append(';');
+            }
+            return encoded.toString();
+        }
+
+        private String unicodePattern() {
+            return unicodeSetToJavaPattern(ranges.toUnicodeSet());
+        }
+
+        private static UserUnicodePropertyResult decode(String encoded) {
+            if (!encoded.startsWith(USER_PROPERTY_RANGE_ENCODING)) {
+                UnicodeSet legacySet = new UnicodeSet("[" + encoded + "]");
+                return new UserUnicodePropertyResult(
+                        LongRangeSet.fromUnicodeSet(legacySet));
+            }
+            LongRangeSet ranges = new LongRangeSet();
+            String body = encoded.substring(USER_PROPERTY_RANGE_ENCODING.length());
+            if (!body.isEmpty()) {
+                for (String item : body.split(";")) {
+                    if (item.isEmpty()) continue;
+                    int delimiter = item.indexOf('-');
+                    if (delimiter <= 0 || delimiter == item.length() - 1) {
+                        throw new IllegalArgumentException(
+                                "Invalid cached user-property range result");
+                    }
+                    ranges.add(
+                            Long.parseLong(item.substring(0, delimiter), 16),
+                            Long.parseLong(item.substring(delimiter + 1), 16));
+                }
+            }
+            return new UserUnicodePropertyResult(ranges);
+        }
+    }
+
+    private static final class LongRangeSet {
+        private List<long[]> values = new ArrayList<>();
+
+        private static LongRangeSet fromUnicodeSet(UnicodeSet set) {
+            LongRangeSet ranges = new LongRangeSet();
+            for (int i = 0; i < set.getRangeCount(); i++) {
+                ranges.add(set.getRangeStart(i), set.getRangeEnd(i));
+            }
+            return ranges;
+        }
+
+        private LongRangeSet copy() {
+            LongRangeSet copy = new LongRangeSet();
+            for (long[] range : values) {
+                copy.values.add(new long[] {range[0], range[1]});
+            }
+            return copy;
+        }
+
+        private void add(long start, long end) {
+            if (start < 0 || end < start) {
+                throw new IllegalArgumentException("Invalid signed-IV range");
+            }
+            values.add(new long[] {start, end});
+            normalize();
+        }
+
+        private void addAll(LongRangeSet other) {
+            for (long[] range : other.values) add(range[0], range[1]);
+        }
+
+        private void remove(long start, long end) {
+            List<long[]> remaining = new ArrayList<>();
+            for (long[] range : values) {
+                if (end < range[0] || start > range[1]) {
+                    remaining.add(new long[] {range[0], range[1]});
+                    continue;
+                }
+                if (start > range[0]) {
+                    remaining.add(new long[] {range[0], start - 1});
+                }
+                if (end < range[1]) {
+                    remaining.add(new long[] {end + 1, range[1]});
+                }
+            }
+            values = remaining;
+        }
+
+        private void removeAll(LongRangeSet other) {
+            for (long[] range : other.values) remove(range[0], range[1]);
+        }
+
+        private void retainAll(LongRangeSet other) {
+            List<long[]> retained = new ArrayList<>();
+            int left = 0;
+            int right = 0;
+            while (left < values.size() && right < other.values.size()) {
+                long[] a = values.get(left);
+                long[] b = other.values.get(right);
+                long start = Math.max(a[0], b[0]);
+                long end = Math.min(a[1], b[1]);
+                if (start <= end) retained.add(new long[] {start, end});
+                if (a[1] < b[1]) left++;
+                else right++;
+            }
+            values = retained;
+        }
+
+        private LongRangeSet complement() {
+            LongRangeSet complement = new LongRangeSet();
+            long start = 0;
+            for (long[] range : values) {
+                if (start < range[0]) complement.values.add(
+                        new long[] {start, range[0] - 1});
+                if (range[1] == Long.MAX_VALUE) return complement;
+                start = range[1] + 1;
+            }
+            complement.values.add(new long[] {start, Long.MAX_VALUE});
+            return complement;
+        }
+
+        private UnicodeSet toUnicodeSet() {
+            UnicodeSet unicode = new UnicodeSet();
+            for (long[] range : values) {
+                if (range[0] > 0x10FFFFL) break;
+                unicode.add((int) range[0], (int) Math.min(range[1], 0x10FFFFL));
+            }
+            return unicode.freeze();
+        }
+
+        private long[] wideRanges() {
+            int count = 0;
+            for (long[] range : values) {
+                if (range[1] >= 0x110000L) count++;
+            }
+            if (count == 0) return null;
+            long[] wide = new long[count * 2 + 1];
+            wide[0] = count;
+            int output = 1;
+            for (long[] range : values) {
+                if (range[1] < 0x110000L) continue;
+                wide[output++] = Math.max(range[0], 0x110000L);
+                wide[output++] = range[1];
+            }
+            return wide;
+        }
+
+        private void normalize() {
+            values.sort((left, right) -> Long.compare(left[0], right[0]));
+            List<long[]> normalized = new ArrayList<>();
+            for (long[] range : values) {
+                if (normalized.isEmpty()) {
+                    normalized.add(new long[] {range[0], range[1]});
+                    continue;
+                }
+                long[] previous = normalized.getLast();
+                boolean adjacent = previous[1] != Long.MAX_VALUE
+                        && range[0] == previous[1] + 1;
+                if (range[0] <= previous[1] || adjacent) {
+                    previous[1] = Math.max(previous[1], range[1]);
+                } else {
+                    normalized.add(new long[] {range[0], range[1]});
+                }
+            }
+            values = normalized;
         }
     }
 
@@ -368,7 +537,8 @@ public class UnicodeResolver {
      * @param parentProperty The parent property name (for error messages)
      * @return A UnicodeSet representing the property
      */
-    private static UnicodeSet resolvePropertyReferenceAsSet(String propRef, Set<String> recursionSet, String parentProperty) {
+    private static LongRangeSet resolvePropertyReferenceAsRanges(
+            String propRef, Set<String> recursionSet, String parentProperty) {
         // Check for recursion
         if (recursionSet.contains(propRef)) {
             // Build recursion chain for error message
@@ -384,15 +554,14 @@ public class UnicodeResolver {
         // Try to resolve as a standard Unicode property via ICU4J
         UnicodeSet result = resolveStandardPropertyAsSet(propName, recursionSet);
         if (result != null) {
-            return result;
+            return LongRangeSet.fromUnicodeSet(result);
         }
 
         // Try as user-defined property (calls the Perl sub)
         String fallbackRef = propRef.startsWith("utf8::") ? "main::" + propRef.substring(6) : propRef;
         String userProp = tryUserDefinedProperty(fallbackRef, recursionSet, false);
         if (userProp != null) {
-            // userProp is a character class pattern from unicodeSetToJavaPattern
-            return new UnicodeSet("[" + userProp + "]");
+            return UserUnicodePropertyResult.decode(userProp).ranges.copy();
         }
 
         throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + propRef);
@@ -635,7 +804,7 @@ public class UnicodeResolver {
             RuntimeList result = RuntimeCode.apply(codeRef, args, RuntimeContextType.SCALAR);
 
             if (result.elements.isEmpty()) {
-                return "";
+                return parseUserDefinedProperty("", recursionSet, diagnosticName);
             }
 
             String definition = result.elements.getFirst().toString();
@@ -824,7 +993,9 @@ public class UnicodeResolver {
                 String userProp = tryUserDefinedProperty(
                         property, recursionSet, caseInsensitive);
                 if (userProp != null) {
-                    return wrapCharClass(userProp, negated);
+                    return wrapCharClass(
+                            UserUnicodePropertyResult.decode(userProp).unicodePattern(),
+                            negated);
                 }
                 String looseUserProperty = loosePropertyName(property);
                 if (looseUserProperty.startsWith("isxposix")
@@ -1027,7 +1198,10 @@ public class UnicodeResolver {
                         // Neither worked - try user-defined property before giving up
                         String userProp = tryUserDefinedProperty(property, recursionSet, false);
                         if (userProp != null) {
-                            return wrapCharClass(userProp, negated);
+                            return wrapCharClass(
+                                    UserUnicodePropertyResult.decode(userProp)
+                                            .unicodePattern(),
+                                    negated);
                         }
                         throw ex; // rethrow original error
                     }
@@ -1079,7 +1253,27 @@ public class UnicodeResolver {
     /** Returns pinned Perl-property ranges and their native Joni fold policy. */
     static CharacterPropertyResolver.Result resolveJoniProperty(
             String property, boolean inCharacterClass) {
+        return resolveJoniProperty(property, inCharacterClass, false);
+    }
+
+    /** Returns ranges for the property variant selected by the regex fold mode. */
+    static CharacterPropertyResolver.Result resolveJoniProperty(
+            String property, boolean inCharacterClass, boolean caseInsensitive) {
         if (property == null) return null;
+        property = property.trim();
+        if (isUserDefinedPropertyName(property)
+                && PerlRuntime.currentOrNull() != null) {
+            String encoded = tryUserDefinedProperty(
+                    property, new LinkedHashSet<>(), caseInsensitive);
+            if (encoded != null) {
+                UserUnicodePropertyResult userProperty =
+                        UserUnicodePropertyResult.decode(encoded);
+                return joniPropertyResult(
+                        userProperty.ranges.toUnicodeSet(),
+                        userProperty.ranges.wideRanges(),
+                        false);
+            }
+        }
         property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {

@@ -98,7 +98,9 @@ final class JoniRegexPattern {
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable,
             JoniRegexPattern::resolveNamedCharacter,
-            JoniRegexPattern::resolveCharacterProperty,
+            (bytes, p, end, encoding, inCharacterClass) ->
+                    resolveCharacterProperty(
+                            bytes, p, end, encoding, inCharacterClass, false),
             PERL_SCALAR_CODEC);
 
     private static int resolveNamedCharacter(byte[] bytes, int p, int end,
@@ -131,7 +133,8 @@ final class JoniRegexPattern {
     }
 
     private static Syntax syntaxForNamedCharacters(
-            NamedCharacterCache cache, NamedCharacterExpansion.SourceMode sourceMode) {
+            NamedCharacterCache cache, NamedCharacterExpansion.SourceMode sourceMode,
+            boolean caseInsensitive) {
         NamedCharacterResolver resolver = new NamedCharacterResolver() {
             @Override
             public int resolve(byte[] bytes, int p, int end, Encoding encoding) {
@@ -152,21 +155,27 @@ final class JoniRegexPattern {
                 return expansion.sequence().codePoints().toArray();
             }
         };
+        CharacterPropertyResolver propertyResolver =
+                (bytes, p, end, encoding, inCharacterClass) ->
+                        resolveCharacterProperty(
+                                bytes, p, end, encoding, inCharacterClass,
+                                caseInsensitive);
         return new Syntax(PERLONJAVA_SYNTAX.name, PERLONJAVA_SYNTAX.op,
                 PERLONJAVA_SYNTAX.op2, PERLONJAVA_SYNTAX.op3,
                 PERLONJAVA_SYNTAX.behavior, PERLONJAVA_SYNTAX.options,
                 PERLONJAVA_SYNTAX.metaCharTable, resolver,
-                PERLONJAVA_SYNTAX.characterPropertyResolver,
+                propertyResolver,
                 PERLONJAVA_SYNTAX.wideScalarCodec);
     }
 
     private static CharacterPropertyResolver.Result resolveCharacterProperty(
             byte[] bytes, int p, int end, Encoding encoding,
-            boolean inCharacterClass) {
+            boolean inCharacterClass, boolean caseInsensitive) {
         String property = new String(bytes, p, end - p,
                 encoding == ISO8859_1Encoding.INSTANCE
                         ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
-        return UnicodeResolver.resolveJoniProperty(property, inCharacterClass);
+        return UnicodeResolver.resolveJoniProperty(
+                property, inCharacterClass, caseInsensitive);
     }
 
     private final Regex regex;
@@ -240,7 +249,8 @@ final class JoniRegexPattern {
                         ? NamedCharacterExpansion.SourceMode.BYTE
                         : NamedCharacterExpansion.SourceMode.UNICODE;
         Syntax syntax = syntaxForNamedCharacters(
-                namedCharacterCache, namedCharacterSourceMode);
+                namedCharacterCache, namedCharacterSourceMode,
+                flags.isCaseInsensitive());
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
@@ -387,10 +397,12 @@ final class JoniRegexPattern {
                             unnegated, flags.isCaseInsensitive());
             boolean joniResolvedProperty = UnicodeResolver.resolveJoniProperty(
                     unnegated, extendedClassBracketDepth > 0
-                            || standardClassBracketDepth > 0) != null;
-            if (joniResolvedProperty && (!userDefined
-                            || perlBuiltInAlias && !preserveUserDefined)
-                    && (frontendProperty || scriptExtensions || perlBuiltInAlias)) {
+                            || standardClassBracketDepth > 0,
+                    flags.isCaseInsensitive()) != null;
+            if (joniResolvedProperty && (userDefined
+                    || (!userDefined || perlBuiltInAlias && !preserveUserDefined)
+                            && (frontendProperty || scriptExtensions
+                                    || perlBuiltInAlias))) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
