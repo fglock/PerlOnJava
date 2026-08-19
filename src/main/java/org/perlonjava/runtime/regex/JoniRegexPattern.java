@@ -26,6 +26,7 @@ import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -1318,8 +1319,7 @@ final class JoniRegexPattern {
     private static final class PerlCalloutHandler implements CalloutHandler {
         private record Token(int localLevel, RegexState regexState, RuntimeScalar previousR,
                              RuntimeScalar result, boolean block, boolean dynamic,
-                             CaptureSnapshot previousDynamicView,
-                             RegexCallbackMutationSnapshot mutations) {}
+                             CaptureSnapshot previousDynamicView) {}
 
         private record CaptureSnapshot(int position, int[] begins, int[] ends,
                                        int lastClosed, String controlMark) implements MatchView {
@@ -1359,6 +1359,9 @@ final class JoniRegexPattern {
         private boolean executedNestedCallbackPattern;
         private String failedNestedLastClosedCapture;
         private String failedNestedLastParenMatch;
+        private final ArrayDeque<RegexCallbackMutationSnapshot> callbackMutations =
+                new ArrayDeque<>();
+        private boolean preserveCallbackMutations;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                            RegexFlags outerFlags, boolean publishesControlVerbState,
@@ -1492,9 +1495,9 @@ final class JoniRegexPattern {
                 }
             }
             CaptureSnapshot priorDynamicView = previousDynamicView;
-            RegexCallbackMutationSnapshot mutations =
-                    callback.kind == RuntimeRegexCallback.Kind.BLOCK && parent == null
-                            ? RegexCallbackMutationSnapshot.capture(callback.code) : null;
+            if (callback.kind == RuntimeRegexCallback.Kind.BLOCK && parent == null) {
+                callbackMutations.addLast(RegexCallbackMutationSnapshot.capture(callback.code));
+            }
             MatchView provisional = callback.kind == RuntimeRegexCallback.Kind.DYNAMIC
                     ? dynamicCaptureView(match, priorDynamicView) : match;
             publishProvisional(provisional);
@@ -1537,7 +1540,7 @@ final class JoniRegexPattern {
                 Token token = new Token(localLevel, savedRegex, previousR,
                         result.clone(), block,
                         callback.kind == RuntimeRegexCallback.Kind.DYNAMIC,
-                        priorDynamicView, mutations);
+                        priorDynamicView);
                 return new Evaluation(result, token);
             } catch (RuntimeException | Error failure) {
                 // The matcher cannot register an unwind token when the callout
@@ -1562,12 +1565,14 @@ final class JoniRegexPattern {
 
         @Override
         public void unwind(Object value) {
-            restore((Token) value, false, true);
+            restore((Token) value, false);
         }
 
         @Override
         public void complete(Object value) {
-            restore((Token) value, true, false);
+            Token token = (Token) value;
+            if (token.block() && parent == null) preserveCallbackMutations = true;
+            restore(token, true);
         }
 
         @Override
@@ -1586,6 +1591,7 @@ final class JoniRegexPattern {
                     GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
                             .set(completedResult);
                 } else if (!matched) {
+                    if (!preserveCallbackMutations) restoreCallbackMutations();
                     initialRegexState.restore();
                     if (hasFailedNestedCaptureState) {
                         state.lastClosedCapture = failedNestedLastClosedCapture;
@@ -1594,6 +1600,7 @@ final class JoniRegexPattern {
                     }
                 }
             } finally {
+                callbackMutations.clear();
                 DynamicVariableManager.popToLocalLevel(initialLocalLevel);
             }
         }
@@ -1605,14 +1612,15 @@ final class JoniRegexPattern {
         }
 
         void abort() {
+            restoreCallbackMutations();
+            callbackMutations.clear();
             DynamicVariableManager.popToLocalLevel(initialLocalLevel);
         }
 
-        private void restore(Token token, boolean completed, boolean backtracked) {
+        private void restore(Token token, boolean completed) {
             if (!completed) {
                 DynamicVariableManager.popToLocalLevel(token.localLevel());
                 previousDynamicView = token.previousDynamicView();
-                if (backtracked && token.mutations() != null) token.mutations().restore();
             }
             token.regexState().restore();
             if (!completed || !token.dynamic()) {
@@ -1621,6 +1629,12 @@ final class JoniRegexPattern {
             }
             if (completed && token.block() && completedResult == null) {
                 completedResult = token.result();
+            }
+        }
+
+        private void restoreCallbackMutations() {
+            while (!callbackMutations.isEmpty()) {
+                callbackMutations.removeLast().restore();
             }
         }
 
