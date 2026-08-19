@@ -48,8 +48,10 @@ public final class Option {
     public static final int CR_7_BIT             = (1 << 18);
     /** Perl /aa: forbid case-fold crossings between ASCII and non-ASCII. */
     public static final int PERL_ASCII_STRICT    = (1 << 19);
+    /** Perl /d byte strings use single-character Latin-1 folding only. */
+    public static final int PERL_BYTE_PATTERN    = (1 << 20);
 
-    public static final int MAXBIT               = (1 << 20); /* limit */
+    public static final int MAXBIT               = (1 << 21); /* limit */
 
     public static final int DEFAULT              = NONE;
 
@@ -69,6 +71,7 @@ public final class Option {
         if (isPosixRegion(option)) options += "POSIX_REGION";
         if (isCR7Bit(option)) options += "CR_7_BIT";
         if (isPerlAsciiStrict(option)) options += "PERL_ASCII_STRICT";
+        if (isPerlBytePattern(option)) options += "PERL_BYTE_PATTERN";
         return options;
     }
 
@@ -146,6 +149,10 @@ public final class Option {
 
     public static boolean isPerlAsciiStrict(int option) {
         return (option & PERL_ASCII_STRICT) != 0;
+    }
+
+    public static boolean isPerlBytePattern(int option) {
+        return (option & PERL_BYTE_PATTERN) != 0;
     }
 
     public static boolean isDynamic(int option) {

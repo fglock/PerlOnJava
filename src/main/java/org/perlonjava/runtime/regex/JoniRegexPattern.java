@@ -249,7 +249,9 @@ final class JoniRegexPattern {
         Syntax syntax = syntaxForNamedCharacters(
                 namedCharacterCache, namedCharacterSourceMode,
                 flags.isCaseInsensitive());
-        regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
+        int options = toJoniOptions(flags, forceAsciiClasses);
+        if (byteMode && byteBackedPattern) options |= Option.PERL_BYTE_PATTERN;
+        regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
         NamedGroupMaps groupMaps = collectNamedGroups(regex);

@@ -2145,6 +2145,41 @@ final class Analyser extends Parser {
         return xnode;
     }
 
+    private Node expandPerlByteSimpleFoldString(StringNode source, int state) {
+        ListNode root = null;
+        boolean expanded = false;
+
+        for (int p = source.p; p < source.end;) {
+            int next = p + enc.length(source.bytes, p, source.end);
+            int codePoint = enc.mbcToCode(source.bytes, p, source.end);
+            StringNode exact = new StringNode(source.bytes, p, next);
+            exact.setRaw();
+            ListNode alternatives = newAlt(exact, null);
+            ListNode tail = alternatives;
+
+            int foldLength = PerlCaseFold.simpleFoldClassLength(codePoint);
+            for (int index = 0; index < foldLength; index++) {
+                int folded = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+                if (folded == codePoint || folded > 0xff) continue;
+                StringNode sibling = new StringNode();
+                sibling.catCode(folded, enc);
+                sibling.setRaw();
+                ListNode alternative = newAlt(sibling, null);
+                tail.setTail(alternative);
+                tail = alternative;
+                expanded = true;
+            }
+
+            root = ListNode.listAdd(root, alternatives.tail == null ? exact : alternatives);
+            p = next;
+        }
+
+        if (!expanded) return source;
+        source.replaceWith(root);
+        setupTree(root, state);
+        return root;
+    }
+
     private boolean isUnsafePerlMultiFoldOptimizationBoundary(StringNode node) {
         if (!syntax.op2OptionPerl() || node.length() == 0) return false;
 
@@ -2344,7 +2379,9 @@ final class Analyser extends Parser {
 
         case NodeType.STR:
             if (isIgnoreCase(regex.options) && !((StringNode)node).isRaw()) {
-                if (Option.isPerlAsciiStrict(regex.options)) {
+                if (Option.isPerlBytePattern(regex.options)) {
+                    node = expandPerlByteSimpleFoldString((StringNode)node, state);
+                } else if (Option.isPerlAsciiStrict(regex.options)) {
                     Node protectedNode = protectPerlAsciiStrictCrossings(
                             (StringNode)node, state);
                     node = protectedNode == node
