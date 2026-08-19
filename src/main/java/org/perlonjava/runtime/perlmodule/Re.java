@@ -181,6 +181,7 @@ public class Re extends PerlModuleBase {
                 RuntimeScalar targetCode = getGlobalCodeRef(caller + "::regexp_pattern");
                 targetCode.set(sourceCode);
             } else if (opt.equalsIgnoreCase("strict")) {
+                symbolTable.enableStrictOption(Strict.HINT_RE_STRICT);
                 // Enable categories used by our preprocessor warnings
                 Warnings.warningManager.enableWarning("experimental::re_strict");
                 Warnings.warningManager.enableWarning("experimental::uniprop_wildcards");
@@ -227,6 +228,7 @@ public class Re extends PerlModuleBase {
             opt = opt.replace("\"", "").replace("'", "").trim();
             
             if (opt.equalsIgnoreCase("strict")) {
+                symbolTable.disableStrictOption(Strict.HINT_RE_STRICT);
                 Warnings.warningManager.disableWarning("experimental::re_strict");
                 Warnings.warningManager.disableWarning("experimental::uniprop_wildcards");
                 Warnings.warningManager.disableWarning("experimental::vlb");

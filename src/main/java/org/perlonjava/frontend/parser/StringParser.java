@@ -25,6 +25,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_TAINT;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUG;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUGCOLOR;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_STRICT;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_LOCALE;
 import static org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName;
 import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
@@ -709,6 +710,9 @@ public class StringParser {
         }
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_TAINT) && !result.contains("T")) {
             result = "T" + result;
+        }
+        if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_STRICT)) {
+            result += RuntimeRegex.INTERNAL_RE_STRICT_MARKER;
         }
         return addLexicalRegexDebugMarker(ctx, result);
     }
