@@ -693,6 +693,12 @@ public class UnicodeResolver {
             normalized = normalized.substring(1).trim();
             negated = !negated;
         }
+        PerlBinaryBooleanAssignment binaryAssignment =
+                perlBinaryBooleanAssignment(normalized);
+        if (binaryAssignment != null) {
+            return wrapProperty(binaryAssignment.propertyName,
+                    negated ^ !binaryAssignment.value);
+        }
         UnicodeSet set = resolveStandardPropertyAsSet(normalized, new LinkedHashSet<>());
         if (set == null) {
             throw new IllegalArgumentException(
@@ -733,6 +739,18 @@ public class UnicodeResolver {
             boolean isPrefixedScriptWildcard =
                     isPerlIsPrefixedScriptWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
+            PerlBinaryBooleanAssignment binaryAssignment =
+                    perlBinaryBooleanAssignment(property);
+            if (binaryAssignment != null) {
+                UnicodeSet binarySet = resolveStandardPropertyAsSet(
+                        binaryAssignment.propertyName, new LinkedHashSet<>());
+                if (caseInsensitive) {
+                    binarySet = new UnicodeSet(binarySet)
+                            .closeOver(UnicodeSet.CASE_INSENSITIVE);
+                }
+                return wrapCharClass(unicodeSetToJavaPattern(binarySet),
+                        negated ^ !binaryAssignment.value);
+            }
             String looseIsValue = looseIsShortcutValue(property);
             if (!isUserDefinedPropertyName(property)
                     && isPerlAllProperty(property, looseIsValue)) {
@@ -1003,6 +1021,7 @@ public class UnicodeResolver {
         property = canonicalPerlPosixPropertyAlias(property);
         return isPerlSpecialPropertyAlias(property.trim())
                 || !normalizePerlIsPropertyAssignment(property).equals(property)
+                || perlBinaryBooleanAssignment(property) != null
                 || resolvePerlBuiltInPropertyAlias(property) != null;
     }
 
@@ -1032,7 +1051,15 @@ public class UnicodeResolver {
         String name = property.substring(0, assignment);
         String value = property.substring(assignment + 1);
         boolean caseFold;
-        if (isGeneralCategoryProperty(name)) {
+        PerlBinaryBooleanAssignment binaryAssignment =
+                perlBinaryBooleanAssignment(property);
+        if (binaryAssignment != null) {
+            // False remains a semantic negation and is translated by the
+            // frontend so outer \P, /i folding, and signed-wide membership stay
+            // symmetric. True can use the native positive range result here.
+            if (!binaryAssignment.value) return null;
+            caseFold = true;
+        } else if (isGeneralCategoryProperty(name)) {
             caseFold = true;
         } else if (PerlUnicodeBlockData.isPropertyAlias(name)) {
             if (perlBlockWildcardBody(value) != null) return null;
@@ -1062,7 +1089,10 @@ public class UnicodeResolver {
         // the AST can retain per-property fold policy through class composition.
         if (!caseFold && inCharacterClass) return null;
 
-        UnicodeSet set = resolvePerlBuiltInPropertyAlias(property);
+        UnicodeSet set = binaryAssignment == null
+                ? resolvePerlBuiltInPropertyAlias(property)
+                : resolveStandardPropertyAsSet(
+                        binaryAssignment.propertyName, new LinkedHashSet<>());
         if (set == null) return null;
 
         return joniPropertyResult(set, caseFold);
@@ -1410,6 +1440,29 @@ public class UnicodeResolver {
             case "false", "no", "n", "f" -> false;
             default -> null;
         };
+    }
+
+    private static PerlBinaryBooleanAssignment perlBinaryBooleanAssignment(
+            String property) {
+        String normalized = normalizePerlIsPropertyAssignment(property.trim());
+        int assignment = propertyValueDelimiter(normalized);
+        if (assignment <= 0 || assignment == normalized.length() - 1) return null;
+
+        String name = normalized.substring(0, assignment);
+        Boolean value = perlBooleanPropertyValue(
+                normalized.substring(assignment + 1));
+        if (value == null || !isIcuBinaryPropertyAlias(name)) return null;
+        return new PerlBinaryBooleanAssignment(name, value);
+    }
+
+    private static final class PerlBinaryBooleanAssignment {
+        private final String propertyName;
+        private final boolean value;
+
+        private PerlBinaryBooleanAssignment(String propertyName, boolean value) {
+            this.propertyName = propertyName;
+            this.value = value;
+        }
     }
 
     private static UnicodeSet resolvePerlMissingBaseAlias(String alias) {
