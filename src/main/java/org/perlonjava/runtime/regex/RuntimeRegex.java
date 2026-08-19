@@ -703,7 +703,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                     regex.regexFlags, trustedCalloutCount, false,
                                     false, false, regex.namedCharacterCache);
                     if (patternByteBacked && regex.regexFlags.isCaseInsensitive()
-                            && !regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()) {
+                            && !regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()
+                            && !hasUnicodePromotingPatternSyntax(compilePatternString)) {
                         regex.recursivePatternBytes = new JoniRegexPattern(
                                 compilePatternString, regex.regexFlags, trustedCalloutCount,
                                 true, true, true, regex.namedCharacterCache);
@@ -1824,6 +1825,54 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static boolean containsNonAscii(String value) {
         for (int i = 0; i < value.length(); i++) {
             if (value.charAt(i) > 0x7f) return true;
+        }
+        return false;
+    }
+
+    /** Perl named characters and wide numeric escapes make an ASCII source Unicode. */
+    private static boolean hasUnicodePromotingPatternSyntax(String pattern) {
+        if (pattern == null) return false;
+        boolean quoted = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (ch > 0xff) return true;
+            if (ch != '\\' || i + 1 >= pattern.length()) continue;
+
+            char escape = pattern.charAt(++i);
+            if (escape == 'Q' && !quoted) {
+                quoted = true;
+                continue;
+            }
+            if (escape == 'E' && quoted) {
+                quoted = false;
+                continue;
+            }
+            if (quoted || escape == '\\') continue;
+            if (escape == 'N' && i + 1 < pattern.length()
+                    && pattern.charAt(i + 1) == '{') {
+                return true;
+            }
+            if ((escape != 'x' && escape != 'o') || i + 1 >= pattern.length()
+                    || pattern.charAt(i + 1) != '{') {
+                continue;
+            }
+
+            int radix = escape == 'x' ? 16 : 8;
+            boolean sawDigit = false;
+            long value = 0;
+            int cursor = i + 2;
+            for (; cursor < pattern.length() && pattern.charAt(cursor) != '}'; cursor++) {
+                char digitCharacter = pattern.charAt(cursor);
+                if (digitCharacter == '_') continue;
+                int digit = Character.digit(digitCharacter, radix);
+                if (digit < 0) break;
+                sawDigit = true;
+                value = value * radix + digit;
+                if (value > 0xff) return true;
+            }
+            if (sawDigit && cursor < pattern.length() && pattern.charAt(cursor) == '}') {
+                i = cursor;
+            }
         }
         return false;
     }
