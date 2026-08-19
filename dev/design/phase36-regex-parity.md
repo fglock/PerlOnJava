@@ -73,18 +73,21 @@ affected corpus before taking another slice.
   later run stopped before the complete plan under concurrent CPAN load.
 - The current imported `reg_mesg.t` passes 1,710/2,603 on each backend with an
   identical status/test-number vector.
-- Forced-Joni Unicode property comparison has 180/83,648 residual records on
-  each backend after the wildcard and POSIX/Perl compatibility slices. The
-  wildcard slice removed 568 rows and the POSIX slice removed the exact assigned
-  152 rows, each with zero introductions; the remaining 96 Block and 84 binary/
-  diagnostic rows are active consecutive slices.
+- Forced-Joni Unicode property comparison has 84/83,648 residual records on
+  each backend after the wildcard, POSIX/Perl compatibility, and Block slices.
+  The Block slice removed its exact assigned 96 rows with zero introductions.
+  The binary-alias candidate removes another exact 52 rows on the complete JVM
+  corpus, leaving only 32 Hyphen diagnostic rows; matching interpreter evidence
+  and integration remain required.
 - The shared deterministic pinned-Perl Unicode generator covers all current
   property families plus compact Perl default simple/full/reverse case-fold
   metadata. General_Category compatibility aliases, native named-call/parser
   safety, the runtime-neutral Joni property-value matcher, signed-IV user-
   property ranges, POSIX compatibility, and generated fold data are integrated.
-  Native extended classes, analyser fold safety, the final property aliases,
-  and removal of Java wildcard execution are active independent slices.
+  The analyser fold-safety slice is integrated in local staging. Native extended
+  classes, the final binary aliases, generated named-sequence lookup, property/
+  class fold closure, and removal of Java wildcard execution are active
+  independent slices.
 - Draft PR 1078 is durable at `e50c667d7`; that exact head passes warning-free
   `make`, all 17 tasks, Joni tests, five unit shards, packaging, and generated-
   data checks.
@@ -208,21 +211,25 @@ behavior.
 1. Keep the canonical native-Joni PR and this plan branch durable. Require exact
    commit/file review, warning-free `make`, and green stacked CI before moving a
    PR from draft to user acceptance.
-2. Finish the exact remaining 96 Block and 84 binary/diagnostic Unicode rows.
-   Then wire every property-value wildcard family to the integrated vendored-
+2. Finish the exact remaining binary aliases and 32 Hyphen diagnostic Unicode
+   rows. Then wire every property-value wildcard family to the integrated vendored-
    Joni evaluator in one conflict-free commit and remove all temporary
    `java.util.regex.Pattern` wildcard execution, including Age/Block/Script/
-   Numeric helpers.
+   Numeric helpers. Generate the complete named-sequence lookup from Perl's
+   pinned `NamedSequences.txt` in parallel and route standard `\N{name}` through
+   it without reimplementing the table by hand.
 3. Integrate the generated fold table through bounded native slices: package-
    local adapter and analyser optimizer safety; property/class closure; explicit
    fold/provenance context; literal forward/reverse expansion; backreferences;
    and final optimizer proof. Keep `/d`, `/u`, `/a`, `/aa`, locale, Turkic, and
    byte/Unicode provenance policy explicit and hand-reviewed.
 4. Finish native Joni `(?[...])` grammar/AST/evaluation and delete the textual
-   lowering. Require operand-local `/i`, scoped modifier isolation, wide-domain
-   algebra, literal/comment scanning, empty/multi-code-point `\N{}` legality,
-   nesting, and exact diagnostics. Then replace the `(?(DEFINE)...)` adapter
-   rewrite with a native non-executing definition container.
+   lowering. Require operand-local `/i`, scoped `^`/`a`/`aa`/`d`/`u` modifier
+   isolation, wide-domain algebra, literal/comment scanning, exact-three-digit
+   octal handling, nested-POSIX boundaries, empty/multi-code-point `\N{}`
+   legality, nesting, and exact diagnostics with zero `reg_mesg.t`
+   introductions. Then replace the `(?(DEFINE)...)` adapter rewrite with a
+   native non-executing definition container.
 5. Refresh `reg_mesg.t`, `pat.t`, `pat_advanced.t`, and the 83,648-record Unicode
    corpus on each combined batch. Close the largest semantically uniform
    native-Joni groups with a system-Perl-first reducer and zero-introduction
