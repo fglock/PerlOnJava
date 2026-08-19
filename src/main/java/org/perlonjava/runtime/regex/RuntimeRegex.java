@@ -824,7 +824,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 if ("invalid backref number/name".equals(e.getMessage())
                         || "invalid backref number".equals(e.getMessage())) {
-                    throw new PerlCompilerException("Reference to nonexistent group");
+                    throw new PerlCompilerException(
+                            "Reference to nonexistent group in regex");
                 }
                 String invalidProperty = invalidUnicodePropertyName(e.getMessage());
                 if (invalidProperty != null) {
