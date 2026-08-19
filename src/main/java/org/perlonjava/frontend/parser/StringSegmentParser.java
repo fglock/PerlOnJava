@@ -7,7 +7,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
-import org.perlonjava.runtime.regex.UnicodeResolver;
+import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 
@@ -1504,20 +1504,21 @@ public abstract class StringSegmentParser {
                 appendToCurrentSegment("\\N{" + name + "}");
                 return;
             }
-            try {
-                // Use centralized Unicode name resolution from UnicodeResolver
-                // This handles U+XXXX format, official Unicode names, and Perl charnames aliases
-                int codePoint;
-                try {
-                    codePoint = UnicodeResolver.getCodePointFromName(name);
-                    var result = new String(Character.toChars(codePoint));
-                    appendToCurrentSegment(result);
-                } catch (IllegalArgumentException e) {
-                    // Name not found, preserve literal
-                    appendToCurrentSegment("N{" + name + "}");
-                }
-            } catch (Exception e) {
-                // Error looking up name, preserve literal
+            NamedCharacterExpansion.SourceMode sourceMode =
+                    ctx.compilerOptions.isByteStringSource
+                            || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                                && !ctx.compilerOptions.isUnicodeSource)
+                    ? NamedCharacterExpansion.SourceMode.BYTE
+                    : NamedCharacterExpansion.SourceMode.UNICODE;
+            NamedCharacterExpansion expansion =
+                    NamedCharacterExpansion.resolve(name, sourceMode);
+            if (expansion.resolved()) {
+                appendToCurrentSegment(expansion.sequence());
+            } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
+                parser.throwError(expansion.diagnostic());
+            } else {
+                // Preserve the historical literal fallback when no standard
+                // name or lexical translator resolves this escape.
                 appendToCurrentSegment("N{" + name + "}");
             }
         } else {

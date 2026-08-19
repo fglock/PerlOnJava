@@ -64,6 +64,33 @@ public class HintHashRegistry {
         }
     }
 
+    /**
+     * Returns a detached copy of one value from the currently active compile-time
+     * {@code %^H}. Parser-side consumers use this instead of reaching through the
+     * global-variable implementation and accidentally bypassing lexical scoping.
+     */
+    public static RuntimeScalar getCompileTimeHint(String key) {
+        RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        RuntimeScalar value = hintHash == null ? null : hintHash.elements.get(key);
+        if (value != null && value.type != org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING) {
+            return new RuntimeScalar(value);
+        }
+
+        // eval STRING restores the legacy string snapshot into the global %^H
+        // facade. Prefer its parallel scalar snapshot for values such as the
+        // charnames CODE reference that cannot survive stringification.
+        CompilationRuntimeState state = state();
+        Map<String, RuntimeScalar> scalarSnapshot =
+                state.hintScalarSnapshots.get(state.callSiteHintHashId);
+        RuntimeScalar captured = scalarSnapshot == null ? null : scalarSnapshot.get(key);
+        if (captured != null && value != null
+                && value.toString().equals(captured.toString())) {
+            return new RuntimeScalar(captured);
+        }
+
+        return value == null ? null : new RuntimeScalar(value);
+    }
+
     // ---- Snapshot registration (compile-time) ----
 
     /**
@@ -80,10 +107,13 @@ public class HintHashRegistry {
         CompilationRuntimeState state = state();
         int id = state.nextHintSnapshotId.incrementAndGet();
         Map<String, String> snapshot = new HashMap<>();
+        Map<String, RuntimeScalar> scalarSnapshot = new HashMap<>();
         for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
             snapshot.put(entry.getKey(), entry.getValue().toString());
+            scalarSnapshot.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
         }
         state.hintSnapshots.put(id, snapshot);
+        state.hintScalarSnapshots.put(id, scalarSnapshot);
         return id;
     }
 
@@ -97,6 +127,11 @@ public class HintHashRegistry {
      */
     public static void setCallSiteHintHashId(int id) {
         state().callSiteHintHashId = id;
+    }
+
+    /** Returns the active call-site snapshot ID for balanced lexical restoration. */
+    public static int getCallSiteHintHashId() {
+        return state().callSiteHintHashId;
     }
 
     /**
@@ -174,6 +209,23 @@ public class HintHashRegistry {
     }
 
     /**
+     * Returns a detached typed snapshot for compile-time consumers such as
+     * eval STRING. Unlike the legacy string map, this preserves CODE refs.
+     */
+    public static Map<String, RuntimeScalar> getCurrentCallSiteScalarHintHash() {
+        CompilationRuntimeState state = state();
+        int id = state.callSiteHintHashId;
+        if (id == 0) return null;
+        Map<String, RuntimeScalar> snapshot = state.hintScalarSnapshots.get(id);
+        if (snapshot == null) return null;
+        Map<String, RuntimeScalar> copy = new HashMap<>();
+        for (Map.Entry<String, RuntimeScalar> entry : snapshot.entrySet()) {
+            copy.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        }
+        return copy;
+    }
+
+    /**
      * Clears all state.
      * Called by PerlLanguageProvider.resetAll() during reinitialization.
      */
@@ -181,6 +233,7 @@ public class HintHashRegistry {
         CompilationRuntimeState state = state();
         state.hintCompileTimeStack.clear();
         state.hintSnapshots.clear();
+        state.hintScalarSnapshots.clear();
         state.nextHintSnapshotId.set(0);
         state.callSiteHintHashId = 0;
         state.callerHintHashIdStack.clear();
