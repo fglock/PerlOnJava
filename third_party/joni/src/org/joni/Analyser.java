@@ -1473,8 +1473,7 @@ final class Analyser extends Parser {
     }
 
     private Node setupLookBehind(AnchorNode node) {
-        AcceptLengthInfo acceptLengths = node.type == AnchorType.LOOK_BEHIND
-                ? getAcceptLengthInfo(node.target) : null;
+        AcceptLengthInfo acceptLengths = getAcceptLengthInfo(node.target);
         if (acceptLengths != null && acceptLengths.hasAccept()) {
             int min = acceptLengths.acceptMin;
             int max = acceptLengths.acceptMax;
@@ -2593,7 +2592,10 @@ final class Analyser extends Parser {
                 int allowedInNegativeLookBehind = syntax.op2OptionPerl()
                         ? AnchorType.ALLOWED_IN_PERL_LB_NOT
                         : AnchorType.ALLOWED_IN_LB_NOT;
-                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB_NOT, allowedInNegativeLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+                int allowedEnclosuresInNegativeLookBehind = syntax.op2OptionPerl()
+                        ? EncloseType.ALLOWED_IN_LB
+                        : EncloseType.ALLOWED_IN_LB_NOT;
+                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, allowedEnclosuresInNegativeLookBehind, allowedInNegativeLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
                 node = setupLookBehind(an);
                 if (node.getType() != NodeType.ANCHOR) continue restart;
                 setupTree(((AnchorNode)node).target, (state | IN_NOT | IN_LOOKAROUND));
