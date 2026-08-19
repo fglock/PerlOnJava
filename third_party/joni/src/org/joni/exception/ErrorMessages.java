@@ -105,6 +105,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
             "Missing right brace on \\N{}";
     String PERL_EMPTY_NAMED_CHARACTER_ESCAPE = "Empty \\N{}";
+    String PERL_NON_NEWLINE_IN_CHARACTER_CLASS =
+            "\\N in a character class must be a named character: \\N{...}";
     String PERL_MISSING_RIGHT_BRACE_ON_BOUNDARY =
             "Missing right brace on \\%n{}";
     String PERL_EMPTY_BOUNDARY = "Empty \\%n{}";

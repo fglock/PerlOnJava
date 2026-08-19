@@ -1480,8 +1480,9 @@ public abstract class StringSegmentParser {
      */
     void handleUnicodeNameEscape() {
         if (!"{".equals(TokenUtils.peekChar(parser))) {
-            // Not a Unicode name escape, treat as literal
-            appendToCurrentSegment("N");
+            // In a regex, plain \N is Perl's non-newline atom. Keep the escape
+            // intact for the regex backend; quoted strings still treat it as N.
+            appendToCurrentSegment(isRegex ? "\\N" : "N");
             return;
         }
 
@@ -1498,6 +1499,12 @@ public abstract class StringSegmentParser {
         if ("}".equals(chr)) {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
+            if (isRegex && isPlainNonNewlineInterval(name)) {
+                // A brace immediately following plain \N can be its quantifier,
+                // not a named character. Leave both pieces for the regex lexer.
+                appendToCurrentSegment("\\N{" + name + "}");
+                return;
+            }
             NamedCharacterExpansion.SourceMode sourceMode =
                     ctx.compilerOptions.isByteStringSource
                             || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
@@ -1534,6 +1541,10 @@ public abstract class StringSegmentParser {
         } else {
             throwMissingNamedCharacterBraceDiagnostic();
         }
+    }
+
+    private boolean isPlainNonNewlineInterval(String contents) {
+        return contents.matches("(?:[0-9]+(?:,[0-9]*)?|,[0-9]+)");
     }
 
     private void throwNamedCharacterDiagnostic(String diagnostic) {

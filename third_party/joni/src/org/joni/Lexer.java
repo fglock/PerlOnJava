@@ -49,6 +49,7 @@ class Lexer extends ScannerSupport {
     private boolean perlHorizontalWhitespaceSingleByte;
     private int perlVerticalWhitespaceTokenIndex = -1;
     private boolean perlVerticalWhitespaceNegated;
+    private int perlNonNewlineTokenIndex = -1;
     private int perlCharacterPropertyEscape;
 
     protected Lexer(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
@@ -715,6 +716,61 @@ class Lexer extends ScannerSupport {
         return token.type;
     }
 
+    private boolean usesPerlNonNewlineEscape() {
+        return syntax.op2OptionPerl() && "PERLONJAVA".equals(syntax.name);
+    }
+
+    private boolean isPerlNonNewlineIntervalAhead() {
+        if (!left() || !peekIs('{')) return false;
+
+        int cursor = nextChar(p, stop);
+        boolean sawLow = false;
+        boolean sawComma = false;
+        boolean sawHigh = false;
+        while (cursor < stop) {
+            int code = codeAt(cursor, stop);
+            if (code == '}') {
+                return sawComma ? sawLow || sawHigh : sawLow;
+            }
+            if (code >= '0' && code <= '9') {
+                if (sawComma) sawHigh = true;
+                else sawLow = true;
+            } else if (code == ',' && !sawComma) {
+                sawComma = true;
+            } else {
+                return false;
+            }
+            cursor = nextChar(cursor, stop);
+        }
+        return false;
+    }
+
+    private void startPerlNonNewline(TokenType openType) {
+        perlNonNewlineTokenIndex = 0;
+        token.type = openType;
+    }
+
+    private TokenType fetchPerlNonNewlineToken() {
+        token.base = 0;
+        token.escaped = false;
+        switch (perlNonNewlineTokenIndex++) {
+        case 0:
+            token.type = TokenType.CHAR;
+            token.setC('^');
+            break;
+        case 1:
+            token.type = TokenType.CODE_POINT;
+            token.setCode('\n');
+            break;
+        default:
+            token.type = TokenType.CC_CLOSE;
+            token.setC(']');
+            perlNonNewlineTokenIndex = -1;
+            break;
+        }
+        return token.type;
+    }
+
     private void fetchTokenInCCFor_p() {
         int c2 = peek(); // !!! migrate to peekIs
         if (c2 == '{' && syntax.op2EscPBraceCharProperty()) {
@@ -787,6 +843,9 @@ class Lexer extends ScannerSupport {
     private boolean fetchTokenFor_namedCharacter(boolean inCharacterClass) {
         NamedCharacterResolver resolver = syntax.namedCharacterResolver;
         if (resolver == null || !syntax.op2OptionPerl() || !left() || !peekIs('{')) {
+            return false;
+        }
+        if (usesPerlNonNewlineEscape() && isPerlNonNewlineIntervalAhead()) {
             return false;
         }
 
@@ -1059,6 +1118,9 @@ class Lexer extends ScannerSupport {
     }
 
     protected final TokenType fetchTokenInCC() {
+        if (perlNonNewlineTokenIndex >= 0) {
+            return fetchPerlNonNewlineToken();
+        }
         if (perlHorizontalWhitespaceTokenIndex >= 0) {
             return fetchPerlHorizontalWhitespaceToken();
         }
@@ -1144,11 +1206,15 @@ class Lexer extends ScannerSupport {
                 break;
             case 'N':
                 if (!fetchTokenFor_namedCharacter(true)) {
-                    unfetch();
-                    fetchEscapedValue();
-                    if (token.getC() != c) {
-                        token.setCode(c);
-                        token.type = TokenType.CODE_POINT;
+                    if (usesPerlNonNewlineEscape()) {
+                        newSyntaxException(PERL_NON_NEWLINE_IN_CHARACTER_CLASS);
+                    } else {
+                        unfetch();
+                        fetchEscapedValue();
+                        if (token.getC() != c) {
+                            token.setCode(c);
+                            token.type = TokenType.CODE_POINT;
+                        }
                     }
                 }
                 break;
@@ -1736,17 +1802,21 @@ class Lexer extends ScannerSupport {
                     break;
                 case 'N':
                     if (!fetchTokenFor_namedCharacter(false)) {
-                        unfetch();
-                        fetchEscapedValue();
-                        if (token.getC() != c) {
-                            token.type = TokenType.CODE_POINT;
-                            token.setCode(c);
+                        if (usesPerlNonNewlineEscape()) {
+                            startPerlNonNewline(TokenType.CC_OPEN);
                         } else {
-                            int encLength = enc.length(bytes, token.backP, stop);
-                            if (encLength == Encoding.CHAR_INVALID) {
-                                throw new IllegalArgumentException("Invalid character found.");
+                            unfetch();
+                            fetchEscapedValue();
+                            if (token.getC() != c) {
+                                token.type = TokenType.CODE_POINT;
+                                token.setCode(c);
+                            } else {
+                                int encLength = enc.length(bytes, token.backP, stop);
+                                if (encLength == Encoding.CHAR_INVALID) {
+                                    throw new IllegalArgumentException("Invalid character found.");
+                                }
+                                p = token.backP + encLength;
                             }
-                            p = token.backP + encLength;
                         }
                     }
                     break;
