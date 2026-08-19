@@ -776,7 +776,12 @@ public class StringOperators {
             isNegative = doubleValue < 0;
         }
 
-        int codePoint = runtimeScalar.getInt();
+        // Preserve exact signed-IV integer values.  Going through getInt() truncates
+        // values such as Long.MAX_VALUE before the beyond-Unicode representation can
+        // encode them.  Keep the existing conversion behavior for other scalar types.
+        long codePoint = runtimeScalar.type == RuntimeScalarType.INTEGER
+                ? runtimeScalar.getLong()
+                : runtimeScalar.getInt();
 
         // Handle negative values (check both int and original double)
         if (codePoint < 0 || isNegative) {
@@ -788,7 +793,7 @@ public class StringOperators {
         // Java's Character.isValidCodePoint() rejects these, so we need to handle them.
 
         // BMP and supplementary scalars (not UTF-16 surrogate halves).
-        if (Character.isValidCodePoint(codePoint)
+        if (Character.isValidCodePoint((int) codePoint)
                 && codePoint <= 0x10FFFF
                 && (codePoint < 0xD800 || codePoint > 0xDFFF)) {
             // U+00..U+FF: Perl chr() yields a Latin-1 octet string with the UTF-8 flag off
@@ -801,19 +806,19 @@ public class StringOperators {
             }
             // Above Latin-1: UTF-16 string (not BYTE_STRING) so RuntimeRegex uses the Unicode
             // pattern for /u and \\p{} (uni/variables.t, use feature 'unicode_strings').
-            return new RuntimeScalar(new String(Character.toChars(codePoint)));
+            return new RuntimeScalar(new String(Character.toChars((int) codePoint)));
         }
 
         // Surrogate scalars U+D800..U+DFFF are legal Perl characters, but raw Java UTF-16
         // surrogates would combine with an adjacent surrogate into a different code point.
         if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
-            return new RuntimeScalar(PerlUtfString.encodeSurrogate(Integer.toUnsignedLong(codePoint)));
+            return new RuntimeScalar(PerlUtfString.encodeSurrogate(codePoint));
         }
 
         // Beyond-Unicode UVs: internal FFFD<hex> marker (Perl distinguishes from valid text).
         RuntimeScalar res = new RuntimeScalar();
         res.type = RuntimeScalarType.STRING;
-        res.value = PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(codePoint));
+        res.value = PerlUtfString.encodeBeyondUnicode(codePoint);
         return res;
     }
 

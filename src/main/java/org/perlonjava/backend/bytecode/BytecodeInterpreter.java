@@ -2654,6 +2654,9 @@ public class BytecodeInterpreter {
                             case Opcodes.SET_CALL_SITE_HINTS ->
                                 WarningBitsRegistry.setCallSiteHints(bytecode[pc++]);
 
+                            case Opcodes.SET_CALL_SITE_HINT_HASH ->
+                                HintHashRegistry.setCallSiteHintHashId(bytecode[pc++]);
+
                             // =================================================================
                             // DEBUGGER SUPPORT
                             // =================================================================
@@ -3407,7 +3410,9 @@ public class BytecodeInterpreter {
                         ? code.stringPool[warningBitsIndex] : null);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
                 if (quoteConstruction != 0) {
-                    registers[rd] = RuntimeRegex.markQuoteConstruction(registers[rd].scalar());
+                    registers[rd] = quoteConstruction == 2
+                            ? RuntimeRegex.markSyntacticQuoteConstruction(registers[rd].scalar())
+                            : RuntimeRegex.markQuoteConstruction(registers[rd].scalar());
                 }
                 return pc;
             }
@@ -3429,7 +3434,9 @@ public class BytecodeInterpreter {
                         ? code.stringPool[warningBitsIndex] : null);
                 registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
                 if (quoteConstruction != 0) {
-                    registers[rd] = RuntimeRegex.markQuoteConstruction(registers[rd].scalar());
+                    registers[rd] = quoteConstruction == 2
+                            ? RuntimeRegex.markSyntacticQuoteConstruction(registers[rd].scalar())
+                            : RuntimeRegex.markQuoteConstruction(registers[rd].scalar());
                 }
                 return pc;
             }

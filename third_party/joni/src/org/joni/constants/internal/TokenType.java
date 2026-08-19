@@ -24,7 +24,9 @@ public enum TokenType {
       RAW_BYTE,
       CHAR,
       STRING,
+      NAMED_STRING,
       CODE_POINT,
+      WIDE_CODE_POINT,
       ANYCHAR,
       CHAR_TYPE,
       BACKREF,
@@ -37,6 +39,7 @@ public enum TokenType {
       SUBEXP_OPEN,
       SUBEXP_CLOSE,
       CC_OPEN,
+      EXTENDED_CC_OPEN, /* Perl (?[...] set expression */
       QUOTE_OPEN,
       CHAR_PROPERTY,    /* \p{...}, \P{...} */
       LINEBREAK,

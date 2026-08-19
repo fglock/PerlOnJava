@@ -10,7 +10,7 @@ public interface RegexMatcher {
 
     /** Find the next match while rejecting zero-length alternatives. */
     default boolean findNotEmpty() {
-        return find() && end() > start();
+        return find() && end() > consumedStart();
     }
 
     void region(int start, int end);
@@ -26,6 +26,12 @@ public interface RegexMatcher {
     default boolean setGlobalPosition(int position) { return false; }
 
     int start();
+
+    /**
+     * Start of input consumed by the engine before a visible-start reset such
+     * as Perl's {@code \K}. Backends without such resets use {@link #start()}.
+     */
+    default int consumedStart() { return start(); }
 
     int end();
 

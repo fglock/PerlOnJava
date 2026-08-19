@@ -11,6 +11,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -230,6 +231,18 @@ public class EvalStringHandler {
         List<EvalSeedAlias> seedAliases = new ArrayList<>();
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
+        RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        Map<String, RuntimeScalar> savedHintHash = new HashMap<>();
+        for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
+            savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        }
+        int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
+        Map<String, RuntimeScalar> lexicalHintHash =
+                HintHashRegistry.getCurrentCallSiteScalarHintHash();
+        if (lexicalHintHash != null) {
+            activeHintHash.elements.clear();
+            activeHintHash.elements.putAll(lexicalHintHash);
+        }
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
@@ -540,6 +553,9 @@ public class EvalStringHandler {
                     savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
                 }
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
+                activeHintHash.elements.clear();
+                activeHintHash.elements.putAll(savedHintHash);
+                HintHashRegistry.setCallSiteHintHashId(savedCallSiteHintHashId);
             } finally {
                 PerlLanguageProvider.COMPILE_LOCK.unlock();
                 compilationLock.close();

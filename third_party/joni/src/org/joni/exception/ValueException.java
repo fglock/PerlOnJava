@@ -26,8 +26,16 @@ public class ValueException extends SyntaxException{
         super(message);
     }
 
+    public ValueException(String message, int patternPosition) {
+        super(message, patternPosition);
+    }
+
     public ValueException(String message, String str) {
         super(message.replaceAll("%n", str));
+    }
+
+    public ValueException(String message, String str, int patternPosition) {
+        super(message.replaceAll("%n", str), patternPosition);
     }
 
     public ValueException(String message, byte[]bytes, int p, int end) {

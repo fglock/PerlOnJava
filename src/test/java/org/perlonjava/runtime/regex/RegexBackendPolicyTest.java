@@ -79,6 +79,35 @@ class RegexBackendPolicyTest {
     }
 
     @Test
+    void javaModeRoutesRealPerlConditionalsToJoni() {
+        System.setProperty(RegexBackendPolicy.PROPERTY, "java");
+
+        assertTrue(RegexBackendPolicy.useJoni("(a)(?(1)b|c)"));
+        assertTrue(RegexBackendPolicy.useJoni("(a)(?(1)b)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?<x>x)(?(<x>)y|z)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?(?=a)a|b)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?(DEFINE)(?<x>x))"));
+        assertTrue(RegexBackendPolicy.useJoni("(?(R)recursive|plain)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?(bogus)x|y)"));
+        assertTrue(RegexBackendPolicy.useJoni("(?(1)x"));
+    }
+
+    @Test
+    void conditionalLookalikesRemainOnTheOrdinaryRoute() {
+        System.setProperty(RegexBackendPolicy.PROPERTY, "java");
+
+        assertFalse(RegexBackendPolicy.useJoni("\\(\\?\\("));
+        assertFalse(RegexBackendPolicy.useJoni("[(?()]"));
+        assertFalse(RegexBackendPolicy.useJoni("(?[ [(?()] ])"));
+        assertFalse(RegexBackendPolicy.useJoni("\\Q(?(DEFINE)(?<x>x))\\E"));
+        assertFalse(RegexBackendPolicy.useJoni("(?# (?(1)x|y))ordinary"));
+
+        String extendedComment = "# (?(1)x|y)\nordinary";
+        RegexFlags extendedFlags = RegexFlags.fromModifiers("x", extendedComment);
+        assertFalse(RegexBackendPolicy.useJoni(extendedComment, extendedFlags));
+    }
+
+    @Test
     void joniModeRoutesOrdinaryPatternsToJoni() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "joni");
 

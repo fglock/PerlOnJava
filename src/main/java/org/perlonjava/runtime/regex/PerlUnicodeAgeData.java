@@ -486,6 +486,14 @@ final class PerlUnicodeAgeData {
         return UNASSIGNED;
     }
 
+    static int valueCount() {
+        return VERSIONS.length;
+    }
+
+    static String versionAt(int index) {
+        return VERSIONS[index];
+    }
+
     private static UnicodeSet[] buildExactSets() {
         UnicodeSet[] sets = new UnicodeSet[VERSIONS.length];
         for (int i = 0; i < sets.length; i++) sets[i] = new UnicodeSet();

@@ -116,6 +116,57 @@ class JoniRegexPatternTest {
     }
 
     @Test
+    void preservesStandaloneBlockAndScriptFoldPolicyInsideJoni() {
+        RegexFlags ignoreCase = RegexFlags.fromModifiers("i", "property");
+        JoniRegexPattern block = new JoniRegexPattern("\\p{Block=ASCII}", ignoreCase);
+        JoniRegexPattern script = new JoniRegexPattern("\\p{Script=Common}", ignoreCase);
+
+        assertEquals("\\p{Block=ASCII}", block.patternDescription());
+        assertEquals("\\p{Script=Common}", script.patternDescription());
+        assertFalse(block.matcher("\u212A", java.util.List.of()).find());
+        assertFalse(script.matcher("K", java.util.List.of()).find());
+    }
+
+    @Test
+    void passesRemainingExactEnumeratedPropertiesToJoni() {
+        String[][] cases = {
+                {"\\p{Canonical_Combining_Class=Above}", "\u0301"},
+                {"\\p{Bidi_Class=Right_To_Left}", "\u05D0"},
+                {"\\p{Decomposition_Type=Canonical}", "\u00C0"},
+                {"\\p{East_Asian_Width=Fullwidth}", "\u3000"},
+                {"\\p{Numeric_Value=1/2}", "\u00BD"},
+                {"\\p{Joining_Group=Alef}", "\u0627"},
+        };
+
+        for (String[] testCase : cases) {
+            JoniRegexPattern pattern = new JoniRegexPattern(testCase[0], FLAGS);
+            assertEquals(testCase[0], pattern.patternDescription());
+            assertTrue(pattern.matcher(testCase[1], java.util.List.of()).find());
+        }
+    }
+
+    @Test
+    void passesExactAgePropertiesToJoniWithoutTextExpansion() {
+        String[][] cases = {
+                {"\\p{Age=2.1}", "\u20AC"},
+                {"\\p{In=3.0}", "\u20AC"},
+                {"\\p{Present_In=3.0}", "\u20AC"},
+                {"\\p{Is_Age=6.1}", "\uD83D\uDE00"},
+                {"\\p{Age=Unassigned}", "\uD88D\uDC7A"},
+        };
+
+        for (String[] testCase : cases) {
+            JoniRegexPattern pattern = new JoniRegexPattern(testCase[0], FLAGS);
+            assertEquals(testCase[0], pattern.patternDescription());
+            assertTrue(pattern.matcher(testCase[1], java.util.List.of()).find());
+        }
+
+        JoniRegexPattern wildcard = new JoniRegexPattern(
+                "\\p{Age=:\\AV16_0\\z:}", FLAGS);
+        assertFalse(wildcard.patternDescription().contains("Age="));
+    }
+
+    @Test
     void flattensTranslatedPropertiesInsideOrdinaryCharacterClasses() {
         JoniRegexPattern pattern = new JoniRegexPattern(
                 "[\\p{IsDigit}\\p{IsLower}\\p{IsUpper}]", FLAGS);

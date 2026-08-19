@@ -27,6 +27,8 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.jcodings.constants.CharacterType;
 import org.joni.ast.AnchorNode;
@@ -41,6 +43,7 @@ import org.joni.ast.EncloseNode;
 import org.joni.ast.Node;
 import org.joni.ast.QuantifierNode;
 import org.joni.ast.StringNode;
+import org.joni.ast.WideScalarNode;
 import org.joni.constants.internal.AnchorType;
 import org.joni.constants.internal.EncloseType;
 import org.joni.constants.internal.NodeType;
@@ -55,6 +58,7 @@ final class ArrayCompiler extends Compiler {
     private byte[][]templates;
     private int templateNum;
     private final Map<String, Integer> controlVerbLabelIds = new LinkedHashMap<>();
+    private final List<CClassNode> wideScalarClasses = new ArrayList<>();
 
     ArrayCompiler(Analyser analyser) {
         super(analyser);
@@ -77,6 +81,7 @@ final class ArrayCompiler extends Compiler {
         regex.templates = templates;
         regex.templateNum = templateNum;
         regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
+        regex.wideScalarClasses = wideScalarClasses.toArray(CClassNode[]::new);
         regex.factory = MatcherFactory.DEFAULT;
 
         if (Config.USE_SUBEXP_CALL && analyser.env.unsetAddrList != null) {
@@ -146,7 +151,7 @@ final class ArrayCompiler extends Compiler {
         do {
             len += compileLengthTree(aln.value);
             if (aln.tail != null) {
-                len += OPSize.PUSH + OPSize.JUMP;
+                len += OPSize.PUSH_BRANCH + OPSize.JUMP;
             }
         } while ((aln = aln.tail) != null);
 
@@ -157,7 +162,7 @@ final class ArrayCompiler extends Compiler {
             len = compileLengthTree(aln.value);
             if (aln.tail != null) {
                 regex.requireStack = true;
-                addOpcodeRelAddr(OPCode.PUSH, len + OPSize.JUMP);
+                addOpcodeRelAddr(OPCode.PUSH_BRANCH, len + OPSize.JUMP);
             }
             compileTree(aln.value);
             if (aln.tail != null) {
@@ -330,6 +335,7 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileLengthCClassNode(CClassNode cc) {
+        if (regex.wideScalarCodec != null) return OPSize.WIDE_SCALAR_CLASS;
         int len;
         if (cc.mbuf == null) {
             len = OPSize.OPCODE + BitSet.BITSET_SIZE;
@@ -347,6 +353,12 @@ final class ArrayCompiler extends Compiler {
 
     @Override
     protected void compileCClassNode(CClassNode cc) {
+        if (regex.wideScalarCodec != null) {
+            addOpcode(OPCode.WIDE_SCALAR_CLASS);
+            addInt(wideScalarClasses.size());
+            wideScalarClasses.add(cc);
+            return;
+        }
         if (cc.mbuf == null) {
             if (cc.isNot()) {
                 addOpcode(OPCode.CCLASS_NOT);
@@ -373,6 +385,13 @@ final class ArrayCompiler extends Compiler {
                 addMultiByteCClass(cc.mbuf);
             }
         }
+    }
+
+    @Override
+    protected void compileWideScalarNode(WideScalarNode node) {
+        addOpcode(OPCode.WIDE_SCALAR);
+        addInt((int)(node.value >>> 32));
+        addInt((int)node.value);
     }
 
     @Override
@@ -1337,6 +1356,8 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileLengthTree(Node node) {
+        if (node instanceof CClassNode) return compileLengthCClassNode((CClassNode)node);
+        if (node instanceof WideScalarNode) return OPSize.WIDE_SCALAR;
         if (node instanceof CalloutNode callout) {
             return callout.dynamic ? OPSize.DYNAMIC_CALLOUT : OPSize.CALLOUT;
         }

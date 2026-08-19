@@ -24,4 +24,13 @@ import org.jcodings.Encoding;
 @FunctionalInterface
 public interface NamedCharacterResolver {
     int resolve(byte[] bytes, int p, int end, Encoding encoding);
+
+    /**
+     * Resolves a Perl named-character escape to one or more Unicode code points.
+     * Existing resolvers remain source- and binary-compatible through the
+     * single-code-point method above.
+     */
+    default int[] resolveSequence(byte[] bytes, int p, int end, Encoding encoding) {
+        return new int[] {resolve(bytes, p, end, encoding)};
+    }
 }

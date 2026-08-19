@@ -62,6 +62,17 @@ public class PerlCompilerException extends RuntimeException {
         this.errorMessage = buildErrorMessage(message);
     }
 
+    /** Attach the compiler's exact source location without a parser "near" clause. */
+    public static PerlCompilerException withSourceLocation(
+            int tokenIndex, String message, ErrorMessageUtil errorMessageUtil) {
+        ErrorMessageUtil.SourceLocation location =
+                errorMessageUtil.getSourceLocationAccurate(tokenIndex);
+        String coreMessage = message != null && message.endsWith("\n")
+                ? message.substring(0, message.length() - 1) : message;
+        return new PerlCompilerException(coreMessage + " at " + location.fileName()
+                + " line " + location.lineNumber() + ".\n");
+    }
+
     /**
      * Formats the error message with location and optional filehandle context.
      * Format: "MESSAGE at FILE line N[, <FH> chunk/line N].\n"

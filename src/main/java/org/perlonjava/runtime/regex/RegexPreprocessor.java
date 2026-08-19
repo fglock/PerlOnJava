@@ -140,13 +140,11 @@ public class RegexPreprocessor {
         duplicateNameCounter = 0;
         warningsOnUse.clear();
 
-        s = transformSimpleConditionals(s);
         s = removeUnderscoresFromEscapes(s);
         s = normalizeQuantifiers(s);
 
         // Expand multi-character case folds when case-insensitive flag is set
-        if (regexFlags.isCaseInsensitive() && !regexFlags.isAsciiStrict()
-                && !containsInlineAsciiStrictModifier(s)) {
+        if (regexFlags.isCaseInsensitive() && !regexFlags.isAsciiStrict()) {
             s = expandMultiCharFolds(materializeFoldableHexEscapes(s), regexFlags);
         }
 
@@ -518,31 +516,6 @@ public class RegexPreprocessor {
             i += Character.charCount(codePoint);
         }
         return result.toString();
-    }
-
-    /**
-     * Full-fold rewriting currently operates on the whole pattern. Avoid
-     * applying it across a scoped (?aa:...) boundary, where Perl forbids
-     * ASCII/non-ASCII fold crossings. The regular parser still handles the
-     * scoped modifier itself.
-     */
-    private static boolean containsInlineAsciiStrictModifier(String pattern) {
-        for (int i = 0; i + 2 < pattern.length(); i++) {
-            if (pattern.charAt(i) != '(' || pattern.charAt(i + 1) != '?') continue;
-            int asciiModifiers = 0;
-            for (int j = i + 2; j < pattern.length(); j++) {
-                char modifier = pattern.charAt(j);
-                if (modifier == 'a') {
-                    asciiModifiers++;
-                    if (asciiModifiers == 2) return true;
-                } else if (modifier == ':' || modifier == ')' || modifier == '-') {
-                    break;
-                } else if (!Character.isLetter(modifier) && modifier != '^') {
-                    break;
-                }
-            }
-        }
-        return false;
     }
 
     private static String expandSpecialSingleCharFold(int codePoint) {
@@ -992,8 +965,8 @@ public class RegexPreprocessor {
 
         // Check for (*...) verb patterns FIRST, before checking (?
         if (c2 == '*') {
-            // (*...) control verbs like (*ACCEPT), (*FAIL), (*COMMIT), etc.
-            // Also handles alpha assertion aliases: (*pla:...), (*plb:...), etc.
+            // Java-backend compatibility for (*...) control verbs such as
+            // (*FAIL). Alpha assertions are routed to Joni before preprocessing.
 
             // Find the verb name (up to ':' or ')')
             int verbNameEnd = offset + 2;
@@ -1013,42 +986,26 @@ public class RegexPreprocessor {
                 return verbNameEnd;
             }
 
-            // Check for alpha assertion aliases (Perl 5.28+)
-            String replacement = switch (verbName) {
-                case "pla", "positive_lookahead" -> "(?=";
-                case "plb", "positive_lookbehind" -> "(?<=";
-                case "nla", "negative_lookahead" -> "(?!";
-                case "nlb", "negative_lookbehind" -> "(?<!";
-                case "atomic" -> "(?>";
-                default -> null;
-            };
-
-            if (replacement != null && verbNameEnd < length && s.codePointAt(verbNameEnd) == ':') {
-                // Alpha assertion with content: (*pla:...) -> (?=...)
-                sb.append(replacement);
-                offset = handleRegex(s, verbNameEnd + 1, sb, regexFlags, true);
-                // Fall through to common ')' handling at end of handleParentheses
-            } else {
-                // Find the end of the verb for error reporting
-                int verbEnd = offset + 2;
-                while (verbEnd < length && s.codePointAt(verbEnd) != ')') {
-                    verbEnd++;
-                }
-                if (verbEnd < length) {
-                    verbEnd++; // Include the closing paren
-                }
-
-                // Extract the verb name for error reporting
-                String verb = s.substring(offset, Math.min(verbEnd, length));
-
-                // Replace with empty non-capturing group as placeholder
-                sb.append("(?:)");
-
-                // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
-                regexUnimplemented(s, offset + 2, "Regex control verb " + verb + " not implemented");
-
-                return verbEnd; // Skip past the entire verb construct
+            // Find the end of the verb for error reporting
+            int verbEnd = offset + 2;
+            while (verbEnd < length && s.codePointAt(verbEnd) != ')') {
+                verbEnd++;
             }
+            if (verbEnd < length) {
+                verbEnd++; // Include the closing paren
+            }
+
+            // Extract the verb name for error reporting
+            String verb = s.substring(offset, Math.min(verbEnd, length));
+
+            // Replace with empty non-capturing group as placeholder
+            sb.append("(?:)");
+
+            // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
+            regexUnimplemented(s, offset + 2,
+                    "Regex control verb " + verb + " not implemented");
+
+            return verbEnd; // Skip past the entire verb construct
         } else if (c2 == '?') {
             if (offset + 2 >= length) {
                 // Marker should be after the ?
@@ -1144,11 +1101,6 @@ public class RegexPreprocessor {
 
                 // offset now points at ')' closing the (??{...}) construct
                 // Fall through to common ')' handling at end of handleParentheses
-            } else if (c3 == '(') {
-                // Handle (?(condition)yes|no) conditionals
-                // handleConditionalPattern processes the entire conditional including its closing )
-                // so we need to return directly without further processing
-                return handleConditionalPattern(s, offset, length, sb, regexFlags);
             } else if (c3 == ';') {
                 // (?;...) is not recognized - marker should be after ;
                 regexError(s, offset + 3, "Sequence (?;...) not recognized");
@@ -1862,164 +1814,6 @@ public class RegexPreprocessor {
         return -1; // Not found
     }
 
-    // Handle conditional patterns
-    private static int handleConditionalPattern(String s, int offset, int length, StringBuilder sb, RegexFlags regexFlags) {
-        // offset is at '(' of (?(condition)yes|no)
-        int condStart = offset + 3;  // Skip (?(
-
-        // Find the end of the condition
-        int condEnd = condStart;
-        int parenDepth = 0;
-        boolean foundEnd = false;
-
-        while (condEnd < length && !foundEnd) {
-            char ch = s.charAt(condEnd);
-            if (ch == '(') {
-                parenDepth++;
-            } else if (ch == ')' && parenDepth == 0) {
-                foundEnd = true;
-                break;
-            } else if (ch == ')') {
-                parenDepth--;
-            }
-            condEnd++;
-        }
-
-        if (!foundEnd) {
-            // Error should point to where we expected the closing paren
-            regexError(s, condEnd, "Switch (?(condition)... not terminated");
-        }
-
-        // Extract and validate the condition
-        String condition = s.substring(condStart, condEnd).trim();
-
-        // System.err.println("DEBUG: Conditional pattern condition: '" + condition + "'");
-
-        // Check for invalid conditions like "1x" or "1x(?#)"
-        if (condition.matches("\\d+[a-zA-Z].*")) {
-            // Find where the alphabetic part starts
-            int i = 0;
-            while (i < condition.length() && Character.isDigit(condition.charAt(i))) {
-                i++;
-            }
-            // For "1x(?#)", we want the marker after "x", not after the comment
-            // So we need to find where the alphabetic part ends
-            int alphaEnd = i;
-            while (alphaEnd < condition.length() && Character.isLetter(condition.charAt(alphaEnd))) {
-                alphaEnd++;
-            }
-            // Error should point after the alphanumeric part
-            regexError(s, condStart + alphaEnd, "Switch condition not recognized");
-        }
-
-        // Check for specific invalid patterns
-        if (condition.equals("??{}") || condition.equals("?[")) {
-            // Marker should be after the first ?
-            regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
-        }
-
-        boolean assertionCondition = condition.startsWith("?=") || condition.startsWith("?!");
-
-        if (condition.startsWith("?") && !assertionCondition) {
-            // Marker should be after the first ?
-            regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
-        }
-
-        // Check for non-numeric conditions that aren't valid
-        if (!assertionCondition && !condition.matches("\\d+") && !condition.matches("<[^>]+>") && !condition.matches("'[^']+'")) {
-            // For single character conditions like "x", marker should be after the character
-            if (condition.length() == 1) {
-                regexUnimplemented(s, condStart + 1, "Unknown switch condition (?(...))");
-            } else {
-                regexUnimplemented(s, condStart, "Unknown switch condition (?(...))");
-            }
-        }
-
-        // Now parse the yes|no branches
-        int pos = condEnd + 1;  // Skip past the closing )
-        int pipeCount = 0;
-        int branchStart = pos;
-        int pipePos = -1;
-        parenDepth = 0;
-
-        // First, check if we have any content after the condition
-        if (pos >= length) {
-            // No branches at all - for /(?(1)/ the marker should be right after the )
-            // condEnd is at the position of ), so condEnd + 1 is after it
-            regexError(s, condEnd + 1, "Switch (?(condition)... not terminated");
-        }
-
-        while (pos < length) {
-            char ch = s.charAt(pos);
-            if (ch == '(') {
-                parenDepth++;
-            } else if (ch == ')' && parenDepth == 0) {
-                // End of conditional
-                break;
-            } else if (ch == ')') {
-                parenDepth--;
-            } else if (ch == '|' && parenDepth == 0) {
-                pipeCount++;
-                if (pipeCount == 1) {
-                    pipePos = pos;
-                }
-                if (pipeCount > 1) {
-                    // Mark the error right after this pipe character
-                    regexError(s, pos + 1, "Switch (?(condition)... contains too many branches");
-                }
-            } else if (ch == '\\' && pos + 1 < length) {
-                pos++; // Skip escaped character
-            }
-            pos++;
-        }
-
-        if (pos >= length || s.charAt(pos) != ')') {
-            // The pattern ends without closing the conditional
-            regexError(s, pos, "Switch (?(condition)... not terminated");
-        }
-
-        String yesBranch = pipePos >= 0 ? s.substring(branchStart, pipePos) : s.substring(branchStart, pos);
-        String noBranch = pipePos >= 0 ? s.substring(pipePos + 1, pos) : "";
-
-        // Java has lookaround but no Perl conditional syntax. An assertion
-        // conditional can be expressed as two mutually exclusive alternations:
-        // (?(?=A)Y|N) -> (?:(?=A)Y|(?!A)N), with the inverse for (?!A).
-        // Run each branch recursively so nested assertion conditionals work too.
-        if (assertionCondition) {
-            String assertionBody = condition.substring(2);
-            boolean positive = condition.startsWith("?=");
-            sb.append("(?:").append(positive ? "(?=" : "(?!").append(assertionBody).append(")");
-            handleRegex(yesBranch, 0, sb, regexFlags, false);
-            if (pipePos >= 0) {
-                sb.append("|").append(positive ? "(?!" : "(?=").append(assertionBody).append(")");
-                handleRegex(noBranch, 0, sb, regexFlags, false);
-            }
-            sb.append(")");
-            return pos;
-        }
-
-        if (condition.matches("\\d+") && pipeCount == 0) {
-            sb.append("(?:");
-            handleRegex(yesBranch, 0, sb, regexFlags, false);
-            sb.append(")?");
-            return pos;
-        }
-
-        // Conditional patterns are not supported by Java regex
-        // (?(1)yes|no) means: if group 1 matched, use 'yes' branch, else use 'no' branch
-        // This is fundamentally different from alternation and cannot be converted
-
-        // Simple cases are transformed in transformSimpleConditionals()
-        // If we reach here, it's a complex case that couldn't be transformed
-
-        // Use regexUnimplemented so it can be caught with JPERL_UNIMPLEMENTED=warn
-        // Append a placeholder that won't match anything
-        sb.append("(?!)"); // Negative lookahead that always fails
-
-        regexUnimplemented(s, condStart - 1, "Conditional patterns (?(...)...) not implemented");
-
-        return pos;
-    }
 
     /**
      * Handle a potential quantifier starting with '{'.
@@ -2135,235 +1929,6 @@ public class RegexPreprocessor {
     }
 
 
-    /**
-     * Transform simple conditional patterns (?(N)yes|no) that can be converted to alternations.
-     * <p>
-     * Phase 1 implementation handles the common pattern: (group)?(?(N)yes|no)
-     * Transforms to: (?:(group)yes|no)
-     * <p>
-     * This works because:
-     * - If group matches: first alternative (group)yes is tried
-     * - If group doesn't match: second alternative no is tried
-     *
-     * @param pattern The regex pattern
-     * @return Transformed pattern with simple conditionals converted to alternations
-     */
-    private static String transformSimpleConditionals(String pattern) {
-        // For now, we'll handle the simplest case: (?)?(?(1)yes|no) or (?)?(?(1)yes)
-        // More complex transformations can be added later
-
-        // Pattern to match: (capture)? followed by (?(N)yes|no) or (?(N)yes)
-        // We need to be careful about nested parentheses and escapes
-
-        StringBuilder result = new StringBuilder();
-        int pos = 0;
-        int len = pattern.length();
-
-        while (pos < len) {
-            // Look for (?(digit)
-            int condStart = pattern.indexOf("(?(", pos);
-            if (condStart == -1) {
-                // No more conditionals
-                result.append(pattern.substring(pos));
-                break;
-            }
-
-            // Check if next char after (?( is a digit
-            if (condStart + 3 >= len || !Character.isDigit(pattern.charAt(condStart + 3))) {
-                // Not a simple numeric conditional, skip it
-                result.append(pattern, pos, condStart + 3);
-                pos = condStart + 3;
-                continue;
-            }
-
-            // Extract the group number
-            int digitEnd = condStart + 3;
-            while (digitEnd < len && Character.isDigit(pattern.charAt(digitEnd))) {
-                digitEnd++;
-            }
-
-            if (digitEnd >= len || pattern.charAt(digitEnd) != ')') {
-                // Invalid format, skip
-                result.append(pattern, pos, digitEnd);
-                pos = digitEnd;
-                continue;
-            }
-
-            int groupNum = Integer.parseInt(pattern.substring(condStart + 3, digitEnd));
-
-            // Now find the yes|no branches
-            // We need to find the matching ) for the conditional
-            int branchStart = digitEnd + 1; // After the ) of (?(N)
-            int parenDepth = 0;
-            int pipePos = -1;
-            int condEnd = branchStart;
-            boolean inCharClass = false;
-            boolean escaped = false;
-
-            while (condEnd < len) {
-                char ch = pattern.charAt(condEnd);
-
-                if (escaped) {
-                    escaped = false;
-                    condEnd++;
-                    continue;
-                }
-
-                if (ch == '\\') {
-                    escaped = true;
-                    condEnd++;
-                    continue;
-                }
-
-                if (inCharClass) {
-                    if (ch == ']') {
-                        inCharClass = false;
-                    }
-                    condEnd++;
-                    continue;
-                }
-
-                if (ch == '[') {
-                    inCharClass = true;
-                    condEnd++;
-                    continue;
-                }
-
-                if (ch == '(') {
-                    parenDepth++;
-                } else if (ch == ')') {
-                    if (parenDepth == 0) {
-                        // Found the end of conditional
-                        break;
-                    }
-                    parenDepth--;
-                } else if (ch == '|' && parenDepth == 0 && pipePos == -1) {
-                    pipePos = condEnd;
-                }
-
-                condEnd++;
-            }
-
-            if (condEnd >= len) {
-                // Unterminated conditional, let normal error handling catch it
-                result.append(pattern.substring(pos));
-                break;
-            }
-
-            // Extract yes and no branches
-            String yesBranch = pipePos > 0 ? pattern.substring(branchStart, pipePos) : pattern.substring(branchStart, condEnd);
-            String noBranch = pipePos > 0 ? pattern.substring(pipePos + 1, condEnd) : "";
-
-            // Now try to find the referenced group BEFORE this conditional
-            // For simplicity in Phase 1, we only handle if the group appears immediately before
-            // or with simple pattern between (like literals)
-
-            // Look backwards for group N
-            // Count groups from the start to condStart
-            int groupCount = 0;
-            int groupNStart = -1;
-            int groupNEnd = -1;
-            int searchPos = 0;
-            int depth = 0;
-            boolean isOptional = false;
-
-            while (searchPos < condStart) {
-                char ch = pattern.charAt(searchPos);
-
-                if (ch == '\\') {
-                    searchPos += 2; // Skip escaped char
-                    continue;
-                }
-
-                if (ch == '(') {
-                    // Check if it's a capturing group
-                    if (searchPos + 1 < condStart && pattern.charAt(searchPos + 1) != '?') {
-                        // It's a capturing group
-                        groupCount++;
-                        if (groupCount == groupNum) {
-                            groupNStart = searchPos;
-                            // Find the end of this group
-                            depth = 1;
-                            int endPos = searchPos + 1;
-                            while (endPos < condStart && depth > 0) {
-                                char c = pattern.charAt(endPos);
-                                if (c == '\\') {
-                                    endPos += 2;
-                                    continue;
-                                }
-                                if (c == '(') depth++;
-                                if (c == ')') depth--;
-                                endPos++;
-                            }
-                            groupNEnd = endPos;
-
-                            // Check if followed by ? or * or {0,
-                            if (groupNEnd < condStart) {
-                                char next = pattern.charAt(groupNEnd);
-                                if (next == '?' || next == '*') {
-                                    isOptional = true;
-                                } else if (next == '{') {
-                                    // Check for {0,n}
-                                    int closePos = pattern.indexOf('}', groupNEnd);
-                                    if (closePos > 0 && closePos < condStart) {
-                                        String quant = pattern.substring(groupNEnd + 1, closePos);
-                                        if (quant.startsWith("0,")) {
-                                            isOptional = true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                searchPos++;
-            }
-
-            // Only transform if we found the group and it's optional and appears directly before the conditional
-            if (groupNStart >= 0 && isOptional) {
-                // Check if there's only simple content between group and conditional
-                String between = pattern.substring(groupNEnd + 1, condStart); // +1 to skip the ? or * after group
-
-                // For Phase 1, only transform if:
-                // 1. The group is immediately before conditional OR
-                // 2. There's only simple literal text between
-                boolean canTransform = between.isEmpty() || between.matches("[a-zA-Z0-9\\s\\^\\$]+");
-
-                if (canTransform) {
-                    // Perform transformation!
-                    // Append everything before the group
-                    result.append(pattern, pos, groupNStart);
-
-                    // Build the alternation: (?:(group)between+yes|between+no)
-                    result.append("(?:");
-
-                    // First alternative: group+between+yes
-                    result.append(pattern, groupNStart, groupNEnd); // The group itself (without the ? or *)
-                    result.append(between);
-                    result.append(yesBranch);
-
-                    // Second alternative: between+no
-                    // Always add second alternative (even if noBranch is empty)
-                    // Empty noBranch means "match nothing" when group doesn't match
-                    result.append("|");
-                    result.append(between);
-                    result.append(noBranch);
-
-                    result.append(")");
-
-                    // Continue after the conditional
-                    pos = condEnd + 1;
-                    continue;
-                }
-            }
-
-            // Could not transform, keep original
-            result.append(pattern, pos, condEnd + 1);
-            pos = condEnd + 1;
-        }
-
-        return result.toString();
-    }
 
     /**
      * Handles (?{...}) code blocks in regex patterns.

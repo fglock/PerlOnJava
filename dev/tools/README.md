@@ -132,6 +132,53 @@ By default it creates a separate worktree under `/tmp`, runs `git bisect --first
 
 ## Code Generation/Templates
 
+### Perl Unicode Java data
+
+`generate_perl_unicode_data.pl` is the single development entry point for all
+checked-in Perl-derived Unicode Java tables, including the runtime
+`PerlUnicode*Data.java` families and Joni's `PerlUnicodeCaseFoldData.java`. Its
+manifest records the pinned Perl 5.44 commit, Unicode version, unicore and Perl
+generator-source SHA-256 checksums, generator/output mapping, and expected
+generated SHA-256 checksums. Each selected generator is run twice; publication
+is rejected if the two byte streams differ or if the pinned output checksum
+changes.
+
+The complete family requires a checkout of pinned Perl commit
+`de80c8ecd40c6d5b677847699e5482b44bc748c6` at `perl5/`. Explicit unicore and
+Perl roots can be supplied when the checkout lives elsewhere:
+
+```bash
+# Regenerate every checked-in class with atomic per-file publication.
+perl dev/tools/generate_perl_unicode_data.pl
+
+# CI/review gate: fail if any source pin or generated file is stale.
+perl dev/tools/generate_perl_unicode_data.pl --check
+
+# Inspect or update one family while developing a generator.
+perl dev/tools/generate_perl_unicode_data.pl --list
+perl dev/tools/generate_perl_unicode_data.pl --only block
+perl dev/tools/generate_perl_unicode_data.pl \
+  --unicode-root /path/to/perl5/lib/unicore \
+  --perl-root /path/to/perl5 --check
+
+# Regenerate or check only the default Unicode case-fold relation.
+perl dev/tools/generate_perl_unicode_data.pl --only case-fold
+perl dev/tools/generate_perl_unicode_data.pl --only case-fold --check
+```
+
+The case-fold table is data-only. It records default C+F full folds, C+S simple
+equivalence closures, reverse multi-character folds, their components, and the
+two excluded Turkic source records. Perl mode policy for `/d`, `/u`, `/a`,
+`/aa`, byte/Unicode provenance, locale behavior, and ASCII-crossing eligibility
+remains hand-written in the Joni integration and is deliberately not generated.
+
+The shared parsing and provenance helpers live in
+`lib/PerlOnJava/UnicodeGenerator.pm`; the complete inventory is
+`perl_unicode_data_generators.json`. Individual generators remain directly
+executable for focused development and emit Java source on standard output.
+The orchestrator alone owns deterministic double generation, fail-closed
+source/output checksum validation, stale-output checking, and atomic updates.
+
 ### automatic_operator_descriptor.java
 **Purpose:** Template for automatic operator descriptors.
 

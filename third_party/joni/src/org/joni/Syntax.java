@@ -33,6 +33,7 @@ public final class Syntax implements SyntaxProperties {
     public final MetaCharTable metaCharTable;
     public final NamedCharacterResolver namedCharacterResolver;
     public final CharacterPropertyResolver characterPropertyResolver;
+    public final WideScalarCodec wideScalarCodec;
 
     public Syntax(String name, int op, int op2, int op3, int behavior, int options, MetaCharTable metaCharTable) {
         this(name, op, op2, op3, behavior, options, metaCharTable, null);
@@ -49,6 +50,15 @@ public final class Syntax implements SyntaxProperties {
                   MetaCharTable metaCharTable,
                   NamedCharacterResolver namedCharacterResolver,
                   CharacterPropertyResolver characterPropertyResolver) {
+        this(name, op, op2, op3, behavior, options, metaCharTable,
+                namedCharacterResolver, characterPropertyResolver, null);
+    }
+
+    public Syntax(String name, int op, int op2, int op3, int behavior, int options,
+                  MetaCharTable metaCharTable,
+                  NamedCharacterResolver namedCharacterResolver,
+                  CharacterPropertyResolver characterPropertyResolver,
+                  WideScalarCodec wideScalarCodec) {
         this.name = name;
         this.op = op;
         this.op2 = op2;
@@ -58,6 +68,7 @@ public final class Syntax implements SyntaxProperties {
         this.metaCharTable = metaCharTable;
         this.namedCharacterResolver = namedCharacterResolver;
         this.characterPropertyResolver = characterPropertyResolver;
+        this.wideScalarCodec = wideScalarCodec;
     }
 
     public static class MetaCharTable {

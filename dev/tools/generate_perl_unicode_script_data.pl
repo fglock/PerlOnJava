@@ -1,13 +1,21 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    emit_java_range_triples emit_unicode_source_notices loose_name parse_range
+    read_pinned_source read_unicode_version repo_root select_unicode_root trim
+);
 
 my $expected_version = '17.0.0';
-my $root = File::Spec->catdir($FindBin::Bin, '..', '..');
-my $unicore = File::Spec->catdir($root, 'perl5', 'lib', 'unicore');
+my $root = repo_root($FindBin::Bin);
+my $unicore = select_unicode_root(
+    repo_root => $root,
+    version => $expected_version,
+    required => [qw(version Scripts.txt ScriptExtensions.txt PropValueAliases.txt PropertyAliases.txt)],
+);
 my @sources = (
     {
         name => 'Scripts-17.0.0.txt',
@@ -37,46 +45,15 @@ my @sources = (
 
 sub read_source {
     my ($source) = @_;
-    open my $input, '<:raw', $source->{path}
-        or die "Cannot read $source->{path}: $!\n";
-    local $/;
-    my $text = <$input>;
-    close $input or die "Cannot close $source->{path}: $!\n";
-    my $actual_hash = sha256_hex($text);
-    die "$source->{path} SHA-256 mismatch: expected $source->{hash}, found $actual_hash\n"
-        unless $actual_hash eq $source->{hash};
-    die "$source->{path} is not pinned Unicode $expected_version data\n"
-        unless $text =~ $source->{version};
-    $source->{text} = $text;
-}
-
-sub trim {
-    my ($text) = @_;
-    $text =~ s/^\s+|\s+$//g;
-    return $text;
-}
-
-sub loose_name {
-    my ($name) = @_;
-    $name = lc $name;
-    $name =~ s/[\s_-]+//g;
-    return $name;
-}
-
-sub parse_range {
-    my ($text) = @_;
-    my ($start, $end) = split /\.\./, $text;
-    return (hex($start), hex(defined $end ? $end : $start));
+    $source->{text} = read_pinned_source(
+        path => $source->{path}, sha256 => $source->{hash},
+        version_pattern => $source->{version}, unicode_version => $expected_version);
 }
 
 read_source($_) for @sources;
 
-my $version_path = File::Spec->catfile($unicore, 'version');
-open my $version_input, '<', $version_path or die "Cannot read $version_path: $!\n";
-chomp(my $unicode_version = <$version_input>);
-close $version_input or die "Cannot close $version_path: $!\n";
-die "Expected Unicode $expected_version, found $unicode_version\n"
-    unless $unicode_version eq $expected_version;
+my $unicode_version = read_unicode_version(
+    path => File::Spec->catfile($unicore, 'version'), expected => $expected_version);
 
 my (@short_values, @long_values, %alias_index, %wildcard_value_index);
 for my $line (split /\n/, $sources[2]{text}) {
@@ -198,15 +175,7 @@ print <<'HEADER';
  * Generated from Perl 5.44's pinned Unicode Character Database. Do not edit manually.
  *
 HEADER
-for my $source (@sources) {
-    print " * Source: $source->{name}\n";
-    for my $line (split /\n/, $source->{text}) {
-        next unless $line =~ /^# (?:©|Unicode and|the U\.S\.|For terms of use and license)/;
-        $line =~ s/^# / * /;
-        print "$line\n";
-    }
-    print " *\n";
-}
+emit_unicode_source_notices(\@sources);
 print <<'HEADER_END';
  */
 package org.perlonjava.runtime.regex;
@@ -252,12 +221,7 @@ print join(', ', map { qq{\"$_\"} } @script_extensions_property_aliases);
 print "\n    };\n\n";
 
 print "    private static final int[] SCRIPT_RANGES = {\n";
-for (my $i = 0; $i < @script_ranges; $i += 4) {
-    my $end = $i + 3 < $#script_ranges ? $i + 3 : $#script_ranges;
-    print "        ", join(', ', map {
-        sprintf '0x%X, 0x%X, %d', @{$script_ranges[$_]}[0, 1, 2]
-    } $i .. $end), ",\n";
-}
+emit_java_range_triples(\@script_ranges);
 print "    };\n\n";
 
 print "    private static final int[] SCRIPT_EXTENSIONS_RANGES = {\n";

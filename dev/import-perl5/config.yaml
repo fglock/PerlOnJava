@@ -114,6 +114,10 @@ imports:
     target: dev/unicode/17.0.0/PropValueAliases.txt
     type: file
 
+  - source: perl5/lib/unicore/Unikemet.txt
+    target: dev/unicode/17.0.0/Unikemet.txt
+    type: file
+
   - source: perl5/lib/unicore/extracted/DDecompositionType.txt
     target: dev/unicode/17.0.0/extracted/DDecompositionType.txt
     type: file

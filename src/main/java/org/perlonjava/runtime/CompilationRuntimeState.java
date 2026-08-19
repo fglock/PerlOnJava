@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class CompilationRuntimeState {
     public final Deque<Map<String, RuntimeScalar>> hintCompileTimeStack = new ArrayDeque<>();
     public final Map<Integer, Map<String, String>> hintSnapshots = new ConcurrentHashMap<>();
+    public final Map<Integer, Map<String, RuntimeScalar>> hintScalarSnapshots = new ConcurrentHashMap<>();
     public final AtomicInteger nextHintSnapshotId = new AtomicInteger();
     public int callSiteHintHashId;
     public final Deque<Integer> callerHintHashIdStack = new ArrayDeque<>();
@@ -62,6 +63,7 @@ public final class CompilationRuntimeState {
     public void clear() {
         hintCompileTimeStack.clear();
         hintSnapshots.clear();
+        hintScalarSnapshots.clear();
         nextHintSnapshotId.set(0);
         callSiteHintHashId = 0;
         callerHintHashIdStack.clear();

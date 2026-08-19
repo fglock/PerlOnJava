@@ -6693,6 +6693,12 @@ public class BytecodeCompiler implements Visitor {
                 patchJump(pc2, endPc);
             }
 
+            Object postBlockHintHashId = node.getAnnotation("postBlockHintHashId");
+            if (postBlockHintHashId instanceof Integer hintHashId) {
+                emit(Opcodes.SET_CALL_SITE_HINT_HASH);
+                emit(hintHashId);
+            }
+
             lastResultReg = outerResultReg;
             return;
         }

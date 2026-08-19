@@ -1,9 +1,13 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Digest::SHA qw(sha256_hex);
+use File::Spec;
+use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    emit_java_range_triples read_pinned_source read_unicode_version repo_root select_unicode_root
+);
 
-my $unicode_root = 'perl5/lib/unicore';
 my $expected_unicode_version = '17.0.0';
 my %expected_hash = (
     'extracted/DCombiningClass.txt' =>
@@ -11,25 +15,18 @@ my %expected_hash = (
     'PropValueAliases.txt' =>
         '670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01',
 );
+my $unicode_root = select_unicode_root(
+    repo_root => repo_root($FindBin::Bin), version => $expected_unicode_version,
+    required => [qw(version PropValueAliases.txt), File::Spec->catfile('extracted', 'DCombiningClass.txt')]);
 
-open my $version_fh, '<', "$unicode_root/version"
-    or die "Can't read Unicode version: $!\n";
-chomp(my $unicode_version = <$version_fh>);
-close $version_fh;
-die "Expected Unicode $expected_unicode_version, found $unicode_version\n"
-    unless $unicode_version eq $expected_unicode_version;
+my $unicode_version = read_unicode_version(
+    path => File::Spec->catfile($unicode_root, 'version'), expected => $expected_unicode_version,
+    sha256 => '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac');
 
 sub read_pinned_file {
     my ($relative) = @_;
-    my $path = "$unicode_root/$relative";
-    open my $fh, '<:raw', $path or die "Can't read $path: $!\n";
-    local $/;
-    my $text = <$fh>;
-    close $fh;
-    my $actual = sha256_hex($text);
-    die "$path SHA-256 mismatch: expected $expected_hash{$relative}, found $actual\n"
-        unless $actual eq $expected_hash{$relative};
-    return $text;
+    my $path = File::Spec->catfile($unicode_root, split m{/}, $relative);
+    return read_pinned_source(path => $path, sha256 => $expected_hash{$relative});
 }
 
 sub normalized_alias {
@@ -129,12 +126,7 @@ for my $chunk (0 .. $range_chunk_count - 1) {
     $last = $#ranges if $last > $#ranges;
     print "    private static int[] rangeChunk$chunk() {\n";
     print "        return new int[] {\n";
-    for (my $i = $first; $i <= $last; $i += 4) {
-        my $end = $i + 3 < $last ? $i + 3 : $last;
-        print "            ", join(', ', map {
-            sprintf '0x%X, 0x%X, %d', @{$ranges[$_]}[0, 1, 2]
-        } $i .. $end), ",\n";
-    }
+    emit_java_range_triples([@ranges[$first .. $last]], indent => '            ');
     print "        };\n";
     print "    }\n\n";
 }

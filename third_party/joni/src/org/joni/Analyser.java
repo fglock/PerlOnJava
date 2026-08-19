@@ -35,6 +35,7 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 import java.util.IllegalFormatConversionException;
 
 import org.jcodings.CaseFoldCodeItem;
+import org.jcodings.Encoding;
 import org.jcodings.ObjPtr;
 import org.jcodings.Ptr;
 import org.jcodings.constants.CharacterType;
@@ -1062,7 +1063,12 @@ final class Analyser extends Parser {
             AnchorNode an = (AnchorNode)node;
             if ((an.type & anchorMask) == 0) return true;
 
-            if (an.target != null) invalid = checkTypeTree(an.target, typeMask, encloseMask, anchorMask);
+            boolean perlLookAhead = syntax.op2OptionPerl()
+                    && (an.type == AnchorType.PREC_READ
+                            || an.type == AnchorType.PREC_READ_NOT);
+            if (!perlLookAhead && an.target != null) {
+                invalid = checkTypeTree(an.target, typeMask, encloseMask, anchorMask);
+            }
             break;
 
         default:
@@ -1306,11 +1312,15 @@ final class Analyser extends Parser {
     }
 
     private void setCallAttr(CallNode cn) {
-        EncloseNode en = env.memNodes[cn.groupNum];
+        EncloseNode en = cn.lexicalTarget != null
+                ? cn.lexicalTarget
+                : env.memNodes[cn.groupNum];
         if (en == null) newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
         // Perl subroutine calls do not replace captures already visible in the
         // caller. Reused branch-reset numbers need the existing snapshot path.
-        if (env.isMultiplexMemNode(cn.groupNum)) cn.setRecursion();
+        if (cn.lexicalTarget == null && env.isMultiplexMemNode(cn.groupNum)) {
+            cn.setRecursion();
+        }
         en.setCalled();
         cn.setTarget(en);
         env.btMemStart = BitStatus.bsOnAt(env.btMemStart, cn.groupNum);
@@ -1437,13 +1447,42 @@ final class Analyser extends Parser {
     }
 
     private Node setupLookBehind(AnchorNode node) {
+        AcceptLengthInfo acceptLengths = node.type == AnchorType.LOOK_BEHIND
+                ? getAcceptLengthInfo(node.target) : null;
+        if (acceptLengths != null && acceptLengths.hasAccept()) {
+            int min = acceptLengths.acceptMin;
+            int max = acceptLengths.acceptMax;
+            if (acceptLengths.hasNormal()) {
+                min = Math.min(min, acceptLengths.normalMin);
+                max = Math.max(max, acceptLengths.normalMax);
+            }
+            if (syntax.op2OptionPerl() && max > 255) {
+                newSyntaxException(PERL_LOOK_BEHIND_LONGER_THAN_255);
+            }
+            if (max <= 255) {
+                node.variableLookBehindMin = min;
+                node.variableLookBehindMax = max;
+                node.variableLookBehindTargetLength = -1;
+                returnCode = 0;
+                return node;
+            }
+        }
+
         int len = getCharLengthTree(node.target);
         switch(returnCode) {
         case 0:
+            if (syntax.op2OptionPerl() && len > 255) {
+                newSyntaxException(PERL_LOOK_BEHIND_LONGER_THAN_255);
+            }
             node.charLength = len;
             break;
         case GET_CHAR_LEN_VARLEN:
             if (!setupBoundedQuantifierLookBehind(node)) {
+                CharLengthRange range = syntax.op2OptionPerl()
+                        ? getCharLengthRange(node.target) : null;
+                if (syntax.op2OptionPerl() && (range == null || range.max > 255)) {
+                    newSyntaxException(PERL_LOOK_BEHIND_LONGER_THAN_255);
+                }
                 newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
             }
             break;
@@ -1491,6 +1530,137 @@ final class Analyser extends Parser {
         CharLengthRange(int min, int max) {
             this.min = min;
             this.max = max;
+        }
+    }
+
+    /**
+     * Character widths for paths that complete normally and paths terminated
+     * by ACCEPT. ACCEPT is a matcher-boundary exit, so nodes after it in a list
+     * do not contribute to that path's effective lookbehind width.
+     */
+    private static final class AcceptLengthInfo {
+        int normalMin = MinMaxLen.INFINITE_DISTANCE;
+        int normalMax;
+        int acceptMin = MinMaxLen.INFINITE_DISTANCE;
+        int acceptMax;
+
+        boolean hasNormal() {
+            return normalMin != MinMaxLen.INFINITE_DISTANCE;
+        }
+
+        boolean hasAccept() {
+            return acceptMin != MinMaxLen.INFINITE_DISTANCE;
+        }
+
+        void addNormal(int min, int max) {
+            normalMin = Math.min(normalMin, min);
+            normalMax = Math.max(normalMax, max);
+        }
+
+        void addAccept(int min, int max) {
+            acceptMin = Math.min(acceptMin, min);
+            acceptMax = Math.max(acceptMax, max);
+        }
+    }
+
+    private AcceptLengthInfo getAcceptLengthInfo(Node node) {
+        if (node instanceof ControlVerbNode control) {
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            if (control.kind == ControlVerbNode.Kind.ACCEPT) info.addAccept(0, 0);
+            else info.addNormal(0, 0);
+            return info;
+        }
+        if (node instanceof CalloutNode) return null;
+
+        switch (node.getType()) {
+        case NodeType.LIST: {
+            AcceptLengthInfo result = new AcceptLengthInfo();
+            result.addNormal(0, 0);
+            ListNode list = (ListNode)node;
+            do {
+                AcceptLengthInfo item = getAcceptLengthInfo(list.value);
+                if (item == null) return null;
+                AcceptLengthInfo next = new AcceptLengthInfo();
+                if (result.hasAccept()) {
+                    next.addAccept(result.acceptMin, result.acceptMax);
+                }
+                if (result.hasNormal() && item.hasAccept()) {
+                    next.addAccept(
+                            MinMaxLen.distanceAdd(result.normalMin, item.acceptMin),
+                            MinMaxLen.distanceAdd(result.normalMax, item.acceptMax));
+                }
+                if (result.hasNormal() && item.hasNormal()) {
+                    next.addNormal(
+                            MinMaxLen.distanceAdd(result.normalMin, item.normalMin),
+                            MinMaxLen.distanceAdd(result.normalMax, item.normalMax));
+                }
+                result = next;
+            } while ((list = list.tail) != null);
+            return result;
+        }
+        case NodeType.ALT: {
+            AcceptLengthInfo result = new AcceptLengthInfo();
+            ListNode alt = (ListNode)node;
+            do {
+                AcceptLengthInfo branch = getAcceptLengthInfo(alt.value);
+                if (branch == null) return null;
+                if (branch.hasNormal()) result.addNormal(branch.normalMin, branch.normalMax);
+                if (branch.hasAccept()) result.addAccept(branch.acceptMin, branch.acceptMax);
+            } while ((alt = alt.tail) != null);
+            return result;
+        }
+        case NodeType.STR: {
+            int length = ((StringNode)node).length(enc);
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            info.addNormal(length, length);
+            return info;
+        }
+        case NodeType.CTYPE:
+        case NodeType.CCLASS:
+        case NodeType.CANY: {
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            info.addNormal(1, 1);
+            return info;
+        }
+        case NodeType.QTFR: {
+            QuantifierNode quantifier = (QuantifierNode)node;
+            if (isRepeatInfinite(quantifier.upper)) return null;
+            AcceptLengthInfo target = getAcceptLengthInfo(quantifier.target);
+            if (target == null) return null;
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            if (target.hasNormal()) {
+                info.addNormal(
+                        MinMaxLen.distanceMultiply(target.normalMin, quantifier.lower),
+                        MinMaxLen.distanceMultiply(target.normalMax, quantifier.upper));
+            } else if (quantifier.lower == 0) {
+                info.addNormal(0, 0);
+            }
+            if (target.hasAccept() && quantifier.upper > 0) {
+                int repeatsBeforeAccept = target.hasNormal() ? quantifier.upper - 1 : 0;
+                info.addAccept(target.acceptMin,
+                        MinMaxLen.distanceAdd(
+                                MinMaxLen.distanceMultiply(target.normalMax, repeatsBeforeAccept),
+                                target.acceptMax));
+            }
+            return info;
+        }
+        case NodeType.ENCLOSE: {
+            EncloseNode enclose = (EncloseNode)node;
+            if (enclose.type == EncloseType.ABSENT) return null;
+            return getAcceptLengthInfo(enclose.target);
+        }
+        case NodeType.ANCHOR: {
+            // Nested assertions are their own ACCEPT boundary.
+            AcceptLengthInfo info = new AcceptLengthInfo();
+            info.addNormal(0, 0);
+            return info;
+        }
+        case NodeType.CALL:
+            // Subexpression calls are their own ACCEPT boundary; their
+            // effective consumed width needs call-specific analysis.
+            return null;
+        default:
+            return null;
         }
     }
 
@@ -1737,6 +1907,85 @@ final class Analyser extends Parser {
 
     private static final int THRESHOLD_CASE_FOLD_ALT_FOR_EXPANSION = 8;
 
+    private boolean perlAsciiStrictSourceCrossesIntoAscii(byte[] bytes, int p, int end,
+                                                           int codePoint) {
+        if (Encoding.isAscii(codePoint)) return false;
+
+        int firstEnd = p + enc.length(bytes, p, end);
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlag, bytes, p, end);
+        for (CaseFoldCodeItem item : items) {
+            for (int foldedCodePoint : item.code) {
+                if (Encoding.isAscii(foldedCodePoint)) return true;
+            }
+            int itemEnd = p + item.byteLen;
+            if (itemEnd > firstEnd && itemEnd <= end
+                    && !perlAsciiStrictAllNonAscii(bytes, p, itemEnd)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Node perlAsciiStrictProtectedFoldNode(byte[] bytes, int p, int end) {
+        StringNode exact = new StringNode(bytes, p, end);
+        exact.setRaw();
+        ListNode alternatives = newAlt(exact, null);
+        ListNode tail = alternatives;
+
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlag, bytes, p, end);
+        for (CaseFoldCodeItem item : items) {
+            if (item.byteLen != end - p) continue;
+            boolean allNonAscii = true;
+            for (int foldedCodePoint : item.code) {
+                if (Encoding.isAscii(foldedCodePoint)) {
+                    allNonAscii = false;
+                    break;
+                }
+            }
+            if (!allNonAscii) continue;
+
+            StringNode folded = new StringNode();
+            for (int foldedCodePoint : item.code) folded.catCode(foldedCodePoint, enc);
+            folded.setRaw();
+            ListNode alternative = newAlt(folded, null);
+            tail.setTail(alternative);
+            tail = alternative;
+        }
+        return alternatives.tail == null ? exact : alternatives;
+    }
+
+    private boolean perlAsciiStrictAllNonAscii(byte[] bytes, int p, int end) {
+        while (p < end) {
+            if (Encoding.isAscii(enc.mbcToCode(bytes, p, end))) return false;
+            p += enc.length(bytes, p, end);
+        }
+        return true;
+    }
+
+    private int perlAsciiStrictSafeMultiSourceEnd(byte[] bytes, int p, int end,
+                                                   int singleEnd) {
+        int safeEnd = singleEnd;
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlag, bytes, p, end);
+        for (CaseFoldCodeItem item : items) {
+            int itemEnd = p + item.byteLen;
+            if (itemEnd <= singleEnd || itemEnd > end ||
+                    !perlAsciiStrictAllNonAscii(bytes, p, itemEnd)) continue;
+
+            boolean allNonAscii = true;
+            for (int foldedCodePoint : item.code) {
+                if (Encoding.isAscii(foldedCodePoint)) {
+                    allNonAscii = false;
+                    break;
+                }
+            }
+            if (allNonAscii && itemEnd > safeEnd) safeEnd = itemEnd;
+        }
+        return safeEnd;
+    }
+
     private Node protectPerlAsciiStrictCrossings(StringNode source, int state) {
         byte[] bytes = source.bytes;
         int segmentStart = source.p;
@@ -1747,7 +1996,10 @@ final class Analyser extends Parser {
         while (p < source.end) {
             int codePoint = enc.mbcToCode(bytes, p, source.end);
             int next = p + enc.length(bytes, p, source.end);
-            if (codePoint == 0x017f || codePoint == 0x212a) {
+            if (perlAsciiStrictSourceCrossesIntoAscii(
+                    bytes, p, source.end, codePoint)) {
+                next = perlAsciiStrictSafeMultiSourceEnd(
+                        bytes, p, source.end, next);
                 if (segmentStart < p) {
                     ListNode segment = ListNode.newList(
                             new StringNode(bytes, segmentStart, p), null);
@@ -1756,9 +2008,8 @@ final class Analyser extends Parser {
                     tail = segment;
                 }
 
-                StringNode exact = new StringNode(bytes, p, next);
-                exact.setRaw();
-                ListNode segment = ListNode.newList(exact, null);
+                ListNode segment = ListNode.newList(
+                        perlAsciiStrictProtectedFoldNode(bytes, p, next), null);
                 if (root == null) root = segment;
                 else tail.setTail(segment);
                 tail = segment;
@@ -1860,6 +2111,42 @@ final class Analyser extends Parser {
 
         node.replaceWith(xnode);
         return xnode;
+    }
+
+    private boolean isUnsafePerlMultiFoldOptimizationBoundary(StringNode node) {
+        if (!syntax.op2OptionPerl() || node.length() == 0) return false;
+
+        int first = enc.mbcToCode(node.bytes, node.p, node.end);
+        if (PerlCaseFold.isMultiFoldComponent(first)) return true;
+
+        int last = node.p;
+        int p = node.p;
+        while (p < node.end) {
+            last = p;
+            p += enc.length(node.bytes, p, node.end);
+        }
+        return PerlCaseFold.isMultiFoldComponent(
+                enc.mbcToCode(node.bytes, last, node.end));
+    }
+
+    private void disableUnsafePerlMultiFoldOptimization(Node node) {
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            ListNode list = (ListNode)node;
+            do {
+                disableUnsafePerlMultiFoldOptimization(list.value);
+            } while ((list = list.tail) != null);
+            break;
+        case NodeType.STR:
+            StringNode string = (StringNode)node;
+            if (isUnsafePerlMultiFoldOptimizationBoundary(string)) {
+                string.setDontGetOptInfo();
+            }
+            break;
+        default:
+            break;
+        }
     }
 
     private static final int CEC_THRES_NUM_BIG_REPEAT       = 512;
@@ -2033,6 +2320,7 @@ final class Analyser extends Parser {
                 } else {
                     node = expandCaseFoldString(node);
                 }
+                disableUnsafePerlMultiFoldOptimization(node);
             }
             break;
 
@@ -2065,10 +2353,20 @@ final class Analyser extends Parser {
             QuantifierNode qn = (QuantifierNode)node;
             Node target = qn.target;
 
+            int perlTargetMin = -1;
+            if (syntax.op2OptionPerl() && qn.isByNumber()
+                    && target.getType() == NodeType.CALL) {
+                perlTargetMin = getMinMatchLength(target);
+                if (perlTargetMin == 0) {
+                    perlSyntaxWarn(PERL_QUANTIFIER_ON_ZERO_LENGTH);
+                }
+            }
+
             if ((state & IN_REPEAT) != 0) qn.setInRepeat();
 
             if (isRepeatInfinite(qn.upper) || qn.lower >= 1) {
-                int d = getMinMatchLength(target);
+                int d = perlTargetMin >= 0
+                        ? perlTargetMin : getMinMatchLength(target);
                 if (d == 0) {
                     qn.targetEmptyInfo = TargetInfo.IS_EMPTY;
                     if (Config.USE_MONOMANIAC_CHECK_CAPTURES_IN_ENDLESS_REPEAT) {

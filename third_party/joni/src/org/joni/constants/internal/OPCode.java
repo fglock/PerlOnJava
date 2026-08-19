@@ -164,6 +164,9 @@ public interface OPCode {
     int NOT_LINE_BOUNDARY             = 120;          /* Perl \B{lb} */
     int PHYSICAL_NAMED_CAPTURE_START  = 121;
     int PHYSICAL_NAMED_CAPTURE_END    = 122;
+    int WIDE_SCALAR                   = 123;
+    int WIDE_SCALAR_CLASS             = 124;
+    int PUSH_BRANCH                   = 125;          /* push a syntactic alternation branch */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -290,6 +293,9 @@ public interface OPCode {
         "not-line-boundary", /*OP_NOT_LINE_BOUNDARY*/
         "physical-named-capture-start",
         "physical-named-capture-end",
+        "wide-scalar",
+        "wide-scalar-class",
+        "push-branch",
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -417,5 +423,8 @@ public interface OPCode {
         Arguments.NON, /*OP_NOT_LINE_BOUNDARY*/
         Arguments.MEMNUM, /*OP_PHYSICAL_NAMED_CAPTURE_START*/
         Arguments.MEMNUM, /*OP_PHYSICAL_NAMED_CAPTURE_END*/
+        Arguments.SPECIAL, /*OP_WIDE_SCALAR*/
+        Arguments.MEMNUM, /*OP_WIDE_SCALAR_CLASS*/
+        Arguments.RELADDR, /*OP_PUSH_BRANCH*/
     } : null;
 }

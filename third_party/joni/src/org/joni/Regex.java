@@ -35,6 +35,7 @@ import org.jcodings.specific.ASCIIEncoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.jcodings.util.BytesHash;
 import org.joni.constants.internal.AnchorType;
+import org.joni.ast.CClassNode;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
 import org.joni.exception.ValueException;
@@ -92,6 +93,8 @@ public final class Regex {
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
     String[] controlVerbLabels;
+    CClassNode[] wideScalarClasses;
+    final WideScalarCodec wideScalarCodec;
 
     private static final Encoding DEFAULT_ENCODING;
     static {
@@ -170,6 +173,7 @@ public final class Regex {
         }
 
         this.enc = enc;
+        this.wideScalarCodec = syntax.wideScalarCodec;
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;
         new Analyser(this, syntax, bytes, p, end, warnings).compile();
@@ -207,6 +211,18 @@ public final class Regex {
 
     public int numberOfCaptures() {
         return numMem;
+    }
+
+    /**
+     * Whether every compiled character class explicitly defines its signed-wide
+     * domain, with at least one such class present.
+     */
+    public boolean hasOnlyAuthoritativeWideCharacterClasses() {
+        if (wideScalarClasses == null || wideScalarClasses.length == 0) return false;
+        for (CClassNode characterClass : wideScalarClasses) {
+            if (!characterClass.hasAuthoritativeWideDomain()) return false;
+        }
+        return true;
     }
 
     public int numberOfCaptureHistories() {

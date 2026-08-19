@@ -398,6 +398,30 @@ public class SystemOperator {
     }
 
     /**
+     * Preserve the portable single-quoted argv idiom used by Perl test commands
+     * before handing a one-string command to cmd.exe, where apostrophes are not
+     * quoting characters. Shell operators outside the quotes remain untouched.
+     */
+    static String normalizeWindowsShellSingleQuotes(String command) {
+        StringBuilder normalized = new StringBuilder(command.length());
+        boolean doubleQuoted = false;
+        boolean singleQuoted = false;
+        for (int i = 0; i < command.length(); i++) {
+            char ch = command.charAt(i);
+            if (ch == '"' && !singleQuoted) {
+                doubleQuoted = !doubleQuoted;
+                normalized.append(ch);
+            } else if (ch == '\'' && !doubleQuoted) {
+                singleQuoted = !singleQuoted;
+                normalized.append('"');
+            } else {
+                normalized.append(ch);
+            }
+        }
+        return singleQuoted ? command : normalized.toString();
+    }
+
+    /**
      * Java's ProcessBuilder does not reliably perform execvp-style PATH lookup
      * for argv-list commands. Perl's system LIST, exec LIST, and simple qx// do.
      */
@@ -653,7 +677,8 @@ public class SystemOperator {
             String[] shellCommand;
             if (SystemUtils.osIsWindows()) {
                 // Windows
-                shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c", command};
+                shellCommand = new String[]{"cmd.exe", "/d", "/s", "/c",
+                        normalizeWindowsShellSingleQuotes(command)};
             } else {
                 // Unix-like (Linux, macOS)
                 shellCommand = new String[]{"/bin/sh", "-c", command};

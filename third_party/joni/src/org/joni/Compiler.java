@@ -32,6 +32,7 @@ import org.joni.ast.EncloseNode;
 import org.joni.ast.Node;
 import org.joni.ast.QuantifierNode;
 import org.joni.ast.StringNode;
+import org.joni.ast.WideScalarNode;
 import org.joni.constants.internal.NodeType;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
@@ -96,6 +97,7 @@ abstract class Compiler implements ErrorMessages {
     protected abstract void addCompileString(byte[]bytes, int p, int mbLength, int strLength, boolean ignoreCase);
 
     protected abstract void compileCClassNode(CClassNode node);
+    protected abstract void compileWideScalarNode(WideScalarNode node);
     protected abstract void compileCTypeNode(CTypeNode node);
     protected abstract void compileAnyCharNode();
     protected abstract void compileCallNode(CallNode node);
@@ -109,6 +111,14 @@ abstract class Compiler implements ErrorMessages {
     protected abstract void compileAnchorNode(AnchorNode node);
 
     protected final void compileTree(Node node) {
+        if (node instanceof CClassNode) {
+            compileCClassNode((CClassNode)node);
+            return;
+        }
+        if (node instanceof WideScalarNode) {
+            compileWideScalarNode((WideScalarNode)node);
+            return;
+        }
         if (node instanceof CalloutNode) {
             compileCalloutNode((CalloutNode)node);
             return;

@@ -166,6 +166,53 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return true;
     }
 
+    private boolean stringCmpICPerlAsciiStrict(int s1, IntHolder ps2, int mbLen) {
+        byte[]buf1 = cfbuf();
+        byte[]buf2 = cfbuf2();
+
+        int s2 = ps2.value;
+        int end1 = s1 + mbLen;
+        int p1 = 0;
+        int p2 = 0;
+        int len1 = 0;
+        int len2 = 0;
+        boolean ascii1 = false;
+        boolean ascii2 = false;
+
+        while (true) {
+            if (p1 >= len1) {
+                if (s1 >= end1) break;
+                ascii1 = Encoding.isAscii(enc.mbcToCode(bytes, s1, end1));
+                value = s1;
+                len1 = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end1, buf1);
+                s1 = value;
+                p1 = 0;
+            }
+
+            if (p2 >= len2) {
+                if (s2 >= range) return false;
+                ascii2 = Encoding.isAscii(enc.mbcToCode(bytes, s2, range));
+                value = s2;
+                len2 = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, range, buf2);
+                s2 = value;
+                p2 = 0;
+            }
+
+            if (buf1[p1++] != buf2[p2++] || ascii1 != ascii2) return false;
+        }
+
+        if (p2 < len2) return false;
+        ps2.value = s2;
+        return true;
+    }
+
+    private boolean backrefStringCmpIC(int caseFoldFlag, int s1, IntHolder ps2,
+                                       int mbLen, int textEnd) {
+        return Option.isPerlAsciiStrict(currentRegexOptions)
+                ? stringCmpICPerlAsciiStrict(s1, ps2, mbLen)
+                : stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd);
+    }
+
     @Override
     protected final int matchAt(int _range, int _sstart, int _sprev, boolean interrupt) throws InterruptedException {
         range = _range;
@@ -238,6 +285,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CCLASS_NOT:                 opCClassNot();             break;
                 case OPCode.CCLASS_MB_NOT:              opCClassMBNot();           break;
                 case OPCode.CCLASS_MIX_NOT:             opCClassMIXNot();          break;
+                case OPCode.WIDE_SCALAR:                opWideScalar();            break;
+                case OPCode.WIDE_SCALAR_CLASS:          opWideScalarClass();       break;
 
                 case OPCode.ANYCHAR:                    opAnyChar();               break;
                 case OPCode.ANYCHAR_ML:                 opAnyCharML();             break;
@@ -303,6 +352,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 case OPCode.JUMP:                       opJump();                  continue;
                 case OPCode.PUSH:                       opPush();                  continue;
+                case OPCode.PUSH_BRANCH:                opPushBranch();            continue;
 
                 case OPCode.POP:                        opPop();                   continue;
                 case OPCode.PUSH_OR_JUMP_EXACT1:        opPushOrJumpExact1();      continue;
@@ -405,6 +455,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CCLASS_NOT:                 opCClassNotSb();           break;
                 case OPCode.CCLASS_MB_NOT:              opCClassMBNotSb();         break;
                 case OPCode.CCLASS_MIX_NOT:             opCClassMIXNotSb();        break;
+                case OPCode.WIDE_SCALAR:                opWideScalar();            break;
+                case OPCode.WIDE_SCALAR_CLASS:          opWideScalarClass();       break;
 
                 case OPCode.ANYCHAR:                    opAnyCharSb();               break;
                 case OPCode.ANYCHAR_ML:                 opAnyCharMLSb();             break;
@@ -470,6 +522,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 case OPCode.JUMP:                       opJump();                  continue;
                 case OPCode.PUSH:                       opPush();                  continue;
+                case OPCode.PUSH_BRANCH:                opPushBranch();            continue;
 
                 case OPCode.POP:                        opPop();                   continue;
                 case OPCode.PUSH_OR_JUMP_EXACT1:        opPushOrJumpExact1();      continue;
@@ -1048,6 +1101,59 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int tlen = code[ip++];
         ip += tlen;
         sprev = sbegin; // break;
+    }
+
+    private WideScalarCodec.Decoded decodeWideScalar() {
+        WideScalarCodec codec = regex.wideScalarCodec;
+        if (codec == null || s >= range) return null;
+        WideScalarCodec.Decoded decoded = codec.decode(bytes, s, end, enc);
+        if (decoded == null || decoded.end() <= s || decoded.end() > range) return null;
+        return decoded;
+    }
+
+    private void opWideScalar() {
+        long expected = (Integer.toUnsignedLong(code[ip++]) << 32)
+                | Integer.toUnsignedLong(code[ip++]);
+        WideScalarCodec.Decoded decoded = decodeWideScalar();
+        if (decoded == null || decoded.value() != expected) {
+            opFail();
+            return;
+        }
+        s = decoded.end();
+        sprev = sbegin;
+    }
+
+    private void opWideScalarClass() {
+        int classIndex = code[ip++];
+        if (s >= range) {
+            opFail();
+            return;
+        }
+
+        org.joni.ast.CClassNode scalarClass = regex.wideScalarClasses[classIndex];
+        WideScalarCodec.Decoded decoded = decodeWideScalar();
+        if (decoded != null) {
+            if (!scalarClass.isScalarInCC(enc, decoded.value())) {
+                opFail();
+                return;
+            }
+            s = decoded.end();
+            sprev = sbegin;
+            return;
+        }
+
+        int length = enc.length(bytes, s, end);
+        if (length <= 0 || s + length > range) {
+            opFail();
+            return;
+        }
+        int value = enc.mbcToCode(bytes, s, s + length);
+        if (!scalarClass.isCodeInCC(enc, value)) {
+            opFail();
+            return;
+        }
+        s += length;
+        sprev = sbegin;
     }
 
     private void opAnyChar() {
@@ -2243,11 +2349,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int pstart = backrefStart(mem);
         int pend = backrefEnd(mem);
         int n = pend - pstart;
-        if (s + n > range) {opFail(); return;}
+        if (!Option.isPerlAsciiStrict(currentRegexOptions) && s + n > range) {opFail(); return;}
         sprev = s;
 
         value = s;
-        if (!stringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
+        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
         s = value;
 
         if (sprev < range) {
@@ -2268,7 +2374,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             int pend = backrefEnd(mem);
 
             int n = pend - pstart;
-            if (s + n > range) continue;
+            if (!Option.isPerlAsciiStrict(currentRegexOptions) && s + n > range) continue;
 
             sprev = s;
             int swork = s;
@@ -2309,7 +2415,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             sprev = s;
 
             value = s;
-            if (!stringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) continue loop; // STRING_CMP_VALUE_IC
+            if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) continue loop; // STRING_CMP_VALUE_IC
             s = value;
 
             int len;
@@ -2350,12 +2456,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                     if (memIsInMemp(e.getMemNum(), memNum, memp)) {
                         int pstart = e.getMemPStr();
                         if (pend != -1) {
-                            if (pend - pstart > end - s) return false; /* or goto next_mem; */
+                            if (!Option.isPerlAsciiStrict(currentRegexOptions) &&
+                                    pend - pstart > end - s) return false; /* or goto next_mem; */
                             int p = pstart;
 
                             value = s;
                             if (ignoreCase) {
-                                if (!stringCmpIC(caseFoldFlag, pstart, this, pend - pstart, end)) {
+                                if (!backrefStringCmpIC(caseFoldFlag, pstart, this, pend - pstart, end)) {
                                     return false; /* or goto next_mem; */
                                 }
                             } else {
@@ -2424,6 +2531,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         switch(code[ip++]) {
         case OPCode.JUMP:
         case OPCode.PUSH:
+        case OPCode.PUSH_BRANCH:
             ip++;       // p += SIZE_RELADDR;
             break;
         case OPCode.REPEAT_INC:
@@ -2495,6 +2603,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opPush() {
         int addr = code[ip++];
         pushAlt(ip + addr, s, sprev, pkeep);
+    }
+
+    private void opPushBranch() {
+        int addr = code[ip++];
+        pushBranchAlt(ip + addr, s, sprev, pkeep);
     }
 
     // CEC
@@ -3104,7 +3217,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             StackEntry entry = stack[i];
             if (entry.type == RETURN) {
                 returns.push(i);
-            } else if (entry.type == CALL_FRAME && !returns.isEmpty()) {
+            } else if (entry.type == CALL_FRAME) {
+                if (returns.isEmpty()) break;
                 int returnIndex = returns.pop();
                 if (entry.getCallFrameCaptureSnapshot() != null
                         && (visible == null || returnIndex > visible.returnIndex)) {

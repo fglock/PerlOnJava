@@ -68,9 +68,10 @@ public final class ScanEnvironment {
     }
 
     int caseFoldFlagFor(int option) {
-        return Option.isPerlAsciiStrict(option)
-                ? caseFoldFlag & ~Config.INTERNAL_ENC_CASE_FOLD_MULTI_CHAR
-                : caseFoldFlag;
+        // Character classes need the complete fold relation so
+        // ApplyCaseFold can retain safe non-ASCII siblings under /aa while
+        // filtering relations that cross into ASCII.
+        return caseFoldFlag;
     }
 
     int addMemEntry() {

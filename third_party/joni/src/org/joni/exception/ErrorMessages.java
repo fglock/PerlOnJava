@@ -55,14 +55,20 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String UNDEFINED_GROUP_OPTION = "undefined group option";
     String INVALID_POSIX_BRACKET_TYPE = "invalid POSIX bracket type";
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
+    String PERL_LOOK_BEHIND_LONGER_THAN_255 =
+            "Lookbehind longer than 255 not implemented in regex";
     String PERL_KEEP_NOT_PERMITTED_IN_LOOKAROUND =
             "\\K not permitted in lookahead/lookbehind in regex";
     String INVALID_REPEAT_RANGE_PATTERN = "invalid repeat range {lower,upper}";
+    String PERL_INVALID_QUANTIFIER = "Invalid quantifier in {,}";
     String INVALID_CONDITION_PATTERN = "invalid conditional pattern";
     String PERL_GROUP_NAME_MUST_START_WITH_WORD =
             "Group name must start with a non-digit word character";
     String PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP =
             "Reference to nonexistent named group";
+    String PERL_INVALID_REFERENCE_TO_GROUP = "Invalid reference to group";
+    String PERL_REFERENCE_TO_NONEXISTENT_GROUP =
+            "Reference to nonexistent group";
     String PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED =
             "Sequence (?P%n...) not recognized";
     String PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED =
@@ -90,12 +96,47 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Regexp modifier \"a\" may appear a maximum of twice";
     String PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE =
             "Missing right brace on \\o{}";
+    String PERL_MISSING_BRACES_ON_OCTAL_ESCAPE = "Missing braces on \\o{}";
     String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
     String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
             "Missing right brace on \\x{}";
     String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
             "Missing right brace on \\N{}";
     String PERL_EMPTY_NAMED_CHARACTER_ESCAPE = "Empty \\N{}";
+    String PERL_MISSING_RIGHT_BRACE_ON_BOUNDARY =
+            "Missing right brace on \\%n{}";
+    String PERL_EMPTY_BOUNDARY = "Empty \\%n{}";
+    String PERL_UNKNOWN_BOUND_TYPE = "'%n' is an unknown bound type";
+    String PERL_EMPTY_CHARACTER_PROPERTY = "Empty \\%n";
+    String PERL_EMPTY_CHARACTER_PROPERTY_BRACES = "Empty \\%n{}";
+    String PERL_UNTERMINATED_G_PATTERN = "Unterminated \\g... pattern";
+    String PERL_UNTERMINATED_G_BRACE_PATTERN = "Unterminated \\g{...} pattern";
+    String PERL_G_SEQUENCE_NOT_TERMINATED = "Sequence \\g{... not terminated";
+    String PERL_K_SEQUENCE_NOT_TERMINATED = "Sequence \\k<... not terminated";
+    String PERL_BARE_K_SEQUENCE_NOT_TERMINATED = "Sequence \\k... not terminated";
+    String PERL_K_QUOTE_SEQUENCE_NOT_TERMINATED = "Sequence \\k'... not terminated";
+    String PERL_K_BRACE_SEQUENCE_NOT_TERMINATED = "Sequence \\k{... not terminated";
+    String PERL_NAMED_CALL_NOT_TERMINATED = "Sequence (?&... not terminated";
+    String PERL_QUANTIFIER_ON_ZERO_LENGTH =
+            "Quantifier unexpected on zero-length expression";
+    String PERL_EXTENDED_CLASS_INCOMPLETE =
+            "Incomplete expression within '(?[ ])'";
+    String PERL_EXTENDED_CLASS_SYNTAX = "Syntax error in (?[...])";
+    String PERL_EXTENDED_CLASS_EXPECTING_INTERPOLATED =
+            "Expecting interpolated extended charclass";
+    String PERL_EXTENDED_CLASS_LOCALE_UNSUPPORTED =
+            "Locale charset modifier is not supported in interpolated extended charclass";
+    String PERL_EXTENDED_CLASS_OCTAL_WIDTH = "Need exactly 3 octal digits";
+    String PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE =
+            "Unexpected ']' with no following ')' in (?[...";
+    String PERL_EXTENDED_CLASS_BARE_CHARACTER =
+            "Unexpected character in extended character class";
+    String PERL_EXTENDED_CLASS_ZERO_LENGTH_NAMED_CHARACTER =
+            "Zero length \\N{}";
+    String PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER =
+            "\\N{} here is restricted to one character in regex";
+    String PERL_WIDE_SCALAR_OVERFLOW =
+            "Use of code point is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF";
 
     /* values error (syntax error) */
     String TOO_BIG_NUMBER = "too big number";

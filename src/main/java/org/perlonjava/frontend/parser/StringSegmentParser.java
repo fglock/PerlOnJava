@@ -7,8 +7,10 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
-import org.perlonjava.runtime.regex.UnicodeResolver;
+import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 
 import java.math.BigInteger;
@@ -1496,33 +1498,80 @@ public abstract class StringSegmentParser {
         if ("}".equals(chr)) {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
+            NamedCharacterExpansion.SourceMode sourceMode =
+                    ctx.compilerOptions.isByteStringSource
+                            || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                                && !ctx.compilerOptions.isUnicodeSource)
+                    ? NamedCharacterExpansion.SourceMode.BYTE
+                    : NamedCharacterExpansion.SourceMode.UNICODE;
             if (isRegex) {
                 // Keep named-character escapes intact until regex preprocessing.
                 // Resolving \N{NUMBER SIGN} to '#' here is observably wrong under
                 // /x: the resolved character is then mistaken for a comment and
                 // any following capture groups disappear from the pattern.
+                boolean customTranslator = NamedCharacterExpansion.usesCustomTranslator(
+                        HintHashRegistry.getCompileTimeHint("charnames"));
+                if (!customTranslator || currentSegment.toString().endsWith("(?[")) {
+                    NamedCharacterExpansion expansion =
+                            NamedCharacterExpansion.resolve(name, sourceMode);
+                    if (isIncompleteExtendedClassNamedSequence(expansion)) {
+                        throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
+                    }
+                    if (!expansion.resolved()) {
+                        parser.throwError(expansion.diagnostic());
+                    }
+                }
                 appendToCurrentSegment("\\N{" + name + "}");
                 return;
             }
-            try {
-                // Use centralized Unicode name resolution from UnicodeResolver
-                // This handles U+XXXX format, official Unicode names, and Perl charnames aliases
-                int codePoint;
-                try {
-                    codePoint = UnicodeResolver.getCodePointFromName(name);
-                    var result = new String(Character.toChars(codePoint));
-                    appendToCurrentSegment(result);
-                } catch (IllegalArgumentException e) {
-                    // Name not found, preserve literal
-                    appendToCurrentSegment("N{" + name + "}");
-                }
-            } catch (Exception e) {
-                // Error looking up name, preserve literal
+            NamedCharacterExpansion expansion =
+                    NamedCharacterExpansion.resolve(name, sourceMode);
+            if (expansion.resolved()) {
+                appendToCurrentSegment(expansion.sequence());
+            } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
+                parser.throwError(expansion.diagnostic());
+            } else {
+                // Preserve the historical literal fallback when no standard
+                // name or lexical translator resolves this escape.
                 appendToCurrentSegment("N{" + name + "}");
             }
         } else {
-            // Unclosed brace, preserve literal
-            appendToCurrentSegment("N{" + nameBuilder);
+            throwMissingNamedCharacterBraceDiagnostic();
         }
+    }
+
+    private void throwMissingNamedCharacterBraceDiagnostic() {
+        var location = ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+        String message = isRegex
+                ? "Missing right brace on \\N{} or unescaped left brace after \\N"
+                : "Missing right brace on \\N{}";
+        throw new PerlParserException(message
+                + " at " + location.fileName() + " line " + location.lineNumber()
+                + ", within " + (isRegex ? "pattern" : "string") + "\n");
+    }
+
+    private boolean isIncompleteExtendedClassNamedSequence(
+            NamedCharacterExpansion expansion) {
+        return expansion.sequence().codePointCount(0, expansion.sequence().length()) > 1
+                && currentSegment.toString().endsWith("(?[");
+    }
+
+    private String namedSequenceExtendedClassDiagnostic(String sequence) {
+        StringBuilder canonical = new StringBuilder();
+        sequence.codePoints().forEach(codePoint -> {
+            if (!canonical.isEmpty()) canonical.append('.');
+            canonical.append(Integer.toHexString(codePoint).toUpperCase(java.util.Locale.ROOT));
+        });
+        return "\\N{} here is restricted to one character in regex; "
+                + "marked by <-- HERE in m/" + currentSegment
+                + "\\N{U+" + canonical + " <-- HERE }/";
+    }
+
+    private void throwNamedSequenceExtendedClassDiagnostic(String sequence) {
+        var location = ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+        throw new PerlParserException(
+                namedSequenceExtendedClassDiagnostic(sequence)
+                        + " at " + location.fileName() + " line "
+                        + location.lineNumber() + ".\n");
     }
 }

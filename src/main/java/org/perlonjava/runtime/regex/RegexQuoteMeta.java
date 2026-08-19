@@ -124,6 +124,11 @@ public class RegexQuoteMeta {
 
     private static void warnUnrecognizedCharClassEscape(char c) {
         String message = "Unrecognized escape \\" + c + " in character class passed through in regex";
+        warnAtConstruction(message);
+    }
+
+    /** Emit a regex-construction warning using the lexical state captured at the quote site. */
+    public static void warnAtConstruction(String message) {
         // This warning belongs to construction of the interpolated pattern.
         // Retaining it on the cached RuntimeRegex re-emits it for every match
         // and can leak a warning-enabled compilation into a no-warnings use.

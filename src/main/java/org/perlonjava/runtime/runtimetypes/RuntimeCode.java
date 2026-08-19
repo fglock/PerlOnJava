@@ -2175,6 +2175,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // warning/feature flags than the caller, and we must not leak the eval's scope.
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
         String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
 
         // Store runtime values in ThreadLocal so SpecialBlockParser can access them during parsing.
         // This enables BEGIN blocks to see outer lexical variables' runtime values.
@@ -2285,10 +2286,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // At runtime, %^H is normally empty. But eval STRING needs to inherit the
             // compile-time %^H that was active when the eval statement was compiled,
             // so that pragmas like 'use mypragma' are visible inside eval.
-            java.util.Map<String, String> callSiteHints = HintHashRegistry.getCurrentCallSiteHintHash();
-            if (callSiteHints != null) {
-                for (java.util.Map.Entry<String, String> entry : callSiteHints.entrySet()) {
-                    capturedHintHash.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+            java.util.Map<String, RuntimeScalar> scalarCallSiteHints =
+                    HintHashRegistry.getCurrentCallSiteScalarHintHash();
+            if (scalarCallSiteHints != null) {
+                capturedHintHash.elements.putAll(scalarCallSiteHints);
+            } else {
+                java.util.Map<String, String> callSiteHints =
+                        HintHashRegistry.getCurrentCallSiteHintHash();
+                if (callSiteHints != null) {
+                    for (java.util.Map.Entry<String, String> entry : callSiteHints.entrySet()) {
+                        capturedHintHash.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                    }
                 }
             }
 
@@ -2546,6 +2554,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // This MUST be in the outer finally to handle both cache hits and compilation paths.
             setCurrentScope(savedCurrentScope);
             WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            HintHashRegistry.setCallSiteHintHashId(savedCallSiteHintHashId);
 
             // Clean up this eval's ThreadLocal stack entry to prevent memory leaks.
             // IMPORTANT: Always pop in the finally block even if compilation fails.
@@ -2716,6 +2725,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // This is critical because eval may be called from code compiled with different
         // warning/feature flags than the caller, and we must not leak the eval's scope.
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
+        RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        Map<String, RuntimeScalar> savedHintHash = new HashMap<>();
+        for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
+            savedHintHash.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+        }
+        int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
+        Map<String, RuntimeScalar> lexicalHintHash =
+                HintHashRegistry.getCurrentCallSiteScalarHintHash();
+        if (lexicalHintHash != null) {
+            activeHintHash.elements.clear();
+            activeHintHash.elements.putAll(lexicalHintHash);
+        }
 
         // Store runtime values in ThreadLocal for BEGIN block support
         EvalRuntimeContext runtimeCtx = new EvalRuntimeContext(
@@ -3172,6 +3193,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Restore the original current scope, not the captured symbol table.
             // This prevents eval from leaking its compile-time scope to the caller.
             setCurrentScope(savedCurrentScope);
+            activeHintHash.elements.clear();
+            activeHintHash.elements.putAll(savedHintHash);
+            HintHashRegistry.setCallSiteHintHashId(savedCallSiteHintHashId);
 
             // Store source lines in debugger symbol table if $^P flags are set
             // Do this on both success and failure paths when flags require retention

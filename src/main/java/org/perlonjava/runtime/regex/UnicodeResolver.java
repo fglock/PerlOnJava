@@ -3,6 +3,9 @@ package org.perlonjava.runtime.regex;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
+import com.ibm.icu.util.ValueIterator;
+import org.joni.CharacterPropertyResolver;
+import org.joni.PerlPropertyValueMatcher;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -17,16 +20,87 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public class UnicodeResolver {
+    private static final String USER_PROPERTY_RANGE_ENCODING =
+            "\u0000POJ_USER_RANGES_V1:";
     private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
             "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*$");
     private static final UnicodeSet[] PERL_DECOMPOSITION_TYPE_SETS =
             buildPerlDecompositionTypeSets();
+    private static final UnicodeSet PERL_UNICODE_BASE_SET =
+            new UnicodeSet(0, 0x10FFFF).freeze();
+    private static final UnicodeSet PERL_ASSIGNED_SET =
+            new UnicodeSet(PERL_UNICODE_BASE_SET)
+                    .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cn"))
+                    .freeze();
+    private static final Set<String> PERL_BARE_PROPERTY_ALIASES = Set.of(
+            "ahex", "alnum", "alpha", "any", "assigned", "bidim",
+            "bidimirrored", "changeswhencasemapped", "changeswhenlowercased",
+            "changeswhennfkccasefolded", "closepunctuation", "cntrl",
+            "combiningmark", "compex", "connectorpunctuation", "cwu", "cwkcf",
+            "dash", "dashpunctuation", "decimalnumber", "deprecated", "dia",
+            "emojimodifierbase", "emojipresentation", "epres", "extender",
+            "fullcompositionexclusion", "grbase", "grext", "hexdigit",
+            "idcompatmathstart", "ideo", "idst", "idsu", "idsunaryoperator",
+            "loe", "logicalorderexception", "lowercase", "modifiercombiningmark",
+            "othernumber", "otherpunctuation", "regionalindicator",
+            "sentenceterminal", "softdotted", "space", "spaceseparator", "uideo",
+            "unassigned", "unifiedideograph", "xids", "xidstart");
+    private static final Set<String> PERL_REJECTED_OBSOLETE_BINARY_ALIASES =
+            Set.of("graphemelink", "grlink", "otheralphabetic", "oalpha",
+                    "otherdefaultignorablecodepoint", "odi",
+                    "othergraphemeextend", "ogrext", "otheridcontinue", "oidc",
+                    "otheridstart", "oids", "otherlowercase", "olower",
+                    "othermath", "omath", "otheruppercase", "oupper");
+    private static final String[][] PERL_WORD_BREAK_WILDCARD_VALUES = {
+            {"CR"}, {"DQ", "Double_Quote"}, {"EB", "E_Base"},
+            {"EBG", "E_Base_GAZ"}, {"EM", "E_Modifier"},
+            {"EX", "ExtendNumLet"}, {"Extend"}, {"FO", "Format"},
+            {"GAZ", "Glue_After_Zwj"}, {"HL", "Hebrew_Letter"},
+            {"KA", "Katakana"}, {"LE", "ALetter"}, {"LF"},
+            {"MB", "MidNumLet"}, {"ML", "MidLetter"},
+            {"MN", "MidNum"}, {"NL", "Newline"}, {"NU", "Numeric"},
+            {"RI", "Regional_Indicator"}, {"SQ", "Single_Quote"},
+            {"WSegSpace"}, {"XX", "Other"}, {"ZWJ"}
+    };
+    private static final String[][] PERL_SENTENCE_BREAK_WILDCARD_VALUES = {
+            {"AT", "ATerm"}, {"CL", "Close"}, {"CR"},
+            {"EX", "Extend"}, {"FO", "Format"}, {"LE", "OLetter"},
+            {"LF"}, {"LO", "Lower"}, {"NU", "Numeric"},
+            {"SC", "SContinue"}, {"SE", "Sep"}, {"SP", "Sp"},
+            {"ST", "STerm"}, {"UP", "Upper"}, {"XX", "Other"}
+    };
+    private static final String[][] PERL_VERTICAL_ORIENTATION_WILDCARD_VALUES = {
+            {"R", "Rotated"}, {"Tr", "Transformed_Rotated"},
+            {"Tu", "Transformed_Upright"}, {"U", "Upright"}
+    };
+    private static final UnicodeSet PERL_VERTICAL_SPACE_SET =
+            buildPerlVerticalSpaceSet();
+    private static final UnicodeSet PERL_HORIZONTAL_SPACE_SET =
+            buildPerlHorizontalSpaceSet();
+    private static final UnicodeSet PERL_WORD_SET = buildPerlWordSet();
+    private static final UnicodeSet PERL_ASCII_SPACE_SET =
+            new UnicodeSet().add(0x0009, 0x000D).add(0x0020).freeze();
+    private static final UnicodeSet PERL_ASCII_WORD_SET =
+            new UnicodeSet().add('0', '9').add('A', 'Z').add('_').add('a', 'z')
+                    .freeze();
+    private static final UnicodeSet PERL_UNICODE_SPACE_SET =
+            buildPerlUnicodeSpaceSet();
+    private static final UnicodeSet PERL_POSIX_GRAPH_SET =
+            buildPerlPosixGraphSet();
+    private static final UnicodeSet PERL_POSIX_PRINT_SET =
+            buildPerlPosixPrintSet();
+    private static final UnicodeSet PERL_POSIX_XDIGIT_SET =
+            new UnicodeSet().add('0', '9').add('A', 'F').add('a', 'f')
+                    .add(0xFF10, 0xFF19).add(0xFF21, 0xFF26)
+                    .add(0xFF41, 0xFF46).freeze();
+    private static final UnicodeSet PERL_COMPOSITION_EXCLUSION_SET =
+            buildPerlCompositionExclusionSet();
 
     /**
      * Cache for user-defined property subroutine results.
      * Perl only calls user-defined property subs once per unique name and caches the result.
      * Key: fully qualified sub name (e.g., "main::IsMyUpper")
-     * Value: the parsed character class pattern from parseUserDefinedProperty
+     * Value: the encoded lossless range result from parseUserDefinedProperty
      */
     private static Map<String, String> userPropertyCache() {
         return PerlRuntime.current().regexState().userUnicodePropertyCache;
@@ -164,9 +238,9 @@ public class UnicodeResolver {
      * @return A character class pattern
      */
     private static String parseUserDefinedProperty(String definition, Set<String> recursionSet, String propertyName) {
-        UnicodeSet resultSet = new UnicodeSet();
+        LongRangeSet resultSet = new LongRangeSet();
         boolean hasIntersection = false;
-        UnicodeSet intersectionSet = null;
+        LongRangeSet intersectionSet = null;
 
         String[] lines = definition.split("\\n");
         for (String line : lines) {
@@ -181,23 +255,31 @@ public class UnicodeResolver {
             if (line.startsWith("+")) {
                 // Add another property
                 String propName = stripDefinitionComment(line.substring(1));
-                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
+                LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                        propName, recursionSet, propertyName);
                 resultSet.addAll(propSet);
-            } else if (line.startsWith("-") || line.startsWith("!")) {
+            } else if (line.startsWith("-")) {
                 // Remove a property
                 String propName = stripDefinitionComment(line.substring(1));
                 // A leading minus may subtract a literal code point/range,
                 // e.g. "-61" in a consonant property definition.
-                if (!(line.startsWith("-") && removeHexRange(resultSet, propName))) {
-                    UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
+                if (!removeHexRange(resultSet, propName)) {
+                    LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                            propName, recursionSet, propertyName);
                     resultSet.removeAll(propSet);
                 }
+            } else if (line.startsWith("!")) {
+                String propName = stripDefinitionComment(line.substring(1));
+                LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                        propName, recursionSet, propertyName);
+                resultSet.addAll(propSet.complement());
             } else if (line.startsWith("&")) {
                 // Intersection with a property
                 String propName = stripDefinitionComment(line.substring(1));
-                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
+                LongRangeSet propSet = resolvePropertyReferenceAsRanges(
+                        propName, recursionSet, propertyName);
                 if (!hasIntersection) {
-                    intersectionSet = propSet;
+                    intersectionSet = propSet.copy();
                     hasIntersection = true;
                 } else {
                     intersectionSet.retainAll(propSet);
@@ -217,12 +299,7 @@ public class UnicodeResolver {
                     }
                     try {
                         long codePoint = Long.parseLong(hexStr, 16);
-                        if (codePoint > 0x10FFFF) {
-                            // JVM only supports Unicode up to U+10FFFF; silently clamp
-                            // (Perl supports 31-bit/32-bit code points, but Java doesn't)
-                            codePoint = 0x10FFFF;
-                        }
-                        resultSet.add((int) codePoint);
+                        resultSet.add(codePoint, codePoint);
                     } catch (NumberFormatException e) {
                         throw new IllegalArgumentException(
                                 "Code point too large in \"" + line
@@ -244,20 +321,11 @@ public class UnicodeResolver {
                         long start = Long.parseLong(startHex, 16);
                         long end = Long.parseLong(endHex, 16);
 
-                        // JVM only supports Unicode up to U+10FFFF; clamp values
-                        // (Perl supports 31-bit/32-bit code points, but Java doesn't)
-                        if (start > 0x10FFFF) {
-                            // Entire range is beyond JVM limit; skip it
-                            continue;
-                        }
-                        if (end > 0x10FFFF) {
-                            end = 0x10FFFF;
-                        }
                         if (start > end) {
                             throw new IllegalArgumentException("Illegal range in \"" + line.trim() + "\" in expansion of " + propertyName);
                         }
 
-                        resultSet.add((int) start, (int) end);
+                        resultSet.add(start, end);
                     } catch (NumberFormatException e) {
                         throw new IllegalArgumentException(
                                 "Code point too large in \"" + line
@@ -272,7 +340,7 @@ public class UnicodeResolver {
             resultSet.retainAll(intersectionSet);
         }
 
-        return unicodeSetToJavaPattern(resultSet);
+        return new UserUnicodePropertyResult(resultSet).encode();
     }
 
     private static String stripDefinitionComment(String propertyReference) {
@@ -280,7 +348,7 @@ public class UnicodeResolver {
         return (comment >= 0 ? propertyReference.substring(0, comment) : propertyReference).trim();
     }
 
-    private static boolean removeHexRange(UnicodeSet target, String definition) {
+    private static boolean removeHexRange(LongRangeSet target, String definition) {
         String[] endpoints = definition.split("\\t+|\\s+");
         if (endpoints.length < 1 || endpoints.length > 2) return false;
         for (String endpoint : endpoints) {
@@ -290,12 +358,185 @@ public class UnicodeResolver {
             long start = Long.parseLong(endpoints[0], 16);
             long end = endpoints.length == 1 ? start : Long.parseLong(endpoints[1], 16);
             if (start > end) return false;
-            if (start <= 0x10FFFF) {
-                target.remove((int) start, (int) Math.min(end, 0x10FFFF));
-            }
+            target.remove(start, end);
             return true;
         } catch (NumberFormatException invalidHex) {
             return false;
+        }
+    }
+
+    private static final class UserUnicodePropertyResult {
+        private final LongRangeSet ranges;
+
+        private UserUnicodePropertyResult(LongRangeSet ranges) {
+            this.ranges = ranges.copy();
+        }
+
+        private String encode() {
+            StringBuilder encoded = new StringBuilder(USER_PROPERTY_RANGE_ENCODING);
+            for (long[] range : ranges.values) {
+                encoded.append(Long.toHexString(range[0]))
+                        .append('-')
+                        .append(Long.toHexString(range[1]))
+                        .append(';');
+            }
+            return encoded.toString();
+        }
+
+        private String unicodePattern() {
+            return unicodeSetToJavaPattern(ranges.toUnicodeSet());
+        }
+
+        private static UserUnicodePropertyResult decode(String encoded) {
+            if (!encoded.startsWith(USER_PROPERTY_RANGE_ENCODING)) {
+                UnicodeSet legacySet = new UnicodeSet("[" + encoded + "]");
+                return new UserUnicodePropertyResult(
+                        LongRangeSet.fromUnicodeSet(legacySet));
+            }
+            LongRangeSet ranges = new LongRangeSet();
+            String body = encoded.substring(USER_PROPERTY_RANGE_ENCODING.length());
+            if (!body.isEmpty()) {
+                for (String item : body.split(";")) {
+                    if (item.isEmpty()) continue;
+                    int delimiter = item.indexOf('-');
+                    if (delimiter <= 0 || delimiter == item.length() - 1) {
+                        throw new IllegalArgumentException(
+                                "Invalid cached user-property range result");
+                    }
+                    ranges.add(
+                            Long.parseLong(item.substring(0, delimiter), 16),
+                            Long.parseLong(item.substring(delimiter + 1), 16));
+                }
+            }
+            return new UserUnicodePropertyResult(ranges);
+        }
+    }
+
+    private static final class LongRangeSet {
+        private List<long[]> values = new ArrayList<>();
+
+        private static LongRangeSet fromUnicodeSet(UnicodeSet set) {
+            LongRangeSet ranges = new LongRangeSet();
+            for (int i = 0; i < set.getRangeCount(); i++) {
+                ranges.add(set.getRangeStart(i), set.getRangeEnd(i));
+            }
+            return ranges;
+        }
+
+        private LongRangeSet copy() {
+            LongRangeSet copy = new LongRangeSet();
+            for (long[] range : values) {
+                copy.values.add(new long[] {range[0], range[1]});
+            }
+            return copy;
+        }
+
+        private void add(long start, long end) {
+            if (start < 0 || end < start) {
+                throw new IllegalArgumentException("Invalid signed-IV range");
+            }
+            values.add(new long[] {start, end});
+            normalize();
+        }
+
+        private void addAll(LongRangeSet other) {
+            for (long[] range : other.values) add(range[0], range[1]);
+        }
+
+        private void remove(long start, long end) {
+            List<long[]> remaining = new ArrayList<>();
+            for (long[] range : values) {
+                if (end < range[0] || start > range[1]) {
+                    remaining.add(new long[] {range[0], range[1]});
+                    continue;
+                }
+                if (start > range[0]) {
+                    remaining.add(new long[] {range[0], start - 1});
+                }
+                if (end < range[1]) {
+                    remaining.add(new long[] {end + 1, range[1]});
+                }
+            }
+            values = remaining;
+        }
+
+        private void removeAll(LongRangeSet other) {
+            for (long[] range : other.values) remove(range[0], range[1]);
+        }
+
+        private void retainAll(LongRangeSet other) {
+            List<long[]> retained = new ArrayList<>();
+            int left = 0;
+            int right = 0;
+            while (left < values.size() && right < other.values.size()) {
+                long[] a = values.get(left);
+                long[] b = other.values.get(right);
+                long start = Math.max(a[0], b[0]);
+                long end = Math.min(a[1], b[1]);
+                if (start <= end) retained.add(new long[] {start, end});
+                if (a[1] < b[1]) left++;
+                else right++;
+            }
+            values = retained;
+        }
+
+        private LongRangeSet complement() {
+            LongRangeSet complement = new LongRangeSet();
+            long start = 0;
+            for (long[] range : values) {
+                if (start < range[0]) complement.values.add(
+                        new long[] {start, range[0] - 1});
+                if (range[1] == Long.MAX_VALUE) return complement;
+                start = range[1] + 1;
+            }
+            complement.values.add(new long[] {start, Long.MAX_VALUE});
+            return complement;
+        }
+
+        private UnicodeSet toUnicodeSet() {
+            UnicodeSet unicode = new UnicodeSet();
+            for (long[] range : values) {
+                if (range[0] > 0x10FFFFL) break;
+                unicode.add((int) range[0], (int) Math.min(range[1], 0x10FFFFL));
+            }
+            return unicode.freeze();
+        }
+
+        private long[] wideRanges() {
+            int count = 0;
+            for (long[] range : values) {
+                if (range[1] >= 0x110000L) count++;
+            }
+            if (count == 0) return null;
+            long[] wide = new long[count * 2 + 1];
+            wide[0] = count;
+            int output = 1;
+            for (long[] range : values) {
+                if (range[1] < 0x110000L) continue;
+                wide[output++] = Math.max(range[0], 0x110000L);
+                wide[output++] = range[1];
+            }
+            return wide;
+        }
+
+        private void normalize() {
+            values.sort((left, right) -> Long.compare(left[0], right[0]));
+            List<long[]> normalized = new ArrayList<>();
+            for (long[] range : values) {
+                if (normalized.isEmpty()) {
+                    normalized.add(new long[] {range[0], range[1]});
+                    continue;
+                }
+                long[] previous = normalized.getLast();
+                boolean adjacent = previous[1] != Long.MAX_VALUE
+                        && range[0] == previous[1] + 1;
+                if (range[0] <= previous[1] || adjacent) {
+                    previous[1] = Math.max(previous[1], range[1]);
+                } else {
+                    normalized.add(new long[] {range[0], range[1]});
+                }
+            }
+            values = normalized;
         }
     }
 
@@ -319,7 +560,8 @@ public class UnicodeResolver {
      * @param parentProperty The parent property name (for error messages)
      * @return A UnicodeSet representing the property
      */
-    private static UnicodeSet resolvePropertyReferenceAsSet(String propRef, Set<String> recursionSet, String parentProperty) {
+    private static LongRangeSet resolvePropertyReferenceAsRanges(
+            String propRef, Set<String> recursionSet, String parentProperty) {
         // Check for recursion
         if (recursionSet.contains(propRef)) {
             // Build recursion chain for error message
@@ -335,15 +577,14 @@ public class UnicodeResolver {
         // Try to resolve as a standard Unicode property via ICU4J
         UnicodeSet result = resolveStandardPropertyAsSet(propName, recursionSet);
         if (result != null) {
-            return result;
+            return LongRangeSet.fromUnicodeSet(result);
         }
 
         // Try as user-defined property (calls the Perl sub)
         String fallbackRef = propRef.startsWith("utf8::") ? "main::" + propRef.substring(6) : propRef;
         String userProp = tryUserDefinedProperty(fallbackRef, recursionSet, false);
         if (userProp != null) {
-            // userProp is a character class pattern from unicodeSetToJavaPattern
-            return new UnicodeSet("[" + userProp + "]");
+            return UserUnicodePropertyResult.decode(userProp).ranges.copy();
         }
 
         throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + propRef);
@@ -358,6 +599,7 @@ public class UnicodeResolver {
      * @return A UnicodeSet, or null if the property cannot be resolved
      */
     private static UnicodeSet resolveStandardPropertyAsSet(String property, Set<String> recursionSet) {
+        property = canonicalPerlPosixPropertyAlias(property);
         UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(property);
         if (perlBuiltInAlias != null) return perlBuiltInAlias;
 
@@ -585,7 +827,7 @@ public class UnicodeResolver {
             RuntimeList result = RuntimeCode.apply(codeRef, args, RuntimeContextType.SCALAR);
 
             if (result.elements.isEmpty()) {
-                return "";
+                return parseUserDefinedProperty("", recursionSet, diagnosticName);
             }
 
             String definition = result.elements.getFirst().toString();
@@ -682,6 +924,12 @@ public class UnicodeResolver {
             normalized = normalized.substring(1).trim();
             negated = !negated;
         }
+        PerlBinaryBooleanAssignment binaryAssignment =
+                perlBinaryBooleanAssignment(normalized);
+        if (binaryAssignment != null) {
+            return wrapProperty(binaryAssignment.propertyName,
+                    negated ^ !binaryAssignment.value);
+        }
         UnicodeSet set = resolveStandardPropertyAsSet(normalized, new LinkedHashSet<>());
         if (set == null) {
             throw new IllegalArgumentException(
@@ -712,6 +960,7 @@ public class UnicodeResolver {
                 property = property.substring(1).trim();
                 negated = !negated;
             }
+            property = canonicalPerlPosixPropertyAlias(property);
             boolean isPrefixedNumericWildcard =
                     isPerlIsPrefixedNumericWildcard(property);
             boolean isPrefixedJoiningGroupWildcard =
@@ -721,6 +970,23 @@ public class UnicodeResolver {
             boolean isPrefixedScriptWildcard =
                     isPerlIsPrefixedScriptWildcard(property);
             property = normalizePerlIsPropertyAssignment(property);
+            PerlBinaryBooleanAssignment binaryAssignment =
+                    perlBinaryBooleanAssignment(property);
+            if (binaryAssignment != null) {
+                UnicodeSet binarySet = resolveStandardPropertyAsSet(
+                        binaryAssignment.propertyName, new LinkedHashSet<>());
+                if (caseInsensitive) {
+                    binarySet = new UnicodeSet(binarySet)
+                            .closeOver(UnicodeSet.CASE_INSENSITIVE);
+                }
+                return wrapCharClass(unicodeSetToJavaPattern(binarySet),
+                        negated ^ !binaryAssignment.value);
+            }
+            String looseIsValue = looseIsShortcutValue(property);
+            if (!isUserDefinedPropertyName(property)
+                    && isPerlAllProperty(property, looseIsValue)) {
+                return negated ? "\\P{All}" : "\\p{All}";
+            }
             if (isPrefixedNumericWildcard) {
                 throw new IllegalArgumentException(
                         "Is-prefixed Numeric_Value properties do not accept wildcard values");
@@ -750,13 +1016,25 @@ public class UnicodeResolver {
                 String userProp = tryUserDefinedProperty(
                         property, recursionSet, caseInsensitive);
                 if (userProp != null) {
-                    return wrapCharClass(userProp, negated);
+                    return wrapCharClass(
+                            UserUnicodePropertyResult.decode(userProp).unicodePattern(),
+                            negated);
+                }
+                String looseUserProperty = loosePropertyName(property);
+                if (looseUserProperty.startsWith("isxposix")
+                        || looseUserProperty.startsWith("isposix")) {
+                    throw new IllegalArgumentException(
+                            "Can't find Unicode property definition \"" + property + "\"");
                 }
                 // Property not found - fall through to throw error below
             }
 
             UnicodeSet perlBuiltInAlias = resolvePerlBuiltInPropertyAlias(property);
             if (perlBuiltInAlias != null) {
+                if (caseInsensitive && resolvePerlMissingBaseAlias(property) != null) {
+                    perlBuiltInAlias = new UnicodeSet(perlBuiltInAlias)
+                            .closeOver(UnicodeSet.CASE_INSENSITIVE);
+                }
                 return wrapCharClass(unicodeSetToJavaPattern(perlBuiltInAlias), negated);
             }
 
@@ -943,7 +1221,10 @@ public class UnicodeResolver {
                         // Neither worked - try user-defined property before giving up
                         String userProp = tryUserDefinedProperty(property, recursionSet, false);
                         if (userProp != null) {
-                            return wrapCharClass(userProp, negated);
+                            return wrapCharClass(
+                                    UserUnicodePropertyResult.decode(userProp)
+                                            .unicodePattern(),
+                                    negated);
                         }
                         throw ex; // rethrow original error
                     }
@@ -971,36 +1252,229 @@ public class UnicodeResolver {
         return property != null && USER_DEFINED_PROPERTY_NAME.matcher(property).matches();
     }
 
+    static boolean mustPreserveUserDefinedProperty(
+            String property, boolean caseInsensitive) {
+        if (!isUserDefinedPropertyName(property)) return false;
+        String subName = property.contains("::") ? property : "main::" + property;
+        if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) return true;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return runtime != null
+                && (runtime.regexState().deferredUserUnicodeProperties.contains(subName)
+                        || runtime.regexState().userUnicodePropertyCache.containsKey(
+                                userPropertyCacheKey(subName, caseInsensitive)));
+    }
+
     static boolean isPerlBuiltInPropertyAlias(String property) {
         if (property == null) return false;
+        property = canonicalPerlPosixPropertyAlias(property);
         return isPerlSpecialPropertyAlias(property.trim())
                 || !normalizePerlIsPropertyAssignment(property).equals(property)
+                || perlBinaryBooleanAssignment(property) != null
                 || resolvePerlBuiltInPropertyAlias(property) != null;
     }
 
-    /** Returns pinned Perl-property ranges in Joni's native range-array format. */
-    static int[] resolveJoniPropertyRanges(String property) {
+    /** Returns pinned Perl-property ranges and their native Joni fold policy. */
+    static CharacterPropertyResolver.Result resolveJoniProperty(
+            String property, boolean inCharacterClass) {
+        return resolveJoniProperty(property, inCharacterClass, false);
+    }
+
+    /** Returns ranges for the property variant selected by the regex fold mode. */
+    static CharacterPropertyResolver.Result resolveJoniProperty(
+            String property, boolean inCharacterClass, boolean caseInsensitive) {
         if (property == null) return null;
+        property = property.trim();
+        if (isUserDefinedPropertyName(property)
+                && PerlRuntime.currentOrNull() != null) {
+            String encoded = tryUserDefinedProperty(
+                    property, new LinkedHashSet<>(), caseInsensitive);
+            if (encoded != null) {
+                UserUnicodePropertyResult userProperty =
+                        UserUnicodePropertyResult.decode(encoded);
+                return joniPropertyResult(
+                        userProperty.ranges.toUnicodeSet(),
+                        userProperty.ranges.wideRanges(),
+                        false);
+            }
+        }
+        property = canonicalPerlPosixPropertyAlias(property);
+        property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
-        if (assignment <= 0 || assignment == property.length() - 1
-                || !isGeneralCategoryProperty(property.substring(0, assignment))) {
+        if (assignment <= 0 || assignment == property.length() - 1) {
+            UnicodeSet foldableBareProperty = resolvePerlCaseFoldableBareProperty(
+                    property, caseInsensitive);
+            if (foldableBareProperty != null) {
+                return joniPropertyResult(foldableBareProperty, true);
+            }
+            UnicodeSet blockBinaryPrecedence =
+                    resolvePerlBlockBinaryPrecedenceAlias(property);
+            if (blockBinaryPrecedence != null) {
+                return joniPropertyResult(blockBinaryPrecedence, true);
+            }
+            PerlBarePropertyAlias compatibility =
+                    resolvePerlPosixCompatibilityAlias(property);
+            if (compatibility != null) {
+                return joniPropertyResult(
+                        compatibility.set, null, compatibility.caseFold);
+            }
+            String looseIsValue = looseIsShortcutValue(property);
+            if (isPerlAllProperty(property, looseIsValue)) {
+                return new CharacterPropertyResolver.Result(
+                        null, new long[] {1, 0, Long.MAX_VALUE}, false);
+            }
+            UnicodeSet generalCategory = resolvePerlBareGeneralCategory(property);
+            if (generalCategory != null) {
+                return joniPropertyResult(generalCategory, true);
+            }
+            UnicodeSet blockShortcut = resolvePerlBareBlockShortcut(property);
+            if (blockShortcut != null) {
+                return joniPropertyResult(blockShortcut, false);
+            }
+            if (looseIsValue == null) {
+                PerlBarePropertyAlias bareAlias = resolvePerlBarePropertyAlias(property);
+                if (bareAlias != null) {
+                    long[] wideRanges = perlUnicodeOnlyWideRanges(property, null);
+                    return joniPropertyResult(
+                            bareAlias.set, wideRanges, bareAlias.caseFold);
+                }
+                UnicodeSet bareSet = resolvePerlMissingBaseAlias(property);
+                return bareSet == null ? null : joniPropertyResult(
+                        bareSet, perlUnicodeOnlyWideRanges(property, null), true);
+            }
+            if (PerlUnicodeScriptData.canonicalValue(looseIsValue) != null
+                    || PerlUnicodeBlockData.set(looseIsValue) != null) {
+                return null;
+            }
+            UnicodeSet bareSet = resolvePerlBuiltInPropertyAlias(property);
+            return bareSet == null ? null : joniPropertyResult(
+                    bareSet, perlUnicodeOnlyWideRanges(property, looseIsValue), true);
+        }
+        String name = property.substring(0, assignment);
+        String value = property.substring(assignment + 1);
+        PerlUnicodePropertyWildcard propertyWildcard =
+                resolvePerlUnicodePropertyWildcard(property);
+        if (propertyWildcard != null) {
+            if (!propertyWildcard.caseFold && inCharacterClass) return null;
+            return joniPropertyResult(
+                    propertyWildcard.set,
+                    propertyWildcard.wideRanges,
+                    propertyWildcard.caseFold);
+        }
+        boolean caseFold;
+        PerlBinaryBooleanAssignment binaryAssignment =
+                perlBinaryBooleanAssignment(property);
+        if (binaryAssignment != null) {
+            // False remains a semantic negation and is translated by the
+            // frontend so outer \P, /i folding, and signed-wide membership stay
+            // symmetric. True can use the native positive range result here.
+            if (!binaryAssignment.value) return null;
+            caseFold = true;
+        } else if (isGeneralCategoryProperty(name)) {
+            caseFold = true;
+        } else if (PerlUnicodeBlockData.isPropertyAlias(name)) {
+            if (perlBlockWildcardBody(value) != null) return null;
+            caseFold = false;
+        } else if (PerlUnicodeScriptData.isScriptPropertyAlias(name)
+                || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(name)) {
+            if (perlNumericWildcardBody(value) != null) return null;
+            caseFold = false;
+        } else if (isCanonicalCombiningClassProperty(name)
+                || PerlUnicodeBidiClassData.isPropertyAlias(name)
+                || PerlUnicodeDecompositionTypeData.isPropertyAlias(name)
+                || PerlUnicodeEastAsianWidthData.isPropertyAlias(name)) {
+            caseFold = false;
+        } else if (PerlUnicodeNumericValueData.isPropertyAlias(name)
+                || PerlUnicodeJoiningGroupData.isPropertyAlias(name)) {
+            if (perlNumericWildcardBody(value) != null) return null;
+            caseFold = false;
+        } else if (isPerlWordBreakProperty(name)) {
+            if (resolvePerlWordBreakProperty(property) == null) return null;
+            caseFold = false;
+        } else if (isPerlSentenceBreakProperty(name)) {
+            if (resolvePerlSentenceBreakProperty(property) == null) return null;
+            caseFold = false;
+        } else if (isPerlVerticalOrientationProperty(name)) {
+            if (resolvePerlVerticalOrientationProperty(property) == null) return null;
+            caseFold = false;
+        } else if (isPerlAgeProperty(name)) {
+            if (isPerlAgeWildcard(value)) return null;
+            caseFold = false;
+        } else {
             return null;
         }
-        UnicodeSet set = resolvePerlBuiltInPropertyAlias(property);
+
+        // Joni currently folds a complete bracket expression as one class.
+        // Keep no-fold families translated by the adapter inside brackets until
+        // the AST can retain per-property fold policy through class composition.
+        if (!caseFold && inCharacterClass) return null;
+
+        UnicodeSet set = binaryAssignment == null
+                ? resolvePerlBuiltInPropertyAlias(property)
+                : resolveStandardPropertyAsSet(
+                        binaryAssignment.propertyName, new LinkedHashSet<>());
         if (set == null) return null;
 
+        long[] wideRanges = isPerlVerticalOrientationDefault(property)
+                ? new long[] {1, 0x110000L, Long.MAX_VALUE}
+                : null;
+        return joniPropertyResult(set, wideRanges, caseFold);
+    }
+
+    private static UnicodeSet resolvePerlCaseFoldableBareProperty(
+            String property, boolean caseInsensitive) {
+        return switch (property) {
+            case "Uppercase", "XPosixLower", "XPosixUpper" ->
+                    resolveStandardPropertyAsSet(
+                            property, new LinkedHashSet<>());
+            case "Titlecase", "TitlecaseLetter", "Titlecase_Letter", "Lt" -> caseInsensitive
+                    ? perlCasedPropertySet()
+                    : resolveStandardPropertyAsSet(property, new LinkedHashSet<>());
+            case "PosixLower" -> new UnicodeSet('a', 'z').freeze();
+            case "PosixUpper" -> new UnicodeSet('A', 'Z').freeze();
+            default -> null;
+        };
+    }
+
+    private static UnicodeSet perlCasedPropertySet() {
+        return new UnicodeSet()
+                .applyPropertyAlias("Cased", "True")
+                .freeze();
+    }
+
+    private static boolean isPerlAllProperty(String property, String looseIsValue) {
+        return loosePropertyName(looseIsValue == null ? property : looseIsValue)
+                .equals("all");
+    }
+
+    private static long[] perlUnicodeOnlyWideRanges(
+            String property, String looseIsValue) {
+        String alias = loosePropertyName(
+                looseIsValue == null ? property : looseIsValue);
+        return alias.equals("any") || alias.equals("unicode")
+                ? new long[] {0}
+                : null;
+    }
+
+    private static CharacterPropertyResolver.Result joniPropertyResult(
+            UnicodeSet set, boolean caseFold) {
+        return joniPropertyResult(set, null, caseFold);
+    }
+
+    private static CharacterPropertyResolver.Result joniPropertyResult(
+            UnicodeSet set, long[] wideRanges, boolean caseFold) {
         int[] ranges = new int[set.getRangeCount() * 2 + 1];
         ranges[0] = set.getRangeCount();
         for (int i = 0; i < set.getRangeCount(); i++) {
             ranges[i * 2 + 1] = set.getRangeStart(i);
             ranges[i * 2 + 2] = set.getRangeEnd(i);
         }
-        return ranges;
+        return new CharacterPropertyResolver.Result(ranges, wideRanges, caseFold);
     }
 
     private static boolean isPerlSpecialPropertyAlias(String property) {
         return switch (property) {
             case "lb=cr", "lb=CR",
+                    "PerlSpace", "PerlWord",
                     "XPosixSpace", "XPerlSpace", "SpacePerl", "Space", "White_Space",
                     "XPosixAlnum", "Alnum",
                     "XPosixAlpha", "Alpha", "Alphabetic",
@@ -1026,11 +1500,84 @@ public class UnicodeResolver {
         };
     }
 
+    private static String canonicalPerlPosixPropertyAlias(String property) {
+        if (property == null) return null;
+        String loose = loosePropertyName(property);
+        if (loose.startsWith("is")) {
+            String unprefixed = loose.substring(2);
+            if (unprefixed.startsWith("xposix") || unprefixed.startsWith("posix")
+                    || unprefixed.equals("perlspace")
+                    || unprefixed.equals("perlword")
+                    || unprefixed.equals("xperlspace")
+                    || unprefixed.equals("spaceperl")) {
+                loose = unprefixed;
+            }
+        }
+        return switch (loose) {
+            case "perlspace" -> "PerlSpace";
+            case "perlword" -> "PerlWord";
+            case "xperlspace" -> "XPerlSpace";
+            case "spaceperl" -> "SpacePerl";
+            case "xposixalnum" -> "XPosixAlnum";
+            case "xposixalpha" -> "XPosixAlpha";
+            case "xposixblank" -> "XPosixBlank";
+            case "xposixcntrl" -> "XPosixCntrl";
+            case "xposixdigit" -> "XPosixDigit";
+            case "xposixgraph" -> "XPosixGraph";
+            case "xposixlower" -> "XPosixLower";
+            case "xposixprint" -> "XPosixPrint";
+            case "xposixpunct" -> "XPosixPunct";
+            case "xposixspace" -> "XPosixSpace";
+            case "xposixupper" -> "XPosixUpper";
+            case "xposixword" -> "XPosixWord";
+            case "xposixxdigit" -> "XPosixXDigit";
+            case "posixalnum" -> "PosixAlnum";
+            case "posixalpha" -> "PosixAlpha";
+            case "posixblank" -> "PosixBlank";
+            case "posixcntrl" -> "PosixCntrl";
+            case "posixdigit" -> "PosixDigit";
+            case "posixgraph" -> "PosixGraph";
+            case "posixlower" -> "PosixLower";
+            case "posixprint" -> "PosixPrint";
+            case "posixpunct" -> "PosixPunct";
+            case "posixspace" -> "PosixSpace";
+            case "posixupper" -> "PosixUpper";
+            case "posixword" -> "PosixWord";
+            case "posixxdigit" -> "PosixXDigit";
+            default -> property;
+        };
+    }
+
     private static UnicodeSet resolvePerlBuiltInPropertyAlias(String property) {
         if (property == null) return null;
 
-        String alias = property.trim();
+        String alias = canonicalPerlPosixPropertyAlias(property.trim());
+        alias = normalizePerlIsPropertyAssignment(alias);
+        if (PERL_REJECTED_OBSOLETE_BINARY_ALIASES.contains(
+                loosePropertyName(alias))) {
+            throw new IllegalArgumentException(
+                    "Unsupported obsolete Unicode property: " + property.trim());
+        }
         int assignment = propertyValueDelimiter(alias);
+        PerlUnicodePropertyWildcard propertyWildcard =
+                resolvePerlUnicodePropertyWildcard(alias);
+        if (propertyWildcard != null) return propertyWildcard.set;
+        if (assignment < 0) {
+            UnicodeSet blockBinaryPrecedence =
+                    resolvePerlBlockBinaryPrecedenceAlias(alias);
+            if (blockBinaryPrecedence != null) return blockBinaryPrecedence;
+            PerlBarePropertyAlias compatibility =
+                    resolvePerlPosixCompatibilityAlias(alias);
+            if (compatibility != null) return compatibility.set;
+            PerlBarePropertyAlias bareAlias = resolvePerlBarePropertyAlias(alias);
+            if (bareAlias != null) return bareAlias.set;
+            UnicodeSet baseAlias = resolvePerlMissingBaseAlias(alias);
+            if (baseAlias != null) return baseAlias;
+            UnicodeSet generalCategory = resolvePerlBareGeneralCategory(alias);
+            if (generalCategory != null) return generalCategory;
+            UnicodeSet blockShortcut = resolvePerlBareBlockShortcut(alias);
+            if (blockShortcut != null) return blockShortcut;
+        }
         if (assignment == alias.length() - 1
                 && (PerlUnicodeScriptData.isScriptPropertyAlias(
                         alias.substring(0, assignment))
@@ -1050,6 +1597,8 @@ public class UnicodeResolver {
             }
             return category;
         }
+        UnicodeSet age = resolvePerlAgeProperty(alias, true);
+        if (age != null) return age;
         if (assignment > 0 && assignment < alias.length() - 1
                 && isCanonicalCombiningClassProperty(alias.substring(0, assignment))) {
             UnicodeSet combiningClass = PerlUnicodeCombiningClassData.resolve(
@@ -1129,6 +1678,12 @@ public class UnicodeResolver {
                         alias.substring(0, assignment))) {
             return resolvePerlScript(alias.substring(assignment + 1), true);
         }
+        UnicodeSet wordBreak = resolvePerlWordBreakProperty(alias);
+        if (wordBreak != null) return wordBreak;
+        UnicodeSet sentenceBreak = resolvePerlSentenceBreakProperty(alias);
+        if (sentenceBreak != null) return sentenceBreak;
+        UnicodeSet verticalOrientation = resolvePerlVerticalOrientationProperty(alias);
+        if (verticalOrientation != null) return verticalOrientation;
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1146,6 +1701,19 @@ public class UnicodeResolver {
                 }
             }
         }
+        String looseIsValue = looseIsShortcutValue(alias);
+        boolean inheritedBareIs = looseIsValue != null
+                && PerlUnicodeScriptData.canonicalValue(looseIsValue) == null
+                && PerlUnicodeBlockData.set(looseIsValue) == null;
+        if (inheritedBareIs) {
+            // Keep General_Category ahead of binary aliases in the shared Is
+            // shortcut namespace, before Block's ambiguity guard runs.
+            UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(looseIsValue);
+            if (category != null) return category;
+            if (isIcuBinaryPropertyAlias(looseIsValue)) {
+                return new UnicodeSet().applyPropertyAlias(looseIsValue, "True");
+            }
+        }
         if (alias.equalsIgnoreCase("L&")) {
             UnicodeSet casedLetters = unicodePropertyValueSet(
                     UProperty.GENERAL_CATEGORY, "UppercaseLetter");
@@ -1159,8 +1727,16 @@ public class UnicodeResolver {
         // Perl's bare script-value shortcuts use Script_Extensions semantics.
         // Keep binary and General_Category names ahead of this value namespace.
         String scriptShortcut = alias;
-        if (alias.length() > 2 && alias.startsWith("Is")) {
-            int valueStart = 2;
+        int scriptPrefixStart = 0;
+        while (scriptPrefixStart < alias.length()) {
+            char separator = alias.charAt(scriptPrefixStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            scriptPrefixStart++;
+        }
+        if (alias.length() - scriptPrefixStart > 2
+                && alias.regionMatches(true, scriptPrefixStart, "is", 0, 2)) {
+            int valueStart = scriptPrefixStart + 2;
             while (valueStart < alias.length()) {
                 char separator = alias.charAt(valueStart);
                 if (!Character.isWhitespace(separator)
@@ -1180,31 +1756,50 @@ public class UnicodeResolver {
             }
         }
 
-        String blockAlias = alias;
+        String blockShortcutAlias = alias;
+        if (assignment < 0) {
+            int prefixStart = 0;
+            while (prefixStart < alias.length()) {
+                char separator = alias.charAt(prefixStart);
+                if (!Character.isWhitespace(separator)
+                        && separator != '-' && separator != '_') break;
+                prefixStart++;
+            }
+            if (prefixStart > 0 && alias.length() - prefixStart > 2
+                    && (alias.regionMatches(true, prefixStart, "in", 0, 2)
+                        || alias.regionMatches(true, prefixStart, "is", 0, 2))) {
+                blockShortcutAlias = alias.substring(prefixStart);
+            }
+        }
+
+        String blockAlias = blockShortcutAlias;
         boolean blockShortcut = false;
         boolean isBlockShortcut = false;
-        if (alias.length() > 2 && alias.regionMatches(true, 0, "in", 0, 2)) {
+        if (blockShortcutAlias.length() > 2
+                && blockShortcutAlias.regionMatches(true, 0, "in", 0, 2)) {
             int valueStart = 2;
-            while (valueStart < alias.length()) {
-                char separator = alias.charAt(valueStart);
+            while (valueStart < blockShortcutAlias.length()) {
+                char separator = blockShortcutAlias.charAt(valueStart);
                 if (!Character.isWhitespace(separator) && separator != '-' && separator != '_') break;
                 valueStart++;
             }
-            if (valueStart >= alias.length()) return null;
-            blockAlias = alias.substring(valueStart);
+            if (valueStart >= blockShortcutAlias.length()) return null;
+            blockAlias = blockShortcutAlias.substring(valueStart);
             blockShortcut = true;
-        } else if (assignment >= 0 || unicodePropertyValue(UProperty.SCRIPT, alias) >= 0) {
+        } else if (assignment >= 0
+                || unicodePropertyValue(UProperty.SCRIPT, blockShortcutAlias) >= 0) {
             return null;
-        } else if (alias.length() > 2 && alias.regionMatches(true, 0, "is", 0, 2)) {
+        } else if (blockShortcutAlias.length() > 2
+                && blockShortcutAlias.regionMatches(true, 0, "is", 0, 2)) {
             int valueStart = 2;
-            while (valueStart < alias.length()) {
-                char separator = alias.charAt(valueStart);
+            while (valueStart < blockShortcutAlias.length()) {
+                char separator = blockShortcutAlias.charAt(valueStart);
                 if (!Character.isWhitespace(separator)
                         && separator != '-' && separator != '_') break;
                 valueStart++;
             }
-            if (valueStart >= alias.length()) return null;
-            String candidate = alias.substring(valueStart);
+            if (valueStart >= blockShortcutAlias.length()) return null;
+            String candidate = blockShortcutAlias.substring(valueStart);
             if (unicodePropertyValue(UProperty.SCRIPT, candidate) >= 0) return null;
             if (isIcuBinaryPropertyAlias(candidate)
                     || isIcuGeneralCategoryAlias(candidate)) return null;
@@ -1221,7 +1816,79 @@ public class UnicodeResolver {
             // representation debt is closed; explicit Block=/In forms remain pinned.
             return null;
         }
-        return block;
+        if (block != null) return block;
+
+        if (inheritedBareIs) {
+            // Only inherit aliases whose unprefixed spelling already resolves.
+            // This preserves user-property lookup and leaves missing bare bases
+            // (for example All and Unicode) for their owning property slices.
+            return resolveStandardPropertyAsSet(looseIsValue, new LinkedHashSet<>());
+        }
+        return null;
+    }
+
+    private static UnicodeSet resolvePerlWordBreakProperty(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlWordBreakProperty(property.substring(0, assignment))) {
+            return null;
+        }
+        return unicodePropertyValueSet(
+                UProperty.WORD_BREAK, property.substring(assignment + 1));
+    }
+
+    private static boolean isPerlWordBreakProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "wb", "wordbreak" -> true;
+            default -> false;
+        };
+    }
+
+    private static UnicodeSet resolvePerlSentenceBreakProperty(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlSentenceBreakProperty(property.substring(0, assignment))) {
+            return null;
+        }
+        return unicodePropertyValueSet(
+                UProperty.SENTENCE_BREAK, property.substring(assignment + 1));
+    }
+
+    private static boolean isPerlSentenceBreakProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "sb", "sentencebreak" -> true;
+            default -> false;
+        };
+    }
+
+    private static UnicodeSet resolvePerlVerticalOrientationProperty(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlVerticalOrientationProperty(
+                        property.substring(0, assignment))) {
+            return null;
+        }
+        return unicodePropertyValueSet(
+                UProperty.VERTICAL_ORIENTATION, property.substring(assignment + 1));
+    }
+
+    private static boolean isPerlVerticalOrientationProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "vo", "verticalorientation" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isPerlVerticalOrientationDefault(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlVerticalOrientationProperty(
+                        property.substring(0, assignment))) {
+            return false;
+        }
+        int value = unicodePropertyValue(
+                UProperty.VERTICAL_ORIENTATION, property.substring(assignment + 1));
+        return value >= 0 && value == unicodePropertyValue(UProperty.VERTICAL_ORIENTATION, "R");
     }
 
     private static Boolean perlBooleanPropertyValue(String value) {
@@ -1230,6 +1897,386 @@ public class UnicodeResolver {
             case "false", "no", "n", "f" -> false;
             default -> null;
         };
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlUnicodePropertyWildcard(
+            String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1) return null;
+
+        String name = property.substring(0, assignment);
+        String value = property.substring(assignment + 1);
+        if (isPerlNameProperty(name)) {
+            return resolvePerlNamePropertyWildcard(name, value);
+        }
+
+        PerlPropertyValueMatcher wildcard =
+                compilePerlUnicodePropertyWildcard(value);
+        if (wildcard == null) return null;
+
+        if (isIcuBinaryPropertyAlias(name)) {
+            return resolvePerlBinaryPropertyWildcard(name, wildcard);
+        }
+        if (isPerlWordBreakProperty(name)) {
+            return resolvePerlEnumeratedPropertyWildcard(
+                    UProperty.WORD_BREAK, wildcard, "Word_Break",
+                    PERL_WORD_BREAK_WILDCARD_VALUES, false);
+        }
+        if (isPerlSentenceBreakProperty(name)) {
+            return resolvePerlEnumeratedPropertyWildcard(
+                    UProperty.SENTENCE_BREAK, wildcard, "Sentence_Break",
+                    PERL_SENTENCE_BREAK_WILDCARD_VALUES, false);
+        }
+        if (isPerlVerticalOrientationProperty(name)) {
+            return resolvePerlEnumeratedPropertyWildcard(
+                    UProperty.VERTICAL_ORIENTATION, wildcard,
+                    "Vertical_Orientation",
+                    PERL_VERTICAL_ORIENTATION_WILDCARD_VALUES, true);
+        }
+        return null;
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlBinaryPropertyWildcard(
+            String propertyName, PerlPropertyValueMatcher wildcard) {
+        boolean positive = matchesPerlUnicodePropertyWildcard(
+                wildcard, "Y", "Yes", "T", "True");
+        boolean negative = matchesPerlUnicodePropertyWildcard(
+                wildcard, "N", "No", "F", "False");
+        if (!positive && !negative) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches binary property "
+                            + propertyName.trim());
+        }
+
+        UnicodeSet propertySet = resolveStandardPropertyAsSet(
+                propertyName, new LinkedHashSet<>());
+        if (propertySet == null) {
+            throw new IllegalArgumentException(
+                    "Unsupported binary property: " + propertyName.trim());
+        }
+        UnicodeSet result = new UnicodeSet();
+        if (positive) result.addAll(propertySet);
+        if (negative) result.addAll(new UnicodeSet(propertySet).complement());
+        long[] wideRanges = negative
+                ? new long[] {1, 0x110000L, Long.MAX_VALUE}
+                : null;
+        return new PerlUnicodePropertyWildcard(
+                result.freeze(), wideRanges, true);
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlEnumeratedPropertyWildcard(
+            int property, PerlPropertyValueMatcher wildcard, String propertyName,
+            String[][] valueAliases, boolean wideDefaultRotated) {
+        UnicodeSet result = new UnicodeSet();
+        boolean matched = false;
+        boolean includesWideDefault = false;
+        for (String[] aliases : valueAliases) {
+            if (!matchesPerlUnicodePropertyWildcard(wildcard, aliases)) continue;
+            matched = true;
+
+            UnicodeSet valueSet = null;
+            for (String alias : aliases) {
+                valueSet = unicodePropertyValueSet(property, alias);
+                if (valueSet != null) break;
+            }
+            if (valueSet == null) {
+                throw new IllegalArgumentException(
+                        "Unsupported pinned " + propertyName + " value: "
+                                + aliases[0]);
+            }
+            result.addAll(valueSet);
+            includesWideDefault |= wideDefaultRotated
+                    && loosePropertyName(aliases[0]).equals("r");
+        }
+        if (!matched) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches " + propertyName);
+        }
+        long[] wideRanges = includesWideDefault
+                ? new long[] {1, 0x110000L, Long.MAX_VALUE}
+                : null;
+        return new PerlUnicodePropertyWildcard(
+                result.freeze(), wideRanges, false);
+    }
+
+    private static PerlPropertyValueMatcher compilePerlUnicodePropertyWildcard(
+            String value) {
+        String body = perlNumericWildcardBody(value);
+        if (body == null) return null;
+        if (body.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+        try {
+            return PerlPropertyValueMatcher.compile(body);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+    }
+
+    private static boolean matchesPerlUnicodePropertyWildcard(
+            PerlPropertyValueMatcher wildcard, String... aliases) {
+        for (String alias : aliases) {
+            if (alias != null && (wildcard.matchesPropertyValue(alias)
+                    || wildcard.matchesPropertyValue(loosePropertyName(alias)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isPerlNameProperty(String name) {
+        String trimmed = name.trim();
+        return trimmed.equals("name") || trimmed.equals("na");
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlNamePropertyWildcard(
+            String propertyName, String value) {
+        String body = perlSlashWildcardBody(value);
+        if (body == null) return null;
+        if (body.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        final PerlPropertyValueMatcher wildcard;
+        try {
+            wildcard = PerlPropertyValueMatcher.compile(body, false);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        ValueIterator names = UCharacter.getNameIterator();
+        ValueIterator.Element name = new ValueIterator.Element();
+        while (names.next(name)) {
+            if (name.value instanceof String unicodeName
+                    && wildcard.matchesPropertyValue(unicodeName)) {
+                result.add(name.integer);
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches "
+                            + propertyName.trim());
+        }
+        return new PerlUnicodePropertyWildcard(result.freeze(), null, true);
+    }
+
+    private static String perlSlashWildcardBody(String value) {
+        String trimmed = value.trim();
+        return trimmed.length() > 2 && trimmed.startsWith("/")
+                && trimmed.endsWith("/")
+                ? trimmed.substring(1, trimmed.length() - 1)
+                : null;
+    }
+
+    private static final class PerlUnicodePropertyWildcard {
+        private final UnicodeSet set;
+        private final long[] wideRanges;
+        private final boolean caseFold;
+
+        private PerlUnicodePropertyWildcard(
+                UnicodeSet set, long[] wideRanges, boolean caseFold) {
+            this.set = set;
+            this.wideRanges = wideRanges;
+            this.caseFold = caseFold;
+        }
+    }
+
+    private static PerlBinaryBooleanAssignment perlBinaryBooleanAssignment(
+            String property) {
+        String normalized = normalizePerlIsPropertyAssignment(property.trim());
+        int assignment = propertyValueDelimiter(normalized);
+        if (assignment <= 0 || assignment == normalized.length() - 1) return null;
+
+        String name = normalized.substring(0, assignment);
+        Boolean value = perlBooleanPropertyValue(
+                normalized.substring(assignment + 1));
+        if (value == null || !isIcuBinaryPropertyAlias(name)) return null;
+        return new PerlBinaryBooleanAssignment(name, value);
+    }
+
+    private static final class PerlBinaryBooleanAssignment {
+        private final String propertyName;
+        private final boolean value;
+
+        private PerlBinaryBooleanAssignment(String propertyName, boolean value) {
+            this.propertyName = propertyName;
+            this.value = value;
+        }
+    }
+
+    private static UnicodeSet resolvePerlMissingBaseAlias(String alias) {
+        return switch (loosePropertyName(alias)) {
+            case "unicode" -> PERL_UNICODE_BASE_SET;
+            case "vertspace" -> PERL_VERTICAL_SPACE_SET;
+            case "word" -> PERL_WORD_SET;
+            case "title", "titlecase" -> PerlUnicodeGeneralCategoryData.resolve("Lt");
+            case "ce", "compositionexclusion" -> PERL_COMPOSITION_EXCLUSION_SET;
+            case "horizspace" -> PERL_HORIZONTAL_SPACE_SET;
+            case "kehnomirror" -> PerlUnicodeUnikemetData.noMirror();
+            case "kehnorotate" -> PerlUnicodeUnikemetData.noRotate();
+            default -> null;
+        };
+    }
+
+    private static PerlBarePropertyAlias resolvePerlBarePropertyAlias(
+            String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        String looseAlias = loosePropertyName(property);
+        if (!PERL_BARE_PROPERTY_ALIASES.contains(looseAlias)) return null;
+
+        if (looseAlias.equals("any")) {
+            return new PerlBarePropertyAlias(PERL_UNICODE_BASE_SET, false);
+        }
+        if (looseAlias.equals("assigned")) {
+            return new PerlBarePropertyAlias(PERL_ASSIGNED_SET, false);
+        }
+
+        UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(looseAlias);
+        if (category == null) {
+            category = unicodePropertyValueSet(
+                    UProperty.GENERAL_CATEGORY, looseAlias);
+        }
+        if (category != null) {
+            return new PerlBarePropertyAlias(category, true);
+        }
+        try {
+            UnicodeSet binary = new UnicodeSet()
+                    .applyPropertyAlias(looseAlias, "True")
+                    .freeze();
+            return new PerlBarePropertyAlias(
+                    binary, looseAlias.equals("lowercase"));
+        } catch (IllegalArgumentException unsupported) {
+            return null;
+        }
+    }
+
+    private static PerlBarePropertyAlias resolvePerlPosixCompatibilityAlias(
+            String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        return switch (loosePropertyName(property)) {
+            case "perlspace" -> new PerlBarePropertyAlias(
+                    PERL_ASCII_SPACE_SET, false);
+            case "perlword" -> new PerlBarePropertyAlias(
+                    PERL_ASCII_WORD_SET, false);
+            case "xperlspace", "spaceperl" -> new PerlBarePropertyAlias(
+                    PERL_UNICODE_SPACE_SET, false);
+            case "whitespace" -> new PerlBarePropertyAlias(
+                    PERL_UNICODE_SPACE_SET, false);
+            case "xposixgraph" -> new PerlBarePropertyAlias(
+                    PERL_POSIX_GRAPH_SET, false);
+            case "xposixprint", "print" -> new PerlBarePropertyAlias(
+                    PERL_POSIX_PRINT_SET, false);
+            case "xposixxdigit", "xdigit" -> new PerlBarePropertyAlias(
+                    PERL_POSIX_XDIGIT_SET, false);
+            default -> null;
+        };
+    }
+
+    private static UnicodeSet resolvePerlBlockBinaryPrecedenceAlias(
+            String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        String isValue = looseIsShortcutValue(property);
+        String alias = loosePropertyName(isValue == null ? property : isValue);
+        String canonical = switch (alias) {
+            case "idc" -> "ID_Continue";
+            case "vs" -> "Variation_Selector";
+            default -> null;
+        };
+        return canonical == null ? null : new UnicodeSet()
+                .applyPropertyAlias(canonical, "True")
+                .freeze();
+    }
+
+    private static final class PerlBarePropertyAlias {
+        private final UnicodeSet set;
+        private final boolean caseFold;
+
+        private PerlBarePropertyAlias(UnicodeSet set, boolean caseFold) {
+            this.set = set;
+            this.caseFold = caseFold;
+        }
+    }
+
+    private static UnicodeSet buildPerlVerticalSpaceSet() {
+        return new UnicodeSet()
+                .add(0x000A, 0x000D)
+                .add(0x0085)
+                .add(0x2028, 0x2029)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlHorizontalSpaceSet() {
+        return new UnicodeSet()
+                .add(0x0009)
+                .add(0x0020)
+                .add(0x00A0)
+                .add(0x1680)
+                .add(0x2000, 0x200A)
+                .add(0x202F)
+                .add(0x205F)
+                .add(0x3000)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlUnicodeSpaceSet() {
+        return new UnicodeSet()
+                .add(0x0009, 0x000D).add(0x0020).add(0x0085).add(0x00A0)
+                .add(0x1680).add(0x2000, 0x200A).add(0x2028, 0x2029)
+                .add(0x202F).add(0x205F).add(0x3000)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlPosixGraphSet() {
+        return new UnicodeSet(PERL_UNICODE_BASE_SET)
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cc"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cs"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cn"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Z"))
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlPosixPrintSet() {
+        return new UnicodeSet(PERL_UNICODE_BASE_SET)
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cc"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cs"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cn"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Zl"))
+                .removeAll(PerlUnicodeGeneralCategoryData.resolve("Zp"))
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlWordSet() {
+        // ICU4J 78.3 and Perl 5.44 are both pinned to Unicode 17.0. Perl's
+        // Word definition is Alphabetic + marks + Nd + Pc + Join_Control.
+        return new UnicodeSet()
+                .applyPropertyAlias("Alphabetic", "True")
+                .addAll(PerlUnicodeGeneralCategoryData.resolve("M"))
+                .addAll(PerlUnicodeGeneralCategoryData.resolve("Nd"))
+                .addAll(PerlUnicodeGeneralCategoryData.resolve("Pc"))
+                .add(0x200C, 0x200D)
+                .freeze();
+    }
+
+    private static UnicodeSet buildPerlCompositionExclusionSet() {
+        // Exact Unicode 17 Composition_Exclusion inversion list used by Perl
+        // 5.44. Keep this explicit rather than discovering a host-ICU property.
+        return new UnicodeSet()
+                .add(0x0958, 0x095F).add(0x09DC, 0x09DD).add(0x09DF)
+                .add(0x0A33).add(0x0A36).add(0x0A59, 0x0A5B).add(0x0A5E)
+                .add(0x0B5C, 0x0B5D).add(0x0F43).add(0x0F4D).add(0x0F52)
+                .add(0x0F57).add(0x0F5C).add(0x0F69).add(0x0F76)
+                .add(0x0F78).add(0x0F93).add(0x0F9D).add(0x0FA2)
+                .add(0x0FA7).add(0x0FAC).add(0x0FB9).add(0x2ADC)
+                .add(0xFB1D).add(0xFB1F).add(0xFB2A, 0xFB36)
+                .add(0xFB38, 0xFB3C).add(0xFB3E).add(0xFB40, 0xFB41)
+                .add(0xFB43, 0xFB44).add(0xFB46, 0xFB4E)
+                .add(0x1D15E, 0x1D164).add(0x1D1BB, 0x1D1C0)
+                .freeze();
     }
 
     private static boolean isIcuBinaryPropertyAlias(String alias) {
@@ -1248,6 +2295,91 @@ public class UnicodeResolver {
         } catch (IllegalArgumentException unsupported) {
             return false;
         }
+    }
+
+    private static String looseIsShortcutValue(String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        int prefixStart = 0;
+        while (prefixStart < property.length()) {
+            char separator = property.charAt(prefixStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            prefixStart++;
+        }
+        if (property.length() - prefixStart <= 2
+                || !property.regionMatches(true, prefixStart, "is", 0, 2)) {
+            return null;
+        }
+        int valueStart = prefixStart + 2;
+        while (valueStart < property.length()) {
+            char separator = property.charAt(valueStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            valueStart++;
+        }
+        return valueStart < property.length() ? property.substring(valueStart) : null;
+    }
+
+    private static UnicodeSet resolvePerlBareGeneralCategory(String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        String looseIsValue = looseIsShortcutValue(property);
+        String alias = looseIsValue == null ? property : looseIsValue;
+
+        // Perl's shared bare namespace gives scripts and binary properties
+        // precedence over General_Category compatibility names. Blocks are
+        // considered afterward by resolvePerlBareBlockShortcut.
+        if (PerlUnicodeScriptData.canonicalValue(alias) != null
+                || isIcuBinaryPropertyAlias(alias)) {
+            return null;
+        }
+        if (loosePropertyName(alias).equals("l&")) {
+            return PerlUnicodeGeneralCategoryData.resolve("LC");
+        }
+        return PerlUnicodeGeneralCategoryData.resolve(alias);
+    }
+
+    private static UnicodeSet resolvePerlBareBlockShortcut(String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        int aliasStart = 0;
+        while (aliasStart < property.length()) {
+            char separator = property.charAt(aliasStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            aliasStart++;
+        }
+        if (aliasStart >= property.length()) return null;
+        String alias = property.substring(aliasStart);
+
+        // Perl gives the shared bare namespace to script, binary, and General
+        // Category aliases before considering a same-spelled block alias.
+        if (PerlUnicodeScriptData.canonicalValue(alias) != null
+                || isIcuBinaryPropertyAlias(alias)
+                || isIcuGeneralCategoryAlias(alias)) {
+            return null;
+        }
+        UnicodeSet direct = PerlUnicodeBlockData.set(alias);
+        if (direct != null) return direct;
+
+        if (alias.length() <= 2
+                || !(alias.regionMatches(true, 0, "in", 0, 2)
+                        || alias.regionMatches(true, 0, "is", 0, 2))) {
+            return null;
+        }
+        int valueStart = 2;
+        while (valueStart < alias.length()) {
+            char separator = alias.charAt(valueStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            valueStart++;
+        }
+        if (valueStart >= alias.length()) return null;
+        String value = alias.substring(valueStart);
+        if (PerlUnicodeScriptData.canonicalValue(value) != null
+                || isIcuBinaryPropertyAlias(value)
+                || isIcuGeneralCategoryAlias(value)) {
+            return null;
+        }
+        return PerlUnicodeBlockData.set(value);
     }
 
     private static boolean isPerlIsPrefixedNumericWildcard(String property) {
@@ -1322,9 +2454,9 @@ public class UnicodeResolver {
                     "quantifier '*' is not allowed in Unicode property value wildcard");
         }
 
-        Pattern valuePattern;
+        PerlPropertyValueMatcher valuePattern;
         try {
-            valuePattern = Pattern.compile(wildcard);
+            valuePattern = PerlPropertyValueMatcher.compile(wildcard);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -1332,8 +2464,8 @@ public class UnicodeResolver {
 
         UnicodeSet result = new UnicodeSet();
         for (String candidate : PerlUnicodeJoiningGroupData.wildcardValues()) {
-            if (valuePattern.matcher(candidate).matches()
-                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+            if (valuePattern.matchesPropertyValue(candidate)
+                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate))) {
                 result.addAll(PerlUnicodeJoiningGroupData.valueSet(candidate));
             }
         }
@@ -1359,9 +2491,9 @@ public class UnicodeResolver {
                     "quantifier '*' is not allowed in Unicode property value wildcard");
         }
 
-        Pattern valuePattern;
+        PerlPropertyValueMatcher valuePattern;
         try {
-            valuePattern = Pattern.compile(wildcard);
+            valuePattern = PerlPropertyValueMatcher.compile(wildcard);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -1370,8 +2502,20 @@ public class UnicodeResolver {
         UnicodeSet result = new UnicodeSet();
         for (int valueId = 0; valueId < PerlUnicodeBlockData.valueCount(); valueId++) {
             String candidate = PerlUnicodeBlockData.canonicalValue(valueId);
-            if (valuePattern.matcher(candidate).matches()
-                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+            boolean matches = valuePattern.matchesPropertyValue(candidate)
+                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate));
+            int icuValue = unicodePropertyValue(UProperty.BLOCK, candidate);
+            for (int nameChoice = UProperty.NameChoice.SHORT;
+                    !matches && icuValue >= 0 && nameChoice <= UProperty.NameChoice.LONG;
+                    nameChoice++) {
+                String officialAlias = UCharacter.getPropertyValueName(
+                        UProperty.BLOCK, icuValue, nameChoice);
+                matches = officialAlias != null
+                        && (valuePattern.matchesPropertyValue(officialAlias)
+                            || valuePattern.matchesPropertyValue(
+                                    loosePropertyName(officialAlias)));
+            }
+            if (matches) {
                 result.addAll(PerlUnicodeBlockData.set(valueId));
             }
         }
@@ -1407,9 +2551,9 @@ public class UnicodeResolver {
                     "quantifier '*' is not allowed in Unicode property value wildcard");
         }
 
-        Pattern valuePattern;
+        PerlPropertyValueMatcher valuePattern;
         try {
-            valuePattern = Pattern.compile(wildcard);
+            valuePattern = PerlPropertyValueMatcher.compile(wildcard);
         } catch (RuntimeException invalidPattern) {
             throw new IllegalArgumentException(
                     "Invalid Unicode property value wildcard", invalidPattern);
@@ -1421,8 +2565,8 @@ public class UnicodeResolver {
                     PerlUnicodeScriptData.canonicalValue(candidate))) {
                 continue;
             }
-            if (valuePattern.matcher(candidate).matches()
-                    || valuePattern.matcher(loosePropertyName(candidate)).matches()) {
+            if (valuePattern.matchesPropertyValue(candidate)
+                    || valuePattern.matchesPropertyValue(loosePropertyName(candidate))) {
                 UnicodeSet match = extensions
                         ? PerlUnicodeScriptData.scriptExtensionsSet(candidate)
                         : PerlUnicodeScriptData.scriptSet(candidate);
@@ -1439,36 +2583,35 @@ public class UnicodeResolver {
 
     private static String perlBlockWildcardBody(String value) {
         String trimmed = value.trim();
+        if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
+                && trimmed.length() > 6) {
+            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
+        }
         if (!trimmed.startsWith("#") || !trimmed.endsWith("#")
                 || trimmed.length() <= 2) {
             return null;
         }
-        String body = trimmed.substring(1, trimmed.length() - 1);
-        if (body.startsWith("\\A") && body.endsWith("\\z")
-                && body.length() > 4) {
-            return body.substring(2, body.length() - 2);
-        }
-        return body;
+        return trimmed.substring(1, trimmed.length() - 1);
     }
 
     private static UnicodeSet resolvePerlNumericValue(String value) {
         String wildcard = perlNumericWildcardBody(value);
         if (wildcard != null) {
-            Pattern valuePattern;
+            PerlPropertyValueMatcher valuePattern;
             try {
-                valuePattern = Pattern.compile(wildcard);
+                valuePattern = PerlPropertyValueMatcher.compile(wildcard);
             } catch (RuntimeException invalidPattern) {
                 return null;
             }
             UnicodeSet result = new UnicodeSet();
             for (int index = 0; index < PerlUnicodeNumericValueData.valueCount(); index++) {
-                if (valuePattern.matcher(
-                        PerlUnicodeNumericValueData.canonicalValue(index)).matches()) {
+                if (valuePattern.matchesPropertyValue(
+                        PerlUnicodeNumericValueData.canonicalValue(index))) {
                     result.addAll(PerlUnicodeNumericValueData.set(index));
                 }
             }
-            if (valuePattern.matcher("NaN").matches()
-                    || valuePattern.matcher("nan").matches()) {
+            if (valuePattern.matchesPropertyValue("NaN")
+                    || valuePattern.matchesPropertyValue("nan")) {
                 result.addAll(PerlUnicodeNumericValueData.nanSet());
             }
             return result.isEmpty() ? null : result.freeze();
@@ -1488,11 +2631,11 @@ public class UnicodeResolver {
         String trimmed = value.trim();
         if (trimmed.startsWith("/\\A") && trimmed.endsWith("\\z/")
                 && trimmed.length() > 6) {
-            return trimmed.substring(3, trimmed.length() - 3);
+            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
         }
         if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
                 && trimmed.length() > 6) {
-            return trimmed.substring(3, trimmed.length() - 3);
+            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
         }
         return null;
     }
@@ -1691,26 +2834,36 @@ public class UnicodeResolver {
     }
 
     private static String translatePerlAgeProperty(String property, boolean negated) {
-        int delimiter = property.indexOf('=');
-        int colon = property.indexOf(':');
-        if (delimiter < 0 || colon > 0 && colon < delimiter) delimiter = colon;
+        UnicodeSet result = resolvePerlAgeProperty(property, true);
+        return result == null ? null
+                : wrapCharClass(unicodeSetToJavaPattern(result), negated);
+    }
+
+    private static UnicodeSet resolvePerlAgeProperty(
+            String property, boolean allowWildcard) {
+        property = normalizePerlIsPropertyAssignment(property);
+        int delimiter = propertyValueDelimiter(property);
         if (delimiter <= 0 || delimiter == property.length() - 1) return null;
 
-        String name = property.substring(0, delimiter)
-                .replace("_", "").replace("-", "").replace(" ", "");
+        String name = property.substring(0, delimiter);
         boolean exact;
-        if (name.equalsIgnoreCase("Age")) {
+        String looseName = loosePropertyName(name);
+        if (looseName.equals("age")) {
             exact = true;
-        } else if (name.equalsIgnoreCase("In") || name.equalsIgnoreCase("PresentIn")) {
+        } else if (looseName.equals("in") || looseName.equals("presentin")) {
             exact = false;
         } else {
             return null;
         }
 
-        String requested = normalizeUnicodeAgeVersion(property.substring(delimiter + 1));
+        String value = property.substring(delimiter + 1);
+        if (!allowWildcard && isPerlAgeWildcard(value)) return null;
+        if (allowWildcard && isPerlAgeWildcard(value)) {
+            return resolvePerlAgeWildcard(value, exact);
+        }
+        String requested = normalizeUnicodeAgeVersion(value);
         if (requested.equalsIgnoreCase("NA") || requested.equalsIgnoreCase("Unassigned")) {
-            return wrapCharClass(
-                    unicodeSetToJavaPattern(PerlUnicodeAgeData.unassignedSet()), negated);
+            return PerlUnicodeAgeData.unassignedSet();
         }
 
         UnicodeSet result = exact
@@ -1719,7 +2872,59 @@ public class UnicodeResolver {
         if (result == null) {
             throw new IllegalArgumentException("Unsupported Unicode age version: " + requested);
         }
-        return wrapCharClass(unicodeSetToJavaPattern(result), negated);
+        return result;
+    }
+
+    private static UnicodeSet resolvePerlAgeWildcard(
+            String value, boolean exact) {
+        String body = perlNumericWildcardBody(value);
+        if (body == null) return null;
+        if (body.indexOf('*') >= 0) {
+            throw new IllegalArgumentException(
+                    "quantifier '*' is not allowed in Unicode property value wildcard");
+        }
+
+        final PerlPropertyValueMatcher wildcard;
+        try {
+            wildcard = PerlPropertyValueMatcher.compile(body);
+        } catch (RuntimeException invalidPattern) {
+            throw new IllegalArgumentException(
+                    "Invalid Unicode property value wildcard", invalidPattern);
+        }
+
+        UnicodeSet result = new UnicodeSet();
+        for (int index = 0; index < PerlUnicodeAgeData.valueCount(); index++) {
+            String version = PerlUnicodeAgeData.versionAt(index);
+            String compact = "v" + version.replace(".", "");
+            String longAlias = "V" + version.replace('.', '_');
+            if (wildcard.matchesPropertyValue(version)
+                    || wildcard.matchesPropertyValue(compact)
+                    || wildcard.matchesPropertyValue(longAlias)) {
+                result.addAll(exact
+                        ? PerlUnicodeAgeData.exactSet(version)
+                        : PerlUnicodeAgeData.cumulativeSet(version));
+            }
+        }
+        if (wildcard.matchesPropertyValue("NA")
+                || wildcard.matchesPropertyValue("Unassigned")) {
+            result.addAll(PerlUnicodeAgeData.unassignedSet());
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches Age");
+        }
+        return result.freeze();
+    }
+
+    private static boolean isPerlAgeProperty(String name) {
+        String looseName = loosePropertyName(name);
+        return looseName.equals("age") || looseName.equals("in")
+                || looseName.equals("presentin");
+    }
+
+    private static boolean isPerlAgeWildcard(String value) {
+        String trimmed = value.trim();
+        return trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:");
     }
 
     private static String normalizeUnicodeAgeVersion(String value) {

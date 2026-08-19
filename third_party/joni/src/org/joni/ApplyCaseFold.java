@@ -36,21 +36,21 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
         Encoding enc = env.enc;
         CClassNode cc = arg.cc;
         CClassNode ascCc = arg.ascCc;
+        CClassNode foldCc = arg.foldCc;
         BitSet bs = cc.bs;
         boolean addFlag;
 
         if (Option.isPerlAsciiStrict(env.option)
-                && Encoding.isAscii(from) != Encoding.isAscii(to[0])) {
+                && perlAsciiStrictRelationCrossesAscii(from, to, length)) {
             return;
         }
 
-        if (ascCc == null) {
+        if (!isEligible(foldCc, enc, from) || ascCc == null) {
             addFlag = false;
         } else if (Encoding.isAscii(from) == Encoding.isAscii(to[0])) {
             addFlag = true;
         } else {
-            addFlag = ascCc.isCodeInCC(enc, from);
-            if (ascCc.isNot()) addFlag = !addFlag;
+            addFlag = isEligible(ascCc, enc, from);
         }
 
         if (length == 1) {
@@ -84,7 +84,8 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
             } // CASE_FOLD_IS_APPLIED_INSIDE_NEGATIVE_CCLASS
 
         } else {
-            if (cc.isCodeInCC(enc, from) && (!Config.CASE_FOLD_IS_APPLIED_INSIDE_NEGATIVE_CCLASS || !cc.isNot())) {
+            if (addFlag && cc.isCodeInCC(enc, from)
+                    && (!Config.CASE_FOLD_IS_APPLIED_INSIDE_NEGATIVE_CCLASS || !cc.isNot())) {
                 StringNode node = null;
                 for (int i=0; i<length; i++) {
                     if (i == 0) {
@@ -108,6 +109,40 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
 
         }
 
+    }
+
+    private static boolean perlAsciiStrictRelationCrossesAscii(int from, int[] to,
+                                                                int length) {
+        boolean fromAscii = Encoding.isAscii(from);
+        for (int i = 0; i < length; i++) {
+            if (fromAscii != Encoding.isAscii(to[i])) return true;
+        }
+        return false;
+    }
+
+    static boolean isEligible(CClassNode ascCc, Encoding enc, int code) {
+        if (ascCc == null) return false;
+        boolean eligible = ascCc.isCodeInCC(enc, code);
+        return ascCc.isNot() ? !eligible : eligible;
+    }
+
+    static void applyPerlSimpleClassClosure(ApplyCaseFoldArg arg) {
+        for (int classIndex = 0; classIndex < PerlUnicodeCaseFoldData.simpleClassCount();
+                classIndex++) {
+            int length = PerlUnicodeCaseFoldData.simpleClassLengthAt(classIndex);
+            for (int fromIndex = 0; fromIndex < length; fromIndex++) {
+                int from = PerlUnicodeCaseFoldData.simpleClassCodePointAt(
+                        classIndex, fromIndex);
+                if (PerlCaseFold.isTurkicSourceExcluded(from)) continue;
+                for (int toIndex = 0; toIndex < length; toIndex++) {
+                    if (toIndex == fromIndex) continue;
+                    int to = PerlUnicodeCaseFoldData.simpleClassCodePointAt(
+                            classIndex, toIndex);
+                    if (PerlCaseFold.isTurkicSourceExcluded(to)) continue;
+                    INSTANCE.apply(from, new int[] {to}, 1, arg);
+                }
+            }
+        }
     }
 
     static final ApplyCaseFold INSTANCE = new ApplyCaseFold();
