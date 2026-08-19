@@ -122,6 +122,9 @@ affected corpus before taking another slice.
   through native Joni bytecode and publish Perl-compatible `$REGMARK` and
   `$REGERROR`; the exact `regexp.t` differential removes three failures with no
   introductions.
+- Negative lookbehind accepts capture enclosures and uses ACCEPT-aware width
+  analysis in native Joni; named cut errors remain authoritative before an
+  unnamed FAIL. The combined exact `regexp.t` differential has no introductions.
 
 ## Execution Phases
 
@@ -234,8 +237,8 @@ behavior.
 ## Ordered Next Steps
 
 1. Run one warning-free full build and affected-corpus differential on the
-   integrated nested-quantifier and named-control-verb batch, then open its
-   review PR and require exact-head Ubuntu/Windows CI.
+   integrated nested-quantifier, named-control-verb, and negative-lookbehind
+   batch, then open its review PR and require exact-head Ubuntu/Windows CI.
 2. Complete byte/Unicode pattern provenance through runtime interpolation and
    template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal
    and backreference folding from generated data. Require direct Joni plus
