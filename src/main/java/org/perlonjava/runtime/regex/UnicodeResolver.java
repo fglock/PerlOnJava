@@ -1066,6 +1066,10 @@ public class UnicodeResolver {
                 return new CharacterPropertyResolver.Result(
                         null, new long[] {1, 0, Long.MAX_VALUE}, false);
             }
+            UnicodeSet blockShortcut = resolvePerlBareBlockShortcut(property);
+            if (blockShortcut != null) {
+                return joniPropertyResult(blockShortcut, false);
+            }
             if (looseIsValue == null) {
                 PerlBarePropertyAlias bareAlias = resolvePerlBarePropertyAlias(property);
                 if (bareAlias != null) {
@@ -1255,6 +1259,8 @@ public class UnicodeResolver {
             if (bareAlias != null) return bareAlias.set;
             UnicodeSet baseAlias = resolvePerlMissingBaseAlias(alias);
             if (baseAlias != null) return baseAlias;
+            UnicodeSet blockShortcut = resolvePerlBareBlockShortcut(alias);
+            if (blockShortcut != null) return blockShortcut;
         }
         if (assignment == alias.length() - 1
                 && (PerlUnicodeScriptData.isScriptPropertyAlias(
@@ -1745,6 +1751,55 @@ public class UnicodeResolver {
             valueStart++;
         }
         return valueStart < property.length() ? property.substring(valueStart) : null;
+    }
+
+    private static UnicodeSet resolvePerlBareBlockShortcut(String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        int aliasStart = 0;
+        while (aliasStart < property.length()) {
+            char separator = property.charAt(aliasStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            aliasStart++;
+        }
+        if (aliasStart >= property.length()) return null;
+        String alias = property.substring(aliasStart);
+
+        // Perl gives the shared bare namespace to script, binary, and General
+        // Category aliases before considering a same-spelled block alias.
+        if (PerlUnicodeScriptData.canonicalValue(alias) != null
+                || isIcuBinaryPropertyAlias(alias)
+                || isIcuGeneralCategoryAlias(alias)) {
+            return null;
+        }
+        UnicodeSet direct = PerlUnicodeBlockData.set(alias);
+        if (direct != null) return direct;
+
+        if (alias.length() <= 2
+                || !(alias.regionMatches(true, 0, "in", 0, 2)
+                        || alias.regionMatches(true, 0, "is", 0, 2))) {
+            return null;
+        }
+        boolean isShortcut = alias.regionMatches(true, 0, "is", 0, 2);
+        int valueStart = 2;
+        while (valueStart < alias.length()) {
+            char separator = alias.charAt(valueStart);
+            if (!Character.isWhitespace(separator)
+                    && separator != '-' && separator != '_') break;
+            valueStart++;
+        }
+        if (valueStart >= alias.length()) return null;
+        String value = alias.substring(valueStart);
+        if (PerlUnicodeScriptData.canonicalValue(value) != null
+                || isIcuBinaryPropertyAlias(value)
+                || isIcuGeneralCategoryAlias(value)) {
+            return null;
+        }
+        UnicodeSet block = PerlUnicodeBlockData.set(value);
+        if (isShortcut && block != null && block.containsSome(0xD800, 0xDFFF)) {
+            return null;
+        }
+        return block;
     }
 
     private static boolean isPerlIsPrefixedNumericWildcard(String property) {
