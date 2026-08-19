@@ -87,15 +87,15 @@ affected corpus before taking another slice.
   integrated in local staging.
 - Raw `\N{name}` source now survives frontend and matcher compilation without
   the temporary `=POJSEQ=` transport. Generated and lexical multi-code-point
-  names resolve through Joni; ordinary scalar names retain one explicit routing
-  gate only until the native `/aa` Kelvin fold correction lands.
-- Draft PR 1078 is durable remotely through `29a6de3fd`; current local staging
-  is `00d461a71`. That exact head passes warning-free `make`, all 17 tasks,
-  Joni tests, five unit shards, packaging, and generated-data checks. The new
-  missing-brace diagnostic fixture passes system Perl, JVM, and interpreter
-  8/8. The named-scalar Kelvin fixture passes system Perl 9/9 but ordinary JVM
-  and interpreter 8/9 until the explicit temporary ordinary-name routing gate
-  is deleted; PR publication waits for that already-owned correction.
+  names and ordinary scalar names resolve through Joni; the temporary
+  generated-sequence-only routing distinction is deleted.
+- PR 1078 is ready for review against `master` at `d5d733982`. That exact head
+  passes warning-free `make`, all 17 tasks, Joni tests, five unit shards,
+  packaging, and generated-data checks. The named-scalar Kelvin fixture passes
+  system Perl and ordinary JVM/interpreter 9/9; named transport passes 11/11,
+  cache 9/9, and missing-brace diagnostics 8/8 on both execution backends.
+  Ubuntu and Windows CI are in progress. New worker deliveries target the
+  isolated `integration/phase36-native-syntax-v8` successor branch.
 - Forced-Joni `pat_re_eval.t` now executes and passes 555/555 on both JVM and
   interpreter. Perl's release-build `-D` diagnostic is preserved without
   enabling PerlOnJava's unrelated internal compiler trace.
@@ -221,9 +221,8 @@ behavior.
    PR from draft to user acceptance.
 2. Finish fold provenance in isolated native slices: `/d`/`u`/`a`/`aa`, locale,
    Turkic, byte/Unicode source identity, forward/reverse literal expansion, and
-   backreferences. Correct named-scalar Kelvin `/aa`, then delete the temporary
-   generated-sequence routing distinction so every ordinary `\N{name}` pattern
-   uses Joni.
+   backreferences. Preserve the now-green ordinary named-character Joni route
+   across byte/upgraded, scoped, qr/interpolation, and substitution paths.
 3. Land native `(?(DEFINE)...)` with exact enclosing-capture publication and
    delete its adapter. Reuse the validated variable-lookbehind candidate, finish
    Perl's character/byte 255/256-width and diagnostic rules, then route ordinary
