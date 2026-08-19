@@ -100,6 +100,10 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
             "Missing right brace on \\N{}";
     String PERL_EMPTY_NAMED_CHARACTER_ESCAPE = "Empty \\N{}";
+    String PERL_MISSING_RIGHT_BRACE_ON_BOUNDARY =
+            "Missing right brace on \\%n{}";
+    String PERL_EMPTY_BOUNDARY = "Empty \\%n{}";
+    String PERL_UNKNOWN_BOUND_TYPE = "'%n' is an unknown bound type";
     String PERL_WIDE_SCALAR_OVERFLOW =
             "Use of code point is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF";
 

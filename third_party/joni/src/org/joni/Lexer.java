@@ -1776,47 +1776,51 @@ class Lexer extends ScannerSupport {
     private boolean fetchTokenForPerlBoundary(boolean negated) {
         if (!syntax.op2OptionPerl() || !left() || peek() != '{') return false;
 
-        mark();
         fetch(); // '{'
+        int contentStart = p;
         StringBuilder name = new StringBuilder(4);
         while (left()) {
+            int characterStart = p;
             fetch();
             if (c == '}') {
-                if (name.toString().equals("gcb")) {
+                String boundaryName = name.toString();
+                if (boundaryName.equals("gcb")) {
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_GRAPHEME_BOUNDARY
                             : AnchorType.GRAPHEME_BOUNDARY);
                     return true;
                 }
-                if (name.toString().equals("sb")) {
+                if (boundaryName.equals("sb")) {
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_SENTENCE_BOUNDARY
                             : AnchorType.SENTENCE_BOUNDARY);
                     return true;
                 }
-                if (name.toString().equals("wb")) {
+                if (boundaryName.equals("wb")) {
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_WORD_BREAK_BOUNDARY
                             : AnchorType.WORD_BREAK_BOUNDARY);
                     return true;
                 }
-                if (name.toString().equals("lb")) {
+                if (boundaryName.equals("lb")) {
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_LINE_BOUNDARY
                             : AnchorType.LINE_BOUNDARY);
                     return true;
                 }
-                restore();
-                return false;
+                String boundary = negated ? "B" : "b";
+                if (boundaryName.isEmpty()) {
+                    newSyntaxException(PERL_EMPTY_BOUNDARY.replace("%n", boundary));
+                }
+                newSyntaxException(PERL_UNKNOWN_BOUND_TYPE.replace("%n", boundaryName),
+                        characterStart - getBegin());
             }
-            if (name.length() >= 8 || c > 0x7f) {
-                restore();
-                return false;
-            }
-            name.append((char)c);
+            name.appendCodePoint(c);
         }
-        restore();
-        return false;
+        String boundary = negated ? "B" : "b";
+        newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_BOUNDARY.replace("%n", boundary),
+                contentStart - getBegin());
+        return false; // not reached
     }
 
     private void greedyCheck() {
