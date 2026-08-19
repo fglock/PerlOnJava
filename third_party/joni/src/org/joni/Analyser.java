@@ -1308,6 +1308,9 @@ final class Analyser extends Parser {
     private void setCallAttr(CallNode cn) {
         EncloseNode en = env.memNodes[cn.groupNum];
         if (en == null) newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
+        // Perl subroutine calls do not replace captures already visible in the
+        // caller. Reused branch-reset numbers need the existing snapshot path.
+        if (env.isMultiplexMemNode(cn.groupNum)) cn.setRecursion();
         en.setCalled();
         cn.setTarget(en);
         env.btMemStart = BitStatus.bsOnAt(env.btMemStart, cn.groupNum);
@@ -1339,7 +1342,7 @@ final class Analyser extends Parser {
                             en.recursionConditionNameP, en.recursionConditionNameEnd);
                 }
                 int[] refs = ne.getBackRefs();
-                if (refs.length != 1) {
+                if (refs.length != 1 && !syntax.allowMultiplexDefinitionNameCall()) {
                     newValueException(MULTIPLEX_DEFINITION_NAME_CALL,
                             en.recursionConditionNameP, en.recursionConditionNameEnd);
                 }
@@ -1370,10 +1373,11 @@ final class Analyser extends Parser {
 
                         if (ne == null) {
                             newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
-                        } else if (ne.backNum > 1) {
+                        } else if (ne.backNum > 1 && !syntax.allowMultiplexDefinitionNameCall()) {
                             newValueException(MULTIPLEX_DEFINITION_NAME_CALL, cn.nameP, cn.nameEnd);
                         } else {
                             cn.groupNum = ne.backRef1; // ne.backNum == 1 ? ne.backRef1 : ne.backRefs[0]; // ??? need to check ?
+                            if (ne.backNum > 1) cn.setRecursion();
                             setCallAttr(cn);
                         }
                     }
@@ -1983,6 +1987,7 @@ final class Analyser extends Parser {
     private static final int IN_VAR_REPEAT              = (1<<3);
     private static final int IN_CALL                    = (1<<4);
     private static final int IN_RECCALL                 = (1<<5);
+    private static final int IN_LOOKAROUND              = (1<<6);
     private static final int EXPAND_STRING_MAX_LENGTH   = 100;
 
     /* setup_tree does the following work.
@@ -2185,27 +2190,39 @@ final class Analyser extends Parser {
             AnchorNode an = (AnchorNode)node;
             switch (an.type) {
             case AnchorType.PREC_READ:
-                setupTree(an.target, state);
+                setupTree(an.target, (state | IN_LOOKAROUND));
                 break;
 
             case AnchorType.PREC_READ_NOT:
-                setupTree(an.target, (state | IN_NOT));
+                setupTree(an.target, (state | IN_NOT | IN_LOOKAROUND));
                 break;
 
             case AnchorType.LOOK_BEHIND:
-                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB, AnchorType.ALLOWED_IN_LB)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+                int allowedInLookBehind = syntax.op2OptionPerl()
+                        ? AnchorType.ALLOWED_IN_PERL_LB
+                        : AnchorType.ALLOWED_IN_LB;
+                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB, allowedInLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
                 node = setupLookBehind(an);
                 if (node.getType() != NodeType.ANCHOR) continue restart;
-                setupTree(((AnchorNode)node).target, state);
+                setupTree(((AnchorNode)node).target, (state | IN_LOOKAROUND));
                 node = setupLookBehind(an);
                 break;
 
             case AnchorType.LOOK_BEHIND_NOT:
-                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB_NOT, AnchorType.ALLOWED_IN_LB_NOT)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
+                int allowedInNegativeLookBehind = syntax.op2OptionPerl()
+                        ? AnchorType.ALLOWED_IN_PERL_LB_NOT
+                        : AnchorType.ALLOWED_IN_LB_NOT;
+                if (checkTypeTree(an.target, NodeType.ALLOWED_IN_LB, EncloseType.ALLOWED_IN_LB_NOT, allowedInNegativeLookBehind)) newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
                 node = setupLookBehind(an);
                 if (node.getType() != NodeType.ANCHOR) continue restart;
-                setupTree(((AnchorNode)node).target, (state | IN_NOT));
+                setupTree(((AnchorNode)node).target, (state | IN_NOT | IN_LOOKAROUND));
                 node = setupLookBehind(an);
+                break;
+
+            case AnchorType.KEEP:
+                if (syntax.op2OptionPerl() && (state & IN_LOOKAROUND) != 0) {
+                    newSyntaxException(PERL_KEEP_NOT_PERMITTED_IN_LOOKAROUND);
+                }
                 break;
 
             } // inner switch

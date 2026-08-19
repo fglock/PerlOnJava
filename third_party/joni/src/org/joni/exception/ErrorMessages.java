@@ -55,6 +55,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String UNDEFINED_GROUP_OPTION = "undefined group option";
     String INVALID_POSIX_BRACKET_TYPE = "invalid POSIX bracket type";
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
+    String PERL_KEEP_NOT_PERMITTED_IN_LOOKAROUND =
+            "\\K not permitted in lookahead/lookbehind in regex";
     String INVALID_REPEAT_RANGE_PATTERN = "invalid repeat range {lower,upper}";
     String INVALID_CONDITION_PATTERN = "invalid conditional pattern";
     String PERL_GROUP_NAME_MUST_START_WITH_WORD =
@@ -91,6 +93,9 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
     String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
             "Missing right brace on \\x{}";
+    String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
+            "Missing right brace on \\N{}";
+    String PERL_EMPTY_NAMED_CHARACTER_ESCAPE = "Empty \\N{}";
 
     /* values error (syntax error) */
     String TOO_BIG_NUMBER = "too big number";

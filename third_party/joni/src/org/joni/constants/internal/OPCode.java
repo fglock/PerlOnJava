@@ -162,6 +162,8 @@ public interface OPCode {
     int NOT_WORD_BREAK_BOUNDARY       = 118;          /* Perl \B{wb} */
     int LINE_BOUNDARY                 = 119;          /* Perl \b{lb} */
     int NOT_LINE_BOUNDARY             = 120;          /* Perl \B{lb} */
+    int PHYSICAL_NAMED_CAPTURE_START  = 121;
+    int PHYSICAL_NAMED_CAPTURE_END    = 122;
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -286,6 +288,8 @@ public interface OPCode {
         "not-word-break-boundary", /*OP_NOT_WORD_BREAK_BOUNDARY*/
         "line-boundary", /*OP_LINE_BOUNDARY*/
         "not-line-boundary", /*OP_NOT_LINE_BOUNDARY*/
+        "physical-named-capture-start",
+        "physical-named-capture-end",
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -411,5 +415,7 @@ public interface OPCode {
         Arguments.NON, /*OP_NOT_WORD_BREAK_BOUNDARY*/
         Arguments.NON, /*OP_LINE_BOUNDARY*/
         Arguments.NON, /*OP_NOT_LINE_BOUNDARY*/
+        Arguments.MEMNUM, /*OP_PHYSICAL_NAMED_CAPTURE_START*/
+        Arguments.MEMNUM, /*OP_PHYSICAL_NAMED_CAPTURE_END*/
     } : null;
 }
