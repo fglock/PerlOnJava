@@ -151,11 +151,23 @@ affected corpus before taking another slice.
 - Native Joni distinguishes non-ASCII unfinished ranges and accepts Perl false
   class ranges around `\d`, `\s`, and POSIX classes. The focused system-Perl,
   direct-Joni, four-backend, and imported-row gates agree.
-- Physical branch-reset names now bind named calls and named conditions to the
-  correct definition without changing numeric condition operands. The combined
-  numeric-backreference, class-range, and branch-reset boundary passes full
-  `make`; exact `regexp.t` is 2,074/2,210, fixing 57 identities from the prior
-  integrated boundary with no newly failing identity.
+- Physical branch-reset names bind named calls and named conditions to the
+  correct definition without changing numeric condition operands. Native
+  whole-pattern recursion, numeric-backreference, class-range, named-character,
+  and lexer slices pass the combined full build; exact `regexp.t` is
+  2,101/2,210 with zero newly failing identity against the prior boundary.
+- Runtime-source scanning preserves `/aa`, ignores callback-looking syntax in
+  comments and character classes, and agrees across default/Joni and JVM/
+  interpreter focused vectors. Unterminated-source diagnostics and the wider
+  dynamic code-array matrix remain open.
+- The fail-closed PR-958 comparator rejects missing files, lost passes,
+  timeout/error/unknown execution, zero TAP, truncated/incomplete TAP, and
+  malformed input, while emitting JSON and retaining exact baseline-artifact
+  provenance. Direct and `_thr` files remain separate identities.
+- Imported `perl5/t/re` and `perl5_t/t/re` files are byte-identical. There is no
+  configured regex-test patch; only a stale `pat.t.orig` artifact and the
+  regex-adjacent `_charnames.pm` library patch remain for the final sync and
+  Unicode-name retirement barriers.
 
 ## Execution Phases
 
@@ -267,36 +279,38 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Complete and integrate the active non-overlapping successor lanes: dynamic
-   source boundaries, ordinary repeated-capture clearing, native named-character
-   and escape diagnostics, and whole-pattern recursion. Preserve each lane as
-   reviewable semantic commits, then run one warning-free full `make`, four-leg
-   focused fixtures, and an exact zero-introduction `regexp.t` comparison on the
-   combined SHA.
+1. Finish and integrate repeated-capture lifetime as a Joni begin/end iteration
+   scope: preserve prior captures for backreferences while matching the next
+   body, clear only groups untouched by the successful iteration, and restore
+   state on failed-body backtracking. Keep nullable-repeat null-loop detection
+   unchanged until it has a dedicated invariant and direct stress tests.
 2. Close the remaining capture/region identities, including inactive named and
    numeric branch-reset slots, final successful quantified iterations, failed
    alternatives, recursive-frame publication, and nested match-state restore.
-3. Move remaining Perl named-character, escape, strict-mode, brace, control-
-   character, and warning semantics into Joni lexer/compiler internals. Remove
-   each corresponding `JoniRegexPattern`/preprocessor rewrite in the same gated
-   slice; keep only source-policy and final diagnostic rendering outside Joni.
-4. Finish whole-pattern recursion `(?R)`, recursive numbered/named calls,
-   recursion conditions, capture publication, and recursion safety. Keep
+3. Finish runtime-source diagnostics for unterminated executable groups and
+   regexp rows 575/576/581, then close the remaining `pat.t` dynamic code-array
+   rows without changing the already-green `pat_re_eval.t` 555/555 contract.
+4. Move remaining Perl named-character, escape, strict-mode, brace, control-
+   character, and warning semantics into Joni lexer/compiler internals. Resolve
+   the Perl-version diagnostic policy for regexp row 1521 without editing an
+   existing test, then remove each redundant translation in the same gate.
+5. Finish recursive numbered/named calls, recursion conditions, recursive
+   capture publication, and recursion safety. Keep
    runtime `(??{...})`, callback unwind, and `pat_re_eval.t` 555/555 green.
-5. Finish `/d`/`u`/`a`/`aa` forward/reverse literal and backreference folding
+6. Finish `/d`/`u`/`a`/`aa` forward/reverse literal and backreference folding
    from generated data, then rerun complete Unicode, `pat.t`, `pat_advanced.t`,
    `reg_mesg.t`, and bounded speed/psycho gates on one immutable artifact.
-6. Use the refreshed impact ledger to close every remaining semantic regex
+7. Use the refreshed impact ledger to close every remaining semantic regex
    identity and move all ordinary constants to Joni. Reject zero-TAP, timeout,
    truncated, incomplete, JVM/interpreter, or direct/thread mismatches.
-7. Remove proven-obsolete `dev/import-perl5` regex patches, rerun targeted sync
-   twice, prove byte-for-byte idempotence, and validate the restored unchanged
-   upstream tests.
-8. Delete Java matching, the backend selector, fallback state, matcher-semantic
+8. Remove the stale imported-corpus backup, retire `_charnames.pm.patch` only
+   after the upstream Unicode-name loading path is green, rerun targeted sync
+   twice, and prove byte-for-byte idempotence without editing imported tests.
+9. Delete Java matching, the backend selector, fallback state, matcher-semantic
    preprocessors, and unreachable adapter code. Prove performance, CPAN,
    packaging, notice/license, and warning-free build gates before removal is
    accepted.
-9. Update the feature matrix and final as-implemented/fork documents, remove or
+10. Update the feature matrix and final as-implemented/fork documents, remove or
    summarize redundant design documents, rebase each final PR on `master`, pass
    Ubuntu/Windows CI, and compare the complete runner output file-by-file with
    the immutable PR 958 baseline.
@@ -393,9 +407,14 @@ gates may reopen it if a semantic regression appears.
 - [ ] Final-iteration, optional, alternation, and failed-path capture clearing
 - [x] Physical branch-reset named calls and conditions
 - [ ] Inactive branch-reset slot publication
-- [ ] Native named-character whitespace/missing-brace/comment diagnostics and
-      removal of the duplicate Java translation path
-- [ ] Whole-pattern `(?R)` recursion and recursive capture publication
+- [x] Native named-character whitespace and missing-brace diagnostics
+- [ ] Exact named-character diagnostic-version policy and removal of the
+      remaining duplicate Java translation path
+- [x] Native whole-pattern `(?R)` parsing and execution
+- [ ] Recursive call capture publication and recursion safety
+- [x] Runtime-source comment/class masking and `/aa` propagation
+- [ ] Unterminated runtime-source diagnostics and dynamic code-array residuals
+- [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [ ] Retire proven-obsolete `dev/import-perl5` regex patches
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       80-file forced-Joni gates on one integrated artifact
