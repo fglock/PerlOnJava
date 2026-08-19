@@ -280,6 +280,37 @@ wake mechanism exists.
 Avoid one opaque sleep or wait longer than the environment permits. Preserve the
 1/2/5-minute schedule through a recurring monitor or several bounded waits.
 
+### Make long gates observable
+
+Before a build or corpus command expected to exceed the normal heartbeat
+interval, append `GATE_STARTED` with the task and lease tokens, exact command
+class, checkout, log path, PID or resumable session identifier when available,
+start time, and expected duration. Append `GATE_FINISHED` with exit status,
+summary, and final log path immediately afterward. A declared gate remains
+healthy while its log metadata or output advances within the expected duration
+plus the recorded grace period.
+
+Run the gate in a bounded background or resumable session against a committed
+or otherwise immutable artifact. While it runs, the worker may continue
+read-only classification, documentation, or a separately assigned task in a
+different non-overlapping worktree. Never mutate the checkout, generated files,
+or build artifact under validation. A second coding agent is optional; process
+separation and immutable inputs provide the concurrency benefit.
+
+Do not infer that a quiet worker is idle merely because no mailbox message
+arrived while a blocking command runs. Check the declared gate, advancing log,
+worktree metadata, and exact process identity. If process inspection is denied
+or unavailable, record the process state as `UNKNOWN`; never translate a failed
+inspection into evidence that no process exists. Ask for a resume handshake
+before recovery, and cancel the recovery if a concurrent midpoint or gate
+completion proves the lease healthy.
+
+Resource capacity is occupied only by an accepted intent that has not missed its
+start deadline or by a verified/declaratively active gate. Source editing and
+read-only classification consume no build slot. This distinction prevents
+stale reservations from making productive workers wait while the machine is
+idle.
+
 ## Detect crashes with renewable leases
 
 Emit a heartbeat at least every 15 minutes containing:
