@@ -23,8 +23,10 @@ commit messages, not here.
   and runtime classpaths.
 - JCodings remains an upstream binary dependency because PerlOnJava does not
   modify its encoding implementation.
-- Ordinary Java-regex patterns keep their existing fast path. Declarative
-  recursive patterns and executable patterns use the vendored Joni engine.
+- Automatic routing temporarily keeps ordinary patterns on Java. Patterns with
+  matcher features that Java cannot represent and the forced-Joni compatibility
+  gate use the vendored engine. The accepted final architecture removes Java
+  matching and the selector after semantic and performance parity.
 
 ## Internal callout syntax
 
@@ -217,41 +219,37 @@ boundary is:
   differences, and constructs that cannot be represented faithfully by textual
   rewrites.
 - The Java-only adapter retains Java `Pattern` syntax rewrites and stack-safety
-  workarounds while the Java fast path exists.
+  workarounds only while the Java route exists. The Joni adapter may temporarily
+  materialize constructs whose native grammar is not complete, but it must use
+  Joni—not Java regex—to execute property-value wildcard expressions.
 
-Migration is incremental. First inventory each preprocessing rule as source
-policy, backend-neutral syntax, Java adaptation, or matcher semantics. Move only
-the matcher-semantic category into focused Joni changes with differential Perl
-tests. A future decision to make Joni the default backend requires corpus and
-performance evidence; it is not implied by executable-callback support.
+Migration is incremental, but the destination is fixed: Joni becomes the sole
+production matcher. Each preprocessing rule is classified as source policy,
+backend-neutral syntax, Java adaptation, or matcher semantics. Matcher semantics
+move into focused Joni changes with differential Perl tests. Java adaptation is
+deleted with the Java route; source policy remains in PerlOnJava.
 
-The Joni routing roadmap is the missing-regex feature list in
-`docs/reference/feature-matrix.md`: dynamically scoped regex state, recursive
-and dynamic patterns, backtracking verbs and definitions, variable lookbehind,
-branch reset, subpattern calls, conditions, extended Unicode and graphemes,
-embedded code, regex debugging, runtime eval, lexical default flags, and named
-capture behavior. As each feature becomes executable, patterns containing it
-select Joni. The current selector routes declarative subpattern calls and every
-structured executable callback template, including runtime `(??{...})`.
-It also routes `(*ACCEPT)`. Semantically safe constant dynamic expressions may
-keep their established fold-to-pattern path.
+The compatibility inventory is the regex section of
+`docs/reference/feature-matrix.md`. The current selector routes subpattern
+calls, conditions, control verbs, ASCII-strict folds, and every structured
+executable callback template, including runtime `(??{...})`. Ordinary patterns
+remain part of the forced-Joni corpus even before automatic routing changes.
+Semantically safe constant dynamic expressions may still fold to pattern text;
+embedded closures never become compile-time constants because their execution
+and unwind are observable.
 
-## Implementation stages
+## Remaining integration gates
 
-1. Import and build the pinned upstream snapshot with its original tests through
-   the dedicated root source sets.
-2. Replace the external dependency and prove declarative regex parity.
-3. Add the callout parser node, opcode, handler API, provisional match view, and
-   forward execution.
-4. Add matcher-owned callout frames and exact-once cleanup for every exit path.
-5. Connect structured Perl callback templates and lexical closures.
-6. Publish provisional match state for plain callbacks and preserve `$^R` across
-   successful completion and backtracking.
-7. Add dynamic-local checkpoints and callback conditions.
-8. Resolve dynamic nested programs at match time and preserve their alternatives
-   as resumable matcher continuations on the outer backtracking stack.
-9. Implement matcher-control opcodes with explicit lookahead, call, dynamic,
-   capture, and backtracking-boundary semantics.
+- Complete native extended character classes and a non-executing
+  `(?(DEFINE)...)` container, then delete their textual rewrites.
+- Carry Perl charset mode and byte/Unicode provenance through property/class,
+  literal, reverse-expansion, and backreference folding.
+- Parse nested property-value regex syntax inside Joni character properties and
+  remove adapter range materialisation.
+- Restore original source names and exact Perl diagnostics after temporary
+  internal encodings.
+- Remove Java matching, Java-only preprocessing, and backend selection after the
+  complete semantic and performance gates pass.
 
 ## Verification
 
