@@ -1536,9 +1536,18 @@ public abstract class StringSegmentParser {
                 appendToCurrentSegment("N{" + name + "}");
             }
         } else {
-            // Unclosed brace, preserve literal
-            appendToCurrentSegment("N{" + nameBuilder);
+            throwMissingNamedCharacterBraceDiagnostic();
         }
+    }
+
+    private void throwMissingNamedCharacterBraceDiagnostic() {
+        var location = ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+        String message = isRegex
+                ? "Missing right brace on \\N{} or unescaped left brace after \\N"
+                : "Missing right brace on \\N{}";
+        throw new PerlParserException(message
+                + " at " + location.fileName() + " line " + location.lineNumber()
+                + ", within " + (isRegex ? "pattern" : "string") + "\n");
     }
 
     private boolean isIncompleteExtendedClassNamedSequence(
