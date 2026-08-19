@@ -7,7 +7,10 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -510,8 +513,60 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // original spelling for qr// stringification and diagnostics.
             case "N" -> handleUnicodeNameEscape();
 
+            // Preserve Unicode property escapes for the regex backend, but
+            // diagnose deprecated property names here while their original
+            // spelling, lexical warning scope, and source location are intact.
+            case "p", "P" -> preserveUnicodePropertyEscape(escape);
+
             // Unknown escape - treat as literal character
             default -> appendToCurrentSegment("\\" + escape);
+        }
+    }
+
+    private void preserveUnicodePropertyEscape(String escape) {
+        appendToCurrentSegment("\\" + escape);
+        String remaining = TokenUtils.toText(
+                tokens, parser.tokenIndex, tokens.size() - 1);
+        if (!remaining.startsWith("{")) {
+            return;
+        }
+
+        int close = remaining.indexOf('}', 1);
+        if (close >= 0) {
+            warnDeprecatedHyphenProperty(remaining.substring(1, close));
+        }
+    }
+
+    private void warnDeprecatedHyphenProperty(String sourceProperty) {
+        String spelling = sourceProperty.replaceFirst("^\\^?\\s*", "");
+        String normalized = spelling.replaceAll("[\\s_]", "")
+                .toLowerCase(java.util.Locale.ROOT);
+        boolean canonicalIsAlias = spelling.equals("IsHyphen")
+                || spelling.equals("Is_Hyphen");
+        if (!(normalized.equals("hyphen")
+                || normalized.equals("ishyphen") && !canonicalIsAlias)) {
+            return;
+        }
+
+        String category = "deprecated::unicode_property_name";
+        if (ctx.symbolTable.isWarningCategoryDisabled(category)) {
+            return;
+        }
+        String message = "Use of '" + spelling
+                + "' in \\p{} or \\P{} is deprecated because: "
+                + "Supplanted by Line_Break property values; "
+                + "see www.unicode.org/reports/tr14";
+        RuntimeScalar text = new RuntimeScalar(message);
+        RuntimeScalar location = new RuntimeScalar(
+                ctx.errorUtil.warningLocation(tokenIndex));
+        if (ctx.symbolTable.isWarningCategoryEnabled(category)) {
+            if (ctx.symbolTable.isFatalWarningCategory(category)) {
+                WarnDie.die(text, location);
+            } else {
+                WarnDie.warn(text, location);
+            }
+        } else {
+            Warnings.warnWithCategory(category, message, location.toString());
         }
     }
 
