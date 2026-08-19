@@ -33,6 +33,7 @@ import static org.joni.ast.ListNode.newList;
 import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
 import java.util.IllegalFormatConversionException;
+import java.util.ArrayList;
 
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
@@ -2139,9 +2140,96 @@ final class Analyser extends Parser {
         }
         /* ending */
         Node xnode = topRoot != null ? topRoot : prevNode.p;
+        xnode = addPerlReverseFoldPartitions(sn, xnode);
 
         node.replaceWith(xnode);
         return xnode;
+    }
+
+    private Node addPerlReverseFoldPartitions(StringNode source, Node expanded) {
+        if (!syntax.op2OptionPerl() || Option.isPerlAsciiStrict(regex.options)
+                || Option.isPerlBytePattern(regex.options)) {
+            return expanded;
+        }
+
+        int sourceLength = 0;
+        int canonicalLength = 0;
+        boolean hasFullFold = false;
+        for (int p = source.p; p < source.end;) {
+            int codePoint = enc.mbcToCode(source.bytes, p, source.end);
+            int fullLength = PerlCaseFold.fullFoldLength(codePoint);
+            canonicalLength += fullLength == 0 ? 1 : fullLength;
+            hasFullFold |= fullLength > 1;
+            sourceLength++;
+            p += enc.length(source.bytes, p, source.end);
+        }
+        if (!hasFullFold || sourceLength < 2 || canonicalLength <= sourceLength) {
+            return expanded;
+        }
+
+        int[] canonical = new int[canonicalLength];
+        int offset = 0;
+        for (int p = source.p; p < source.end;) {
+            int codePoint = enc.mbcToCode(source.bytes, p, source.end);
+            int fullLength = PerlCaseFold.fullFoldLength(codePoint);
+            if (fullLength == 0) {
+                canonical[offset++] = codePoint < 0x80
+                        ? Character.toLowerCase(codePoint) : codePoint;
+            } else {
+                for (int index = 0; index < fullLength; index++) {
+                    canonical[offset++] = PerlCaseFold.fullFoldCodePoint(
+                            codePoint, index);
+                }
+            }
+            p += enc.length(source.bytes, p, source.end);
+        }
+
+        ArrayList<int[]> variants = new ArrayList<>();
+        collectPerlReverseFoldPartitions(canonical, 0, new int[canonical.length],
+                0, false, variants);
+        if (variants.isEmpty()) return expanded;
+
+        ListNode alternatives = newAlt(expanded, null);
+        ListNode tail = alternatives;
+        for (int[] variant : variants) {
+            StringNode candidate = new StringNode();
+            for (int codePoint : variant) candidate.catCode(codePoint, enc);
+            candidate.setRaw();
+            ListNode alternative = newAlt(candidate, null);
+            tail.setTail(alternative);
+            tail = alternative;
+        }
+        return alternatives;
+    }
+
+    private void collectPerlReverseFoldPartitions(int[] canonical, int offset,
+            int[] path, int pathLength, boolean usedReverse,
+            ArrayList<int[]> variants) {
+        if (variants.size() >= THRESHOLD_CASE_FOLD_ALT_FOR_EXPANSION) return;
+        if (offset == canonical.length) {
+            if (usedReverse) {
+                variants.add(java.util.Arrays.copyOf(path, pathLength));
+            }
+            return;
+        }
+
+        path[pathLength] = canonical[offset];
+        collectPerlReverseFoldPartitions(canonical, offset + 1, path,
+                pathLength + 1, usedReverse, variants);
+        for (int length = 2; length <= 3 && offset + length <= canonical.length;
+                length++) {
+            int count = PerlCaseFold.reverseFullFoldSourceCount(
+                    canonical, offset, length);
+            for (int index = 0; index < count; index++) {
+                path[pathLength] = PerlCaseFold.reverseFullFoldSourceAt(
+                        canonical, offset, length, index);
+                collectPerlReverseFoldPartitions(canonical, offset + length,
+                        path, pathLength + 1, true, variants);
+                if (variants.size() >= THRESHOLD_CASE_FOLD_ALT_FOR_EXPANSION) {
+                    return;
+                }
+            }
+        }
     }
 
     private Node expandPerlByteAsciiFoldString(StringNode source, int state) {
