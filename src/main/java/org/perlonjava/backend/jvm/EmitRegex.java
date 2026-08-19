@@ -306,7 +306,7 @@ public class EmitRegex {
         ListNode operand = (node.operand instanceof ListNode) 
             ? (ListNode) node.operand 
             : ListNode.makeList(node.operand);
-        validateLiteralRegex(emitterVisitor, operand);
+        validateLiteralRegex(emitterVisitor, node, operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
         // Process pattern and flags
@@ -332,7 +332,8 @@ public class EmitRegex {
     }
 
     /** Validate non-interpolated qr// at CV compilation, as Perl does. */
-    private static void validateLiteralRegex(EmitterVisitor emitterVisitor, ListNode operand) {
+    private static void validateLiteralRegex(EmitterVisitor emitterVisitor,
+                                             OperatorNode node, ListNode operand) {
         if (operand.elements.size() < 2
                 || !(operand.elements.get(1) instanceof StringNode flags)) {
             return;
@@ -343,7 +344,12 @@ public class EmitRegex {
         if (unicodeStringsEnabled(emitterVisitor) && !modifiers.contains("u")) {
             modifiers += "u";
         }
-        RuntimeRegex.validateLiteralSyntax(pattern, modifiers);
+        try {
+            RuntimeRegex.validateLiteralSyntax(pattern, modifiers);
+        } catch (PerlCompilerException exception) {
+            throw PerlCompilerException.withSourceLocation(node.tokenIndex,
+                    exception.getMessage(), emitterVisitor.ctx.errorUtil);
+        }
     }
 
     /**
