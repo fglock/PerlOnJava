@@ -1293,6 +1293,11 @@ public class UnicodeResolver {
         property = normalizePerlIsPropertyAssignment(property);
         int assignment = propertyValueDelimiter(property);
         if (assignment <= 0 || assignment == property.length() - 1) {
+            UnicodeSet blockBinaryPrecedence =
+                    resolvePerlBlockBinaryPrecedenceAlias(property);
+            if (blockBinaryPrecedence != null) {
+                return joniPropertyResult(blockBinaryPrecedence, true);
+            }
             PerlBarePropertyAlias compatibility =
                     resolvePerlPosixCompatibilityAlias(property);
             if (compatibility != null) {
@@ -1519,6 +1524,9 @@ public class UnicodeResolver {
                 resolvePerlUnicodePropertyWildcard(alias);
         if (propertyWildcard != null) return propertyWildcard.set;
         if (assignment < 0) {
+            UnicodeSet blockBinaryPrecedence =
+                    resolvePerlBlockBinaryPrecedenceAlias(alias);
+            if (blockBinaryPrecedence != null) return blockBinaryPrecedence;
             PerlBarePropertyAlias compatibility =
                     resolvePerlPosixCompatibilityAlias(alias);
             if (compatibility != null) return compatibility.set;
@@ -2075,6 +2083,21 @@ public class UnicodeResolver {
         };
     }
 
+    private static UnicodeSet resolvePerlBlockBinaryPrecedenceAlias(
+            String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        String isValue = looseIsShortcutValue(property);
+        String alias = loosePropertyName(isValue == null ? property : isValue);
+        String canonical = switch (alias) {
+            case "idc" -> "ID_Continue";
+            case "vs" -> "Variation_Selector";
+            default -> null;
+        };
+        return canonical == null ? null : new UnicodeSet()
+                .applyPropertyAlias(canonical, "True")
+                .freeze();
+    }
+
     private static final class PerlBarePropertyAlias {
         private final UnicodeSet set;
         private final boolean caseFold;
@@ -2248,7 +2271,6 @@ public class UnicodeResolver {
                         || alias.regionMatches(true, 0, "is", 0, 2))) {
             return null;
         }
-        boolean isShortcut = alias.regionMatches(true, 0, "is", 0, 2);
         int valueStart = 2;
         while (valueStart < alias.length()) {
             char separator = alias.charAt(valueStart);
@@ -2263,11 +2285,7 @@ public class UnicodeResolver {
                 || isIcuGeneralCategoryAlias(value)) {
             return null;
         }
-        UnicodeSet block = PerlUnicodeBlockData.set(value);
-        if (isShortcut && block != null && block.containsSome(0xD800, 0xDFFF)) {
-            return null;
-        }
-        return block;
+        return PerlUnicodeBlockData.set(value);
     }
 
     private static boolean isPerlIsPrefixedNumericWildcard(String property) {
