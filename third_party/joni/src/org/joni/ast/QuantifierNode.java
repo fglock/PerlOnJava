@@ -29,6 +29,8 @@ import static org.joni.ast.QuantifierNode.ReduceType.QQ;
 import org.joni.Config;
 import org.joni.ScanEnvironment;
 import org.joni.constants.internal.TargetInfo;
+import org.joni.exception.ErrorMessages;
+import org.joni.exception.ValueException;
 
 public final class QuantifierNode extends StateNode {
     public static final int REPEAT_INFINITE = -1;
@@ -229,6 +231,16 @@ public final class QuantifierNode extends StateNode {
             /* check redundant double repeat. */
             /* verbose warn (?:.?)? etc... but not warn (.?)? etc... */
             QuantifierNode qnt = (QuantifierNode)tgt;
+            if (env.usesPerlDiagnostics()) {
+                if (!group) {
+                    throw new ValueException(ErrorMessages.PERL_NESTED_QUANTIFIERS);
+                }
+                // Parentheses are a semantic boundary in Perl.  Keep both
+                // quantifiers instead of applying Oniguruma's reduction table
+                // or warning about a legal grouped repeat.
+                setTarget(qnt);
+                return 0;
+            }
             int nestQNum = popularNum();
             int targetQNum = qnt.popularNum();
 

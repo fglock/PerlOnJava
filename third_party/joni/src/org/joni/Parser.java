@@ -1202,13 +1202,13 @@ class Parser extends Lexer {
 
         final ControlVerbNode.Kind kind;
         final String verb;
-        if (startsWith("ACCEPT)")) {
+        if (startsWith("ACCEPT)") || startsWith("ACCEPT:")) {
             kind = ControlVerbNode.Kind.ACCEPT;
             verb = "ACCEPT";
-        } else if (startsWith("FAIL)")) {
+        } else if (startsWith("FAIL)") || startsWith("FAIL:")) {
             kind = ControlVerbNode.Kind.FAIL;
             verb = "FAIL";
-        } else if (startsWith("F)")) {
+        } else if (startsWith("F)") || startsWith("F:")) {
             kind = ControlVerbNode.Kind.FAIL;
             verb = "F";
         } else if (startsWith("PRUNE)") || startsWith("PRUNE:")) {

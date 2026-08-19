@@ -158,10 +158,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 ? RuntimeScalarCache.scalarEmptyString : new RuntimeScalar(mark);
         RuntimeScalar errorValue = error == null
                 ? RuntimeScalarCache.scalarEmptyString : new RuntimeScalar(error);
+        String currentPackage = InterpreterState.currentPackage.get().toString();
+        if (currentPackage == null || currentPackage.isEmpty()) currentPackage = "main";
+        GlobalVariable.getGlobalVariable(currentPackage + "::REGMARK").set(markValue);
+        GlobalVariable.getGlobalVariable(currentPackage + "::REGERROR").set(errorValue);
         // Perl activates these otherwise ordinary package variables through
-        // local(). The interpreter does not keep its runtime current-package
-        // facade synchronized with every lexical package statement, so use the
-        // localized scalar identities rather than guessing one package name.
+        // local(). Also update localized scalar identities directly because the
+        // interpreter does not keep its runtime current-package facade
+        // synchronized with every lexical package statement.
         for (Map.Entry<String, RuntimeScalar> entry
                 : DynamicVariableManager.activeLocalizedGlobalScalars().entrySet()) {
             if (entry.getKey().endsWith("::REGMARK")) {

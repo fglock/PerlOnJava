@@ -74,7 +74,8 @@ public interface OPSize {
     int CALLOUT                      = (OPCODE + MEMNUM);
     int CALLOUT_CONDITION            = (OPCODE + MEMNUM + RELADDR);
     int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM);
-    int ACCEPT                       = OPCODE;
+    int ACCEPT                       = (OPCODE + INDEX);
+    int CONTROL_FAIL                 = (OPCODE + INDEX);
     int PRUNE                        = (OPCODE + INDEX);
     int SKIP                         = (OPCODE + INDEX);
     int THEN                         = (OPCODE + INDEX);

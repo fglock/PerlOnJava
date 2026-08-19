@@ -48,6 +48,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS = "unmatched range specifier in char-class";
     String TARGET_OF_REPEAT_OPERATOR_NOT_SPECIFIED = "target of repeat operator is not specified";
     String PERL_QUANTIFIER_FOLLOWS_NOTHING = "Quantifier follows nothing";
+    String PERL_NESTED_QUANTIFIERS = "Nested quantifiers";
     String TARGET_OF_REPEAT_OPERATOR_INVALID = "target of repeat operator is invalid";
     String NESTED_REPEAT_NOT_ALLOWED = "nested repeat is not allowed";
     String NESTED_REPEAT_OPERATOR = "nested repeat operator";

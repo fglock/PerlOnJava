@@ -20,6 +20,7 @@
 package org.joni;
 
 import static org.joni.Option.isAsciiRange;
+import static org.joni.Option.isExtend;
 import static org.joni.Option.isSingleline;
 import static org.joni.Option.isWordBoundAllRange;
 import static org.joni.ast.QuantifierNode.isRepeatInfinite;
@@ -1272,7 +1273,7 @@ class Lexer extends ScannerSupport {
             greedyCheck();
             break;
         case 2:
-            if (syntax.fixedIntervalIsGreedyOnly()) {
+            if (syntax.fixedIntervalIsGreedyOnly() && !syntax.op2OptionPerl()) {
                 possessiveCheck();
             } else {
                 greedyCheck();
@@ -2032,18 +2033,20 @@ class Lexer extends ScannerSupport {
     }
 
     private void greedyCheck() {
+        skipPerlExtendedQuantifierSpace();
         if (left() && peekIs('?') && syntax.opQMarkNonGreedy()) {
-
             fetch();
 
             token.setRepeatGreedy(false);
             token.setRepeatPossessive(false);
+            rejectPerlNestedQuantifierModifier();
         } else {
             possessiveCheck();
         }
     }
 
     private void possessiveCheck() {
+        skipPerlExtendedQuantifierSpace();
         if (left() && peekIs('+') &&
             (syntax.op2PlusPossessiveRepeat() && token.type != TokenType.INTERVAL ||
              syntax.op2PlusPossessiveInterval() && token.type == TokenType.INTERVAL)) {
@@ -2052,9 +2055,35 @@ class Lexer extends ScannerSupport {
 
             token.setRepeatGreedy(true);
             token.setRepeatPossessive(true);
+            rejectPerlNestedQuantifierModifier();
         } else {
             token.setRepeatGreedy(true);
             token.setRepeatPossessive(false);
+        }
+    }
+
+    private void rejectPerlNestedQuantifierModifier() {
+        if (!env.usesPerlDiagnostics() || !left()) return;
+        int next = peek();
+        if (next == '?' || next == '*' || next == '+') {
+            newSyntaxException(PERL_NESTED_QUANTIFIERS);
+        }
+    }
+
+    private void skipPerlExtendedQuantifierSpace() {
+        if (!syntax.op2OptionPerl() || !isExtend(env.option)) return;
+        while (left()) {
+            int next = peek();
+            if (next == ' ' || next == '\t' || next == '\n'
+                    || next == '\r' || next == '\f') {
+                inc();
+                continue;
+            }
+            if (next != '#') return;
+            while (left()) {
+                fetch();
+                if (enc.isNewLine(c)) break;
+            }
         }
     }
 
