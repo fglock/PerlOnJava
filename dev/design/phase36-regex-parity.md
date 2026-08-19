@@ -280,12 +280,12 @@ if they expose a semantic defect.
    - the current combined candidate clears the loose-binary-property fatal:
      each `pat.t` variant executes 1,301/1,302 assertions and passes 1,223;
      classify and close the remaining 79 failures plus the one-test plan
-     shortfall; the exact pre-named-character `pat_advanced.t` baseline executes
-     all 1,687 assertions and passes 1,577 on both JVM and interpreter, with
-     byte-identical 110-row residuals; refresh that complete gate after the
-     named-character and `(*THEN)` slices, then close the remaining semantic
-     failures without relying on the runner's status heuristic or treating
-     optimizer/debug transcripts as semantic parity;
+     shortfall; the current `pat_advanced.t` gate executes all 1,687 assertions
+     and passes 1,625 on both JVM and interpreter, with byte-identical 62-row
+     residuals and zero introductions against the exact 110-row baseline;
+     close the remaining semantic failures without relying on the runner's
+     status heuristic or treating optimizer/debug transcripts as semantic
+     parity;
    - the current forced-Joni `reg_mesg.t` gate executes 2,595 assertions and
      passes 1,694 after malformed backreference diagnostics; finish typed
      warning collection, Perl wording/categories, source markers, strict-mode
