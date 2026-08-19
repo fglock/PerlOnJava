@@ -316,10 +316,10 @@ if they expose a semantic defect.
    - represent property-value wildcard parsing and diagnostics with a dedicated
      Joni syntax node rather than flattening wildcard behavior into literal
      ranges prematurely;
-   - the native Word_Break, Sentence_Break, and Vertical_Orientation alias
-     families are closed with zero corpus introductions; continue from the
-     pinned 1,720/83,648 residual set by closing bare binary-property aliases,
-     then the remaining Block, General_Category, compatibility, and wildcard
+   - the native Word_Break, Sentence_Break, Vertical_Orientation, and bare
+     binary-property alias families are closed with zero corpus introductions;
+     continue from the byte-identical 1,188/83,648 JVM/interpreter residual set
+     with the remaining Block, General_Category, compatibility, and wildcard
      families;
    - close the remaining generated property/value alias gaps against the pinned
      Perl 5.44 corpus while retaining native `All` through Perl's signed-IV-wide
