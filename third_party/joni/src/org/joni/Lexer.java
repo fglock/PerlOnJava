@@ -1640,8 +1640,10 @@ class Lexer extends ScannerSupport {
             token.setPropCType(enc.propertyNameToCType(bytes, nameStart, p));
             token.setPropNot(c == 'P');
         } else if (syntax.op2OptionPerl()) {
-            newSyntaxException(PERL_EMPTY_CHARACTER_PROPERTY.replace(
-                    "%n", Character.toString(c)));
+            String message = left()
+                    ? PERL_INVALID_CHARACTER_PROPERTY_FOLLOWER
+                    : PERL_EMPTY_CHARACTER_PROPERTY;
+            newSyntaxException(message.replace("%n", Character.toString(c)));
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
         }
