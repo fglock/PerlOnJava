@@ -825,22 +825,6 @@ final class JoniRegexPattern {
                 i += 2;
                 continue;
             }
-            if (!inClass && pattern.startsWith("(?&", i)) {
-                int end = pattern.indexOf(')', i + 3);
-                if (end > i) {
-                    out.append("\\g<").append(pattern, i + 3, end).append('>');
-                    i = end;
-                    continue;
-                }
-            }
-            if (!inClass && pattern.startsWith("(?P>", i)) {
-                int end = pattern.indexOf(')', i + 4);
-                if (end > i) {
-                    out.append("\\g<").append(pattern, i + 4, end).append('>');
-                    i = end;
-                    continue;
-                }
-            }
             out.append(ch);
         }
         return out.toString();
