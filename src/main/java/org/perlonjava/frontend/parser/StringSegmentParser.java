@@ -1518,10 +1518,7 @@ public abstract class StringSegmentParser {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
-                        if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
-                            throwNamedCharacterDiagnostic(expansion.diagnostic());
-                        }
-                        parser.throwError(expansion.diagnostic());
+                        throwNamedCharacterDiagnostic(expansion.diagnostic());
                     }
                 }
                 appendToCurrentSegment("\\N{" + name + "}");
@@ -1531,12 +1528,8 @@ public abstract class StringSegmentParser {
                     NamedCharacterExpansion.resolve(name, sourceMode);
             if (expansion.resolved()) {
                 appendToCurrentSegment(expansion.sequence());
-            } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
-                throwNamedCharacterDiagnostic(expansion.diagnostic());
             } else {
-                // Preserve the historical literal fallback when no standard
-                // name or lexical translator resolves this escape.
-                appendToCurrentSegment("N{" + name + "}");
+                throwNamedCharacterDiagnostic(expansion.diagnostic());
             }
         } else {
             throwMissingNamedCharacterBraceDiagnostic();
