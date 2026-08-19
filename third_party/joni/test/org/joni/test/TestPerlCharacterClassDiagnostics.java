@@ -55,4 +55,14 @@ public class TestPerlCharacterClassDiagnostics {
                         UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE));
         assertEquals(message, error.getMessage());
     }
+
+    @Test
+    public void emptyClassUsesPerlUnmatchedBracketDiagnostic() {
+        byte[] bytes = "a[]b".getBytes(StandardCharsets.UTF_8);
+        SyntaxException error = assertThrows(SyntaxException.class,
+                () -> new Regex(bytes, 0, bytes.length, Option.NONE,
+                        UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE));
+        assertEquals("Unmatched [", error.getMessage());
+        assertEquals(2, error.getPatternPosition());
+    }
 }

@@ -351,6 +351,7 @@ class Parser extends Lexer {
 
     private ParsedCharClass parseCharClass(ObjPtr<CClassNode> ascNode,
                                            ObjPtr<CClassNode> foldNode) {
+        int classContentStart = p - getBegin();
         final boolean neg;
         CClassNode cc, prevCc = null, ascCc = null, ascPrevCc = null,
                 workCc = null, ascWorkCc = null, foldCc = null,
@@ -367,7 +368,12 @@ class Parser extends Lexer {
         }
 
         if (token.type == TokenType.CC_CLOSE && !syntax.op3OptionECMAScript()) {
-            if (!codeExistCheck(']', true)) newSyntaxException(EMPTY_CHAR_CLASS);
+            if (!codeExistCheck(']', true)) {
+                if (env.usesPerlDiagnostics()) {
+                    newSyntaxException(PERL_UNMATCHED_OPEN_BRACKET, classContentStart);
+                }
+                newSyntaxException(EMPTY_CHAR_CLASS);
+            }
             env.ccEscWarn("]");
             token.type = TokenType.CHAR; /* allow []...] */
         }
