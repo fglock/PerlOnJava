@@ -1414,6 +1414,10 @@ final class Analyser extends Parser {
                             newValueException(MULTIPLEX_DEFINITION_NAME_CALL, cn.nameP, cn.nameEnd);
                         } else {
                             cn.groupNum = ne.backRef1; // ne.backNum == 1 ? ne.backRef1 : ne.backRefs[0]; // ??? need to check ?
+                            if (ne.backNum == 1) {
+                                cn.lexicalTarget = env.physicalNamedMemNode(
+                                        ne.getPhysicalBackRefs()[0]);
+                            }
                             if (ne.backNum > 1) cn.setRecursion();
                             setCallAttr(cn);
                         }
