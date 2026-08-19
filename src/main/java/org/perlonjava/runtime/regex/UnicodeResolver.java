@@ -1077,6 +1077,9 @@ public class UnicodeResolver {
                 || PerlUnicodeJoiningGroupData.isPropertyAlias(name)) {
             if (perlNumericWildcardBody(value) != null) return null;
             caseFold = false;
+        } else if (isPerlWordBreakProperty(name)) {
+            if (resolvePerlWordBreakProperty(property) == null) return null;
+            caseFold = false;
         } else if (isPerlAgeProperty(name)) {
             if (isPerlAgeWildcard(value)) return null;
             caseFold = false;
@@ -1291,6 +1294,8 @@ public class UnicodeResolver {
                         alias.substring(0, assignment))) {
             return resolvePerlScript(alias.substring(assignment + 1), true);
         }
+        UnicodeSet wordBreak = resolvePerlWordBreakProperty(alias);
+        if (wordBreak != null) return wordBreak;
         if (assignment > 0 && assignment < alias.length() - 1) {
             Boolean value = perlBooleanPropertyValue(alias.substring(assignment + 1));
             if (value != null) {
@@ -1432,6 +1437,23 @@ public class UnicodeResolver {
             return resolveStandardPropertyAsSet(looseIsValue, new LinkedHashSet<>());
         }
         return null;
+    }
+
+    private static UnicodeSet resolvePerlWordBreakProperty(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlWordBreakProperty(property.substring(0, assignment))) {
+            return null;
+        }
+        return unicodePropertyValueSet(
+                UProperty.WORD_BREAK, property.substring(assignment + 1));
+    }
+
+    private static boolean isPerlWordBreakProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "wb", "wordbreak" -> true;
+            default -> false;
+        };
     }
 
     private static Boolean perlBooleanPropertyValue(String value) {
