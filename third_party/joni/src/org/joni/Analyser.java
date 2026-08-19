@@ -2113,6 +2113,42 @@ final class Analyser extends Parser {
         return xnode;
     }
 
+    private boolean isUnsafePerlMultiFoldOptimizationBoundary(StringNode node) {
+        if (!syntax.op2OptionPerl() || node.length() == 0) return false;
+
+        int first = enc.mbcToCode(node.bytes, node.p, node.end);
+        if (PerlCaseFold.isMultiFoldComponent(first)) return true;
+
+        int last = node.p;
+        int p = node.p;
+        while (p < node.end) {
+            last = p;
+            p += enc.length(node.bytes, p, node.end);
+        }
+        return PerlCaseFold.isMultiFoldComponent(
+                enc.mbcToCode(node.bytes, last, node.end));
+    }
+
+    private void disableUnsafePerlMultiFoldOptimization(Node node) {
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            ListNode list = (ListNode)node;
+            do {
+                disableUnsafePerlMultiFoldOptimization(list.value);
+            } while ((list = list.tail) != null);
+            break;
+        case NodeType.STR:
+            StringNode string = (StringNode)node;
+            if (isUnsafePerlMultiFoldOptimizationBoundary(string)) {
+                string.setDontGetOptInfo();
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
     private static final int CEC_THRES_NUM_BIG_REPEAT       = 512;
     private static final int CEC_INFINITE_NUM               = 0x7fffffff;
 
@@ -2284,6 +2320,7 @@ final class Analyser extends Parser {
                 } else {
                     node = expandCaseFoldString(node);
                 }
+                disableUnsafePerlMultiFoldOptimization(node);
             }
             break;
 
