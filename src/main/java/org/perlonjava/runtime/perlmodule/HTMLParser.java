@@ -139,6 +139,8 @@ public class HTMLParser extends PerlModuleBase {
         pstate.put("_eof", scalarFalse);
         pstate.put("_started", scalarFalse);
         pstate.put("_buf", new RuntimeScalar(""));
+        pstate.put("_literal_mode", new RuntimeScalar(""));
+        pstate.put("_pending_end_tag", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
         pstate.put("_in_cdata", scalarFalse);
 
@@ -227,12 +229,7 @@ public class HTMLParser extends PerlModuleBase {
                     pstate.put("_started", scalarTrue);
                     fireEvent(self, selfHash, pstate, "start_document");
                 }
-                // Flush any remaining buffered text
-                String remaining = pstate.get("_buf").toString();
-                if (!remaining.isEmpty()) {
-                    pstate.put("_buf", new RuntimeScalar(""));
-                    parseHtml(self, selfHash, pstate, remaining);
-                }
+                flushBufferedAtEof(self, selfHash, pstate);
                 // Fire end_document event
                 fireEvent(self, selfHash, pstate, "end_document");
                 pstate.put("_started", scalarFalse);
@@ -448,6 +445,16 @@ public class HTMLParser extends PerlModuleBase {
      * @param eventArgs the event-specific arguments
      */
     private static void fireEvent(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate, String eventName, RuntimeScalar... eventArgs) {
+        RuntimeScalar pendingEndTag = pstate.get("_pending_end_tag");
+        if (pendingEndTag != null && pendingEndTag.getDefinedBoolean()
+                && !pendingEndTag.toString().isEmpty()
+                && !eventName.equals("text") && !eventName.equals("comment")) {
+            String tagName = pendingEndTag.toString();
+            pstate.put("_pending_end_tag", new RuntimeScalar(""));
+            fireEvent(self, selfHash, pstate, "end",
+                    new RuntimeScalar(tagName), new RuntimeScalar(""));
+        }
+
         RuntimeHash handlers = pstate.get("_handlers").hashDeref();
         RuntimeScalar cb = handlers.get(eventName + "_cb");
         String handlerName = eventName;
@@ -838,6 +845,33 @@ public class HTMLParser extends PerlModuleBase {
         int i = 0;
         int textStart = 0;
 
+        String literalMode = pstate.get("_literal_mode").toString();
+        if (!literalMode.isEmpty()) {
+            int endIdx = findLiteralEnd(pstate, html, literalMode, 0);
+            if (endIdx < 0) {
+                pstate.put("_buf", new RuntimeScalar(html));
+                return;
+            }
+
+            int endTagEnd = html.indexOf('>', endIdx);
+            if (endTagEnd < 0) {
+                pstate.put("_buf", new RuntimeScalar(html));
+                return;
+            }
+
+            if (endIdx > 0) {
+                fireEvent(self, selfHash, pstate, "text",
+                        new RuntimeScalar(html.substring(0, endIdx)));
+            }
+            endTagEnd++;
+            fireEvent(self, selfHash, pstate, "end",
+                    new RuntimeScalar(literalMode),
+                    new RuntimeScalar(html.substring(endIdx, endTagEnd)));
+            pstate.put("_literal_mode", new RuntimeScalar(""));
+            i = endTagEnd;
+            textStart = i;
+        }
+
         while (i < len) {
             if (html.charAt(i) == '<') {
                 // Flush pending text
@@ -1093,17 +1127,7 @@ public class HTMLParser extends PerlModuleBase {
                             || tagName.equals("xmp") || tagName.equals("listing")
                             || tagName.equals("plaintext") || tagName.equals("textarea")
                             || tagName.equals("title"))) {
-                        String endTag = "</" + tagName;
-                        // For script content, only marked_sections (not xml_mode) enables CDATA-skipping.
-                        // xml_mode alone doesn't change how script closing tags interact with CDATA sections.
-                        boolean msEnabled = pstate.get("marked_sections").getBoolean();
-                        int endIdx;
-                        if (msEnabled) {
-                            // With marked_sections, skip over <![CDATA[...]]> when looking for end tag
-                            endIdx = findEndTagSkippingCdata(html, endTag, i);
-                        } else {
-                            endIdx = findCaseInsensitive(html, endTag, i);
-                        }
+                        int endIdx = findLiteralEnd(pstate, html, tagName, i);
                         if (endIdx >= 0) {
                             // Emit raw content as text
                             if (endIdx > i) {
@@ -1124,9 +1148,10 @@ public class HTMLParser extends PerlModuleBase {
                                 return;
                             }
                         } else {
-                            // No closing tag found - buffer everything for next parse()
-                            pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
-                            // Re-emit the start tag on next parse when we have the full content
+                            // The start event has already fired. Preserve literal mode and only
+                            // buffer its content so a later chunk cannot emit the start twice.
+                            pstate.put("_literal_mode", new RuntimeScalar(tagName));
+                            pstate.put("_buf", new RuntimeScalar(html.substring(i)));
                             return;
                         }
                     }
@@ -1142,6 +1167,51 @@ public class HTMLParser extends PerlModuleBase {
         if (textStart < len) {
             fireEvent(self, selfHash, pstate, "text",
                     new RuntimeScalar(html.substring(textStart)));
+        }
+    }
+
+    private static int findLiteralEnd(RuntimeHash pstate, String html, String tagName, int fromIndex) {
+        String endTag = "</" + tagName;
+        if (pstate.get("marked_sections").getBoolean()) {
+            return findEndTagSkippingCdata(html, endTag, fromIndex);
+        }
+        return findCaseInsensitive(html, endTag, fromIndex);
+    }
+
+    private static void flushBufferedAtEof(RuntimeScalar self, RuntimeHash selfHash, RuntimeHash pstate) {
+        while (true) {
+            String remaining = pstate.get("_buf").toString();
+            String literalMode = pstate.get("_literal_mode").toString();
+            pstate.put("_buf", new RuntimeScalar(""));
+            pstate.put("_literal_mode", new RuntimeScalar(""));
+
+            if (literalMode.isEmpty()) {
+                if (remaining.isEmpty()) {
+                    return;
+                }
+                parseHtml(self, selfHash, pstate, remaining);
+            } else if (literalMode.equals("script") || literalMode.equals("style")) {
+                fireEvent(self, selfHash, pstate, "end",
+                        new RuntimeScalar(literalMode), new RuntimeScalar(""));
+                if (!remaining.isEmpty()) {
+                    parseHtml(self, selfHash, pstate, remaining);
+                }
+            } else if (literalMode.equals("title")) {
+                pstate.put("_pending_end_tag", new RuntimeScalar(literalMode));
+                if (!remaining.isEmpty()) {
+                    parseHtml(self, selfHash, pstate, remaining);
+                }
+            } else if (!remaining.isEmpty()) {
+                // HTML::Parser treats unterminated textarea/xmp/iframe/plaintext
+                // literal content as text at EOF. Keep the existing listing mode
+                // on that same non-markup path.
+                fireEvent(self, selfHash, pstate, "text", new RuntimeScalar(remaining));
+            }
+
+            if (pstate.get("_buf").toString().isEmpty()
+                    && pstate.get("_literal_mode").toString().isEmpty()) {
+                return;
+            }
         }
     }
 
