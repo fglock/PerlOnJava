@@ -536,7 +536,9 @@ public class ArgumentParser {
                     parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", null, true));
                     break;
                 case 'D':
-                    // Enable debugging flags (currently a no-op for compatibility)
+                    // A release Perl has no -DDEBUGGING instrumentation.  Match
+                    // its warning instead of enabling PerlOnJava's unrelated
+                    // internal compiler trace (available through --debug).
                     index = handleDebugFlags(args, parsedArgs, index, j, arg);
                     return index;
                 case 'T':
@@ -1536,10 +1538,12 @@ public class ArgumentParser {
             debugFlags = args[++index];
         }
 
-        // Store debug flags for potential future use
+        // Preserve the requested flags for diagnostics/introspection, but do
+        // not turn on PerlOnJava's internal compiler trace.  That trace is a
+        // separate --debug facility and does not implement Perl's -D flags.
         parsedArgs.debugFlags = debugFlags;
-        parsedArgs.debugEnabled = true;
-        CompilerOptions.DEBUG_ENABLED = true;
+        System.err.println(
+                "Recompile perl with -DDEBUGGING to use -D switch (did you mean -d ?)");
 
         return index;
     }
