@@ -1128,12 +1128,17 @@ class Lexer extends ScannerSupport {
         if (perlVerticalWhitespaceTokenIndex >= 0) {
             return fetchPerlVerticalWhitespaceToken();
         }
-        if (!left()) {
-            token.type = TokenType.EOT;
-            return token.type;
+        while (true) {
+            if (!left()) {
+                token.type = TokenType.EOT;
+                return token.type;
+            }
+            fetch();
+            if (!syntax.op2OptionPerl() || !Option.isPerlExtendMore(env.option)
+                    || c != ' ' && c != '\t') {
+                break;
+            }
         }
-
-        fetch();
         token.type = TokenType.CHAR;
         token.base = 0;
         token.setC(c);
