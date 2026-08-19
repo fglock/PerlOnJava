@@ -2030,7 +2030,8 @@ class Lexer extends ScannerSupport {
                 return new CharProperty(
                         enc.propertyNameToCType(bytes, _p, last), null, null,
                         true);
-            } else if (c == '(' || c == ')' || c == '{' || c == '|') {
+            } else if (c == '{' || !syntax.op2OptionPerl()
+                    && (c == '(' || c == ')' || c == '|')) {
                 throw new CharacterPropertyException(EncodingError.ERR_INVALID_CHAR_PROPERTY_NAME, bytes, _p, last);
             }
         }

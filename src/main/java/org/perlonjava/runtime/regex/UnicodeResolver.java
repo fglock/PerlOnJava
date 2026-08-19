@@ -1346,17 +1346,6 @@ public class UnicodeResolver {
         }
         String name = property.substring(0, assignment);
         String value = property.substring(assignment + 1);
-        // Property-value regex syntax is evaluated by the Joni-backed matcher
-        // in the resolver, then materialized as a class by the adapter.  Keep
-        // the original property token out of Joni's character-property lexer,
-        // which does not yet parse nested regex constructs inside \p{...}.
-        if (isPerlNameProperty(name)) {
-            String nameWildcard = perlSlashWildcardBody(value);
-            if (nameWildcard != null
-                    && !joniCharacterPropertyLexerAccepts(nameWildcard)) {
-                return null;
-            }
-        }
         PerlUnicodePropertyWildcard propertyWildcard =
                 resolvePerlUnicodePropertyWildcard(property);
         if (propertyWildcard != null) {
@@ -2056,22 +2045,6 @@ public class UnicodeResolver {
                 && trimmed.endsWith("/")
                 ? trimmed.substring(1, trimmed.length() - 1)
                 : null;
-    }
-
-    private static boolean joniCharacterPropertyLexerAccepts(String wildcard) {
-        for (int index = 0; index < wildcard.length(); index++) {
-            switch (wildcard.charAt(index)) {
-            case '(':
-            case ')':
-            case '{':
-            case '}':
-            case '|':
-                return false;
-            default:
-                break;
-            }
-        }
-        return true;
     }
 
     private static final class PerlUnicodePropertyWildcard {
