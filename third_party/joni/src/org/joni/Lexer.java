@@ -1356,6 +1356,7 @@ class Lexer extends ScannerSupport {
         }
 
         if (c == '8' || c == '9') { /* normal char */ // skip_backref:
+            if (syntax.op2OptionPerl()) newValueException(INVALID_BACKREF);
             p = last;
             inc();
             return;
@@ -1440,10 +1441,10 @@ class Lexer extends ScannerSupport {
             return;
         }
         if (Config.USE_NAMED_GROUP) {
-            if (syntax.op2EscGBraceBackref() && left()) {
+            if ((syntax.op2EscGBraceBackref() || syntax.op2OptionPerl()) && left()) {
                 fetch();
                 if (c == '{') {
-                    fetchNamedBackrefToken();
+                    if (!fetchPerlNumericBackrefToken()) fetchNamedBackrefToken();
                 } else {
                     unfetch();
                 }
@@ -1495,6 +1496,46 @@ class Lexer extends ScannerSupport {
                 }
             }
         }
+    }
+
+    private boolean fetchPerlNumericBackrefToken() {
+        if (!syntax.op2OptionPerl()) return false;
+
+        int cursor = p;
+        while (cursor < stop && Character.isWhitespace(codeAt(cursor, stop))) {
+            cursor = nextChar(cursor, stop);
+        }
+        boolean negative = cursor < stop && codeAt(cursor, stop) == '-';
+        if (negative) cursor = nextChar(cursor, stop);
+        int digitsStart = cursor;
+        long number = 0;
+        boolean overflow = false;
+        while (cursor < stop && enc.isDigit(codeAt(cursor, stop))) {
+            int digit = Encoding.digitVal(codeAt(cursor, stop));
+            if (number > (Integer.MAX_VALUE - digit) / 10L) overflow = true;
+            else if (!overflow) number = number * 10 + digit;
+            cursor = nextChar(cursor, stop);
+        }
+        if (cursor == digitsStart) return false;
+        while (cursor < stop && Character.isWhitespace(codeAt(cursor, stop))) {
+            cursor = nextChar(cursor, stop);
+        }
+        if (cursor >= stop || codeAt(cursor, stop) != '}') return false;
+        p = nextChar(cursor, stop);
+
+        if (overflow || number == 0) newValueException(INVALID_BACKREF);
+        long absolute = negative ? (long)env.numMem + 1 - number : number;
+        if (absolute <= 0 || absolute > env.numMem || env.memNodes == null
+                || absolute >= env.memNodes.length
+                || env.memNodes[(int)absolute] == null) {
+            newValueException(INVALID_BACKREF);
+        }
+        token.type = TokenType.BACKREF;
+        token.setBackrefByName(false);
+        token.setBackrefNum(1);
+        token.setBackrefRef1((int)absolute);
+        if (Config.USE_BACKREF_WITH_LEVEL) token.setBackrefExistLevel(false);
+        return true;
     }
 
     private void rejectMalformedPerlBackref() {
@@ -1580,7 +1621,8 @@ class Lexer extends ScannerSupport {
                 if (backNum <= 0) newValueException(INVALID_BACKREF);
             }
 
-            if (syntax.strictCheckBackref() && (backNum > env.numMem || env.memNodes == null)) {
+            if (syntax.strictCheckBackref() && (backNum > env.numMem || env.memNodes == null
+                    || backNum >= env.memNodes.length || env.memNodes[backNum] == null)) {
                 newValueException(INVALID_BACKREF);
             }
             token.type = TokenType.BACKREF;

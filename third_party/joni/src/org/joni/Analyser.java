@@ -449,14 +449,14 @@ final class Analyser extends Parser {
             BackRefNode br = (BackRefNode)node;
             if (br.isRecursion()) break;
 
-            if (br.back[0] > env.numMem) {
+            if (invalidBackrefNode(br.back[0])) {
                 if (!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
             } else {
                 min = getMinMatchLength(env.memNodes[br.back[0]]);
             }
 
             for (int i=1; i<br.backNum; i++) {
-                if (br.back[i] > env.numMem) {
+                if (invalidBackrefNode(br.back[i])) {
                     if (!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
                 } else {
                     int tmin = getMinMatchLength(env.memNodes[br.back[i]]);
@@ -596,7 +596,7 @@ final class Analyser extends Parser {
             }
 
             for (int i=0; i<br.backNum; i++) {
-                if (br.back[i] > env.numMem) {
+                if (invalidBackrefNode(br.back[i])) {
                     if(!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
                 } else {
                     int tmax = getMaxMatchLength(env.memNodes[br.back[i]]);
@@ -2500,7 +2500,7 @@ final class Analyser extends Parser {
         case NodeType.BREF:
             BackRefNode br = (BackRefNode)node;
             for (int i=0; i<br.backNum; i++) {
-                if (br.back[i] > env.numMem) {
+                if (invalidBackrefNode(br.back[i])) {
                     if (!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
                 } else {
                     env.backrefedMem = bsOnAt(env.backrefedMem, br.back[i]);
@@ -3065,5 +3065,10 @@ final class Analyser extends Parser {
         if (Config.DEBUG_COMPILE || Config.DEBUG_MATCH) {
             Config.log.println(regex.optimizeInfoToString());
         }
+    }
+
+    private boolean invalidBackrefNode(int number) {
+        return number <= 0 || number > env.numMem || env.memNodes == null
+                || number >= env.memNodes.length || env.memNodes[number] == null;
     }
 }

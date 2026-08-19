@@ -57,16 +57,18 @@ abstract class ScannerSupport extends IntHolder implements ErrorMessages {
         return p - begin;
     }
 
-    private static final int INT_SIGN_BIT = 1 << 31;
     protected final int scanUnsignedNumber() {
         int last = c;
         int num = 0; // long ???
         while(left()) {
             fetch();
             if (enc.isDigit(c)) {
-                int onum = num;
-                num = num * 10 + Encoding.digitVal(c);
-                if (((onum ^ num) & INT_SIGN_BIT) != 0) return -1;
+                int digit = Encoding.digitVal(c);
+                if (num > (Integer.MAX_VALUE - digit) / 10) {
+                    c = last;
+                    return -1;
+                }
+                num = num * 10 + digit;
             } else {
                 unfetch();
                 break;
@@ -103,10 +105,12 @@ abstract class ScannerSupport extends IntHolder implements ErrorMessages {
         while(left() && maxLength-- != 0) {
             fetch();
             if (enc.isDigit(c) && c < '8') {
-                int onum = num;
                 int val = Encoding.odigitVal(c);
+                if (num > (Integer.MAX_VALUE - val) / 8) {
+                    c = last;
+                    return -1;
+                }
                 num = (num << 3) + val;
-                if (((onum ^ num) & INT_SIGN_BIT) != 0) return -1;
             } else {
                 unfetch();
                 break;
