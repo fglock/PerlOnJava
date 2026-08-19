@@ -10,6 +10,7 @@ import org.joni.CharacterPropertyResolver;
 import org.joni.DynamicPatternResult;
 import org.joni.MatchView;
 import org.joni.NameEntry;
+import org.joni.NamedCharacterResolver;
 import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Region;
@@ -33,6 +34,7 @@ import java.util.WeakHashMap;
 
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.PerlUtfString;
+import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.runtimetypes.*;
 
 /**
@@ -106,6 +108,58 @@ final class JoniRegexPattern {
                         ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8));
     }
 
+    static final class NamedCharacterCache {
+        private final Map<String, NamedCharacterExpansion> expansions =
+                new LinkedHashMap<>();
+        private final RuntimeScalar translator;
+
+        NamedCharacterCache() {
+            this(null);
+        }
+
+        NamedCharacterCache(RuntimeScalar translator) {
+            this.translator = translator == null ? null : new RuntimeScalar(translator);
+        }
+
+        NamedCharacterExpansion resolve(
+                String name, NamedCharacterExpansion.SourceMode sourceMode) {
+            return expansions.computeIfAbsent(name,
+                    ignored -> translator == null
+                            ? NamedCharacterExpansion.resolve(name, sourceMode)
+                            : NamedCharacterExpansion.resolve(name, translator, sourceMode));
+        }
+    }
+
+    private static Syntax syntaxForNamedCharacters(
+            NamedCharacterCache cache, NamedCharacterExpansion.SourceMode sourceMode) {
+        NamedCharacterResolver resolver = new NamedCharacterResolver() {
+            @Override
+            public int resolve(byte[] bytes, int p, int end, Encoding encoding) {
+                return resolveNamedCharacter(bytes, p, end, encoding);
+            }
+
+            @Override
+            public int[] resolveSequence(byte[] bytes, int p, int end, Encoding encoding) {
+                String name = new String(bytes, p, end - p,
+                        encoding == ISO8859_1Encoding.INSTANCE
+                                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
+                int[] encoded = NamedCharacterExpansion.decodeRegexToken(name);
+                if (encoded != null) return encoded;
+                NamedCharacterExpansion expansion = cache.resolve(name, sourceMode);
+                if (!expansion.resolved()) {
+                    throw new IllegalArgumentException(expansion.diagnostic());
+                }
+                return expansion.sequence().codePoints().toArray();
+            }
+        };
+        return new Syntax(PERLONJAVA_SYNTAX.name, PERLONJAVA_SYNTAX.op,
+                PERLONJAVA_SYNTAX.op2, PERLONJAVA_SYNTAX.op3,
+                PERLONJAVA_SYNTAX.behavior, PERLONJAVA_SYNTAX.options,
+                PERLONJAVA_SYNTAX.metaCharTable, resolver,
+                PERLONJAVA_SYNTAX.characterPropertyResolver,
+                PERLONJAVA_SYNTAX.wideScalarCodec);
+    }
+
     private static CharacterPropertyResolver.Result resolveCharacterProperty(
             byte[] bytes, int p, int end, Encoding encoding,
             boolean inCharacterClass) {
@@ -141,6 +195,13 @@ final class JoniRegexPattern {
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
                      boolean forceAsciiClasses, boolean byteMode,
                      boolean byteBackedPattern) {
+        this(perlPattern, flags, trustedCalloutCount, forceAsciiClasses, byteMode,
+                byteBackedPattern, new NamedCharacterCache());
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses, boolean byteMode,
+                     boolean byteBackedPattern, NamedCharacterCache namedCharacterCache) {
         PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(perlPattern, flags.isExtended());
         if (syntaxFeatures.keepInLookaround()) {
             throw new PerlCompilerException("\\K not permitted in lookahead/lookbehind in regex");
@@ -174,9 +235,15 @@ final class JoniRegexPattern {
                 return true;
             }
         };
+        NamedCharacterExpansion.SourceMode namedCharacterSourceMode =
+                forceAsciiClasses || byteMode && byteBackedPattern
+                        ? NamedCharacterExpansion.SourceMode.BYTE
+                        : NamedCharacterExpansion.SourceMode.UNICODE;
+        Syntax syntax = syntaxForNamedCharacters(
+                namedCharacterCache, namedCharacterSourceMode);
         regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
-                PERLONJAVA_SYNTAX, warningCollector);
+                syntax, warningCollector);
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
@@ -222,7 +289,7 @@ final class JoniRegexPattern {
     }
 
     String patternDescription() {
-        return sourcePattern;
+        return NamedCharacterExpansion.restoreRegexTokens(sourcePattern);
     }
 
     Regex engineRegex() {
@@ -429,6 +496,7 @@ final class JoniRegexPattern {
                 || syntaxFeatures.alphaAssertionPresent()
                 || pattern.contains("(?{=CALL:")
                 || pattern.contains("(?{=DYNAMIC:")
+                || pattern.contains("\\N{=POJSEQ=")
                 || pattern.contains("(*ACCEPT)")
                 || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP")

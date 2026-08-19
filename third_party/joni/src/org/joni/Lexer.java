@@ -779,7 +779,7 @@ class Lexer extends ScannerSupport {
         setPerlBracedCodePointToken(value);
     }
 
-    private boolean fetchTokenFor_namedCharacter() {
+    private boolean fetchTokenFor_namedCharacter(boolean inCharacterClass) {
         NamedCharacterResolver resolver = syntax.namedCharacterResolver;
         if (resolver == null || !syntax.op2OptionPerl() || !left() || !peekIs('{')) {
             return false;
@@ -794,12 +794,26 @@ class Lexer extends ScannerSupport {
             if (nameStart == nameEnd) {
                 newSyntaxException(PERL_EMPTY_NAMED_CHARACTER_ESCAPE);
             }
-            int codePoint = resolver.resolve(bytes, nameStart, nameEnd, enc);
-            if (codePoint < 0 || codePoint > 0x10ffff) {
-                newValueException(ERR_INVALID_CODE_POINT_VALUE);
+            int[] sequence = resolver.resolveSequence(bytes, nameStart, nameEnd, enc);
+            if (sequence == null) newValueException(ERR_INVALID_CODE_POINT_VALUE);
+            for (int codePoint : sequence) {
+                if (codePoint < 0 || codePoint > 0x10ffff) {
+                    newValueException(ERR_INVALID_CODE_POINT_VALUE);
+                }
             }
-            token.type = TokenType.CODE_POINT;
-            token.setCode(codePoint);
+            if (sequence.length == 0) {
+                if (inCharacterClass) {
+                    syntaxWarn("Ignoring zero length \\N{} in character class", p - getBegin());
+                }
+                token.type = TokenType.NAMED_STRING;
+                token.setNamedCharacterSequence(sequence);
+            } else if (sequence.length == 1) {
+                token.type = TokenType.CODE_POINT;
+                token.setCode(sequence[0]);
+            } else {
+                token.type = TokenType.NAMED_STRING;
+                token.setNamedCharacterSequence(sequence);
+            }
             return true;
         }
 
@@ -1124,7 +1138,7 @@ class Lexer extends ScannerSupport {
                 fetchTokenInCCFor_u();
                 break;
             case 'N':
-                if (!fetchTokenFor_namedCharacter()) {
+                if (!fetchTokenFor_namedCharacter(true)) {
                     unfetch();
                     fetchEscapedValue();
                     if (token.getC() != c) {
@@ -1683,7 +1697,7 @@ class Lexer extends ScannerSupport {
                     fetchTokenFor_uHex();
                     break;
                 case 'N':
-                    if (!fetchTokenFor_namedCharacter()) {
+                    if (!fetchTokenFor_namedCharacter(false)) {
                         unfetch();
                         fetchEscapedValue();
                         if (token.getC() != c) {

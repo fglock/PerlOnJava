@@ -42,6 +42,68 @@ public record NamedCharacterExpansion(
         return resolved() && sequence.isEmpty();
     }
 
+    private static final String REGEX_TOKEN_PREFIX = "=POJSEQ=";
+
+    /** Encodes a resolved lexical expansion without exposing it as regex syntax. */
+    public static String encodeRegexToken(String originalName, String sequence) {
+        return REGEX_TOKEN_PREFIX + hex(sequence) + "=" + hex(originalName);
+    }
+
+    /** Returns the code-point sequence from an encoded regex token, or null. */
+    public static int[] decodeRegexToken(String token) {
+        if (token == null || !token.startsWith(REGEX_TOKEN_PREFIX)) return null;
+        int separator = token.indexOf('=', REGEX_TOKEN_PREFIX.length());
+        if (separator < 0) return null;
+        String sequence = unhex(token.substring(REGEX_TOKEN_PREFIX.length(), separator));
+        return sequence == null ? null : sequence.codePoints().toArray();
+    }
+
+    /** Restores encoded lexical tokens for qr// stringification and diagnostics. */
+    public static String restoreRegexTokens(String pattern) {
+        if (pattern == null || !pattern.contains("\\N{" + REGEX_TOKEN_PREFIX)) return pattern;
+        StringBuilder restored = new StringBuilder(pattern.length());
+        for (int i = 0; i < pattern.length(); i++) {
+            if (!pattern.startsWith("\\N{" + REGEX_TOKEN_PREFIX, i)) {
+                restored.append(pattern.charAt(i));
+                continue;
+            }
+            int close = pattern.indexOf('}', i + 3);
+            int separator = close < 0 ? -1
+                    : pattern.lastIndexOf('=', close - 1);
+            String name = separator < 0 ? null
+                    : unhex(pattern.substring(separator + 1, close));
+            if (name == null) {
+                restored.append(pattern.charAt(i));
+                continue;
+            }
+            restored.append("\\N{").append(name).append('}');
+            i = close;
+        }
+        return restored.toString();
+    }
+
+    private static String hex(String value) {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        StringBuilder encoded = new StringBuilder(bytes.length * 2);
+        for (byte valueByte : bytes) {
+            encoded.append(Character.forDigit((valueByte >>> 4) & 0xf, 16));
+            encoded.append(Character.forDigit(valueByte & 0xf, 16));
+        }
+        return encoded.toString();
+    }
+
+    private static String unhex(String value) {
+        if ((value.length() & 1) != 0) return null;
+        byte[] bytes = new byte[value.length() / 2];
+        for (int i = 0; i < bytes.length; i++) {
+            int high = Character.digit(value.charAt(i * 2), 16);
+            int low = Character.digit(value.charAt(i * 2 + 1), 16);
+            if (high < 0 || low < 0) return null;
+            bytes[i] = (byte)((high << 4) | low);
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
     /** Resolve using the callback in the currently active lexical {@code %^H}. */
     public static NamedCharacterExpansion resolve(String name, SourceMode inputMode) {
         return resolve(name, HintHashRegistry.getCompileTimeHint("charnames"), inputMode);
