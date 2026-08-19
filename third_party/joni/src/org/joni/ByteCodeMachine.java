@@ -60,6 +60,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int pkeep;
     private int currentRegexOptions;
     private int pendingControlAction;
+    private boolean preserveCalloutMutations;
+    private boolean exportedDestructiveControl;
 
     private final int[]code;        // byte code
     private int ip;                 // instruction pointer
@@ -222,6 +224,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         ip = 0;
         currentRegexOptions = regex.options;
         controlMark = null;
+        preserveCalloutMutations = false;
+        exportedDestructiveControl = false;
 
         if (Config.DEBUG_MATCH) debugMatchBegin();
         stackInit();
@@ -2996,6 +3000,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opControlFail() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         // An unnamed FAIL terminates the current path without replacing a
         // more specific PRUNE/SKIP/THEN/COMMIT error already encountered on
@@ -3008,6 +3013,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opPrune() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(false);
@@ -3016,6 +3022,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opSkip() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         if (name != null) {
@@ -3033,6 +3040,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opThen() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(true, s, sprev, pkeep);
@@ -3041,6 +3049,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opCommit() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(false);
@@ -3053,6 +3062,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         String next = controlVerbName(code[ip++]);
         pushControlMark(controlMark, next, s);
         controlMark = next;
+    }
+
+    private void markDestructiveControl() {
+        preserveCalloutMutations = true;
+        exportedDestructiveControl = true;
+    }
+
+    @Override
+    protected boolean completeCalloutsOnUnwind() {
+        return preserveCalloutMutations;
     }
 
     @Override
@@ -3406,6 +3425,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             int action = machine.pendingControlAction;
             machine.pendingControlAction = CONTROL_NONE;
             if (machine.controlVerbEncountered) outer.controlVerbEncountered = true;
+            if (machine.exportedDestructiveControl) {
+                outer.markDestructiveControl();
+                machine.exportedDestructiveControl = false;
+            }
             if (machine.controlError != null) outer.controlError = machine.controlError;
             switch (action) {
             case CONTROL_PRUNE:
