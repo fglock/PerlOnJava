@@ -833,6 +833,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                 && originalPatternString.regionMatches(
                                         characterPosition - 3, "(?\\", 0, 3)) {
                             message = "Sequence (?\\...) not recognized";
+                        } else if ("too big number for repeat range".equals(message)) {
+                            message = "Quantifier in {,} bigger than 2147483646";
                         }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
                                 originalPatternString, characterPosition, message));
