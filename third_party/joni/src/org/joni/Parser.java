@@ -776,6 +776,21 @@ class Parser extends Lexer {
                 return parsePerlRelativeCall(c);
             }
             switch(c) {
+            case 'R':
+                if (syntax.op2OptionPerl()) {
+                    if (!left() || !peekIs(')')) {
+                        newSyntaxException(UNDEFINED_GROUP_OPTION);
+                    }
+                    inc();
+                    // group 0 with an empty name span denotes a numbered
+                    // whole-pattern call to the analyser, not a named call.
+                    CallNode call = new CallNode(bytes, p, p, 0);
+                    env.numCall++;
+                    returnCode = 0;
+                    return call;
+                }
+                newSyntaxException(UNDEFINED_GROUP_OPTION);
+                break;
             case '{':
                 return parseInternalCallout();
             case ':':  /* (?:...) grouping only */
