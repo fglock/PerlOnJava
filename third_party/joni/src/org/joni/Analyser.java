@@ -1911,11 +1911,17 @@ final class Analyser extends Parser {
                                                            int codePoint) {
         if (Encoding.isAscii(codePoint)) return false;
 
+        int firstEnd = p + enc.length(bytes, p, end);
         CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
                 regex.caseFoldFlag, bytes, p, end);
         for (CaseFoldCodeItem item : items) {
             for (int foldedCodePoint : item.code) {
                 if (Encoding.isAscii(foldedCodePoint)) return true;
+            }
+            int itemEnd = p + item.byteLen;
+            if (itemEnd > firstEnd && itemEnd <= end
+                    && !perlAsciiStrictAllNonAscii(bytes, p, itemEnd)) {
+                return true;
             }
         }
         return false;
