@@ -4,8 +4,7 @@ package org.perlonjava.runtime.regex;
  * Shared placeholder markers used by the string-interpolation parser to
  * stand in for regex constructs that PerlOnJava cannot compile literally
  * (because they require features unsupported by the underlying Java regex
- * engine — e.g. arbitrary {@code (?{ CODE })} code blocks and
- * {@code (??{ CODE })} recursive/dynamic patterns).
+ * engine — e.g. arbitrary {@code (?{ CODE })} code blocks).
  *
  * <p>The markers are emitted by {@code StringSegmentParser} when a code
  * block can't be constant-folded. {@link RegexPreprocessor} detects them
@@ -15,12 +14,6 @@ package org.perlonjava.runtime.regex;
  *       or a no-op fallback only when {@link #CODE_BLOCK_NOOP_ENV} is set.
  *       Plain {@code JPERL_UNIMPLEMENTED=warn} still reports the unsupported
  *       feature without pretending the callback ran.</li>
- *   <li>{@link #RECURSIVE_PATTERN} — a hard error under default die mode,
- *       or a warning under {@code JPERL_UNIMPLEMENTED=warn} followed by
- *       the soft {@code (?:} fallback so the surrounding pattern still
- *       compiles (many CPAN modules build dynamic patterns that happen
- *       to work with the empty-group fallback; under warn mode we want
- *       tests to continue but the user must see a diagnostic).</li>
  * </ul>
  *
  * <p><b>Why these specific spellings?</b> The preprocessor performs some
@@ -49,13 +42,6 @@ public final class RegexMarkers {
      * constant-folded at parse time. Contains no fold-affected letters.
      */
     public static final String CODE_BLOCK = "(?{UNIMPLEMENTED_CODE_BLOC})";
-
-    /**
-     * Marker for a {@code (??{ CODE })} recursive/dynamic pattern that
-     * could not be constant-folded at parse time. Contains no
-     * fold-affected letters.
-     */
-    public static final String RECURSIVE_PATTERN = "(??{UNIMPLEMENTED_RECURSIVE_PATTERN})";
 
     private RegexMarkers() {}
 }
