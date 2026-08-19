@@ -519,6 +519,10 @@ final class JoniRegexPattern {
                 || pattern.contains("(?{=DYNAMIC:")
                 || containsNamedCharacterEscape(pattern)
                 || pattern.contains("(*ACCEPT)")
+                || pattern.contains("(*ACCEPT:")
+                || pattern.contains("(*FAIL")
+                || pattern.contains("(*F)")
+                || pattern.contains("(*F:")
                 || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP")
                 || pattern.contains("(*THEN")
@@ -719,6 +723,8 @@ final class JoniRegexPattern {
 
     private static boolean hasControlVerbState(String pattern) {
         return pattern.contains("(*MARK") || pattern.contains("(*:")
+                || pattern.contains("(*ACCEPT") || pattern.contains("(*FAIL")
+                || pattern.contains("(*F)") || pattern.contains("(*F:")
                 || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP") || pattern.contains("(*THEN")
                 || pattern.contains("(*COMMIT");
@@ -1077,7 +1083,6 @@ final class JoniRegexPattern {
             if (nextStart > regionEnd) {
                 matched = false;
                 committedLastClosedCapture = -1;
-                if (hasControlVerbState) RuntimeRegex.updateControlVerbVariables(null, null);
                 return false;
             }
             matcher = regex.matcher(bytes);
@@ -1103,9 +1108,12 @@ final class JoniRegexPattern {
                 throw failure;
             }
             matched = result >= 0;
-            if (hasControlVerbState || matcher.hasEncounteredControlVerb()) {
+            boolean encounteredControlVerb = matcher.hasEncounteredControlVerb();
+            if ((matched && hasControlVerbState) || encounteredControlVerb) {
+                String mark = matcher.getControlMark();
+                if (matched && mark == null) mark = "1";
                 RuntimeRegex.updateControlVerbVariables(
-                        matcher.getControlMark(), matcher.getControlError());
+                        mark, matcher.getControlError());
             }
             if (calloutHandler != null) calloutHandler.finish(matched);
             if (!matched) {

@@ -103,10 +103,12 @@ final class ArrayCompiler extends Compiler {
         case ACCEPT:
             regex.requireStack = true;
             addOpcode(OPCode.ACCEPT);
+            addInt(controlVerbLabelId(node.name));
             break;
         case FAIL:
             regex.requireStack = true;
-            addOpcode(OPCode.FAIL);
+            addOpcode(OPCode.CONTROL_FAIL);
+            addInt(controlVerbLabelId(node.name));
             break;
         case PRUNE:
             regex.requireStack = true;
@@ -1372,7 +1374,7 @@ final class ArrayCompiler extends Compiler {
         if (node instanceof ControlVerbNode control) {
             return switch (control.kind) {
                 case ACCEPT -> OPSize.ACCEPT;
-                case FAIL -> OPSize.FAIL;
+                case FAIL -> OPSize.CONTROL_FAIL;
                 case PRUNE -> OPSize.PRUNE;
                 case SKIP -> OPSize.SKIP;
                 case THEN -> OPSize.THEN;

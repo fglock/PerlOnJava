@@ -389,6 +389,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CHECK_LOOK_BEHIND_END:      opCheckLookBehindEnd();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
+                case OPCode.CONTROL_FAIL:               opControlFail();           continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
@@ -559,6 +560,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.CHECK_LOOK_BEHIND_END:      opCheckLookBehindEnd();    continue;
                 case OPCode.FINISH:                     return finish();
                 case OPCode.FAIL:                       opFail();                  continue;
+                case OPCode.CONTROL_FAIL:               opControlFail();           continue;
                 case OPCode.CALLOUT:                    opCallout();               continue;
                 case OPCode.CALLOUT_CONDITION:          opCalloutCondition();      continue;
                 case OPCode.DYNAMIC_CALLOUT:            opDynamicCallout();        continue;
@@ -2949,6 +2951,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
      * are not boundaries; calls and assertions are, matching Perl's behavior.
      */
     private boolean opAccept() {
+        controlVerbEncountered = true;
+        String name = controlVerbName(code[ip++]);
+        if (name != null) controlMark = name;
         int callDepth = 0;
         for (int i = stk - 1; i >= 0; i--) {
             StackEntry entry = stack[i];
@@ -2987,6 +2992,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         closeOpenCaptures(-1);
         return opEnd();
+    }
+
+    private void opControlFail() {
+        controlVerbEncountered = true;
+        String name = controlVerbName(code[ip++]);
+        controlError = name == null ? "1" : name;
+        opFail();
     }
 
     private void opPrune() {
