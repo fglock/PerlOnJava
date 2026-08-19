@@ -1,5 +1,6 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.runtime.regex.PerlUnicodeNamedSequenceData;
 import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -151,6 +152,12 @@ public record NamedCharacterExpansion(
     }
 
     private static NamedCharacterExpansion resolveStandard(String name) {
+        String namedSequence = PerlUnicodeNamedSequenceData.sequence(name);
+        if (namedSequence != null) {
+            return new NamedCharacterExpansion(
+                    namedSequence, SourceMode.UNICODE,
+                    true, Status.RESOLVED, null);
+        }
         try {
             int codePoint = UnicodeResolver.getCodePointFromName(name);
             return new NamedCharacterExpansion(
