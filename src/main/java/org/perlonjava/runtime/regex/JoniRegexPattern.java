@@ -807,22 +807,6 @@ final class JoniRegexPattern {
                         continue;
                     }
                 }
-                // In Perl, \g{name} is a backreference.  Ruby/Oniguruma uses
-                // \g<name> for a subexpression call and \k<name> for the
-                // backreference, so passing the brace form through makes Joni
-                // diagnose it as an invalid subexpression call.  Numeric and
-                // relative brace forms follow the same translation.
-                if (!inClass && pattern.startsWith("\\g{", i)) {
-                    int end = pattern.indexOf('}', i + 3);
-                    if (end > i + 3) {
-                        String backreference = pattern.substring(i + 3, end);
-                        if (isValidPerlBraceBackreference(backreference)) {
-                            out.append("\\k<").append(backreference).append('>');
-                            i = end;
-                            continue;
-                        }
-                    }
-                }
                 out.append(ch);
                 escaped = true;
                 continue;
@@ -947,22 +931,6 @@ final class JoniRegexPattern {
             out.append(ch);
         }
         return out.toString();
-    }
-
-    private static boolean isValidPerlBraceBackreference(String content) {
-        if (content.isEmpty()) return false;
-        int start = content.charAt(0) == '-' ? 1 : 0;
-        if (start == content.length()) return false;
-        if (start == 1 || Character.isDigit(content.charAt(0))) {
-            for (int i = start; i < content.length(); i++) {
-                if (!Character.isDigit(content.charAt(i))) return false;
-            }
-            return true;
-        }
-        for (int i = 0; i < content.length(); i++) {
-            if (Character.isWhitespace(content.charAt(i))) return false;
-        }
-        return true;
     }
 
     private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,
