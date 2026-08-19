@@ -60,6 +60,8 @@ public final class Regex {
 
     int[]repeatRangeLo;
     int[]repeatRangeHi;
+    int[][] repeatCaptureClearGroups;
+    int numRepeatCaptureClearGroups;
 
     MatcherFactory factory;
 
