@@ -66,12 +66,18 @@ affected corpus before taking another slice.
 - Recursive callouts observe captures from the just-completed recursive frame.
 - Folded exact-search candidate bounds are safe for long ASCII-strict literals,
   and native numbered-call diagnostics retain the Perl source location.
-- Forced-Joni `pat_advanced.t` executes 1,687/1,687 and passes 1,644 on JVM and
-  interpreter, with identical 43-row residuals and zero introductions against
+- Forced-Joni `pat_advanced.t` executes 1,687/1,687 and passes 1,646 on JVM and
+  interpreter, with identical 41-row residuals and zero introductions against
   the exact 110-row reference set.
-- Forced-Joni `reg_mesg.t` passes 1,694/2,595.
-- Forced-Joni Unicode property comparison has 1,124/83,648 residual records on
-  each backend, with byte-identical normalized output.
+- The current imported `reg_mesg.t` passes 1,710/2,603 on each backend with an
+  identical status/test-number vector.
+- Forced-Joni Unicode property comparison has 900/83,648 residual records on
+  each backend, with an identical residual identity set. A corpus-proven
+  property-value-wildcard slice reduces this to 332 and awaits integration.
+- The shared deterministic pinned-Perl Unicode generator covers all 11 current
+  families. General_Category compatibility aliases and native named-call/parser
+  safety are integrated; generated case-fold metadata, signed-IV user-property
+  ranges, and native extended classes are active independent slices.
 - Each `pat.t` variant executes 1,301/1,302 and passes 1,223.
 - The current 80-file forced-Joni gate passes 363,164/391,977 and has 19
   per-file pass-count regressions against PR 958. These figures must be refreshed
@@ -192,27 +198,25 @@ behavior.
 1. Keep the canonical native-Joni PR and this plan branch durable. Require exact
    commit/file review, warning-free `make`, and green stacked CI before moving a
    PR from draft to user acceptance.
-2. Finish the current independent slices and integrate only zero-introduction
-   commits:
-   - deterministic generated Java for all pinned Perl Unicode data families;
-   - the complete General_Category compatibility and wildcard family from the
-     1,124-record Unicode residual;
-   - native named-call grammar, malformed-pattern diagnostics, and recursion
-     safety from the remaining parser tail;
-   - byte `/d` fold provenance only after named-character Unicode provenance is
-     correct; reject the broad ASCII-strict policy if it regresses named folds.
-3. Consolidate Unicode generation before adding more alias families: use one
-   pinned development script to parse/analyze the Perl tables and emit compiled,
-   checked-in Java resolver/fold classes, generated oracle fixtures, and
-   checksums. Require deterministic, diff-free regeneration; keep runtime
-   provenance and matcher algorithms in reviewed hand-written code.
-4. Refresh `pat_advanced.t` on the combined head and classify every remaining
-   semantic row. Prioritize `\N{}` extended-class failure, `\K`, property `/i`
-   closure, multi-character folds, recursion safety, wildcard/property errors,
-   then source/debug-only rows.
-5. Refresh `reg_mesg.t`, `pat.t`, and the 83,648-record Unicode corpus on both
-   backends. Close the largest semantically uniform native-Joni groups with a
-   system-Perl-first reducer and zero-introduction complete gate for each.
+2. Integrate the proven Unicode value-wildcard slice, then batch its follow-ups:
+   signed-IV user-property ranges, the exact 152-row POSIX/Perl compatibility
+   family, and the remaining 96 Block plus 84 binary/diagnostic rows. Replace
+   all temporary `java.util.regex.Pattern` value-wildcard execution—including
+   older Age/Block/Script/Numeric helpers—with one vendored-Joni evaluator
+   before Java matcher removal.
+3. Complete generated Perl case-fold metadata through the shared deterministic
+   pipeline, then wire the reviewed Joni fold API for literals, classes,
+   properties, backreferences, and optimizer search. Keep `/d`, `/u`, `/a`,
+   `/aa`, locale, Turkic, and byte/Unicode provenance policy hand-written.
+4. Implement native Joni `(?[...])` grammar/AST/evaluation and delete the
+   corresponding textual lowering. Close empty/multi-code-point `\N{}` legality,
+   nesting, set algebra, ranges, strict warnings, and exact diagnostics across
+   the affected `pat_advanced.t`, `pat.t`, and `reg_mesg.t` rows.
+5. Refresh `reg_mesg.t`, `pat.t`, `pat_advanced.t`, and the 83,648-record Unicode
+   corpus on each combined batch. Close the largest semantically uniform
+   native-Joni groups with a system-Perl-first reducer and zero-introduction
+   complete gate for each; compare stable test identities when diagnostics
+   contain backend-specific source-location or binary rendering.
 6. Refresh all four 80-file legs on one combined artifact. Resolve all 19
    per-file PR 958 regressions; do not offer a long user acceptance run while
    any negative, zero-TAP, timeout, or incomplete file is unexplained.
