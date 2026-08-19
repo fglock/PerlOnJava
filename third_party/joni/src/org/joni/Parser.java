@@ -70,6 +70,7 @@ class Parser extends Lexer {
     protected int returnCode; // return code used by parser methods (they itself return parsed nodes)
                               // this approach will not affect recursive calls
     private EncloseNode[] lexicalMemNodes;
+    private boolean perlExtendedClassLeaf;
 
     private static final class PerlAsciiStrictClassMultiFold
             implements ApplyAllCaseFoldFunction {
@@ -266,6 +267,78 @@ class Parser extends Lexer {
     private record ParsedCharClass(CClassNode standard,
                                    List<StringNode> namedSequences) {}
 
+    private record PerlExtendedClassPrimary(CClassNode node,
+                                            boolean scopedOptionsApplied) {}
+
+    private final class PerlCharsetOptionState {
+        private int asciiModifierCount;
+        private boolean sawDefaultCharset;
+        private boolean sawLocaleCharset;
+        private boolean sawUnicodeCharset;
+
+        int apply(int option, int modifier, boolean neg, boolean rejectLocale) {
+            switch (modifier) {
+            case 'a':
+                if (!(syntax.op2OptionPerl() || syntax.op2OptionRuby()) || neg) {
+                    newSyntaxException(UNDEFINED_GROUP_OPTION);
+                }
+                if (syntax.op2OptionPerl() && sawDefaultCharset) {
+                    newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
+                }
+                asciiModifierCount++;
+                if (syntax.op2OptionPerl() && asciiModifierCount > 2) {
+                    newSyntaxException(PERL_MODIFIER_A_MAXIMUM_TWICE);
+                }
+                option = bsOnOff(option, Option.ASCII_RANGE, false);
+                option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
+                option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                return bsOnOff(option, Option.PERL_ASCII_STRICT,
+                        syntax.op2OptionPerl() && asciiModifierCount >= 2
+                                ? false : true);
+            case 'u':
+                if (!(syntax.op2OptionPerl() || syntax.op2OptionRuby()) || neg) {
+                    newSyntaxException(UNDEFINED_GROUP_OPTION);
+                }
+                if (syntax.op2OptionPerl() && sawLocaleCharset) {
+                    newSyntaxException(PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE);
+                }
+                sawUnicodeCharset = true;
+                option = bsOnOff(option, Option.ASCII_RANGE, true);
+                option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
+                option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
+            case 'd':
+                if (!syntax.op2OptionPerl() || neg) {
+                    newSyntaxException(UNDEFINED_GROUP_OPTION);
+                }
+                if (asciiModifierCount > 0) {
+                    newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
+                }
+                sawDefaultCharset = true;
+                option = bsOnOff(option, Option.ASCII_RANGE, true);
+                return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
+            case 'l':
+                if (rejectLocale) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_LOCALE_UNSUPPORTED);
+                }
+                if (!syntax.op2OptionPerl() || neg) {
+                    newSyntaxException(UNDEFINED_GROUP_OPTION);
+                }
+                if (sawUnicodeCharset) {
+                    newSyntaxException(PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE);
+                }
+                if (sawLocaleCharset) {
+                    newSyntaxException(PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE);
+                }
+                sawLocaleCharset = true;
+                option = bsOnOff(option, Option.ASCII_RANGE, true);
+                return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
+            default:
+                throw new AssertionError(modifier);
+            }
+        }
+    }
+
     private ParsedCharClass parseCharClass(ObjPtr<CClassNode> ascNode,
                                            ObjPtr<CClassNode> foldNode) {
         final boolean neg;
@@ -361,6 +434,9 @@ class Parser extends Lexer {
 
             case NAMED_STRING:
                 int[] namedSequence = token.getNamedCharacterSequence();
+                if (perlExtendedClassLeaf && namedSequence.length == 0) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_ZERO_LENGTH_NAMED_CHARACTER);
+                }
                 if (neg && namedSequence.length > 1) {
                     syntaxWarn("Using just the first character returned by \\N{} in character class",
                             p - getBegin());
@@ -466,6 +542,9 @@ class Parser extends Lexer {
                 break;
 
             case CC_CC_OPEN: /* [ */
+                if (perlExtendedClassLeaf) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
+                }
                 ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
                 ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
                 ParsedCharClass nested = parseCharClass(ascPtr, foldPtr);
@@ -922,10 +1001,7 @@ class Parser extends Lexer {
             case 'g':
             case 'o':
                 boolean neg = false;
-                int asciiModifierCount = 0;
-                boolean sawDefaultCharset = false;
-                boolean sawLocaleCharset = false;
-                boolean sawUnicodeCharset = false;
+                PerlCharsetOptionState charsetOptions = new PerlCharsetOptionState();
                 boolean sawContinueModifier = false;
                 while (true) {
                     switch(c) {
@@ -994,70 +1070,24 @@ class Parser extends Lexer {
                         break;
 
                     case 'a':     /* limits \d, \s, \w and POSIX brackets to ASCII range */
-                        if ((syntax.op2OptionPerl() || syntax.op2OptionRuby()) && !neg) {
-                            if (syntax.op2OptionPerl() && sawDefaultCharset) {
-                                newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
-                            }
-                            asciiModifierCount++;
-                            if (syntax.op2OptionPerl() && asciiModifierCount > 2) {
-                                newSyntaxException(PERL_MODIFIER_A_MAXIMUM_TWICE);
-                            }
-                            option = bsOnOff(option, Option.ASCII_RANGE, false);
-                            option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
-                            option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
-                            option = bsOnOff(option, Option.PERL_ASCII_STRICT,
-                                    syntax.op2OptionPerl() && asciiModifierCount >= 2
-                                            ? false : true);
-                            break;
-                        } else {
-                            newSyntaxException(UNDEFINED_GROUP_OPTION);
-                        }
+                        option = charsetOptions.apply(option, c, neg, false);
+                        break;
                     case 'u':
-                        if ((syntax.op2OptionPerl() || syntax.op2OptionRuby()) && !neg) {
-                            if (syntax.op2OptionPerl() && sawLocaleCharset) {
-                                newSyntaxException(PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE);
-                            }
-                            sawUnicodeCharset = true;
-                            option = bsOnOff(option, Option.ASCII_RANGE, true);
-                            option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
-                            option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
-                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
-                            break;
-                        } else {
-                            newSyntaxException(UNDEFINED_GROUP_OPTION);
-                        }
+                        option = charsetOptions.apply(option, c, neg, false);
+                        break;
 
                     case 'd':
-                        if (syntax.op2OptionPerl() && !neg) {
-                            if (asciiModifierCount > 0) {
-                                newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
-                            }
-                            sawDefaultCharset = true;
-                            option = bsOnOff(option, Option.ASCII_RANGE, true);
-                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
-                        } else if (syntax.op2OptionRuby() && !neg) {
+                        if (syntax.op2OptionRuby() && !syntax.op2OptionPerl() && !neg) {
                             option = bsOnOff(option, Option.ASCII_RANGE, false);
                             option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, false);
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, false);
                         } else {
-                            newSyntaxException(UNDEFINED_GROUP_OPTION);
+                            option = charsetOptions.apply(option, c, neg, false);
                         }
                         break;
 
                     case 'l':
-                        if (syntax.op2OptionPerl() && !neg) {
-                            if (sawUnicodeCharset) {
-                                newSyntaxException(PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE);
-                            }
-                            if (sawLocaleCharset) {
-                                newSyntaxException(PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE);
-                            }
-                            sawLocaleCharset = true;
-                            option = bsOnOff(option, Option.ASCII_RANGE, true);
-                            option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
-                        } else {
-                            newSyntaxException(UNDEFINED_GROUP_OPTION);
-                        }
+                        option = charsetOptions.apply(option, c, neg, false);
                         break;
                     default:
                         newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -1464,6 +1494,10 @@ class Parser extends Lexer {
             break;
             }
 
+        case EXTENDED_CC_OPEN:
+            node = parsePerlExtendedCharClass();
+            break;
+
         case ANYCHAR:
             node = new AnyCharNode();
             break;
@@ -1506,6 +1540,293 @@ class Parser extends Lexer {
         fetchToken(); // re_entry:
 
         return parseExpRepeat(node, group); // repeat:
+    }
+
+    private CClassNode parsePerlExtendedCharClass() {
+        skipPerlExtendedClassSpace();
+        if (!left() || extendedClassAt(']')) {
+            newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+        }
+        CClassNode result = parsePerlExtendedClassUnion();
+        skipPerlExtendedClassSpace();
+        if (!left() || !extendedClassAt(']')) {
+            newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+        }
+        inc();
+        if (!left() || !extendedClassAt(')')) {
+            if (left() && extendedClassAt(']')) {
+                newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
+            }
+            newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+        }
+        inc();
+        return result;
+    }
+
+    private CClassNode parsePerlExtendedClassUnion() {
+        CClassNode left = parsePerlExtendedClassIntersection();
+        while (true) {
+            skipPerlExtendedClassSpace();
+            if (!left()) return left;
+            int operator = extendedClassCode();
+            if (operator != '+' && operator != '|' && operator != '-'
+                    && operator != '^') return left;
+            inc();
+            CClassNode right = parsePerlExtendedClassIntersection();
+            switch (operator) {
+            case '+':
+            case '|':
+                left.or(right, env);
+                break;
+            case '-':
+                right.setNot();
+                left.and(right, env);
+                break;
+            case '^':
+                CClassNode onlyLeft = left.copy();
+                CClassNode onlyRight = right.copy();
+                right.setNot();
+                onlyLeft.and(right, env);
+                left.setNot();
+                onlyRight.and(left, env);
+                onlyLeft.or(onlyRight, env);
+                left = onlyLeft;
+                break;
+            default:
+                throw new AssertionError(operator);
+            }
+        }
+    }
+
+    private CClassNode parsePerlExtendedClassIntersection() {
+        CClassNode left = parsePerlExtendedClassUnary();
+        while (true) {
+            skipPerlExtendedClassSpace();
+            if (!left() || !extendedClassAt('&')) return left;
+            inc();
+            left.and(parsePerlExtendedClassUnary(), env);
+        }
+    }
+
+    private CClassNode parsePerlExtendedClassUnary() {
+        skipPerlExtendedClassSpace();
+        if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+        if (extendedClassAt('!')) {
+            inc();
+            CClassNode result = parsePerlExtendedClassUnary();
+            if (result.isNot()) result.clearNot();
+            else result.setNot();
+            return result;
+        }
+        PerlExtendedClassPrimary primary = parsePerlExtendedClassPrimary();
+        CClassNode result = primary.node();
+        if (!primary.scopedOptionsApplied() && isIgnoreCase(env.option)) {
+            cClassCaseFold(result, result, result, result);
+        }
+        return result;
+    }
+
+    private PerlExtendedClassPrimary parsePerlExtendedClassPrimary() {
+        skipPerlExtendedClassSpace();
+        if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+
+        if (extendedClassStarts("(?[")) {
+            p += 3;
+            return new PerlExtendedClassPrimary(parsePerlExtendedCharClass(), true);
+        }
+        if (extendedClassStarts("(?")) {
+            p += 2;
+            int previousOption = env.option;
+            int nestedOption = previousOption;
+            if (left() && extendedClassAt('^')) {
+                nestedOption = bsOnOff(nestedOption, Option.ASCII_RANGE, true);
+                nestedOption = bsOnOff(nestedOption, Option.IGNORECASE, true);
+                nestedOption = bsOnOff(nestedOption, Option.SINGLELINE, false);
+                nestedOption = bsOnOff(nestedOption, Option.MULTILINE, true);
+                nestedOption = bsOnOff(nestedOption, Option.EXTEND, true);
+                nestedOption = bsOnOff(nestedOption, Option.DONT_CAPTURE_GROUP, true);
+                nestedOption = bsOnOff(nestedOption, Option.CAPTURE_GROUP, false);
+                nestedOption = bsOnOff(nestedOption, Option.PERL_ASCII_STRICT, true);
+                inc();
+            }
+            boolean negateOption = false;
+            PerlCharsetOptionState charsetOptions = new PerlCharsetOptionState();
+            while (left() && !extendedClassAt(':')) {
+                int option = extendedClassCode();
+                if (option != 'a' && option != 'd' && option != 'i'
+                        && option != 'l' && option != 'm' && option != 'n'
+                        && option != 'p' && option != 's' && option != 'u'
+                        && option != 'x' && option != '-') {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                }
+                if (option == '-') negateOption = true;
+                else if (option == 'i') {
+                    nestedOption = bsOnOff(nestedOption, Option.IGNORECASE, negateOption);
+                } else if (option == 'a' || option == 'd'
+                        || option == 'l' || option == 'u') {
+                    nestedOption = charsetOptions.apply(
+                            nestedOption, option, negateOption, true);
+                }
+                inc();
+            }
+            if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            inc();
+            env.option = nestedOption;
+            CClassNode nested;
+            try {
+                skipPerlExtendedClassSpace();
+                if (!extendedClassStarts("(?[")) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_EXPECTING_INTERPOLATED);
+                }
+                p += 3;
+                nested = parsePerlExtendedCharClass();
+                skipPerlExtendedClassSpace();
+                if (!left() || !extendedClassAt(')')) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                }
+                inc();
+            } finally {
+                env.option = previousOption;
+            }
+            return new PerlExtendedClassPrimary(nested, true);
+        }
+        if (extendedClassAt('(')) {
+            inc();
+            CClassNode nested = parsePerlExtendedClassUnion();
+            skipPerlExtendedClassSpace();
+            if (!left() || !extendedClassAt(')')) {
+                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            }
+            inc();
+            return new PerlExtendedClassPrimary(nested, true);
+        }
+        if (extendedClassAt('[')) {
+            inc();
+            ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
+            ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
+            boolean previousExtendedLeaf = perlExtendedClassLeaf;
+            perlExtendedClassLeaf = true;
+            ParsedCharClass parsed;
+            try {
+                parsed = parseCharClass(ascPtr, foldPtr);
+            } finally {
+                perlExtendedClassLeaf = previousExtendedLeaf;
+            }
+            if (!parsed.namedSequences().isEmpty()) {
+                newSyntaxException(PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER);
+            }
+            return new PerlExtendedClassPrimary(parsed.standard(), false);
+        }
+        if (extendedClassAt('\\')) {
+            return new PerlExtendedClassPrimary(parsePerlExtendedClassEscape(), false);
+        }
+        newSyntaxException(PERL_EXTENDED_CLASS_BARE_CHARACTER);
+        return null;
+    }
+
+    private CClassNode parsePerlExtendedClassEscape() {
+        int escapeStart = p;
+        if (escapeStart < stop && enc.mbcToCode(bytes, escapeStart, stop) == '\\') {
+            int cursor = escapeStart + enc.length(bytes, escapeStart, stop);
+            if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '0') {
+                int digits = 0;
+                while (cursor < stop) {
+                    int digit = enc.mbcToCode(bytes, cursor, stop);
+                    if (digit < '0' || digit > '7') break;
+                    digits++;
+                    cursor += enc.length(bytes, cursor, stop);
+                }
+                if (digits != 3) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_OCTAL_WIDTH);
+                }
+            }
+        }
+        fetchToken();
+        CClassNode result = new CClassNode();
+        switch (token.type) {
+        case CODE_POINT:
+            addPerlExtendedClassCode(result, token.getCode());
+            return result;
+        case WIDE_CODE_POINT:
+            result.addWideScalarRange(token.getWideCode(), token.getWideCode());
+            return result;
+        case RAW_BYTE:
+        case STRING:
+            addPerlExtendedClassCode(result, token.getC());
+            return result;
+        case NAMED_STRING:
+            int[] sequence = token.getNamedCharacterSequence();
+            if (sequence.length == 0) {
+                newSyntaxException(PERL_EXTENDED_CLASS_ZERO_LENGTH_NAMED_CHARACTER);
+            }
+            if (sequence.length != 1) {
+                newSyntaxException(PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER);
+            }
+            addPerlExtendedClassCode(result, sequence[0]);
+            return result;
+        case CHAR_TYPE:
+            result.addCType(token.getPropCType(), token.getPropNot(),
+                    isAsciiRange(env.option), env, this);
+            return result;
+        case CHAR_PROPERTY:
+            CharProperty property = fetchCharProperty(true);
+            addCharProperty(result, null, null, property, token.getPropNot());
+            return result;
+        case CC_OPEN:
+            ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
+            ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
+            ParsedCharClass parsed = parseCharClass(ascPtr, foldPtr);
+            if (!parsed.namedSequences().isEmpty()) {
+                newSyntaxException(PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER);
+            }
+            return parsed.standard();
+        default:
+            newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            return null;
+        }
+    }
+
+    private void addPerlExtendedClassCode(CClassNode cc, int codePoint) {
+        int length = enc.codeToMbcLength(codePoint);
+        if (codePoint < BitSet.SINGLE_BYTE_SIZE && length == 1) {
+            cc.bs.set(env, codePoint);
+        } else {
+            cc.addCodeRange(env, codePoint, codePoint);
+        }
+    }
+
+    private void skipPerlExtendedClassSpace() {
+        while (left()) {
+            int codePoint = extendedClassCode();
+            if (codePoint == '#') {
+                do {
+                    int length = enc.length(bytes, p, stop);
+                    p += length;
+                } while (left() && !enc.isNewLine(extendedClassCode()));
+                continue;
+            }
+            if (!Character.isWhitespace(codePoint) && codePoint != 0x85) return;
+            p += enc.length(bytes, p, stop);
+        }
+    }
+
+    private boolean extendedClassAt(int codePoint) {
+        return left() && extendedClassCode() == codePoint;
+    }
+
+    private int extendedClassCode() {
+        return enc.mbcToCode(bytes, p, stop);
+    }
+
+    private boolean extendedClassStarts(String suffix) {
+        int cursor = p;
+        for (int i = 0; i < suffix.length(); i++) {
+            if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != suffix.charAt(i)) {
+                return false;
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return true;
     }
 
     private Node parseLineBreak() {

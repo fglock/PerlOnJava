@@ -1842,6 +1842,11 @@ class Lexer extends ScannerSupport {
                     case '(':
                         if (peekIs('?') && syntax.op2QMarkGroupEffect()) {
                             inc();
+                            if (syntax.op2OptionPerl() && peekIs('[')) {
+                                inc();
+                                token.type = TokenType.EXTENDED_CC_OPEN;
+                                break;
+                            }
                             if (peekIs('#')) {
                                 fetch();
                                 while (true) {

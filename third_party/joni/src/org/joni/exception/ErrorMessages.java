@@ -119,6 +119,22 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_NAMED_CALL_NOT_TERMINATED = "Sequence (?&... not terminated";
     String PERL_QUANTIFIER_ON_ZERO_LENGTH =
             "Quantifier unexpected on zero-length expression";
+    String PERL_EXTENDED_CLASS_INCOMPLETE =
+            "Incomplete expression within '(?[ ])'";
+    String PERL_EXTENDED_CLASS_SYNTAX = "Syntax error in (?[...])";
+    String PERL_EXTENDED_CLASS_EXPECTING_INTERPOLATED =
+            "Expecting interpolated extended charclass";
+    String PERL_EXTENDED_CLASS_LOCALE_UNSUPPORTED =
+            "Locale charset modifier is not supported in interpolated extended charclass";
+    String PERL_EXTENDED_CLASS_OCTAL_WIDTH = "Need exactly 3 octal digits";
+    String PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE =
+            "Unexpected ']' with no following ')' in (?[...";
+    String PERL_EXTENDED_CLASS_BARE_CHARACTER =
+            "Unexpected character in extended character class";
+    String PERL_EXTENDED_CLASS_ZERO_LENGTH_NAMED_CHARACTER =
+            "Zero length \\N{}";
+    String PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER =
+            "\\N{} here is restricted to one character in regex";
     String PERL_WIDE_SCALAR_OVERFLOW =
             "Use of code point is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF";
 

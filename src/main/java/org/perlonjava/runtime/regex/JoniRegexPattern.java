@@ -819,17 +819,39 @@ final class JoniRegexPattern {
                 }
             }
             if (!inClass && pattern.startsWith("(?[", i)) {
-                StringBuilder translatedClass = new StringBuilder();
-                int end = ExtendedCharClass.handleExtendedCharacterClass(
-                        pattern, i, translatedClass, flags);
-                String sourceClass = pattern.substring(i, Math.min(pattern.length(), end + 1));
-                if (sourceClass.toLowerCase(java.util.Locale.ROOT).contains("[:ascii:]")) {
-                    appendAsciiClassForJoni(out, translatedClass.toString());
-                } else {
-                    out.append(normalizeGeneratedPropertyClassForJoni(
-                            translatedClass.toString()));
+                int bracketDepth = 0;
+                boolean comment = false;
+                int end = i + 3;
+                for (; end < pattern.length(); end++) {
+                    char extended = pattern.charAt(end);
+                    if (comment) {
+                        if (extended == '\n' || extended == '\r') comment = false;
+                        continue;
+                    }
+                    if (extended == '#' && bracketDepth == 0) {
+                        comment = true;
+                        continue;
+                    }
+                    if (extended == '\\') {
+                        if (end + 1 < pattern.length()) end++;
+                        continue;
+                    }
+                    if (extended == '[') {
+                        bracketDepth++;
+                        continue;
+                    }
+                    if (extended != ']') continue;
+                    if (bracketDepth > 0) {
+                        bracketDepth--;
+                        continue;
+                    }
+                    if (end + 1 < pattern.length() && pattern.charAt(end + 1) == ')') {
+                        end++;
+                        break;
+                    }
                 }
-                i = end;
+                out.append(pattern, i, Math.min(end + 1, pattern.length()));
+                i = Math.min(end, pattern.length() - 1);
                 continue;
             }
             if (!inClass && pattern.startsWith("(?)", i)) {

@@ -47,6 +47,17 @@ public final class CClassNode extends Node {
         super(CCLASS);
     }
 
+    public CClassNode copy() {
+        CClassNode copy = new CClassNode();
+        copy.flags = flags;
+        copy.bs.copy(bs);
+        copy.mbuf = mbuf == null ? null : mbuf.clone();
+        copy.wideRanges = wideRanges == null ? null : wideRanges.clone();
+        copy.wideRangeCount = wideRangeCount;
+        copy.authoritativeWideDomain = authoritativeWideDomain;
+        return copy;
+    }
+
     public void clear() {
         bs.clear();
         flags = 0;
