@@ -454,9 +454,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * a Unicode property to one emits a use-site {@code non_unicode} warning,
      * even though the value is carried internally as a Java-safe marker.
      */
-    private void emitNonUnicodePropertyWarning(String input) {
+    private void emitNonUnicodePropertyWarning(RuntimeScalar subject, String input) {
         if (patternString == null || input == null
                 || !UNICODE_PROPERTY_PATTERN.matcher(patternString).find()) {
+            return;
+        }
+        if (recursivePattern != null
+                && selectRecursivePattern(subject)
+                        .hasOnlyAuthoritativeWideCharacterClasses()) {
             return;
         }
         for (int offset = 0; offset < input.length(); ) {
@@ -2007,7 +2012,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         String inputStr = string.toString();
-        regex.emitNonUnicodePropertyWarning(inputStr);
+        regex.emitNonUnicodePropertyWarning(string, inputStr);
         regex.emitExecutionDebugTrace(inputStr);
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         RegexMatcher matcher;
