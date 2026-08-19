@@ -1,12 +1,11 @@
 package org.perlonjava.runtime.regex;
 
 /**
- * Temporary migration policy for comparing the legacy Java-first routing with
- * the canonical Joni matcher. Ordinary lookbehind also remains on Java until
- * Joni's nested-lookahead admission is complete. Branch-reset subroutine calls
- * also temporarily use Java pending Joni's native named-call patch. Other
- * Joni-only constructs in the same pattern still force Joni. This class and its
- * controls are removed when the Java matching backend is retired.
+ * Temporary migration policy for comparing the canonical Joni matcher with
+ * the legacy Java matcher. Default and auto modes use Joni; explicit Java mode
+ * remains only for differential diagnosis. Constructs unavailable in Java may
+ * still force Joni even in explicit Java mode. This class and its controls are
+ * removed when the Java matching backend is retired.
  */
 final class RegexBackendPolicy {
     static final String PROPERTY = "jperl.regex.backend";
@@ -27,14 +26,14 @@ final class RegexBackendPolicy {
         }
         if (configured == null || configured.isBlank()
                 || configured.equalsIgnoreCase("auto")
-                || configured.equalsIgnoreCase("java")) {
-            return Mode.JAVA;
-        }
-        if (configured.equalsIgnoreCase("joni")) {
+                || configured.equalsIgnoreCase("joni")) {
             return Mode.JONI;
         }
+        if (configured.equalsIgnoreCase("java")) {
+            return Mode.JAVA;
+        }
         throw new IllegalArgumentException("Invalid " + ENVIRONMENT + " value '"
-                + configured + "' (expected java or joni)");
+                + configured + "' (expected auto, java, or joni)");
     }
 
     static boolean useJoni(String pattern) {

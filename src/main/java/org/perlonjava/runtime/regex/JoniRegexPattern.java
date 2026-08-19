@@ -17,6 +17,7 @@ import org.joni.Region;
 import org.joni.Syntax;
 import org.joni.WarnCallback;
 import org.joni.WideScalarCodec;
+import org.joni.exception.SyntaxException;
 
 import static org.joni.constants.SyntaxProperties.ALLOW_MULTIPLEX_DEFINITION_NAME_CALL;
 import static org.joni.constants.SyntaxProperties.OP2_ESC_H_HORIZONTAL_WHITESPACE;
@@ -249,7 +250,9 @@ final class JoniRegexPattern {
         Syntax syntax = syntaxForNamedCharacters(
                 namedCharacterCache, namedCharacterSourceMode,
                 flags.isCaseInsensitive());
-        regex = new Regex(bytes, 0, bytes.length, toJoniOptions(flags, forceAsciiClasses),
+        int options = toJoniOptions(flags, forceAsciiClasses);
+        if (byteMode && byteBackedPattern) options |= Option.PERL_BYTE_PATTERN;
+        regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
@@ -1063,7 +1066,7 @@ final class JoniRegexPattern {
             matcher = regex.matcher(bytes);
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
-                        input, byteToChar, callbacks, flags, hasControlVerbState, subject);
+                        input, byteToChar, callbacks, flags, hasControlVerbState, byteMode, subject);
                 matcher.setCalloutHandler(calloutHandler);
             }
             int result;
@@ -1281,6 +1284,7 @@ final class JoniRegexPattern {
         private final List<RuntimeRegexCallback> callbacks;
         private final RegexFlags outerFlags;
         private final boolean publishesControlVerbState;
+        private final boolean byteMode;
         private final RuntimeScalar subject;
         private final int initialLocalLevel;
         private final RegexState initialRegexState;
@@ -1295,20 +1299,21 @@ final class JoniRegexPattern {
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                            RegexFlags outerFlags, boolean publishesControlVerbState,
-                           RuntimeScalar subject) {
+                           boolean byteMode, RuntimeScalar subject) {
             this(input, byteToChar, callbacks, outerFlags, publishesControlVerbState,
-                    subject, null);
+                    byteMode, subject, null);
         }
 
         private PerlCalloutHandler(
                 String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                 RegexFlags outerFlags, boolean publishesControlVerbState,
-                RuntimeScalar subject, PerlCalloutHandler parent) {
+                boolean byteMode, RuntimeScalar subject, PerlCalloutHandler parent) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
             this.outerFlags = outerFlags;
             this.publishesControlVerbState = publishesControlVerbState;
+            this.byteMode = byteMode;
             this.subject = subject;
             this.parent = parent;
             this.nestedDepth = parent == null ? 0 : parent.nestedDepth + 1;
@@ -1352,7 +1357,8 @@ final class JoniRegexPattern {
                 nestedCallbacks = runtimeRegex.executableCallbacks;
             } else if (value.value instanceof RuntimeRegexTemplate template) {
                 nestedPattern = new JoniRegexPattern(template.pattern(), outerFlags,
-                        template.callbacks().size());
+                        template.callbacks().size(), false,
+                        byteMode && template.byteBackedPattern(), template.byteBackedPattern());
                 nestedCallbacks = template.callbacks();
             } else {
                 String dynamicSource = value.toString();
@@ -1371,7 +1377,18 @@ final class JoniRegexPattern {
                             runtimeRegex.executableCallbacks.size());
                     nestedCallbacks = runtimeRegex.executableCallbacks;
                 } else {
-                    nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags);
+                    try {
+                        nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags);
+                    } catch (SyntaxException exception) {
+                        String message = exception.getMessage();
+                        if (message != null && (message.contains("premature end of char-class")
+                                || message.contains("Unclosed character class"))) {
+                            int open = dynamicSource.indexOf('[');
+                            throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                                    dynamicSource, open < 0 ? 0 : open + 1, "Unmatched ["));
+                        }
+                        throw exception;
+                    }
                 }
             }
             CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
@@ -1380,6 +1397,7 @@ final class JoniRegexPattern {
                                     && runtimeRegex.getRegexFlags() != null
                                     ? runtimeRegex.getRegexFlags() : outerFlags,
                             nestedPattern.hasControlVerbState,
+                            byteMode,
                             subject,
                             this);
             if (nestedHandler != null) executedNestedCallbackPattern = true;

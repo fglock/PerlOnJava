@@ -8,11 +8,11 @@ backtracking, captures, conditions, recursion, control verbs, Unicode matching,
 case folding, and matcher-visible callbacks. PerlOnJava owns Perl source policy,
 runtime integration, lexical warnings, diagnostics, and callback closures.
 
-Migration is not complete. Automatic routing still uses Java for ordinary
-patterns unless a Joni-only construct is present. Setting
-`JPERL_REGEX_BACKEND=joni` or the `jperl.regex.backend=joni` system property
-forces Joni and is the compatibility gate used by the unit corpus. The Java
-matcher, selector, and Java-only rewrites are temporary migration scaffolding.
+Migration is not complete. Automatic routing uses Joni for ordinary patterns.
+Setting `JPERL_REGEX_BACKEND=java` or the `jperl.regex.backend=java` system
+property retains the legacy matcher solely as a differential baseline; explicit
+`joni` selects the production route. The Java matcher, selector, and Java-only
+rewrites are temporary migration scaffolding.
 
 ## Compilation and routing
 

@@ -66,6 +66,19 @@ public record NamedCharacterExpansion(
             if (name.matches("(?i)U\\+[0-9A-F]+")) {
                 return resolveStandard(name);
             }
+            if (name.matches("(?i)U\\+[0-9A-F]+(?:\\.[0-9A-F]+)+")) {
+                try {
+                    StringBuilder sequence = new StringBuilder();
+                    for (String scalar : name.substring(2).split("\\.")) {
+                        sequence.appendCodePoint(Integer.parseInt(scalar, 16));
+                    }
+                    return new NamedCharacterExpansion(
+                            sequence.toString(), SourceMode.UNICODE,
+                            true, Status.RESOLVED, null);
+                } catch (IllegalArgumentException failure) {
+                    // Fall through to Perl's common malformed-U+ diagnostic.
+                }
+            }
             return new NamedCharacterExpansion(
                     "", SourceMode.UNICODE, true, Status.INVALID,
                     "Invalid hexadecimal number in \\N{U+...}");

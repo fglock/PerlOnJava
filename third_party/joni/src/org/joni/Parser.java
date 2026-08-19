@@ -2230,7 +2230,13 @@ class Parser extends Lexer {
 
     private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc,
                                 CClassNode foldCc) {
-        ApplyCaseFoldArg arg = new ApplyCaseFoldArg(env, cc, ascCc, foldCc);
+        return cClassCaseFold(node, cc, ascCc, foldCc, false);
+    }
+
+    private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc,
+                                CClassNode foldCc, boolean preservePropertyAsciiCrossings) {
+        ApplyCaseFoldArg arg = new ApplyCaseFoldArg(
+                env, cc, ascCc, foldCc, preservePropertyAsciiCrossings);
         enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
         if (syntax.op2OptionPerl()) {
             ApplyCaseFold.applyPerlSimpleClassClosure(arg);
@@ -2258,7 +2264,7 @@ class Parser extends Lexer {
         if (isIgnoreCase(env.option) && property.caseFold) {
             if (property.ranges != null || property.wideRanges != null
                     || property.ctype != CharacterType.ASCII) {
-                node = cClassCaseFold(node, cc, cc, cc);
+                node = cClassCaseFold(node, cc, cc, cc, true);
             }
         }
         return node;

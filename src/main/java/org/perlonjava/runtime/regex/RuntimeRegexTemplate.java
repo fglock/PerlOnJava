@@ -9,7 +9,9 @@ import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.perlmodule.Utf8;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -23,6 +25,7 @@ public final class RuntimeRegexTemplate {
             "\\(\\?\\{=(CALL|DYNAMIC):(\\d+)\\}\\)");
     private final String pattern;
     private final List<RuntimeRegexCallback> callbacks;
+    private final boolean byteBackedPattern;
 
     /**
      * Deferred array interpolation. Keeping the joined operands separate until
@@ -52,9 +55,11 @@ public final class RuntimeRegexTemplate {
         }
     }
 
-    private RuntimeRegexTemplate(String pattern, List<RuntimeRegexCallback> callbacks) {
+    private RuntimeRegexTemplate(String pattern, List<RuntimeRegexCallback> callbacks,
+                                 boolean byteBackedPattern) {
         this.pattern = pattern;
         this.callbacks = List.copyOf(callbacks);
+        this.byteBackedPattern = byteBackedPattern;
     }
 
     public static RuntimeScalar build(RuntimeList parts) {
@@ -85,9 +90,11 @@ public final class RuntimeRegexTemplate {
         StringBuilder pattern = new StringBuilder();
         List<RuntimeRegexCallback> callbacks = new ArrayList<>();
         boolean tainted = false;
+        boolean byteBackedPattern = true;
         for (RuntimeBase part : parts.elements) {
             RuntimeScalar scalar = part.scalar();
             tainted |= scalar.isTainted();
+            byteBackedPattern &= isByteCompatiblePatternPart(scalar);
             if (scalar.value instanceof RuntimeRegexCallback callback) {
                 int id = callbacks.size();
                 callbacks.add(callback);
@@ -108,10 +115,24 @@ public final class RuntimeRegexTemplate {
             }
         }
         RuntimeScalar result = callbacks.isEmpty()
-                ? new RuntimeScalar(pattern.toString())
-                : new RuntimeScalar(new RuntimeRegexTemplate(pattern.toString(), callbacks));
+                ? patternScalar(pattern.toString(), byteBackedPattern)
+                : new RuntimeScalar(new RuntimeRegexTemplate(
+                        pattern.toString(), callbacks, byteBackedPattern));
         result.tainted = tainted;
         return result;
+    }
+
+    private static boolean isByteCompatiblePatternPart(RuntimeScalar scalar) {
+        if (scalar.value instanceof RuntimeRegexCallback) return true;
+        if (scalar.value instanceof RuntimeRegex regex) return regex.isPatternByteBacked();
+        if (scalar.value instanceof RuntimeRegexTemplate template) return template.byteBackedPattern;
+        return !Utf8.isUtf8(scalar);
+    }
+
+    static RuntimeScalar patternScalar(String pattern, boolean byteBackedPattern) {
+        return byteBackedPattern
+                ? new RuntimeScalar(pattern.getBytes(StandardCharsets.ISO_8859_1))
+                : new RuntimeScalar(pattern);
     }
 
     private static RuntimeScalar resolveLoneRegexOverload(RuntimeScalar scalar) {
@@ -283,6 +304,10 @@ public final class RuntimeRegexTemplate {
 
     List<RuntimeRegexCallback> callbacks() {
         return callbacks;
+    }
+
+    boolean byteBackedPattern() {
+        return byteBackedPattern;
     }
 
     /**

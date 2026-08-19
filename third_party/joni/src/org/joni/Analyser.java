@@ -2145,6 +2145,51 @@ final class Analyser extends Parser {
         return xnode;
     }
 
+    private Node expandPerlByteAsciiFoldString(StringNode source, int state) {
+        ListNode root = null;
+        ListNode sequenceTail = null;
+        boolean expanded = false;
+
+        for (int p = source.p; p < source.end;) {
+            int next = p + enc.length(source.bytes, p, source.end);
+            int codePoint = enc.mbcToCode(source.bytes, p, source.end);
+            StringNode exact = new StringNode(source.bytes, p, next);
+            exact.setRaw();
+            ListNode alternatives = newAlt(exact, null);
+            ListNode tail = alternatives;
+
+            if (Encoding.isAscii(codePoint)) {
+                int foldLength = PerlCaseFold.simpleFoldClassLength(codePoint);
+                for (int index = 0; index < foldLength; index++) {
+                    int folded = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+                    if (folded == codePoint || !Encoding.isAscii(folded)) continue;
+                    StringNode sibling = new StringNode();
+                    sibling.catCode(folded, enc);
+                    sibling.setRaw();
+                    ListNode alternative = newAlt(sibling, null);
+                    tail.setTail(alternative);
+                    tail = alternative;
+                    expanded = true;
+                }
+            }
+
+            Node part = alternatives.tail == null ? exact : alternatives;
+            ListNode segment = ListNode.newList(part, null);
+            if (root == null) root = segment;
+            else sequenceTail.setTail(segment);
+            sequenceTail = segment;
+            p = next;
+        }
+
+        if (!expanded) {
+            source.setRaw();
+            return source;
+        }
+        source.replaceWith(root);
+        setupTree(root, state);
+        return root;
+    }
+
     private boolean isUnsafePerlMultiFoldOptimizationBoundary(StringNode node) {
         if (!syntax.op2OptionPerl() || node.length() == 0) return false;
 
@@ -2344,7 +2389,9 @@ final class Analyser extends Parser {
 
         case NodeType.STR:
             if (isIgnoreCase(regex.options) && !((StringNode)node).isRaw()) {
-                if (Option.isPerlAsciiStrict(regex.options)) {
+                if (Option.isPerlBytePattern(regex.options)) {
+                    node = expandPerlByteAsciiFoldString((StringNode)node, state);
+                } else if (Option.isPerlAsciiStrict(regex.options)) {
                     Node protectedNode = protectPerlAsciiStrictCrossings(
                             (StringNode)node, state);
                     node = protectedNode == node
