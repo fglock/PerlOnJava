@@ -1496,20 +1496,29 @@ public abstract class StringSegmentParser {
         if ("}".equals(chr)) {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
-            if (isRegex) {
-                // Keep named-character escapes intact until regex preprocessing.
-                // Resolving \N{NUMBER SIGN} to '#' here is observably wrong under
-                // /x: the resolved character is then mistaken for a comment and
-                // any following capture groups disappear from the pattern.
-                appendToCurrentSegment("\\N{" + name + "}");
-                return;
-            }
             NamedCharacterExpansion.SourceMode sourceMode =
                     ctx.compilerOptions.isByteStringSource
                             || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
                                 && !ctx.compilerOptions.isUnicodeSource)
                     ? NamedCharacterExpansion.SourceMode.BYTE
                     : NamedCharacterExpansion.SourceMode.UNICODE;
+            if (isRegex) {
+                // Keep named-character escapes intact until regex preprocessing.
+                // Resolving \N{NUMBER SIGN} to '#' here is observably wrong under
+                // /x: the resolved character is then mistaken for a comment and
+                // any following capture groups disappear from the pattern.
+                NamedCharacterExpansion expansion =
+                        NamedCharacterExpansion.resolve(name, sourceMode);
+                if (expansion.resolved()) {
+                    appendToCurrentSegment("\\N{" + NamedCharacterExpansion.encodeRegexToken(
+                            name, expansion.sequence()) + "}");
+                } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
+                    parser.throwError(expansion.diagnostic());
+                } else {
+                    appendToCurrentSegment("\\N{" + name + "}");
+                }
+                return;
+            }
             NamedCharacterExpansion expansion =
                     NamedCharacterExpansion.resolve(name, sourceMode);
             if (expansion.resolved()) {

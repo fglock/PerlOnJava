@@ -83,8 +83,8 @@ public class HintHashRegistry {
         Map<String, RuntimeScalar> scalarSnapshot =
                 state.hintScalarSnapshots.get(state.callSiteHintHashId);
         RuntimeScalar captured = scalarSnapshot == null ? null : scalarSnapshot.get(key);
-        if (captured != null && value != null
-                && value.toString().equals(captured.toString())) {
+        if (captured != null && (value == null
+                || value.toString().equals(captured.toString()))) {
             return new RuntimeScalar(captured);
         }
 

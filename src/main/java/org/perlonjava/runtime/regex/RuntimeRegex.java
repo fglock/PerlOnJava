@@ -187,6 +187,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     JoniRegexPattern recursivePattern;
     JoniRegexPattern recursivePatternUnicode;
     JoniRegexPattern recursivePatternBytes;
+    private JoniRegexPattern.NamedCharacterCache namedCharacterCache;
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
     int[] branchResetCaptureMap;
@@ -246,6 +247,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.recursivePattern = this.recursivePattern;
         copy.recursivePatternUnicode = this.recursivePatternUnicode;
         copy.recursivePatternBytes = this.recursivePatternBytes;
+        copy.namedCharacterCache = this.namedCharacterCache;
         copy.setExecutableCallbacks(this.executableCallbacks);
         copy.branchResetCaptureMap = this.branchResetCaptureMap;
         copy.patternFlags = this.patternFlags;
@@ -503,6 +505,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
                                         int trustedCalloutCount) {
+        RuntimeScalar namedCharacterTranslator =
+                org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames");
         modifiers = stripDebugMarkers(modifiers);
         // Dynamic/interpolated qr// compilation can begin during ordinary
         // execution, outside the Perl compiler lock. User-defined Unicode
@@ -513,7 +517,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         UnicodeResolver.preloadUserDefinedProperties(
                 patternString, preloadFlags.isCaseInsensitive());
         return compileSynchronized(patternString, modifiers, lexicalDebugMode,
-                trustedCalloutCount, false);
+                trustedCalloutCount, false, namedCharacterTranslator);
     }
 
     /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
@@ -535,7 +539,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static void validateLiteralSyntax(String patternString, String modifiers) {
         try {
             compileSynchronized(patternString, stripDebugMarkers(modifiers),
-                    debugMode(modifiers), 0, true);
+                    debugMode(modifiers), 0, true,
+                    org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames"));
         } catch (PerlJavaUnimplementedException unsupported) {
             String message = unsupported.getMessage();
             if (message != null && (message.contains("premature end of char-class")
@@ -554,14 +559,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static synchronized RuntimeRegex compileSynchronized(
             String patternString, String modifiers, int lexicalDebugMode,
-            int trustedCalloutCount, boolean literalSyntaxValidation) {
+            int trustedCalloutCount, boolean literalSyntaxValidation,
+            RuntimeScalar namedCharacterTranslator) {
         // Debug logging
         if (DEBUG_REGEX) {
             System.err.println("RuntimeRegex.compile: pattern=" + patternString + " modifiers=" + modifiers);
             System.err.println("  caller stack: " + Thread.currentThread().getStackTrace()[2]);
         }
 
-        String originalPatternString = patternString;
+        String originalPatternString =
+                org.perlonjava.runtime.NamedCharacterExpansion.restoreRegexTokens(patternString);
         String compilePatternString = patternString;
         boolean hasDynamicPattern = compilePatternString != null
                 && compilePatternString.contains(RegexMarkers.RECURSIVE_PATTERN);
@@ -590,10 +597,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Dynamic patterns compile differently in normal and warn modes. Do not
         // let a placeholder cached in one mode leak into the other. Lexical
         // regex debugging also changes the compiled representation.
-        String cacheKey = originalPatternString + "/" + modifiers
+        // Cache by the internal semantic source, not the restored display
+        // spelling. Distinct lexical charname expansions intentionally share
+        // the same external `\N{name}` text but must compile independently.
+        String cacheKey = patternString + "/" + modifiers
                 + "#debug=" + lexicalDebugMode
                 + "#callouts=" + trustedCalloutCount
                 + "#backend=" + RegexBackendPolicy.cacheTag()
+                + (namedCharacterTranslator == null ? "" : "#charnames="
+                        + namedCharacterTranslator.toString())
                 + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
 
         // Check if the regex is already cached
@@ -603,6 +615,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 System.err.println("  cache miss, compiling new regex");
             }
             regex = new RuntimeRegex();
+            regex.namedCharacterCache =
+                    new JoniRegexPattern.NamedCharacterCache(namedCharacterTranslator);
             regex.lexicalDebugMode = lexicalDebugMode;
 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
@@ -658,11 +672,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (usesRecursiveBackend) {
                     regex.recursivePattern = new JoniRegexPattern(compilePatternString,
                             regex.regexFlags, trustedCalloutCount,
-                            !regex.regexFlags.isUnicode());
+                            !regex.regexFlags.isUnicode(), false, false,
+                            regex.namedCharacterCache);
                     regex.recursivePatternUnicode = regex.regexFlags.isAscii()
                             ? regex.recursivePattern
                             : new JoniRegexPattern(compilePatternString,
-                                    regex.regexFlags, trustedCalloutCount, false);
+                                    regex.regexFlags, trustedCalloutCount, false,
+                                    false, false, regex.namedCharacterCache);
                     regex.deferredUserDefinedUnicodeProperties =
                             regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty()
                                     || regex.recursivePatternUnicode
@@ -1765,7 +1781,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     : patternString.type == RuntimeScalarType.BYTE_STRING;
             regex.recursivePatternBytes = new JoniRegexPattern(sourcePattern,
                     regex.regexFlags, regex.executableCallbacks.size(), true,
-                    true, byteBackedPattern);
+                    true, byteBackedPattern, regex.namedCharacterCache);
         }
         return result;
     }

@@ -263,13 +263,17 @@ class Parser extends Lexer {
         return false;
     }
 
-    private CClassNode parseCharClass(ObjPtr<CClassNode> ascNode,
-                                      ObjPtr<CClassNode> foldNode) {
+    private record ParsedCharClass(CClassNode standard,
+                                   List<StringNode> namedSequences) {}
+
+    private ParsedCharClass parseCharClass(ObjPtr<CClassNode> ascNode,
+                                           ObjPtr<CClassNode> foldNode) {
         final boolean neg;
         CClassNode cc, prevCc = null, ascCc = null, ascPrevCc = null,
                 workCc = null, ascWorkCc = null, foldCc = null,
                 foldPrevCc = null, foldWorkCc = null;
         CCStateArg arg = new CCStateArg();
+        List<StringNode> namedSequences = new ArrayList<>();
 
         fetchTokenInCC();
         if (token.type == TokenType.CHAR && token.getC() == '^' && !token.escaped) {
@@ -353,6 +357,25 @@ class Parser extends Lexer {
                 arg.to = token.getCode();
                 arg.toIsRaw = true;
                 parseCharClassValEntry(cc, ascCc, foldCc, arg); // val_entry:, val_entry2
+                break;
+
+            case NAMED_STRING:
+                int[] namedSequence = token.getNamedCharacterSequence();
+                if (neg && namedSequence.length > 1) {
+                    syntaxWarn("Using just the first character returned by \\N{} in character class",
+                            p - getBegin());
+                    // Perl 5 observably selects the final source-order code
+                    // point here, although its warning calls it the "first".
+                    arg.to = namedSequence[namedSequence.length - 1];
+                    arg.toIsRaw = true;
+                    parseCharClassValEntry(cc, ascCc, foldCc, arg);
+                } else {
+                    cc.nextStateClass(arg, ascCc, foldCc, env);
+                }
+                if (!neg && namedSequence.length > 0) {
+                    namedSequences.add(namedCharacterStringNode(
+                            namedSequence));
+                }
                 break;
 
             case WIDE_CODE_POINT:
@@ -445,8 +468,11 @@ class Parser extends Lexer {
             case CC_CC_OPEN: /* [ */
                 ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
                 ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
-                CClassNode acc = parseCharClass(ascPtr, foldPtr);
-                cc.or(acc, env);
+                ParsedCharClass nested = parseCharClass(ascPtr, foldPtr);
+                if (!nested.namedSequences().isEmpty()) {
+                    newSyntaxException(CHAR_CLASS_VALUE_AT_END_OF_RANGE);
+                }
+                cc.or(nested.standard(), env);
                 if (ascPtr.p != null) {
                     ascCc.or(ascPtr.p, env);
                 }
@@ -545,7 +571,30 @@ class Parser extends Lexer {
             }
         }
 
-        return cc;
+        return new ParsedCharClass(cc, namedSequences);
+    }
+
+    private StringNode namedCharacterStringNode(int[] sequence) {
+        StringNode node = new StringNode();
+        for (int codePoint : sequence) node.catCode(codePoint, enc);
+        return node;
+    }
+
+    private Node addNamedCharacterClassAlternatives(
+            Node standard, CClassNode standardClass, List<StringNode> sequences) {
+        if (sequences.isEmpty()) return standard;
+        ListNode head = null;
+        ListNode tail = null;
+        for (StringNode sequence : sequences) {
+            ListNode next = ListNode.newAlt(sequence, null);
+            if (head == null) head = next;
+            else tail.setTail(next);
+            tail = next;
+        }
+        if (standardClass.isNot() || !standardClass.isEmpty()) {
+            tail.setTail(ListNode.newAlt(standard, null));
+        }
+        return head.tail == null ? head.value : head;
     }
 
     private void parseCharClassSbChar(CClassNode cc, CClassNode ascCc,
@@ -1357,6 +1406,11 @@ class Parser extends Lexer {
         case CODE_POINT:
             return parseStringLoop(StringNode.fromCodePoint(token.getCode(), enc), group);
 
+        case NAMED_STRING:
+            node = namedCharacterStringNode(token.getNamedCharacterSequence());
+            fetchToken();
+            return parseExpRepeat(node, true);
+
         case WIDE_CODE_POINT: {
             WideScalarNode wide = new WideScalarNode(token.getWideCode(),
                     syntax.wideScalarCodec.encode(token.getWideCode(), enc));
@@ -1379,9 +1433,11 @@ class Parser extends Lexer {
         case CC_OPEN: {
             ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
             ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
-            CClassNode cc = parseCharClass(ascPtr, foldPtr);
+            ParsedCharClass parsedClass = parseCharClass(ascPtr, foldPtr);
+            CClassNode cc = parsedClass.standard();
             int code = cc.isOneChar();
-            if (code != -1 && (!isIgnoreCase(env.option)
+            if (parsedClass.namedSequences().isEmpty()
+                    && code != -1 && (!isIgnoreCase(env.option)
                     || ApplyCaseFold.isEligible(foldPtr.p, enc, code))) {
                 return parseStringLoop(StringNode.fromCodePoint(code, enc), group);
             }
@@ -1390,6 +1446,8 @@ class Parser extends Lexer {
             if (isIgnoreCase(env.option)) {
                 node = cClassCaseFold(node, cc, ascPtr.p, foldPtr.p);
             }
+            node = addNamedCharacterClassAlternatives(
+                    node, cc, parsedClass.namedSequences());
             break;
             }
 

@@ -1843,6 +1843,10 @@ public class Disassemble {
                         sb.append("SET_CALL_SITE_HINTS hints=")
                                 .append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
+                    case Opcodes.SET_CALL_SITE_HINT_HASH:
+                        sb.append("SET_CALL_SITE_HINT_HASH id=")
+                                .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];

@@ -30,6 +30,7 @@ final class Token {
     // union fields
     private int INT1, INT2, INT3, INT4, INT5;
     private int []INTA1;
+    private int []INTA2;
     private long LONG1;
 
     // union accessors
@@ -45,6 +46,14 @@ final class Token {
     }
     void setCode(int code) {
         INT1 = code;
+    }
+
+    int[] getNamedCharacterSequence() {
+        return INTA2;
+    }
+
+    void setNamedCharacterSequence(int[] sequence) {
+        INTA2 = sequence;
     }
 
     long getWideCode() {

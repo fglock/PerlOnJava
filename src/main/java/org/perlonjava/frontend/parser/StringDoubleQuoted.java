@@ -504,6 +504,12 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // start of @- when used in a range such as [\c@-\c_].
             case "c" -> appendToCurrentSegment("\\c" + TokenUtils.consumeChar(parser));
 
+            // Resolve lexical charnames while their compile-time %^H scope is
+            // still active. Multi-character and empty results are encoded as
+            // private regex tokens for Joni; ordinary names retain their
+            // original spelling for qr// stringification and diagnostics.
+            case "N" -> handleUnicodeNameEscape();
+
             // Unknown escape - treat as literal character
             default -> appendToCurrentSegment("\\" + escape);
         }

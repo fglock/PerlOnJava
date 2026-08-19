@@ -2488,6 +2488,9 @@ public class Opcodes {
      */
     public static final short HASH_GET_STRING_INTERPOLATION = 526;
 
+    /** Restore lexical %^H after leaving a nested block. Format: SET_CALL_SITE_HINT_HASH id. */
+    public static final short SET_CALL_SITE_HINT_HASH = 527;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

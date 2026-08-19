@@ -2654,6 +2654,9 @@ public class BytecodeInterpreter {
                             case Opcodes.SET_CALL_SITE_HINTS ->
                                 WarningBitsRegistry.setCallSiteHints(bytecode[pc++]);
 
+                            case Opcodes.SET_CALL_SITE_HINT_HASH ->
+                                HintHashRegistry.setCallSiteHintHashId(bytecode[pc++]);
+
                             // =================================================================
                             // DEBUGGER SUPPORT
                             // =================================================================

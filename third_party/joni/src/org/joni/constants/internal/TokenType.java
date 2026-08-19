@@ -24,6 +24,7 @@ public enum TokenType {
       RAW_BYTE,
       CHAR,
       STRING,
+      NAMED_STRING,
       CODE_POINT,
       WIDE_CODE_POINT,
       ANYCHAR,
