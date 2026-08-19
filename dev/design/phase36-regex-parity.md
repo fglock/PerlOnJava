@@ -89,16 +89,11 @@ affected corpus before taking another slice.
   the temporary `=POJSEQ=` transport. Generated and lexical multi-code-point
   names and ordinary scalar names resolve through Joni; the temporary
   generated-sequence-only routing distinction is deleted.
-- PR 1078 targets `master` at `daca5545a`. Its warning-free local `make` passes
-  all 17 tasks, including Joni tests, five unit shards, packaging, and generated
-  data. Named-scalar Kelvin passes 9/9; named transport 11/11, cache 9/9, and
-  missing-brace diagnostics 8/8 on JVM/interpreter. Ubuntu and Windows CI are
-  running on the exact head; merge remains gated on both checks.
-- Draft PR 1079 is the successor integration batch. Its current local head
-  contains native `(?(DEFINE)...)`, ordinary lookbehind, branch reset, plain
-  `\N`, and the PR 1078 platform correction on top of the validated malformed/
-  unknown named-character diagnostics. The combined warning-free build is the
-  next durability gate before push.
+- PR 1078 passed exact-head Ubuntu and Windows CI and is merged into `master`.
+- PR 1079 is rebased onto that master and contains native `(?(DEFINE)...)`,
+  ordinary lookbehind, branch reset, and plain `\N` on top of the validated
+  malformed/unknown named-character diagnostics. Its rebased warning-free
+  `make` passes all 17 tasks; Ubuntu and Windows CI are the merge gate.
 - Native DEFINE, ordinary lookbehind, and branch reset now route through Joni;
   their feature-specific Java rewrites and branch-reset capture-map adapter are
   deleted. Plain Perl `\N` is a native Joni non-line-feed atom, including
@@ -226,9 +221,9 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Merge PR 1078 only after exact-head Ubuntu and Windows CI pass. Rebase PR
-   1079 onto the resulting `master`, retain its independent semantic commits,
-   run one combined warning-free `make`, push, and obtain stacked CI.
+1. Merge PR 1079 only after exact-head Ubuntu and Windows CI pass, then rebase
+   the next integration batch onto the resulting `master` without combining its
+   independent semantic commits.
 2. Complete byte/Unicode pattern provenance through runtime interpolation and
    template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal
    and backreference folding from generated data. Require direct Joni plus
