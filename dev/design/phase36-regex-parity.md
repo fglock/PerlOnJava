@@ -140,6 +140,10 @@ affected corpus before taking another slice.
   unterminated inline-option and comment groups, incomplete `(?` group effects,
   and empty control verbs. The focused system-Perl/direct-Joni/four-leg gates
   remove the corresponding `regexp.t` identities with no introductions.
+- Runtime `(??{...})` sources execute through native Joni continuations; the
+  dynamic Java fallback adapter is gone. Callback aggregate mutations unwind
+  on ordinary backtracking while destructive control verbs commit the cut
+  path, including across a dynamic continuation.
 
 ## Execution Phases
 
@@ -369,7 +373,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Native ordinary lookbehind and removal of its Java translation
 - [x] Native branch reset and removal of its capture-map adapter
 - [x] Native plain `\N` non-newline atom and interval forms
-- [ ] Native recursive/runtime `(??{...})` and removal of dynamic adapters
+- [x] Native recursive/runtime `(??{...})` and removal of dynamic adapters
 - [ ] Retire proven-obsolete `dev/import-perl5` regex patches
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       80-file forced-Joni gates on one integrated artifact
