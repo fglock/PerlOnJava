@@ -136,6 +136,10 @@ affected corpus before taking another slice.
   before loose alias normalization, so uncased letters no longer enter that
   class. The focused system-Perl oracle, four runtime legs, and imported
   `regexp.t` identity agree.
+- Native Joni diagnostics distinguish invalid non-braced `\p`/`\P` followers,
+  unterminated inline-option and comment groups, incomplete `(?` group effects,
+  and empty control verbs. The focused system-Perl/direct-Joni/four-leg gates
+  remove the corresponding `regexp.t` identities with no introductions.
 
 ## Execution Phases
 
