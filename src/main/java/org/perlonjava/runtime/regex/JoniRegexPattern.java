@@ -296,6 +296,10 @@ final class JoniRegexPattern {
         return regex;
     }
 
+    boolean hasOnlyAuthoritativeWideCharacterClasses() {
+        return regex.hasOnlyAuthoritativeWideCharacterClasses();
+    }
+
     boolean hasDeferredUserDefinedUnicodeProperty() {
         return hasDeferredUserDefinedUnicodeProperty;
     }
@@ -378,10 +382,14 @@ final class JoniRegexPattern {
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
             boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
+            boolean preserveUserDefined = userDefined
+                    && UnicodeResolver.mustPreserveUserDefinedProperty(
+                            unnegated, flags.isCaseInsensitive());
             boolean joniResolvedProperty = UnicodeResolver.resolveJoniProperty(
                     unnegated, extendedClassBracketDepth > 0
                             || standardClassBracketDepth > 0) != null;
-            if (!userDefined && joniResolvedProperty
+            if (joniResolvedProperty && (!userDefined
+                            || perlBuiltInAlias && !preserveUserDefined)
                     && (frontendProperty || scriptExtensions || perlBuiltInAlias)) {
                 translated.append(pattern, i, end + 1);
                 i = end;

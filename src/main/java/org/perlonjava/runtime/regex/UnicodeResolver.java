@@ -24,6 +24,23 @@ public class UnicodeResolver {
             buildPerlDecompositionTypeSets();
     private static final UnicodeSet PERL_UNICODE_BASE_SET =
             new UnicodeSet(0, 0x10FFFF).freeze();
+    private static final UnicodeSet PERL_ASSIGNED_SET =
+            new UnicodeSet(PERL_UNICODE_BASE_SET)
+                    .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cn"))
+                    .freeze();
+    private static final Set<String> PERL_BARE_PROPERTY_ALIASES = Set.of(
+            "ahex", "alnum", "alpha", "any", "assigned", "bidim",
+            "bidimirrored", "changeswhencasemapped", "changeswhenlowercased",
+            "changeswhennfkccasefolded", "closepunctuation", "cntrl",
+            "combiningmark", "compex", "connectorpunctuation", "cwu", "cwkcf",
+            "dash", "dashpunctuation", "decimalnumber", "deprecated", "dia",
+            "emojimodifierbase", "emojipresentation", "epres", "extender",
+            "fullcompositionexclusion", "grbase", "grext", "hexdigit",
+            "idcompatmathstart", "ideo", "idst", "idsu", "idsunaryoperator",
+            "loe", "logicalorderexception", "lowercase", "modifiercombiningmark",
+            "othernumber", "otherpunctuation", "regionalindicator",
+            "sentenceterminal", "softdotted", "space", "spaceseparator", "uideo",
+            "unassigned", "unifiedideograph", "xids", "xidstart");
     private static final UnicodeSet PERL_VERTICAL_SPACE_SET =
             buildPerlVerticalSpaceSet();
     private static final UnicodeSet PERL_HORIZONTAL_SPACE_SET =
@@ -1016,6 +1033,18 @@ public class UnicodeResolver {
         return property != null && USER_DEFINED_PROPERTY_NAME.matcher(property).matches();
     }
 
+    static boolean mustPreserveUserDefinedProperty(
+            String property, boolean caseInsensitive) {
+        if (!isUserDefinedPropertyName(property)) return false;
+        String subName = property.contains("::") ? property : "main::" + property;
+        if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) return true;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        return runtime != null
+                && (runtime.regexState().deferredUserUnicodeProperties.contains(subName)
+                        || runtime.regexState().userUnicodePropertyCache.containsKey(
+                                userPropertyCacheKey(subName, caseInsensitive)));
+    }
+
     static boolean isPerlBuiltInPropertyAlias(String property) {
         if (property == null) return false;
         property = canonicalPerlPosixPropertyAlias(property);
@@ -1038,15 +1067,23 @@ public class UnicodeResolver {
                         null, new long[] {1, 0, Long.MAX_VALUE}, false);
             }
             if (looseIsValue == null) {
+                PerlBarePropertyAlias bareAlias = resolvePerlBarePropertyAlias(property);
+                if (bareAlias != null) {
+                    long[] wideRanges = perlUnicodeOnlyWideRanges(property, null);
+                    return joniPropertyResult(
+                            bareAlias.set, wideRanges, bareAlias.caseFold);
+                }
                 UnicodeSet bareSet = resolvePerlMissingBaseAlias(property);
-                return bareSet == null ? null : joniPropertyResult(bareSet, true);
+                return bareSet == null ? null : joniPropertyResult(
+                        bareSet, perlUnicodeOnlyWideRanges(property, null), true);
             }
             if (PerlUnicodeScriptData.canonicalValue(looseIsValue) != null
                     || PerlUnicodeBlockData.set(looseIsValue) != null) {
                 return null;
             }
             UnicodeSet bareSet = resolvePerlBuiltInPropertyAlias(property);
-            return bareSet == null ? null : joniPropertyResult(bareSet, true);
+            return bareSet == null ? null : joniPropertyResult(
+                    bareSet, perlUnicodeOnlyWideRanges(property, looseIsValue), true);
         }
         String name = property.substring(0, assignment);
         String value = property.substring(assignment + 1);
@@ -1113,6 +1150,15 @@ public class UnicodeResolver {
     private static boolean isPerlAllProperty(String property, String looseIsValue) {
         return loosePropertyName(looseIsValue == null ? property : looseIsValue)
                 .equals("all");
+    }
+
+    private static long[] perlUnicodeOnlyWideRanges(
+            String property, String looseIsValue) {
+        String alias = loosePropertyName(
+                looseIsValue == null ? property : looseIsValue);
+        return alias.equals("any") || alias.equals("unicode")
+                ? new long[] {0}
+                : null;
     }
 
     private static CharacterPropertyResolver.Result joniPropertyResult(
@@ -1205,6 +1251,8 @@ public class UnicodeResolver {
         String alias = normalizePerlIsPropertyAssignment(property.trim());
         int assignment = propertyValueDelimiter(alias);
         if (assignment < 0) {
+            PerlBarePropertyAlias bareAlias = resolvePerlBarePropertyAlias(alias);
+            if (bareAlias != null) return bareAlias.set;
             UnicodeSet baseAlias = resolvePerlMissingBaseAlias(alias);
             if (baseAlias != null) return baseAlias;
         }
@@ -1564,6 +1612,48 @@ public class UnicodeResolver {
             case "kehnorotate" -> PerlUnicodeUnikemetData.noRotate();
             default -> null;
         };
+    }
+
+    private static PerlBarePropertyAlias resolvePerlBarePropertyAlias(
+            String property) {
+        if (propertyValueDelimiter(property) >= 0) return null;
+        String looseAlias = loosePropertyName(property);
+        if (!PERL_BARE_PROPERTY_ALIASES.contains(looseAlias)) return null;
+
+        if (looseAlias.equals("any")) {
+            return new PerlBarePropertyAlias(PERL_UNICODE_BASE_SET, false);
+        }
+        if (looseAlias.equals("assigned")) {
+            return new PerlBarePropertyAlias(PERL_ASSIGNED_SET, false);
+        }
+
+        UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(looseAlias);
+        if (category == null) {
+            category = unicodePropertyValueSet(
+                    UProperty.GENERAL_CATEGORY, looseAlias);
+        }
+        if (category != null) {
+            return new PerlBarePropertyAlias(category, true);
+        }
+        try {
+            UnicodeSet binary = new UnicodeSet()
+                    .applyPropertyAlias(looseAlias, "True")
+                    .freeze();
+            return new PerlBarePropertyAlias(
+                    binary, looseAlias.equals("lowercase"));
+        } catch (IllegalArgumentException unsupported) {
+            return null;
+        }
+    }
+
+    private static final class PerlBarePropertyAlias {
+        private final UnicodeSet set;
+        private final boolean caseFold;
+
+        private PerlBarePropertyAlias(UnicodeSet set, boolean caseFold) {
+            this.set = set;
+            this.caseFold = caseFold;
+        }
     }
 
     private static UnicodeSet buildPerlVerticalSpaceSet() {

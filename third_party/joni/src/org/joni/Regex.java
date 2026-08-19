@@ -213,6 +213,18 @@ public final class Regex {
         return numMem;
     }
 
+    /**
+     * Whether every compiled character class explicitly defines its signed-wide
+     * domain, with at least one such class present.
+     */
+    public boolean hasOnlyAuthoritativeWideCharacterClasses() {
+        if (wideScalarClasses == null || wideScalarClasses.length == 0) return false;
+        for (CClassNode characterClass : wideScalarClasses) {
+            if (!characterClass.hasAuthoritativeWideDomain()) return false;
+        }
+        return true;
+    }
+
     public int numberOfCaptureHistories() {
         if (Config.USE_CAPTURE_HISTORY) {
             int n = 0;

@@ -214,6 +214,17 @@ public abstract class Matcher extends IntHolder {
         }
     }
 
+    private int logicalCharacterLength(int p) {
+        WideScalarCodec codec = regex.wideScalarCodec;
+        if (codec != null && p < end) {
+            WideScalarCodec.Decoded decoded = codec.decode(bytes, p, end, enc);
+            if (decoded != null && decoded.end() > p && decoded.end() <= end) {
+                return decoded.end() - p;
+            }
+        }
+        return enc.length(bytes, p, end);
+    }
+
     int low, high; // these are the return values
     private final boolean forwardSearchRange(byte[]bytes, int str, int end, int s, int range, IntHolder lowPrev) {
         int pprev = -1;
@@ -226,7 +237,7 @@ public abstract class Matcher extends IntHolder {
                 p += regex.dMin;
             } else {
                 int q = p + regex.dMin;
-                while (p < q && p < end) p += enc.length(bytes, p, end);
+                while (p < q && p < end) p += logicalCharacterLength(p);
             }
         }
 
@@ -238,7 +249,7 @@ public abstract class Matcher extends IntHolder {
                 if (p - regex.dMin < s) {
                     // retry_gate:
                     pprev = p;
-                    p += enc.length(bytes, p, end);
+                    p += logicalCharacterLength(p);
                     continue retry;
                 }
 
@@ -250,7 +261,7 @@ public abstract class Matcher extends IntHolder {
                             if (!enc.isNewLine(bytes, prev, end)) {
                                 // goto retry_gate;
                                 pprev = p;
-                                p += enc.length(bytes, p, end);
+                                p += logicalCharacterLength(p);
                                 continue retry;
                             }
                         }
@@ -263,7 +274,7 @@ public abstract class Matcher extends IntHolder {
                                 if (prev != -1 && enc.isNewLine(bytes, prev, end)) {
                                     // goto retry_gate;
                                     pprev = p;
-                                    p += enc.length(bytes, p, end);
+                                    p += logicalCharacterLength(p);
                                     continue retry;
                                 }
                             }
@@ -271,7 +282,7 @@ public abstract class Matcher extends IntHolder {
                             //if () break;
                             // goto retry_gate;
                             pprev = p;
-                            p += enc.length(bytes, p, end);
+                            p += logicalCharacterLength(p);
                             continue retry;
                         }
                         break;
@@ -408,7 +419,7 @@ public abstract class Matcher extends IntHolder {
                 if (skip.target < next || skip.target > range) return FAILED;
                 if (skip.target == next) {
                     if (next >= range) return FAILED;
-                    next += enc.length(bytes, next, end);
+                    next += logicalCharacterLength(next);
                 } else {
                     next = skip.target;
                 }
@@ -443,7 +454,7 @@ public abstract class Matcher extends IntHolder {
                 if (skip.target < next || skip.target > range) return FAILED;
                 if (skip.target == next) {
                     if (next >= range) return FAILED;
-                    next += enc.length(bytes, next, end);
+                    next += logicalCharacterLength(next);
                 } else {
                     next = skip.target;
                 }
@@ -593,7 +604,7 @@ public abstract class Matcher extends IntHolder {
                         while (s <= high) {
                             if (matchCheck(origRange, s, prev, interrupt)) return match(s); // ???
                             prev = s;
-                            s += enc.length(bytes, s, end);
+                            s += logicalCharacterLength(s);
                         }
                     } while (s < range);
                     return mismatch();
@@ -605,12 +616,12 @@ public abstract class Matcher extends IntHolder {
                         do {
                             if (matchCheck(origRange, s, prev, interrupt)) return match(s);
                             prev = s;
-                            s += enc.length(bytes, s, end);
+                            s += logicalCharacterLength(s);
 
                             if ((regex.anchor & (AnchorType.LOOK_BEHIND | AnchorType.PREC_READ_NOT)) == 0) {
                                 while (!enc.isNewLine(bytes, prev, end) && s < range) {
                                     prev = s;
-                                    s += enc.length(bytes, s, end);
+                                    s += logicalCharacterLength(s);
                                 }
                             }
                         } while (s < range);
@@ -622,7 +633,7 @@ public abstract class Matcher extends IntHolder {
             do {
                 if (matchCheck(origRange, s, prev, interrupt)) return match(s);
                 prev = s;
-                s += enc.length(bytes, s, end);
+                s += logicalCharacterLength(s);
             } while (s < range);
 
             if (s == range) { /* because empty match with /$/. */
@@ -631,7 +642,7 @@ public abstract class Matcher extends IntHolder {
         } else { /* backward search */
             if (Config.USE_MATCH_RANGE_MUST_BE_INSIDE_OF_SPECIFIED_RANGE) {
                 if (origStart < end) {
-                    origStart += enc.length(bytes, origStart, end); // /* is upper range */
+                    origStart += logicalCharacterLength(origStart); // /* is upper range */
                 }
             }
 

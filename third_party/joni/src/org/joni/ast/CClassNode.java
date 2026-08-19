@@ -38,6 +38,7 @@ public final class CClassNode extends Node {
     private int flags;
     private long[] wideRanges;
     private int wideRangeCount;
+    private boolean authoritativeWideDomain;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
@@ -52,6 +53,7 @@ public final class CClassNode extends Node {
         mbuf = null;
         wideRanges = null;
         wideRangeCount = 0;
+        authoritativeWideDomain = false;
     }
 
     @Override
@@ -111,7 +113,7 @@ public final class CClassNode extends Node {
     }
 
     public int isOneChar() {
-        if (isNot() || wideRangeCount != 0) return -1;
+        if (isNot() || authoritativeWideDomain || wideRangeCount != 0) return -1;
         int c = -1;
         if (mbuf != null) {
             int[]range = mbuf.getCodeRange();
@@ -187,7 +189,9 @@ public final class CClassNode extends Node {
             mbuf = pbuf;
         }
         long[] actual = intersectWideRanges(wide1, wide2);
-        setWideRanges(not1 ? complementWideRanges(actual) : actual);
+        boolean authoritative = authoritativeWideDomain
+                || other.authoritativeWideDomain || actual.length != 0;
+        setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
 
     }
 
@@ -238,7 +242,9 @@ public final class CClassNode extends Node {
             mbuf = pbuf;
         }
         long[] actual = unionWideRanges(wide1, wide2);
-        setWideRanges(not1 ? complementWideRanges(actual) : actual);
+        boolean authoritative = authoritativeWideDomain
+                || other.authoritativeWideDomain || actual.length != 0;
+        setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
     }
 
     public void addWideScalarRange(long from, long to) {
@@ -251,6 +257,10 @@ public final class CClassNode extends Node {
 
     public boolean hasWideScalarRanges() {
         return wideRangeCount != 0;
+    }
+
+    public boolean hasAuthoritativeWideDomain() {
+        return authoritativeWideDomain;
     }
 
     public boolean isWideScalarInCC(long value) {
@@ -283,13 +293,18 @@ public final class CClassNode extends Node {
     }
 
     private void setWideRanges(long[] ranges) {
+        setWideRanges(ranges, ranges.length != 0);
+    }
+
+    private void setWideRanges(long[] ranges, boolean authoritative) {
         wideRanges = ranges.length == 0 ? null : ranges;
         wideRangeCount = ranges.length / 2;
+        authoritativeWideDomain = authoritative;
         // A class containing host-defined scalars is opaque to Analyser's
         // Unicode-only class algebra.  CANY preserves its one-character width
         // and prevents unsafe disjointness/possessification decisions;
         // Compiler recognizes the concrete CClassNode and emits the real set.
-        type = wideRangeCount == 0 ? CCLASS : CANY;
+        type = authoritativeWideDomain ? CANY : CCLASS;
     }
 
     private static long[] actualWideRanges(long[] ranges, boolean negated) {
@@ -458,6 +473,7 @@ public final class CClassNode extends Node {
 
         CClassNode resolved = new CClassNode();
         if (ranges != null) resolved.addCodeRanges(ranges, false, env);
+        resolved.setWideRanges(new long[0], true);
 
         int normalCount = 0;
         int rangeCount = (int)wideRanges[0];
