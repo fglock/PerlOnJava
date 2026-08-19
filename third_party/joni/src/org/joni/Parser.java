@@ -1246,7 +1246,8 @@ class Parser extends Lexer {
             verb = "MARK";
         } else {
             String construct = controlConstructName();
-            if (!construct.isEmpty() && Character.isUpperCase(construct.codePointAt(0))) {
+            if (construct.isEmpty()
+                    || Character.isUpperCase(construct.codePointAt(0))) {
                 newValueException(PERL_UNKNOWN_VERB_PATTERN, construct);
             }
             newValueException(PERL_UNKNOWN_CONTROL_CONSTRUCT, construct);
