@@ -32,6 +32,8 @@ my @literal_patterns = (
 
 ok('a' =~ m'(?#( (?{1+)a',
     'apostrophe-delimited comment text stays inside the regex literal');
+ok('a' =~ m'a# (?{1+'x,
+    'extended-mode line comments hide callback-looking text');
 ok('ab1' =~ m'ab[(?{1]',
     'character-class callback-looking text stays inside the regex literal');
 ok('ab2' =~ m'ab[(?{1\](?{2]',
