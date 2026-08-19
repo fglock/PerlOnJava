@@ -107,6 +107,11 @@ affected corpus before taking another slice.
   enabling PerlOnJava's unrelated internal compiler trace.
 - Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
   passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
+- Exact `re/regexp.t` executes 2,210/2,210 with 2,156 passing and 54 explicit
+  residuals. Non-nullable quantified captures now preserve the preceding
+  iteration for backreferences, clear captures untouched by the successful
+  final iteration, and restore state on backtracking. Lexical warning masks
+  remain authoritative when undef captures are interpolated by eval STRING.
 - The four Java/Joni × JVM/interpreter legs now have one 80-file comparison
   ledger on the pre-successor artifact. It identifies stable extended-class,
   regexp, charset, fold-grind, and bounded-speed negative clusters plus several
@@ -279,38 +284,35 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish and integrate repeated-capture lifetime as a Joni begin/end iteration
-   scope: preserve prior captures for backreferences while matching the next
-   body, clear only groups untouched by the successful iteration, and restore
-   state on failed-body backtracking. Keep nullable-repeat null-loop detection
-   unchanged until it has a dedicated invariant and direct stress tests.
-2. Close the remaining capture/region identities, including inactive named and
-   numeric branch-reset slots, final successful quantified iterations, failed
+1. Close the remaining capture/region identities, including nullable repeated
+   captures, inactive named and numeric branch-reset slots, failed
    alternatives, recursive-frame publication, and nested match-state restore.
-3. Finish runtime-source diagnostics for unterminated executable groups and
+   Preserve Joni null-loop detection with a dedicated nullable-repeat invariant
+   and direct stress tests.
+2. Finish runtime-source diagnostics for unterminated executable groups and
    regexp rows 575/576/581, then close the remaining `pat.t` dynamic code-array
    rows without changing the already-green `pat_re_eval.t` 555/555 contract.
-4. Move remaining Perl named-character, escape, strict-mode, brace, control-
+3. Move remaining Perl named-character, escape, strict-mode, brace, control-
    character, and warning semantics into Joni lexer/compiler internals. Resolve
    the Perl-version diagnostic policy for regexp row 1521 without editing an
    existing test, then remove each redundant translation in the same gate.
-5. Finish recursive numbered/named calls, recursion conditions, recursive
+4. Finish recursive numbered/named calls, recursion conditions, recursive
    capture publication, and recursion safety. Keep
    runtime `(??{...})`, callback unwind, and `pat_re_eval.t` 555/555 green.
-6. Finish `/d`/`u`/`a`/`aa` forward/reverse literal and backreference folding
+5. Finish `/d`/`u`/`a`/`aa` forward/reverse literal and backreference folding
    from generated data, then rerun complete Unicode, `pat.t`, `pat_advanced.t`,
    `reg_mesg.t`, and bounded speed/psycho gates on one immutable artifact.
-7. Use the refreshed impact ledger to close every remaining semantic regex
+6. Use the refreshed impact ledger to close every remaining semantic regex
    identity and move all ordinary constants to Joni. Reject zero-TAP, timeout,
    truncated, incomplete, JVM/interpreter, or direct/thread mismatches.
-8. Remove the stale imported-corpus backup, retire `_charnames.pm.patch` only
+7. Remove the stale imported-corpus backup, retire `_charnames.pm.patch` only
    after the upstream Unicode-name loading path is green, rerun targeted sync
    twice, and prove byte-for-byte idempotence without editing imported tests.
-9. Delete Java matching, the backend selector, fallback state, matcher-semantic
+8. Delete Java matching, the backend selector, fallback state, matcher-semantic
    preprocessors, and unreachable adapter code. Prove performance, CPAN,
    packaging, notice/license, and warning-free build gates before removal is
    accepted.
-10. Update the feature matrix and final as-implemented/fork documents, remove or
+9. Update the feature matrix and final as-implemented/fork documents, remove or
    summarize redundant design documents, rebase each final PR on `master`, pass
    Ubuntu/Windows CI, and compare the complete runner output file-by-file with
    the immutable PR 958 baseline.
@@ -405,6 +407,7 @@ gates may reopen it if a semantic regression appears.
       brace-backreference rewriting
 - [x] Native Perl false-class ranges and unfinished non-ASCII range diagnostics
 - [ ] Final-iteration, optional, alternation, and failed-path capture clearing
+- [x] Non-nullable quantified-capture iteration scopes and backtracking restore
 - [x] Physical branch-reset named calls and conditions
 - [ ] Inactive branch-reset slot publication
 - [x] Native named-character whitespace and missing-brace diagnostics
