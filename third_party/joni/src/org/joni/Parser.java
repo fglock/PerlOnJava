@@ -1718,13 +1718,13 @@ class Parser extends Lexer {
             return new PerlExtendedClassPrimary(parsed.standard(), false);
         }
         if (extendedClassAt('\\')) {
-            return new PerlExtendedClassPrimary(parsePerlExtendedClassEscape(), false);
+            return parsePerlExtendedClassEscape();
         }
         newSyntaxException(PERL_EXTENDED_CLASS_BARE_CHARACTER);
         return null;
     }
 
-    private CClassNode parsePerlExtendedClassEscape() {
+    private PerlExtendedClassPrimary parsePerlExtendedClassEscape() {
         int escapeStart = p;
         if (escapeStart < stop && enc.mbcToCode(bytes, escapeStart, stop) == '\\') {
             int cursor = escapeStart + enc.length(bytes, escapeStart, stop);
@@ -1746,14 +1746,14 @@ class Parser extends Lexer {
         switch (token.type) {
         case CODE_POINT:
             addPerlExtendedClassCode(result, token.getCode());
-            return result;
+            return new PerlExtendedClassPrimary(result, false);
         case WIDE_CODE_POINT:
             result.addWideScalarRange(token.getWideCode(), token.getWideCode());
-            return result;
+            return new PerlExtendedClassPrimary(result, false);
         case RAW_BYTE:
         case STRING:
             addPerlExtendedClassCode(result, token.getC());
-            return result;
+            return new PerlExtendedClassPrimary(result, false);
         case NAMED_STRING:
             int[] sequence = token.getNamedCharacterSequence();
             if (sequence.length == 0) {
@@ -1763,15 +1763,15 @@ class Parser extends Lexer {
                 newSyntaxException(PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER);
             }
             addPerlExtendedClassCode(result, sequence[0]);
-            return result;
+            return new PerlExtendedClassPrimary(result, false);
         case CHAR_TYPE:
             result.addCType(token.getPropCType(), token.getPropNot(),
                     isAsciiRange(env.option), env, this);
-            return result;
+            return new PerlExtendedClassPrimary(result, false);
         case CHAR_PROPERTY:
-            CharProperty property = fetchCharProperty(true);
+            CharProperty property = fetchCharProperty(false);
             addCharProperty(result, null, null, property, token.getPropNot());
-            return result;
+            return new PerlExtendedClassPrimary(result, !property.caseFold);
         case CC_OPEN:
             ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
             ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
@@ -1779,7 +1779,7 @@ class Parser extends Lexer {
             if (!parsed.namedSequences().isEmpty()) {
                 newSyntaxException(PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER);
             }
-            return parsed.standard();
+            return new PerlExtendedClassPrimary(parsed.standard(), false);
         default:
             newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
             return null;
