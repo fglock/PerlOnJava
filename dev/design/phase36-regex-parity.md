@@ -281,7 +281,7 @@ if they expose a semantic defect.
      each `pat.t` variant executes 1,301/1,302 assertions and passes 1,223;
      classify and close the remaining 79 failures plus the one-test plan
      shortfall; the current `pat_advanced.t` gate executes all 1,687 assertions
-     and passes 1,629 on both JVM and interpreter, with byte-identical 58-row
+     and passes 1,632 on both JVM and interpreter, with byte-identical 55-row
      residuals and zero introductions against the exact 110-row baseline;
      close the remaining semantic failures without relying on the runner's
      status heuristic or treating optimizer/debug transcripts as semantic
