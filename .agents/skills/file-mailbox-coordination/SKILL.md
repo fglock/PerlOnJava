@@ -173,6 +173,39 @@ READY -> CLAIMED -> WORKING -> BLOCKED -> COMPLETED
 Never report completion until required validation and externally observable
 state agree with the claim.
 
+### Distinguish queued work from active implementation
+
+Treat `WORKING` as incomplete status without an `activity_kind`. Require one of
+`PREPARING`, `IMPLEMENTING`, `GATING`, or `INTEGRATING`, plus observable
+evidence:
+
+- preparation: artifact path and the next dependency trigger;
+- implementation: worktree, branch, exact base, owned production file, and the
+  first edited file or current commit;
+- gate: immutable source SHA, exact process/session, and advancing log;
+- integration: source commit, destination branch, and current replay state.
+
+Do not count an assignment, queued next task, clean candidate worktree, or
+`DEFINE ACTIVE`-style prose as active implementation. If a worker claims
+implementation but no fresh worktree or first production edit is visible,
+send a resume handshake after the normal interval requiring that evidence or
+the exact failed command. This catches agents that are waiting at an implicit
+dependency boundary while appearing busy.
+
+Make dependency waits executable. Give the worker the exact source repository,
+ref, and required commit, not only a SHA: separate checkouts may not share an
+object database. Authorize the fetch, exact-object verification, fresh worktree
+creation, bounded transplant, gates, commit, and next slice in one envelope.
+State which small line-local conflicts the coordinator will absorb so workers
+do not idle merely to avoid a manageable replay. Queue a non-overlapping
+preparation task and a conditional implementation trigger whenever a hard
+dependency genuinely prevents production edits.
+
+Audit progress by observable transitions, not mailbox volume. A productive
+pipeline moves `PREPARING -> IMPLEMENTING -> GATING -> COMMITTED`; repeated
+heartbeats in one state without new artifacts indicate a blocker to diagnose,
+not healthy parallelism.
+
 ## Prefer bounded execution envelopes
 
 Reduce coordination latency by authorizing the worker's predictable delivery
