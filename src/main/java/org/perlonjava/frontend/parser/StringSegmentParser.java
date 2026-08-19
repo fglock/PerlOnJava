@@ -1518,6 +1518,9 @@ public abstract class StringSegmentParser {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
+                        if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
+                            throwNamedCharacterDiagnostic(expansion.diagnostic());
+                        }
                         parser.throwError(expansion.diagnostic());
                     }
                 }
@@ -1529,7 +1532,7 @@ public abstract class StringSegmentParser {
             if (expansion.resolved()) {
                 appendToCurrentSegment(expansion.sequence());
             } else if (expansion.status() == NamedCharacterExpansion.Status.INVALID) {
-                parser.throwError(expansion.diagnostic());
+                throwNamedCharacterDiagnostic(expansion.diagnostic());
             } else {
                 // Preserve the historical literal fallback when no standard
                 // name or lexical translator resolves this escape.
@@ -1538,6 +1541,14 @@ public abstract class StringSegmentParser {
         } else {
             throwMissingNamedCharacterBraceDiagnostic();
         }
+    }
+
+    private void throwNamedCharacterDiagnostic(String diagnostic) {
+        int errorIndex = this.tokenIndex;
+        var location = ctx.errorUtil.getSourceLocationAccurate(errorIndex);
+        throw new PerlParserException(diagnostic
+                + " at " + location.fileName() + " line " + location.lineNumber()
+                + ", within " + (isRegex ? "pattern" : "string") + "\n");
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {

@@ -62,8 +62,13 @@ public record NamedCharacterExpansion(
      */
     public static NamedCharacterExpansion resolve(
             String name, RuntimeScalar translator, SourceMode inputMode) {
-        if (name != null && name.matches("(?i)U\\+[0-9A-F]+")) {
-            return resolveStandard(name);
+        if (name != null && name.regionMatches(true, 0, "U+", 0, 2)) {
+            if (name.matches("(?i)U\\+[0-9A-F]+")) {
+                return resolveStandard(name);
+            }
+            return new NamedCharacterExpansion(
+                    "", SourceMode.UNICODE, true, Status.INVALID,
+                    "Invalid hexadecimal number in \\N{U+...}");
         }
         RuntimeScalar callable = unwrapCallable(translator);
         if (callable != null) {
