@@ -9,6 +9,7 @@ use File::Spec;
 our @EXPORT_OK = qw(
     repo_root
     select_unicode_root
+    select_perl_root
     read_raw
     read_pinned_source
     read_unicode_version
@@ -45,6 +46,33 @@ sub select_unicode_root {
         push @diagnostics, "$candidate missing " . join(', ', @missing);
     }
     die "No complete Unicode $version source tree: " . join('; ', @diagnostics) . "\n";
+}
+
+sub select_perl_root {
+    my (%args) = @_;
+    my $root = $args{repo_root} // die "repo_root is required\n";
+    my @required = @{$args{required} // []};
+    my @candidates;
+    push @candidates, $ENV{PERLONJAVA_PERL_ROOT}
+        if defined $ENV{PERLONJAVA_PERL_ROOT} && length $ENV{PERLONJAVA_PERL_ROOT};
+    push @candidates, File::Spec->catdir($root, 'perl5');
+    if (defined $args{unicode_root}) {
+        push @candidates, File::Spec->rel2abs(
+            File::Spec->catdir($args{unicode_root}, '..', '..'));
+    }
+
+    my %seen;
+    my @diagnostics;
+    for my $candidate (@candidates) {
+        $candidate = File::Spec->rel2abs($candidate);
+        next if $seen{$candidate}++;
+        my @missing = grep {
+            !-f File::Spec->catfile($candidate, split m{/})
+        } @required;
+        return $candidate unless @missing;
+        push @diagnostics, "$candidate missing " . join(', ', @missing);
+    }
+    die "No complete pinned Perl source tree: " . join('; ', @diagnostics) . "\n";
 }
 
 sub read_raw {

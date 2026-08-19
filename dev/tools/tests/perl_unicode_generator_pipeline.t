@@ -14,15 +14,18 @@ my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..
 my $pipeline = File::Spec->catfile($repo, 'dev', 'tools', 'generate_perl_unicode_data.pl');
 my $temporary = tempdir(CLEANUP => 1);
 my $unicode = File::Spec->catdir($temporary, 'unicore');
+my $perl_root = File::Spec->catdir($temporary, 'perl5');
 my $tools = File::Spec->catdir($temporary, 'tools');
 my $output_dir = File::Spec->catdir($temporary, 'generated');
-make_path($unicode, $tools, $output_dir);
+make_path($unicode, $perl_root, $tools, $output_dir);
 
 my $version = "17.0.0\n";
 my $source = "# test Unicode table\n0041 ; Example\n";
 my $generated = "generated\n";
 write_file(File::Spec->catfile($unicode, 'version'), $version);
 write_file(File::Spec->catfile($unicode, 'table.txt'), $source);
+my $perl_source = "# pinned Perl generator source\n";
+write_file(File::Spec->catfile($perl_root, 'source.pl'), $perl_source);
 write_file(File::Spec->catfile($tools, 'generate.pl'), <<'GENERATOR');
 #!/usr/bin/env perl
 use strict;
@@ -47,6 +50,7 @@ write_manifest($manifest, {
         output => 'generated/Data.java',
         output_sha256 => sha256_hex($generated),
         sources => {},
+        perl_sources => {'source.pl' => sha256_hex($perl_source)},
     }],
 });
 
@@ -79,6 +83,13 @@ like($log, qr/table\.txt SHA-256 mismatch/, 'source checksum diagnostic names th
 is(read_file($output), $generated, 'source failure leaves published output untouched');
 write_file(File::Spec->catfile($unicode, 'table.txt'), $source);
 
+write_file(File::Spec->catfile($perl_root, 'source.pl'), "corrupt\n");
+($status, $log) = run_pipeline('--check');
+is($status, 255, 'Perl source checksum mismatch fails before generation');
+like($log, qr/source\.pl SHA-256 mismatch/, 'Perl source checksum diagnostic names the input');
+is(read_file($output), $generated, 'Perl source failure leaves published output untouched');
+write_file(File::Spec->catfile($perl_root, 'source.pl'), $perl_source);
+
 write_file(File::Spec->catfile($tools, 'generate.pl'), <<'NONDETERMINISTIC');
 #!/usr/bin/env perl
 use strict;
@@ -110,6 +121,7 @@ sub run_pipeline {
         '--root', $temporary,
         '--manifest', $manifest,
         '--unicode-root', $unicode,
+        '--perl-root', $perl_root,
         @arguments);
     local $/;
     my $log = (<$stdout> // '') . (<$error> // '');

@@ -10,13 +10,14 @@ use Getopt::Long qw(GetOptions);
 use JSON::PP qw(decode_json);
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    read_pinned_source read_raw read_unicode_version repo_root select_unicode_root
+    read_pinned_source read_raw read_unicode_version repo_root select_perl_root select_unicode_root
 );
 
 my $check = 0;
 my $list = 0;
 my @only;
 my $unicode_root;
+my $perl_root;
 my $root_override;
 my $manifest_path = File::Spec->catfile($FindBin::Bin, 'perl_unicode_data_generators.json');
 my $help = 0;
@@ -25,6 +26,7 @@ GetOptions(
     'list' => \$list,
     'only=s@' => \@only,
     'unicode-root=s' => \$unicode_root,
+    'perl-root=s' => \$perl_root,
     'root=s' => \$root_override,
     'manifest=s' => \$manifest_path,
     'help' => \$help,
@@ -52,6 +54,11 @@ for my $entry (@entries) {
         safe_relative_path($relative, "$name source");
         die "$name has an invalid source SHA-256 for $relative\n"
             unless $entry->{sources}{$relative} =~ /\A[0-9a-f]{64}\z/;
+    }
+    for my $relative (keys %{$entry->{perl_sources} // {}}) {
+        safe_relative_path($relative, "$name Perl source");
+        die "$name has an invalid Perl source SHA-256 for $relative\n"
+            unless $entry->{perl_sources}{$relative} =~ /\A[0-9a-f]{64}\z/;
     }
 }
 if (@only) {
@@ -81,6 +88,14 @@ for my $entry (@entries) {
         $source_hash{$relative} = $hash;
     }
 }
+my %perl_source_hash;
+for my $entry (@entries) {
+    while (my ($relative, $hash) = each %{$entry->{perl_sources} // {}}) {
+        die "Conflicting Perl source SHA-256 pins for $relative\n"
+            if exists $perl_source_hash{$relative} && $perl_source_hash{$relative} ne $hash;
+        $perl_source_hash{$relative} = $hash;
+    }
+}
 my @required = ('version', sort keys %source_hash);
 $unicode_root //= select_unicode_root(
     repo_root => $root,
@@ -98,6 +113,19 @@ for my $relative (sort keys %source_hash) {
         sha256 => $source_hash{$relative},
     );
 }
+if (%perl_source_hash) {
+    $perl_root //= select_perl_root(
+        repo_root => $root,
+        unicode_root => $unicode_root,
+        required => [sort keys %perl_source_hash],
+    );
+    for my $relative (sort keys %perl_source_hash) {
+        read_pinned_source(
+            path => File::Spec->catfile($perl_root, split m{/}, $relative),
+            sha256 => $perl_source_hash{$relative},
+        );
+    }
+}
 
 my @publication;
 my $failed = 0;
@@ -106,8 +134,8 @@ for my $entry (@entries) {
     my $output = File::Spec->catfile($root, split m{/}, $entry->{output});
     die "Missing generator $script\n" unless -f $script;
 
-    my $first = run_generator($script, $unicode_root);
-    my $second = run_generator($script, $unicode_root);
+    my $first = run_generator($script, $unicode_root, $perl_root);
+    my $second = run_generator($script, $unicode_root, $perl_root);
     die "$entry->{name} generator is nondeterministic across consecutive runs\n"
         unless $first eq $second;
     my $actual_hash = sha256_hex($first);
@@ -142,9 +170,14 @@ for my $item (@publication) {
 }
 
 sub run_generator {
-    my ($script, $source_root) = @_;
+    my ($script, $source_root, $pinned_perl_root) = @_;
     local %ENV = %ENV;
     $ENV{PERLONJAVA_UNICODE_ROOT} = $source_root;
+    if (defined $pinned_perl_root) {
+        $ENV{PERLONJAVA_PERL_ROOT} = $pinned_perl_root;
+    } else {
+        delete $ENV{PERLONJAVA_PERL_ROOT};
+    }
     open my $pipe, '-|', $^X, $script or die "Cannot run $script: $!\n";
     binmode $pipe, ':raw';
     local $/;
@@ -169,6 +202,7 @@ Usage: perl dev/tools/generate_perl_unicode_data.pl [options]
   --check                 verify generated files without changing them
   --only NAME             process one named generator (repeatable)
   --unicode-root PATH     use an explicit Perl unicore source directory
+  --perl-root PATH        use an explicit pinned Perl source checkout
   --root PATH             resolve manifest paths under PATH (testing/automation)
   --list                  list the complete generated-data inventory
   --help                  show this help
