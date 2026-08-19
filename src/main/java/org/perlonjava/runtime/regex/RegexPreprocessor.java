@@ -1041,28 +1041,10 @@ public class RegexPreprocessor {
                     offset = handleCodeBlock(s, offset, length, sb, regexFlags);
                 }
             } else if (c3 == '?' && c4 == '{') {
-                // Check if this is the unimplemented marker for (??{...}).
-                // Under JPERL_UNIMPLEMENTED=warn, warn and fall through to the
-                // existing non-constant handling (which appends "(?:"); under
-                // die mode, abort with a clean diagnostic. Either way the user
-                // sees the issue — silent substitution would be a lie.
-                if (s.startsWith(RegexMarkers.RECURSIVE_PATTERN, offset)) {
-                    regexUnimplementedSoft(s, offset + 3,
-                            "(??{...}) recursive/dynamic regex patterns not implemented");
-                    if (isUnimplementedWarnMode()) {
-                        // The marker includes the source construct's closing
-                        // parenthesis. Emit a complete empty-group fallback
-                        // and return its closing position so the dynamic
-                        // construct is not parsed a second time below.
-                        sb.append("(?:)");
-                        offset += RegexMarkers.RECURSIVE_PATTERN.length() - 1;
-                        return offset;
-                    }
-                }
-                // Handle (??{ ... }) recursive/dynamic regex patterns
-                // These insert a regex pattern at runtime based on code execution
-
-                // Skip the (??{ part to find the code content
+                // Runtime executable-source compilation replaces this construct
+                // with a structured DYNAMIC_CALLOUT before matching. The ordinary
+                // preprocessor sees it only during literal syntax validation, so
+                // validate its extent and use an inert group for that validation.
                 int codeStart = offset + 4;
                 int codeOffset = findRegexCodeBlockClosingBrace(s, codeStart);
                 if (codeOffset < 0) {
@@ -1070,28 +1052,8 @@ public class RegexPreprocessor {
                             "Unmatched '{' in (??{...}) dynamic pattern");
                 }
                 // codeOffset points at the closing '}'
-                String codeBlock = s.substring(codeStart, codeOffset).trim();
                 offset = codeOffset + 1; // Skip past '}'
-
-                // For simple constant expressions, inline the value as a regex pattern.
-                // (??{1}) means "evaluate 1 and use result as pattern" → matches literal "1"
-                // (??{"[x]"}) → matches character class [x]
-                if (isSimpleConstant(codeBlock)) {
-                    String value = evaluateSimpleConstant(codeBlock);
-                    if (value != null) {
-                        // Insert the constant value as a non-capturing group pattern.
-                        // Run through handleRegex to process any regex constructs
-                        // (e.g. (?[...]) from regex_sets transformation).
-                        sb.append("(?:");
-                        handleRegex(value, 0, sb, regexFlags, false);
-                    } else {
-                        // Fallback: empty non-capturing group
-                        sb.append("(?:");
-                    }
-                } else {
-                    // Non-constant: replace with empty non-capturing group
-                    sb.append("(?:");
-                }
+                sb.append("(?:");
 
                 // offset now points at ')' closing the (??{...}) construct
                 // Fall through to common ')' handling at end of handleParentheses

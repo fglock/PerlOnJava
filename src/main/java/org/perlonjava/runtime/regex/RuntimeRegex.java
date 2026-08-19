@@ -227,9 +227,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
     private boolean lexicalReStrict;
-    private static final String DYNAMIC_PATTERN_ERROR =
-            "\u0000(??{...}) recursive regex patterns not implemented (dynamic pattern)";
-
     public RuntimeRegex() {
         this.regexFlags = null;
     }
@@ -450,9 +447,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 && !activeCodeEnablesRegexp) {
             return;
         }
-        if (warningsOnUse.contains(DYNAMIC_PATTERN_ERROR)) {
-            throw new PerlJavaUnimplementedException(DYNAMIC_PATTERN_ERROR.substring(1));
-        }
         for (String warning : warningsOnUse) {
             WarnDie.warnWithCategory(new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "regexp");
         }
@@ -597,22 +591,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         String originalPatternString = patternString;
         String compilePatternString = patternString;
-        boolean hasDynamicPattern = compilePatternString != null
-                && compilePatternString.contains(RegexMarkers.RECURSIVE_PATTERN);
-        boolean warnOnUnimplemented = "warn".equals(
-                GlobalVariable.getGlobalHash("main::ENV")
-                        .get("JPERL_UNIMPLEMENTED").toString());
-        boolean hasDeferredDynamicPattern = hasDynamicPattern && !warnOnUnimplemented;
-        boolean hasWarnDynamicFallback = hasDynamicPattern && warnOnUnimplemented;
-        if (hasDeferredDynamicPattern || hasWarnDynamicFallback) {
-            // Perl permits qr// construction before the dynamic callback is needed.
-            // Default mode keeps a never-matching placeholder and reports the hard
-            // error on use. Warn mode retains the historical compatibility fallback
-            // that ignores the unsupported dynamic component after warning.
-            compilePatternString = compilePatternString.replace(
-                    RegexMarkers.RECURSIVE_PATTERN,
-                    hasWarnDynamicFallback ? "(?:)" : "(?!)");
-        }
         List<String> quoteMetaWarningsOnUse = new ArrayList<>();
         if (compilePatternString != null && compilePatternString.contains("\\Q")) {
             // Interpolated-pattern warnings are lexical diagnostics for each
@@ -621,9 +599,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             quoteMetaWarningsOnUse = RegexQuoteMeta.getWarningsOnUse();
         }
 
-        // Dynamic patterns compile differently in normal and warn modes. Do not
-        // let a placeholder cached in one mode leak into the other. Lexical
-        // regex debugging also changes the compiled representation.
+        // Lexical regex debugging changes the compiled representation.
         // A lexical charname translator may return a different expansion for
         // each compilation of the same spelling. Literal syntax validation is
         // the first leg of one logical compilation: refresh the raw-source
@@ -642,8 +618,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 + "#bytepattern=" + effectivePatternByteBacked
                 + "#strict=" + lexicalReStrict
                 + (namedCharacterTranslator == null ? "" : "#charnames="
-                        + namedCharacterTranslator.toString())
-                + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
+                        + namedCharacterTranslator.toString());
 
         // Check if the regex is already cached
         RuntimeRegex regex = refreshLexicalNamedCharacter
@@ -745,12 +720,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 if (constructionPolicyWarning != null) {
                     regex.inlineModifierWarnings.add(constructionPolicyWarning);
-                }
-                if (hasDeferredDynamicPattern) {
-                    regex.warningsOnUse.add(DYNAMIC_PATTERN_ERROR);
-                } else if (hasWarnDynamicFallback) {
-                    regex.warningsOnUse.add(
-                            "(??{...}) recursive/dynamic regex patterns not implemented\n");
                 }
                 if (usesRecursiveBackend) {
                     regex.recursivePattern = new JoniRegexPattern(compilePatternString,
