@@ -684,7 +684,7 @@ public final class CClassNode extends Node {
                             arg.state = CCSTATE.COMPLETE;
                             break;
                         } else {
-                            throw new ValueException(ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS);
+                            throw new ValueException(env.emptyRangeError());
                         }
                     }
                     bs.setRange(env, (int)arg.from, (int)arg.to);
@@ -696,7 +696,7 @@ public final class CClassNode extends Node {
                             arg.state = CCSTATE.COMPLETE;
                             break;
                         }
-                        throw new ValueException(ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS);
+                        throw new ValueException(env.emptyRangeError());
                     }
                     addWideScalarRange(arg.from, arg.to);
                 } else {
@@ -711,7 +711,7 @@ public final class CClassNode extends Node {
                         arg.state = CCSTATE.COMPLETE;
                         break;
                     } else {
-                        throw new ValueException(ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS);
+                        throw new ValueException(env.emptyRangeError());
                     }
                 }
                 long normalTo = Math.min(arg.to, 0x10ffffL);

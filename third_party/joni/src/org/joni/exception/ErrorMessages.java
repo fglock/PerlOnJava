@@ -147,6 +147,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String TOO_BIG_NUMBER_FOR_REPEAT_RANGE = "too big number for repeat range";
     String UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE = "upper is smaller than lower in repeat range";
     String EMPTY_RANGE_IN_CHAR_CLASS = "empty range in char class";
+    String PERL_INVALID_RANGE_IN_CHAR_CLASS = "Invalid [] range";
     String MISMATCH_CODE_LENGTH_IN_CLASS_RANGE = "mismatch multibyte code length in char-class range";
     String TOO_MANY_MULTI_BYTE_RANGES = "too many multibyte code ranges are specified";
     String TOO_SHORT_MULTI_BYTE_STRING = "too short multibyte code string";

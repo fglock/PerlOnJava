@@ -178,6 +178,12 @@ public final class ScanEnvironment {
         }
     }
 
+    public String emptyRangeError() {
+        return ("PerlNG".equals(syntax.name) || "PERLONJAVA".equals(syntax.name))
+                ? ErrorMessages.PERL_INVALID_RANGE_IN_CHAR_CLASS
+                : ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS;
+    }
+
     void closeBracketWithoutEscapeWarn(String s) {
         if (warnings != WarnCallback.NONE) {
             // A closing bracket outside a character class is an ordinary

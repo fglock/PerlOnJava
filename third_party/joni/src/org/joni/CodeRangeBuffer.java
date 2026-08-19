@@ -186,7 +186,7 @@ public final class CodeRangeBuffer {
             if (env.syntax.allowEmptyRangeInCC()) {
                 return pbuf;
             } else {
-                throw new ValueException(ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS);
+                throw new ValueException(env.emptyRangeError());
             }
         }
         return addCodeRangeToBuff(pbuf, env, from, to, checkDup);

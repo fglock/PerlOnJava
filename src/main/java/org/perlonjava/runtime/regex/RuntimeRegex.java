@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -790,6 +791,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
             } catch (Exception e) {
+                if (e instanceof PatternSyntaxException syntaxError
+                        && "Illegal character range".equals(syntaxError.getDescription())) {
+                    throw new PerlCompilerException("Invalid [] range");
+                }
                 if ("invalid backref number/name".equals(e.getMessage())
                         || "invalid backref number".equals(e.getMessage())) {
                     throw new PerlCompilerException("Reference to nonexistent group");
