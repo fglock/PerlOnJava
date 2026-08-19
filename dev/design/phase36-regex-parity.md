@@ -303,13 +303,22 @@ if they expose a semantic defect.
    - preserve per-member fold policy in Joni's composed-class AST through union,
      intersection, negation, and nested classes, then remove the corresponding
      adapter translation;
-   - the exact forced-Joni `/aa` envelope now passes 837/837 on JVM and
-     interpreter, including strict literal, mixed-class, scoped mixed-source,
-     and backreference folds; remove its temporary Java fold routing after the
-     combined 80-file gate confirms no owner-file regression;
+   - the exact `/aa` envelope passes 837/837 on JVM and interpreter, including
+     strict literal, mixed-class, scoped mixed-source, and backreference folds;
+     automatic and forced cells are byte-identical on native Joni, and the
+     temporary Java fold route is gone; retain this as a combined-corpus guard;
+   - complete native multi-character and empty lexical `\N{name}` atoms,
+     character-class alternatives, compile caching, lexical scope restoration,
+     stringification, and exact extended-class diagnostics without moving
+     matcher semantics back into textual preprocessing;
    - represent property-value wildcard parsing and diagnostics with a dedicated
      Joni syntax node rather than flattening wildcard behavior into literal
      ranges prematurely;
+   - the native Word_Break, Sentence_Break, and Vertical_Orientation alias
+     families are closed with zero corpus introductions; continue from the
+     pinned 1,720/83,648 residual set by closing bare binary-property aliases,
+     then the remaining Block, General_Category, compatibility, and wildcard
+     families;
    - close the remaining generated property/value alias gaps against the pinned
      Perl 5.44 corpus while retaining native `All` through Perl's signed-IV-wide
      scalar domain via the long-range property result rather than truncating to
