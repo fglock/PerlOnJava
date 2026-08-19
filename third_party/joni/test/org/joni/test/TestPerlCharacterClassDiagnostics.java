@@ -41,4 +41,18 @@ public class TestPerlCharacterClassDiagnostics {
                         UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE));
         assertEquals("Invalid [] range", error.getMessage());
     }
+
+    @Test
+    public void unknownPosixClassNamesUsePerlDiagnostic() {
+        assertPosixError("[[:foo:]]", "POSIX class [:foo:] unknown");
+        assertPosixError("[[:^foo:]]", "POSIX class [:^foo:] unknown");
+    }
+
+    private static void assertPosixError(String pattern, String message) {
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        SyntaxException error = assertThrows(SyntaxException.class,
+                () -> new Regex(bytes, 0, bytes.length, Option.NONE,
+                        UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.NONE));
+        assertEquals(message, error.getMessage());
+    }
 }

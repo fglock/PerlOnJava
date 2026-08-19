@@ -195,6 +195,7 @@ class Parser extends Lexer {
         } else {
             not = false;
         }
+        int nameStart = p;
         if (enc.strLength(bytes, p, stop) >= POSIX_BRACKET_NAME_MIN_LEN + 3) { // else goto not_posix_bracket
             boolean asciiRange = isAsciiRange(env.option) && !isPosixBracketAllRange(env.option);
 
@@ -233,10 +234,19 @@ class Parser extends Lexer {
         }
 
         if (c == ':' && left()) {
+            int nameEnd = p;
             inc();
             if (left()) {
                 fetch();
-                if (c == ']') newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                if (c == ']') {
+                    if (env.usesPerlDiagnostics()) {
+                        String name = new String(bytes, nameStart,
+                                nameEnd - nameStart, StandardCharsets.US_ASCII);
+                        newSyntaxException("POSIX class [:" + (not ? "^" : "")
+                                + name + ":] unknown");
+                    }
+                    newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                }
             }
         }
         restore();

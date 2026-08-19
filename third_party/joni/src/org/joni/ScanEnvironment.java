@@ -179,9 +179,13 @@ public final class ScanEnvironment {
     }
 
     public String emptyRangeError() {
-        return ("PerlNG".equals(syntax.name) || "PERLONJAVA".equals(syntax.name))
+        return usesPerlDiagnostics()
                 ? ErrorMessages.PERL_INVALID_RANGE_IN_CHAR_CLASS
                 : ErrorMessages.EMPTY_RANGE_IN_CHAR_CLASS;
+    }
+
+    public boolean usesPerlDiagnostics() {
+        return "PerlNG".equals(syntax.name) || "PERLONJAVA".equals(syntax.name);
     }
 
     void closeBracketWithoutEscapeWarn(String s) {
