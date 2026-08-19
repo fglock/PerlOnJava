@@ -1542,8 +1542,8 @@ public class ArgumentParser {
         // not turn on PerlOnJava's internal compiler trace.  That trace is a
         // separate --debug facility and does not implement Perl's -D flags.
         parsedArgs.debugFlags = debugFlags;
-        System.err.println(
-                "Recompile perl with -DDEBUGGING to use -D switch (did you mean -d ?)");
+        System.err.print(
+                "Recompile perl with -DDEBUGGING to use -D switch (did you mean -d ?)\n");
 
         return index;
     }
