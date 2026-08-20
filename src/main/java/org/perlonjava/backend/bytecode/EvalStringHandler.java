@@ -12,6 +12,7 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -460,9 +461,12 @@ public class EvalStringHandler {
             parser.parsingEvalString = true;
             Node ast;
             BHooksEndOfScope.beginFileLoad(evalFileName);
+            String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
+            RegexQuoteMeta.setParserWarningBits(siteWarningBits);
             try {
                 ast = parser.parse();
             } finally {
+                RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                 BHooksEndOfScope.endFileLoad(evalFileName);
             }
 

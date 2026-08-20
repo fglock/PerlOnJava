@@ -21,6 +21,7 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.ForkOpenCompleteException;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.debugger.DebugState;
@@ -2870,6 +2871,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Create parser context
                 ScopedSymbolTable parseSymbolTable = capturedSymbolTable.snapShot();
+                String lexicalEvalWarningBits = parseSymbolTable.getWarningBitsString();
                 // Eval STRING inherits the caller's lexical warning bits. The
                 // interpreter does not have JVM call-site instructions to
                 // reconstruct this state later, so seed the parser scope from
@@ -2906,9 +2908,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 Parser parser = new Parser(evalCtx, tokens);
                 BHooksEndOfScope.beginFileLoad(evalCompilerOptions.fileName);
+                String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
+                RegexQuoteMeta.setParserWarningBits(lexicalEvalWarningBits);
                 try {
                     ast = parser.parse();
                 } finally {
+                    RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
                 }
 

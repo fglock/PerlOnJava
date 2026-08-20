@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.jcodings.specific.ASCIIEncoding;
+import org.jcodings.specific.UTF8Encoding;
 import org.joni.CalloutHandler;
 import org.joni.CalloutResult;
 import org.joni.DynamicPatternResult;
@@ -108,6 +109,37 @@ public class TestPerlDynamicExecution {
                 "nested-complete:nested-3",
                 "nested-finish:true",
                 "outer-complete:outer-dynamic"), events);
+    }
+
+    @Test
+    public void nestedPatternRetainsAsciiStrictCaseFoldOption() {
+        byte[] outerBytes = "\\A(?{=DYNAMIC:1})\\z".getBytes(StandardCharsets.UTF_8);
+        Regex outer = new Regex(outerBytes, 0, outerBytes.length, Option.NONE,
+                UTF8Encoding.INSTANCE, Syntax.RUBY);
+        byte[] nestedBytes = "s".getBytes(StandardCharsets.UTF_8);
+        Regex nested = new Regex(nestedBytes, 0, nestedBytes.length,
+                Option.IGNORECASE | Option.PERL_ASCII_STRICT,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG);
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callout not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                return new DynamicPatternResult(nested, null, null);
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        };
+
+        byte[] input = "\u017f".getBytes(StandardCharsets.UTF_8);
+        Matcher matcher = outer.matcher(input);
+        matcher.setCalloutHandler(handler);
+        assertEquals(-1, matcher.search(0, input.length, Option.NONE));
     }
 
     @Test

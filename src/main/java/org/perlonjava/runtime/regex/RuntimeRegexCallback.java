@@ -13,16 +13,18 @@ public final class RuntimeRegexCallback {
     final String sourceLocation;
     final String lexicalPackage;
     final String source;
+    final boolean uninitializedWarningsEnabled;
     private int ownerCount;
 
     private RuntimeRegexCallback(
             RuntimeCode code, Kind kind, String sourceLocation, String lexicalPackage,
-            String source) {
+            String source, boolean uninitializedWarningsEnabled) {
         this.code = code;
         this.kind = kind;
         this.sourceLocation = sourceLocation;
         this.lexicalPackage = lexicalPackage;
         this.source = source;
+        this.uninitializedWarningsEnabled = uninitializedWarningsEnabled;
     }
 
     synchronized void retainOwner() {
@@ -54,6 +56,12 @@ public final class RuntimeRegexCallback {
 
     public static RuntimeScalar wrap(
             RuntimeScalar codeRef, String kindName, String lexicalPackage, String source) {
+        return wrap(codeRef, kindName, lexicalPackage, source, true);
+    }
+
+    public static RuntimeScalar wrap(
+            RuntimeScalar codeRef, String kindName, String lexicalPackage, String source,
+            boolean uninitializedWarningsEnabled) {
         if (!(codeRef.value instanceof RuntimeCode code)) {
             throw new IllegalArgumentException("regex callback is not a code reference");
         }
@@ -68,6 +76,6 @@ public final class RuntimeRegexCallback {
         return new RuntimeScalar(new RuntimeRegexCallback(
                 code, Kind.valueOf(kindName), sourceLocation,
                 lexicalPackage != null ? lexicalPackage : code.packageName,
-                source));
+                source, uninitializedWarningsEnabled));
     }
 }

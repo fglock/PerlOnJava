@@ -1380,7 +1380,8 @@ final class JoniRegexPattern {
             }
             Evaluation evaluation = evaluate(callback, match);
             RuntimeScalar value = evaluation.result();
-            if (value.type == RuntimeScalarType.UNDEF) {
+            if (value.type == RuntimeScalarType.UNDEF
+                    && callback.uninitializedWarningsEnabled) {
                 WarnDie.warnWithCategory(
                         new RuntimeScalar("Use of uninitialized value"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
