@@ -1250,8 +1250,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAnyCharStar() {
         final byte[]bytes = this.bytes;
+        final int nextExactByte = nextExactByte();
         while (s < range) {
-            pushAlt(ip, s, sprev, pkeep);
+            // The compiler normally emits ANYCHAR_STAR_PEEK_NEXT when it knows
+            // the next literal.  Some valid AST shapes do not preserve that
+            // metadata, but the bytecode still makes a following exact literal
+            // mandatory.  Retrying at every other position only repeats a
+            // guaranteed failed exact match (notably /.*literal/ on a miss).
+            if (nextExactByte < 0 || (bytes[s] & 0xff) == nextExactByte) {
+                pushAlt(ip, s, sprev, pkeep);
+            }
             int n = enc.length(bytes, s, end);
             if (s + n > range) {opFail(); return;}
             if (enc.isNewLine(bytes, s, end)) {opFail(); return;}
@@ -1262,11 +1270,45 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAnyCharStarSb() {
         final byte[]bytes = this.bytes;
+        final int nextExactByte = nextExactByte();
         while (s < range) {
-            pushAlt(ip, s, sprev, pkeep);
+            if (nextExactByte < 0 || (bytes[s] & 0xff) == nextExactByte) {
+                pushAlt(ip, s, sprev, pkeep);
+            }
             if (bytes[s] == Encoding.NEW_LINE) {opFail(); return;}
             sprev = s;
             s++;
+        }
+    }
+
+    /**
+     * Return the first byte of the exact opcode immediately following an
+     * ANYCHAR_STAR, or -1 when the following instruction cannot prove a byte.
+     *
+     * This deliberately recognizes only bytecode layouts whose first byte is
+     * explicit in {@code code}; case-insensitive and template-backed strings
+     * retain the existing fully general retry behaviour.
+     */
+    private int nextExactByte() {
+        if (ip + 1 >= code.length) return -1;
+
+        switch (code[ip]) {
+            case OPCode.EXACT1:
+            case OPCode.EXACT2:
+            case OPCode.EXACT3:
+            case OPCode.EXACT4:
+            case OPCode.EXACT5:
+            case OPCode.EXACTMB2N1:
+            case OPCode.EXACTMB2N2:
+            case OPCode.EXACTMB2N3:
+                return code[ip + 1] & 0xff;
+            case OPCode.EXACTN:
+                if (!Config.USE_STRING_TEMPLATES && ip + 2 < code.length && code[ip + 1] > 0) {
+                    return code[ip + 2] & 0xff;
+                }
+                return -1;
+            default:
+                return -1;
         }
     }
 
