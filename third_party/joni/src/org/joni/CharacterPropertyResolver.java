@@ -55,4 +55,10 @@ public interface CharacterPropertyResolver {
      */
     Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                    boolean inCharacterClass);
+
+    /** Validates a Perl script-run span; ordinary resolvers remain neutral. */
+    default boolean isScriptRun(byte[] bytes, int p, int end, Encoding encoding,
+                                WideScalarCodec wideScalarCodec) {
+        return true;
+    }
 }

@@ -172,6 +172,7 @@ public interface OPCode {
     int REPEAT_CAPTURE_CLEAR_END      = 128;          /* clear captures untouched by repeat body */
     int BACKREFN_PREV                 = 129;          /* Perl self-reference may use prior repeat iteration */
     int BACKREFN_PREV_IC              = 130;          /* case-folded prior repeat self-reference */
+    int SCRIPT_RUN                    = 131;          /* validate the current (*script_run:...) span */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -306,6 +307,7 @@ public interface OPCode {
         "repeat-capture-clear-end",
         "backrefn-prev",
         "backrefn-prev-ic",
+        "script-run",
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -441,5 +443,6 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_REPEAT_CAPTURE_CLEAR_END*/
         Arguments.MEMNUM, /*OP_BACKREFN_PREV*/
         Arguments.MEMNUM, /*OP_BACKREFN_PREV_IC*/
+        Arguments.NON, /*OP_SCRIPT_RUN*/
     } : null;
 }

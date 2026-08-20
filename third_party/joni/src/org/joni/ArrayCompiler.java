@@ -1149,6 +1149,11 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileLengthEncloseNode(EncloseNode node) {
+        if (node.scriptRun) {
+            int targetLength = compileLengthTree(node.target);
+            return OPSize.PUSH_POS + targetLength + OPSize.SCRIPT_RUN
+                    + (node.atomicScriptRun ? OPSize.PUSH_STOP_BT + OPSize.POP_STOP_BT : 0);
+        }
         if (node.isOption()) {
             return compileLengthOptionNode(node);
         }
@@ -1234,6 +1239,15 @@ final class ArrayCompiler extends Compiler {
 
     @Override
     protected void compileEncloseNode(EncloseNode node) {
+        if (node.scriptRun) {
+            regex.requireStack = true;
+            addOpcodeRelAddr(OPCode.PUSH_POS, 0);
+            if (node.atomicScriptRun) addOpcode(OPCode.PUSH_STOP_BT);
+            compileTree(node.target);
+            if (node.atomicScriptRun) addOpcode(OPCode.POP_STOP_BT);
+            addOpcode(OPCode.SCRIPT_RUN);
+            return;
+        }
         int len;
         switch (node.type) {
         case EncloseType.MEMORY:

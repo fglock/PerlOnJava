@@ -35,6 +35,7 @@ import org.jcodings.IntHolder;
 import org.jcodings.unicode.UnicodeCodeRange;
 import org.joni.constants.internal.OPCode;
 import org.joni.constants.internal.OPSize;
+import org.joni.constants.internal.StackType;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
 import org.joni.exception.ValueException;
@@ -406,6 +407,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.REPEAT_INC_NG_SG:           opRepeatIncNGSG();         continue;
                 case OPCode.REPEAT_CAPTURE_CLEAR:       opRepeatCaptureClear();    continue;
                 case OPCode.REPEAT_CAPTURE_CLEAR_END:   opRepeatCaptureClearEnd(); continue;
+                case OPCode.SCRIPT_RUN:                 opScriptRun();             continue;
 
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
@@ -581,6 +583,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.REPEAT_INC_NG_SG:           opRepeatIncNGSG();         continue;
                 case OPCode.REPEAT_CAPTURE_CLEAR:       opRepeatCaptureClear();    continue;
                 case OPCode.REPEAT_CAPTURE_CLEAR_END:   opRepeatCaptureClearEnd(); continue;
+                case OPCode.SCRIPT_RUN:                 opScriptRun();             continue;
 
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
@@ -2962,6 +2965,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opRepeatCaptureClearEnd() {
         endRepeatCaptureIteration(code[ip++]);
+    }
+
+    private void opScriptRun() {
+        int start = savedPosition(StackType.POS);
+        if (start < 0 || regex.characterPropertyResolver == null
+                || !regex.characterPropertyResolver.isScriptRun(
+                        bytes, start, s, enc, regex.wideScalarCodec)) {
+            opFail();
+        }
     }
 
     private void opPushPos() {

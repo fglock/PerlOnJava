@@ -1326,6 +1326,33 @@ class Parser extends Lexer {
         Node alphaAssertion = parseAlphaAssertion();
         if (alphaAssertion != null) return alphaAssertion;
 
+        // Script-run groups are scoped, non-capturing constructs.  Parse their
+        // body with the same delimiter discipline as the other Perl (*name:)
+        // groups; native validation is added by the matcher path.
+        boolean scriptRun = startsWith("script_run:") || startsWith("sr:");
+        boolean atomicScriptRun = startsWith("atomic_script_run:") || startsWith("asr:");
+        if (scriptRun || atomicScriptRun) {
+            if (startsWith("script_run:")) p += "script_run:".length();
+            else if (startsWith("atomic_script_run:")) p += "atomic_script_run:".length();
+            else p += scriptRun ? "sr:".length() : "asr:".length();
+            fetchToken();
+            try {
+                Node target = parseSubExp(TokenType.SUBEXP_CLOSE);
+                // Keep a recognised enclosure type so this scoped feature can
+                // own native bytecode without extending the shared analyser.
+                EncloseNode scope = new EncloseNode(EncloseType.STOP_BACKTRACK);
+                scope.scriptRun = true;
+                scope.atomicScriptRun = atomicScriptRun;
+                scope.setTarget(target);
+                return scope;
+            } catch (SyntaxException e) {
+                if (END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
+                    newSyntaxException(PERL_UNTERMINATED_CONTROL_ARGUMENT);
+                }
+                throw e;
+            }
+        }
+
         final ControlVerbNode.Kind kind;
         final String verb;
         if (startsWith("ACCEPT)") || startsWith("ACCEPT:")) {

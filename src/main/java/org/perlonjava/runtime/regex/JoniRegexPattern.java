@@ -101,9 +101,7 @@ final class JoniRegexPattern {
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable,
             null,
-            (bytes, p, end, encoding, inCharacterClass) ->
-                    resolveCharacterProperty(
-                            bytes, p, end, encoding, inCharacterClass, false),
+            propertyResolver(false),
             PERL_SCALAR_CODEC);
 
     static final class NamedCharacterCache {
@@ -158,17 +156,31 @@ final class JoniRegexPattern {
                 return expansion.sequence().codePoints().toArray();
             }
         };
-        CharacterPropertyResolver propertyResolver =
-                (bytes, p, end, encoding, inCharacterClass) ->
-                        resolveCharacterProperty(
-                                bytes, p, end, encoding, inCharacterClass,
-                                caseInsensitive);
+        CharacterPropertyResolver propertyResolver = propertyResolver(caseInsensitive);
         return new Syntax(PERLONJAVA_SYNTAX.name, PERLONJAVA_SYNTAX.op,
                 PERLONJAVA_SYNTAX.op2, PERLONJAVA_SYNTAX.op3,
                 PERLONJAVA_SYNTAX.behavior, PERLONJAVA_SYNTAX.options,
                 PERLONJAVA_SYNTAX.metaCharTable, resolver,
                 propertyResolver,
                 PERLONJAVA_SYNTAX.wideScalarCodec);
+    }
+
+    private static CharacterPropertyResolver propertyResolver(boolean caseInsensitive) {
+        return new CharacterPropertyResolver() {
+            @Override
+            public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                                  boolean inCharacterClass) {
+                return resolveCharacterProperty(
+                        bytes, p, end, encoding, inCharacterClass, caseInsensitive);
+            }
+
+            @Override
+            public boolean isScriptRun(byte[] bytes, int p, int end, Encoding encoding,
+                                       WideScalarCodec wideScalarCodec) {
+                return UnicodeResolver.isPerlScriptRun(
+                        bytes, p, end, encoding, wideScalarCodec);
+            }
+        };
     }
 
     private static CharacterPropertyResolver.Result resolveCharacterProperty(
@@ -717,7 +729,11 @@ final class JoniRegexPattern {
                             || name.equals("negative_lookahead")
                             || name.equals("nlb")
                             || name.equals("negative_lookbehind")
-                            || name.equals("atomic");
+                            || name.equals("atomic")
+                            || name.equals("script_run")
+                            || name.equals("sr")
+                            || name.equals("atomic_script_run")
+                            || name.equals("asr");
                 }
                 boolean lookaround = pattern.startsWith("(?=", i)
                         || pattern.startsWith("(?!", i)
