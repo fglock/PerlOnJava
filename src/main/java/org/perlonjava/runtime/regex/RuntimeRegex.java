@@ -719,10 +719,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 javaPattern = usesRecursiveBackend
                         ? "(?!)"
                         : preProcessRegex(compilePatternString, regex.regexFlags);
-                if (!usesRecursiveBackend) {
-                    javaPattern = makeDelimitedTokenRepetitionsPossessive(javaPattern);
-                }
-
                 // Debug logging
                 if (DEBUG_REGEX) {
                     System.err.println("  preprocessed pattern=" + javaPattern);
