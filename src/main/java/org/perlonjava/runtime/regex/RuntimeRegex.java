@@ -666,6 +666,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         }
                         throw new PerlCompilerException(diagnostic);
                     }
+                    if ("Lookbehind longer than 255 not implemented in regex".equals(message)) {
+                        throw new PerlCompilerException(message + " m/"
+                                + originalPatternString + "/");
+                    }
                     int bytePosition = ((SyntaxException) e).getPatternPosition();
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
