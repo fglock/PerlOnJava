@@ -488,7 +488,7 @@ gates may reopen it if a semantic regression appears.
       rewrites for abbreviated `(*:NAME)`, `/xx` class whitespace, literal
       nested `[` in standard classes, and empty `(?)` groups into the Joni
       lexer/parser, then delete those adapter cases
-- [ ] Reduce user-property translation to Perl-owned executable callback and
+- [x] Reduce user-property translation to Perl-owned executable callback and
       generated-spelling policy; built-in property/class matching must stay in
       Joni and untrusted interpolated callback text must remain explicitly
       documented source policy rather than an implicit matcher fallback
