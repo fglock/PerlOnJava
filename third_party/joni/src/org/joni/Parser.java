@@ -388,6 +388,7 @@ class Parser extends Lexer {
     private ParsedCharClass parseCharClass(ObjPtr<CClassNode> ascNode,
                                            ObjPtr<CClassNode> foldNode) {
         int classContentStart = p - getBegin();
+        warnPerlPosixSyntaxOutsideClass();
         final boolean neg;
         CClassNode cc, prevCc = null, ascCc = null, ascPrevCc = null,
                 workCc = null, ascWorkCc = null, foldCc = null,
@@ -744,6 +745,50 @@ class Parser extends Lexer {
         }
 
         return new ParsedCharClass(cc, namedSequences);
+    }
+
+    private void warnPerlPosixSyntaxOutsideClass() {
+        if (!env.usesPerlDiagnostics() || p >= stop) return;
+
+        int delimiter = enc.mbcToCode(bytes, p, stop);
+        if (delimiter != ':' && delimiter != '.' && delimiter != '=') return;
+
+        int cursor = p + enc.length(bytes, p, stop);
+        if (delimiter == ':' && cursor < stop
+                && enc.mbcToCode(bytes, cursor, stop) == '^') {
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        int nameStart = cursor;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == delimiter || code == ']') break;
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != delimiter) return;
+        int delimiterEnd = cursor + enc.length(bytes, cursor, stop);
+        if (delimiterEnd >= stop || enc.mbcToCode(bytes, delimiterEnd, stop) != ']') return;
+        int classEnd = delimiterEnd + enc.length(bytes, delimiterEnd, stop);
+
+        String message;
+        if (delimiter == ':') {
+            String name = new String(bytes, nameStart, cursor - nameStart,
+                    StandardCharsets.US_ASCII);
+            message = isKnownPerlPosixClassName(name)
+                    ? PERL_POSIX_CLASS_OUTSIDE_CLASS
+                    : PERL_INVALID_POSIX_CLASS_OUTSIDE_CLASS;
+        } else {
+            message = PERL_UNIMPLEMENTED_POSIX_CLASS_OUTSIDE_CLASS.replace(
+                    "%n", Character.toString((char)delimiter));
+        }
+        syntaxWarn(message, classEnd - getBegin());
+    }
+
+    private static boolean isKnownPerlPosixClassName(String candidate) {
+        if (candidate.equals("ascii")) return true;
+        for (byte[] name : PosixBracket.PBSNamesLower) {
+            if (candidate.equals(new String(name, StandardCharsets.US_ASCII))) return true;
+        }
+        return false;
     }
 
     private StringNode namedCharacterStringNode(int[] sequence) {

@@ -68,6 +68,12 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "POSIX syntax [= =] is reserved for future extensions";
     String PERL_POSIX_COLLATING_ELEMENT_RESERVED =
             "POSIX syntax [. .] is reserved for future extensions";
+    String PERL_POSIX_CLASS_OUTSIDE_CLASS =
+            "POSIX syntax [: :] belongs inside character classes";
+    String PERL_INVALID_POSIX_CLASS_OUTSIDE_CLASS =
+            "POSIX syntax [: :] belongs inside character classes (but this one isn't fully valid)";
+    String PERL_UNIMPLEMENTED_POSIX_CLASS_OUTSIDE_CLASS =
+            "POSIX syntax [%n %n] belongs inside character classes (but this one isn't implemented)";
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
     String PERL_LOOK_BEHIND_LONGER_THAN_255 =
             "Lookbehind longer than 255 not implemented in regex";
