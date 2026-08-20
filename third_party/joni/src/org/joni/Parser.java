@@ -270,6 +270,12 @@ class Parser extends Lexer {
                 fetch();
                 if (c == ']') {
                     if (env.usesPerlDiagnostics()) {
+                        if (perlExtendedClassLeaf && left() && peekIs(']')) {
+                            int closeEnd = p + enc.length(bytes, p, stop);
+                            newSyntaxException(
+                                    PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE,
+                                    closeEnd - getBegin());
+                        }
                         String name = new String(bytes, nameStart,
                                 nameEnd - nameStart, StandardCharsets.US_ASCII);
                         newSyntaxException("POSIX class [:" + (not ? "^" : "")
@@ -1897,6 +1903,7 @@ class Parser extends Lexer {
     }
 
     private CClassNode parsePerlExtendedCharClass() {
+        int bodyStart = p;
         skipPerlExtendedClassSpace();
         if (!left() || extendedClassAt(']')) {
             newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
@@ -1904,21 +1911,25 @@ class Parser extends Lexer {
         CClassNode result = parsePerlExtendedClassUnion();
         skipPerlExtendedClassSpace();
         if (!left() || !extendedClassAt(']')) {
+            if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)) {
+                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                        stop - getBegin());
+            }
             newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
         }
         inc();
         if (!left() || !extendedClassAt(')')) {
-            if (left() && extendedClassAt(']')) {
-                newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
+            if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)) {
+                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
             }
-            newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
         }
         inc();
         return result;
     }
 
     private CClassNode parsePerlExtendedClassUnion() {
-        CClassNode left = parsePerlExtendedClassIntersection();
+        CClassNode left = parsePerlExtendedClassIntersection(false);
         while (true) {
             skipPerlExtendedClassSpace();
             if (!left()) return left;
@@ -1930,11 +1941,11 @@ class Parser extends Lexer {
                     inc();
                     newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OPEN_PAREN);
                 }
-                parsePerlExtendedClassIntersection();
+                parsePerlExtendedClassIntersection(false);
                 newSyntaxException(PERL_EXTENDED_CLASS_OPERAND_WITHOUT_OPERATOR);
             }
             inc();
-            CClassNode right = parsePerlExtendedClassIntersection();
+            CClassNode right = parsePerlExtendedClassIntersection(true);
             switch (operator) {
             case '+':
             case '|':
@@ -1960,27 +1971,27 @@ class Parser extends Lexer {
         }
     }
 
-    private CClassNode parsePerlExtendedClassIntersection() {
-        CClassNode left = parsePerlExtendedClassUnary();
+    private CClassNode parsePerlExtendedClassIntersection(boolean afterOperator) {
+        CClassNode left = parsePerlExtendedClassUnary(afterOperator);
         while (true) {
             skipPerlExtendedClassSpace();
             if (!left() || !extendedClassAt('&')) return left;
             inc();
-            left.and(parsePerlExtendedClassUnary(), env);
+            left.and(parsePerlExtendedClassUnary(true), env);
         }
     }
 
-    private CClassNode parsePerlExtendedClassUnary() {
+    private CClassNode parsePerlExtendedClassUnary(boolean afterOperator) {
         skipPerlExtendedClassSpace();
         if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
         if (extendedClassAt('!')) {
             inc();
-            CClassNode result = parsePerlExtendedClassUnary();
+            CClassNode result = parsePerlExtendedClassUnary(true);
             if (result.isNot()) result.clearNot();
             else result.setNot();
             return result;
         }
-        PerlExtendedClassPrimary primary = parsePerlExtendedClassPrimary();
+        PerlExtendedClassPrimary primary = parsePerlExtendedClassPrimary(afterOperator);
         CClassNode result = primary.node();
         if (!primary.scopedOptionsApplied() && isIgnoreCase(env.option)) {
             caseFoldPerlExtendedClass(result);
@@ -1998,7 +2009,7 @@ class Parser extends Lexer {
         }
     }
 
-    private PerlExtendedClassPrimary parsePerlExtendedClassPrimary() {
+    private PerlExtendedClassPrimary parsePerlExtendedClassPrimary(boolean afterOperator) {
         skipPerlExtendedClassSpace();
         if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
 
@@ -2090,6 +2101,11 @@ class Parser extends Lexer {
         }
         if (extendedClassAt('(')) {
             inc();
+            skipPerlExtendedClassSpace();
+            if (left() && extendedClassAt(')')) {
+                inc();
+                newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+            }
             CClassNode nested = parsePerlExtendedClassUnion();
             skipPerlExtendedClassSpace();
             if (!left() || !extendedClassAt(')')) {
@@ -2131,7 +2147,9 @@ class Parser extends Lexer {
         if (extendedClassAt('\\')) {
             return parsePerlExtendedClassEscape();
         }
-        newSyntaxException(PERL_EXTENDED_CLASS_BARE_CHARACTER);
+        newSyntaxException(afterOperator
+                ? PERL_EXTENDED_CLASS_INCOMPLETE
+                : PERL_EXTENDED_CLASS_BARE_CHARACTER);
         return null;
     }
 
@@ -2148,7 +2166,14 @@ class Parser extends Lexer {
                     cursor += enc.length(bytes, cursor, stop);
                 }
                 if (digits != 3) {
-                    newSyntaxException(PERL_EXTENDED_CLASS_OCTAL_WIDTH);
+                    while (cursor < stop) {
+                        int next = enc.mbcToCode(bytes, cursor, stop);
+                        if (next != ' ' && next != '\t' && next != '\n'
+                                && next != '\r' && next != '\f') break;
+                        cursor += enc.length(bytes, cursor, stop);
+                    }
+                    newSyntaxException(PERL_EXTENDED_CLASS_OCTAL_WIDTH,
+                            cursor - getBegin());
                 }
             }
         }
@@ -2214,11 +2239,34 @@ class Parser extends Lexer {
                     int length = enc.length(bytes, p, stop);
                     p += length;
                 } while (left() && !enc.isNewLine(extendedClassCode()));
+                if (!left()) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
                 continue;
             }
             if (!Character.isWhitespace(codePoint) && codePoint != 0x85) return;
             p += enc.length(bytes, p, stop);
         }
+    }
+
+    private boolean extendedClassBodyStartsWithSpacedStandardClass(int bodyStart) {
+        int cursor = bodyStart;
+        while (cursor < stop) {
+            int codePoint = enc.mbcToCode(bytes, cursor, stop);
+            if (codePoint != ' ' && codePoint != '\t' && codePoint != '\n'
+                    && codePoint != '\r' && codePoint != '\f') {
+                if (codePoint != '[') return false;
+                cursor += enc.length(bytes, cursor, stop);
+                if (cursor >= stop) return false;
+                int firstLeafCodePoint = enc.mbcToCode(bytes, cursor, stop);
+                return firstLeafCodePoint == ' ' || firstLeafCodePoint == '\t'
+                        || firstLeafCodePoint == '\n' || firstLeafCodePoint == '\r'
+                        || firstLeafCodePoint == '\f';
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return false;
     }
 
     private boolean extendedClassAt(int codePoint) {
