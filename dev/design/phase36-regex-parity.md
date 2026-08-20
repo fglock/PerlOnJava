@@ -79,10 +79,11 @@ affected corpus before taking another slice.
   integrated signed-IV range fix removes row 1651 with zero introductions in
   exact A/B evidence; a fresh combined serial gate remains required because a
   later run stopped before the complete plan under concurrent CPAN load.
-- The current imported `reg_mesg.t` passes 1,814/2,613 on each backend with an
+- The current imported `reg_mesg.t` passes 1,834/2,613 on each backend with an
   identical status/test-number vector. Native extended-class diagnostics now
   distinguish binary operators that have no preceding operand, adjacent
-  operands without an operator, and misplaced parentheses.
+  operands without an operator, and misplaced parentheses. Overlong-lookbehind
+  errors retain Perl's unmarked `m/pattern/` rendering.
 - Forced-Joni Unicode property comparison is 83,648/83,648 on both backends.
   The Hyphen/IsHyphen warning correction removes the final exact 32 residuals
   with zero introductions while preserving dynamic property interpolation.
