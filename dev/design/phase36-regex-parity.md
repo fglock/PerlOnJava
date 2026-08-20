@@ -350,12 +350,11 @@ behavior.
 
 1. Finish the four active, non-overlapping slices: integrate the green warmed
    callback-clone batch and then close the remaining Unicode/property
-   source-policy rows; reduce the current 454-row same-source
+   source-policy rows; reduce the current 448-row same-source
    `reg_mesg.t` frontier through the next three-to-five native diagnostic
-   families; close the 32 optimizer-debug description rows left after the
-   completed `speed*`/`pat_psycho*` semantic and performance gate; and finish
-   the remaining runtime diagnostic-policy families. Each semantic slice must
-   include
+   families; complete the CPAN/performance and obsolete-Java-label audit after
+   closing the optimizer-debug rows; and finish the remaining runtime
+   diagnostic-policy families. Each semantic slice must include
    system-Perl oracles, JVM/interpreter parity, complete affected-corpus deltas,
    and zero introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
@@ -539,7 +538,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Native nested-quantifier source positions, including UTF-8 patterns
 - [x] Native Perl group-name start categories and source positions
 - [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`;
-      current same-source JVM/interpreter frontier is 454 failing rows
+      current same-source JVM/interpreter frontier is 448 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
@@ -552,8 +551,11 @@ gates may reopen it if a semantic regression appears.
 - [x] Native `(*script_run:...)`, `(*sr:...)`, `(*atomic_script_run:...)`, and
       `(*asr:...)`
 - [x] Complete bounded `speed*` and `pat_psycho*` semantic/performance closure
-      on JVM, interpreter, direct Joni, and thread wrappers; 32 debug-output
-      assertions remain an active diagnostics lane
+      on JVM, interpreter, direct Joni, and thread wrappers
+- [x] Emit truthful Joni optimizer anchor metadata for `use re 'debug'`; all 32
+      debug-output assertions pass on JVM, interpreter, and thread wrappers
+- [x] Render runtime-interpolated trailing-backslash diagnostics with exact
+      Perl text while preserving valid paired terminal backslashes
 - [x] Publish inverted `\K` match text as undef while preserving Perl match
       offsets and backtracking state
 - [x] Remove the dead callback no-op runner switch and marker constants
