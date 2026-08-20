@@ -186,6 +186,10 @@ public class RegexQuoteMeta {
         if (message != null && message.contains("is more clearly written simply as")) {
             return "syntax";
         }
+        if (message != null && message.startsWith("Variable length ")
+                && message.contains("lookbehind with capturing is experimental")) {
+            return "experimental::vlb";
+        }
         return "regexp";
     }
 }

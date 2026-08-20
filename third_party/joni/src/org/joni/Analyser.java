@@ -1547,6 +1547,7 @@ final class Analyser extends Parser {
                 node.variableLookBehindMin = min;
                 node.variableLookBehindMax = max;
                 node.variableLookBehindTargetLength = -1;
+                warnVariableLookBehindCapture(node, min, max);
                 returnCode = 0;
                 return node;
             }
@@ -1572,6 +1573,10 @@ final class Analyser extends Parser {
             break;
         case GET_CHAR_LEN_TOP_ALT_VARLEN:
             if (syntax.differentLengthAltLookBehind()) {
+                CharLengthRange range = getCharLengthRange(node.target);
+                if (range != null) {
+                    warnVariableLookBehindCapture(node, range.min, range.max);
+                }
                 return divideLookBehindAlternatives(node);
             } else {
                 newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
@@ -1603,8 +1608,48 @@ final class Analyser extends Parser {
         node.variableLookBehindMin = range.min;
         node.variableLookBehindMax = range.max;
         node.variableLookBehindTargetLength = -1;
+        warnVariableLookBehindCapture(node, range.min, range.max);
         returnCode = 0;
         return true;
+    }
+
+    private void warnVariableLookBehindCapture(AnchorNode node, int min, int max) {
+        if (node.variableLookBehindCaptureWarned || min == max || !containsCapture(node.target,
+                Collections.newSetFromMap(new IdentityHashMap<>()))) {
+            return;
+        }
+        node.variableLookBehindCaptureWarned = true;
+        String message = node.type == AnchorType.LOOK_BEHIND_NOT
+                ? PERL_NEGATIVE_VARIABLE_LOOKBEHIND_CAPTURE
+                : PERL_POSITIVE_VARIABLE_LOOKBEHIND_CAPTURE;
+        env.warnings.warn(message, getEnd() - getBegin());
+    }
+
+    private boolean containsCapture(Node node, Set<Node> active) {
+        if (node == null || !active.add(node)) return false;
+        try {
+            return switch (node.getType()) {
+            case NodeType.LIST, NodeType.ALT -> {
+                ListNode list = (ListNode)node;
+                boolean found = false;
+                do {
+                    found |= containsCapture(list.value, active);
+                } while (!found && (list = list.tail) != null);
+                yield found;
+            }
+            case NodeType.QTFR -> containsCapture(((QuantifierNode)node).target, active);
+            case NodeType.ANCHOR -> containsCapture(((AnchorNode)node).target, active);
+            case NodeType.ENCLOSE -> {
+                EncloseNode enclose = (EncloseNode)node;
+                yield enclose.type == EncloseType.MEMORY
+                        || containsCapture(enclose.target, active);
+            }
+            case NodeType.CALL -> containsCapture(((CallNode)node).target, active);
+            default -> false;
+            };
+        } finally {
+            active.remove(node);
+        }
     }
 
     private static final class CharLengthRange {

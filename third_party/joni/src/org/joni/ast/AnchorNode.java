@@ -29,6 +29,7 @@ public final class AnchorNode extends Node {
     public int variableLookBehindMin;
     public int variableLookBehindMax;
     public int variableLookBehindTargetLength;
+    public boolean variableLookBehindCaptureWarned;
 
     public AnchorNode(int type, boolean asciiRange) {
         super(ANCHOR);
@@ -37,6 +38,7 @@ public final class AnchorNode extends Node {
         variableLookBehindMin = -1;
         variableLookBehindMax = -1;
         variableLookBehindTargetLength = -1;
+        variableLookBehindCaptureWarned = false;
         this.asciiRange = asciiRange;
     }
 
