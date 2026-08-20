@@ -821,6 +821,10 @@ class Parser extends Lexer {
                     parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
                     break;
                 }
+                arg.toStart = token.backP - getBegin() - 1;
+                arg.toEnd = p - getBegin();
+                warnFalseRangeBeforeClass(arg, arg.toEnd);
+                arg.toFalseRangeEligible = true;
                 cc.nextStateClass(arg, ascCc, foldCc, env); // goto next_class
                 break;
 
@@ -1137,15 +1141,20 @@ class Parser extends Lexer {
     }
 
     private void warnPerlExtendedClassRange(CCStateArg arg) {
-        if (!perlExtendedClassLeaf || arg.state != CCSTATE.RANGE
+        boolean strictOrdinaryClass = !perlExtendedClassLeaf
+                && Option.isPerlReStrict(env.option);
+        if (!perlExtendedClassLeaf && !strictOrdinaryClass
+                || arg.state != CCSTATE.RANGE
                 || !env.usesPerlDiagnostics() || arg.from > arg.to) {
             return;
         }
 
         if (arg.fromEscaped && arg.toEscaped
                 && arg.fromNamedCharacter != arg.toNamedCharacter) {
-            env.warnings.warn("Both or neither range ends should be Unicode",
-                    perlExtendedRangeWarningPosition());
+            if (perlExtendedClassLeaf) {
+                env.warnings.warn("Both or neither range ends should be Unicode",
+                        perlExtendedRangeWarningPosition());
+            }
             return;
         }
 

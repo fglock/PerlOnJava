@@ -54,6 +54,10 @@ public class TestPerlStrictRangeWarnings {
             Syntax.RUBY.metaCharTable, NAMED);
 
     private static List<Warning> warnings(String pattern) {
+        return warnings(pattern, Option.NONE);
+    }
+
+    private static List<Warning> warnings(String pattern, int option) {
         List<Warning> warnings = new ArrayList<>();
         byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
         WarnCallback callback = new WarnCallback() {
@@ -72,7 +76,7 @@ public class TestPerlStrictRangeWarnings {
                 return true;
             }
         };
-        new Regex(bytes, 0, bytes.length, Option.NONE, UTF8Encoding.INSTANCE,
+        new Regex(bytes, 0, bytes.length, option, UTF8Encoding.INSTANCE,
                 SYNTAX, callback);
         return warnings;
     }
@@ -121,6 +125,25 @@ public class TestPerlStrictRangeWarnings {
         assertEquals(List.of(new Warning(
                 "\"\\t - \\x09 \" is more clearly written simply as \"\\t\"",
                 endpointPosition(tab))), warnings(tab));
+    }
+
+    @Test
+    public void warnsForRangesInStrictOrdinaryClasses() {
+        assertEquals(List.of(new Warning(
+                "Ranges of ASCII printables should be some subset of \"0-9\", "
+                        + "\"A-Z\", or \"a-z\"", 4)),
+                warnings("[A-a]", Option.PERL_RE_STRICT));
+        assertEquals(List.of(new Warning(
+                "\":-\\x3A\" is more clearly written simply as \":\"", 7)),
+                warnings("[:-\\x3A]", Option.PERL_RE_STRICT));
+    }
+
+    @Test
+    public void treatsPosixClassesAsFalseRangeEndpoints() {
+        assertEquals(List.of(new Warning("False [] range \"a-[:digit:]\"", 12)),
+                warnings("[a-[:digit:]]"));
+        assertEquals(List.of(new Warning("False [] range \"[:digit:]-\"", 11)),
+                warnings("[[:digit:]-b]"));
     }
 
     @Test
