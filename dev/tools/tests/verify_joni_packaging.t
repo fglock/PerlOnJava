@@ -33,12 +33,20 @@ subtest 'packaging entry failure families are fail-closed' => sub {
 subtest 'SBOM failure families are fail-closed' => sub {
     my ($jar, $sbom) = fixture('wrong-version', sbom => sub { $_[0]{components}[0]{version} = '9.9.9' });
     rejected($jar, $sbom, qr/wrong joni version/, 'wrong Joni version');
+    ($jar, $sbom) = fixture('wrong-jcodings-version', sbom => sub { $_[0]{components}[1]{version} = '9.9.9' });
+    rejected($jar, $sbom, qr/wrong jcodings version/, 'wrong JCodings version');
+    ($jar, $sbom) = fixture('missing-joni', sbom => sub { shift @{$_[0]{components}} });
+    rejected($jar, $sbom, qr/missing vendored joni/, 'missing Joni component');
     ($jar, $sbom) = fixture('duplicate-purl', sbom => sub { push @{$_[0]{components}}, {
         type => 'library', 'bom-ref' => 'other', purl => $joni_ref,
         group => 'example', name => 'other', version => '1' } });
     rejected($jar, $sbom, qr/duplicate purl/, 'duplicate purl');
     ($jar, $sbom) = fixture('missing-edge', sbom => sub { $_[0]{dependencies}[0]{dependsOn} = [] });
     rejected($jar, $sbom, qr/missing Joni -> JCodings dependency edge/, 'missing dependency edge');
+    ($jar, $sbom) = fixture('duplicate-relation', sbom => sub { push @{$_[0]{dependencies}}, { ref => $joni_ref, dependsOn => [$jcodings_ref] } });
+    rejected($jar, $sbom, qr/duplicate Joni dependency relations/, 'duplicate dependency relation');
+    ($jar, $sbom) = fixture('bad-relation', sbom => sub { $_[0]{dependencies}[0]{dependsOn} = {} });
+    rejected($jar, $sbom, qr/dependency relation is malformed/, 'non-array dependency relation');
     ($jar, $sbom) = fixture('malformed-json');
     write_file($sbom, '{ malformed');
     rejected($jar, $sbom, qr/Malformed SBOM JSON/, 'malformed SBOM');
