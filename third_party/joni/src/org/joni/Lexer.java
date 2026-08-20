@@ -2301,6 +2301,12 @@ class Lexer extends ScannerSupport {
                     }
                     // fall through
                 default:
+                    if (syntax.op2OptionPerl() && isAsciiLetter(c)
+                            && "ntrfabevcCMV".indexOf(c) < 0) {
+                        syntaxWarn("Unrecognized escape \\" + (char)c
+                                + " passed through", p - getBegin());
+                        break;
+                    }
                     unfetch();
                     fetchEscapedValue();
                     if (token.getC() != c) { /* set_raw: */
