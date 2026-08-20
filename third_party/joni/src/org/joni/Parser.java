@@ -1749,7 +1749,15 @@ class Parser extends Lexer {
             if (!left()) return left;
             int operator = extendedClassCode();
             if (operator != '+' && operator != '|' && operator != '-'
-                    && operator != '^') return left;
+                    && operator != '^') {
+                if (operator == ']' || operator == ')') return left;
+                if (operator == '(') {
+                    inc();
+                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OPEN_PAREN);
+                }
+                parsePerlExtendedClassIntersection();
+                newSyntaxException(PERL_EXTENDED_CLASS_OPERAND_WITHOUT_OPERATOR);
+            }
             inc();
             CClassNode right = parsePerlExtendedClassIntersection();
             switch (operator) {
@@ -1816,6 +1824,10 @@ class Parser extends Lexer {
             newSyntaxException(String.format(
                     PERL_EXTENDED_CLASS_BINARY_OPERATOR_WITHOUT_OPERAND,
                     (char) codePoint));
+        }
+        if (codePoint == ')') {
+            inc();
+            newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_CLOSE_PAREN);
         }
 
         if (extendedClassStarts("(?[")) {
