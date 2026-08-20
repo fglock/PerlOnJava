@@ -14,18 +14,17 @@ import org.perlonjava.runtime.perlmodule.Utf8;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /** Runtime interpolation result that keeps executable regex callbacks out of strings. */
 public final class RuntimeRegexTemplate {
-    private static final Pattern CALLOUT_ID = Pattern.compile(
-            "\\(\\?\\{=(CALL|DYNAMIC):(\\d+)\\}\\)");
+    private static final char SLOT_START = '\u001e';
+    private static final char SLOT_END = '\u001f';
     private final String pattern;
     private final List<RuntimeRegexCallback> callbacks;
     private final boolean byteBackedPattern;
+
+    private record CalloutSlot(int start, int end, char kind, int id) {}
 
     /**
      * Deferred array interpolation. Keeping the joined operands separate until
@@ -99,23 +98,25 @@ public final class RuntimeRegexTemplate {
                 int id = callbacks.size();
                 callbacks.add(callback);
                 if (callback.kind == RuntimeRegexCallback.Kind.CONDITION) {
-                    pattern.append("?{=CALL:").append(id).append("})");
+                    appendSlot(pattern, 'C', id);
                 } else if (callback.kind == RuntimeRegexCallback.Kind.DYNAMIC) {
-                    pattern.append("(?{=DYNAMIC:").append(id).append("})");
+                    appendSlot(pattern, 'D', id);
                 } else {
-                    pattern.append("(?{=CALL:").append(id).append("})");
+                    appendSlot(pattern, 'B', id);
                 }
             } else if (scalar.value instanceof RuntimeRegex regex
                     && !regex.executableCallbacks.isEmpty()) {
-                appendEmbeddedRegex(pattern, callbacks, regex.toExecutableString(), regex.executableCallbacks);
+                appendEmbeddedRegex(pattern, callbacks,
+                        regex.toExecutableString(), regex.executableCallbacks);
             } else if (scalar.value instanceof RuntimeRegexTemplate template) {
-                appendEmbeddedRegex(pattern, callbacks, template.pattern, template.callbacks);
+                appendEmbeddedRegex(pattern, callbacks,
+                        template.pattern, template.callbacks);
             } else {
-                pattern.append(scalar);
+                appendUntrusted(pattern, scalar.toString());
             }
         }
         RuntimeScalar result = callbacks.isEmpty()
-                ? patternScalar(pattern.toString(), byteBackedPattern)
+                ? patternScalar(collapseSlotEscapes(pattern.toString()), byteBackedPattern)
                 : new RuntimeScalar(new RuntimeRegexTemplate(
                         pattern.toString(), callbacks, byteBackedPattern));
         result.tainted = tainted;
@@ -282,20 +283,69 @@ public final class RuntimeRegexTemplate {
                                             String embeddedPattern,
                                             List<RuntimeRegexCallback> embeddedCallbacks) {
         int offset = callbacks.size();
-        Matcher matcher = CALLOUT_ID.matcher(embeddedPattern);
-        StringBuilder remapped = new StringBuilder();
-        while (matcher.find()) {
-            String kind = matcher.group(1);
-            int oldId = Integer.parseInt(matcher.group(2));
+        int cursor = 0;
+        for (CalloutSlot slot : calloutSlots(embeddedPattern)) {
+            pattern.append(embeddedPattern, cursor, slot.start());
+            int oldId = slot.id();
             if (oldId < 0 || oldId >= embeddedCallbacks.size()) {
                 throw new IllegalArgumentException("Invalid embedded regex callout ID " + oldId);
             }
-            matcher.appendReplacement(remapped,
-                    "(?{=" + kind + ":" + (offset + oldId) + "})");
+            appendSlot(pattern, slot.kind(), offset + oldId);
+            cursor = slot.end();
         }
-        matcher.appendTail(remapped);
-        pattern.append(remapped);
+        pattern.append(embeddedPattern, cursor, embeddedPattern.length());
         callbacks.addAll(embeddedCallbacks);
+    }
+
+    private static void appendSlot(StringBuilder pattern, char kind, int id) {
+        pattern.append(SLOT_START).append(kind).append(id).append(SLOT_END);
+    }
+
+    private static void appendUntrusted(StringBuilder pattern, String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            pattern.append(ch);
+            if (ch == SLOT_START) pattern.append(ch);
+        }
+    }
+
+    private static List<CalloutSlot> calloutSlots(String executablePattern) {
+        List<CalloutSlot> slots = new ArrayList<>();
+        for (int i = 0; i < executablePattern.length(); i++) {
+            if (executablePattern.charAt(i) != SLOT_START) continue;
+            if (i + 1 < executablePattern.length()
+                    && executablePattern.charAt(i + 1) == SLOT_START) {
+                i++;
+                continue;
+            }
+            int start = i;
+            if (++i >= executablePattern.length()) {
+                throw malformedCalloutSlot();
+            }
+            char kind = executablePattern.charAt(i);
+            if (kind != 'B' && kind != 'C' && kind != 'D') {
+                throw malformedCalloutSlot();
+            }
+            int digitStart = ++i;
+            while (i < executablePattern.length()
+                    && executablePattern.charAt(i) >= '0'
+                    && executablePattern.charAt(i) <= '9') i++;
+            if (i == digitStart || i >= executablePattern.length()
+                    || executablePattern.charAt(i) != SLOT_END) {
+                throw malformedCalloutSlot();
+            }
+            try {
+                slots.add(new CalloutSlot(start, i + 1, kind,
+                        Integer.parseInt(executablePattern.substring(digitStart, i))));
+            } catch (NumberFormatException ignored) {
+                throw malformedCalloutSlot();
+            }
+        }
+        return slots;
+    }
+
+    private static IllegalArgumentException malformedCalloutSlot() {
+        return new IllegalArgumentException("Malformed internal regex callout slot");
     }
 
     String pattern() {
@@ -317,21 +367,24 @@ public final class RuntimeRegexTemplate {
      * Perl expressions.
      */
     MaskedCallouts maskCallouts() {
-        Matcher matcher = CALLOUT_ID.matcher(pattern);
         StringBuilder masked = new StringBuilder();
         StringBuilder syntheticPrefix = new StringBuilder();
         List<String> placeholders = new ArrayList<>();
         List<String> markers = new ArrayList<>();
+        int cursor = 0;
         int id = 0;
-        while (matcher.find()) {
+        for (CalloutSlot slot : calloutSlots(pattern)) {
+            int maskStart = slot.kind() == 'C' && slot.start() > 0
+                    && pattern.charAt(slot.start() - 1) == '('
+                    ? slot.start() - 1 : slot.start();
+            masked.append(pattern, cursor, maskStart);
             String token = "POJ_INTERNAL_CALLOUT_PLACEHOLDER_" + id++ + "_END";
             while (pattern.contains(token)) token += "_";
             // In (?(?{...})yes|no), the marker itself is the condition. Use a
             // temporary named-capture condition so the runtime regex parser
             // preserves the branches without interpreting the trusted marker
             // as Perl source. The empty capture is removed by restore().
-            boolean callbackCondition = matcher.start() >= 2
-                    && pattern.startsWith("(?", matcher.start() - 2);
+            boolean callbackCondition = slot.kind() == 'C';
             String placeholder = token;
             if (callbackCondition) {
                 String name = "POJ_INTERNAL_CALLOUT_CONDITION_" + id;
@@ -340,10 +393,11 @@ public final class RuntimeRegexTemplate {
                 placeholder = "(<" + name + ">)";
             }
             placeholders.add(placeholder);
-            markers.add(matcher.group());
-            matcher.appendReplacement(masked, Matcher.quoteReplacement(placeholder));
+            markers.add(pattern.substring(maskStart, slot.end()));
+            masked.append(placeholder);
+            cursor = slot.end();
         }
-        matcher.appendTail(masked);
+        masked.append(pattern, cursor, pattern.length());
         return new MaskedCallouts(syntheticPrefix + masked.toString(),
                 syntheticPrefix.toString(), placeholders, markers);
     }
@@ -355,19 +409,61 @@ public final class RuntimeRegexTemplate {
 
     static String offsetCalloutIds(String executablePattern, int offset,
                                    int callbackCount) {
-        if (offset == 0 || callbackCount == 0) return executablePattern;
-        Matcher matcher = CALLOUT_ID.matcher(executablePattern);
         StringBuilder remapped = new StringBuilder();
-        while (matcher.find()) {
-            int oldId = Integer.parseInt(matcher.group(2));
+        int cursor = 0;
+        for (CalloutSlot slot : calloutSlots(executablePattern)) {
+            remapped.append(executablePattern, cursor, slot.start());
+            int oldId = slot.id();
             if (oldId < 0 || oldId >= callbackCount) {
                 throw new IllegalArgumentException("Invalid runtime regex callout ID " + oldId);
             }
-            matcher.appendReplacement(remapped, Matcher.quoteReplacement(
-                    "(?{=" + matcher.group(1) + ":" + (offset + oldId) + "})"));
+            appendSlot(remapped, slot.kind(), offset + oldId);
+            cursor = slot.end();
         }
-        matcher.appendTail(remapped);
+        remapped.append(executablePattern, cursor, executablePattern.length());
         return remapped.toString();
+    }
+
+    static String materializeTrustedCallouts(String executablePattern, int callbackCount) {
+        if (callbackCount == 0 || executablePattern.indexOf(SLOT_START) < 0) {
+            return executablePattern;
+        }
+        StringBuilder materialized = new StringBuilder(executablePattern.length() + 16);
+        int cursor = 0;
+        for (CalloutSlot slot : calloutSlots(executablePattern)) {
+            appendCollapsedSlotEscapes(materialized,
+                    executablePattern.substring(cursor, slot.start()));
+            if (slot.id() < 0 || slot.id() >= callbackCount) {
+                throw new IllegalArgumentException(
+                        "Invalid runtime regex callout ID " + slot.id());
+            }
+            if (slot.kind() == 'C') {
+                materialized.append("?{=CALL:").append(slot.id()).append("})");
+            } else {
+                materialized.append("(?{=")
+                        .append(slot.kind() == 'D' ? "DYNAMIC:" : "CALL:")
+                        .append(slot.id()).append("})");
+            }
+            cursor = slot.end();
+        }
+        appendCollapsedSlotEscapes(materialized,
+                executablePattern.substring(cursor));
+        return materialized.toString();
+    }
+
+    private static void appendCollapsedSlotEscapes(StringBuilder target, String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            target.append(ch);
+            if (ch == SLOT_START && i + 1 < text.length()
+                    && text.charAt(i + 1) == SLOT_START) i++;
+        }
+    }
+
+    private static String collapseSlotEscapes(String text) {
+        StringBuilder collapsed = new StringBuilder(text.length());
+        appendCollapsedSlotEscapes(collapsed, text);
+        return collapsed.toString();
     }
 
     static String displayPattern(String executablePattern,
@@ -375,22 +471,28 @@ public final class RuntimeRegexTemplate {
         if (executablePattern == null || executablePattern.isEmpty()) {
             return executablePattern;
         }
-        Matcher matcher = CALLOUT_ID.matcher(executablePattern);
         StringBuilder display = new StringBuilder();
-        while (matcher.find()) {
-            int callbackId = Integer.parseInt(matcher.group(2));
+        int cursor = 0;
+        for (CalloutSlot slot : calloutSlots(executablePattern)) {
+            int textEnd = slot.kind() == 'C' && slot.start() > cursor
+                    && executablePattern.charAt(slot.start() - 1) == '('
+                    ? slot.start() - 1 : slot.start();
+            appendCollapsedSlotEscapes(display,
+                    executablePattern.substring(cursor, textEnd));
+            int callbackId = slot.id();
             String replacement = callbackId >= 0 && callbackId < callbacks.size()
                     && callbacks.get(callbackId).source != null
                     ? callbacks.get(callbackId).source
-                    : "DYNAMIC".equals(matcher.group(1)) ? "(??{})" : "(?{})";
-            matcher.appendReplacement(display, Matcher.quoteReplacement(replacement));
+                    : slot.kind() == 'D' ? "(??{})" : "(?{})";
+            display.append(replacement);
+            cursor = slot.end();
         }
-        matcher.appendTail(display);
+        appendCollapsedSlotEscapes(display, executablePattern.substring(cursor));
         return display.toString();
     }
 
     @Override
     public String toString() {
-        return pattern;
+        return displayPattern(pattern, callbacks);
     }
 }

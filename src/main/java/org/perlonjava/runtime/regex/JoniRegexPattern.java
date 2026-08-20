@@ -237,8 +237,10 @@ final class JoniRegexPattern {
         hasControlVerbState = hasControlVerbState(perlPattern);
         UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
         hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
-        sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
-        compatibilityPatternDescription = legacyCompatibilityDescription(sourcePattern, flags);
+        sourcePattern = RuntimeRegexTemplate.materializeTrustedCallouts(
+                userProperties.pattern(), trustedCalloutCount);
+        compatibilityPatternDescription = legacyCompatibilityDescription(
+                sourcePattern, flags, trustedCalloutCount);
         compileWarnings = new ArrayList<>();
         java.nio.charset.Charset sourceCharset = byteMode && byteBackedPattern
                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
@@ -814,7 +816,7 @@ final class JoniRegexPattern {
     static String translatePattern(String pattern) {
         RegexFlags flags = RegexFlags.fromModifiers("", pattern);
         return legacyCompatibilityDescription(
-                translatePattern(pattern, flags, 0, true), flags);
+                translateCompatibilityPattern(pattern, flags), flags, 0);
     }
 
     /**
@@ -824,7 +826,8 @@ final class JoniRegexPattern {
      * Joni or runtime regex reconstruction.
      */
     private static String legacyCompatibilityDescription(String pattern,
-                                                         RegexFlags flags) {
+                                                         RegexFlags flags,
+                                                         int trustedCalloutCount) {
         StringBuilder description = new StringBuilder(pattern.length() + 8);
         boolean escaped = false;
         boolean inClass = false;
@@ -835,6 +838,24 @@ final class JoniRegexPattern {
                 description.append(ch);
                 escaped = false;
                 continue;
+            }
+            if (ch == '\\' && i + 3 < pattern.length()
+                    && (pattern.charAt(i + 1) == 'p' || pattern.charAt(i + 1) == 'P')
+                    && pattern.charAt(i + 2) == '{') {
+                int end = pattern.indexOf('}', i + 3);
+                if (end > i + 3) {
+                    String property = pattern.substring(i + 3, end).trim();
+                    if (isLegacyAgeWildcard(property)) {
+                        String propertyClass = UnicodeResolver.translateUnicodeProperty(
+                                property, pattern.charAt(i + 1) == 'P',
+                                flags.isCaseInsensitive());
+                        description.append("(?-i:")
+                                .append(normalizeGeneratedPropertyClassForJoni(propertyClass))
+                                .append(')');
+                        i = end;
+                        continue;
+                    }
+                }
             }
             if (ch == '\\') {
                 description.append(ch);
@@ -865,9 +886,23 @@ final class JoniRegexPattern {
                 i += 2;
                 continue;
             }
+            if (!inClass && pattern.startsWith("(?{", i)
+                    && !isTrustedCallout(pattern, i, trustedCalloutCount)) {
+                int end = findCodeBlockEnd(pattern, i);
+                if (end >= 0) {
+                    description.append("(?:)");
+                    i = end;
+                    continue;
+                }
+            }
             description.append(ch);
         }
         return description.toString();
+    }
+
+    private static boolean isLegacyAgeWildcard(String property) {
+        return property.matches(
+                "(?is)^(?:age|in|present[-_ ]?in)\\s*(?:=|:(?!:))\\s*:\\\\A.*\\\\z:$");
     }
 
     private static boolean hasInlineExtendedOption(String pattern) {
@@ -904,14 +939,7 @@ final class JoniRegexPattern {
         return false;
     }
 
-    private static String translatePattern(String pattern, RegexFlags flags,
-                                           int trustedCalloutCount) {
-        return translatePattern(pattern, flags, trustedCalloutCount, false);
-    }
-
-    private static String translatePattern(String pattern, RegexFlags flags,
-                                           int trustedCalloutCount,
-                                           boolean resolveNamedCharacters) {
+    private static String translateCompatibilityPattern(String pattern, RegexFlags flags) {
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
@@ -930,7 +958,7 @@ final class JoniRegexPattern {
                     atClassStart = false;
                     classAllowsLeadingClose = false;
                 }
-                if (resolveNamedCharacters && pattern.startsWith("\\N{", i)) {
+                if (pattern.startsWith("\\N{", i)) {
                     int end = pattern.indexOf('}', i + 3);
                     if (end > i + 3) {
                         int codePoint = UnicodeResolver.getCodePointFromName(
@@ -994,20 +1022,6 @@ final class JoniRegexPattern {
             if (inClass) {
                 atClassStart = false;
                 classAllowsLeadingClose = false;
-            }
-            if (!inClass && pattern.startsWith("(?{", i)
-                    && !isTrustedCallout(pattern, i, trustedCalloutCount)) {
-                // A callback introduced as text by runtime interpolation has
-                // no parser-created lexical closure to invoke. Preserve the
-                // historical compatibility behavior for that unsupported
-                // case: treat it as a zero-width no-op. Structured callbacks
-                // remain match-time Joni callouts and are handled below.
-                int end = findCodeBlockEnd(pattern, i);
-                if (end >= 0) {
-                    out.append("(?:)");
-                    i = end;
-                    continue;
-                }
             }
             if (!inClass && pattern.startsWith("(?[", i)) {
                 int bracketDepth = 0;
