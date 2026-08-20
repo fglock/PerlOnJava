@@ -27,6 +27,8 @@ class StackEntry {
     private String previousControlMarkName;
     private String controlMarkLabel;
     private int[] callFrameCaptureSnapshot;
+    private boolean callFrameRestoreCallerCaptures;
+    private boolean callFrameRecursiveVisibility;
 
     // first union member
     /* byte code position */
@@ -189,6 +191,18 @@ class StackEntry {
     }
     int[] getCallFrameCaptureSnapshot() {
         return callFrameCaptureSnapshot;
+    }
+    void setCallFrameRestoreCallerCaptures(boolean restore) {
+        callFrameRestoreCallerCaptures = restore;
+    }
+    boolean getCallFrameRestoreCallerCaptures() {
+        return callFrameRestoreCallerCaptures;
+    }
+    void setCallFrameRecursiveVisibility(boolean recursive) {
+        callFrameRecursiveVisibility = recursive;
+    }
+    boolean getCallFrameRecursiveVisibility() {
+        return callFrameRecursiveVisibility;
     }
 
     /* absent position */

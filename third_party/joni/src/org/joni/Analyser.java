@@ -1329,9 +1329,10 @@ final class Analyser extends Parser {
             }
             newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
         }
-        // Perl subroutine calls do not replace captures already visible in the
-        // caller. Reused branch-reset numbers and DEFINE-only groups need the
-        // existing call-frame snapshot path.
+        // PerlOnJava subroutine calls do not replace captures already visible
+        // in the caller.  Generic Joni Perl-like syntaxes retain Joni's
+        // established capture-publication behavior.
+        cn.preserveCallerCaptures = "PERLONJAVA".equals(syntax.name);
         if ((cn.lexicalTarget == null && env.isMultiplexMemNode(cn.groupNum))
                 || (isInsideDefine(en) && !isInsideDefine(cn))) {
             cn.setRecursion();

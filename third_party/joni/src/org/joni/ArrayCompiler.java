@@ -444,13 +444,12 @@ final class ArrayCompiler extends Compiler {
         addOpcode(OPCode.CALL);
         node.unsetAddrList.add(codeLength, node.target);
         addAbsAddr(0); /*dummy addr.*/
-        // Preserve analyser recursion knowledge for the matcher without adding
-        // an opcode operand. -1 remains reserved for compiler-internal calls.
-        // Whole-pattern recursion has group number zero, so it needs a distinct
-        // recursive sentinel rather than the normal group-zero encoding.
-        addMemNum(node.isRecursion()
-                ? (node.groupNum == 0 ? Integer.MIN_VALUE : -(node.groupNum + 1))
-                : node.groupNum);
+        // Keep recursion and Perl capture-publication policy separate from the
+        // group number. Ordinary Perl subroutine calls preserve the caller's
+        // captures but must not be treated as recursive by the analyser.
+        int callFlags = (node.isRecursion() ? 0x40000000 : 0)
+                | (node.preserveCallerCaptures ? 0x80000000 : 0);
+        addMemNum((node.groupNum & 0x3fffffff) | callFlags);
     }
 
     @Override
