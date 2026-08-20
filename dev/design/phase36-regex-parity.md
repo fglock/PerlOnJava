@@ -431,7 +431,9 @@ gates may reopen it if a semantic regression appears.
 - [x] Variable-width simple-fold backreference comparison
 - [ ] Forward/reverse literal and character-class fold expansion
 - [x] Prevent the legacy backend selector from re-enabling Java matching
-- [ ] Remove Java matcher storage and empty-pattern/substitution retry branches
+- [x] Remove Java matcher storage and empty-pattern/substitution retry branches
+- [x] Remove Java matcher-semantic preprocessing and the legacy extended-class
+      adapter
 - [x] Generated Perl named-sequence lookup and native sequence resolution
 - [x] Remove temporary named-sequence encoding from native Joni pattern source
 - [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
