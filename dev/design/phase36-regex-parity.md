@@ -348,14 +348,14 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the four active, non-overlapping slices: isolate warmed callback
-   clones and then close the remaining Unicode/property source-policy rows;
-   reduce the current 462-row same-source
+1. Finish the four active, non-overlapping slices: integrate the green warmed
+   callback-clone batch and then close the remaining Unicode/property
+   source-policy rows; reduce the current 456-row same-source
    `reg_mesg.t` frontier through the next three-to-five native diagnostic
    families; close the 32 optimizer-debug description rows left after the
    completed `speed*`/`pat_psycho*` semantic and performance gate; and finish
-   inverted KEEP match-variable publication plus the remaining runtime
-   diagnostic-policy families. Each semantic slice must include
+   the remaining runtime diagnostic-policy families. Each semantic slice must
+   include
    system-Perl oracles, JVM/interpreter parity, complete affected-corpus deltas,
    and zero introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
@@ -536,8 +536,9 @@ gates may reopen it if a semantic regression appears.
 - [x] Dynamic code-array source strict policy, eval lexical-cell lifetime, and
       child-thread reuse
 - [x] Native compile diagnostics and exact warning-category inheritance
+- [x] Native nested-quantifier source positions, including UTF-8 patterns
 - [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`;
-      current same-source JVM/interpreter frontier is 462 failing rows
+      current same-source JVM/interpreter frontier is 456 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
@@ -552,6 +553,9 @@ gates may reopen it if a semantic regression appears.
 - [x] Complete bounded `speed*` and `pat_psycho*` semantic/performance closure
       on JVM, interpreter, direct Joni, and thread wrappers; 32 debug-output
       assertions remain an active diagnostics lane
+- [x] Publish inverted `\K` match text as undef while preserving Perl match
+      offsets and backtracking state
+- [x] Remove the dead callback no-op runner switch and marker constants
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       mechanically derived 286-file gates on one integrated artifact
 
