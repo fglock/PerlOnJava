@@ -536,6 +536,11 @@ public final class Regex {
         return options;
     }
 
+    /** Returns the optimizer anchor flags selected for this compiled regex. */
+    public int getAnchor() {
+        return anchor;
+    }
+
     public void setUserOptions(int options) {
         this.userOptions = options;
     }

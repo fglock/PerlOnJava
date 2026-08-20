@@ -27,6 +27,8 @@ import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
 import static org.joni.constants.SyntaxProperties.OP3_PERL_LITERAL_OPEN_IN_CC;
 import static org.joni.constants.SyntaxProperties.OP_POSIX_BRACKET;
 
+import org.joni.constants.internal.AnchorType;
+
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Iterator;
@@ -370,6 +372,17 @@ final class JoniRegexPattern {
 
     Regex engineRegex() {
         return regex;
+    }
+
+    String optimizerDebugDescription() {
+        int anchor = regex.getAnchor();
+        if ((anchor & AnchorType.ANYCHAR_STAR_ML) != 0) {
+            return "anchored(SBOL) implicit";
+        }
+        if ((anchor & AnchorType.ANYCHAR_STAR) != 0) {
+            return "anchored(MBOL) implicit";
+        }
+        return "";
     }
 
     boolean hasOnlyAuthoritativeWideCharacterClasses() {
