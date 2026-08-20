@@ -11,6 +11,7 @@ my $fail_on_invalid = 0;
 my $expected_files;
 my $output_file;
 my $path_prefix;
+my $file_list;
 my $normalize_pr958_artifacts = 0;
 my $help = 0;
 GetOptions(
@@ -19,6 +20,7 @@ GetOptions(
     'expected-files=i' => \$expected_files,
     'output=s' => \$output_file,
     'path-prefix=s' => \$path_prefix,
+    'file-list=s' => \$file_list,
     'normalize-pr958-artifacts!' => \$normalize_pr958_artifacts,
     'help' => \$help,
 ) or usage(2);
@@ -26,6 +28,8 @@ GetOptions(
 usage(0) if $help;
 my ($baseline_file, $candidate_file) = @ARGV;
 usage(2) unless defined $baseline_file && defined $candidate_file && @ARGV == 2;
+die "--path-prefix and --file-list are mutually exclusive\n"
+    if defined $path_prefix && defined $file_list;
 
 my $baseline = load_results($baseline_file, 'baseline');
 my $candidate = load_results($candidate_file, 'candidate');
@@ -34,6 +38,11 @@ if (defined $path_prefix) {
     $path_prefix .= '/' unless $path_prefix =~ m{/$} || $path_prefix =~ /\.t\z/;
     $baseline = filter_results($baseline, $path_prefix);
     $candidate = filter_results($candidate, $path_prefix);
+}
+if (defined $file_list) {
+    my $selected = load_file_list($file_list);
+    $baseline = filter_results_by_file($baseline, $selected);
+    $candidate = filter_results_by_file($candidate, $selected);
 }
 my $comparison = compare_results($baseline, $candidate);
 $comparison->{expected_files} = $expected_files if defined $expected_files;
@@ -61,6 +70,7 @@ Options:
   --expected-files NUM  Require exactly NUM candidate files
   --output FILE         Save the normalized comparison as JSON
   --path-prefix PATH    Compare one test file or files below a canonical path
+  --file-list FILE      Compare only exact test paths listed one per line
   --normalize-pr958-artifacts
                         Normalize the two exact reconstructed PR-958 baseline
                         transcript signatures and retain raw counts in JSON
@@ -163,6 +173,28 @@ sub filter_results {
     my %filtered = map { $_ => $results->{$_} }
         grep { index($_, $prefix) == 0 } keys %$results;
     die "No result files match --path-prefix $prefix\n" unless keys %filtered;
+    return \%filtered;
+}
+
+sub load_file_list {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot open file list $path: $!\n";
+    my %selected;
+    while (my $line = <$fh>) {
+        $line =~ s/\r?\n\z//;
+        $line =~ s/^\s+|\s+$//g;
+        next if $line eq '' || $line =~ /^#/;
+        $selected{canonical_file($line)} = 1;
+    }
+    close $fh or die "Cannot close file list $path: $!\n";
+    die "File list $path contains no test paths\n" unless keys %selected;
+    return \%selected;
+}
+
+sub filter_results_by_file {
+    my ($results, $selected) = @_;
+    my %filtered = map { $_ => $results->{$_} }
+        grep { $selected->{$_} } keys %$results;
     return \%filtered;
 }
 

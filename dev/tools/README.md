@@ -38,6 +38,15 @@ perl dev/tools/generate_regex_test_ledger.pl \
   --output /tmp/phase36-regex-ledger.json
 ```
 
+Use the same list to compare only those exact identities against a broader
+historical runner log:
+
+```bash
+perl dev/tools/compare_test_results.pl \
+  --file-list /tmp/phase36-regex-files.txt \
+  baseline.log candidate.json
+```
+
 The generated counts describe the current latest upstream checkout. Refresh
 comparisons may record hashes for that run, but they must not encode a
 historical Perl revision as the expected corpus.
