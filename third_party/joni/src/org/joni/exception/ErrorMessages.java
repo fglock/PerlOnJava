@@ -107,6 +107,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Unknown '(*...)' construct '%n'";
     String PERL_UNTERMINATED_CONTROL_ARGUMENT =
             "Unterminated '(*...' argument";
+    String PERL_UNTERMINATED_CONTROL_CONSTRUCT =
+            "Unterminated '(*...' construct";
     String PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED =
             "Sequence (?^-...) not recognized";
     String PERL_CARET_D_OPTION_NOT_RECOGNIZED =
