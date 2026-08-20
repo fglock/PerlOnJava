@@ -36,4 +36,51 @@ public final class RegexLiteralAnalyzer {
         }
         return null;
     }
+
+    /**
+     * Return a syntax-equivalent literal source, or {@code null} when runtime
+     * interpolation is required. Parser-created callbacks are replaced by
+     * same-width neutral constructs so later diagnostic offsets remain in the
+     * original literal coordinate space.
+     */
+    public static String constantSyntaxString(Node node) {
+        return constantTemplateString(node, true);
+    }
+
+    /** Return the complete literal source, including parser-created callbacks. */
+    public static String constantSourceString(Node node) {
+        return constantTemplateString(node, false);
+    }
+
+    private static String constantTemplateString(Node node, boolean maskCallbacks) {
+        String constant = constantString(node);
+        if (constant != null) return constant;
+        if (node instanceof BinaryOperatorNode binary && ".".equals(binary.operator)) {
+            String left = constantTemplateString(binary.left, maskCallbacks);
+            String right = constantTemplateString(binary.right, maskCallbacks);
+            return left == null || right == null ? null : left + right;
+        }
+        if (node instanceof OperatorNode operator && "regexTemplate".equals(operator.operator)
+                && operator.operand instanceof ListNode parts) {
+            StringBuilder source = new StringBuilder();
+            for (Node part : parts.elements) {
+                String value = constantTemplateString(part, maskCallbacks);
+                if (value == null) return null;
+                source.append(value);
+            }
+            return source.toString();
+        }
+        if (node instanceof OperatorNode operator && "regexCallback".equals(operator.operator)) {
+            Object callbackSource = operator.getAnnotation("regexCallbackSource");
+            if (!(callbackSource instanceof String source)) return null;
+            if (!maskCallbacks) return source;
+            Object kind = operator.getAnnotation("regexCallbackKind");
+            String skeleton = "CONDITION".equals(kind) ? "?=)" : "(?:)";
+            if (source.length() < skeleton.length()) return null;
+            return skeleton.substring(0, skeleton.length() - 1)
+                    + " ".repeat(source.length() - skeleton.length())
+                    + skeleton.charAt(skeleton.length() - 1);
+        }
+        return null;
+    }
 }

@@ -447,6 +447,56 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
     }
 
+    /** Validate masked callback syntax while retaining its same-width source in diagnostics. */
+    public static void validateLiteralSyntax(
+            String patternString, String modifiers, String diagnosticPatternString) {
+        validateLiteralSyntax(patternString, modifiers,
+                org.perlonjava.runtime.HintHashRegistry
+                        .getCompileTimeHint("charnames"),
+                null, diagnosticPatternString);
+    }
+
+    /** Validate masked callback syntax with the literal's lexical charname context. */
+    public static void validateLiteralSyntax(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            String diagnosticPatternString) {
+        try {
+            validateLiteralSyntax(patternString, modifiers,
+                    namedCharacterTranslator, namedCharacterSourceMode);
+        } catch (PerlCompilerException exception) {
+            throw new PerlCompilerException(remapLiteralDiagnosticSource(
+                    exception.getMessage(), patternString, diagnosticPatternString));
+        }
+    }
+
+    private static String remapLiteralDiagnosticSource(
+            String message, String compiledPattern, String diagnosticPattern) {
+        if (message == null || compiledPattern == null || diagnosticPattern == null
+                || compiledPattern.length() != diagnosticPattern.length()
+                || compiledPattern.equals(diagnosticPattern)) {
+            return message;
+        }
+        String prefix = " in regex; marked by <-- HERE in m/";
+        String marker = " <-- HERE ";
+        int sourceStart = message.indexOf(prefix);
+        if (sourceStart < 0) return message;
+        sourceStart += prefix.length();
+        int markerStart = message.indexOf(marker, sourceStart);
+        if (markerStart < sourceStart) return message;
+        int offset = markerStart - sourceStart;
+        if (offset > diagnosticPattern.length()) return message;
+        int sourceEnd = markerStart + marker.length()
+                + compiledPattern.length() - offset;
+        if (sourceEnd > message.length()) return message;
+        return message.substring(0, sourceStart)
+                + diagnosticPattern.substring(0, offset)
+                + marker
+                + diagnosticPattern.substring(offset)
+                + message.substring(sourceEnd);
+    }
+
     private static synchronized RuntimeRegex compileSynchronized(
             String patternString, String modifiers, int lexicalDebugMode,
             int trustedCalloutCount, boolean literalSyntaxValidation,
@@ -717,7 +767,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
                                 displayDiagnosticPattern, bytePosition);
-                        if ("undefined group option".equals(message)
+                        int unmatched = unmatchedOpeningParenthesis(originalPatternString);
+                        if ("Reference to nonexistent named group".equals(message)
+                                && unmatched >= 0) {
+                            message = "Unmatched (";
+                            characterPosition = unmatched + 1;
+                        } else if ("undefined group option".equals(message)
                                 && originalPatternString != null
                                 && characterPosition >= 3
                                 && originalPatternString.regionMatches(
@@ -726,11 +781,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         } else if ("too big number for repeat range".equals(message)) {
                             message = "Quantifier in {,} bigger than 2147483646";
                         } else if ("end pattern with unmatched parenthesis".equals(message)) {
-                            int unmatched = ordinaryUnmatchedOpeningParenthesis(
+                            int ordinaryUnmatched = ordinaryUnmatchedOpeningParenthesis(
                                     originalPatternString);
-                            if (unmatched >= 0) {
+                            if (ordinaryUnmatched >= 0) {
                                 message = "Unmatched (";
-                                characterPosition = unmatched + 1;
+                                characterPosition = ordinaryUnmatched + 1;
                             }
                         }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
@@ -932,6 +987,40 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
         return -1;
+    }
+
+    /** Locate the first unmatched group opener after otherwise balanced groups are removed. */
+    private static int unmatchedOpeningParenthesis(String pattern) {
+        if (pattern == null) return -1;
+        Deque<Integer> openings = new ArrayDeque<>();
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass) continue;
+            if (ch == '(') {
+                openings.push(i);
+            } else if (ch == ')' && !openings.isEmpty()) {
+                openings.pop();
+            }
+        }
+        return openings.isEmpty() ? -1 : openings.getLast();
     }
 
     private static LeftBraceIssue unescapedLeftBraceIssue(String pattern) {
