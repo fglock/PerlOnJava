@@ -178,7 +178,7 @@ Unicode/property/charname, and 20 analyser/debug rows. P5 owns the
 control-verb source correction, selector retirement, P4 boundary/quantifier
 diagnostics, and P5 direct custom-charname correction are jointly green at
 `61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
-integrated through `f31bb5362` and queued for the following batched gate.
+integrated through `3135b6742` and queued for the following batched gate.
 
 The interpreter comparison's 53 lower rows are classified: 48 are general
 interpreter limitations, four are shared native rows, and its sole independent
