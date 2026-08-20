@@ -44,4 +44,9 @@ public class TestPerlAdjacentMultiFold {
         assertEquals(0, search("\u00dfs", "s\u00df"));
         assertEquals(-1, search("s\u00df", "\u00dfx"));
     }
+
+    @Test
+    public void foldsVariableWidthPerlBackreferences() {
+        assertEquals(0, search("^(?<fold>\u212a)\\k<fold>$", "\u212aK"));
+    }
 }
