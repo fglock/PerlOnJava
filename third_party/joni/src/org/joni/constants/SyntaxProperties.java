@@ -89,6 +89,7 @@ public interface SyntaxProperties {
 
     int OP3_OPTION_JAVA                = (1<<0); /* (?idmsux), (?-idmsux) */
     int OP3_OPTION_ECMASCRIPT          = (1<<1); /* EcmaScript quirks */
+    int OP3_PERL_LITERAL_OPEN_IN_CC    = (1<<2); /* ordinary [ is literal inside Perl [...] */
 
     /* syntax (behavior); */
     int CONTEXT_INDEP_ANCHORS           = (1<<31); /* not implemented */

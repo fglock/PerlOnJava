@@ -370,6 +370,10 @@ public final class Syntax implements SyntaxProperties {
         return isOp3(OP3_OPTION_ECMASCRIPT);
     }
 
+    public boolean op3PerlLiteralOpenInCC() {
+        return isOp3(OP3_PERL_LITERAL_OPEN_IN_CC);
+    }
+
 
     /**
      * BEHAVIOR
