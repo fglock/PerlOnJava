@@ -157,16 +157,24 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Next head `41a585bdc` integrates the independent
-Unicode resolver tranche and restores `op/stat.t` baseline parity; combined
-licensed Joni and focused JVM/interpreter gates pass. It needs the next batched
-full gate before the PR is updated.
+green on JVM and interpreter. Current head `67f2d7ce1` additionally integrates
+the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
+transports immutable lexical custom-charname expansions through ithreads,
+preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
+word-class complements.
+Its worker full build and combined focused JVM/interpreter gates pass; the exact
+combined head still needs the next batched full gate before the PR is updated.
 
 The current complete 286-file JVM run executes 420,748 passing assertions and
 improves 72 baseline rows, but is not yet a valid release artifact: five files
 time out, 19 are incomplete, and the strict comparator reports four unresolved
 regex regressions (`pat_advanced_thr.t`, both `pat_special_cc` modes, and
-`regex_sets.t`). The integrated subject-sensitive byte/`/d`
+`regex_sets.t`). Focused exact-head evidence closes both `pat_special_cc`
+modes at 9/9 on both backends; immutable comparison refresh remains pending.
+`regex_sets.t` remains backend-identical at 79/85: five native parser/control
+rows are assigned to P4 and the `Is0` user-property diagnostic is assigned to
+P6.
+The integrated subject-sensitive byte/`/d`
 and fullwidth-xdigit
 fix restores complete `re/charset.t` execution, and the logical-wide-scalar
 `chop` fix restores `op/chop.t` to 148/148. The logical-interpreter executable
@@ -179,20 +187,21 @@ properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
 immutable comparison are pending. The production backend selector has been
 removed and its packaging/property invariance gates are awaiting the combined
-build. The latest focused `reg_mesg.t` artifact is 3198/3292 on both backends.
+build. The latest exact-head `reg_mesg.t` artifact is backend-identical raw TAP:
+3331 `ok` and 33 `not ok` of 3364 on both backends.
 The native parser/range/structural/runtime-warning diagnostic lease is
 exhausted; the residual is redirected Unicode/property/charname and
-analyser/debug rows. P5 owns the
-`re/pat_advanced.t` source/debug and charname rows. The byte-property fold and
+analyser/debug rows. P5's immutable lexical-charname transport is integrated;
+the remaining `re/pat_advanced_thr.t` rows require live custom-charname callback
+cloning for dynamic eval. The byte-property fold and
 control-verb source correction, selector retirement, P4 boundary/quantifier
 diagnostics, and P5 direct custom-charname correction are jointly green at
 `61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
 integrated through `8ab138bfd`; licensed Joni and the final warning fixture are
 green on both execution backends. On the exact combined jar and current private
-corpus, `reg_mesg.t` has backend-identical raw TAP: 3287 `ok` and 65 `not ok`
-of 3352; the runner counts ten expected TODO outcomes as effective passes
-(3297/3352). The resolver tranche closes 28 of its 52 owned source rows; 24
-rows await the serialized shared hook.
+corpus, the resolver and serialized shared helper close their complete owned
+property-diagnostic tranche while preserving spelling, positions, and wildcard
+warning categories.
 
 The interpreter comparison's 53 lower rows are classified: 48 are general
 interpreter limitations, four are shared native rows, and its sole independent
@@ -202,24 +211,25 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: diagnose the zero-TAP `anyof.t` timeout and continue adjacent native
-  execution-completion roots; all focused native diagnostic rows are closed.
-- P5: fix the a11 eager-validation regression that classifies the core
-  `_charnames` bootstrap as a custom translator, then deliver immutable
-  custom-charname AST/CV thread transport and close the remaining `\\N{}` /
-  custom-charname analyser/debug residual with absolute-launcher corpus gates.
-- P6: exhaust the remaining Unicode property diagnostic residual and zero-TAP
-  `uniprops01..04.t` performance failures and the `/u` `\\w` complement root in
-  both `pat_special_cc` modes; shared runtime files remain centrally serialized.
+- P4: close the four remaining native `regex_sets.t` diagnostics, then own the
+  incomplete `alpha_assertions.t` execution root and classify adjacent
+  execution-completion files. `anyof.t` is cumulative child-JVM startup and
+  debug-display adaptation, not a matcher deadlock.
+- P5: clone live lexical custom-charname callback state required by dynamic eval
+  into child execution without sharing mutable regex/cache objects, then close
+  the remaining `\\N{}` analyser/debug residual with absolute-launcher gates.
+- P6: diagnose and close the zero-TAP `uniprops01..04.t` performance failures;
+  its Unicode-property diagnostics and `/u` `\\w` complement roots are
+  integrated, and shared runtime files remain centrally serialized.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
   immutable acceptance, PR/CI, plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Integrate P5's green shared-runtime barrier, then replay only declared P4/P6
-   helper contracts and integrate cohesive deliveries, preserving all vendored
-   notices. Resolve shared Joni parser changes centrally and retain every
-   independent semantic fix.
+1. Validate and commit the serialized P6 property helper on the integrated P5
+   barrier, then integrate cohesive P4/P6 deliveries while preserving all
+   vendored notices. Resolve shared Joni parser changes centrally and retain
+   every independent semantic fix.
 2. Run one combined warning-free `make`, then refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
