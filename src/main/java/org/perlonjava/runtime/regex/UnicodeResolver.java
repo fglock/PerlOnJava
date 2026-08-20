@@ -4,8 +4,10 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
 import com.ibm.icu.util.ValueIterator;
+import org.jcodings.Encoding;
 import org.joni.CharacterPropertyResolver;
 import org.joni.PerlPropertyValueMatcher;
+import org.joni.WideScalarCodec;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -95,6 +97,96 @@ public class UnicodeResolver {
                     .add(0xFF41, 0xFF46).freeze();
     private static final UnicodeSet PERL_COMPOSITION_EXCLUSION_SET =
             buildPerlCompositionExclusionSet();
+
+    /**
+     * Perl's native (*script_run:...) predicate, evaluated against the pinned
+     * Script and Script_Extensions data used by ordinary property matching.
+     */
+    static boolean isPerlScriptRun(byte[] bytes, int start, int end, Encoding encoding,
+                                   WideScalarCodec wideScalarCodec) {
+        String[] scripts = PerlUnicodeScriptData.canonicalValues();
+        boolean[] possibleScripts = null;
+        boolean japanesePossible = true;
+        int unknownCount = 0;
+        int characterCount = 0;
+        int digitSet = -1;
+
+        for (int p = start; p < end;) {
+            int codePoint;
+            int next;
+            WideScalarCodec.Decoded wide = wideScalarCodec == null
+                    ? null : wideScalarCodec.decode(bytes, p, end, encoding);
+            if (wide != null) {
+                if (wide.value() > Character.MAX_CODE_POINT || wide.end() <= p || wide.end() > end) {
+                    return false;
+                }
+                codePoint = (int) wide.value();
+                next = wide.end();
+            } else {
+                int length = encoding.length(bytes, p, end);
+                if (length <= 0 || p + length > end) return false;
+                codePoint = encoding.mbcToCode(bytes, p, end);
+                next = p + length;
+            }
+            p = next;
+            characterCount++;
+
+            if (PerlUnicodeScriptData.scriptSet("Unknown").contains(codePoint)) {
+                unknownCount++;
+                if (unknownCount > 1 || characterCount > 1) return false;
+                continue;
+            }
+            if (unknownCount != 0) return false;
+
+            if (Character.getType(codePoint) == Character.DECIMAL_DIGIT_NUMBER) {
+                int digit = Character.digit(codePoint, 10);
+                int thisDigitSet = digit < 0 ? codePoint : codePoint - digit;
+                if (digitSet >= 0 && digitSet != thisDigitSet) return false;
+                digitSet = thisDigitSet;
+            }
+
+            boolean[] forCharacter = new boolean[scripts.length];
+            boolean hasScript = false;
+            for (int i = 0; i < scripts.length; i++) {
+                String script = scripts[i];
+                if (script.equals("Common") || script.equals("Inherited")
+                        || script.equals("Unknown")) continue;
+                if (PerlUnicodeScriptData.scriptExtensionsSet(script).contains(codePoint)) {
+                    forCharacter[i] = true;
+                    hasScript = true;
+                }
+            }
+            // Plain Common/Inherited characters do not constrain the run;
+            // Common characters with Script_Extensions (for example certain
+            // punctuation) do constrain it through the generated sets above.
+            if (!hasScript && (PerlUnicodeScriptData.scriptSet("Common").contains(codePoint)
+                    || PerlUnicodeScriptData.scriptSet("Inherited").contains(codePoint))) {
+                continue;
+            }
+            if (!hasScript) return false;
+            boolean characterJapanese = forCharacter[scriptIndex(scripts, "Han")]
+                    || forCharacter[scriptIndex(scripts, "Hiragana")]
+                    || forCharacter[scriptIndex(scripts, "Katakana")];
+            japanesePossible &= characterJapanese;
+            if (possibleScripts == null) {
+                possibleScripts = forCharacter;
+            } else {
+                for (int i = 0; i < possibleScripts.length; i++) {
+                    possibleScripts[i] &= forCharacter[i];
+                }
+            }
+        }
+        if (possibleScripts == null) return true;
+        for (boolean possible : possibleScripts) if (possible) return true;
+        // UTS #39's Highly Restrictive profile treats the Japanese script
+        // combination (Han, Hiragana, Katakana) as one permitted run.
+        return japanesePossible;
+    }
+
+    private static int scriptIndex(String[] scripts, String name) {
+        for (int i = 0; i < scripts.length; i++) if (scripts[i].equals(name)) return i;
+        return -1;
+    }
 
     /**
      * Cache for user-defined property subroutine results.

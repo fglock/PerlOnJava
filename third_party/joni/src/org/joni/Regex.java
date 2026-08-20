@@ -98,6 +98,7 @@ public final class Regex {
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
     final WideScalarCodec wideScalarCodec;
+    final CharacterPropertyResolver characterPropertyResolver;
 
     private static final Encoding DEFAULT_ENCODING;
     static {
@@ -178,6 +179,7 @@ public final class Regex {
         this.enc = enc;
         this.perlSyntax = syntax.op2OptionPerl();
         this.wideScalarCodec = syntax.wideScalarCodec;
+        this.characterPropertyResolver = syntax.characterPropertyResolver;
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;
         new Analyser(this, syntax, bytes, p, end, warnings).compile();

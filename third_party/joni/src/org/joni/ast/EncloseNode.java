@@ -42,6 +42,10 @@ public final class EncloseNode extends StateNode implements EncloseType {
     public int recursionConditionNameP = -1;
     public int recursionConditionNameEnd = -1;
     public Node containingAnchor;   //
+    /** Perl (*script_run:...) scope; separate from historical enclosure bits. */
+    public boolean scriptRun;
+    /** Whether the script-run scope has the documented atomic boundary. */
+    public boolean atomicScriptRun;
 
     // node_new_enclose / onig_node_new_enclose
     public EncloseNode(int type) {
@@ -109,6 +113,7 @@ public final class EncloseNode extends StateNode implements EncloseType {
         if (isCondition()) types.append("CONDITION ");
         if (isAbsent()) types.append("ABSENT ");
         if (isDefine()) types.append("DEFINE ");
+        if (scriptRun) types.append(atomicScriptRun ? "ATOMIC_SCRIPT_RUN " : "SCRIPT_RUN ");
         return types.toString();
     }
 
