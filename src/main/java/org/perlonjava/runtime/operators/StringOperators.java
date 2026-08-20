@@ -746,12 +746,9 @@ public class StringOperators {
             return new RuntimeScalar();
         }
 
-        // Handle Unicode properly by using code points instead of char units
-        int lastCodePoint = str.codePointBefore(str.length());
-        int lastCharSize = Character.charCount(lastCodePoint);
-
-        String lastChar = str.substring(str.length() - lastCharSize);
-        String remainingStr = str.substring(0, str.length() - lastCharSize);
+        int lastStart = PerlUtfString.lastLogicalCharacterStart(str);
+        String lastChar = str.substring(lastStart);
+        String remainingStr = str.substring(0, lastStart);
 
         boolean wasByteString = runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
         runtimeScalar.set(remainingStr);
