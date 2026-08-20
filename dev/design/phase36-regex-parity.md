@@ -162,10 +162,12 @@ assertions. The integrated subject-sensitive byte/`/d` and fullwidth-xdigit
 fix restores complete `re/charset.t` execution, and the logical-wide-scalar
 `chop` fix restores `op/chop.t` to 148/148. A fresh bounded rerun also
 executes `op/stat.t` 111/111 on both backends, above PR 958's 107/111. The
-refreshed immutable comparison remains fail-closed until the other three lower
-rows are rerun. The remaining `re/regex_sets.t` property/interpolation failures
-are part of P4's shared default-`/d` byte-variant root. P5 owns the two
-`re/pat_advanced.t` source/debug rows.
+shared default-`/d` byte-variant root is now closed in focused worker evidence:
+dynamic source provenance, callback search, grapheme boundaries, Unicode
+properties/classes, and extended sets pass on both backends while
+`re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
+immutable comparison are pending. P5 owns the two `re/pat_advanced.t`
+source/debug rows.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -175,16 +177,14 @@ Active ownership:
 
 - P3: retire the disconnected backend-selector compatibility plumbing and prove
   that no environment/property setting can select a production Java matcher.
-- P4: the unified default-`/d` byte-pattern construction root (callback/search,
-  grapheme, property/set, and source provenance), then remaining non-POSIX
-  parser/range diagnostic families.
-- P5: literal-regex frontend ordering, debug trace, and the two
-  `pat_advanced.t` rows.
-- P6: latest-upstream development sync workflow, including safe checkout
-  handling, `unicore/Name.pl`, and idempotence proof; its independent
-  interpreter-only regex row is integrated.
+- P4: exhaust all remaining same-source native `reg_mesg.t` parser/range/escape
+  diagnostic families and classify the residual.
+- P5: close the `EMPTY-STR` custom-charname blocker, debug/source trace, and the
+  two `pat_advanced.t` rows.
+- P6: unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and removed-
+  accommodation CPAN release matrix; latest-upstream sync is integrated.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, and release evidence.
+  plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
