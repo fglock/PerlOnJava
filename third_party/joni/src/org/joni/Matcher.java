@@ -706,7 +706,9 @@ public abstract class Matcher extends IntHolder {
             if ((maxSemiEnd - (range - 1)) < regex.anchorDmin) {
                 range = maxSemiEnd - regex.anchorDmin + 1;
             }
-            if (start >= range) return true; // mismatch_no_msa;
+            if (start > range || start == range && regex.anchorDmin > 0) {
+                return true; // mismatch_no_msa;
+            }
         } else {
             if ((minSemiEnd - range) > regex.anchorDmax) {
                 range = minSemiEnd - regex.anchorDmax;
