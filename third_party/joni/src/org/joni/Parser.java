@@ -2369,6 +2369,11 @@ class Parser extends Lexer {
                     inc();
                     newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OPEN_PAREN);
                 }
+                if (extendedClassStarts("\\]")) {
+                    p += 2;
+                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE,
+                            p - getBegin());
+                }
                 int operandStart = p;
                 parsePerlExtendedClassIntersection(false);
                 newSyntaxException(PERL_EXTENDED_CLASS_OPERAND_WITHOUT_OPERATOR,
