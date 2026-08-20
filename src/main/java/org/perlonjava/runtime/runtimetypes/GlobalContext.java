@@ -331,6 +331,7 @@ public class GlobalContext {
         Parent.initialize();
         Lib.initialize();
         Re.initialize();
+        TieHashNamedCapture.initialize();
         // Cwd.initialize();  // Use Perl Cwd.pm instead (has pure Perl fallbacks)
         FileSpec.initialize();
         // Deferred to XSLoader::load() for faster startup - only loaded when actually used:
