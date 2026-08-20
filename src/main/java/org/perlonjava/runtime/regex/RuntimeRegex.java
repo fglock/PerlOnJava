@@ -1132,10 +1132,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (lexicalDebugMode == 0) return;
         registerDebugLifecycle();
         String patternDescription = patternString == null ? "" : patternString;
+        String optimizerDescription = recursivePattern == null
+                ? "" : recursivePattern.optimizerDebugDescription();
         debugWrite("Compiling REx \"" + patternDescription + "\"\n"
                 + "Final program:\n"
-                + "   1: JAVA_PATTERN <" + patternDescription + "> (2)\n"
-                + "   2: END (0)\n");
+                + "   1: JONI_PATTERN <" + patternDescription + "> (2)\n"
+                + "   2: END (0)\n"
+                + (optimizerDescription.isEmpty()
+                        ? "" : optimizerDescription + "\n"));
     }
 
     public void emitExecutionDebugTrace(String input) {
