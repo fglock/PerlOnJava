@@ -687,6 +687,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                 regex.regexFlags.isExtended());
                 if (e instanceof SyntaxException && !validatesExecutableSource) {
                     String message = e.getMessage();
+                    if (message != null && message.startsWith("end pattern")
+                            && originalPatternString != null
+                            && originalPatternString.endsWith("\\")) {
+                        throw new PerlCompilerException("Trailing \\ in regex m/"
+                                + originalPatternString + "/");
+                    }
                     if ("unmatched close parenthesis".equals(message)) {
                         message = "Unmatched )";
                     }
