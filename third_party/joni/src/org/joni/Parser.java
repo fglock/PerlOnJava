@@ -989,6 +989,15 @@ class Parser extends Lexer {
                         break;
                     } else if (c == '?' && left() && peekIs('{')) {
                         fetch();
+                        // RuntimeRegexTemplate lowers (??{...}) into a trusted
+                        // internal DYNAMIC callout.  It is valid as a pattern
+                        // atom, but Perl does not permit it as a conditional
+                        // operand; retain the source-level diagnostic instead
+                        // of falling through to the generic group-option error.
+                        if (startsWith("=DYNAMIC:")) {
+                            parseInternalCalloutId("=DYNAMIC:");
+                            newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION);
+                        }
                         calloutConditionId = parseInternalCalloutId();
                     } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
                         fetch();
@@ -1062,9 +1071,11 @@ class Parser extends Lexer {
                                 if (named != null && named.backNum == 1) {
                                     physicalNamedCondition = named.getPhysicalBackRefs()[0];
                                 }
+                            } else {
+                                newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION);
                             }
                         } else { // USE_NAMED_GROUP
-                            newSyntaxException(INVALID_CONDITION_PATTERN);
+                            newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION);
                         }
                     }
                     EncloseNode en = new EncloseNode(EncloseType.CONDITION);
