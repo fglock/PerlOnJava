@@ -82,10 +82,11 @@ affected corpus before taking another slice.
   The Hyphen/IsHyphen warning correction removes the final exact 32 residuals
   with zero introductions while preserving dynamic property interpolation.
 - Generated Unicode data covers all current property families plus compact Perl
-  default simple/full/reverse case-fold metadata. The generator still needs a
-  transactional current-checkout refresh that records exact source and output
-  provenance without pinning a historical Perl commit. General_Category
-  compatibility aliases, native named-call/parser
+  default simple/full/reverse case-fold metadata. Its transactional
+  current-checkout refresh records the selected checkout's semantic version,
+  full revision, exact source hashes, and generated-output hashes; strict check
+  mode rejects stale provenance without treating that revision as a permanent
+  target. General_Category compatibility aliases, native named-call/parser
   safety, the runtime-neutral Joni property-value matcher, signed-IV user-
   property ranges, POSIX compatibility, and generated fold data are integrated.
   The analyser fold-safety slice, final binary aliases, generated named-sequence
@@ -417,7 +418,7 @@ gates may reopen it if a semantic regression appears.
 
 ### Active phase detail
 
-- [ ] Transactional latest-upstream Perl Unicode generator refresh and exact
+- [x] Transactional latest-upstream Perl Unicode generator refresh and exact
       provenance/freshness gates
 - [x] General Category, Script, Block, POSIX, binary-membership, and signed-wide
       property ranges
