@@ -1548,7 +1548,8 @@ class Parser extends Lexer {
         if (syntax.op2OptionPerl() && left()) {
             int first = enc.mbcToCode(bytes, p, stop);
             if (enc.isDigit(first) || !enc.isWord(first)) {
-                newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
+                newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
+                        p + enc.length(bytes, p, stop) - getBegin());
             }
         }
         int nm = p;
