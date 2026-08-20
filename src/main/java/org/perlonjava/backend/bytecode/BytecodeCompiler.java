@@ -5169,6 +5169,10 @@ public class BytecodeCompiler implements Visitor {
         emit(addToStringPool(variableName));
     }
 
+    boolean tracksRuntimeRegexLexicals() {
+        return tracksRuntimeRegexLexicals;
+    }
+
     /**
      * Apply Perl's context conversion to an array value. This is shared by
      * named arrays and dereferenced arrays: scalar {@code @$ref} is the array
