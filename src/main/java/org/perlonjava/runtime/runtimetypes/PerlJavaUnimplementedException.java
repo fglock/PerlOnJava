@@ -2,7 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 /**
  * Exception thrown when PerlOnJava encounters a Perl feature that is not yet implemented
- * in the Java regex engine or other Java components. This is distinct from PerlCompilerException
+ * in the regex engine or other Java components. This is distinct from PerlCompilerException
  * which represents actual Perl syntax errors.
  * <p>
  * This exception is used to distinguish between:

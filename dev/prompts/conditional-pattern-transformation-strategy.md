@@ -1,5 +1,9 @@
 # Conditional Pattern Transformation Strategy
 
+> **Historical strategy:** This predates the Phase 36 Joni cutover. Production
+> conditionals are parsed and matched natively by the vendored Joni fork; the
+> Java `Pattern` transformations below are retained only as design history.
+
 ## Discovery
 Java regex does NOT support `(?(condition)yes|no)` syntax - it throws "Unknown inline modifier" error.
 

@@ -140,6 +140,8 @@ outside it.
 - [ ] Pass immutable 286-file JVM and interpreter acceptance against PR 958.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
+- [x] Pass the five-run warmed ordinary-regex comparison: candidate median
+  12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI.
 - [ ] Reconcile `docs/reference/feature-matrix.md`,
   `dev/implementation/regex.md`, and `docs/design/joni-callout-fork.md`
