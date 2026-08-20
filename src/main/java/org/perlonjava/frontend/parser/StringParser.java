@@ -660,16 +660,18 @@ public class StringParser {
         modStr = addLexicalRegexContext(ctx, modStr);
         
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        ListNode list = new ListNode(elements, rawStr.index);
+        captureLexicalNamedCharacterTranslator(list, rawStr.index, ctx);
+        parsed = elements.getFirst();
         boolean literalSyntaxValidated = false;
-        if (isQuoteRegex) {
-            RuntimeScalar namedCharacterTranslator =
-                    HintHashRegistry.getCompileTimeHint("charnames");
+        if (isQuoteRegex || list.getAnnotation(
+                LEXICAL_NAMED_CHARACTER_TRANSLATOR) instanceof RuntimeScalar) {
             String literalSyntax = RegexLiteralAnalyzer.constantSyntaxString(parsed);
             String literalSource = RegexLiteralAnalyzer.constantSourceString(parsed);
             if (literalSyntax != null
                     && literalSource != null
-                    && !NamedCharacterExpansion.usesCustomTranslator(
-                            namedCharacterTranslator)
                     && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalSyntax)) {
                 String validationModifiers = modStr;
                 if (ctx.symbolTable != null
@@ -678,6 +680,8 @@ public class StringParser {
                     validationModifiers += "u";
                 }
                 try {
+                    RuntimeScalar namedCharacterTranslator =
+                            HintHashRegistry.getCompileTimeHint("charnames");
                     NamedCharacterExpansion.SourceMode namedCharacterSourceMode =
                             ctx.symbolTable != null
                                     && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
@@ -701,11 +705,7 @@ public class StringParser {
             modStr += '?';
         }
         Node modifiers = new StringNode(modStr, rawStr.index);
-        List<Node> elements = new ArrayList<>();
-        elements.add(parsed);
         elements.add(modifiers);
-        ListNode list = new ListNode(elements, rawStr.index);
-        captureLexicalNamedCharacterTranslator(list, rawStr.index, ctx);
         OperatorNode node = new OperatorNode(operator, list, rawStr.index);
         node.setAnnotation("syntacticQuoteRegex", isQuoteRegex);
         node.setAnnotation("literalSyntaxValidated", literalSyntaxValidated);
@@ -718,7 +718,7 @@ public class StringParser {
         return node;
     }
 
-    private static void captureLexicalNamedCharacterTranslator(
+    static void captureLexicalNamedCharacterTranslator(
             ListNode operand, int sourceTokenIndex, EmitterContext ctx) {
         RuntimeScalar translator = HintHashRegistry.getCompileTimeHint("charnames");
         if (NamedCharacterExpansion.usesCustomTranslator(translator)) {

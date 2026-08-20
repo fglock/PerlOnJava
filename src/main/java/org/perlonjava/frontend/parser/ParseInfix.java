@@ -195,10 +195,13 @@ public class ParseInfix {
             if ((operator.equals("=~") || operator.equals("!~"))
                     && !isRegexOperator(right)) {
                 String flags = StringParser.addLexicalRegexContext(parser.ctx, "");
-                right = new OperatorNode("quoteRegex",
-                        new ListNode(List.of(right,
-                                new StringNode(flags, right.getIndex())), right.getIndex()),
-                        right.getIndex());
+                ListNode regexOperand = new ListNode(new ArrayList<>(List.of(right,
+                        new StringNode(flags, right.getIndex()))), right.getIndex());
+                if (right instanceof StringNode) {
+                    StringParser.captureLexicalNamedCharacterTranslator(
+                            regexOperand, right.getIndex(), parser.ctx);
+                }
+                right = new OperatorNode("quoteRegex", regexOperand, right.getIndex());
             }
 
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);

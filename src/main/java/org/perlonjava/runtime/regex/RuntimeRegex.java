@@ -555,7 +555,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         String compilePatternString = originalPatternString;
         String displayDiagnosticPattern = sourceDiagnosticPattern == null
-                ? originalPatternString : sourceDiagnosticPattern;
+                ? originalPatternString
+                : RegexMarkers.stripLiteralDiagnostics(sourceDiagnosticPattern);
         List<String> quoteMetaWarningsOnUse = new ArrayList<>();
         if (compilePatternString != null && compilePatternString.contains("\\Q")) {
             // Interpolated-pattern warnings are lexical diagnostics for each
@@ -806,11 +807,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         } else if ("too big number for repeat range".equals(message)) {
                             message = "Quantifier in {,} bigger than 2147483646";
                         } else if ("end pattern with unmatched parenthesis".equals(message)) {
-                            int structuralUnmatched = unmatchedOpeningParenthesis(
-                                    originalPatternString);
-                            if (structuralUnmatched >= 0) {
+                            if (unmatched >= 0) {
                                 message = "Unmatched (";
-                                characterPosition = structuralUnmatched + 1;
+                                characterPosition = unmatched + 1;
                             }
                         }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
@@ -970,46 +969,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             if (number > captureCount) return end;
             i = end - 1;
-        }
-        return -1;
-    }
-
-    /** Locate an unmatched ordinary group opener, excluding Perl's specialized {@code (?...} forms. */
-    private static int ordinaryUnmatchedOpeningParenthesis(String pattern) {
-        if (pattern == null) return -1;
-        Deque<Integer> openings = new ArrayDeque<>();
-        boolean escaped = false;
-        boolean inClass = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (ch == '[') {
-                inClass = true;
-                continue;
-            }
-            if (ch == ']' && inClass) {
-                inClass = false;
-                continue;
-            }
-            if (inClass) continue;
-            if (ch == '(') {
-                openings.push(i);
-            } else if (ch == ')' && !openings.isEmpty()) {
-                openings.pop();
-            }
-        }
-        while (!openings.isEmpty()) {
-            int opening = openings.removeLast();
-            if (opening + 1 >= pattern.length() || pattern.charAt(opening + 1) != '?') {
-                return opening;
-            }
         }
         return -1;
     }
