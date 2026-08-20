@@ -443,6 +443,13 @@ Every `jperl`, `jcpan`, and `prove` process has a hard timeout.
 - Never push master. Use focused branches, attributed commits, PRs, and current
   master rebases after upstream merges.
 
+An incremental integration PR may merge before every Phase 36 item is complete
+when the exact PR-958 comparator proves that every file/test row is
+non-regressing, at least one row has more passing tests, and the PR's required
+warning-free build and CI gates pass. Such a merge is a checkpoint, not project
+completion: immediately open the next WIP PR and continue the unchecked phases
+and final-acceptance items below.
+
 ## Performance Gate
 
 Before deleting Java matching, run five warmed ordinary-pattern measurements on
