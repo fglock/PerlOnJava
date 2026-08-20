@@ -22,6 +22,38 @@ lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane
 controlled by `--cpu-heavy-jobs` (default 2). This permits useful CPU
 parallelism without making their watchdogs contend with `pat*`.
 
+### generate_regex_test_ledger.pl
+**Purpose:** Derive the current Phase 36 regex corpus without a hand-maintained
+file list or pinned Perl revision.
+
+The tool includes every current `perl5_t/t/re/*.t` file, scans `op/` and `uni/`
+for regex-bearing tests, resolves test references from the feature matrix,
+Phase 36 plan, and comparison policy, and records direct/thread pairs and unit
+gates separately. It emits canonical JSON plus an optional one-path-per-line
+runner list:
+
+```bash
+perl dev/tools/generate_regex_test_ledger.pl \
+  --runner-list /tmp/phase36-regex-files.txt \
+  --output /tmp/phase36-regex-ledger.json
+```
+
+The generated counts describe the current latest upstream checkout. Refresh
+comparisons may record hashes for that run, but they must not encode a
+historical Perl revision as the expected corpus.
+
+For a system-Perl oracle of an imported core test, remember that `t/test.pl`
+replaces `@INC` with the imported `../lib`. Preload host-core modules needed by
+the test before that reset. For example, the reproducible `op/do.t` oracle is:
+
+```bash
+cd perl5_t/t
+perl -Mstrict -MErrno -MPerlIO -MPerlIO::scalar op/do.t
+```
+
+This distinguishes a real TAP count from a zero-TAP host-module startup error;
+it does not patch or otherwise modify the imported test.
+
 ### reorganize_tests.sh
 **Purpose:** Reorganize test directory structure to separate PerlOnJava unit tests from standard Perl module tests.
 
