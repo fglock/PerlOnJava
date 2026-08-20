@@ -2560,9 +2560,37 @@ class Parser extends Lexer {
             // In (?[...]), a POSIX bracket is itself a primary: [:alpha:]
             // is not the nested standard-class spelling [[:alpha:]].
             p += 2;
+            int literalNameStart = p;
             CClassNode result = new CClassNode();
-            if (parsePosixBracket(result, null, null)) {
+            int literalNameEnd = p;
+            while (literalNameEnd < stop
+                    && enc.mbcToCode(bytes, literalNameEnd, stop) != ']') {
+                literalNameEnd += enc.length(bytes, literalNameEnd, stop);
+            }
+            if (literalNameEnd >= stop) {
                 newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            }
+            int previous = enc.prevCharHead(bytes, literalNameStart,
+                    literalNameEnd, stop);
+            if (previous < literalNameStart
+                    || enc.mbcToCode(bytes, previous, stop) != ':') {
+                addPerlLiteralPosixText(result, null, null,
+                        literalNameStart, literalNameEnd);
+                p = literalNameEnd + enc.length(bytes, literalNameEnd, stop);
+                return new PerlExtendedClassPrimary(result, false);
+            }
+            if (parsePosixBracket(result, null, null)) {
+                literalNameEnd = p;
+                while (literalNameEnd < stop
+                        && enc.mbcToCode(bytes, literalNameEnd, stop) != ']') {
+                    literalNameEnd += enc.length(bytes, literalNameEnd, stop);
+                }
+                if (literalNameEnd >= stop) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                }
+                addPerlLiteralPosixText(result, null, null,
+                        literalNameStart, literalNameEnd);
+                p = literalNameEnd + enc.length(bytes, literalNameEnd, stop);
             }
             return new PerlExtendedClassPrimary(result, false);
         }
