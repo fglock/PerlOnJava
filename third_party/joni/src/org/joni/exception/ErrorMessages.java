@@ -100,6 +100,16 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Switch (?(condition)... contains too many branches";
     String PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED =
             "Sequence (?P%n...) not recognized";
+    String PERL_GROUP_SEQUENCE_NOT_RECOGNIZED =
+            "Sequence (?%n...) not recognized";
+    String PERL_CARET_GROUP_SEQUENCE_NOT_RECOGNIZED =
+            "Sequence (?^(...) not recognized";
+    String PERL_GROUP_INTRODUCER_NOT_ADJACENT =
+            "In '(?...)', the '(' and '?' must be adjacent";
+    String PERL_VERB_INTRODUCER_NOT_ADJACENT =
+            "In '(*VERB...)', the '(' and '*' must be adjacent";
+    String PERL_STAR_GROUP_INTRODUCER_NOT_ADJACENT =
+            "In '(*...)', the '(' and '*' must be adjacent";
     String PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED =
             "Sequence (?<... not terminated";
     String PERL_QUOTE_NAMED_CAPTURE_NOT_TERMINATED =
@@ -139,6 +149,9 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
     String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
             "Missing right brace on \\x{}";
+    String PERL_EMPTY_HEX_ESCAPE = "Empty \\x{}";
+    String PERL_HEX_ESCAPE_MORE_THAN_TWO_DIGITS =
+            "Use \\x{...} for more than two hex characters";
     String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
             "Missing right brace on \\N{}";
     String PERL_MISSING_BRACES_ON_NAMED_CHARACTER_ESCAPE = "Missing braces on \\N{}";

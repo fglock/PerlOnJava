@@ -52,6 +52,7 @@ class Lexer extends ScannerSupport {
     private boolean perlVerticalWhitespaceNegated;
     private int perlNonNewlineTokenIndex = -1;
     private int perlCharacterPropertyEscape;
+    private boolean perlCommentSeparatedGroupToken;
 
     protected Lexer(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex.enc, bytes, p, end);
@@ -2147,6 +2148,18 @@ class Lexer extends ScannerSupport {
                 token.setC(c);
                 token.escaped = false;
 
+                if (perlCommentSeparatedGroupToken) {
+                    perlCommentSeparatedGroupToken = false;
+                    if (syntax.op2OptionPerl() && c == '?') {
+                        newSyntaxException(PERL_GROUP_INTRODUCER_NOT_ADJACENT);
+                    }
+                    if (syntax.op2OptionPerl() && c == '*') {
+                        newSyntaxException(left() && Character.isUpperCase(peek())
+                                ? PERL_VERB_INTRODUCER_NOT_ADJACENT
+                                : PERL_STAR_GROUP_INTRODUCER_NOT_ADJACENT);
+                    }
+                }
+
                 if (Config.USE_VARIABLE_META_CHARS && (c != MetaChar.INEFFECTIVE_META_CHAR && syntax.opVariableMetaCharacters())) {
                     fetchTokenFor_metaChars();
                     break;
@@ -2196,6 +2209,7 @@ class Lexer extends ScannerSupport {
                                         if (c == ')') break;
                                     }
                                 }
+                                perlCommentSeparatedGroupToken = true;
                                 continue start; // goto start
                             }
                             unfetch();
