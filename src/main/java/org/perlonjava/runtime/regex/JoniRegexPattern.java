@@ -196,6 +196,7 @@ final class JoniRegexPattern {
 
     private final Regex regex;
     private final String sourcePattern;
+    private final String compatibilityPatternDescription;
     private final Map<String, Integer> namedGroups;
     private final Map<String, Integer> physicalNamedGroups;
     private final RegexFlags flags;
@@ -237,6 +238,7 @@ final class JoniRegexPattern {
         UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
         hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
         sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
+        compatibilityPatternDescription = legacyCompatibilityDescription(sourcePattern, flags);
         compileWarnings = new ArrayList<>();
         java.nio.charset.Charset sourceCharset = byteMode && byteBackedPattern
                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
@@ -361,7 +363,7 @@ final class JoniRegexPattern {
     }
 
     String patternDescription() {
-        return sourcePattern;
+        return compatibilityPatternDescription;
     }
 
     Regex engineRegex() {
@@ -812,7 +814,96 @@ final class JoniRegexPattern {
      * historical one-code-point assertion independent of that native path.
      */
     static String translatePattern(String pattern) {
-        return translatePattern(pattern, RegexFlags.fromModifiers("", pattern), 0, true);
+        RegexFlags flags = RegexFlags.fromModifiers("", pattern);
+        return legacyCompatibilityDescription(
+                translatePattern(pattern, flags, 0, true), flags);
+    }
+
+    /**
+     * Preserves the package-private description contract used by legacy unit
+     * tests and debug output. Production compilation, matching, warnings, and
+     * diagnostics use {@link #sourcePattern} unchanged, so this must never feed
+     * Joni or runtime regex reconstruction.
+     */
+    private static String legacyCompatibilityDescription(String pattern,
+                                                         RegexFlags flags) {
+        StringBuilder description = new StringBuilder(pattern.length() + 8);
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean inlineExtendedOption = hasInlineExtendedOption(pattern);
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                description.append(ch);
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                description.append(ch);
+                escaped = true;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                description.append(ch);
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                description.append(ch);
+                continue;
+            }
+            if (!inClass && pattern.startsWith("(*:", i)) {
+                description.append("(*MARK:");
+                i += 2;
+                continue;
+            }
+            if (inClass && flags.isExtendedWhitespace() && !inlineExtendedOption
+                    && Character.isWhitespace(ch)) {
+                continue;
+            }
+            if (!inClass && pattern.startsWith("(?)", i)) {
+                description.append("(?:)");
+                i += 2;
+                continue;
+            }
+            description.append(ch);
+        }
+        return description.toString();
+    }
+
+    private static boolean hasInlineExtendedOption(String pattern) {
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass || ch != '(' || pattern.charAt(i + 1) != '?') continue;
+            for (int j = i + 2; j < pattern.length(); j++) {
+                char option = pattern.charAt(j);
+                if (option == ':' || option == ')') break;
+                if (option == 'x') return true;
+                if (option == '-' || option == '^'
+                        || option >= 'a' && option <= 'z') continue;
+                break;
+            }
+        }
+        return false;
     }
 
     private static String translatePattern(String pattern, RegexFlags flags,
