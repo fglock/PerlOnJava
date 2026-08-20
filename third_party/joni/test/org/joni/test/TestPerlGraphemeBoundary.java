@@ -23,6 +23,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.nio.charset.StandardCharsets;
 
+import org.jcodings.specific.ISO8859_1Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Option;
 import org.joni.Regex;
@@ -57,5 +58,20 @@ public class TestPerlGraphemeBoundary {
         assertNoBoundary("👩̈‍", "🚀");
         assertNoBoundary("🇦", "🇧");
         assertBoundary("🇦🇧", "🇨");
+    }
+
+    @Test
+    public void recognizesCrLfInBytePatterns() {
+        byte[] input = "\r\n".getBytes(StandardCharsets.ISO_8859_1);
+        byte[] pattern = "\\A\r\\B{gcb}\n\\z".getBytes(StandardCharsets.ISO_8859_1);
+        Regex regex = new Regex(pattern, 0, pattern.length, Option.PERL_BYTE_PATTERN,
+                ISO8859_1Encoding.INSTANCE, Syntax.PerlNG);
+        assertEquals(0, regex.matcher(input).search(0, input.length, Option.NONE));
+
+        input = "AB".getBytes(StandardCharsets.ISO_8859_1);
+        pattern = "\\AA\\b{gcb}B\\z".getBytes(StandardCharsets.ISO_8859_1);
+        regex = new Regex(pattern, 0, pattern.length, Option.PERL_BYTE_PATTERN,
+                ISO8859_1Encoding.INSTANCE, Syntax.PerlNG);
+        assertEquals(0, regex.matcher(input).search(0, input.length, Option.NONE));
     }
 }

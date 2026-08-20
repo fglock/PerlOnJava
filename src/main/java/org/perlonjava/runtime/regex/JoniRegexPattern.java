@@ -1318,7 +1318,9 @@ final class JoniRegexPattern {
                 } else {
                     result = anchored
                             ? matcher.match(charToByte[nextStart], charToByte[regionEnd], option)
-                            : matcher.search(charToByte[nextStart], charToByte[regionEnd], option);
+                            : callbacks.isEmpty()
+                                    ? matcher.search(charToByte[nextStart], charToByte[regionEnd], option)
+                                    : searchEachCallbackCandidate(option);
                 }
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
@@ -1354,6 +1356,17 @@ final class JoniRegexPattern {
             int end = end();
             nextStart = end > consumedStart ? end : advanceCodePoint(end);
             return true;
+        }
+
+        private int searchEachCallbackCandidate(int option) {
+            for (int candidate = nextStart; candidate <= regionEnd;
+                 candidate = advanceCodePoint(candidate)) {
+                int byteCandidate = charToByte[candidate];
+                if (matcher.match(byteCandidate, charToByte[regionEnd], option) >= 0) {
+                    return byteCandidate;
+                }
+            }
+            return -1;
         }
 
         @Override
@@ -1625,7 +1638,10 @@ final class JoniRegexPattern {
                     nestedCallbacks = runtimeRegex.executableCallbacks;
                 } else {
                     try {
-                        nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags);
+                        boolean byteBackedDynamic = value.type == RuntimeScalarType.BYTE_STRING;
+                        boolean compileAsBytes = byteMode && byteBackedDynamic;
+                        nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags, 0,
+                                compileAsBytes, compileAsBytes, byteBackedDynamic);
                     } catch (SyntaxException exception) {
                         String message = exception.getMessage();
                         if (message != null && (message.contains("premature end of char-class")

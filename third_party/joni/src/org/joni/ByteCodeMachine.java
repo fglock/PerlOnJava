@@ -2174,6 +2174,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean isGcb(int codePoint, UnicodeCodeRange range) {
+        if (!enc.isUnicode()) {
+            if (range == UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CR) return codePoint == '\r';
+            if (range == UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LF) return codePoint == '\n';
+            if (range == UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CONTROL) {
+                return codePoint < 0x20 || codePoint >= 0x7f && codePoint <= 0x9f;
+            }
+            return false;
+        }
         return enc.isCodeCType(codePoint, range.getCType());
     }
 
