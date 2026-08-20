@@ -93,6 +93,7 @@ public abstract class StringSegmentParser {
     protected boolean hasRuntimeInterpolation;
     protected final boolean interpolateVariable;
     protected final boolean parseEscapes;
+    protected final boolean deferNamedCharacterDiagnosticsToRegex;
     /**
      * Original token offset for mapping string positions back to source
      */
@@ -117,6 +118,17 @@ public abstract class StringSegmentParser {
     }
 
     public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, boolean isRegexQuoteConstruction) {
+        this(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes,
+                interpolateVariable, isRegexReplacement,
+                isRegexQuoteConstruction, false);
+    }
+
+    public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens,
+                               Parser parser, int tokenIndex, boolean isRegex,
+                               boolean parseEscapes, boolean interpolateVariable,
+                               boolean isRegexReplacement,
+                               boolean isRegexQuoteConstruction,
+                               boolean deferNamedCharacterDiagnosticsToRegex) {
         this.ctx = ctx;
         this.tokens = tokens;
         this.parser = parser;
@@ -128,6 +140,8 @@ public abstract class StringSegmentParser {
         this.interpolateVariable = interpolateVariable;
         this.isRegexReplacement = isRegexReplacement;
         this.isRegexQuoteConstruction = isRegexQuoteConstruction;
+        this.deferNamedCharacterDiagnosticsToRegex =
+                deferNamedCharacterDiagnosticsToRegex;
     }
 
     /**
@@ -1621,6 +1635,11 @@ public abstract class StringSegmentParser {
         if ("}".equals(chr)) {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
+            if (isRegex && deferNamedCharacterDiagnosticsToRegex
+                    && !name.regionMatches(true, 0, "U+", 0, 2)) {
+                appendToCurrentSegment("\\N{" + name + "}");
+                return;
+            }
             if (isRegex && isPlainNonNewlineInterval(name)) {
                 // A brace immediately following plain \N can be its quantifier,
                 // not a named character. Leave both pieces for the regex lexer.

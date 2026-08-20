@@ -388,7 +388,7 @@ public class StringParser {
             parsed = StringDoubleQuoted.parseDoubleQuotedString(
                     ctx, rawStr, false, false, true,
                     parser != null ? parser.getHeredocNodes() : null,
-                    null, true, isRegexQuoteConstruction, hasXModifier);
+                    null, true, isRegexQuoteConstruction, hasXModifier, true);
         } else {
             String patternStr = rawStr.buffers.getFirst();
             if (hasXModifier && mayInterpolateRegex(patternStr)) {

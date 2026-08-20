@@ -11,7 +11,21 @@ final class RegexDiagnosticFormatter {
 
     /** Renders the exact Perl form, including whitespace before the closing delimiter. */
     static String markedPerl(String pattern, int characterOffset, String message) {
-        return marked(pattern, characterOffset, expandUselessModifier(message), true);
+        return marked(pattern, characterOffset,
+                normalizePerlMessage(pattern, characterOffset, message), true);
+    }
+
+    private static String normalizePerlMessage(
+            String pattern, int characterOffset, String message) {
+        if ("Sequence (?<... not terminated".equals(message)
+                && pattern != null && characterOffset > 0
+                && characterOffset <= pattern.length()) {
+            char first = pattern.charAt(characterOffset - 1);
+            if (first != '_' && !Character.isLetterOrDigit(first)) {
+                return "Group name must start with a non-digit word character";
+            }
+        }
+        return expandUselessModifier(message);
     }
 
     private static String expandUselessModifier(String message) {
