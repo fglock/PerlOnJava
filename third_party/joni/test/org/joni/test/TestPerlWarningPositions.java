@@ -71,4 +71,13 @@ public class TestPerlWarningPositions {
                 new Warning("Useless (?-o)", 6)),
                 warnings("(?-cgo)"));
     }
+
+    @Test
+    public void locatesUnboundedZeroWidthRepeats() {
+        assertEquals(List.of(new Warning(
+                "\\b* matches null string many times", 3)), warnings("\\b*"));
+        assertEquals(List.of(new Warning(
+                "(?=a)+ matches null string many times", 6)), warnings("(?=a)+"));
+        assertEquals(List.of(), warnings("\\b?"));
+    }
 }

@@ -1683,6 +1683,7 @@ class Parser extends Lexer {
 
     private Node parseExp(TokenType term) {
         if (token.type == term) return StringNode.EMPTY; // goto end_of_token
+        int expressionStart = token.backP - (token.escaped ? 1 : 0);
         Node node = null;
         boolean group = false;
 
@@ -1826,7 +1827,7 @@ class Parser extends Lexer {
 
         fetchToken(); // re_entry:
 
-        return parseExpRepeat(node, group); // repeat:
+        return parseExpRepeat(node, group, expressionStart); // repeat:
     }
 
     private CClassNode parsePerlExtendedCharClass() {
@@ -2431,6 +2432,10 @@ class Parser extends Lexer {
     }
 
     private Node parseExpRepeat(Node target, boolean group) {
+        return parseExpRepeat(target, group, -1);
+    }
+
+    private Node parseExpRepeat(Node target, boolean group, int expressionStart) {
         while (token.type == TokenType.OP_REPEAT || token.type == TokenType.INTERVAL) { // repeat:
             if (isInvalidQuantifier(target)) newSyntaxException(TARGET_OF_REPEAT_OPERATOR_INVALID);
 
@@ -2440,6 +2445,16 @@ class Parser extends Lexer {
             QuantifierNode qtfr = new QuantifierNode(token.getRepeatLower(),
                                                      token.getRepeatUpper(),
                                                      token.type == TokenType.INTERVAL);
+
+            if (expressionStart >= getBegin()
+                    && target.getType() == NodeType.ANCHOR
+                    && token.getRepeatUpper() == QuantifierNode.REPEAT_INFINITE
+                    && env.usesPerlDiagnostics()) {
+                String repeated = new String(bytes, expressionStart,
+                        p - expressionStart, enc.getCharset());
+                env.warnings.warn(repeated + " matches null string many times",
+                        p - getBegin());
+            }
 
             qtfr.greedy = token.getRepeatGreedy();
             int ret = qtfr.setQuantifier(target, group, env, bytes, getBegin(), getEnd());
