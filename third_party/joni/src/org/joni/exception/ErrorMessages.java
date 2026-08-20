@@ -150,6 +150,9 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
             "Missing right brace on \\x{}";
     String PERL_EMPTY_HEX_ESCAPE = "Empty \\x{}";
+    String PERL_EMPTY_UNBRACED_HEX_ESCAPE = "Empty \\x";
+    String PERL_NON_HEX_CHARACTER = "Non-hex character";
+    String PERL_NON_OCTAL_CHARACTER = "Non-octal character";
     String PERL_HEX_ESCAPE_MORE_THAN_TWO_DIGITS =
             "Use \\x{...} for more than two hex characters";
     String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
