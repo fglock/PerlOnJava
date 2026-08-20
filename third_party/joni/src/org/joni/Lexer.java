@@ -2469,7 +2469,13 @@ class Lexer extends ScannerSupport {
             fetch();
             if (c == '}') {
                 String boundaryName = name.toString().trim();
-                if (boundaryName.equals("gcb")) {
+                if (boundaryName.equals("g") || boundaryName.equals("gcb")) {
+                    if (Option.isPerlExplicitAscii(env.option)) {
+                        String boundary = negated ? "B" : "b";
+                        syntaxWarn("Using /u for '\\" + boundary + "{"
+                                + boundaryName + "}' instead of /a",
+                                p - getBegin());
+                    }
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_GRAPHEME_BOUNDARY
                             : AnchorType.GRAPHEME_BOUNDARY);
