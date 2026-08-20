@@ -133,6 +133,15 @@ else
 	./gradlew classes testUnitParallel --parallel shadowJar
 endif
 
+# Focused vendored-Joni unit gate for parser/matcher iteration. A full `make`
+# remains required before pushing or updating a PR.
+test-joni: check-java-gradle
+ifeq ($(OS),Windows_NT)
+	gradlew.bat testJoni
+else
+	./gradlew testJoni
+endif
+
 # `make dev` is disabled on purpose.
 #
 # It used to be a "build without running tests" shortcut, but that is
