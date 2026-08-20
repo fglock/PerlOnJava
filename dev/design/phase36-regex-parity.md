@@ -5,8 +5,11 @@
 Implement the current imported upstream Perl regular-expression semantics on
 both PerlOnJava execution backends and make the vendored Joni fork the sole
 production matcher. Java
-`Pattern` and the backend selector are temporary differential tools and must be
-removed before completion.
+`Pattern` matcher routes and production backend selection are temporary
+differential tools and must be removed before completion. A disconnected
+selector-policy parser may remain solely to compile existing compatibility
+tests until those tests receive explicit retirement authority; it must not
+control production matching.
 
 The contract includes matching, captures, match state, callbacks, dynamic
 patterns, diagnostics, warnings, source locations, byte/Unicode behavior,
@@ -76,8 +79,9 @@ affected corpus before taking another slice.
   integrated signed-IV range fix removes row 1651 with zero introductions in
   exact A/B evidence; a fresh combined serial gate remains required because a
   later run stopped before the complete plan under concurrent CPAN load.
-- The current imported `reg_mesg.t` passes 1,794/2,613 on each backend with an
-  identical status/test-number vector.
+- The current imported `reg_mesg.t` passes 1,806/2,613 on each backend with an
+  identical status/test-number vector. Native extended-class diagnostics now
+  distinguish binary operators that have no preceding operand.
 - Forced-Joni Unicode property comparison is 83,648/83,648 on both backends.
   The Hyphen/IsHyphen warning correction removes the final exact 32 residuals
   with zero introductions while preserving dynamic property interpolation.
@@ -334,10 +338,12 @@ behavior.
    reject zero-TAP, timeout, truncated, incomplete, backend, or direct/thread
    mismatches. Prioritize variable lookbehind and any remaining runtime-source
    or extended-class residuals shown by that artifact.
-3. Delete the remaining Java selector/fallback state, duplicate matcher-semantic
-   preprocessing, and unreachable adapters. Retain only documented Perl source
-   policy that cannot live in runtime-neutral Joni. Prove no production Java
-   matcher construction and no supported test dependency on
+3. Delete the remaining production Java selector/fallback state, duplicate
+   matcher-semantic preprocessing, and unreachable adapters. Retain only
+   documented Perl source policy that cannot live in runtime-neutral Joni, plus
+   any disconnected compatibility parser required by immutable existing tests.
+   Prove no production Java matcher construction, no environment setting that
+   changes the matcher, and no supported test dependency on
    `JPERL_UNIMPLEMENTED=warn`.
 4. Complete the mechanically derived 286-file acceptance run on JVM and
    interpreter, compare every file/test identity with PR 958, and separately
@@ -440,6 +446,7 @@ gates may reopen it if a semantic regression appears.
       adapter
 - [x] Generated Perl named-sequence lookup and native sequence resolution
 - [x] Generated Perl scalar character-name and alias lookup
+- [x] Perl `/i` folding for canonical Unicode casing-property aliases
 - [x] Remove temporary named-sequence encoding from native Joni pattern source
 - [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
 - [x] Restore Perl diagnostics for unknown/empty/malformed named sequences
@@ -490,7 +497,8 @@ gates may reopen it if a semantic regression appears.
       recursion, dynamic source, byte strings, and Unicode strings.
 - [ ] `pat_psycho*` and `speed*` pass under bounded parallelism.
 - [ ] No supported regex test needs `JPERL_UNIMPLEMENTED=warn`.
-- [ ] Joni is the sole production matcher; Java routing/selector code is gone.
+- [ ] Joni is the sole production matcher; Java matcher routing is gone and any
+      retained selector-policy parser is disconnected from production.
 - [ ] Matcher-semantic preprocessing is gone.
 - [ ] Obsolete import patches are removed and targeted sync is idempotent.
 - [ ] Feature matrix and final architecture documents match implementation.

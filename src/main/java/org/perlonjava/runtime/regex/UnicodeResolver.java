@@ -952,11 +952,11 @@ public class UnicodeResolver {
                 }
                 // Preloading is an optimization for callbacks that are already
                 // available. Perl permits qr// to contain a forward reference
-                // to a user property; the native compiler represents that with a
-                // placeholder and recompiles on first use. Calling the complete
-                // translator here would turn that intentional forward reference
-                // into an early "unsupported property" fatal before the
-                // placeholder path can run.
+                // to a user property; RuntimeRegex retains that deferred marker
+                // and ensureCompiledForRuntime() recompiles on first use. Calling
+                // the complete translator here would turn that intentional
+                // forward reference into an early "unsupported property" fatal
+                // before the deferred runtime path can run.
                 tryUserDefinedProperty(property, new LinkedHashSet<>(), caseInsensitive,
                         qualifyBareDiagnosticName);
             }
