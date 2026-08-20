@@ -607,6 +607,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             if (warning.startsWith("False [] range")) {
                                 throw new PerlCompilerException(warning);
                             }
+                            if (warning.startsWith("Unrecognized escape ")
+                                    && warning.contains(
+                                            " in character class passed through")) {
+                                throw new PerlCompilerException(warning.replaceFirst(
+                                        " in character class passed through",
+                                        " in character class"));
+                            }
                         }
                     }
                     regex.warningsOnUse.addAll(regex.inlineModifierWarnings);
