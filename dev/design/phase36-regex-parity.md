@@ -439,7 +439,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Remove Java matcher-semantic preprocessing and the legacy extended-class
       adapter
 - [x] Generated Perl named-sequence lookup and native sequence resolution
-- [ ] Generated Perl scalar character-name and alias lookup
+- [x] Generated Perl scalar character-name and alias lookup
 - [x] Remove temporary named-sequence encoding from native Joni pattern source
 - [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
 - [x] Restore Perl diagnostics for unknown/empty/malformed named sequences
