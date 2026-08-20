@@ -1278,7 +1278,16 @@ class Parser extends Lexer {
         }
 
         fetchToken();
-        Node target = parseSubExp(term);
+        Node target;
+        try {
+            target = parseSubExp(term);
+        } catch (SyntaxException e) {
+            if (node instanceof EncloseNode en && en.type == EncloseType.CONDITION
+                    && END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
+                newSyntaxException(PERL_SWITCH_CONDITION_NOT_TERMINATED);
+            }
+            throw e;
+        }
 
         if (node.getType() == NodeType.ANCHOR) {
             AnchorNode an = (AnchorNode)node;
