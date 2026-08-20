@@ -1967,9 +1967,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static boolean hasUnicodePromotingPatternSyntax(String pattern) {
         if (pattern == null) return false;
         boolean quoted = false;
+        int characterClassDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (ch > 0xff) return true;
+            if (!quoted && ch == '[') {
+                characterClassDepth++;
+                continue;
+            }
+            if (!quoted && ch == ']' && characterClassDepth > 0) {
+                characterClassDepth--;
+                continue;
+            }
             if (ch != '\\' || i + 1 >= pattern.length()) continue;
 
             char escape = pattern.charAt(++i);
@@ -1982,6 +1991,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 continue;
             }
             if (quoted || escape == '\\') continue;
+            if ((escape == 'p' || escape == 'P') && characterClassDepth == 0) {
+                return true;
+            }
             if (escape == 'N' && i + 1 < pattern.length()
                     && pattern.charAt(i + 1) == '{') {
                 return true;
