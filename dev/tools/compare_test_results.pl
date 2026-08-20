@@ -31,7 +31,7 @@ my $baseline = load_results($baseline_file, 'baseline');
 my $candidate = load_results($candidate_file, 'candidate');
 if (defined $path_prefix) {
     $path_prefix = canonical_file($path_prefix);
-    $path_prefix .= '/' unless $path_prefix =~ m{/$};
+    $path_prefix .= '/' unless $path_prefix =~ m{/$} || $path_prefix =~ /\.t\z/;
     $baseline = filter_results($baseline, $path_prefix);
     $candidate = filter_results($candidate, $path_prefix);
 }
@@ -60,7 +60,7 @@ Options:
                         zero-TAP results, or an --expected-files mismatch
   --expected-files NUM  Require exactly NUM candidate files
   --output FILE         Save the normalized comparison as JSON
-  --path-prefix PATH    Compare only files below this canonical path
+  --path-prefix PATH    Compare one test file or files below a canonical path
   --normalize-pr958-artifacts
                         Normalize the two exact reconstructed PR-958 baseline
                         transcript signatures and retain raw counts in JSON
