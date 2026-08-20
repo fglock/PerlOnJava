@@ -1227,7 +1227,8 @@ class Parser extends Lexer {
                         if (!syntax.op2OptionPerl()) {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
                         }
-                        env.warnings.warn("Useless (?" + (neg ? "-" : "") + "c)");
+                        env.warnings.warn("Useless (?" + (neg ? "-" : "") + "c)",
+                                p - getBegin());
                         sawContinueModifier = true;
                         break;
 
@@ -1238,7 +1239,7 @@ class Parser extends Lexer {
                         }
                         if (c != 'g' || !sawContinueModifier) {
                             env.warnings.warn("Useless (?" + (neg ? "-" : "")
-                                    + (char)c + ")");
+                                    + (char)c + ")", p - getBegin());
                         }
                         break;
 
