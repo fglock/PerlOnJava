@@ -720,6 +720,9 @@ final class Analyser extends Parser {
         case NodeType.STR:
             StringNode sn = (StringNode)node;
             len = sn.length(enc);
+            if (sn.isAmbig() && sn.isDontGetOptInfo() && len > 1) {
+                returnCode = GET_CHAR_LEN_VARLEN;
+            }
             break;
 
         case NodeType.QTFR:
@@ -1641,9 +1644,11 @@ final class Analyser extends Parser {
             return result;
         }
         case NodeType.STR: {
-            int length = ((StringNode)node).length(enc);
+            StringNode string = (StringNode)node;
+            int length = string.length(enc);
             AcceptLengthInfo info = new AcceptLengthInfo();
-            info.addNormal(length, length);
+            info.addNormal(string.isAmbig() && string.isDontGetOptInfo() && length > 1 ? 1 : length,
+                    length);
             return info;
         }
         case NodeType.CTYPE:
@@ -1727,8 +1732,11 @@ final class Analyser extends Parser {
             return new CharLengthRange(min, max);
         }
         case NodeType.STR: {
-            int length = ((StringNode)node).length(enc);
-            return new CharLengthRange(length, length);
+            StringNode string = (StringNode)node;
+            int length = string.length(enc);
+            return new CharLengthRange(
+                    string.isAmbig() && string.isDontGetOptInfo() && length > 1 ? 1 : length,
+                    length);
         }
         case NodeType.CTYPE:
         case NodeType.CCLASS:
@@ -2870,10 +2878,16 @@ final class Analyser extends Parser {
 
                 opt.length.set(slen, slen);
             } else {
+                int min = slen;
                 int max;
                 if (sn.isDontGetOptInfo()) {
                     int n = sn.length(enc);
                     max = enc.maxLength() * n;
+                    // A multi-character canonical fold can match one encoded
+                    // source character (for example U+1F80 can match U+1F88).
+                    // Its canonical byte length is therefore not a sound
+                    // lower bound for a following optimizer candidate.
+                    min = enc.minLength();
                 } else {
                     opt.exb.concatStr(sn.bytes, sn.p, sn.end, sn.isRaw(), enc);
                     opt.exb.ignoreCase = 1;
@@ -2884,7 +2898,7 @@ final class Analyser extends Parser {
 
                     max = slen;
                 }
-                opt.length.set(slen, max);
+                opt.length.set(min, max);
             }
 
             if (opt.exb.length == slen) {
