@@ -2284,16 +2284,16 @@ class Parser extends Lexer {
                 qn = en;
             }
 
-            if (ret == 0 || token.getRepeatPossessive()
-                    || (syntax.op3OptionECMAScript() && ret == 1)) {
-                target = qn;
-            } else if (ret == 2) { /* split case: /abc+/ */
+            if (ret == 2) { /* split case: /abc+/ */
                 target = ListNode.newList(target, null);
                 ListNode tmp = ListNode.newList(qn, null);
                 ((ListNode)target).setTail(tmp);
 
                 fetchToken();
                 return parseExpRepeatForCar(target, tmp, group);
+            } else if (ret == 0 || token.getRepeatPossessive()
+                    || (syntax.op3OptionECMAScript() && ret == 1)) {
+                target = qn;
             }
             fetchToken(); // goto re_entry
         }
