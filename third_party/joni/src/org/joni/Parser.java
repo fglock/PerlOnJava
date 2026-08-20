@@ -1236,6 +1236,9 @@ class Parser extends Lexer {
                         break;
 
                     case 'l':
+                        if (neg && syntax.op2OptionPerl()) {
+                            newSyntaxException(PERL_LOCALE_MODIFIER_AFTER_MINUS);
+                        }
                         option = charsetOptions.apply(option, c, neg, false);
                         break;
                     default:

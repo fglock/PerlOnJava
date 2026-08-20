@@ -113,6 +113,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Sequence (?^d...) not recognized";
     String PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE =
             "Regexp modifiers \"l\" and \"u\" are mutually exclusive";
+    String PERL_LOCALE_MODIFIER_AFTER_MINUS =
+            "Regexp modifier \"l\" may not appear after the \"-\"";
     String PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE =
             "Regexp modifiers \"d\" and \"a\" are mutually exclusive";
     String PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE =
