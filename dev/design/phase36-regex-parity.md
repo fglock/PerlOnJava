@@ -462,7 +462,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Remove Java matcher storage and empty-pattern/substitution retry branches
 - [x] Remove Java matcher-semantic preprocessing and the legacy extended-class
       adapter
-- [ ] Move the remaining matcher-semantic `JoniRegexPattern.translatePattern`
+- [x] Move the remaining matcher-semantic `JoniRegexPattern.translatePattern`
       rewrites for abbreviated `(*:NAME)`, `/xx` class whitespace, literal
       nested `[` in standard classes, and empty `(?)` groups into the Joni
       lexer/parser, then delete those adapter cases
