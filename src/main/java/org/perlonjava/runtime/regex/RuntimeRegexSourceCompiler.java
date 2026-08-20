@@ -117,7 +117,20 @@ final class RuntimeRegexSourceCompiler {
             Node ast = new Parser(context, tokens).parse();
             InterpretedCode code = new BytecodeCompiler(
                     sourceName, sourceLine, errors, registry).compile(ast, context);
-            code = code.withCapturedVars(orderedCells.values().toArray(new RuntimeBase[0]));
+            int highestCapturedRegister = 2;
+            for (int compiledRegister : code.variableRegistry.values()) {
+                highestCapturedRegister = Math.max(
+                        highestCapturedRegister, compiledRegister);
+            }
+            RuntimeBase[] capturedCells =
+                    new RuntimeBase[highestCapturedRegister - 2];
+            for (Map.Entry<String, RuntimeBase> entry : orderedCells.entrySet()) {
+                Integer compiledRegister = code.variableRegistry.get(entry.getKey());
+                if (compiledRegister != null && compiledRegister >= 3) {
+                    capturedCells[compiledRegister - 3] = entry.getValue();
+                }
+            }
+            code = code.withCapturedVars(capturedCells);
             if (owner != null) {
                 code.__SUB__ = owner.__SUB__ != null ? owner.__SUB__ : new RuntimeScalar(owner);
             }

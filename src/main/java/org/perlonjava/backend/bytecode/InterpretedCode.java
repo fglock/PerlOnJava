@@ -492,6 +492,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.inheritsSelfReference = this.inheritsSelfReference;
         copy.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
         copy.isQuotedRegexCallback = this.isQuotedRegexCallback;
+        copy.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals;
         copy.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         copy.deferredConstAttribute = this.deferredConstAttribute;
         copy.cvStartFile = this.cvStartFile;

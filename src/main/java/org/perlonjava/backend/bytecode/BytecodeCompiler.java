@@ -143,6 +143,9 @@ public class BytecodeCompiler implements Visitor {
     private int maxRegisterEverUsed = 2;  // Track highest register ever allocated
     // True when this compiler was constructed for eval STRING (has parentRegistry)
     private boolean isEvalString;
+    // Runtime regex interpolation can synthesize executable source through
+    // overload, so the containing CV must expose all of its live lexical cells.
+    private boolean tracksRuntimeRegexLexicals;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
     // True when compiling inside a map/grep block (explicit return must use RETURN_NONLOCAL)
@@ -866,6 +869,14 @@ public class BytecodeCompiler implements Visitor {
         // Store context for strict checks and other compile-time options
         this.emitterContext = ctx;
 
+        if (node != null) {
+            VariableCollectorVisitor runtimeSourceCollector =
+                    new VariableCollectorVisitor(new HashSet<>());
+            node.accept(runtimeSourceCollector);
+            tracksRuntimeRegexLexicals =
+                    runtimeSourceCollector.requiresAllRuntimeLexicals();
+        }
+
         // Detect closure variables if context is provided
         if (ctx != null) {
             detectClosureVariables(node, ctx);
@@ -994,6 +1005,7 @@ public class BytecodeCompiler implements Visitor {
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;
+        code.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals;
         // Attach the `our` registry so eval STRING can inherit caller's `our` aliases
         code.ourVariableRegistry = ourVariableRegistry.isEmpty() ? null : ourVariableRegistry;
         // Store goto label map for dynamic goto support (goto $variable)
@@ -1037,7 +1049,7 @@ public class BytecodeCompiler implements Visitor {
             Set<String> used = new HashSet<>();
             VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
             ast.accept(collector);
-            if (!collector.hasEvalString()) {
+            if (!collector.requiresAllRuntimeLexicals()) {
                 usedVars = used;
             }
         }
@@ -3025,6 +3037,7 @@ public class BytecodeCompiler implements Visitor {
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
+                        emitActiveLexicalBinding(reg, varName);
 
                         // Match JVM EmitVariable: MODIFY_*_ATTRIBUTES must run for : ATTR(...)
                         // declarations even when storage comes from RETRIEVE_BEGIN_* (closure
@@ -3090,6 +3103,7 @@ public class BytecodeCompiler implements Visitor {
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
+                        emitActiveLexicalBinding(reg, varName);
 
                         // Runtime attribute dispatch for state variables with attributes
                         emitVarAttrsIfNeeded(node, reg, sigil);
@@ -3442,6 +3456,7 @@ public class BytecodeCompiler implements Visitor {
                                     default ->
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
+                                emitActiveLexicalBinding(reg, varName);
 
                                 // A captured declaration-list slot is retrieved from the
                                 // persistent definition-time cell, but attributes still
@@ -5230,6 +5245,12 @@ public class BytecodeCompiler implements Visitor {
         emit(addToStringPool(variableName));
     }
 
+    void emitActiveLexicalBinding(int register, String variableName) {
+        emit(Opcodes.BIND_ACTIVE_LEXICAL);
+        emitReg(register);
+        emit(addToStringPool(variableName));
+    }
+
     /**
      * Apply Perl's context conversion to an array value. This is shared by
      * named arrays and dereferenced arrays: scalar {@code @$ref} is the array
@@ -5361,7 +5382,7 @@ public class BytecodeCompiler implements Visitor {
         Set<String> used = new HashSet<>();
         VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
         body.accept(collector);
-        if (collector.hasEvalString()) return all;
+        if (collector.requiresAllRuntimeLexicals()) return all;
         TreeMap<Integer, String> narrowed = new TreeMap<>();
         for (Map.Entry<Integer, String> e : all.entrySet()) {
             if (used.contains(e.getValue())) {

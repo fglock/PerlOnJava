@@ -2746,16 +2746,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield newScalar;
             }
             case REFERENCE -> (RuntimeScalar) value;
-            case REGEX -> {
-                // Dereferencing qr// produces a non-reference scalar whose
-                // string value is the compiled pattern, but whose referent type
-                // remains REGEXP (reftype(\${qr/foo/}) eq "REGEXP").
-                RuntimeScalar result = new RuntimeScalar();
-                result.type = RuntimeScalarType.STRING;
-                result.value = this.value.toString();
-                result.firstClassRegexScalar = true;
-                yield result.propagateTaint(this);
-            }
+            case REGEX -> dereferencedRegexScalar();
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 // e.g., ${*Foo::VERSION} or ${$glob} where $glob is a glob
@@ -2803,6 +2794,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case REFERENCE -> (RuntimeScalar) value;
+            case REGEX -> dereferencedRegexScalar();
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 if (value instanceof RuntimeGlob glob) {
@@ -2830,6 +2822,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield GlobalVariable.getGlobalVariable(varName);
             }
         };
+    }
+
+    private RuntimeScalar dereferencedRegexScalar() {
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.STRING;
+        result.value = this.value.toString();
+        result.firstClassRegexScalar = true;
+        return result.propagateTaint(this);
     }
 
     // Method to implement `%$v`, when "no strict refs" is in effect

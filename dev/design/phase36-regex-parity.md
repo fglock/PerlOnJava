@@ -105,8 +105,10 @@ affected corpus before taking another slice.
 - Forced-Joni `pat_re_eval.t` now executes and passes 555/555 on both JVM and
   interpreter. Perl's release-build `-D` diagnostic is preserved without
   enabling PerlOnJava's unrelated internal compiler trace.
-- Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
-  passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
+- Each `pat.t` variant executes 1,301/1,302 and passes 1,240 on JVM and
+  interpreter. Executable callbacks introduced by overloaded scalar and array
+  interpolation retain containing lexicals under large-method fallback, and
+  nonstrict scalar dereference preserves first-class REGEXP source.
 - Exact `re/regexp.t` executes 2,210/2,210 with 2,195 passing and 15 explicit
   residuals. Non-nullable quantified captures now preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
@@ -308,8 +310,9 @@ behavior.
 3. Resolve the remaining named-character diagnostic-version identity and
    remove the duplicate Java translation only after the native Joni and full
    Unicode-name gates are green.
-4. Close the remaining `pat.t` dynamic code-array rows without changing the
-   native unterminated executable-group diagnostics or the already-green
+4. Close native reserved POSIX-class syntax diagnostics and the remaining
+   shared `pat.t` semantic rows without changing the now-green dynamic
+   code-array matrix, native unterminated executable-group diagnostics, or the
    `pat_re_eval.t` 555/555 contract.
 5. Finish `/d`/`u`/`a`/`aa` forward/reverse literal and backreference folding
    from generated data, then rerun complete Unicode, `pat.t`, `pat_advanced.t`,
@@ -433,7 +436,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Unterminated runtime-source diagnostics for regexp rows 575/576/581
 - [x] Dynamic undef-warning scope and nested-continuation `/aa` state
 - [x] Native compile diagnostics and exact warning-category inheritance
-- [ ] Remaining dynamic code-array residuals
+- [x] Dynamic overloaded scalar/array code-source interpolation and lexical
+      capture under large-method interpreter fallback
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [ ] Retire proven-obsolete `dev/import-perl5` regex patches
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and

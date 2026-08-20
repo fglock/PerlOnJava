@@ -280,7 +280,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();
         activeCodeStack(executionState).push(code);
-        if (runtime.runtimeCodeState().lexicalAliasSupportEnabled) {
+        if (runtime.runtimeCodeState().lexicalAliasSupportEnabled
+                || code.tracksRuntimeRegexLexicals) {
             activeLexicalFrames(executionState).push(
                     new ActiveLexicalFrame(code, new HashMap<>()));
         }
@@ -289,7 +290,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void popActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();
-        if (runtime.runtimeCodeState().lexicalAliasSupportEnabled) {
+        if (runtime.runtimeCodeState().lexicalAliasSupportEnabled
+                || code.tracksRuntimeRegexLexicals) {
             Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
             if (!frames.isEmpty() && frames.peek().code() == code) {
                 frames.pop();
@@ -352,7 +354,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void registerActiveLexical(
             RuntimeCode code, String variableName, RuntimeBase cell) {
         PerlRuntime runtime = PerlRuntime.current();
-        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return;
+        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled
+                && (code == null || !code.tracksRuntimeRegexLexicals)) return;
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
         for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
@@ -400,7 +403,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static Map<String, RuntimeBase> snapshotActiveLexicals(RuntimeCode code) {
         if (code == null) return Collections.emptyMap();
         PerlRuntime runtime = PerlRuntime.current();
-        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) {
+        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled
+                && !code.tracksRuntimeRegexLexicals) {
             return Collections.emptyMap();
         }
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
@@ -986,6 +990,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // A callback compiled as part of qr// contributes Perl's anonymous-regex
     // frame to caller(), unlike an inline m// callback pseudo-block.
     public boolean isQuotedRegexCallback = false;
+    // Executable regex interpolation may stringify an overloaded value into
+    // source that references any lexical in the containing CV. Track live pad
+    // cells for these rare CVs without enabling global Devel::LexAlias support.
+    public boolean tracksRuntimeRegexLexicals = false;
     // Implementation callbacks such as map/grep do not introduce a Perl
     // subroutine scope, so their __SUB__ comes from the enclosing RuntimeCode.
     public boolean inheritsSelfReference = false;
@@ -1193,6 +1201,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             code.lexicalVariableNames = variableNames == null
                     ? null
                     : new java.util.LinkedHashSet<>(java.util.Arrays.asList(variableNames));
+        }
+        return codeRef;
+    }
+
+    /** Mark a generated CODE value as requiring live lexical regex-source access. */
+    public static RuntimeScalar markRuntimeRegexLexicals(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            code.tracksRuntimeRegexLexicals = true;
         }
         return codeRef;
     }
@@ -1433,6 +1449,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.cvStartLine = this.cvStartLine;
         clone.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
         clone.isQuotedRegexCallback = this.isQuotedRegexCallback;
+        clone.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals;
         clone.deparseSourceText = this.deparseSourceText;
         clone.deparseFlags = this.deparseFlags;
         clone.deparseSourceOffset = this.deparseSourceOffset;
@@ -1991,6 +2008,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isMapGrepBlock = codeFrom.isMapGrepBlock;
         this.isRegexCallbackPseudoBlock = codeFrom.isRegexCallbackPseudoBlock;
         this.isQuotedRegexCallback = codeFrom.isQuotedRegexCallback;
+        // A lazy named-CV placeholder is annotated from its parsed body before
+        // the backend executable exists. Materialization must not overwrite
+        // that source-policy marker with the backend object's default false.
+        this.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals
+                || codeFrom.tracksRuntimeRegexLexicals;
         this.inheritsSelfReference = codeFrom.inheritsSelfReference;
         this.isEvalBlock = codeFrom.isEvalBlock;
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
