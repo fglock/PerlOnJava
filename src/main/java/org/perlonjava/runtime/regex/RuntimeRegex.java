@@ -616,6 +616,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             originalPatternString, nonHexIssue.offset, message);
                 }
             }
+            NonOctalZeroIssue nonOctalZeroIssue =
+                    nonOctalZeroEscapeIssue(originalPatternString);
+            if (nonOctalZeroIssue != null
+                    && !(lexicalReStrict && nonOctalZeroIssue.inCharacterClass)) {
+                String octal = originalPatternString.substring(
+                        nonOctalZeroIssue.escapeOffset + 1,
+                        nonOctalZeroIssue.invalidOffset);
+                char invalid = originalPatternString.charAt(nonOctalZeroIssue.invalidOffset);
+                String resolved = "0".repeat(Math.max(0, 3 - octal.length()))
+                        + octal + invalid;
+                String message = "Non-octal character '" + invalid
+                        + "' terminates \\0 early.  Resolved as \"\\" + resolved + "\"";
+                constructionPolicyWarning = RegexDiagnosticFormatter.markedPerl(
+                        originalPatternString, nonOctalZeroIssue.invalidOffset + 1,
+                        message);
+            }
             
             try {
                 regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
@@ -1119,6 +1135,45 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             this.offset = offset;
             this.braced = braced;
         }
+    }
+
+    private record NonOctalZeroIssue(
+            int escapeOffset, int invalidOffset, boolean inCharacterClass) {
+    }
+
+    /** Locate an 8 or 9 that terminates a short legacy {@code \0} escape. */
+    private static NonOctalZeroIssue nonOctalZeroEscapeIssue(String pattern) {
+        if (pattern == null) return null;
+        boolean inCharacterClass = false;
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            if (pattern.charAt(i) == '[') {
+                inCharacterClass = true;
+                continue;
+            }
+            if (pattern.charAt(i) == ']' && inCharacterClass) {
+                inCharacterClass = false;
+                continue;
+            }
+            if (pattern.charAt(i) != '\\' || pattern.charAt(i + 1) != '0') continue;
+            int precedingSlashes = 0;
+            for (int j = i - 1; j >= 0 && pattern.charAt(j) == '\\'; j--) {
+                precedingSlashes++;
+            }
+            if ((precedingSlashes & 1) != 0) continue;
+            int cursor = i + 2;
+            int remainingOctalDigits = 2;
+            while (remainingOctalDigits > 0 && cursor < pattern.length()
+                    && pattern.charAt(cursor) >= '0' && pattern.charAt(cursor) <= '7') {
+                cursor++;
+                remainingOctalDigits--;
+            }
+            if (cursor < pattern.length()
+                    && (pattern.charAt(cursor) == '8' || pattern.charAt(cursor) == '9')) {
+                return new NonOctalZeroIssue(i, cursor, inCharacterClass);
+            }
+            i = cursor - 1;
+        }
+        return null;
     }
 
     private static List<String> normalizeNonHexWarningCase(
