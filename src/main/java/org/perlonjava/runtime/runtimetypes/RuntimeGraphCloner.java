@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RuntimeRegexCallback;
 import org.perlonjava.runtime.io.BorrowedIOHandle;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.DupIOHandle;
@@ -194,6 +195,15 @@ public class RuntimeGraphCloner {
             }
         }
         copyCodeMetadata(source, target);
+        return target;
+    }
+
+    private RuntimeRegexCallback cloneRegexCallback(RuntimeRegexCallback source) {
+        Object existing = clones.get(source);
+        if (existing != null) return (RuntimeRegexCallback) existing;
+        RuntimeRegexCallback target = source.cloneForThread(
+                code -> (RuntimeCode) cloneValue(code));
+        clones.put(source, target);
         return target;
     }
 
@@ -442,8 +452,7 @@ public class RuntimeGraphCloner {
         } else if (source.type == CODE && source.value instanceof RuntimeCode code) {
             target.value = cloneCode(code);
         } else if (source.value instanceof RuntimeRegex regex) {
-            target.value = regex.cloneTrackedForThread(
-                    code -> (RuntimeCode) cloneValue(code));
+            target.value = regex.cloneTrackedForThread(this::cloneRegexCallback);
         } else if (source.value instanceof RuntimeIO io) {
             RuntimeIO inherited = cloneRuntimeIO(io);
             if (inherited != null) {

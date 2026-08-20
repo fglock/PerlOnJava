@@ -4,6 +4,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.operators.WarnDie;
 
+import java.util.function.Function;
+
 /** A parser-created executable segment in a regex template. */
 public final class RuntimeRegexCallback {
     public enum Kind { BLOCK, CONDITION, DYNAMIC }
@@ -43,6 +45,14 @@ public final class RuntimeRegexCallback {
         if (code.refCount == 0 && code.stashRefCount <= 0) {
             code.releaseCaptures();
         }
+    }
+
+    /** Exact metadata copy for an ithread graph clone with a child-owned CODE pad. */
+    public RuntimeRegexCallback cloneForThread(
+            Function<RuntimeCode, RuntimeCode> codeCloner) {
+        return new RuntimeRegexCallback(
+                codeCloner.apply(code), kind, sourceLocation, lexicalPackage,
+                source, uninitializedWarningsEnabled);
     }
 
     public static RuntimeScalar wrap(RuntimeScalar codeRef, String kindName) {
