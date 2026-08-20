@@ -348,9 +348,9 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the four active, non-overlapping slices: integrate the green warmed
-   callback-clone batch and then close the remaining Unicode/property
-   source-policy rows; reduce the current 448-row same-source
+1. Finish the four active, non-overlapping slices: close the remaining
+   Unicode/property source-policy rows after completing warmed callback-clone
+   isolation; reduce the current 446-row same-source
    `reg_mesg.t` frontier through the next three-to-five native diagnostic
    families; complete the CPAN/performance and obsolete-Java-label audit after
    closing the optimizer-debug rows; and finish the remaining runtime
@@ -537,10 +537,13 @@ gates may reopen it if a semantic regression appears.
 - [x] Native compile diagnostics and exact warning-category inheritance
 - [x] Native nested-quantifier source positions, including UTF-8 patterns
 - [x] Native Perl group-name start categories and source positions
+- [x] Native unknown extended-class escape identity and diagnostics
 - [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`;
-      current same-source JVM/interpreter frontier is 448 failing rows
+      current same-source JVM/interpreter frontier is 446 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
+- [x] Thread graph cloning remaps executable regex callback CODE while
+      preserving child-side shared lexical identity and parent isolation
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [x] Mechanically derived current-checkout regex acceptance ledger
 - [x] Canonical as-implemented regex architecture and shipped Joni fork/API
