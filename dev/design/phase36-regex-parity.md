@@ -141,13 +141,12 @@ affected corpus before taking another slice.
   warning categories; matcher warnings retain their Perl `regexp`, `syntax`,
   or `misc` category. Inactive branch-reset slots no longer become fatal under
   a caller's disabled `uninitialized` scope.
-- The current 80-file runner artifact contains all expected files and improves
-  42 file identities against PR 958, including complete execution of the large
-  Unicode-property families. It still has 11 lower pass counts and 17 invalid
-  execution records, including zero-TAP or incomplete `pat_advanced.t`,
-  `regex_sets.t`, `speed*`, `pat*`, and property records. Plan-size changes in
-  current upstream Perl are reported separately from semantic regressions. The
-  invalid records must be rerun or classified before this artifact is release
+- The mechanically derived acceptance ledger covers all 80 `re/` files, every
+  regex-bearing `op/` and `uni/` test, documented unit gates, and direct/thread
+  pairs without pinning a Perl revision. Its current 286-file combined run is
+  the release comparison boundary. An earlier 80-file artifact improved 42
+  identities against PR 958 but contained 11 lower counts and 17 invalid
+  execution records, so it is diagnostic evidence rather than acceptance
   evidence.
 - Exact `/aa` routing/folding gates pass on native Joni, and the Java `/aa`
   workaround is removed.
@@ -320,41 +319,32 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the active semantic closures: callback-local transaction and
-   reentrant-matcher safety; `/d`/`u`/`a`/`aa` forward/reverse literal and class
-   fold
-   closure; complete extended-class/property algebra; and final-iteration,
-   optional, alternation, DEFINE, recursive, and failed-path capture clearing.
-   Each family needs system-Perl reducers, direct Joni coverage, both execution
-   backends, exact affected-corpus identities, and zero introductions.
-2. Integrate the ordinary-Joni cutover, runtime recursive-capture provenance,
-   fold closure, and corrected current-checkout Unicode generator on one
-   immutable barrier. Rerun
-   exact `regexp.t`, `reg_fold.t`, `reg_email*`, `regex_sets.t`, Unicode
-   property, callback, recursion, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`,
-   and `reg_mesg.t` gates. Classify every residual by a general native-Joni root
-   cause; reject zero-TAP, timeout, truncated, incomplete, backend, or
-   direct/thread mismatches.
-3. Generate a complete routing impact ledger and move every remaining ordinary
-   constant family to Joni after its semantic gates pass. Prove selected
-   families never execute the Java matcher, and close all feature-matrix regex
-   gaps rather than preserving fallback classifications as permanent behavior.
-4. Remove the Java matcher, selector/fallback state, duplicate semantic
-   preprocessors, and unreachable adapters. Retain only source-policy scanning
-   that cannot live in a runtime-neutral Joni fork. Re-run focused gates after
-   each deletion and require no supported test to depend on
+1. Finish the four active, non-overlapping slices: forward/reverse literal and
+   class fold closure; deletion of Java matcher storage plus empty-pattern and
+   substitution retry branches; native `(*script_run:...)`/`(*sr:...)`; and a
+   latest-upstream, idempotent import sync that preserves required forkless
+   `IPC::Cmd` and `App::Cpan` patches and applies patches transactionally.
+2. Integrate those commits on one immutable barrier. Run exact `regexp.t`,
+   `reg_fold.t`, `reg_email*`, `regex_sets.t`, Unicode-property, callback,
+   recursion, `script_run.t`, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`, and
+   `reg_mesg.t` gates. Classify every residual by a general native-Joni root;
+   reject zero-TAP, timeout, truncated, incomplete, backend, or direct/thread
+   mismatches. Prioritize variable lookbehind and any remaining runtime-source
+   or extended-class residuals shown by that artifact.
+3. Delete the remaining Java selector/fallback state, duplicate matcher-semantic
+   preprocessing, and unreachable adapters. Retain only documented Perl source
+   policy that cannot live in runtime-neutral Joni. Prove no production Java
+   matcher construction and no supported test dependency on
    `JPERL_UNIMPLEMENTED=warn`.
-5. Regenerate and sync from the current latest upstream `perl5/` checkout.
-   Refresh generated-data manifests transactionally from the selected checkout
-   and reject stale provenance under `--check`; then
-   prove a byte-identical second pass, run the complete mechanically derived
-   regex manifest, and compare file/test identities with the immutable PR 958
-   baseline. Run bounded `pat_psycho*` and `speed*` lanes without starving other
-   work, and record system-Perl oracle counts separately.
-6. Pass warmed performance, CPAN smoke, warning-free `make`, packaging,
-   license/notice, Ubuntu, Windows, and CI gates. Reconcile the feature matrix
-   and final architecture/fork documents with the shipped source, rebase on
-   current `master`, and open the final reviewable PR.
+4. Complete the mechanically derived 286-file acceptance run on JVM and
+   interpreter, compare every file/test identity with PR 958, and separately
+   record current-upstream plan-size changes and system-Perl oracle counts. Run
+   bounded `pat_psycho*` and `speed*` lanes without starving implementation.
+5. Pass warmed performance, CPAN smoke, warning-free `make`, packaging,
+   license/notice, Ubuntu, Windows, and CI gates. Reconcile the feature matrix,
+   as-implemented regex architecture, and Joni fork documents with shipped
+   source; remove or summarize redundant design documents; rebase on current
+   `master`; and open the final reviewable PR.
 
 ## Parallel Work
 
@@ -449,7 +439,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Native bounded numeric backreference parsing and removal of Joni-side
       brace-backreference rewriting
 - [x] Native Perl false-class ranges and unfinished non-ASCII range diagnostics
-- [ ] Final-iteration, optional, alternation, and failed-path capture clearing
+- [x] Final-iteration, optional, alternation, DEFINE, recursive, and failed-path
+      capture clearing and publication
 - [x] Non-nullable quantified-capture iteration scopes and backtracking restore
 - [x] Previous-iteration visibility for conditions inside repeated captures
 - [x] Previous-iteration visibility for non-alternating self-backreferences
@@ -467,9 +458,13 @@ gates may reopen it if a semantic regression appears.
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
+- [x] Mechanically derived current-checkout regex acceptance ledger
 - [x] Retire proven-obsolete `dev/import-perl5` regex patches
+- [ ] Latest-upstream import sync preserves required non-regex runtime patches
+      and is transactional and idempotent
+- [ ] Native `(*script_run:...)` and `(*sr:...)`
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
-      80-file forced-Joni gates on one integrated artifact
+      mechanically derived 286-file gates on one integrated artifact
 
 ## Final Acceptance
 
