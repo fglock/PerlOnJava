@@ -385,6 +385,104 @@ sub generate_unicode_testprop {
     return 1;
 }
 
+# Generate the core Name.pl table in the checked-out perl5 source before its
+# ordinary manifest row copies it into the bundled library. Upstream does not
+# commit this build product, but _charnames.pm loads it as a normal core file.
+sub generate_unicode_name_source {
+    my ($generator_relative, $target, $project_root) = @_;
+    if ($^V lt v5.36.0) {
+        warn "  ERROR: Cannot generate Unicode Name.pl with $^X ($^V).\n"
+            . "  Current perl5/lib/unicore/mktables uses builtin, which requires "
+            . "Perl 5.36 or newer. Re-run sync.pl with a compatible host Perl.\n\n";
+        return 0;
+    }
+
+    my $generator = File::Spec->catfile($project_root, $generator_relative);
+    my $unicode_source = dirname($generator);
+    for my $required ($generator,
+                      File::Spec->catfile($unicode_source, 'version'),
+                      File::Spec->catfile($unicode_source, 'UnicodeData.txt')) {
+        unless (-f $required) {
+            warn "  ERROR: Cannot generate Unicode Name.pl; missing checkout "
+                . "generation prerequisite: $required\n\n";
+            return 0;
+        }
+    }
+
+    my $temporary = tempdir('perlonjava-namepl-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+    my $temporary_unicode = File::Spec->catdir($temporary, 'unicore');
+    make_path($temporary_unicode) or do {
+        warn "  ERROR: Cannot create temporary Unicode generation directory: $!\n\n";
+        return 0;
+    };
+    unless (copy_directory($unicode_source, $temporary_unicode,
+                           $project_root, [], [])) {
+        warn "  ERROR: Cannot copy checked-out Unicode data for Name.pl generation.\n\n";
+        return 0;
+    }
+
+    my $original_dir = getcwd();
+    unless (chdir $project_root) {
+        warn "  ERROR: Cannot enter project root for Name.pl generation: $!\n\n";
+        return 0;
+    }
+    print "  Generating Unicode Name.pl with $^X: $generator_relative\n";
+    my $result = system($^X, $generator_relative, '-C', $temporary_unicode, '-q');
+    my $generation_error = $!;
+    unless (chdir $original_dir) {
+        die "sync.pl: cannot restore working directory '$original_dir': $!\n";
+    }
+    if ($result != 0) {
+        my $exit = $result == -1
+            ? "could not start: $generation_error"
+            : ($result & 127)
+                ? "terminated by signal " . ($result & 127)
+                : "exit code " . ($result >> 8);
+        warn "  ERROR: Unicode Name.pl generation failed ($exit).\n"
+            . "  Re-run sync.pl with a host Perl that can run the current "
+            . "perl5/lib/unicore/mktables.\n\n";
+        return 0;
+    }
+
+    my $generated = File::Spec->catfile($temporary_unicode, 'Name.pl');
+    unless (-s $generated) {
+        warn "  ERROR: Unicode generator completed without producing Name.pl.\n\n";
+        return 0;
+    }
+    open my $generated_fh, '<', $generated or do {
+        warn "  ERROR: Cannot inspect generated Name.pl: $!\n\n";
+        return 0;
+    };
+    binmode $generated_fh;
+    local $/;
+    my $contents = <$generated_fh>;
+    close $generated_fh;
+    my $actual_sha = sha256_hex($contents);
+    my $target_dir = dirname($target);
+    make_path($target_dir) unless -d $target_dir;
+    my ($target_fh, $staged) = tempfile('.Name-sync-XXXXXX', DIR => $target_dir,
+                                        UNLINK => 0);
+    binmode $target_fh;
+    print {$target_fh} $contents or do {
+        warn "  ERROR: Cannot stage generated Name.pl: $!\n\n";
+        close $target_fh;
+        unlink $staged;
+        return 0;
+    };
+    close $target_fh or do {
+        warn "  ERROR: Cannot close staged Name.pl: $!\n\n";
+        unlink $staged;
+        return 0;
+    };
+    rename $staged, $target or do {
+        warn "  ERROR: Cannot publish generated Name.pl: $!\n\n";
+        unlink $staged;
+        return 0;
+    };
+    print "  Generated Name.pl (SHA-256 $actual_sha)\n";
+    return 1;
+}
+
 sub usage {
     print <<'USAGE';
 PerlOnJava perl5 import sync — see dev/import-perl5/config.yaml
@@ -511,6 +609,13 @@ sub main {
         # Check if source exists
         if ($type eq 'generated_unicode_testprop') {
             unless (generate_unicode_testprop($import->{source}, $target, $project_root)) {
+                $error_count++;
+                next;
+            }
+        }
+        elsif ($type eq 'generated_unicode_name_source') {
+            unless (generate_unicode_name_source($import->{source}, $target,
+                                                 $project_root)) {
                 $error_count++;
                 next;
             }
