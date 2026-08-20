@@ -326,7 +326,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
         boolean byteDefaultSemantics = patternByteBacked && regexFlags != null
                 && regexFlags.isCaseInsensitive() && !regexFlags.isUnicode()
-                && !regexFlags.isAscii();
+                && !regexFlags.isAscii() && !hasInlineUnicodeCaseFoldModifier(patternString);
         if ((bytesSubstitution || byteDefaultSemantics) && recursivePatternBytes != null
                 && !Utf8.isUtf8(string)) {
             return recursivePatternBytes;
@@ -3807,6 +3807,54 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     break;  // End of modifier section
                 }
                 idx++;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A scoped {@code /u}, {@code /a}, or {@code /aa} group must use the UTF-8
+     * Joni variant even when its containing qr// originated in a byte scalar.
+     * The byte variant carries {@code PERL_BYTE_PATTERN}, whose global
+     * case-fold policy deliberately excludes Latin-1 folds; that policy cannot
+     * be relaxed by a nested charset group.
+     */
+    private static boolean hasInlineUnicodeCaseFoldModifier(String pattern) {
+        if (pattern == null) return false;
+
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            char current = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (current == '[') {
+                inClass = true;
+                continue;
+            }
+            if (current == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass || current != '(' || pattern.charAt(i + 1) != '?') continue;
+
+            boolean negated = false;
+            for (int j = i + 2; j < pattern.length(); j++) {
+                char modifier = pattern.charAt(j);
+                if (modifier == ':' || modifier == ')') break;
+                if (modifier == '-') {
+                    negated = true;
+                    continue;
+                }
+                if (modifier == '^') continue;
+                if (modifier < 'a' || modifier > 'z') break;
+                if ((modifier == 'u' || modifier == 'a') && !negated) return true;
             }
         }
         return false;
