@@ -39,13 +39,44 @@ final class ApplyCaseFold implements ApplyAllCaseFoldFunction {
         CClassNode foldCc = arg.foldCc;
         BitSet bs = cc.bs;
         boolean addFlag;
+        boolean bytePropertySource = false;
 
         if (!arg.preservePropertyAsciiCrossings && Option.isPerlAsciiStrict(env.option)
                 && perlAsciiStrictRelationCrossesAscii(from, to, length)) {
             return;
         }
 
-        if (!isEligible(foldCc, enc, from) || ascCc == null) {
+        if (Option.isPerlBytePattern(env.option) && !Encoding.isAscii(from)) {
+            boolean fromMember = cc.isCodeInCC(enc, from);
+            if (length == 1) {
+                boolean fromProperty = isEligible(
+                        arg.propertyFoldCc, enc, from);
+                boolean toProperty = isEligible(
+                        arg.propertyFoldCc, enc, to[0]);
+                bytePropertySource = fromProperty || toProperty;
+                if (!bytePropertySource) return;
+
+                boolean toMember = cc.isCodeInCC(enc, to[0]);
+                boolean propertyMember = (fromProperty && fromMember)
+                        || (toProperty && toMember);
+                if (fromMember != propertyMember) {
+                    if (propertyMember) cc.includeCode(env, from);
+                    else cc.excludeCode(env, from);
+                }
+                if (toMember != propertyMember) {
+                    if (propertyMember) cc.includeCode(env, to[0]);
+                    else cc.excludeCode(env, to[0]);
+                }
+                return;
+            }
+            bytePropertySource = isEligible(arg.propertyFoldCc, enc, from);
+            if (!bytePropertySource) return;
+            if (!fromMember) return;
+        }
+
+        if (bytePropertySource) {
+            addFlag = true;
+        } else if (!isEligible(foldCc, enc, from) || ascCc == null) {
             addFlag = false;
         } else if (Encoding.isAscii(from) == Encoding.isAscii(to[0])) {
             addFlag = true;
