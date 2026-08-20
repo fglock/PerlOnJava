@@ -2146,9 +2146,117 @@ final class Analyser extends Parser {
         /* ending */
         Node xnode = topRoot != null ? topRoot : prevNode.p;
         xnode = addPerlReverseFoldPartitions(sn, xnode);
+        xnode = addPerlSimpleFoldClassPartitions(sn, xnode);
 
         node.replaceWith(xnode);
         return xnode;
+    }
+
+    private Node addPerlSimpleFoldClassPartitions(StringNode source, Node expanded) {
+        if (!syntax.op2OptionPerl() || Option.isPerlAsciiStrict(regex.options)
+                || Option.isPerlBytePattern(regex.options)) {
+            return expanded;
+        }
+
+        ListNode root = null;
+        ListNode tail = null;
+        int literalStart = source.p;
+        boolean hasPerlOnlySibling = false;
+
+        for (int p = source.p; p < source.end;) {
+            int next = p + enc.length(source.bytes, p, source.end);
+            int codePoint = enc.mbcToCode(source.bytes, p, source.end);
+            int foldLength = PerlCaseFold.simpleFoldClassLength(codePoint);
+            // JCodings already supplies ordinary two-member case pairs.  Only
+            // materialize a class when Perl's pinned relation contributes an
+            // extra sibling such as Kelvin or Angstrom; otherwise this would
+            // needlessly discard an exact-literal optimizer candidate.
+            if (foldLength <= 2 && !perlSimpleFoldNeedsPartition(codePoint)
+                    && perlSimpleFoldClassIsNative(source.bytes, p, next,
+                    codePoint, foldLength)) {
+                p = next;
+                continue;
+            }
+
+            boolean hasSibling = false;
+            for (int index = 0; index < foldLength; index++) {
+                int folded = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+                if (folded != codePoint && !PerlCaseFold.isTurkicSourceExcluded(folded)) {
+                    hasSibling = true;
+                    break;
+                }
+            }
+            if (!hasSibling || PerlCaseFold.isTurkicSourceExcluded(codePoint)) {
+                p = next;
+                continue;
+            }
+
+            if (literalStart < p) {
+                ListNode literal = ListNode.newList(
+                        new StringNode(source.bytes, literalStart, p), null);
+                if (root == null) root = literal;
+                else tail.setTail(literal);
+                tail = literal;
+            }
+
+            CClassNode closure = new CClassNode();
+            for (int index = 0; index < foldLength; index++) {
+                int folded = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+                if (!PerlCaseFold.isTurkicSourceExcluded(folded)) {
+                    closure.addCodeRange(env, folded, folded, false);
+                }
+            }
+            ListNode closureNode = ListNode.newList(closure, null);
+            if (root == null) root = closureNode;
+            else tail.setTail(closureNode);
+            tail = closureNode;
+
+            literalStart = next;
+            p = next;
+            hasPerlOnlySibling = true;
+        }
+
+        if (!hasPerlOnlySibling) return expanded;
+        if (literalStart < source.end) {
+            ListNode literal = ListNode.newList(
+                    new StringNode(source.bytes, literalStart, source.end), null);
+            tail.setTail(literal);
+        }
+        ListNode alternatives = newAlt(expanded, null);
+        alternatives.setTail(newAlt(root, null));
+        return alternatives;
+    }
+
+    private boolean perlSimpleFoldNeedsPartition(int codePoint) {
+        // JCodings exposes the case-fold query for these pinned pairs but does
+        // not make its literal matcher accept the reverse source.  Keep this
+        // exceptional relation explicit rather than broadening every ordinary
+        // two-member literal and losing the exact-literal optimizer.
+        return codePoint == 0x023a || codePoint == 0x023e
+                || codePoint == 0x2c65 || codePoint == 0x2c66;
+    }
+
+    private boolean perlSimpleFoldClassIsNative(byte[] bytes, int p, int next,
+                                                int codePoint, int foldLength) {
+        if (foldLength <= 1) return true;
+
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlagFor(regex.options), bytes, p, next);
+        for (int index = 0; index < foldLength; index++) {
+            int sibling = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+            if (sibling == codePoint) continue;
+
+            boolean found = false;
+            for (CaseFoldCodeItem item : items) {
+                if (item.byteLen == next - p && item.code.length == 1
+                        && item.code[0] == sibling) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
     }
 
     private Node addPerlReverseFoldPartitions(StringNode source, Node expanded) {
