@@ -1,10 +1,11 @@
 package org.perlonjava.runtime.regex;
 
 /**
- * Disconnected compatibility parser for historical regex-backend settings.
- * Production matching does not call this class and is always handled by Joni;
- * the Java mode spelling remains only so existing policy tests can describe the
- * retired migration behavior without reintroducing a Java matcher route.
+ * Test-only model of the retired regex-backend selector.
+ *
+ * <p>The historical routing tests remain useful migration documentation, but
+ * this class is deliberately absent from production artifacts. Production
+ * matching is unconditionally implemented by Joni.</p>
  */
 final class RegexBackendPolicy {
     static final String PROPERTY = "jperl.regex.backend";

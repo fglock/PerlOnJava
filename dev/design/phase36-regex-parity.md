@@ -26,8 +26,8 @@ final-acceptance item below.
   warning masks, `use re 'eval'`, executable Perl closures, user-defined
   properties, source locations, and final Perl diagnostic rendering.
 - No production regex may route to `java.util.regex`, including ordinary
-  constant patterns. A disconnected selector-policy parser may remain only
-  while immutable compatibility tests require it.
+  constant patterns. Historical selector-policy tests use a test-scope-only
+  model that cannot enter production artifacts.
 - The maintained Joni/JCodings source packages remain unchanged under
   `third_party/`; standalone packaging relocates them to
   `org.perlonjava.internal` to avoid public collisions.
@@ -73,8 +73,8 @@ repeatable baseline.
   progression, `\G`, `/g`, `/c`, `/o`, substitution, reuse, and nested
   match-state behavior.
 - [ ] Prove byte/Unicode pattern and subject variant selection.
-- [ ] Delete the disconnected backend selector once its compatibility tests can
-  be retired.
+- [x] Delete the disconnected production backend selector while preserving its
+  historical compatibility tests under test scope.
 
 Exit: every ordinary regex executes in Joni with no baseline regression and
 JVM/interpreter agreement.
@@ -130,7 +130,7 @@ agree with standard Perl on JVM and interpreter.
 - [x] Remove obsolete imported regex patches and prove targeted sync idempotent.
 - [ ] Delete remaining matcher-semantic preprocessing, source scanners, and
   unreachable adapters after their native gates pass.
-- [ ] Prove no environment setting can select a production Java matcher.
+- [x] Prove no environment setting can select a production Java matcher.
 
 Exit: Joni is the sole matcher and only documented Perl source policy remains
 outside it.
@@ -162,12 +162,13 @@ assertions. The integrated subject-sensitive byte/`/d` and fullwidth-xdigit
 fix restores complete `re/charset.t` execution, and the logical-wide-scalar
 `chop` fix restores `op/chop.t` to 148/148. A fresh bounded rerun also
 executes `op/stat.t` 111/111 on both backends, above PR 958's 107/111. The
-shared default-`/d` byte-variant root is now closed in focused worker evidence:
+shared default-`/d` byte-variant root is now closed in focused evidence:
 dynamic source provenance, callback search, grapheme boundaries, Unicode
 properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
-immutable comparison are pending. P5 owns the two `re/pat_advanced.t`
-source/debug rows.
+immutable comparison are pending. The production backend selector has been
+removed and its packaging/property invariance gates are awaiting the combined
+build. P5 owns the two `re/pat_advanced.t` source/debug rows.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -175,20 +176,18 @@ be separated and closed before dual-backend acceptance.
 
 Active ownership:
 
-- P3: retire the disconnected backend-selector compatibility plumbing and prove
-  that no environment/property setting can select a production Java matcher.
 - P4: exhaust all remaining same-source native `reg_mesg.t` parser/range/escape
   diagnostic families and classify the residual.
 - P5: close the `EMPTY-STR` custom-charname blocker, debug/source trace, and the
   two `pat_advanced.t` rows.
 - P6: unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and removed-
   accommodation CPAN release matrix; latest-upstream sync is integrated.
-- Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, combined build, and release evidence.
+- Coordinator: backend-selector retirement, integration, conflict resolution,
+  immutable acceptance, PR/CI, plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Integrate cohesive P3/P4/P5/P6 deliveries, preserving all vendored notices.
+1. Integrate cohesive P4/P5/P6 deliveries, preserving all vendored notices.
    Resolve shared Joni parser changes centrally and retain every independent
    semantic fix.
 2. Run one combined warning-free `make`, then refresh focused Unicode,
@@ -250,8 +249,8 @@ Active ownership:
 - [x] `(*MARK:NAME)` and named control-verb state execute in Joni.
 - [x] Bounded `pat_psycho*` and `speed*` semantic/performance closure.
 - [ ] No supported regex test needs `JPERL_UNIMPLEMENTED=warn`.
-- [ ] Joni is the sole production matcher; selector compatibility code is
-  disconnected or retired.
+- [x] Joni is the sole production matcher; selector compatibility code is
+  test-scope-only and absent from production packaging.
 - [ ] Matcher-semantic preprocessing and obsolete import patches are gone.
 - [ ] Targeted latest-upstream sync is reproducible and idempotent.
 - [ ] Feature matrix and architecture/fork documents match implementation.
