@@ -205,6 +205,13 @@ public class RegexQuoteMeta {
                 && message.contains("lookbehind with capturing is experimental")) {
             return "experimental::vlb";
         }
+        if (message != null
+                && (message.startsWith(
+                        "The Unicode property wildcards feature is experimental")
+                    || message.startsWith(
+                        "Using just the single character results returned by \\p{} in (?[...])"))) {
+            return "experimental::uniprop_wildcards";
+        }
         return "regexp";
     }
 }

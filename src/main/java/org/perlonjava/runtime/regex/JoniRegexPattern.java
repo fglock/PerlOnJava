@@ -550,6 +550,12 @@ final class JoniRegexPattern {
             String unnegated = property.startsWith("^")
                     ? property.substring(1).trim() : property;
             boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(unnegated);
+            if (extendedClassBracketDepth > 0
+                    && UnicodeResolver.isPerlStringProperty(unnegated)) {
+                throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                        pattern, end + 1,
+                        "Unicode string properties are not implemented in (?[...])"));
+            }
             if (userDefined) {
                 boolean mustDefer =
                         UnicodeResolver.mustDeferPotentialUserDefinedProperty(
