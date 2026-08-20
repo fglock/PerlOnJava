@@ -19,9 +19,8 @@ verbs, backtracking, optimizer selection, and match-time callout opcodes.
 
 This is an as-implemented record. The ordered gates remain in
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); historical
-investigation records such as
-[`phase36-regex-differential-20260817.md`](../design/phase36-regex-differential-20260817.md)
-are evidence snapshots, not current routing documentation.
+investigation snapshots are retained in Git history, not as current routing
+documentation.
 
 ## Frontend policy and compilation
 

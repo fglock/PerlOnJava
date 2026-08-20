@@ -176,7 +176,5 @@ behavior or stabilize transitional routing decisions.
 Related documents:
 
 - `dev/design/phase36-regex-parity.md`
-- `dev/design/executable-regex-callbacks.md`
-- `dev/design/regex_engines.md`
-- `dev/design/regex_jruby_joni.md`
 - `dev/implementation/regex.md`
+- `docs/design/joni-callout-fork.md`
