@@ -60,6 +60,10 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_GROUP_EFFECT_INCOMPLETE = "Sequence (? incomplete";
     String UNDEFINED_GROUP_OPTION = "undefined group option";
     String INVALID_POSIX_BRACKET_TYPE = "invalid POSIX bracket type";
+    String PERL_POSIX_EQUIVALENCE_CLASS_RESERVED =
+            "POSIX syntax [= =] is reserved for future extensions";
+    String PERL_POSIX_COLLATING_ELEMENT_RESERVED =
+            "POSIX syntax [. .] is reserved for future extensions";
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
     String PERL_LOOK_BEHIND_LONGER_THAN_255 =
             "Lookbehind longer than 255 not implemented in regex";
