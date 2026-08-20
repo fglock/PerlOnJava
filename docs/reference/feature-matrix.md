@@ -354,71 +354,59 @@ my @copy = @{$z};         # ERROR
 
 ## Regular Expressions
 
-Regex status is backed by the named source and fixture paths below. The default
-route is Joni (`RuntimeRegex.java`, `RegexBackendPolicy.java`); explicit
-`JPERL_REGEX_BACKEND=java` is diagnostic-only differential mode, and constructs
-that Java cannot represent still force Joni. “Implemented” means the cited
-current gate passes, not that every diagnostic, provenance, performance, or
-cross-platform migration obligation is closed. Unicode imports follow the
-current latest upstream `perl5/` checkout; refresh checks compare outputs within
-that refresh and do not require a historical Perl or Unicode version.
-- ✅  **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
-- ✅  **Regex modifiers**: Modifiers `/p` `/i` `/m` `/s` `/n` `/g` `/c` `/r` `/e` `/ee` `/x` `/xx` are implemented.
-- ✅  **Special variables**: The special variables `$1`, `$2`... are implemented.
-- ✅  **Transliteration**: `tr` and `y` transliteration operators are implemented.
-- ✅  **`pos`**: `pos` operator is implemented.
-- ✅  **`\G`**: `\G` operator in regex is implemented.
-- ✅  **`\N{name}`**: `\N{name}` and `\N{U+hex}` operator for named characters in regex is implemented.
-- ✅  **`\N`**: Not-newline operator.
-- ✅  **lvalue `pos`**: lvalue `pos` operator is implemented.
-- ✅  **`m?pat?`** one-time match is implemented.
-- ✅  **`reset`** resetting one-time match is implemented
-- ✅  **`@-`, `@+`, `%+`, `%-`, `@{^CAPTURE}`, `${^LAST_SUCCESSFUL_PATTERN}` variables**: regex special variables are implemented
-- ✅  **`$&` variables**: `` $` ``, `$&`, `$'`, `$+` special variables are implemented, and aliases: `${^PREMATCH}`, `${^MATCH}`, `${^POSTMATCH}`.
-- ✅  **`[[:pattern:]]`**: `[[:ascii:]]`, `[[:print:]]` are implemented.
-- ✅  **Matching plain strings**: `$var =~ "Test"` is implemented.
-- ✅  **Inline comments**: `(?#comment)` in regex is implemented.
-- ✅  **caret modifier**: `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
-- ✅  **\b inside character class**: `[\b]` is supported in regex.
-- ✅  **Vertical whitespace escapes**: Native Joni `\v` matches U+000A..U+000D, U+0085, U+2028, and U+2029; `\V` matches the complement. Direct and character-class forms match Perl, and `reg_posixcc.t` passes 2,560/2,560 on both execution backends.
-- ✅  **Unicode boundary assertions**: `\b{gcb}`, `\b{sb}`, `\b{wb}`, and `\b{lb}` (and their `\B` forms) execute natively in Joni. Current focused gates are `grapheme_boundary_rules.t`, `sentence_boundary_rules.t`, and `line_boundary_rules.t`; generated data is refreshed from the latest upstream checkout.
-- ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
-- ✅  **Non-capturing groups**: `(?:...)` is implemented.
-- ✅  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is supported.
-- ✅  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is supported.
-- ✅  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
-- ✅  **Basic Unicode Properties**: Common `\p{...}` and `\P{...}` forms such as `\p{L}` execute through Joni. Gates: `regex_unicode_properties.t` and `unicode_general_category_compatibility_aliases.t`.
-- 🟡  **Perl Unicode Property Syntax**: Perl-specific properties execute through Joni. Wildcards execute in Joni but are temporarily materialized as selected ranges by the adapter; see `unicode_property_value_wildcards.t` and `joni_native_property_wildcard_lexer.t`. Some fold, alias, and diagnostic cases remain migration work.
-- 🟡  **Named Unicode Sequences**: Current-upstream generated `Name.pl` data resolves multi-code-point `\\N{name}` sequences before scalar names in strings and Joni patterns. Gates: `unicode_named_sequences.t` and `joni_named_character_sequences.t`; exact restricted-class diagnostics remain active work.
-- ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, and `{n,m}+`, which disable backtracking, are supported.
-- ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
-- ✅  **`\K` assertion**: Keep left — in `s///`, text before `\K` is preserved; match variables reflect only the portion after `\K`. Ordinary KEEP assertions route through native Joni and no longer use the Java marker rewrite; the adapter still rejects KEEP inside lookaround until the Joni analyser emits Perl's diagnostic directly.
-- ✅  **Preprocessor**: `\Q`, `\L`, `\U`, `\l`, `\u`, `\E` are preprocessed in regex.
-- ✅  **Overloading**: `qr` overloading is implemented. See also [overload pragma](#pragmas).
-- ✅  **Python-style named groups**: `(?P<name>...)` and `(?P=name)` are parsed natively by Joni with Perl capture numbering, duplicate-name behavior, and malformed/unknown-name diagnostics.
-- ✅  **Alpha assertion aliases**: `(*pla:...)`, `(*plb:...)`, `(*nla:...)`, `(*nlb:...)`, `(*atomic:...)`, and the corresponding long spellings are parsed natively by Joni with Perl nesting, capture numbering, backtracking, assertion-condition predicates, and malformed-form diagnostics.
-- 🟡  **Underscored numeric regex escapes**: Joni natively parses Perl spellings such as `\x{0_0_4_1}` and `\o{0_0_1_0_1}` through U+10FFFF, including literal/class forms, bare high-octal UTF-8 code points, truncation behavior, and structural diagnostics. The frontend normalization remains for forced-Java compatibility; exact `use re 'strict'` diagnostics and Perl code points above U+10FFFF through signed IV max remain source-policy/representation debt.
+All production matching uses the vendored Joni fork through `RuntimeRegex` and
+`JoniRegexPattern`; there is no production Java matcher or preprocessor route.
+The disconnected `RegexBackendPolicy` parser exists only to compile immutable
+compatibility tests and is not a runtime capability switch. Status below means
+the named behavior is demonstrated by source and a focused gate, not that every
+Perl diagnostic, optimizer path, or complete upstream corpus is closed.
 
-- ✅  **Dynamically-scoped regex variables**: Provisional captures, `$^R`, `$^N`, match positions, and callback locals follow matcher paths and unwind on backtracking.
-- ✅  **Recursive and Dynamic Patterns**: `(?R)`, `(?0)`, and runtime `(??{ code })` execute through Joni. Dynamic expressions may return strings or `qr//` values, nested alternatives participate in outer backtracking without changing outer grouping or capture numbering, and callback and pure-pattern recursion have engine-owned depth ceilings.
-- ✅  **Backtracking Control Verbs**: `(*ACCEPT)`, `(*FAIL)`/`(*F)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, and `(*COMMIT)` execute through Joni with matcher-owned cut boundaries. Atomic groups `(?>...)` are supported.
-- ✅  **Marks and named skip targets**: `(*MARK:NAME)` and its `(*:NAME)` shorthand, named `(*SKIP:NAME)`, `$REGMARK`, and `$REGERROR` execute through Joni and follow the selected backtracking path.
-- 🟡  **Regex Definitions**: `(?(DEFINE)...)` containers and numbered or named calls to their subpatterns execute through Joni. The frontend still rewrites the non-executing container into an equivalent internal form; native Joni ownership and removal of that rewrite remain in progress.
-- ✅  **Lookbehind Assertions**: Fixed and bounded variable-length positive and negative lookbehind assertions execute through Joni, including nested lookahead. Removing the remaining compatibility routing requires the complete lookbehind corpus and native diagnostics to pass.
-- ✅  **Branch Reset Groups**: `(?|...)` resets capture numbering across alternatives and preserves mapped match variables.
-- ✅  **Advanced Subroutine Calls**: Sub-pattern calls with numbered or named references like `(?1)` and `(?&name)` execute through Joni.
-- ✅  **Conditional Expressions**: Numbered and named capture conditions, positive and negative assertion conditions, recursion conditions `(?(R))`, `(?(R1))`, and `(?(R&name))`, executable callback conditions, and optimistic predicates execute through Joni.
-- 🟡  **Extended Unicode Regex Features**: Generated Perl property families, invalid-property gates, and Unicode boundaries execute through Joni. The complete property corpus currently passes 83,616/83,648 identically on JVM and interpreter; the 32 residual assertions are only deprecated `Hyphen`/`IsHyphen` warning diagnostics, while membership assertions pass. Boundary, grapheme, sentence, word, and line corpora have their separate complete gates below.
-- ✅  **Extended Grapheme Clusters**: Native `\b{gcb}`/`\B{gcb}` implement GB1–GB13 and GB999, and `\X` includes repeated GB9c Indic conjuncts. The complete 8,516-assertion GCB/`\X` section of authoritative chunk 05 passes identically on JVM and interpreter.
-- ✅  **Unicode Sentence Boundaries**: Native `\b{sb}`/`\B{sb}` implement sentence boundaries; focused gate: `sentence_boundary_rules.t`.
-- ✅  **Unicode Word Boundaries**: Native `\b{wb}`/`\B{wb}` implement word boundaries; focused gate: `boundary_empty_whitespace.t` plus the generated corpus in the repository build.
-- ✅  **Unicode Line Boundaries**: Native `\b{lb}`/`\B{lb}` implement line boundaries; focused gate: `line_boundary_rules.t`.
-- ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Callback `local` frames follow matcher paths, and escaped loop control or `goto` stops at the callback pseudo-block boundary. `$^N` follows capture-close order independently of `$+`.
-- ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
-- ✅  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile. Admitted runtime source is compiled into lexical callback closures and preserves its package, visible lexical cells, Unicode or byte source type, default regex modifiers, and match-once state. Literal callbacks, interpolated `qr//` values (including local, referenced, and tied arrays), raw runtime eval groups, callback conditions, and standalone `(?(DEFINE)...)` containers may be composed in one Joni pattern; dynamic callbacks may return further admitted executable source.
-- ✅  **Regex Compilation Flags**: Lexically scoped default flags from `use/no re '/imsx'` are applied to literal, interpolated, and runtime-compiled regex values.
-- 🟡  **Perl capture and ASCII fold modifiers**: Top-level and scoped `/n` suppress unnamed captures. `/a` and `/aa` matching is available through the Joni path, but native property/class closure, byte/Unicode provenance, literal reverse expansion, and backreference folding are still being moved from adapter protections into the fork.
-- ✅  **Perl Named Captures**: Names may contain underscores, and duplicate named groups preserve Perl-style `%+`/`%-` and backreference behavior.
+The review covers the current `perl5/pod/perlreref.pod`, `perlrecharclass.pod`,
+`perlrequick.pod`, `perlrepository.pod`, `perlre.pod`, `perlretut.pod`, and
+`perlrebackslash.pod` inventory. POD syntax examples are grouped by semantic
+family; documentation headings such as NAME, DESCRIPTION, BUGS, SEE ALSO,
+AUTHORS, and repository prose are intentionally excluded from capability
+claims. The review classified 565 inventory rows: 516 map to a capability
+family, 42 are intentional descriptive/tutorial exclusions, and seven record
+the source POD files; no rows were left unclassified.
+
+| Family | Status | Supported behavior and evidence | Boundary |
+|---|---|---|---|
+| Operations, interpolation, and state | ✅ | `qr//`, `m//`, `s///`, `split`, `tr///`, `y///`, interpolation, `m?PAT?`, `reset`, `/g`, `/c`, `pos`, `\G`, match offsets, `$1`, `$&`, `$'`, `$+`, `%+`, and `%-`; `RuntimeRegex.java`, `regex_g_pos.t`, `regex_c_pos.t`, `regex_once.t`, `regex_mark_control.t`. | Reuse and state are runtime-local; complete corpus parity remains a release gate. |
+| Modifiers and quoting | 🟡 | `/i`, `/m`, `/s`, `/p`, `/n`, `/x`, `/xx`, `/g`, `/c`, `/r`, `/e`, `/ee`, `(?^...)`, scoped option groups, `(?#...)`, `\Q...\E`, and case escapes; `RegexFlags.java`, `RegexQuoteMeta.java`, `regex_xx.t`, `regex_n.t`, `re_debug_pragma.t`. | `/d`, `/u`, `/l`, `/a`, and `/aa` provenance and folding differ by pattern/subject mode; unresolved portions are partial rather than a Java fallback. |
+| Atoms, quantifiers, and ordinary classes | 🟡 | Literals, `.`, anchors, alternation, captures/non-captures, greedy/lazy/possessive quantifiers, atomic groups, `\K`, POSIX classes, `\d`, `\w`, `\s`, `\h`, `\v`, `\R`, `\N`, and `\X`; `JoniRegexPattern.java`, `regex_possessive_quantifier.t`, `regex_atomic_group.t`, `joni_keep_progress.t`, `vertical_whitespace_escape.t`. | Forward/reverse literal and character-class fold expansion remains an open semantic gate; KEEP in lookaround and exact malformed-pattern wording are also partial. |
+| Escapes, numeric forms, and references | 🟡 | Control, octal, hexadecimal, named, absolute, relative, and named references are parsed by Joni; `numeric_escape_underscores.t`, `native_numeric_backreference_boundaries.t`, `native_escape_named_reference_diagnostics.t`, `joni_relative_group_call_diagnostics.t`. | Exact `re 'strict'` messages and values outside ordinary Unicode/signed scalar representation remain divergent. |
+| Unicode properties, names, and character-class algebra | 🟡 | Current-Perl generated properties, aliases, POSIX compatibility, `\p`/`\P`, `\N{name}`, multi-code-point names, `(?[...])`, and property-value wildcards execute in Joni; `UnicodeResolver.java`, `unicode_all_property.t`, `unicode_named_sequences.t`, `joni_named_character_sequences.t`, `unicode_property_value_wildcards.t`, `extended_more_character_class.t`. | Exact unknown/restricted-name and property diagnostics, plus remaining fold/provenance cases, are partial. Generated data refreshes from the latest upstream checkout rather than a pinned Perl SHA. |
+| Captures, names, branch reset, and backreferences | 🟡 | Perl and Python named captures, duplicate names, numbered/relative/named backreferences, `(?|...)`, `/n`, and capture publication; `branch_reset_capture_semantics.t`, `branch_reset_named_call.t`, `regex_duplicate_named_backreference.t`, `regex_named_capture.t`, `casefold_literal_backreference.t`, `joni_ascii_strict_backreference_folds.t`. | Case-insensitive backreference folding is covered for existing cases, but its full-fold/charset interaction shares the unresolved literal/class fold boundary; malformed-reference diagnostics remain partial. |
+| Lookarounds and alpha aliases | 🟡 | Positive/negative lookahead, fixed and bounded lookbehind, nested assertions, and `(*pla:...)`/`(*plb:...)`/`(*nla:...)`/`(*nlb:...)`; `lookbehind_native_acceptance.t`, `extended_unicode_lookbehind.t`, `alpha_assertion_native_routing.t`. | Variable-width limits, KEEP-in-lookaround, and exact failure positions remain partial. |
+| Calls, recursion, DEFINE, and conditions | ✅ | `(?R)`, `(?0)`, numbered/named/signed-relative calls, `(?(DEFINE)...)`, capture/assertion/recursion conditions, and branch-reset calls; `recursive_patterns.t`, `joni_whole_pattern_recursion.t`, `recursion_conditions.t`, `conditional_native_routing.t`. | Engine depth ceilings and remaining malformed-condition diagnostics are explicit limits. |
+| Code groups and dynamic programs | 🟡 | Parser-created `(?{...})`, `(*{...})`, callback conditions, and `(??{...})` execute as matcher-local Joni callouts with backtracking unwind; dynamic values may be strings or `qr//`; `executable_callbacks.t`, `dynamic_patterns.t`, `native_dynamic_pattern_contract.t`, `callback_exception_unwind.t`. | Raw runtime executable text requires `use re 'eval'`; untrusted interpolated callback text is not promoted to executable code. |
+| Control verbs and marks | ✅ | `(*ACCEPT)`, `(*FAIL)`/`(*F)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, `(*COMMIT)`, `(*MARK:NAME)`, `(*:NAME)`, `$REGMARK`, and `$REGERROR`; `perl_control_verbs.t`, `control_verb_paths.t`, `named_accept_fail_control_verbs.t`, `regex_mark_control.t`. | Optimizer behavior intentionally yields to matcher control flow; performance evidence is separate. |
+| Unicode boundaries and byte behavior | 🟡 | `\b{gcb}`, `\b{sb}`, `\b{wb}`, `\b{lb}`, `\B` forms, UTF-8 offset mapping, byte-mode identity mapping, and wide scalar encoding; `grapheme_boundary_rules.t`, `sentence_boundary_rules.t`, `word_boundary_rules.t`, `line_boundary_rules.t`, `wide_scalar_engine_semantics.t`. | Charset-mode folds and byte-backed class provenance are active partial work. |
+| Warnings, diagnostics, debug, and performance | 🟡 | Source-positioned compile errors, `use re 'strict'` policy, `use/no re 'debug'`, `debugcolor`, and warning inheritance; `RegexDiagnosticFormatter.java`, `frontend_regex_diagnostic_provenance.t`, `native_compile_diagnostics.t`, `re_debug_pragma.t`. | Remaining native lexer/parser diagnostic families and optimizer `speed*` behavior are active work; parser acceptance is not proof of exact Perl diagnostics. |
+| Custom engines and non-Perl interfaces | ❌ | `perlre` custom regex-engine hooks and host-defined engine protocols are not implemented. | PerlOnJava supports its bundled Joni engine only. |
+
+### Pending final integrated verification
+
+This first-pass matrix is pinned to integrated parent
+`5054f236ea8533c46b1068275bdbd703c3207ace`. A later pass may promote only rows
+whose required tests pass on the final immutable integration artifact:
+
+- `/d` byte-backed class provenance and its charset/fold interaction;
+- remaining native lexer/parser diagnostics and exact source-position wording;
+- optimizer-sensitive literal/fold search behavior, including the `speed*`
+  corpus.
+
+No result is predicted here; until that artifact exists, these boundaries remain
+partial regardless of progress in POJ3, POJ4, or POJ5 worktrees.
+
+The current source-level architecture is described in
+[`dev/implementation/regex.md`](../../dev/implementation/regex.md) and the
+runtime-neutral callback/packaging contract in
+[`docs/design/joni-callout-fork.md`](../design/joni-callout-fork.md). The Phase
+36 plan remains the authority for integration and release completion; active
+P3 `/d` provenance, P4 diagnostic, and P5 optimizer work is deliberately marked
+partial here until its commits and shared gates are integrated.
 
 
 ## Statements and Special Operators
