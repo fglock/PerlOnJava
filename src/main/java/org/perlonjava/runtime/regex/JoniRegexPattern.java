@@ -236,6 +236,7 @@ final class JoniRegexPattern {
     private final RegexFlags flags;
     private final boolean hasControlVerbState;
     private final boolean hasDeferredUserDefinedUnicodeProperty;
+    private final boolean hasUserDefinedUnicodeProperty;
     private final boolean byteMode;
     private final List<String> compileWarnings;
 
@@ -340,7 +341,9 @@ final class JoniRegexPattern {
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
-        hasDeferredUserDefinedUnicodeProperty = deferredPropertyState.deferred;
+        hasDeferredUserDefinedUnicodeProperty = userProperties.deferred()
+                || deferredPropertyState.deferred;
+        hasUserDefinedUnicodeProperty = userProperties.userDefined();
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
@@ -456,16 +459,22 @@ final class JoniRegexPattern {
         return hasDeferredUserDefinedUnicodeProperty;
     }
 
+    boolean hasUserDefinedUnicodeProperty() {
+        return hasUserDefinedUnicodeProperty;
+    }
+
     List<String> compileWarnings() {
         return List.copyOf(compileWarnings);
     }
 
-    private record UserPropertyTranslation(String pattern, boolean deferred) {}
+    private record UserPropertyTranslation(
+            String pattern, boolean deferred, boolean userDefined) {}
 
     private static UserPropertyTranslation translateUserDefinedProperties(
             String pattern, RegexFlags flags) {
         StringBuilder translated = new StringBuilder(pattern.length());
         boolean deferred = false;
+        boolean containsUserDefined = false;
         int extendedClassBracketDepth = 0;
         int standardClassBracketDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
@@ -546,6 +555,9 @@ final class JoniRegexPattern {
                     // Native Joni selects the mode-specific callback cache from
                     // env.option and records deferral only for tokens its lexer
                     // actually reaches. Comments and quoted text stay inert.
+                    // Even an already resolved user property remains Unicode-
+                    // authoritative: its ranges are not constrained to bytes.
+                    containsUserDefined = true;
                     translated.append(pattern, i, end + 1);
                     i = end;
                     continue;
@@ -607,10 +619,12 @@ final class JoniRegexPattern {
                 }
                 translated.append("[\\s\\S]");
                 deferred = true;
+                containsUserDefined = true;
             }
             i = end;
         }
-        return new UserPropertyTranslation(translated.toString(), deferred);
+        return new UserPropertyTranslation(
+                translated.toString(), deferred, containsUserDefined);
     }
 
     /**
@@ -1318,9 +1332,7 @@ final class JoniRegexPattern {
                 } else {
                     result = anchored
                             ? matcher.match(charToByte[nextStart], charToByte[regionEnd], option)
-                            : callbacks.isEmpty()
-                                    ? matcher.search(charToByte[nextStart], charToByte[regionEnd], option)
-                                    : searchEachCallbackCandidate(option);
+                            : matcher.search(charToByte[nextStart], charToByte[regionEnd], option);
                 }
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
@@ -1356,17 +1368,6 @@ final class JoniRegexPattern {
             int end = end();
             nextStart = end > consumedStart ? end : advanceCodePoint(end);
             return true;
-        }
-
-        private int searchEachCallbackCandidate(int option) {
-            for (int candidate = nextStart; candidate <= regionEnd;
-                 candidate = advanceCodePoint(candidate)) {
-                int byteCandidate = charToByte[candidate];
-                if (matcher.match(byteCandidate, charToByte[regionEnd], option) >= 0) {
-                    return byteCandidate;
-                }
-            }
-            return -1;
         }
 
         @Override
