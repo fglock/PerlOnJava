@@ -834,6 +834,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     String backendDiagnostic = e.getMessage();
                     if (backendDiagnostic != null
                             && backendDiagnostic.startsWith("Unknown charname '")
+                            && literalFrontendDiagnostic.startsWith("Unknown charname '")) {
+                        // Literal source validation and native compilation are
+                        // two legs of one compile. Perl reports the lexical
+                        // source diagnostic once, not again as a backend error.
+                        throw new PerlCompilerException(literalFrontendDiagnostic + "\n");
+                    }
+                    if (backendDiagnostic != null
+                            && backendDiagnostic.startsWith("Unknown charname '")
                             && !backendDiagnostic.endsWith(" in regex")) {
                         backendDiagnostic += " in regex";
                     }
