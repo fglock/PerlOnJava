@@ -154,12 +154,14 @@ The integration branch contains additional native fixes and must not update the
 PR until its exact head passes `make`.
 
 The first complete 286-file JVM comparison improves 74 rows and 403,846 passing
-assertions but is fail-closed on six lower rows:
+assertions. The integrated subject-sensitive byte/`/d` and fullwidth-xdigit
+fix restores complete `re/charset.t` execution; the refreshed immutable
+comparison remains fail-closed until the other five lower rows are rerun:
 
 - P3: `re/pat_advanced.t` and its thread variant, currently stopped by custom
   charname `foo` context.
-- P4: `re/regex_sets.t`, `re/charset.t`, `op/chop.t`, and `op/stat.t`,
-  subject to exact rerun and ownership classification.
+- P4: `re/regex_sets.t`, `op/chop.t`, and `op/stat.t`, subject to exact
+  rerun and ownership classification.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -168,7 +170,7 @@ be separated and closed before dual-backend acceptance.
 Active ownership:
 
 - P3: Unicode/property/charnames and the two `pat_advanced` rows.
-- P4: four independent JVM acceptance rows and non-POSIX parser/range families.
+- P4: three independent JVM acceptance rows and non-POSIX parser/range families.
 - P5: debug-trace, analyser-warning policy, benchmark, and obsolete Java-label
   audit.
 - P6: remaining POSIX parser/diagnostic families, then the first safe
