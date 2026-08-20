@@ -353,6 +353,15 @@ my @copy = @{$z};         # ERROR
 ---
 
 ## Regular Expressions
+
+Regex status is backed by the named source and fixture paths below. The default
+route is Joni (`RuntimeRegex.java`, `RegexBackendPolicy.java`); explicit
+`JPERL_REGEX_BACKEND=java` is temporary differential diagnosis, and constructs
+that Java cannot represent still force Joni. “Implemented” means the cited
+current gate passes, not that every diagnostic, provenance, performance, or
+cross-platform migration obligation is closed. Unicode imports follow the
+current latest upstream `perl5/` checkout; refresh checks compare outputs within
+that refresh and do not require a historical Perl or Unicode version.
 - ✅  **Basic Matching**: Operators `qr//`, `m//`, `s///`, `split` are implemented.
 - ✅  **Regex modifiers**: Modifiers `/p` `/i` `/m` `/s` `/n` `/g` `/c` `/r` `/e` `/ee` `/x` `/xx` are implemented.
 - ✅  **Special variables**: The special variables `$1`, `$2`... are implemented.
@@ -372,15 +381,15 @@ my @copy = @{$z};         # ERROR
 - ✅  **caret modifier**: `(?^` embedded pattern-match modifier, shorthand equivalent to "d-imnsx".
 - ✅  **\b inside character class**: `[\b]` is supported in regex.
 - ✅  **Vertical whitespace escapes**: Native Joni `\v` matches U+000A..U+000D, U+0085, U+2028, and U+2029; `\V` matches the complement. Direct and character-class forms match Perl, and `reg_posixcc.t` passes 2,560/2,560 on both execution backends.
-- ✅  **Unicode boundary assertions**: `\b{gcb}`, `\b{sb}`, `\b{wb}`, and `\b{lb}` (and their `\B` forms) execute natively in Joni from reproducible pinned Perl 5.44 Unicode 17.0 data. The complete 239,866-assertion generated boundary corpus passes on both backends.
+- ✅  **Unicode boundary assertions**: `\b{gcb}`, `\b{sb}`, `\b{wb}`, and `\b{lb}` (and their `\B` forms) execute natively in Joni. Current focused gates are `grapheme_boundary_rules.t`, `sentence_boundary_rules.t`, and `line_boundary_rules.t`; generated data is refreshed from the latest upstream checkout.
 - ✅  **Variable Interpolation in Regex**: Features like `${var}` for embedding variables.
 - ✅  **Non-capturing groups**: `(?:...)` is implemented.
 - ✅  **Named Capture Groups**: Defining named capture groups using `(?<name>...)` or `(?'name'...)` is supported.
 - ✅  **Backreferences to Named Groups**: Using `\k<name>` or `\g{name}` for backreferences to named groups is supported.
 - ✅  **Relative Backreferences**: Using `\g{-n}` for relative backreferences.
-- ✅  **Basic Unicode Properties**: Common `\p{...}` and `\P{...}` forms such as `\p{L}` execute through Joni. General_Category assignments now enter the forked Joni parser unchanged and resolve to pinned Perl ranges there.
-- 🟡  **Perl Unicode Property Syntax**: Perl-specific properties execute through Joni from generated pinned Perl 5.44 Unicode 17.0 data. Exact assignments use Joni's range-resolver API with explicit per-family fold policy. Property-value wildcard expressions are compiled and executed by the forked Joni matcher, then temporarily materialized as selected ranges by the adapter; Java regex no longer evaluates them. No-fold properties inside composed classes and some generated alias/diagnostic cases remain migration work.
-- 🟡  **Named Unicode Sequences**: A generated pinned 461-entry Perl Unicode 17 table resolves multi-code-point `\\N{name}` sequences before scalar names in strings and Joni patterns. Temporary internal encoding and exact diagnostics for unknown or restricted class uses remain migration work.
+- ✅  **Basic Unicode Properties**: Common `\p{...}` and `\P{...}` forms such as `\p{L}` execute through Joni. Gates: `regex_unicode_properties.t` and `unicode_general_category_compatibility_aliases.t`.
+- 🟡  **Perl Unicode Property Syntax**: Perl-specific properties execute through Joni. Wildcards execute in Joni but are temporarily materialized as selected ranges by the adapter; see `unicode_property_value_wildcards.t` and `joni_native_property_wildcard_lexer.t`. Some fold, alias, and diagnostic cases remain migration work.
+- 🟡  **Named Unicode Sequences**: Current-upstream generated `Name.pl` data resolves multi-code-point `\\N{name}` sequences before scalar names in strings and Joni patterns. Gates: `unicode_named_sequences.t` and `joni_named_character_sequences.t`; exact restricted-class diagnostics remain active work.
 - ✅  **Possessive Quantifiers**: Quantifiers like `*+`, `++`, `?+`, and `{n,m}+`, which disable backtracking, are supported.
 - ✅  **Atomic Grouping**: Use of `(?>...)` for atomic groups is supported.
 - ✅  **`\K` assertion**: Keep left — in `s///`, text before `\K` is preserved; match variables reflect only the portion after `\K`. Ordinary KEEP assertions route through native Joni and no longer use the Java marker rewrite; the adapter still rejects KEEP inside lookaround until the Joni analyser emits Perl's diagnostic directly.
@@ -401,9 +410,9 @@ my @copy = @{$z};         # ERROR
 - ✅  **Conditional Expressions**: Numbered and named capture conditions, positive and negative assertion conditions, recursion conditions `(?(R))`, `(?(R1))`, and `(?(R&name))`, executable callback conditions, and optimistic predicates execute through Joni.
 - 🟡  **Extended Unicode Regex Features**: Generated Perl property families, invalid-property gates, and Unicode boundaries execute through Joni. The complete property corpus currently passes 83,616/83,648 identically on JVM and interpreter; the 32 residual assertions are only deprecated `Hyphen`/`IsHyphen` warning diagnostics, while membership assertions pass. Boundary, grapheme, sentence, word, and line corpora have their separate complete gates below.
 - ✅  **Extended Grapheme Clusters**: Native `\b{gcb}`/`\B{gcb}` implement GB1–GB13 and GB999, and `\X` includes repeated GB9c Indic conjuncts. The complete 8,516-assertion GCB/`\X` section of authoritative chunk 05 passes identically on JVM and interpreter.
-- ✅  **Unicode Sentence Boundaries**: Native `\b{sb}`/`\B{sb}` implement SB1–SB11 and SB998 from the reproducible Perl 5.44 Unicode 17.0 sentence-break table. Authoritative chunk 05 passes 14,976/14,976 identically on JVM and interpreter.
-- ✅  **Unicode Word Boundaries**: Native `\b{wb}`/`\B{wb}` implement WB1–WB16 and WB999 from reproducible Perl 5.44 Unicode 17.0 word-break and extended-pictographic tables. Authoritative chunk 10 passes 19,510/19,510 identically on JVM and interpreter.
-- ✅  **Unicode Line Boundaries**: Native `\b{lb}`/`\B{lb}` implement Unicode 17 UAX #14 from reproducible pinned line-break, category, width, and emoji tables. Authoritative chunks 06–09 pass 205,380/205,380 identically on JVM and interpreter.
+- ✅  **Unicode Sentence Boundaries**: Native `\b{sb}`/`\B{sb}` implement sentence boundaries; focused gate: `sentence_boundary_rules.t`.
+- ✅  **Unicode Word Boundaries**: Native `\b{wb}`/`\B{wb}` implement word boundaries; focused gate: `boundary_empty_whitespace.t` plus the generated corpus in the repository build.
+- ✅  **Unicode Line Boundaries**: Native `\b{lb}`/`\B{lb}` implement line boundaries; focused gate: `line_boundary_rules.t`.
 - ✅  **Embedded Code in Regex**: `(?{ code })`, optimistic callbacks `(*{ code })`, executable callback conditions, and `(??{ code })` run as lexical closures in Joni with provisional captures and backtracking unwind. Callback `local` frames follow matcher paths, and escaped loop control or `goto` stops at the callback pseudo-block boundary. `$^N` follows capture-close order independently of `$+`.
 - ✅  **Regex Debugging**: Lexically scoped `use/no re 'debug'` and `debugcolor` are supported, including runtime snapshot ownership.
 - ✅  **Runtime Regex Evaluation**: `use re 'eval'` controls whether interpolated patterns containing eval groups may compile. Admitted runtime source is compiled into lexical callback closures and preserves its package, visible lexical cells, Unicode or byte source type, default regex modifiers, and match-once state. Literal callbacks, interpolated `qr//` values (including local, referenced, and tied arrays), raw runtime eval groups, callback conditions, and standalone `(?(DEFINE)...)` containers may be composed in one Joni pattern; dynamic callbacks may return further admitted executable source.
