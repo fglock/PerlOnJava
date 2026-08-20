@@ -924,6 +924,7 @@ class Lexer extends ScannerSupport {
             } else if (sequence.length == 1) {
                 token.type = TokenType.CODE_POINT;
                 token.setCode(sequence[0]);
+                token.namedCharacter = true;
             } else {
                 token.type = TokenType.NAMED_STRING;
                 token.setNamedCharacterSequence(sequence);
@@ -1260,6 +1261,7 @@ class Lexer extends ScannerSupport {
     }
 
     protected final TokenType fetchTokenInCC() {
+        token.namedCharacter = false;
         if (perlNonNewlineTokenIndex >= 0) {
             return fetchPerlNonNewlineToken();
         }

@@ -418,6 +418,8 @@ class Parser extends Lexer {
         arg.state = CCSTATE.START;
         while (token.type != TokenType.CC_CLOSE) {
             boolean fetched = false;
+            arg.toEscaped = token.escaped;
+            arg.toNamedCharacter = token.namedCharacter;
 
             switch (token.type) {
             case CHAR:
@@ -547,6 +549,8 @@ class Parser extends Lexer {
                         arg.state = CCSTATE.COMPLETE;
                         arg.to = '-';
                         arg.toIsRaw = false;
+                        arg.toEscaped = false;
+                        arg.toNamedCharacter = false;
                         arg.inType = CCVALTYPE.SB;
                         cc.nextStateValue(arg, ascCc, foldCc, env);
                         break;
@@ -566,6 +570,8 @@ class Parser extends Lexer {
                 } else if (arg.state == CCSTATE.START) {
                     arg.to = token.getC(); /* [-xa] is allowed */
                     arg.toIsRaw = false;
+                    arg.toEscaped = false;
+                    arg.toNamedCharacter = false;
                     fetchTokenInCC();
                     fetched = true;
                     if (token.type == TokenType.CC_RANGE || andStart) env.ccEscWarn("-"); /* [--x] or [a&&-x] is warned. */
@@ -688,6 +694,8 @@ class Parser extends Lexer {
         if (arg.state == CCSTATE.VALUE) {
             arg.to = 0;
             arg.toIsRaw = false;
+            arg.toEscaped = false;
+            arg.toNamedCharacter = false;
             cc.nextStateValue(arg, ascCc, foldCc, env);
         }
 
@@ -765,6 +773,8 @@ class Parser extends Lexer {
                                            CClassNode foldCc, CCStateArg arg) {
         arg.to = '-';
         arg.toIsRaw = false;
+        arg.toEscaped = false;
+        arg.toNamedCharacter = false;
         parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
     }
 
@@ -782,7 +792,63 @@ class Parser extends Lexer {
 
     private void parseCharClassValEntry2(CClassNode cc, CClassNode ascCc,
                                          CClassNode foldCc, CCStateArg arg) {
+        warnPerlExtendedClassRange(arg);
         cc.nextStateValue(arg, ascCc, foldCc, env);
+    }
+
+    private void warnPerlExtendedClassRange(CCStateArg arg) {
+        if (!perlExtendedClassLeaf || arg.state != CCSTATE.RANGE
+                || !env.usesPerlDiagnostics() || arg.from > arg.to) {
+            return;
+        }
+
+        if (arg.fromEscaped && arg.toEscaped
+                && arg.fromNamedCharacter != arg.toNamedCharacter) {
+            env.warnings.warn("Both or neither range ends should be Unicode",
+                    perlExtendedRangeWarningPosition());
+            return;
+        }
+
+        int from = (int)arg.from;
+        int to = (int)arg.to;
+        if (isAsciiPrintable(from) || isAsciiPrintable(to)) {
+            if (from != to && (arg.fromEscaped || arg.toEscaped
+                    || !isSameAsciiRangeGroup(from, to))) {
+                env.warnings.warn("Ranges of ASCII printables should be some subset of "
+                        + "\"0-9\", \"A-Z\", or \"a-z\"",
+                        perlExtendedRangeWarningPosition());
+            }
+            return;
+        }
+
+        int fromDigit = Character.getNumericValue(from);
+        int toDigit = Character.getNumericValue(to);
+        if (fromDigit >= 0 && toDigit >= 0
+                && fromDigit <= 9 && toDigit <= 9
+                && from - fromDigit != to - toDigit) {
+            env.warnings.warn("Ranges of digits should be from the same group of 10",
+                    perlExtendedRangeWarningPosition());
+        }
+    }
+
+    private int perlExtendedRangeWarningPosition() {
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code != ' ' && code != '\t') break;
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return cursor - getBegin();
+    }
+
+    private static boolean isAsciiPrintable(int codePoint) {
+        return codePoint >= 0x20 && codePoint <= 0x7e;
+    }
+
+    private static boolean isSameAsciiRangeGroup(int from, int to) {
+        return from >= '0' && to <= '9'
+                || from >= 'A' && to <= 'Z'
+                || from >= 'a' && to <= 'z';
     }
 
     private Node parseEnclose(TokenType term) {
@@ -2047,11 +2113,14 @@ class Parser extends Lexer {
             ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
             ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
             boolean previousExtendedLeaf = perlExtendedClassLeaf;
+            int previousOption = env.option;
             perlExtendedClassLeaf = true;
+            env.option |= Option.PERL_EXTEND_MORE;
             ParsedCharClass parsed;
             try {
                 parsed = parseCharClass(ascPtr, foldPtr);
             } finally {
+                env.option = previousOption;
                 perlExtendedClassLeaf = previousExtendedLeaf;
             }
             if (!parsed.namedSequences().isEmpty()) {

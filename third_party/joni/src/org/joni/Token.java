@@ -24,6 +24,7 @@ import org.joni.constants.internal.TokenType;
 final class Token {
     TokenType type;
     boolean escaped;
+    boolean namedCharacter;
     int base;               /* is number: 8, 16 (used in [....]) */
     int backP;
 
