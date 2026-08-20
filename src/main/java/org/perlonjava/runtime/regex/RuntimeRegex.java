@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -23,6 +24,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 import static org.perlonjava.runtime.regex.RegexFlags.fromModifiers;
 import static org.perlonjava.runtime.regex.RegexFlags.validateModifiers;
@@ -218,6 +220,37 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * the shared compiled regex.
      */
     public RuntimeRegex cloneTracked() {
+        return cloneTrackedWithCallbacks(this.executableCallbacks);
+    }
+
+    /**
+     * Clone a compiled qr// at an ithread graph boundary.
+     *
+     * <p>The native patterns are immutable and remain shared, but executable
+     * callback CODE objects own Perl lexical pads. Route those CODE objects
+     * through the graph cloner so callbacks share the same child-side lexical
+     * identities as ordinary CODE references in the snapshot.</p>
+     */
+    public RuntimeRegex cloneTrackedForThread(
+            Function<RuntimeCode, RuntimeCode> callbackCodeCloner) {
+        List<RuntimeRegexCallback> callbacks = new ArrayList<>(executableCallbacks.size());
+        Map<RuntimeRegexCallback, RuntimeRegexCallback> clonedCallbacks =
+                new IdentityHashMap<>();
+        for (RuntimeRegexCallback callback : executableCallbacks) {
+            RuntimeRegexCallback cloned = clonedCallbacks.computeIfAbsent(callback, original -> {
+                RuntimeCode clonedCode = callbackCodeCloner.apply(original.code);
+                RuntimeScalar wrapped = RuntimeRegexCallback.wrap(
+                        new RuntimeScalar(clonedCode), original.kind.name(),
+                        original.lexicalPackage, original.source,
+                        original.uninitializedWarningsEnabled);
+                return (RuntimeRegexCallback) wrapped.value;
+            });
+            callbacks.add(cloned);
+        }
+        return cloneTrackedWithCallbacks(callbacks);
+    }
+
+    private RuntimeRegex cloneTrackedWithCallbacks(List<RuntimeRegexCallback> callbacks) {
         RuntimeRegex copy = new RuntimeRegex();
         copy.recursivePattern = this.recursivePattern;
         copy.recursivePatternUnicode = this.recursivePatternUnicode;
@@ -226,7 +259,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.namedCharacterTranslator = copyScalarOrNull(this.namedCharacterTranslator);
         copy.trustedCalloutCount = this.trustedCalloutCount;
         copy.compiledRegexCacheKey = this.compiledRegexCacheKey;
-        copy.setExecutableCallbacks(this.executableCallbacks);
+        copy.setExecutableCallbacks(callbacks);
         copy.patternString = this.patternString;
         copy.patternByteBacked = this.patternByteBacked;
         copy.hasPreservesMatch = this.hasPreservesMatch;

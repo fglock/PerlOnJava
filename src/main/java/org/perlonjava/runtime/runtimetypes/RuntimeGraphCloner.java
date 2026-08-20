@@ -442,7 +442,8 @@ public class RuntimeGraphCloner {
         } else if (source.type == CODE && source.value instanceof RuntimeCode code) {
             target.value = cloneCode(code);
         } else if (source.value instanceof RuntimeRegex regex) {
-            target.value = regex.cloneTracked();
+            target.value = regex.cloneTrackedForThread(
+                    code -> (RuntimeCode) cloneValue(code));
         } else if (source.value instanceof RuntimeIO io) {
             RuntimeIO inherited = cloneRuntimeIO(io);
             if (inherited != null) {
