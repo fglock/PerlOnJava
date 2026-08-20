@@ -164,10 +164,9 @@ fix restores complete `re/charset.t` execution, and the logical-wide-scalar
 `chop` fix restores `op/chop.t` to 148/148. A fresh bounded rerun also
 executes `op/stat.t` 111/111 on both backends, above PR 958's 107/111. The
 refreshed immutable comparison remains fail-closed until the other three lower
-rows are rerun:
-
-- P3: `re/pat_advanced.t`, its thread variant, and the combined
-  `re/regex_sets.t` property/interpolation residuals.
+rows are rerun. The coordinator owns the combined `re/regex_sets.t`
+property/interpolation root. P5 owns the two `re/pat_advanced.t` source/debug
+rows.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -175,14 +174,16 @@ be separated and closed before dual-backend acceptance.
 
 Active ownership:
 
-- P3: combined `regex_sets.t` property/interpolation roots and the two
-  `pat_advanced` rows.
+- P3: retire the disconnected backend-selector compatibility plumbing and prove
+  that no environment/property setting can select a production Java matcher.
 - P4: byte-pattern callback/search/grapheme regressions plus remaining
   non-POSIX parser/range diagnostic families.
-- P5: debug-trace, benchmark, and obsolete Java-label audit.
-- P6: classify and close interpreter-only regex acceptance regressions.
-- Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, and release evidence.
+- P5: literal-regex frontend ordering, debug trace, and the two
+  `pat_advanced.t` rows.
+- P6: delivered the only independent interpreter-only regex row and remains
+  available for the next non-overlapping release slice.
+- Coordinator: property/set regression root, integration, conflict resolution,
+  immutable acceptance, PR/CI, plan state, and release evidence.
 
 ## Ordered Next Steps
 
