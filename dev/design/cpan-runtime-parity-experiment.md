@@ -220,5 +220,5 @@ Runtime outcome:
 
 - `dev/design/caller_line_number_fix.md`
 - `dev/design/utf8_flag_parity.md`
-- `dev/design/regex_jruby_joni.md`
+- `dev/implementation/regex.md`
 - `.agents/skills/debug-perlonjava/SKILL.md`

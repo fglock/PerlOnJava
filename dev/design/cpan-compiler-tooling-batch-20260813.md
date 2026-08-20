@@ -143,5 +143,5 @@ was kept in the PerlOnJava validation set.
 ## References
 
 - [Module porting guide](../../docs/guides/module-porting.md)
-- [Executable regex callbacks](executable-regex-callbacks.md)
+- [Regex callout contract](../../docs/design/joni-callout-fork.md)
 - Skills: `debug-perlonjava`, `port-cpan-module`
