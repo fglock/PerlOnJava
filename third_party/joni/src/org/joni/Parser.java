@@ -598,11 +598,16 @@ class Parser extends Lexer {
                 break;
 
             case CC_CC_OPEN: /* [ */
-                if (perlExtendedClassLeaf) {
+                if (perlExtendedClassLeaf && !token.escaped) {
                     // A standard class remains a leaf of (?[...]). Ruby's
                     // class-set lexer tokenizes '[' specially, but Perl still
                     // permits it as an unescaped member here (for example
                     // [^][ \\ ] and [a[]).
+                    //
+                    // Escapes such as \\h synthesize a nested character class
+                    // token sequence. They must still be consumed as that
+                    // sequence; treating their opening token as a literal '['
+                    // leaves the generated contents in the outer expression.
                     arg.inType = CCVALTYPE.SB;
                     arg.to = '[';
                     arg.toIsRaw = false;
