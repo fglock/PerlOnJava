@@ -1,11 +1,10 @@
 package org.perlonjava.runtime.regex;
 
 /**
- * Temporary migration policy for comparing the canonical Joni matcher with
- * the legacy Java matcher. Default and auto modes use Joni; explicit Java mode
- * remains only for differential diagnosis. Constructs unavailable in Java may
- * still force Joni even in explicit Java mode. This class and its controls are
- * removed when the Java matching backend is retired.
+ * Disconnected compatibility parser for historical regex-backend settings.
+ * Production matching does not call this class and is always handled by Joni;
+ * the Java mode spelling remains only so existing policy tests can describe the
+ * retired migration behavior without reintroducing a Java matcher route.
  */
 final class RegexBackendPolicy {
     static final String PROPERTY = "jperl.regex.backend";

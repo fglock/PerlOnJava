@@ -13,7 +13,7 @@ class NativeAsciiStrictRoutingTest {
     private String originalBackendProperty;
 
     @BeforeEach
-    void forceTemporaryJavaPolicy() {
+    void forceHistoricalJavaPolicySpelling() {
         originalBackendProperty = System.getProperty(RegexBackendPolicy.PROPERTY);
         System.setProperty(RegexBackendPolicy.PROPERTY, "java");
     }
