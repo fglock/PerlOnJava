@@ -626,7 +626,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
                 if (sourcePolicyWarning != null) {
                     regex.inlineModifierWarnings.add(sourcePolicyWarning);
-                    regex.warningsOnUse.add(sourcePolicyWarning);
                 }
                 if (constructionPolicyWarning != null) {
                     regex.inlineModifierWarnings.add(constructionPolicyWarning);
