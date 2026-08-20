@@ -13,7 +13,7 @@ commit messages, not here.
 
 ## Repository and dependency model
 
-- Joni is a pinned source snapshot in `third_party/joni`. Its production sources
+- Joni is a maintained source fork in `third_party/joni`. Its production sources
   and upstream tests are dedicated source sets in the root Gradle project. This
   keeps the code boundary explicit without exposing the vendored engine as a
   separately resolved project dependency.
@@ -23,10 +23,10 @@ commit messages, not here.
   and runtime classpaths.
 - JCodings remains an upstream binary dependency because PerlOnJava does not
   modify its encoding implementation.
-- Automatic routing temporarily keeps ordinary patterns on Java. Patterns with
-  matcher features that Java cannot represent and the forced-Joni compatibility
-  gate use the vendored engine. The accepted final architecture removes Java
-  matching and the selector after semantic and performance parity.
+- Default and auto routing use the vendored engine. Explicit Java routing is a
+  temporary differential-diagnosis mode; patterns Java cannot represent still
+  force Joni. The accepted final architecture removes Java matching and the
+  selector after semantic and performance parity.
 
 ## Internal callout syntax
 
@@ -210,8 +210,8 @@ boundary is:
 
 - PerlOnJava owns Perl source policy and runtime integration: trusted callback
   templates, `use re 'eval'` security, lexical warnings, user-defined Unicode
-  properties, Perl diagnostics, named/branch-reset capture mapping, and backend
-  selection.
+  properties, Perl diagnostics, named/branch-reset capture mapping, and the
+  temporary backend-selection policy.
 - A backend-neutral Perl normalization layer may own syntax aliases shared by
   all engines, such as accepted named-group spellings and modifier validation.
 - Joni should own matcher semantics required by Perl, including condition
@@ -230,10 +230,11 @@ move into focused Joni changes with differential Perl tests. Java adaptation is
 deleted with the Java route; source policy remains in PerlOnJava.
 
 The compatibility inventory is the regex section of
-`docs/reference/feature-matrix.md`. The current selector routes subpattern
-calls, conditions, control verbs, ASCII-strict folds, and every structured
-executable callback template, including runtime `(??{...})`. Ordinary patterns
-remain part of the forced-Joni corpus even before automatic routing changes.
+`docs/reference/feature-matrix.md`. Default routing already uses Joni;
+subpattern calls, conditions, control verbs, ASCII-strict folds, and every
+structured executable callback template—including runtime `(??{...})`—also
+force Joni when the temporary Java differential mode is selected. Ordinary
+patterns remain part of the forced-Joni corpus.
 Semantically safe constant dynamic expressions may still fold to pattern text;
 embedded closures never become compile-time constants because their execution
 and unwind are observable.
