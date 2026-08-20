@@ -154,8 +154,11 @@ Exit: release evidence and public/internal documentation match the code.
 ## Current Release Gate
 
 PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
-on Ubuntu and Windows CI. The integration branch contains additional native
-fixes and must not update the PR until its exact head passes `make`.
+on Ubuntu and Windows CI. Exact integration head `61eb48af7` passes warning-free
+`make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
+boundary, quantifier, and direct-charname fixtures are green on JVM and
+interpreter. The newer integration batch must pass its own exact gate before the
+PR is updated.
 
 The first complete 286-file JVM comparison improves 74 rows and 403,846 passing
 assertions. The integrated subject-sensitive byte/`/d` and fullwidth-xdigit
@@ -171,13 +174,11 @@ removed and its packaging/property invariance gates are awaiting the combined
 build. The latest focused `reg_mesg.t` artifact is 2961/3096 on both backends,
 with 135 failures partitioned as 41 native-parser, 74 redirected
 Unicode/property/charname, and 20 analyser/debug rows. P5 owns the
-`re/pat_advanced.t` source/debug and charname rows. The exact `f296dbe54`
-combined build passed compilation, packaging, licensed Joni, selector
-invariance, and all but four unit fixtures; their byte-property fold and
-control-verb source correction, P4 boundary/quantifier diagnostics, and P5
-direct custom-charname correction are integrated through `9d3cc95ec`; exact
-`61eb48af7` is under combined validation and the latest P4/P6 slices are queued
-for the following batched gate.
+`re/pat_advanced.t` source/debug and charname rows. The byte-property fold and
+control-verb source correction, selector retirement, P4 boundary/quantifier
+diagnostics, and P5 direct custom-charname correction are jointly green at
+`61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
+integrated through `9d3cc95ec` and queued for the following batched gate.
 
 The interpreter comparison's 53 lower rows are classified: 48 are general
 interpreter limitations, four are shared native rows, and its sole independent
@@ -193,9 +194,9 @@ Active ownership:
 - P5: carry immutable pre-resolved custom-charname metadata through AST/CV
   thread cloning, then own the remaining `\\N{}`/custom-charname and
   analyser/debug residual.
-- P6: complete the unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and
-  String::Random matrix, then own the redirected Unicode-property wildcard,
-  name/value, user-property, and string-property diagnostic residual.
+- P6: exhaust the 52-row redirected Unicode-property wildcard, name/value,
+  user-property, and string-property diagnostic residual; the affected CPAN
+  matrix is classified and its independent caller fix is integrated.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
   immutable acceptance, PR/CI, plan state, combined build, and release evidence.
 
