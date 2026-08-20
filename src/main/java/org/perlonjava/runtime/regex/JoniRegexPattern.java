@@ -40,10 +40,7 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.runtimetypes.*;
 
-/**
- * Stack-based regex backend for Perl constructs that require matcher semantics
- * beyond the Java Pattern fast path.
- */
+/** Sole production adapter from Perl regex operations to the vendored Joni fork. */
 final class JoniRegexPattern {
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
@@ -1022,25 +1019,6 @@ final class JoniRegexPattern {
             }
         }
         return -1;
-    }
-
-    /**
-     * Joni's Ruby syntax does not understand Java's {@code &&} character-class
-     * intersection.  For an explicitly ASCII-bounded Perl extended class,
-     * evaluate the already-translated Java class and emit the exact byte set.
-     */
-    private static void appendAsciiClassForJoni(StringBuilder out, String javaClass) {
-        // Java requires literal closing/opening brackets to be escaped even in
-        // the leading position accepted by Perl's bracket syntax.
-        javaClass = javaClass.replace("[^][", "[^\\]\\[");
-        java.util.regex.Pattern predicate = java.util.regex.Pattern.compile(javaClass);
-        out.append('[');
-        for (int value = 0; value < 128; value++) {
-            if (predicate.matcher(Character.toString((char) value)).matches()) {
-                out.append(String.format("\\x%02X", value));
-            }
-        }
-        out.append(']');
     }
 
     private record NamedGroupMaps(Map<String, Integer> logical,
