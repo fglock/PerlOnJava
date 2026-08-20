@@ -168,23 +168,26 @@ properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
 immutable comparison are pending. The production backend selector has been
 removed and its packaging/property invariance gates are awaiting the combined
-build. The latest focused `reg_mesg.t` artifact is 2939/3086 on both backends,
-with 147 failures partitioned as 53 native-parser, 74 redirected
+build. The latest focused `reg_mesg.t` artifact is 2941/3086 on both backends,
+with 145 failures partitioned as 51 native-parser, 74 redirected
 Unicode/property/charname, and 20 analyser/debug rows. P5 owns the
 `re/pat_advanced.t` source/debug and charname rows. The exact `f296dbe54`
 combined build passed compilation, packaging, licensed Joni, selector
 invariance, and all but four unit fixtures; their byte-property fold and
 control-verb source correction, P4 boundary/quantifier diagnostics, and P5
-direct custom-charname correction are integrated through `799c39004` and await
-the next exact combined build.
+direct custom-charname correction are integrated through `61d4d3356`; exact
+`61eb48af7` is under combined validation and the latest P4 slice is queued for
+the following batched gate.
 
-The interpreter artifact is diagnostic only: it has 53 lower rows containing
-both regex and existing general interpreter limitations. Regex-owned rows must
-be separated and closed before dual-backend acceptance.
+The interpreter comparison's 53 lower rows are classified: 48 are general
+interpreter limitations, four are shared native rows, and its sole independent
+regex/interpreter defect is fixed. The remaining shared rows are covered by the
+active custom-charname, Unicode-property, and native-diagnostic ownership below;
+they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: exhaust the remaining 53 same-source native `reg_mesg.t`
+- P4: exhaust the remaining 51 same-source native `reg_mesg.t`
   parser/range/escape diagnostic rows; combined-build regressions are fixed in
   source and await integration validation.
 - P5: carry immutable pre-resolved custom-charname metadata through AST/CV
@@ -205,9 +208,10 @@ Active ownership:
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-3. Rerun the six lower JVM rows. If they close, run the complete 286-file JVM
-   acceptance and compare file/test identities with PR 958. Push that exact
-   green head to PR 1087, run CI, and make the incremental PR reviewable.
+3. Rerun the current shared JVM/interpreter acceptance rows. If they close, run
+   the complete 286-file JVM acceptance and compare file/test identities with
+   PR 958. Push that exact green head to PR 1087, run CI, and make the
+   incremental PR reviewable.
 4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
    PR. Repeat focused tests per semantic tranche and one combined build per
    integration batch.
