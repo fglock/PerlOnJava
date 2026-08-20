@@ -1681,7 +1681,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return false;
     }
 
-    /** Perl named characters and wide numeric escapes make an ASCII source Unicode. */
+    /** Syntax with intrinsic Unicode semantics makes an ASCII source Unicode. */
     private static boolean hasUnicodePromotingPatternSyntax(String pattern) {
         if (pattern == null) return false;
         boolean quoted = false;
@@ -1690,6 +1690,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (ch > 0xff) return true;
+            if (!quoted && characterClassDepth == 0 && pattern.startsWith("(?[", i)) {
+                return true;
+            }
             if (!quoted && ch == '[') {
                 if (characterClassDepth > 0) {
                     // A nested opener (including the '[' in a POSIX class)
@@ -1726,7 +1729,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 continue;
             }
             if (quoted || escape == '\\') continue;
-            if ((escape == 'p' || escape == 'P') && characterClassDepth == 0) {
+            if (escape == 'p' || escape == 'P') {
                 return true;
             }
             if (escape == 'N' && i + 1 < pattern.length()
