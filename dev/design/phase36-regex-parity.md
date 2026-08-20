@@ -348,14 +348,14 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the four active, non-overlapping slices: close KEEP-in-lookaround
-   matcher publication; close the next three-to-five native `reg_mesg.t`
-   diagnostic families; finish runtime-source escaping/strict-policy cleanup,
-   frontend fold/property provenance, obsolete lookbehind prevalidation, and
-   warning-default cache state; and complete the source-grounded architecture/
-   fork-document consolidation. Each semantic slice must include system-Perl
-   oracles, JVM/interpreter parity, complete affected-corpus deltas, and zero
-   introductions.
+1. Finish the four active, non-overlapping slices: preserve trusted callback
+   token provenance and remove the untrusted callback no-op; close the next
+   three-to-five native `reg_mesg.t` diagnostic families; close the next two or
+   three native matcher-semantic residual families; and finish frontend fold/
+   property provenance, obsolete lookbehind prevalidation, warning-default
+   cache state, and inverted KEEP match-variable publication. Each semantic
+   slice must include system-Perl oracles, JVM/interpreter parity, complete
+   affected-corpus deltas, and zero introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
    `make`. The preceding native-adapter/runtime-source batch is already saved in
    draft PR 1087 at an exact warning-free checkpoint. Refresh exact
@@ -539,6 +539,8 @@ gates may reopen it if a semantic regression appears.
       capture under large-method interpreter fallback
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [x] Mechanically derived current-checkout regex acceptance ledger
+- [x] Canonical as-implemented regex architecture and shipped Joni fork/API
+      documents; final release reconciliation remains required
 - [x] Retire proven-obsolete `dev/import-perl5` regex patches
 - [x] Latest-upstream import sync preserves required non-regex runtime patches
       and is transactional and idempotent
