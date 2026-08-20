@@ -63,4 +63,19 @@ public class TestPerlBytePatternCaseFold {
                 UTF8Encoding.INSTANCE, Syntax.PerlNG);
         assertEquals(0, regex.matcher(kelvin).search(0, kelvin.length, Option.NONE));
     }
+
+    @Test
+    public void scopedCharsetCaseFoldUsesTheUtf8Variant() {
+        byte[] pattern = "(?u:\\xC0)".getBytes(StandardCharsets.UTF_8);
+        byte[] lower = "\u00e0".getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(pattern, 0, pattern.length, Option.IGNORECASE,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG);
+
+        assertEquals(0, regex.matcher(lower).search(0, lower.length, Option.NONE));
+
+        pattern = "(?aa:\\xC0)".getBytes(StandardCharsets.UTF_8);
+        regex = new Regex(pattern, 0, pattern.length, Option.IGNORECASE,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG);
+        assertEquals(0, regex.matcher(lower).search(0, lower.length, Option.NONE));
+    }
 }
