@@ -153,10 +153,9 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-PR 1087 is saved at exact `0d652229d`, which is warning-free locally; its
-current Ubuntu and Windows CI is pending. The integration branch contains
-additional native fixes and must not update the PR until its exact head passes
-`make`.
+PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
+on Ubuntu and Windows CI. The integration branch contains additional native
+fixes and must not update the PR until its exact head passes `make`.
 
 The first complete 286-file JVM comparison improves 74 rows and 403,846 passing
 assertions. The integrated subject-sensitive byte/`/d` and fullwidth-xdigit
