@@ -2,8 +2,9 @@
 
 ## Goal
 
-Implement Perl 5.44 regular-expression semantics on both PerlOnJava execution
-backends and make the vendored Joni fork the sole production matcher. Java
+Implement the current imported upstream Perl regular-expression semantics on
+both PerlOnJava execution backends and make the vendored Joni fork the sole
+production matcher. Java
 `Pattern` and the backend selector are temporary differential tools and must be
 removed before completion.
 
@@ -80,10 +81,11 @@ affected corpus before taking another slice.
 - Forced-Joni Unicode property comparison is 83,648/83,648 on both backends.
   The Hyphen/IsHyphen warning correction removes the final exact 32 residuals
   with zero introductions while preserving dynamic property interpolation.
-- The shared deterministic current-upstream Perl Unicode generator covers all
-  current
-  property families plus compact Perl default simple/full/reverse case-fold
-  metadata. General_Category compatibility aliases, native named-call/parser
+- Generated Unicode data covers all current property families plus compact Perl
+  default simple/full/reverse case-fold metadata. The generator still needs a
+  transactional current-checkout refresh that records exact source and output
+  provenance without pinning a historical Perl commit. General_Category
+  compatibility aliases, native named-call/parser
   safety, the runtime-neutral Joni property-value matcher, signed-IV user-
   property ranges, POSIX compatibility, and generated fold data are integrated.
   The analyser fold-safety slice, final binary aliases, generated named-sequence
@@ -114,8 +116,11 @@ affected corpus before taking another slice.
   interpreter. Executable callbacks introduced by overloaded scalar and array
   interpolation retain containing lexicals under large-method fallback, and
   nonstrict scalar dereference preserves first-class REGEXP source.
-- Exact `re/regexp.t` executes 2,210/2,210 with 2,195 passing and 15 explicit
-  residuals. Non-nullable quantified captures now preserve the preceding
+- Exact `re/regexp.t` executes 2,210/2,210 with 2,200 passing on the current
+  acceptance artifact. The capture-state branch reaches 2,207 with one owned
+  recursion/capture residual and two explicitly separate diagnostic/lookbehind
+  residuals, but it is not integrated evidence yet. Non-nullable quantified
+  captures now preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
   final iteration, and restore state on backtracking. Lexical warning masks
   remain authoritative when undef captures are interpolated by eval STRING.
@@ -134,11 +139,13 @@ affected corpus before taking another slice.
   warning categories; matcher warnings retain their Perl `regexp`, `syntax`,
   or `misc` category. Inactive branch-reset slots no longer become fatal under
   a caller's disabled `uninitialized` scope.
-- The four Java/Joni × JVM/interpreter legs now have one 80-file comparison
-  ledger on the pre-successor artifact. It identifies stable extended-class,
-  regexp, charset, fold-grind, and bounded-speed negative clusters plus several
-  zero-TAP/execution records. The complete matrix must be repeated on the exact
-  successor artifact before acceptance; older aggregate figures are not release
+- The current 80-file runner artifact contains all expected files and improves
+  42 file identities against PR 958, including complete execution of the large
+  Unicode-property families. It still has 11 lower pass counts and 17 invalid
+  execution records, including zero-TAP or incomplete `pat_advanced.t`,
+  `regex_sets.t`, `speed*`, `pat*`, and property records. Plan-size changes in
+  current upstream Perl are reported separately from semantic regressions. The
+  invalid records must be rerun or classified before this artifact is release
   evidence.
 - Exact `/aa` routing/folding gates pass on native Joni, and the Java `/aa`
   workaround is removed.
@@ -308,12 +315,15 @@ behavior.
 ## Ordered Next Steps
 
 1. Finish the active semantic closures: callback-local transaction and
-   reentrant-matcher safety; `/d`/`u`/`a`/`aa` literal/backreference fold
+   reentrant-matcher safety; `/d`/`u`/`a`/`aa` forward/reverse literal and class
+   fold
    closure; complete extended-class/property algebra; and final-iteration,
    optional, alternation, DEFINE, recursive, and failed-path capture clearing.
    Each family needs system-Perl reducers, direct Joni coverage, both execution
    backends, exact affected-corpus identities, and zero introductions.
-2. Integrate those non-overlapping slices on one immutable barrier and rerun
+2. Integrate the ordinary-Joni cutover, runtime recursive-capture provenance,
+   fold closure, and corrected current-checkout Unicode generator on one
+   immutable barrier. Rerun
    exact `regexp.t`, `reg_fold.t`, `reg_email*`, `regex_sets.t`, Unicode
    property, callback, recursion, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`,
    and `reg_mesg.t` gates. Classify every residual by a general native-Joni root
@@ -328,7 +338,9 @@ behavior.
    that cannot live in a runtime-neutral Joni fork. Re-run focused gates after
    each deletion and require no supported test to depend on
    `JPERL_UNIMPLEMENTED=warn`.
-5. Regenerate and sync from the current latest upstream `perl5/` checkout,
+5. Regenerate and sync from the current latest upstream `perl5/` checkout.
+   Refresh generated-data manifests transactionally from the selected checkout
+   and reject stale provenance under `--check`; then
    prove a byte-identical second pass, run the complete mechanically derived
    regex manifest, and compare file/test identities with the immutable PR 958
    baseline. Run bounded `pat_psycho*` and `speed*` lanes without starving other
@@ -401,7 +413,8 @@ gates may reopen it if a semantic regression appears.
 
 ### Active phase detail
 
-- [x] Latest-upstream Perl Unicode property-data generators and freshness gates
+- [ ] Transactional latest-upstream Perl Unicode generator refresh and exact
+      provenance/freshness gates
 - [x] General Category, Script, Block, POSIX, binary-membership, and signed-wide
       property ranges
 - [x] Runtime-neutral Joni property-value matcher
@@ -413,7 +426,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Native fold adapter and unsafe optimizer-boundary suppression
 - [x] Property/class fold closure
 - [x] Fold-mode and byte/Unicode provenance context
-- [ ] Forward/reverse literal expansion and backreference folding
+- [x] Variable-width simple-fold backreference comparison
+- [ ] Forward/reverse literal and character-class fold expansion
 - [x] Generated Perl named-sequence lookup and native sequence resolution
 - [x] Remove temporary named-sequence encoding from native Joni pattern source
 - [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
