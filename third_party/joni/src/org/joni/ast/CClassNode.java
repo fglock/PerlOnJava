@@ -39,6 +39,7 @@ public final class CClassNode extends Node {
     private long[] wideRanges;
     private int wideRangeCount;
     private boolean authoritativeWideDomain;
+    private CClassNode propertyFoldMask;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
@@ -55,6 +56,8 @@ public final class CClassNode extends Node {
         copy.wideRanges = wideRanges == null ? null : wideRanges.clone();
         copy.wideRangeCount = wideRangeCount;
         copy.authoritativeWideDomain = authoritativeWideDomain;
+        copy.propertyFoldMask = propertyFoldMask == null
+                ? null : propertyFoldMask.copy();
         return copy;
     }
 
@@ -65,6 +68,7 @@ public final class CClassNode extends Node {
         wideRanges = null;
         wideRangeCount = 0;
         authoritativeWideDomain = false;
+        propertyFoldMask = null;
     }
 
     @Override
@@ -203,6 +207,7 @@ public final class CClassNode extends Node {
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
         setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        mergePropertyFoldMask(other, env);
 
     }
 
@@ -256,6 +261,50 @@ public final class CClassNode extends Node {
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
         setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        mergePropertyFoldMask(other, env);
+    }
+
+    private void mergePropertyFoldMask(CClassNode other, ScanEnvironment env) {
+        CClassNode merged = propertyFoldMask == null
+                ? null : propertyFoldMask.copy();
+        if (other.propertyFoldMask != null) {
+            if (merged == null) merged = other.propertyFoldMask.copy();
+            else merged.or(other.propertyFoldMask, env);
+        }
+        if (merged == null) return;
+
+        // Provenance is meaningful only for members that survive the set
+        // operation. This removes a property source after subtraction and
+        // avoids lending its fold policy to an unrelated literal survivor.
+        CClassNode membership = copy();
+        membership.propertyFoldMask = null;
+        merged.and(membership, env);
+        propertyFoldMask = merged;
+    }
+
+    public CClassNode propertyFoldMask() {
+        return propertyFoldMask;
+    }
+
+    public void includeCode(ScanEnvironment env, int code) {
+        or(singleton(env, code), env);
+    }
+
+    public void excludeCode(ScanEnvironment env, int code) {
+        CClassNode excluded = singleton(env, code);
+        excluded.setNot();
+        and(excluded, env);
+    }
+
+    private static CClassNode singleton(ScanEnvironment env, int code) {
+        CClassNode singleton = new CClassNode();
+        if (code < BitSet.SINGLE_BYTE_SIZE
+                && env.enc.codeToMbcLength(code) == 1) {
+            singleton.bs.set(env, code);
+        } else {
+            singleton.addCodeRange(env, code, code, false);
+        }
+        return singleton;
     }
 
     public void addWideScalarRange(long from, long to) {
@@ -517,6 +566,12 @@ public final class CClassNode extends Node {
         or(resolved, env);
     }
 
+    public void markPropertyFoldCodeRanges(int[] ranges, long[] wideRanges,
+                                           boolean not, ScanEnvironment env) {
+        if (propertyFoldMask == null) propertyFoldMask = new CClassNode();
+        propertyFoldMask.addCodeRanges(ranges, wideRanges, not, env);
+    }
+
     private static int CR_FROM(int[] range, int i) {
         return range[(i * 2) + 1];
     }
@@ -609,6 +664,12 @@ public final class CClassNode extends Node {
         default:
             throw new InternalException(ErrorMessages.PARSER_BUG);
         } // switch
+    }
+
+    public void markPropertyFoldCType(int ctype, boolean not,
+                                      ScanEnvironment env, IntHolder sbOut) {
+        if (propertyFoldMask == null) propertyFoldMask = new CClassNode();
+        propertyFoldMask.addCType(ctype, not, false, env, sbOut);
     }
 
     public enum CCVALTYPE {

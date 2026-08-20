@@ -1905,9 +1905,19 @@ class Parser extends Lexer {
         PerlExtendedClassPrimary primary = parsePerlExtendedClassPrimary();
         CClassNode result = primary.node();
         if (!primary.scopedOptionsApplied() && isIgnoreCase(env.option)) {
-            cClassCaseFold(result, result, result, result);
+            caseFoldPerlExtendedClass(result);
         }
         return result;
+    }
+
+    private void caseFoldPerlExtendedClass(CClassNode result) {
+        int previousOption = env.option;
+        env.option &= ~Option.PERL_BYTE_PATTERN;
+        try {
+            cClassCaseFold(result, result, result, result);
+        } finally {
+            env.option = previousOption;
+        }
     }
 
     private PerlExtendedClassPrimary parsePerlExtendedClassPrimary() {
@@ -2555,7 +2565,8 @@ class Parser extends Lexer {
     private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc,
                                 CClassNode foldCc, boolean preservePropertyAsciiCrossings) {
         ApplyCaseFoldArg arg = new ApplyCaseFoldArg(
-                env, cc, ascCc, foldCc, preservePropertyAsciiCrossings);
+                env, cc, ascCc, foldCc, cc.propertyFoldMask(),
+                preservePropertyAsciiCrossings);
         enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
         if (syntax.op2OptionPerl()) {
             ApplyCaseFold.applyPerlSimpleClassClosure(arg);
@@ -2600,6 +2611,9 @@ class Parser extends Lexer {
             if (foldCc != null) {
                 foldCc.addCType(property.ctype, not, false, env, this);
             }
+            if (property.caseFold) {
+                cc.markPropertyFoldCType(property.ctype, false, env, this);
+            }
             return;
         }
         cc.addCodeRanges(property.ranges, property.wideRanges, not, env);
@@ -2608,6 +2622,10 @@ class Parser extends Lexer {
         }
         if (foldCc != null && property.caseFold) {
             foldCc.addCodeRanges(property.ranges, property.wideRanges, not, env);
+        }
+        if (property.caseFold) {
+            cc.markPropertyFoldCodeRanges(
+                    property.ranges, property.wideRanges, false, env);
         }
     }
 
