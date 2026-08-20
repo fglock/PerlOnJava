@@ -33,6 +33,8 @@ final class Token {
     private int []INTA1;
     private int []INTA2;
     private long LONG1;
+    private int backrefNameP = -1;
+    private int backrefNameEnd = -1;
 
     // union accessors
     int getC() {
@@ -150,6 +152,19 @@ final class Token {
     }
     void setBackrefLevel(int level) {
         INT5 = level;
+    }
+
+    int getBackrefNameP() {
+        return backrefNameP;
+    }
+
+    void setBackrefName(int nameP, int nameEnd) {
+        backrefNameP = nameP;
+        backrefNameEnd = nameEnd;
+    }
+
+    int getBackrefNameEnd() {
+        return backrefNameEnd;
     }
 
     // call union member

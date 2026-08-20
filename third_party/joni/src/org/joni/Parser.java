@@ -2953,6 +2953,10 @@ class Parser extends Lexer {
     }
 
     private BackRefNode newBackRef(int[]backRefs) {
+        if (token.getBackrefNameP() >= 0) {
+            return new BackRefNode(bytes, token.getBackrefNameP(),
+                    token.getBackrefNameEnd(), env);
+        }
         return new BackRefNode(token.getBackrefNum(),
             backRefs,
             token.getBackrefByName(),

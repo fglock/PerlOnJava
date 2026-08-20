@@ -25,13 +25,19 @@ import org.joni.exception.ErrorMessages;
 import org.joni.exception.ValueException;
 
 public final class BackRefNode extends StateNode {
-    public final int[] back;
+    public int[] back;
     public int backNum;
     public int nestLevel;
+    public final byte[] unresolvedName;
+    public final int unresolvedNameP;
+    public final int unresolvedNameEnd;
 
     private BackRefNode(int backNum, int[]backRefs, boolean byName, ScanEnvironment env) {
         super(BREF);
         this.backNum = backNum;
+        unresolvedName = null;
+        unresolvedNameP = -1;
+        unresolvedNameEnd = -1;
         if (byName) setNameRef();
 
         for (int i=0; i<backNum; i++) {
@@ -49,6 +55,27 @@ public final class BackRefNode extends StateNode {
         if (Config.USE_BACKREF_WITH_LEVEL && existLevel) {
             setNestLevel();
             this.nestLevel = nestLevel;
+        }
+    }
+
+    public BackRefNode(byte[] name, int nameP, int nameEnd, ScanEnvironment env) {
+        super(BREF);
+        backNum = 0;
+        back = new int[0];
+        unresolvedName = name;
+        unresolvedNameP = nameP;
+        unresolvedNameEnd = nameEnd;
+        setNameRef();
+    }
+
+    public void resolve(int[] refs, ScanEnvironment env) {
+        back = refs;
+        backNum = refs.length;
+        for (int ref : refs) {
+            if (ref <= env.numMem && env.memNodes[ref] == null) {
+                setRecursion();
+                break;
+            }
         }
     }
 

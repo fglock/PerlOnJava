@@ -1838,8 +1838,11 @@ class Lexer extends ScannerSupport {
             NameEntry e = regex.nameToGroupNumbers(bytes, last, nameEnd);
             if (e == null) {
                 if (syntax.op2OptionPerl()) {
-                    newSyntaxException(PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP,
-                            nameEnd - getBegin());
+                    token.type = TokenType.BACKREF;
+                    token.setBackrefByName(true);
+                    token.setBackrefNum(0);
+                    token.setBackrefName(last, nameEnd);
+                    return;
                 }
                 newValueException(UNDEFINED_NAME_REFERENCE, last, nameEnd);
             }
@@ -1946,6 +1949,7 @@ class Lexer extends ScannerSupport {
             token.type = TokenType.STRING;
             token.base = 0;
             token.backP = p;
+            token.setBackrefName(-1, -1);
 
             fetch();
 
