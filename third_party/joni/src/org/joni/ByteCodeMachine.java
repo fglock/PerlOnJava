@@ -123,7 +123,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         // was clear ???
         node.group = 0;
-        node.beg = ((pkeep > s) ? s : pkeep) - str;
+        node.beg = visibleMatchStart() - str;
         node.end = s      - str;
 
         stkp = 0;
@@ -716,7 +716,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             final Region region = msaRegion;
             if (region != null) {
                 // USE_POSIX_REGION_OPTION ... else ...
-                region.setBeg(0, msaBegin = ((pkeep > s) ? s : pkeep) - str);
+                region.setBeg(0, msaBegin = visibleMatchStart() - str);
                 region.setEnd(0, msaEnd   = s      - str);
                 CompletedRecursiveCall completed = completedRecursiveCall();
                 int[] callerCaptures = completed == null
@@ -747,7 +747,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 if (Config.USE_CAPTURE_HISTORY && regex.captureHistory != 0) checkCaptureHistory(region);
             } else {
-                msaBegin = ((pkeep > s) ? s : pkeep) - str;
+                msaBegin = visibleMatchStart() - str;
                 msaEnd   = s      - str;
             }
         } else {
@@ -761,6 +761,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         // end_best_len:
         /* default behavior: return first-matching result. */
         return endBestLength();
+    }
+
+    private int visibleMatchStart() {
+        // Perl permits a KEEP reached through a called group inside an
+        // assertion to publish a start beyond the zero-width assertion end.
+        // Other Joni syntaxes retain the historical non-inverted region.
+        return regex.perlSyntax ? pkeep : Math.min(pkeep, s);
     }
 
     private boolean endBestLength() {
