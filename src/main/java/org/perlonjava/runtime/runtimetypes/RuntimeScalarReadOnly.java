@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.INTEGER;
@@ -154,7 +156,8 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
             return new RuntimeScalar("");
         }
         if (s == null || s.isEmpty()) return new RuntimeScalar("");
-        return new RuntimeScalar(s.substring(s.length() - 1));
+        return new RuntimeScalar(s.substring(
+                PerlUtfString.lastLogicalCharacterStart(s)));
     }
 
     /**
