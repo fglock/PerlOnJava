@@ -118,10 +118,11 @@ affected corpus before taking another slice.
   interpolation retain containing lexicals under large-method fallback, and
   nonstrict scalar dereference preserves first-class REGEXP source.
 - Exact `re/regexp.t` executes 2,210/2,210 with 2,200 passing on the current
-  acceptance artifact. The capture-state branch reaches 2,207 with one owned
-  recursion/capture residual and two explicitly separate diagnostic/lookbehind
-  residuals, but it is not integrated evidence yet. Non-nullable quantified
-  captures now preserve the preceding
+  acceptance artifact. Recursive capture publication reaches 2,208/2,210 on
+  both execution backends at its focused barrier, leaving only the separately
+  owned named-diagnostic and variable-lookbehind rows; the combined integrated
+  artifact still requires an exact rerun. Non-nullable quantified captures now
+  preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
   final iteration, and restore state on backtracking. Lexical warning masks
   remain authoritative when undef captures are interpolated by eval STRING.
@@ -458,7 +459,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Remove the duplicate Java named-character translation path
 - [x] Exact named-character diagnostic-version policy
 - [x] Native whole-pattern `(?R)` parsing and execution
-- [ ] Recursive call capture publication and recursion safety
+- [x] Recursive call capture publication and recursion safety
 - [x] Runtime-source comment/class masking and `/aa` propagation
 - [x] Unterminated runtime-source diagnostics for regexp rows 575/576/581
 - [x] Dynamic undef-warning scope and nested-continuation `/aa` state
