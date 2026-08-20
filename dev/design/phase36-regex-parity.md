@@ -164,9 +164,9 @@ fix restores complete `re/charset.t` execution, and the logical-wide-scalar
 `chop` fix restores `op/chop.t` to 148/148. A fresh bounded rerun also
 executes `op/stat.t` 111/111 on both backends, above PR 958's 107/111. The
 refreshed immutable comparison remains fail-closed until the other three lower
-rows are rerun. The coordinator owns the combined `re/regex_sets.t`
-property/interpolation root. P5 owns the two `re/pat_advanced.t` source/debug
-rows.
+rows are rerun. The remaining `re/regex_sets.t` property/interpolation failures
+are part of P4's shared default-`/d` byte-variant root. P5 owns the two
+`re/pat_advanced.t` source/debug rows.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -176,14 +176,16 @@ Active ownership:
 
 - P3: retire the disconnected backend-selector compatibility plumbing and prove
   that no environment/property setting can select a production Java matcher.
-- P4: byte-pattern callback/search/grapheme regressions plus remaining
-  non-POSIX parser/range diagnostic families.
+- P4: the unified default-`/d` byte-pattern construction root (callback/search,
+  grapheme, property/set, and source provenance), then remaining non-POSIX
+  parser/range diagnostic families.
 - P5: literal-regex frontend ordering, debug trace, and the two
   `pat_advanced.t` rows.
-- P6: delivered the only independent interpreter-only regex row and remains
-  available for the next non-overlapping release slice.
-- Coordinator: property/set regression root, integration, conflict resolution,
-  immutable acceptance, PR/CI, plan state, and release evidence.
+- P6: latest-upstream development sync workflow, including safe checkout
+  handling, `unicore/Name.pl`, and idempotence proof; its independent
+  interpreter-only regex row is integrated.
+- Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
+  plan state, and release evidence.
 
 ## Ordered Next Steps
 
