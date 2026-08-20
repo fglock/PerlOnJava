@@ -349,6 +349,17 @@ abstract class StackMachine extends Matcher implements StackType {
         // In that path there is no surviving entry snapshot to finalize.
     }
 
+    /** Previous completed value visible while the same repeated capture is open. */
+    protected final StackEntry repeatCaptureSnapshot(int mnum) {
+        for (int index = stk - 1; index >= 0; index--) {
+            StackEntry entry = stack[index];
+            if (entry.type == REPEAT_CAPTURE_SNAPSHOT && entry.getMemNum() == mnum) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
     private void pushRepeatCaptureClear(int mnum, int oldStart, int oldEnd) {
         StackEntry clear = ensure1();
         clear.type = REPEAT_CAPTURE_CLEAR;

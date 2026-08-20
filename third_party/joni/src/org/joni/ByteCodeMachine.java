@@ -960,7 +960,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             }
             return;
         }
-        if (mem > regex.numMem || repeatStk[memEndStk + mem] == INVALID_INDEX || repeatStk[memStartStk + mem] == INVALID_INDEX) {
+        if (mem > regex.numMem || captureIsUnset(mem)) {
             ip += addr;
         }
     }
@@ -2340,6 +2340,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int backrefEnd(int mem) {
         int me = repeatStk[memEndStk + mem];
         return bsAt(regex.btMemEnd, mem) ? stack[me].getMemPStr() : me;
+    }
+
+    private boolean captureIsUnset(int mem) {
+        int start = repeatStk[memStartStk + mem];
+        int captureEnd = repeatStk[memEndStk + mem];
+        if (start != INVALID_INDEX && captureEnd != INVALID_INDEX) {
+            return false;
+        }
+        // Only an actively open capture may consult the preceding iteration.
+        // A fully cleared capture must stay unset after the repeat completes.
+        if (start == INVALID_INDEX) return true;
+        StackEntry snapshot = repeatCaptureSnapshot(mem);
+        return snapshot == null || snapshot.getMemStart() == INVALID_INDEX
+                || snapshot.getMemEnd() == INVALID_INDEX;
     }
 
     private void backref(int mem) {

@@ -62,4 +62,11 @@ public class TestPerlRepeatCaptureLifetime {
     public void clearsCapturesInExpandedFiniteRepeats() {
         assertLastAlternativeWins(match("^(?:(a)|(b)){2}$", "ab"));
     }
+
+    @Test
+    public void exposesPreviousIterationToConditionInsideOpenCapture() {
+        Matcher matcher = match("^((?(1)a|b))+$", "baaa");
+        assertEquals(3, matcher.getRegion().getBeg(1));
+        assertEquals(4, matcher.getRegion().getEnd(1));
+    }
 }
