@@ -20,9 +20,23 @@ public final class RegexMarkers {
 
     private static final String LITERAL_DIAGNOSTIC_PREFIX = "\uFDD0\uFDD2";
     private static final String LITERAL_DIAGNOSTIC_SUFFIX = "\uFDD3\uFDEF";
+    // Keep identity markers inside the byte domain. Their Latin-1 members
+    // preserve the source's lexical utf8 flag through literal materialization:
+    // byte source stays octets, while `use utf8` source stays Unicode.
+    private static final String LITERAL_IDENTITY_PREFIX = "\u001D\u00FE";
+    private static final String LITERAL_IDENTITY_SUFFIX = "\u00FF\u001C";
     private static final Pattern LITERAL_DIAGNOSTIC = Pattern.compile(
             Pattern.quote(LITERAL_DIAGNOSTIC_PREFIX) + "([A-Za-z0-9_-]+)"
                     + Pattern.quote(LITERAL_DIAGNOSTIC_SUFFIX));
+    private static final Pattern LITERAL_IDENTITY = Pattern.compile(
+            Pattern.quote(LITERAL_IDENTITY_PREFIX) + "[0-9]+"
+                    + Pattern.quote(LITERAL_IDENTITY_SUFFIX));
+
+    /** Distinguish two lexical custom-charname literals without changing matcher source. */
+    public static String literalIdentity(long identity) {
+        return LITERAL_IDENTITY_PREFIX + Math.max(0, identity)
+                + LITERAL_IDENTITY_SUFFIX;
+    }
 
     /** Encode a frontend diagnostic while retaining the literal regex spelling. */
     public static String literalDiagnostic(String diagnostic) {
@@ -43,7 +57,9 @@ public final class RegexMarkers {
 
     /** Remove all source-only diagnostic markers before backend compilation. */
     public static String stripLiteralDiagnostics(String pattern) {
-        return pattern == null ? null : LITERAL_DIAGNOSTIC.matcher(pattern).replaceAll("");
+        if (pattern == null) return null;
+        return LITERAL_IDENTITY.matcher(
+                LITERAL_DIAGNOSTIC.matcher(pattern).replaceAll("")).replaceAll("");
     }
 
     private RegexMarkers() {}

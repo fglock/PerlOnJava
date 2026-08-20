@@ -2,6 +2,8 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -10,6 +12,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CompileOperator {
+    private static RuntimeScalar lexicalNamedCharacterTranslator(ListNode operand) {
+        Object translator = operand.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_TRANSLATOR);
+        return translator instanceof RuntimeScalar scalar ? scalar : null;
+    }
+
+    private static NamedCharacterExpansion.SourceMode lexicalNamedCharacterSourceMode(
+            ListNode operand) {
+        Object sourceMode = operand.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_SOURCE_MODE);
+        return sourceMode instanceof NamedCharacterExpansion.SourceMode mode
+                ? mode : null;
+    }
+
     private static void emitSubroutineExitCleanup(BytecodeCompiler bc, int returnReg) {
         java.util.List<Integer> scalarIdxs = bc.symbolTable.getMyScalarIndicesInScope(0);
         for (int idx : scalarIdxs) {
@@ -1122,7 +1138,9 @@ public class CompileOperator {
                         modifiers += "u";
                     }
                     try {
-                        RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers);
+                        RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers,
+                                lexicalNamedCharacterTranslator(operand),
+                                lexicalNamedCharacterSourceMode(operand));
                     } catch (PerlCompilerException exception) {
                         throw PerlCompilerException.withSourceLocation(
                                 node.tokenIndex, exception.getMessage(),

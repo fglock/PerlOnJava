@@ -8,6 +8,9 @@ import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.NamedCharacterExpansion;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -348,11 +351,27 @@ public class EmitRegex {
             modifiers += "u";
         }
         try {
-            RuntimeRegex.validateLiteralSyntax(pattern, modifiers);
+            RuntimeRegex.validateLiteralSyntax(pattern, modifiers,
+                    lexicalNamedCharacterTranslator(operand),
+                    lexicalNamedCharacterSourceMode(operand));
         } catch (PerlCompilerException exception) {
             throw PerlCompilerException.withSourceLocation(node.tokenIndex,
                     exception.getMessage(), emitterVisitor.ctx.errorUtil);
         }
+    }
+
+    private static RuntimeScalar lexicalNamedCharacterTranslator(ListNode operand) {
+        Object translator = operand.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_TRANSLATOR);
+        return translator instanceof RuntimeScalar scalar ? scalar : null;
+    }
+
+    private static NamedCharacterExpansion.SourceMode lexicalNamedCharacterSourceMode(
+            ListNode operand) {
+        Object sourceMode = operand.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_SOURCE_MODE);
+        return sourceMode instanceof NamedCharacterExpansion.SourceMode mode
+                ? mode : null;
     }
 
     /**

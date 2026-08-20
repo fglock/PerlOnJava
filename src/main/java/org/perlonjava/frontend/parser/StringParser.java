@@ -8,15 +8,19 @@ import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
+import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RegexMarkers;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
@@ -39,6 +43,12 @@ import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
  * The string is then passed on to the respective domain-specific compilers.
  */
 public class StringParser {
+
+    public static final String LEXICAL_NAMED_CHARACTER_TRANSLATOR =
+            "lexicalNamedCharacterTranslator";
+    public static final String LEXICAL_NAMED_CHARACTER_SOURCE_MODE =
+            "lexicalNamedCharacterSourceMode";
+    private static final AtomicLong NEXT_LEXICAL_REGEX_IDENTITY = new AtomicLong();
 
     /** Historical HINT_NEW_RE bit used by old regex interpolation parsing. */
     private static final int HINT_NEW_RE = 0x00010000;
@@ -621,6 +631,7 @@ public class StringParser {
         elements.add(replace);
         elements.add(modifiers);
         ListNode list = new ListNode(elements, rawStr.index);
+        captureLexicalNamedCharacterTranslator(list, rawStr.index, ctx);
         OperatorNode node = new OperatorNode(operator, list, rawStr.index);
         node.setAnnotation("regexWarningsEnabled",
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
@@ -658,6 +669,7 @@ public class StringParser {
         elements.add(parsed);
         elements.add(modifiers);
         ListNode list = new ListNode(elements, rawStr.index);
+        captureLexicalNamedCharacterTranslator(list, rawStr.index, ctx);
         OperatorNode node = new OperatorNode(operator, list, rawStr.index);
         node.setAnnotation("syntacticQuoteRegex", isQuoteRegex);
         node.setAnnotation("regexWarningsEnabled",
@@ -667,6 +679,31 @@ public class StringParser {
         node.setAnnotation("regexWarningBits",
                 ctx.symbolTable == null ? null : ctx.symbolTable.getWarningBitsString());
         return node;
+    }
+
+    private static void captureLexicalNamedCharacterTranslator(
+            ListNode operand, int sourceTokenIndex, EmitterContext ctx) {
+        RuntimeScalar translator = HintHashRegistry.getCompileTimeHint("charnames");
+        if (NamedCharacterExpansion.usesCustomTranslator(translator)) {
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_TRANSLATOR,
+                    new RuntimeScalar(translator));
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_SOURCE_MODE,
+                    ctx.symbolTable != null
+                            && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                            ? NamedCharacterExpansion.SourceMode.UNICODE
+                            : NamedCharacterExpansion.SourceMode.BYTE);
+            Node pattern = operand.elements.get(0);
+            String identity = RegexMarkers.literalIdentity(
+                    NEXT_LEXICAL_REGEX_IDENTITY.incrementAndGet());
+            if (pattern instanceof StringNode string) {
+                operand.elements.set(0, new StringNode(
+                        string.value + identity, string.isVString,
+                        string.forceByteString, string.tokenIndex));
+            } else {
+                operand.elements.set(0, new BinaryOperatorNode(".", pattern,
+                        new StringNode(identity, sourceTokenIndex), sourceTokenIndex));
+            }
+        }
     }
 
     /**

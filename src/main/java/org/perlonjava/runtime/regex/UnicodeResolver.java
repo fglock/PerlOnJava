@@ -14,6 +14,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public class UnicodeResolver {
+    private record PropertyScanState(boolean caseInsensitive, boolean extended) {}
     private static final String USER_PROPERTY_RANGE_ENCODING =
             "\u0000POJ_USER_RANGES_V1:";
     private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
@@ -921,29 +923,116 @@ public class UnicodeResolver {
      * regex compiler. Property subs are arbitrary Perl and may block; keeping
      * them outside that compiler monitor lets unrelated property names proceed.
      */
-    static void preloadUserDefinedProperties(String pattern, boolean caseInsensitive) {
-        preloadUserDefinedProperties(pattern, caseInsensitive, false);
+    static void preloadUserDefinedProperties(
+            String pattern, boolean caseInsensitive, boolean extended) {
+        preloadUserDefinedProperties(pattern, caseInsensitive, extended, false);
     }
 
     static void preloadDeferredUserDefinedProperties(
-            String pattern, boolean caseInsensitive) {
-        preloadUserDefinedProperties(pattern, caseInsensitive, true);
+            String pattern, boolean caseInsensitive, boolean extended) {
+        preloadUserDefinedProperties(pattern, caseInsensitive, extended, true);
     }
 
     private static void preloadUserDefinedProperties(
-            String pattern, boolean caseInsensitive,
+            String pattern, boolean caseInsensitive, boolean extended,
             boolean qualifyBareDiagnosticName) {
         if (pattern == null || pattern.isEmpty()) return;
 
-        for (int slash = pattern.indexOf('\\'); slash >= 0;
-             slash = pattern.indexOf('\\', slash + 1)) {
-            int precedingSlashes = 0;
-            for (int cursor = slash - 1; cursor >= 0 && pattern.charAt(cursor) == '\\'; cursor--) {
-                precedingSlashes++;
+        boolean quoted = false;
+        int characterClassDepth = 0;
+        PropertyScanState scanState = new PropertyScanState(caseInsensitive, extended);
+        ArrayDeque<PropertyScanState> groupStates = new ArrayDeque<>();
+        for (int slash = 0; slash < pattern.length(); slash++) {
+            char current = pattern.charAt(slash);
+            if (!quoted && current == '[') {
+                characterClassDepth++;
+                continue;
             }
-            if ((precedingSlashes & 1) != 0 || slash + 3 >= pattern.length()) continue;
+            if (!quoted && current == ']' && characterClassDepth > 0) {
+                characterClassDepth--;
+                continue;
+            }
+            if (!quoted && characterClassDepth == 0 && current == '('
+                    && slash + 2 < pattern.length()
+                    && pattern.charAt(slash + 1) == '?'
+                    && pattern.charAt(slash + 2) == '#') {
+                slash += 3;
+                while (slash < pattern.length() && pattern.charAt(slash) != ')') {
+                    if (pattern.charAt(slash) == '\\' && slash + 1 < pattern.length()) {
+                        slash++;
+                    }
+                    slash++;
+                }
+                continue;
+            }
+            if (!quoted && characterClassDepth == 0 && current == '(') {
+                PropertyScanState previousState = scanState;
+                int optionEnd = slash + 2;
+                boolean negative = false;
+                boolean sawOption = false;
+                boolean localCaseInsensitive = scanState.caseInsensitive();
+                boolean localExtended = scanState.extended();
+                while (optionEnd < pattern.length()) {
+                    char option = pattern.charAt(optionEnd);
+                    if (option == '-') {
+                        if (negative) break;
+                        negative = true;
+                        optionEnd++;
+                        continue;
+                    }
+                    if (option == ':' || option == ')') break;
+                    if ("adgilimnopsux".indexOf(option) < 0) break;
+                    sawOption = true;
+                    if (option == 'i') localCaseInsensitive = !negative;
+                    if (option == 'x') localExtended = !negative;
+                    optionEnd++;
+                }
+                if (sawOption && optionEnd < pattern.length()
+                        && (pattern.charAt(optionEnd) == ':'
+                        || pattern.charAt(optionEnd) == ')')) {
+                    scanState = new PropertyScanState(
+                            localCaseInsensitive, localExtended);
+                    if (pattern.charAt(optionEnd) == ':') {
+                        groupStates.push(previousState);
+                    }
+                    slash = optionEnd;
+                    continue;
+                }
+                groupStates.push(scanState);
+                continue;
+            }
+            if (!quoted && characterClassDepth == 0 && current == ')') {
+                if (!groupStates.isEmpty()) scanState = groupStates.pop();
+                continue;
+            }
+            if (!quoted && scanState.extended()
+                    && characterClassDepth == 0 && current == '#') {
+                while (slash < pattern.length() && pattern.charAt(slash) != '\n') slash++;
+                continue;
+            }
+            if (current != '\\' || slash + 1 >= pattern.length()) continue;
 
             char marker = pattern.charAt(slash + 1);
+            if (marker == 'Q' && !quoted) {
+                quoted = true;
+                slash++;
+                continue;
+            }
+            if (marker == 'E' && quoted) {
+                quoted = false;
+                slash++;
+                continue;
+            }
+            if (quoted) {
+                slash++;
+                continue;
+            }
+            if (marker == '\\') {
+                slash++;
+                continue;
+            }
+            if (slash + 3 >= pattern.length()) continue;
+
             if ((marker != 'p' && marker != 'P') || pattern.charAt(slash + 2) != '{') continue;
             int end = pattern.indexOf('}', slash + 3);
             if (end < 0) return;
@@ -964,7 +1053,7 @@ public class UnicodeResolver {
                 // forward reference into an early "unsupported property" fatal
                 // before the deferred runtime path can run.
                 String resolved = tryUserDefinedProperty(
-                        property, new LinkedHashSet<>(), caseInsensitive,
+                        property, new LinkedHashSet<>(), scanState.caseInsensitive(),
                         qualifyBareDiagnosticName);
                 if (qualifyBareDiagnosticName && resolved == null
                         && !PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
@@ -973,7 +1062,8 @@ public class UnicodeResolver {
                     // the case-sensitive callback result (or absence) has
                     // previously been observed.
                     deferredUserProperties().add(
-                            userPropertyAttemptKey(subName, caseInsensitive));
+                            userPropertyAttemptKey(
+                                    subName, scanState.caseInsensitive()));
                 }
             }
             slash = end;
@@ -1572,7 +1662,7 @@ public class UnicodeResolver {
         return new CharacterPropertyResolver.Result(ranges, wideRanges, caseFold);
     }
 
-    private static boolean mustDeferPotentialUserDefinedProperty(
+    static boolean mustDeferPotentialUserDefinedProperty(
             String property, boolean caseInsensitive) {
         if (!PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
             return false;
@@ -1586,6 +1676,22 @@ public class UnicodeResolver {
         }
         return !runtime.regexState().deferredUserUnicodeProperties.contains(
                 userPropertyAttemptKey(subName, caseInsensitive));
+    }
+
+    static boolean hasCachedUserDefinedProperty(String property) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return false;
+        String subName = property.contains("::") ? property : "main::" + property;
+        return runtime.regexState().userUnicodePropertyCache.containsKey(
+                userPropertyCacheKey(subName, false))
+                || runtime.regexState().userUnicodePropertyCache.containsKey(
+                        userPropertyCacheKey(subName, true));
+    }
+
+    static boolean hasDefinedUserPropertySub(String property) {
+        if (PerlRuntime.currentOrNull() == null) return false;
+        String subName = property.contains("::") ? property : "main::" + property;
+        return GlobalVariable.isGlobalCodeRefDefined(subName);
     }
 
     private static boolean isPerlSpecialPropertyAlias(String property) {
