@@ -24,6 +24,7 @@ import static org.joni.constants.SyntaxProperties.OP2_ESC_H_HORIZONTAL_WHITESPAC
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
+import static org.joni.constants.SyntaxProperties.OP3_PERL_LITERAL_OPEN_IN_CC;
 import static org.joni.constants.SyntaxProperties.OP_POSIX_BRACKET;
 
 import java.nio.charset.StandardCharsets;
@@ -95,7 +96,7 @@ final class JoniRegexPattern {
             "PERLONJAVA", Syntax.RUBY.op | OP_POSIX_BRACKET,
             (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL
                     | OP2_PLUS_POSSESSIVE_INTERVAL | OP2_ESC_H_HORIZONTAL_WHITESPACE,
-            Syntax.RUBY.op3,
+            Syntax.RUBY.op3 | OP3_PERL_LITERAL_OPEN_IN_CC,
             Syntax.RUBY.behavior | ALLOW_MULTIPLEX_DEFINITION_NAME_CALL,
             Syntax.RUBY.options & ~(Option.ASCII_RANGE
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
@@ -805,40 +806,6 @@ final class JoniRegexPattern {
                 || pattern.contains("(*COMMIT");
     }
 
-    private static boolean hasInlineExtendedOption(String pattern) {
-        boolean escaped = false;
-        boolean inClass = false;
-        for (int i = 0; i + 2 < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (ch == '[') {
-                inClass = true;
-                continue;
-            }
-            if (ch == ']' && inClass) {
-                inClass = false;
-                continue;
-            }
-            if (inClass || ch != '(' || pattern.charAt(i + 1) != '?') continue;
-            for (int j = i + 2; j < pattern.length(); j++) {
-                char option = pattern.charAt(j);
-                if (option == ':' || option == ')') break;
-                if (option == 'x') return true;
-                if (option == '-' || option == '^'
-                        || option >= 'a' && option <= 'z') continue;
-                break;
-            }
-        }
-        return false;
-    }
-
     /**
      * Test-facing compatibility normalizer. Production patterns retain raw
      * {@code \N{...}} source for Joni's resolver; this helper keeps its
@@ -861,7 +828,6 @@ final class JoniRegexPattern {
         boolean inClass = false;
         boolean atClassStart = false;
         boolean classAllowsLeadingClose = false;
-        boolean inlineExtendedOption = hasInlineExtendedOption(pattern);
         int posixClassDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
@@ -902,28 +868,16 @@ final class JoniRegexPattern {
                         classAllowsLeadingClose = false;
                         out.append(ch);
                         continue;
-                    } else {
-                        out.append("\\[");
-                        atClassStart = false;
-                        classAllowsLeadingClose = false;
-                        continue;
                     }
+                    out.append(ch);
+                    atClassStart = false;
+                    classAllowsLeadingClose = false;
+                    continue;
                 }
                 inClass = true;
                 atClassStart = true;
                 classAllowsLeadingClose = true;
                 out.append(ch);
-                continue;
-            }
-            if (!inClass && pattern.startsWith("(*:", i)) {
-                // Perl's abbreviated MARK form is (*:NAME). Joni accepts the
-                // equivalent long spelling and publishes the mark normally.
-                out.append("(*MARK:");
-                i += 2;
-                continue;
-            }
-            if (inClass && flags.isExtendedWhitespace() && !inlineExtendedOption
-                    && Character.isWhitespace(ch)) {
                 continue;
             }
             if (inClass && atClassStart && ch == '^') {
@@ -1000,11 +954,6 @@ final class JoniRegexPattern {
                 }
                 out.append(pattern, i, Math.min(end + 1, pattern.length()));
                 i = Math.min(end, pattern.length() - 1);
-                continue;
-            }
-            if (!inClass && pattern.startsWith("(?)", i)) {
-                out.append("(?:)");
-                i += 2;
                 continue;
             }
             out.append(ch);
