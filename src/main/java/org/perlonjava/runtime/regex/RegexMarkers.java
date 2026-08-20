@@ -6,40 +6,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Shared placeholder markers used by the string-interpolation parser to
- * stand in for regex constructs that PerlOnJava cannot compile literally
- * (because they require features unsupported by the underlying Java regex
- * engine — e.g. arbitrary {@code (?{ CODE })} code blocks).
- *
- * <p>The markers are emitted by {@code StringSegmentParser} when a code
- * block can't be constant-folded. The native regex compilation path detects
- * them and reports "not implemented":
- * <ul>
- *   <li>{@link #CODE_BLOCK} — a hard error under default die mode,
- *       or a no-op fallback only when {@link #CODE_BLOCK_NOOP_ENV} is set.
- *       Plain {@code JPERL_UNIMPLEMENTED=warn} still reports the unsupported
- *       feature without pretending the callback ran.</li>
- * </ul>
- *
- * <p><b>Why these specific spellings?</b> The markers remain stable under
- * case-insensitive compilation and are deliberately free of fold-sensitive
- * characters, so diagnostic/callout transport is independent of modifiers.
+ * Source-only markers that carry frontend regex diagnostics into native Joni
+ * compilation without changing executable pattern text.
  */
 public final class RegexMarkers {
-    /**
-     * Environment variable that permits non-constant {@code (?{ CODE })}
-     * blocks to compile as empty no-op groups. This is deliberately opt-in:
-     * normal PerlOnJava code must fail loudly because callbacks are not
-     * executed.
-     */
-    public static final String CODE_BLOCK_NOOP_ENV = "JPERL_REGEX_CODE_BLOCK_NOOP";
-
-    /**
-     * Marker for a {@code (?{ CODE })} code block that could not be
-     * constant-folded at parse time. Contains no fold-affected letters.
-     */
-    public static final String CODE_BLOCK = "(?{UNIMPLEMENTED_CODE_BLOC})";
-
     /**
      * Source-only marker for a literal {@code \\E} encountered without an
      * active quote or case-modification region. The frontend consumes that

@@ -428,17 +428,6 @@ sub run_single_test {
         | base/lex.t
         | comp/parser.t }x
         ? "warn" : "";
-    local $ENV{JPERL_REGEX_CODE_BLOCK_NOOP} = $test_file =~ m{
-          re/pat_advanced.t
-        | re/overload.t
-        | re/regexp.t
-        | re/regexp_noamp.t
-        | re/regexp_normal.t
-        | re/regexp_notrie.t
-        | re/regexp_qr.t
-        | re/regexp_qr_embed.t
-        | re/regexp_trielist.t }x
-        ? "1" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{
           re/pat.t
         | op/repeat.t
