@@ -34,6 +34,9 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
 import java.util.IllegalFormatConversionException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
@@ -674,10 +677,11 @@ final class Analyser extends Parser {
     private static final int GET_CHAR_LEN_VARLEN            = -1;
     private static final int GET_CHAR_LEN_TOP_ALT_VARLEN    = -2;
     protected final int getCharLengthTree(Node node) {
-        return getCharLengthTree(node, 0);
+        return getCharLengthTree(node, 0,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
     }
 
-    private int getCharLengthTree(Node node, int level) {
+    private int getCharLengthTree(Node node, int level, Set<Node> activeCalls) {
         level++;
 
         int len = 0;
@@ -687,7 +691,7 @@ final class Analyser extends Parser {
         case NodeType.LIST:
             ListNode ln = (ListNode)node;
             do {
-                int tlen = getCharLengthTree(ln.value, level);
+                int tlen = getCharLengthTree(ln.value, level, activeCalls);
                 if (returnCode == 0) len = MinMaxLen.distanceAdd(len, tlen);
             } while (returnCode == 0 && (ln = ln.tail) != null);
             break;
@@ -696,9 +700,9 @@ final class Analyser extends Parser {
             ListNode an = (ListNode)node;
             boolean varLen = false;
 
-            int tlen = getCharLengthTree(an.value, level);
+            int tlen = getCharLengthTree(an.value, level, activeCalls);
             while (returnCode == 0 && (an = an.tail) != null) {
-                int tlen2 = getCharLengthTree(an.value, level);
+                int tlen2 = getCharLengthTree(an.value, level, activeCalls);
                 if (returnCode == 0) {
                     if (tlen != tlen2) varLen = true;
                 }
@@ -728,7 +732,7 @@ final class Analyser extends Parser {
         case NodeType.QTFR:
             QuantifierNode qn = (QuantifierNode)node;
             if (qn.lower == qn.upper) {
-                tlen = getCharLengthTree(qn.target, level);
+                tlen = getCharLengthTree(qn.target, level, activeCalls);
                 if (returnCode == 0) len = MinMaxLen.distanceMultiply(tlen, qn.lower);
             } else {
                 returnCode = GET_CHAR_LEN_VARLEN;
@@ -738,10 +742,14 @@ final class Analyser extends Parser {
         case NodeType.CALL:
             if (Config.USE_SUBEXP_CALL) {
                 CallNode cn = (CallNode)node;
-                if (!cn.isRecursion()) {
-                    len = getCharLengthTree(cn.target, level);
-                } else {
+                if (!activeCalls.add(cn.target)) {
                     returnCode = GET_CHAR_LEN_VARLEN;
+                } else {
+                    try {
+                        len = getCharLengthTree(cn.target, level, activeCalls);
+                    } finally {
+                        activeCalls.remove(cn.target);
+                    }
                 }
             } // USE_SUBEXP_CALL
             break;
@@ -760,7 +768,7 @@ final class Analyser extends Parser {
                     if (en.isCLenFixed()) {
                         len = en.charLength;
                     } else {
-                        len = getCharLengthTree(en.target, level);
+                        len = getCharLengthTree(en.target, level, activeCalls);
                         if (returnCode == 0) {
                             en.charLength = len;
                             en.setCLenFixed();
@@ -772,7 +780,7 @@ final class Analyser extends Parser {
             case EncloseType.OPTION:
             case EncloseType.STOP_BACKTRACK:
             case EncloseNode.CONDITION:
-                len = getCharLengthTree(en.target, level);
+                len = getCharLengthTree(en.target, level, activeCalls);
                 break;
 
             case EncloseType.ABSENT:
@@ -1598,6 +1606,11 @@ final class Analyser extends Parser {
     }
 
     private AcceptLengthInfo getAcceptLengthInfo(Node node) {
+        return getAcceptLengthInfo(node,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private AcceptLengthInfo getAcceptLengthInfo(Node node, Set<Node> activeCalls) {
         if (node instanceof ControlVerbNode control) {
             AcceptLengthInfo info = new AcceptLengthInfo();
             if (control.kind == ControlVerbNode.Kind.ACCEPT) info.addAccept(0, 0);
@@ -1612,7 +1625,7 @@ final class Analyser extends Parser {
             result.addNormal(0, 0);
             ListNode list = (ListNode)node;
             do {
-                AcceptLengthInfo item = getAcceptLengthInfo(list.value);
+                AcceptLengthInfo item = getAcceptLengthInfo(list.value, activeCalls);
                 if (item == null) return null;
                 AcceptLengthInfo next = new AcceptLengthInfo();
                 if (result.hasAccept()) {
@@ -1636,7 +1649,7 @@ final class Analyser extends Parser {
             AcceptLengthInfo result = new AcceptLengthInfo();
             ListNode alt = (ListNode)node;
             do {
-                AcceptLengthInfo branch = getAcceptLengthInfo(alt.value);
+                AcceptLengthInfo branch = getAcceptLengthInfo(alt.value, activeCalls);
                 if (branch == null) return null;
                 if (branch.hasNormal()) result.addNormal(branch.normalMin, branch.normalMax);
                 if (branch.hasAccept()) result.addAccept(branch.acceptMin, branch.acceptMax);
@@ -1661,7 +1674,7 @@ final class Analyser extends Parser {
         case NodeType.QTFR: {
             QuantifierNode quantifier = (QuantifierNode)node;
             if (isRepeatInfinite(quantifier.upper)) return null;
-            AcceptLengthInfo target = getAcceptLengthInfo(quantifier.target);
+            AcceptLengthInfo target = getAcceptLengthInfo(quantifier.target, activeCalls);
             if (target == null) return null;
             AcceptLengthInfo info = new AcceptLengthInfo();
             if (target.hasNormal()) {
@@ -1688,7 +1701,7 @@ final class Analyser extends Parser {
                 info.addNormal(0, 0);
                 return info;
             }
-            return getAcceptLengthInfo(enclose.target);
+            return getAcceptLengthInfo(enclose.target, activeCalls);
         }
         case NodeType.ANCHOR: {
             // Nested assertions are their own ACCEPT boundary.
@@ -1696,23 +1709,46 @@ final class Analyser extends Parser {
             info.addNormal(0, 0);
             return info;
         }
-        case NodeType.CALL:
-            // Subexpression calls are their own ACCEPT boundary; their
-            // effective consumed width needs call-specific analysis.
-            return null;
+        case NodeType.CALL: {
+            CallNode call = (CallNode)node;
+            if (!activeCalls.add(call.target)) return null;
+            try {
+                AcceptLengthInfo target = getAcceptLengthInfo(call.target, activeCalls);
+                if (target == null) return null;
+
+                // ACCEPT terminates the called subexpression rather than the
+                // containing lookbehind, so both target exit kinds are normal
+                // completions at the call site.
+                AcceptLengthInfo info = new AcceptLengthInfo();
+                if (target.hasNormal()) {
+                    info.addNormal(target.normalMin, target.normalMax);
+                }
+                if (target.hasAccept()) {
+                    info.addNormal(target.acceptMin, target.acceptMax);
+                }
+                return info;
+            } finally {
+                activeCalls.remove(call.target);
+            }
+        }
         default:
             return null;
         }
     }
 
     private CharLengthRange getCharLengthRange(Node node) {
+        return getCharLengthRange(node,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private CharLengthRange getCharLengthRange(Node node, Set<Node> activeCalls) {
         switch (node.getType()) {
         case NodeType.LIST: {
             int min = 0;
             int max = 0;
             ListNode list = (ListNode)node;
             do {
-                CharLengthRange item = getCharLengthRange(list.value);
+                CharLengthRange item = getCharLengthRange(list.value, activeCalls);
                 if (item == null) return null;
                 min = MinMaxLen.distanceAdd(min, item.min);
                 max = MinMaxLen.distanceAdd(max, item.max);
@@ -1724,7 +1760,7 @@ final class Analyser extends Parser {
             int max = 0;
             ListNode alt = (ListNode)node;
             do {
-                CharLengthRange branch = getCharLengthRange(alt.value);
+                CharLengthRange branch = getCharLengthRange(alt.value, activeCalls);
                 if (branch == null) return null;
                 min = Math.min(min, branch.min);
                 max = Math.max(max, branch.max);
@@ -1745,7 +1781,7 @@ final class Analyser extends Parser {
         case NodeType.QTFR: {
             QuantifierNode quantifier = (QuantifierNode)node;
             if (isRepeatInfinite(quantifier.upper)) return null;
-            CharLengthRange target = getCharLengthRange(quantifier.target);
+            CharLengthRange target = getCharLengthRange(quantifier.target, activeCalls);
             if (target == null) return null;
             return new CharLengthRange(
                     MinMaxLen.distanceMultiply(target.min, quantifier.lower),
@@ -1755,13 +1791,18 @@ final class Analyser extends Parser {
             EncloseNode enclose = (EncloseNode)node;
             if (enclose.type == EncloseType.ABSENT) return null;
             if (enclose.type == EncloseType.DEFINE) return new CharLengthRange(0, 0);
-            return getCharLengthRange(enclose.target);
+            return getCharLengthRange(enclose.target, activeCalls);
         }
         case NodeType.ANCHOR:
             return new CharLengthRange(0, 0);
         case NodeType.CALL: {
             CallNode call = (CallNode)node;
-            return call.isRecursion() ? null : getCharLengthRange(call.target);
+            if (!activeCalls.add(call.target)) return null;
+            try {
+                return getCharLengthRange(call.target, activeCalls);
+            } finally {
+                activeCalls.remove(call.target);
+            }
         }
         default:
             return null;
