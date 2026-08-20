@@ -99,9 +99,10 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
 - [x] Native `\N{name}`, extended classes, DEFINE, lookbehind, branch reset,
   plain `\N`, recursion, numeric references, false ranges, and subpattern
   calls.
-- [ ] Finish lexical custom-charname cache identity, source byte/Unicode mode,
+- [x] Finish lexical custom-charname cache identity, source byte/Unicode mode,
   scoped user-property options, and nested class fold provenance.
-- [ ] Finish remaining native range/POSIX grammar and diagnostics.
+- [x] Finish native POSIX grammar, recovery, warning order, and diagnostics.
+- [ ] Finish remaining non-POSIX native range/parser diagnostics.
 - [ ] Refresh complete Unicode, `pat.t`, and `pat_advanced.t` gates.
 
 Exit: Unicode and native syntax corpora execute without compatibility masking.
@@ -114,7 +115,8 @@ Exit: Unicode and native syntax corpora execute without compatibility masking.
   range, and selected POSIX diagnostics.
 - [x] `pat_re_eval.t` semantic contract.
 - [ ] Finish all remaining same-source `reg_mesg.t` diagnostic families.
-- [ ] Finish debug-trace and analyser-warning policy rows.
+- [x] Finish analyser warning-policy rows.
+- [ ] Finish remaining debug-trace rows.
 - [ ] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
 
 Exit: generated regexes, warnings, fatality, categories, text, and locations
@@ -149,9 +151,10 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The saved PR 1087 checkpoint is warning-free and green on Ubuntu and Windows.
-The integration branch contains additional native fixes and must not update the
-PR until its exact head passes `make`.
+PR 1087 is saved at exact `0d652229d`, which is warning-free locally; its
+current Ubuntu and Windows CI is pending. The integration branch contains
+additional native fixes and must not update the PR until its exact head passes
+`make`.
 
 The first complete 286-file JVM comparison improves 74 rows and 403,846 passing
 assertions. The integrated subject-sensitive byte/`/d` and fullwidth-xdigit
@@ -161,9 +164,8 @@ executes `op/stat.t` 111/111 on both backends, above PR 958's 107/111. The
 refreshed immutable comparison remains fail-closed until the other three lower
 rows are rerun:
 
-- P3: `re/pat_advanced.t` and its thread variant, currently stopped by custom
-  charname `foo` context.
-- P4: `re/regex_sets.t`.
+- P3: `re/pat_advanced.t`, its thread variant, and the combined
+  `re/regex_sets.t` property/interpolation residuals.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -171,12 +173,11 @@ be separated and closed before dual-backend acceptance.
 
 Active ownership:
 
-- P3: Unicode/property/charnames and the two `pat_advanced` rows.
-- P4: the independent `regex_sets.t` row and non-POSIX parser/range families.
-- P5: debug-trace, analyser-warning policy, benchmark, and obsolete Java-label
-  audit.
-- P6: remaining POSIX parser/diagnostic families, then the first safe
-  warn-mode-removal preparation.
+- P3: combined `regex_sets.t` property/interpolation roots and the two
+  `pat_advanced` rows.
+- P4: remaining non-POSIX parser/range diagnostic families.
+- P5: debug-trace, benchmark, and obsolete Java-label audit.
+- P6: classify and close interpreter-only regex acceptance regressions.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, and release evidence.
 
