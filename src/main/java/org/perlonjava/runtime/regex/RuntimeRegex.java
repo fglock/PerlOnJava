@@ -78,73 +78,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final Set<String> REPORTED_DEBUG_COMPILATIONS =
             ConcurrentHashMap.newKeySet();
 
-    private static String makeDelimitedTokenRepetitionsPossessive(String pattern) {
-        Deque<DelimitedGroup> groups = new ArrayDeque<>();
-        List<Integer> insertions = new ArrayList<>();
-        boolean escaped = false;
-        boolean inClass = false;
-
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (ch == '[') {
-                inClass = true;
-                continue;
-            }
-            if (ch == ']' && inClass) {
-                inClass = false;
-                continue;
-            }
-            if (inClass) continue;
-
-            if (ch == '(') {
-                groups.push(new DelimitedGroup(i));
-            } else if (ch == '|' && !groups.isEmpty()) {
-                groups.peek().hasAlternation = true;
-            } else if (ch == ')' && !groups.isEmpty()) {
-                DelimitedGroup group = groups.pop();
-                if (!group.hasAlternation || i + 1 >= pattern.length()
-                        || pattern.charAt(i + 1) != '*') {
-                    continue;
-                }
-
-                String body = pattern.substring(group.start, i + 1);
-                char delimiter = body.contains("[^\"") || body.contains("[^\\\"") ? '"'
-                        : body.contains("[^'") || body.contains("[^\\'") ? '\'' : 0;
-                if (delimiter == 0) continue;
-
-                int suffix = i + 2;
-                while (suffix < pattern.length() && pattern.charAt(suffix) == ')') suffix++;
-                if (suffix < pattern.length() && pattern.charAt(suffix) == delimiter) {
-                    insertions.add(i + 2);
-                }
-            }
-        }
-
-        if (insertions.isEmpty()) return pattern;
-        StringBuilder stackSafe = new StringBuilder(pattern);
-        for (int i = insertions.size() - 1; i >= 0; i--) {
-            stackSafe.insert(insertions.get(i).intValue(), '+');
-        }
-        return stackSafe.toString();
-    }
-
-    private static final class DelimitedGroup {
-        final int start;
-        boolean hasAlternation;
-
-        DelimitedGroup(int start) {
-            this.start = start;
-        }
-    }
-
     private static RuntimeRegexState state() {
         return PerlRuntime.current().regexState;
     }
@@ -3675,37 +3608,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (int i = 0; i < s.length(); i++) {
             if (s.charAt(i) > 255) {
                 return true;  // Early exit at first Unicode char
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Check if a pattern contains inline ASCII modifier (?a...).
-     * When present, we should use ASCII matching even for UTF-8 strings with non-ASCII content.
-     * 
-     * @param pattern The pattern string to check
-     * @return true if the pattern contains inline (?a...) modifier
-     */
-    private static boolean hasInlineAsciiModifier(String pattern) {
-        if (pattern == null) {
-            return false;
-        }
-        // Check for (?a...) inline modifier - matches (?a, (?a:, (?ai, (?ia, etc.
-        // The 'a' must appear in the modifier position after (?
-        int idx = 0;
-        while ((idx = pattern.indexOf("(?", idx)) >= 0) {
-            idx += 2;
-            // Scan modifier characters until we hit : or )
-            while (idx < pattern.length()) {
-                char c = pattern.charAt(idx);
-                if (c == 'a') {
-                    return true;  // Found inline ASCII modifier
-                }
-                if (c == ':' || c == ')' || c == '-' || c == '<' || c == '=' || c == '!' || c == '{' || c == '#') {
-                    break;  // End of modifier section
-                }
-                idx++;
             }
         }
         return false;
