@@ -356,7 +356,7 @@ my @copy = @{$z};         # ERROR
 
 Regex status is backed by the named source and fixture paths below. The default
 route is Joni (`RuntimeRegex.java`, `RegexBackendPolicy.java`); explicit
-`JPERL_REGEX_BACKEND=java` is temporary differential diagnosis, and constructs
+`JPERL_REGEX_BACKEND=java` is diagnostic-only differential mode, and constructs
 that Java cannot represent still force Joni. “Implemented” means the cited
 current gate passes, not that every diagnostic, provenance, performance, or
 cross-platform migration obligation is closed. Unicode imports follow the

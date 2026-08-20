@@ -108,7 +108,8 @@ complete from a documentation statement or a single backend run.
 
 Run changed unit fixtures with system Perl first. `make` is the repository gate:
 it builds the fork, verifies packaging, and runs parallel unit shards. Before
-retiring Java matching, require the documented Perl corpus comparison,
+retiring the diagnostic Java differential mode, require the documented Perl
+corpus comparison,
 forced-Joni JVM and interpreter legs, package relocation checks, performance
 evidence, and platform CI. The feature matrix is a status summary, not an
 independent acceptance test.

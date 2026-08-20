@@ -24,9 +24,9 @@ commit messages, not here.
 - JCodings remains an upstream binary dependency because PerlOnJava does not
   modify its encoding implementation.
 - Default and auto routing use the vendored engine. Explicit Java routing is a
-  temporary differential-diagnosis mode; patterns Java cannot represent still
-  force Joni. The accepted final architecture removes Java matching and the
-  selector after semantic and performance parity.
+  diagnostic differential mode; patterns Java cannot represent still force
+  Joni. Production matcher ownership is already Joni; retiring the diagnostic
+  selector remains a separately tracked evidence gate.
 
 ## Internal callout syntax
 
@@ -233,7 +233,7 @@ The compatibility inventory is the regex section of
 `docs/reference/feature-matrix.md`. Default routing already uses Joni;
 subpattern calls, conditions, control verbs, ASCII-strict folds, and every
 structured executable callback template—including runtime `(??{...})`—also
-force Joni when the temporary Java differential mode is selected. Ordinary
+force Joni when the diagnostic Java differential mode is selected. Ordinary
 patterns remain part of the forced-Joni corpus.
 Semantically safe constant dynamic expressions may still fold to pattern text;
 embedded closures never become compile-time constants because their execution
@@ -249,8 +249,8 @@ and unwind are observable.
   remove adapter range materialisation.
 - Restore original source names and exact Perl diagnostics after temporary
   internal encodings.
-- Remove Java matching, Java-only preprocessing, and backend selection after the
-  complete semantic and performance gates pass.
+- Retire the diagnostic Java differential selector after the complete semantic
+  and performance evidence gate; it is not production matcher ownership.
 
 ## Verification
 
