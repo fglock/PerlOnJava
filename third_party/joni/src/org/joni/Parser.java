@@ -1353,6 +1353,17 @@ class Parser extends Lexer {
         Node alphaAssertion = parseAlphaAssertion();
         if (alphaAssertion != null) return alphaAssertion;
 
+        String missingScriptRunColon = missingControlArgumentDelimiter("script_run");
+        if (missingScriptRunColon != null) {
+            newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", missingScriptRunColon),
+                    p + missingScriptRunColon.length() - getBegin());
+        }
+        String missingShortScriptRunColon = missingControlArgumentDelimiter("sr");
+        if (missingShortScriptRunColon != null) {
+            newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", missingShortScriptRunColon),
+                    p + missingShortScriptRunColon.length() - getBegin());
+        }
+
         // Script-run groups are scoped, non-capturing constructs.  Parse their
         // body with the same delimiter discipline as the other Perl (*name:)
         // groups; native validation is added by the matcher path.
@@ -1408,11 +1419,20 @@ class Parser extends Lexer {
             verb = "MARK";
         } else {
             String construct = controlConstructName();
-            if (construct.isEmpty()
-                    || Character.isUpperCase(construct.codePointAt(0))) {
+            int constructEnd = p + construct.getBytes(StandardCharsets.UTF_8).length;
+            int diagnosticEnd = constructEnd;
+            if (constructEnd < stop && enc.mbcToCode(bytes, constructEnd, stop) == ')') {
+                diagnosticEnd += enc.length(bytes, constructEnd, stop);
+            }
+            if (construct.isEmpty()) {
                 newValueException(PERL_UNKNOWN_VERB_PATTERN, construct);
             }
-            newValueException(PERL_UNKNOWN_CONTROL_CONSTRUCT, construct);
+            if (Character.isUpperCase(construct.codePointAt(0))) {
+                newSyntaxException(PERL_UNKNOWN_VERB_PATTERN.replace("%n", construct),
+                        diagnosticEnd - getBegin());
+            }
+            newSyntaxException(PERL_UNKNOWN_CONTROL_CONSTRUCT.replace("%n", construct),
+                    diagnosticEnd - getBegin());
             return null;
         }
         p += verb.length();
@@ -1448,7 +1468,8 @@ class Parser extends Lexer {
             return null;
         }
         if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != ':') {
-            newValueException(PERL_ALPHA_ASSERTION_REQUIRES_COLON, name);
+            newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", name),
+                    cursor - getBegin());
         }
         p = cursor + enc.length(bytes, cursor, stop);
 
@@ -1499,6 +1520,16 @@ class Parser extends Lexer {
             cursor += enc.length(bytes, cursor, stop);
         }
         return new String(bytes, start, cursor - start, StandardCharsets.UTF_8);
+    }
+
+    private String missingControlArgumentDelimiter(String name) {
+        if (!startsWith(name)) return null;
+        int afterName = p + name.length();
+        if (afterName >= stop) {
+            newSyntaxException(PERL_UNTERMINATED_CONTROL_CONSTRUCT,
+                    afterName - getBegin());
+        }
+        return enc.mbcToCode(bytes, afterName, stop) == ')' ? name : null;
     }
 
     private int parseInternalCalloutId() {
