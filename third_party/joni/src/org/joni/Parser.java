@@ -541,6 +541,11 @@ class Parser extends Lexer {
                                     PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE,
                                     closeEnd - getBegin());
                         }
+                        if (!isPerlPosixClassName(nameStart, nameEnd)) {
+                            addPerlLiteralPosixText(
+                                    cc, ascCc, foldCc, nameStart, nameEnd);
+                            return false;
+                        }
                         String name = new String(bytes, nameStart,
                                 nameEnd - nameStart, StandardCharsets.US_ASCII);
                         newSyntaxException("POSIX class [:" + (not ? "^" : "")
@@ -552,6 +557,31 @@ class Parser extends Lexer {
         }
         restore();
         return true; /* 1: is not POSIX bracket, but no error. */
+    }
+
+    private boolean isPerlPosixClassName(int start, int end) {
+        int length = 0;
+        for (int cursor = start; cursor < end; ) {
+            int code = enc.mbcToCode(bytes, cursor, end);
+            if (code < 'a' || code > 'z') return false;
+            cursor += enc.length(bytes, cursor, end);
+            length++;
+        }
+        return length != 1;
+    }
+
+    private void addPerlLiteralPosixText(CClassNode cc, CClassNode ascCc,
+                                         CClassNode foldCc, int start, int end) {
+        cc.addCodeRange(env, ':', ':');
+        if (ascCc != null) ascCc.addCodeRange(env, ':', ':');
+        if (foldCc != null) foldCc.addCodeRange(env, ':', ':');
+        for (int cursor = start; cursor < end; ) {
+            int code = enc.mbcToCode(bytes, cursor, end);
+            cc.addCodeRange(env, code, code);
+            if (ascCc != null) ascCc.addCodeRange(env, code, code);
+            if (foldCc != null) foldCc.addCodeRange(env, code, code);
+            cursor += enc.length(bytes, cursor, end);
+        }
     }
 
     private boolean codeExistCheck(int code, boolean ignoreEscaped) {
