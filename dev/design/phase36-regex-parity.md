@@ -490,8 +490,8 @@ gates may reopen it if a semantic regression appears.
 - P3 owns Unicode/property/charnames closure; P4 owns acceptance regressions
   plus non-POSIX ranges; P5 owns debug trace and analyser warnings; P6 owns the
   remaining native POSIX recovery families. Literal NUL-delimited substitution
-  parsing is fully gated on its isolated coordinator branch and awaits P3-first
-  integration to minimize `StringParser` conflicts.
+  parsing is integrated and retains native malformed-pattern diagnostics plus
+  ordinary invalid-modifier errors.
 
 ### Active phase detail
 
@@ -606,7 +606,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Remove the dead callback no-op runner switch and marker constants
 - [x] Remove unreachable historical adapter helpers and the dead required-
       literal scanner
-- [ ] Parse and diagnose literal NUL-delimited substitutions through the native
+- [x] Parse and diagnose literal NUL-delimited substitutions through the native
       pattern compiler without masking errors as a stray numeric expression
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       mechanically derived 286-file gates on one integrated artifact
