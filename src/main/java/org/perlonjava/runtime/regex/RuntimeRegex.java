@@ -651,17 +651,30 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                     regex.regexFlags, trustedCalloutCount, false,
                                     false, false, regex.namedCharacterCache,
                                     namedCharacterSourceMode, lexicalReStrict);
-                    if (effectivePatternByteBacked && !regex.regexFlags.isUnicode()
-                            && !regex.regexFlags.isAscii()) {
-                        regex.recursivePatternBytes = new JoniRegexPattern(
-                                compilePatternString, regex.regexFlags, trustedCalloutCount,
-                                true, true, true, regex.namedCharacterCache,
-                                namedCharacterSourceMode, lexicalReStrict);
-                    }
                     regex.deferredUserDefinedUnicodeProperties =
                             regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty()
                                     || regex.recursivePatternUnicode
                                             .hasDeferredUserDefinedUnicodeProperty();
+                    if (effectivePatternByteBacked && !regex.regexFlags.isUnicode()
+                            && !regex.regexFlags.isAscii()
+                            && !regex.deferredUserDefinedUnicodeProperties
+                            && !regex.recursivePattern.hasUserDefinedUnicodeProperty()
+                            && !regex.recursivePatternUnicode
+                                    .hasUserDefinedUnicodeProperty()) {
+                        try {
+                            regex.recursivePatternBytes = new JoniRegexPattern(
+                                    compilePatternString, regex.regexFlags,
+                                    trustedCalloutCount, true, true, true,
+                                    regex.namedCharacterCache,
+                                    namedCharacterSourceMode, lexicalReStrict);
+                        } catch (RuntimeException byteVariantFailure) {
+                            // The Unicode variant above is authoritative. Some
+                            // otherwise valid property/set programs cannot be
+                            // represented by the ISO-8859-1 optimization; use
+                            // the Unicode matcher instead of rejecting them.
+                            regex.recursivePatternBytes = null;
+                        }
+                    }
                     regex.inlineModifierWarnings.addAll(
                             regex.recursivePattern.compileWarnings());
                     if (lexicalReStrict) {
@@ -1791,9 +1804,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (ch > 0xff) return true;
-            if (!quoted && characterClassDepth == 0 && pattern.startsWith("(?[", i)) {
-                return true;
-            }
             if (!quoted && ch == '[') {
                 if (characterClassDepth > 0) {
                     // A nested opener (including the '[' in a POSIX class)
@@ -1830,7 +1840,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 continue;
             }
             if (quoted || escape == '\\') continue;
-            if (escape == 'p' || escape == 'P') {
+            if ((escape == 'p' || escape == 'P') && characterClassDepth == 0) {
                 return true;
             }
             if (escape == 'N' && i + 1 < pattern.length()

@@ -165,7 +165,8 @@ final class Analyser extends Parser {
         // unreachable. The ordinary optimizer assumes every concatenated node
         // remains mandatory, so its minimum-length and literal-search filters
         // are not sound for these programs.
-        if (Config.OPTIMIZE && !env.hasControlVerb && !regex.hasDynamicOptions) {
+        if (Config.OPTIMIZE && !env.hasControlVerb && !env.hasCallout
+                && !regex.hasDynamicOptions) {
             setOptimizedInfoFromTree(root);
         }
 
