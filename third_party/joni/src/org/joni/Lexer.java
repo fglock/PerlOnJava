@@ -1083,11 +1083,27 @@ class Lexer extends ScannerSupport {
         int cursor = p;
         while (cursor < stop) {
             if (codeAt(cursor, stop) == '}') return cursor;
+            if (codeAt(cursor, stop) == ']') break;
             cursor = nextChar(cursor, stop);
         }
+        while (cursor > p) {
+            int previous = enc.prevCharHead(bytes, p, cursor, stop);
+            if (!isPerlEscapeWhitespace(codeAt(previous, stop))) break;
+            cursor = previous;
+        }
+        int firstContent = p;
+        while (firstContent < cursor
+                && isPerlEscapeWhitespace(codeAt(firstContent, stop))) {
+            firstContent = nextChar(firstContent, stop);
+        }
+        int diagnosticPosition = firstContent < cursor
+                && perlEscapeDigit(codeAt(firstContent, stop),
+                        escape == 'o' ? 8 : 16) >= 0
+                ? cursor : p;
         newSyntaxException(escape == 'o'
                 ? PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE
-                : PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE);
+                : PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE,
+                diagnosticPosition - getBegin());
         return stop;
     }
 
