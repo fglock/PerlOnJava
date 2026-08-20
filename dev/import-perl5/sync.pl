@@ -84,11 +84,12 @@ sub apply_patch {
     my ($target, $patch_file) = @_;
     
     # --no-backup-if-mismatch prevents creating .orig files
-    my $cmd = "patch --no-backup-if-mismatch -p0 '$target' < '$patch_file'";
+    my $cmd = "patch --no-backup-if-mismatch -r - -p0 '$target' < '$patch_file'";
     print "  Applying patch: $patch_file\n";
     
     my $result = system($cmd);
     if ($result != 0) {
+        unlink "$target.rej", "$target.orig";
         warn "  Warning: patch failed with exit code $result\n";
         return 0;
     }
@@ -671,17 +672,36 @@ sub main {
                 };
             }
             
-            # Copy file
+            my $patch_applied = 0;
+            # Stage file and its patch before replacing the target.
             print "  Copying to: $import->{target}\n";
-            unless (copy($source, $target)) {
+            my ($temporary, $temporary_path) = tempfile('.import-XXXXXX', DIR => $target_dir, UNLINK => 0);
+            close $temporary;
+            unless (copy($source, $temporary_path)) {
                 warn "  ERROR: Copy failed: $!\n\n";
                 $error_count++;
                 next;
             }
+            if ($import->{patch}) {
+                my $patch_file = File::Spec->catfile($patches_dir, $import->{patch});
+                unless (-f $patch_file && apply_patch($temporary_path, $patch_file)) {
+                    unlink $temporary_path;
+                    $error_count++;
+                    next;
+                }
+                $patch_applied = 1;
+            }
+            rename $temporary_path, $target or do {
+                warn "  ERROR: Cannot publish staged import: $!\n\n";
+                unlink $temporary_path;
+                $error_count++;
+                next;
+            };
+            $import->{_patch_applied} = $patch_applied;
         }
         
         # Apply patch if specified
-        if ($import->{patch}) {
+        if ($import->{patch} && !$import->{_patch_applied}) {
             my $patch_file = File::Spec->catfile($patches_dir, $import->{patch});
             unless (-f $patch_file) {
                 warn "  ERROR: Patch file not found: $patch_file\n\n";
