@@ -137,12 +137,6 @@ my sub populate_txt {
   return if $txt;
 
   $txt = do "unicore/Name.pl";
-  if (!defined $txt || $txt eq '') {
-    # unicore/Name.pl not available (e.g. on PerlOnJava);
-    # set $txt to a truthy placeholder so we don't retry and crash.
-    # viacode() will fall back to _java_viacode() for name lookups.
-    $txt = "# unavailable\n";
-  }
   Internals::SvREADONLY($txt, 1);
 }
 
@@ -427,15 +421,6 @@ sub lookup_name ($name, $wants_ord, $runtime, $regex_loose //= 0) {
           && (defined (my $ord = charnames::name_to_code_point_special($lookup_name, $loose))))
       {
         $result = chr $ord;
-      }
-      # PerlOnJava bundles ICU4J, whose Unicode name database is complete and
-      # current. Use it for strict official-name lookup before falling back to
-      # the generated Perl table, just as viacode() does for reverse lookup.
-      elsif (! $loose && $^H{charnames_full} && defined &_java_vianame
-             && defined(my $java_ord = _java_vianame($lookup_name)))
-      {
-        $result = chr $java_ord;
-        $full_names_cache{$name} = $result;
       }
       else {
 
@@ -820,16 +805,6 @@ sub viacode ($arg) {
     if (defined $algorithmic) {
       $viacode{$hex} = $algorithmic;
       return $algorithmic;
-    }
-
-    # Try Java-backed ICU4J name lookup if available (PerlOnJava).
-    # This provides complete Unicode name data without needing unicore/Name.pl.
-    if (defined &_java_viacode) {
-        my $java_name = _java_viacode(CORE::hex $hex);
-        if (defined $java_name && $java_name ne '') {
-            $viacode{$hex} = $java_name;
-            return $java_name;
-        }
     }
 
     # Return the official name, if exists.  It's unclear to me (khw) at
