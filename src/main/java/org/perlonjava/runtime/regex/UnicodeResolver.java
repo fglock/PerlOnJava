@@ -1329,18 +1329,6 @@ public class UnicodeResolver {
         return property != null && USER_DEFINED_PROPERTY_NAME.matcher(property).matches();
     }
 
-    static boolean mustPreserveUserDefinedProperty(
-            String property, boolean caseInsensitive) {
-        if (!isUserDefinedPropertyName(property)) return false;
-        String subName = property.contains("::") ? property : "main::" + property;
-        if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) return true;
-        PerlRuntime runtime = PerlRuntime.currentOrNull();
-        return runtime != null
-                && (runtime.regexState().deferredUserUnicodeProperties.contains(subName)
-                        || runtime.regexState().userUnicodePropertyCache.containsKey(
-                                userPropertyCacheKey(subName, caseInsensitive)));
-    }
-
     static boolean isPerlBuiltInPropertyAlias(String property) {
         if (property == null) return false;
         if (isUserDefinedPropertyName(property)
@@ -1369,6 +1357,22 @@ public class UnicodeResolver {
             String property, boolean inCharacterClass, boolean caseInsensitive) {
         if (property == null) return null;
         property = property.trim();
+        if (isPerlIsPrefixedNumericWildcard(property)) {
+            throw new IllegalArgumentException(
+                    "Is-prefixed Numeric_Value properties do not accept wildcard values");
+        }
+        if (isPerlIsPrefixedJoiningGroupWildcard(property)) {
+            throw new IllegalArgumentException(
+                    "Can't find Unicode property definition for Is-prefixed Joining_Group wildcard");
+        }
+        if (isPerlIsPrefixedBlockWildcard(property)) {
+            throw new IllegalArgumentException(
+                    "Can't find Unicode property definition for Is-prefixed Block wildcard");
+        }
+        if (isPerlIsPrefixedScriptWildcard(property)) {
+            throw new IllegalArgumentException(
+                    "Can't find Unicode property definition for Is-prefixed Script wildcard");
+        }
         boolean userDefined = isUserDefinedPropertyName(property);
         if (userDefined && PerlRuntime.currentOrNull() != null) {
             String encoded = tryUserDefinedProperty(
@@ -1443,7 +1447,6 @@ public class UnicodeResolver {
         PerlUnicodePropertyWildcard propertyWildcard =
                 resolvePerlUnicodePropertyWildcard(property);
         if (propertyWildcard != null) {
-            if (!propertyWildcard.caseFold && inCharacterClass) return null;
             return joniPropertyResult(
                     propertyWildcard.set,
                     propertyWildcard.wideRanges,
@@ -1461,11 +1464,9 @@ public class UnicodeResolver {
         } else if (isGeneralCategoryProperty(name)) {
             caseFold = true;
         } else if (PerlUnicodeBlockData.isPropertyAlias(name)) {
-            if (perlBlockWildcardBody(value) != null) return null;
             caseFold = false;
         } else if (PerlUnicodeScriptData.isScriptPropertyAlias(name)
                 || PerlUnicodeScriptData.isScriptExtensionsPropertyAlias(name)) {
-            if (perlNumericWildcardBody(value) != null) return null;
             caseFold = false;
         } else if (isCanonicalCombiningClassProperty(name)
                 || PerlUnicodeBidiClassData.isPropertyAlias(name)
@@ -1474,7 +1475,6 @@ public class UnicodeResolver {
             caseFold = false;
         } else if (PerlUnicodeNumericValueData.isPropertyAlias(name)
                 || PerlUnicodeJoiningGroupData.isPropertyAlias(name)) {
-            if (perlNumericWildcardBody(value) != null) return null;
             caseFold = false;
         } else if (isPerlWordBreakProperty(name)) {
             if (resolvePerlWordBreakProperty(property) == null) return null;
@@ -1489,16 +1489,10 @@ public class UnicodeResolver {
             if (resolvePerlVerticalOrientationProperty(property) == null) return null;
             caseFold = false;
         } else if (isPerlAgeProperty(name)) {
-            if (isPerlAgeWildcard(value)) return null;
             caseFold = false;
         } else {
             return null;
         }
-
-        // Joni currently folds a complete bracket expression as one class.
-        // Keep no-fold families translated by the adapter inside brackets until
-        // the AST can retain per-property fold policy through class composition.
-        if (!caseFold && inCharacterClass) return null;
 
         UnicodeSet set;
         if (binaryAssignment != null) {

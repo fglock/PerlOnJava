@@ -456,28 +456,26 @@ final class JoniRegexPattern {
             boolean frontendProperty = unnegated.matches(
                     "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
             boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
-            boolean preserveUserDefined = userDefined
-                    && UnicodeResolver.mustPreserveUserDefinedProperty(
-                            unnegated, flags.isCaseInsensitive());
             boolean joniResolvedProperty = UnicodeResolver.resolveJoniProperty(
                     unnegated, extendedClassBracketDepth > 0
                             || standardClassBracketDepth > 0,
                     flags.isCaseInsensitive()) != null;
-            if (joniResolvedProperty && (userDefined
-                    || (!userDefined || perlBuiltInAlias && !preserveUserDefined)
-                            && (frontendProperty || scriptExtensions
-                                    || perlBuiltInAlias))) {
+            if (joniResolvedProperty) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
             }
-            if ((frontendProperty || scriptExtensions || perlBuiltInAlias)
+            if (userDefined && extendedClassBracketDepth > 0) {
+                throw new PerlCompilerException(
+                        "Unknown user-defined property name \"" + unnegated + "\"");
+            }
+            if (!userDefined && (frontendProperty || scriptExtensions || perlBuiltInAlias)
                     && extendedClassBracketDepth > 0) {
                 translated.append(pattern, i, end + 1);
                 i = end;
                 continue;
             }
-            if ((frontendProperty || scriptExtensions || perlBuiltInAlias)
+            if (!userDefined && (frontendProperty || scriptExtensions || perlBuiltInAlias)
                     && standardClassBracketDepth > 0) {
                 String propertyClass = UnicodeResolver.translateUnicodePropertyForCharClass(
                         property, pattern.charAt(i + 1) == 'P');
