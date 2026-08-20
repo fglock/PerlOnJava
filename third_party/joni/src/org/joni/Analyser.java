@@ -60,6 +60,7 @@ import org.joni.constants.internal.EncloseType;
 import org.joni.constants.internal.NodeType;
 import org.joni.constants.internal.StackPopLevel;
 import org.joni.constants.internal.TargetInfo;
+import org.joni.exception.ValueException;
 
 final class Analyser extends Parser {
 
@@ -84,6 +85,7 @@ final class Analyser extends Parser {
 
         Node root = parseRegexp(); // onig_parse_make_tree
         regex.numMem = env.numMem;
+        resolveForwardNamedBackrefs(root);
 
         if (Config.USE_NAMED_GROUP) {
             /* mixed use named group and no-named group */
@@ -189,6 +191,46 @@ final class Analyser extends Parser {
         } // DEBUG_COMPILE
 
         regex.options &= ~syntax.options;
+    }
+
+    private void resolveForwardNamedBackrefs(Node node) {
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            ListNode list = (ListNode)node;
+            do {
+                resolveForwardNamedBackrefs(list.value);
+            } while ((list = list.tail) != null);
+            break;
+        case NodeType.QTFR:
+            resolveForwardNamedBackrefs(((QuantifierNode)node).target);
+            break;
+        case NodeType.ENCLOSE:
+            EncloseNode enclose = (EncloseNode)node;
+            if (enclose.assertionCondition != null) {
+                resolveForwardNamedBackrefs(enclose.assertionCondition);
+            }
+            if (enclose.target != null) resolveForwardNamedBackrefs(enclose.target);
+            break;
+        case NodeType.ANCHOR:
+            AnchorNode anchor = (AnchorNode)node;
+            if (anchor.target != null) resolveForwardNamedBackrefs(anchor.target);
+            break;
+        case NodeType.BREF:
+            BackRefNode backref = (BackRefNode)node;
+            if (backref.unresolvedName != null) {
+                NameEntry entry = regex.nameToGroupNumbers(backref.unresolvedName,
+                        backref.unresolvedNameP, backref.unresolvedNameEnd);
+                if (entry == null) {
+                    throw new ValueException(PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP,
+                            backref.unresolvedNameEnd - getBegin());
+                }
+                backref.resolve(entry.getBackRefs(), env);
+            }
+            break;
+        default:
+            break;
+        }
     }
 
     private String encStringToString(byte[]bytes, int p, int end) {
