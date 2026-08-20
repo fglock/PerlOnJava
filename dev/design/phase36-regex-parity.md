@@ -207,8 +207,10 @@ affected corpus before taking another slice.
   2,101/2,210 with zero newly failing identity against the prior boundary.
 - Runtime-source scanning preserves `/aa`, ignores callback-looking syntax in
   comments and character classes, and agrees across default/Joni and JVM/
-  interpreter focused vectors. Unterminated-source diagnostics and the wider
-  dynamic code-array matrix remain open.
+  interpreter focused vectors. Unterminated-source diagnostics are native.
+  Dynamic executable source inherits the construction site's complete lexical
+  strict policy and live eval-captured cells; the direct and child-thread
+  code-array matrix agrees across system Perl, JVM, and interpreter.
 - The fail-closed PR-958 comparator rejects missing files, lost passes,
   timeout/error/unknown execution, zero TAP, truncated/incomplete TAP, and
   malformed input, while emitting JSON and retaining exact baseline-artifact
@@ -219,10 +221,10 @@ affected corpus before taking another slice.
   wrapper's bounded `jperl -v` identity to that source commit, retains hashes
   for every artifact, verifies relocated unique Joni/JCodings classes and exact
   notice bytes, and proves the exact SBOM components and dependency edge.
-- Imported `perl5/t/re` and `perl5_t/t/re` files are byte-identical. There is no
-  configured regex-test patch; only a stale `pat.t.orig` artifact and the
-  regex-adjacent `_charnames.pm` library patch remain for the final sync and
-  Unicode-name retirement barriers.
+- Imported `perl5/t/re` and `perl5_t/t/re` are byte-identical, with no
+  configured regex-test patch or stale backup artifact. The regex-adjacent
+  `_charnames.pm` library patch is retired; current generated name data and the
+  upstream library are the only named-character inputs.
 
 ## Execution Phases
 
@@ -335,15 +337,17 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the four active, non-overlapping slices: alternating dynamic
-   user-property cache identity; native abbreviated MARK, empty group,
-   standard-class literal `[`, and `/xx` adapter retirement; native
-   forward/reverse literal and class fold expansion; and the remaining dynamic
-   code-array/mixed-source matrix. Each slice must include system-Perl oracles,
+1. Finish the four active, non-overlapping slices: reduce user-property
+   translation to executable callback/source policy; complete native
+   forward/reverse literal and class fold expansion; close the next substantial
+   native `reg_mesg.t` diagnostic tranche; and close the next runtime-source/
+   eval diagnostic tranche. Each slice must include system-Perl oracles,
    JVM/interpreter parity, complete affected-corpus deltas, and zero
    introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
-   `make`. Refresh exact `regexp.t`, `reg_fold.t`, `fold_grind_d.t`,
+   `make`. The preceding native-adapter/runtime-source batch is already saved in
+   draft PR 1087 at an exact warning-free checkpoint. Refresh exact
+   `regexp.t`, `reg_fold.t`, `fold_grind_d.t`,
    `reg_email*`, `regex_sets.t`, Unicode-property, callback, recursion,
    `script_run.t`, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t`
    gates. Classify every residual by a general native-Joni root and immediately
@@ -500,6 +504,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Runtime-source comment/class masking and `/aa` propagation
 - [x] Unterminated runtime-source diagnostics for regexp rows 575/576/581
 - [x] Dynamic undef-warning scope and nested-continuation `/aa` state
+- [x] Dynamic code-array source strict policy, eval lexical-cell lifetime, and
+      child-thread reuse
 - [x] Native compile diagnostics and exact warning-category inheritance
 - [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
