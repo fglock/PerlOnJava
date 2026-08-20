@@ -356,8 +356,8 @@ my @copy = @{$z};         # ERROR
 
 All production matching uses the vendored Joni fork through `RuntimeRegex` and
 `JoniRegexPattern`; there is no production Java matcher or preprocessor route.
-The disconnected `RegexBackendPolicy` parser exists only to compile immutable
-compatibility tests and is not a runtime capability switch. Status below means
+A test-scope-only `RegexBackendPolicy` model compiles immutable compatibility
+tests but is absent from production packaging. Status below means
 the named behavior is demonstrated by source and a focused gate, not that every
 Perl diagnostic, optimizer path, or complete upstream corpus is closed.
 
