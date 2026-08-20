@@ -490,15 +490,10 @@ public abstract class Matcher extends IntHolder {
             if ((regex.anchor & AnchorType.BEGIN_POSITION) != 0) {
                 /* search start-position only */
                 // !begin_position:!
-                if (range > start) {
-                    if (gpos > start) {
-                        if (gpos < range) range = gpos + 1;
-                    } else {
-                        range = start + 1;
-                    }
-                } else {
-                    range = start;
-                }
+                int lower = Math.min(start, range);
+                int upper = Math.max(start, range);
+                if (gpos < lower || gpos > upper) return FAILED;
+                start = range = gpos;
             } else if ((regex.anchor & AnchorType.BEGIN_BUF) != 0) {
                 /* search str-position only */
                 if (range > start) {
