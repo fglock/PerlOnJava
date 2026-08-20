@@ -293,6 +293,11 @@ class Lexer extends ScannerSupport {
         }
     }
 
+    protected final boolean isPerlGroupNameStart(int code) {
+        return code == '_' || Character.isLetter(code)
+                || Character.getType(code) == Character.LETTER_NUMBER;
+    }
+
     // USE_NAMED_GROUP && USE_BACKREF_AT_LEVEL
     /*
         \k<name+n>, \k<name-n>
@@ -427,6 +432,8 @@ class Lexer extends ScannerSupport {
                     err = INVALID_GROUP_NAME;
                     // isNum = 0;
                 }
+            } else if (!ref && syntax.op2OptionPerl() && !isPerlGroupNameStart(c)) {
+                err = INVALID_GROUP_NAME;
             }
         }
 
@@ -1586,7 +1593,7 @@ class Lexer extends ScannerSupport {
                         }
                         if (nameStart < stop) {
                             int initial = codeAt(nameStart, stop);
-                            if (enc.isDigit(initial) || !enc.isWord(initial)) {
+                            if (!isPerlGroupNameStart(initial)) {
                                 newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
                                         nameStart - getBegin());
                             }
