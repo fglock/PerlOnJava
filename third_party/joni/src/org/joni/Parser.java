@@ -1809,6 +1809,15 @@ class Parser extends Lexer {
         skipPerlExtendedClassSpace();
         if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
 
+        int codePoint = extendedClassCode();
+        if (codePoint == '+' || codePoint == '|' || codePoint == '-'
+                || codePoint == '^' || codePoint == '&') {
+            inc();
+            newSyntaxException(String.format(
+                    PERL_EXTENDED_CLASS_BINARY_OPERATOR_WITHOUT_OPERAND,
+                    (char) codePoint));
+        }
+
         if (extendedClassStarts("(?[")) {
             p += 3;
             return new PerlExtendedClassPrimary(parsePerlExtendedCharClass(), true);
