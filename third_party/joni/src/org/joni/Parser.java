@@ -2184,8 +2184,10 @@ class Parser extends Lexer {
 
     private PerlExtendedClassPrimary parsePerlExtendedClassEscape() {
         int escapeStart = p;
+        int escapeCode = -1;
         if (escapeStart < stop && enc.mbcToCode(bytes, escapeStart, stop) == '\\') {
             int cursor = escapeStart + enc.length(bytes, escapeStart, stop);
+            if (cursor < stop) escapeCode = enc.mbcToCode(bytes, cursor, stop);
             if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == 'x') {
                 cursor += enc.length(bytes, cursor, stop);
                 if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '{') {
@@ -2240,6 +2242,10 @@ class Parser extends Lexer {
             return new PerlExtendedClassPrimary(result, false);
         case RAW_BYTE:
         case STRING:
+            if (token.escaped && Character.isLetterOrDigit(token.getC())) {
+                newValueException(PERL_UNRECOGNIZED_ESCAPE_IN_CHAR_CLASS,
+                        Character.toString(token.getC()));
+            }
             addPerlExtendedClassCode(result, token.getC());
             return new PerlExtendedClassPrimary(result, false);
         case NAMED_STRING:
@@ -2269,6 +2275,10 @@ class Parser extends Lexer {
             }
             return new PerlExtendedClassPrimary(parsed.standard(), false);
         default:
+            if (Character.isLetterOrDigit(escapeCode)) {
+                newValueException(PERL_UNRECOGNIZED_ESCAPE_IN_CHAR_CLASS,
+                        Character.toString(escapeCode));
+            }
             newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
             return null;
         }
