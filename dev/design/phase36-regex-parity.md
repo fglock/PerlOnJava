@@ -350,11 +350,12 @@ behavior.
 
 1. Finish the four active, non-overlapping slices: close the remaining
    Unicode/property source-policy rows after completing warmed callback-clone
-   isolation; reduce the current 446-row same-source
-   `reg_mesg.t` frontier through the next three-to-five native diagnostic
-   families; complete the CPAN/performance and obsolete-Java-label audit after
-   closing the optimizer-debug rows; and finish the remaining runtime
-   diagnostic-policy families. Each semantic slice must include
+   isolation; reduce the current 436-row same-source `reg_mesg.t` frontier
+   through the classified runtime, Unicode/property, analyser-warning, and
+   frontend source-rendering families; complete the CPAN/performance and
+   obsolete-Java-label audit after closing the optimizer-debug rows; and finish
+   the remaining runtime diagnostic-policy families. Each semantic slice must
+   include
    system-Perl oracles, JVM/interpreter parity, complete affected-corpus deltas,
    and zero introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
@@ -538,8 +539,11 @@ gates may reopen it if a semantic regression appears.
 - [x] Native nested-quantifier source positions, including UTF-8 patterns
 - [x] Native Perl group-name start categories and source positions
 - [x] Native unknown extended-class escape identity and diagnostics
-- [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`;
-      current same-source JVM/interpreter frontier is 446 failing rows
+- [x] Exhaust native lexer/parser diagnostic families in `reg_mesg.t` and
+      classify every residual to runtime, Unicode/property, analyser, or
+      frontend
+- [ ] Remaining same-source diagnostic families in `reg_mesg.t`; current exact
+      JVM/interpreter frontier is 436 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Thread graph cloning remaps executable regex callback CODE while
@@ -559,6 +563,8 @@ gates may reopen it if a semantic regression appears.
       debug-output assertions pass on JVM, interpreter, and thread wrappers
 - [x] Render runtime-interpolated trailing-backslash diagnostics with exact
       Perl text while preserving valid paired terminal backslashes
+- [x] Emit exact runtime short-octal termination warnings for `\0` followed by
+      8 or 9 while honoring regexp warning suppression
 - [x] Publish inverted `\K` match text as undef while preserving Perl match
       offsets and backtracking state
 - [x] Remove the dead callback no-op runner switch and marker constants
