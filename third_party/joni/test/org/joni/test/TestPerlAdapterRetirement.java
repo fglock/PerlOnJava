@@ -19,8 +19,10 @@
  */
 package org.joni.test;
 
-import static org.joni.constants.SyntaxProperties.OP2_CCLASS_SET_OP;
+import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
+import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.joni.constants.SyntaxProperties.OP3_PERL_LITERAL_OPEN_IN_CC;
+import static org.joni.constants.SyntaxProperties.OP_POSIX_BRACKET;
 import static org.junit.Assert.assertEquals;
 
 import java.nio.charset.StandardCharsets;
@@ -34,17 +36,21 @@ import org.junit.Test;
 
 public class TestPerlAdapterRetirement {
     private static final Syntax PERL_LITERAL_CLASS = new Syntax(
-            "PerlLiteralClass", Syntax.PerlNG.op,
-            Syntax.PerlNG.op2 | OP2_CCLASS_SET_OP,
-            Syntax.PerlNG.op3 | OP3_PERL_LITERAL_OPEN_IN_CC,
-            Syntax.PerlNG.behavior, Syntax.PerlNG.options,
-            Syntax.PerlNG.metaCharTable);
+            "PerlLiteralClass", Syntax.RUBY.op | OP_POSIX_BRACKET,
+            (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL,
+            Syntax.RUBY.op3 | OP3_PERL_LITERAL_OPEN_IN_CC,
+            Syntax.RUBY.behavior, Syntax.RUBY.options,
+            Syntax.RUBY.metaCharTable);
 
     private static Matcher matcher(String pattern, String input, int options) {
+        return matcher(pattern, input, options, PERL_LITERAL_CLASS);
+    }
+
+    private static Matcher matcher(String pattern, String input, int options, Syntax syntax) {
         byte[] patternBytes = pattern.getBytes(StandardCharsets.US_ASCII);
         byte[] inputBytes = input.getBytes(StandardCharsets.US_ASCII);
         Regex regex = new Regex(patternBytes, 0, patternBytes.length, options,
-                ASCIIEncoding.INSTANCE, PERL_LITERAL_CLASS);
+                ASCIIEncoding.INSTANCE, syntax);
         return regex.matcher(inputBytes);
     }
 
@@ -65,6 +71,17 @@ public class TestPerlAdapterRetirement {
         assertEquals(0, search("[a[]", "a", Option.NONE));
         assertEquals(0, search("[[:]+", "[", Option.NONE));
         assertEquals(0, search("[a[:]b[:c]", "abc", Option.NONE));
+        assertEquals(0, search("[[:alpha:]]", "a", Option.NONE));
+        assertEquals(0, search("[[:dgit:foo]]", "d]", Option.NONE));
+        assertEquals(-1, search("[[:dgit:foo]]", "a]", Option.NONE));
+    }
+
+    @Test
+    public void rubyClassSetSemanticsRemainAvailable() {
+        assertEquals(0, matcher("[[a]b]", "a", Option.NONE, Syntax.RUBY)
+                .search(0, 1, Option.NONE));
+        assertEquals(0, matcher("[[a]b]", "b", Option.NONE, Syntax.RUBY)
+                .search(0, 1, Option.NONE));
     }
 
     @Test
