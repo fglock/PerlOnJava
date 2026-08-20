@@ -43,6 +43,7 @@ import java.util.WeakHashMap;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.runtimetypes.*;
 
 /** Sole production adapter from Perl regex operations to the vendored Joni fork. */
@@ -109,26 +110,37 @@ final class JoniRegexPattern {
             PERL_SCALAR_CODEC);
 
     static final class NamedCharacterCache {
-        private record CacheKey(String name, NamedCharacterExpansion.SourceMode sourceMode) {}
-
-        private final Map<CacheKey, NamedCharacterExpansion> expansions =
+        private final Map<NamedCharacterExpansionMap.Key, NamedCharacterExpansion> expansions =
                 new LinkedHashMap<>();
         private final RuntimeScalar translator;
 
         NamedCharacterCache() {
-            this(null);
+            this((RuntimeScalar) null);
         }
 
         NamedCharacterCache(RuntimeScalar translator) {
             this.translator = translator == null ? null : new RuntimeScalar(translator);
         }
 
+        NamedCharacterCache(NamedCharacterExpansionMap preResolved) {
+            this.translator = null;
+            if (preResolved != null) expansions.putAll(preResolved.expansions());
+        }
+
         NamedCharacterExpansion resolve(
                 String name, NamedCharacterExpansion.SourceMode sourceMode) {
-            return expansions.computeIfAbsent(new CacheKey(name, sourceMode),
+            return expansions.computeIfAbsent(new NamedCharacterExpansionMap.Key(name, sourceMode),
                     ignored -> translator == null
                             ? NamedCharacterExpansion.resolve(name, sourceMode)
                             : NamedCharacterExpansion.resolve(name, translator, sourceMode));
+        }
+
+
+        NamedCharacterExpansionMap snapshot(
+                NamedCharacterExpansionMap.LiteralIdentity literalIdentity,
+                NamedCharacterExpansionMap.CallableIdentity callableIdentity) {
+            return new NamedCharacterExpansionMap(
+                    literalIdentity, callableIdentity, expansions);
         }
     }
 

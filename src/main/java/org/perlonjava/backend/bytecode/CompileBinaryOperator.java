@@ -635,10 +635,19 @@ public class CompileBinaryOperator {
 
                     // Create a copy of the operand list and add the left side (string)
                     ListNode boundList = new ListNode(new java.util.ArrayList<>(originalList.elements), originalList.tokenIndex);
+                    boundList.handle = originalList.handle;
+                    if (originalList.annotations != null) {
+                        boundList.annotations = new java.util.HashMap<>(
+                                originalList.annotations);
+                    }
                     boundList.elements.add(node.left);
 
                     // Create a new OperatorNode with the modified operand list
                     OperatorNode boundOp = new OperatorNode(rightOp.operator, boundList, rightOp.tokenIndex);
+                    boundOp.id = rightOp.id;
+                    if (rightOp.annotations != null) {
+                        boundOp.annotations = new java.util.HashMap<>(rightOp.annotations);
+                    }
 
                     // For !~, we need to negate the result
                     if (node.operator.equals("!~")) {

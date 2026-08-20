@@ -450,6 +450,9 @@ public class ConstantFoldingVisitor implements Visitor {
         if (foldedOperand != node.operand) {
             OperatorNode newNode = new OperatorNode(node.operator, foldedOperand, node.tokenIndex);
             newNode.id = node.id;
+            if (node.annotations != null) {
+                newNode.annotations = new java.util.HashMap<>(node.annotations);
+            }
             result = newNode;
         } else {
             result = node;
@@ -524,7 +527,12 @@ public class ConstantFoldingVisitor implements Visitor {
         }
 
         if (changed) {
-            result = new ListNode(foldedElements, node.tokenIndex);
+            ListNode folded = new ListNode(foldedElements, node.tokenIndex);
+            folded.handle = node.handle;
+            if (node.annotations != null) {
+                folded.annotations = new java.util.HashMap<>(node.annotations);
+            }
+            result = folded;
         } else {
             result = node;
         }

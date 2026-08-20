@@ -3,7 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
 import org.perlonjava.frontend.parser.StringParser;
-import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -12,20 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CompileOperator {
-    private static RuntimeScalar lexicalNamedCharacterTranslator(ListNode operand) {
-        Object translator = operand.getAnnotation(
-                StringParser.LEXICAL_NAMED_CHARACTER_TRANSLATOR);
-        return translator instanceof RuntimeScalar scalar ? scalar : null;
-    }
-
-    private static NamedCharacterExpansion.SourceMode lexicalNamedCharacterSourceMode(
-            ListNode operand) {
-        Object sourceMode = operand.getAnnotation(
-                StringParser.LEXICAL_NAMED_CHARACTER_SOURCE_MODE);
-        return sourceMode instanceof NamedCharacterExpansion.SourceMode mode
-                ? mode : null;
-    }
-
     private static void emitSubroutineExitCleanup(BytecodeCompiler bc, int returnReg) {
         java.util.List<Integer> scalarIdxs = bc.symbolTable.getMyScalarIndicesInScope(0);
         for (int idx : scalarIdxs) {
@@ -300,6 +286,18 @@ public class CompileOperator {
         return bits instanceof String string ? bc.addToStringPool(string) : -1;
     }
 
+    private static int namedCharacterExpansionIndex(
+            BytecodeCompiler bc, OperatorNode node, ListNode operand) {
+        Object expansions = node.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        if (expansions == null) {
+            expansions = operand.getAnnotation(
+                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        }
+        return expansions instanceof NamedCharacterExpansionMap map
+                ? bc.addToConstantPool(map) : -1;
+    }
+
     private static int regexTargetNameIndex(BytecodeCompiler bc, Node node) {
         if (node instanceof OperatorNode operator
                 && operator.operator.equals("$")
@@ -336,6 +334,7 @@ public class CompileOperator {
             bc.emit(regexWarningState(node));
             bc.emit(regexWarningBitsIndex(bc, node));
             bc.emit(0);
+            bc.emit(namedCharacterExpansionIndex(bc, node, args));
         } else {
             bc.emit(Opcodes.QUOTE_REGEX);
             bc.emitReg(regexReg);
@@ -345,6 +344,7 @@ public class CompileOperator {
             bc.emit(regexWarningState(node));
             bc.emit(regexWarningBitsIndex(bc, node));
             bc.emit(0);
+            bc.emit(namedCharacterExpansionIndex(bc, node, args));
         }
         int stringReg;
         if (args.elements.size() > 2) {
@@ -1140,9 +1140,19 @@ public class CompileOperator {
                         modifiers += "u";
                     }
                     try {
-                        RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers,
-                                lexicalNamedCharacterTranslator(operand),
-                                lexicalNamedCharacterSourceMode(operand));
+                        String diagnosticPattern = RegexLiteralAnalyzer.constantSourceString(
+                                operand.elements.get(0));
+                        StringParser.validateLiteralNamedCharacters(
+                                operand, literalPattern, modifiers,
+                                diagnosticPattern == null
+                                        ? literalPattern : diagnosticPattern);
+                        Object expansions = operand.getAnnotation(
+                                StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+                        if (expansions != null) {
+                            node.setAnnotation(
+                                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS,
+                                    expansions);
+                        }
                     } catch (PerlCompilerException exception) {
                         throw PerlCompilerException.withSourceLocation(
                                 node.tokenIndex, exception.getMessage(),
@@ -1171,6 +1181,8 @@ public class CompileOperator {
                     bytecodeCompiler.emit(regexWarningState(node));
                     bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
                     bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
+                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
+                            bytecodeCompiler, node, operand));
                 } else {
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
                     bytecodeCompiler.emitReg(rd);
@@ -1180,6 +1192,8 @@ public class CompileOperator {
                     bytecodeCompiler.emit(regexWarningState(node));
                     bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
                     bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
+                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
+                            bytecodeCompiler, node, operand));
                 }
                 bytecodeCompiler.lastResultReg = rd;
             }
