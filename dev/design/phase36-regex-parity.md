@@ -345,6 +345,13 @@ behavior.
    as-implemented regex architecture, and Joni fork documents with shipped
    source; remove or summarize redundant design documents; rebase on current
    `master`; and open the final reviewable PR.
+6. After the final implementation PR is integrated into `master`, review the
+   shipped PerlOnJava behavior against Perl's documented regex surface in
+   `pod/perlreref.pod`, `pod/perlrecharclass.pod`, `pod/perlrequick.pod`,
+   `pod/perlrepository.pod`, `pod/perlre.pod`, `pod/perlretut.pod`, and
+   `pod/perlrebackslash.pod`. Record every supported, partial, divergent, and
+   missing capability in `docs/reference/feature-matrix.md`; add focused
+   follow-up items for gaps rather than inferring support from parser syntax.
 
 ## Parallel Work
 
@@ -482,3 +489,9 @@ gates may reopen it if a semantic regression appears.
 - [ ] Original copyright/authorship notices are preserved.
 - [ ] Performance, warning-free `make`, packaging, license, Ubuntu, Windows,
       and CI gates pass.
+- [ ] After final integration to `master`, Perl's documented regex capabilities
+      in `pod/perlreref.pod`, `pod/perlrecharclass.pod`, `pod/perlrequick.pod`,
+      `pod/perlrepository.pod`, `pod/perlre.pod`, `pod/perlretut.pod`, and
+      `pod/perlrebackslash.pod` are reviewed against the shipped implementation;
+      `docs/reference/feature-matrix.md` records all supported, partial,
+      divergent, and missing features with evidence.
