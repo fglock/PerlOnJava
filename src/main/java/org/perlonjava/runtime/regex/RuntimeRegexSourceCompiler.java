@@ -37,8 +37,28 @@ final class RuntimeRegexSourceCompiler {
 
     static RuntimeScalar compile(RuntimeScalar pattern, String modifiers) {
         RuntimeCode owner = RuntimeCode.getActiveCodeAt(0);
-        Map<String, RuntimeBase> cells = owner == null
-                ? Map.of() : RuntimeCode.snapshotActiveLexicals(owner);
+        Map<String, RuntimeBase> cells = new LinkedHashMap<>();
+        if (owner != null) {
+            cells.putAll(RuntimeCode.snapshotActiveLexicals(owner));
+        }
+        // Eval STRING code enters with its outer lexical cells preloaded in
+        // captured registers. Those registers have no declaration opcode in
+        // the eval body, so they are not added to the active-frame map. Merge
+        // them explicitly before strict-vars validation and callback capture;
+        // a live active binding wins whenever both routes provide a cell.
+        if (owner instanceof InterpretedCode interpreted
+                && interpreted.capturedVars != null) {
+            for (Map.Entry<String, Integer> entry
+                    : interpreted.variableRegistry.entrySet()) {
+                int capturedIndex = entry.getValue() - 3;
+                if (capturedIndex >= 0
+                        && capturedIndex < interpreted.capturedVars.length
+                        && interpreted.capturedVars[capturedIndex] != null) {
+                    cells.putIfAbsent(
+                            entry.getKey(), interpreted.capturedVars[capturedIndex]);
+                }
+            }
+        }
         Map<String, RuntimeBase> orderedCells = new LinkedHashMap<>();
         for (Map.Entry<String, RuntimeBase> entry : cells.entrySet()) {
             String name = entry.getKey();
@@ -74,7 +94,13 @@ final class RuntimeRegexSourceCompiler {
             symbolTable.addVariable("this", "", null);
             symbolTable.addVariable("@_", "our", null);
             symbolTable.addVariable("wantarray", "", null);
-            symbolTable.enableStrictOption(HINT_RE_EVAL);
+            // Runtime callback source is an eval at the regex construction
+            // site. Preserve that site's complete $^H state so strict subs,
+            // vars, refs, bytes, and related lexical policy validate the
+            // callback while it is compiled, rather than deferring malformed
+            // code until the first match executes.
+            symbolTable.setStrictOptions(
+                    WarningBitsRegistry.getCallSiteHints() | HINT_RE_EVAL);
             symbolTable.enableLexicalRegexModifiers(
                     publicModifiers.replaceAll("[^imsx]", ""));
             String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
