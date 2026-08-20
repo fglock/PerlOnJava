@@ -2724,8 +2724,7 @@ final class Analyser extends Parser {
             Node target = qn.target;
 
             int perlTargetMin = -1;
-            if (syntax.op2OptionPerl() && qn.isByNumber()
-                    && target.getType() == NodeType.CALL) {
+            if (syntax.op2OptionPerl() && qn.isByNumber()) {
                 perlTargetMin = getMinMatchLength(target);
                 if (perlTargetMin == 0) {
                     perlSyntaxWarn(PERL_QUANTIFIER_ON_ZERO_LENGTH);
