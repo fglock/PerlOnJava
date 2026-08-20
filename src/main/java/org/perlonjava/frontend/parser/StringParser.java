@@ -90,7 +90,7 @@ public class StringParser {
         while (state != END_TOKEN) {
             LexerToken currentToken = tokens.get(tokPos);
             if (currentToken.type == LexerTokenType.EOF) {
-                String errorMsg = endDelim == '/'
+                String errorMsg = isRegex
                         ? "Search pattern not terminated"
                         : "Can't find string terminator "
                         + (markerDelimiter != null ? "\".\"" : endDelim)

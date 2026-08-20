@@ -107,7 +107,7 @@ affected corpus before taking another slice.
   enabling PerlOnJava's unrelated internal compiler trace.
 - Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
   passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
-- Exact `re/regexp.t` executes 2,210/2,210 with 2,169 passing and 41 explicit
+- Exact `re/regexp.t` executes 2,210/2,210 with 2,195 passing and 15 explicit
   residuals. Non-nullable quantified captures now preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
   final iteration, and restore state on backtracking. Lexical warning masks
@@ -121,6 +121,12 @@ affected corpus before taking another slice.
 - Optional and conditional self-backreferences inside a repeated capture use
   the preceding completed iteration. Ordinary alternation invalidates that
   visibility, preserving all fourteen upstream false-positive guards.
+- Native compile diagnostics cover relative/group-zero references, malformed
+  conditions, incomplete POSIX-looking classes, reversed quantifier bounds,
+  and apostrophe-delimited patterns. Eval STRING preserves disabled fatal
+  warning categories; matcher warnings retain their Perl `regexp`, `syntax`,
+  or `misc` category. Inactive branch-reset slots no longer become fatal under
+  a caller's disabled `uninitialized` scope.
 - The four Java/Joni × JVM/interpreter legs now have one 80-file comparison
   ledger on the pre-successor artifact. It identifies stable extended-class,
   regexp, charset, fold-grind, and bounded-speed negative clusters plus several
@@ -293,21 +299,18 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Close the remaining capture/region identities, including nullable repeated
-   captures, inactive named and numeric branch-reset slots, failed
-   alternatives, recursive-frame publication, and nested match-state restore.
-   Preserve Joni null-loop detection with a dedicated nullable-repeat invariant
-   and direct stress tests.
-2. Close the remaining `pat.t` dynamic code-array rows without changing the
+1. Close the thirteen recursive-call identities: recursion conditions,
+   numbered/named/relative calls, recursive lookaround, backreference and
+   capture publication, frame restoration, and recursion safety. Preserve
+   already-green callback/dynamic continuation behavior and direct Joni tests.
+2. Close the possessive nested-repeat false-positive identity with a dedicated
+   null-loop/atomic-repeat invariant and bounded stress tests.
+3. Resolve the remaining named-character diagnostic-version identity and
+   remove the duplicate Java translation only after the native Joni and full
+   Unicode-name gates are green.
+4. Close the remaining `pat.t` dynamic code-array rows without changing the
    native unterminated executable-group diagnostics or the already-green
    `pat_re_eval.t` 555/555 contract.
-3. Move remaining Perl named-character, escape, strict-mode, brace, control-
-   character, and warning semantics into Joni lexer/compiler internals. Resolve
-   the Perl-version diagnostic policy for regexp row 1521 without editing an
-   existing test, then remove each redundant translation in the same gate.
-4. Finish recursive numbered/named calls, recursion conditions, recursive
-   capture publication, and recursion safety. Keep
-   runtime `(??{...})`, callback unwind, and `pat_re_eval.t` 555/555 green.
 5. Finish `/d`/`u`/`a`/`aa` forward/reverse literal and backreference folding
    from generated data, then rerun complete Unicode, `pat.t`, `pat_advanced.t`,
    `reg_mesg.t`, and bounded speed/psycho gates on one immutable artifact.
@@ -420,7 +423,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Previous-iteration visibility for conditions inside repeated captures
 - [x] Previous-iteration visibility for non-alternating self-backreferences
 - [x] Physical branch-reset named calls and conditions
-- [ ] Inactive branch-reset slot publication
+- [x] Inactive branch-reset slot publication
 - [x] Native named-character whitespace and missing-brace diagnostics
 - [ ] Exact named-character diagnostic-version policy and removal of the
       remaining duplicate Java translation path
@@ -429,6 +432,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Runtime-source comment/class masking and `/aa` propagation
 - [x] Unterminated runtime-source diagnostics for regexp rows 575/576/581
 - [x] Dynamic undef-warning scope and nested-continuation `/aa` state
+- [x] Native compile diagnostics and exact warning-category inheritance
 - [ ] Remaining dynamic code-array residuals
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [ ] Retire proven-obsolete `dev/import-perl5` regex patches

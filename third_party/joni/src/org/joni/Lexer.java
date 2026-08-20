@@ -140,7 +140,11 @@ class Lexer extends ScannerSupport {
         if (c != '}') return invalidRangeQuantifier(synAllow);
 
         if (!isRepeatInfinite(up) && low > up) {
-            newValueException(UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE);
+            if (syntax.op2OptionPerl()) {
+                perlSyntaxWarn("Quantifier {n,m} with n > m can't match");
+            } else {
+                newValueException(UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE);
+            }
         }
 
         token.type = TokenType.INTERVAL;
@@ -1160,7 +1164,10 @@ class Lexer extends ScannerSupport {
         if (syntax.opPosixBracket() && peekIs(':')) {
             token.backP = p; /* point at '[' is readed */
             inc();
-            if (strExistCheckWithEsc(send, send.length, ']')) {
+            // Perl treats an empty [:] opener as ordinary class text rather
+            // than an empty POSIX class.  Do not enter the POSIX parser unless
+            // there is at least one name character before the closing :].
+            if (left() && !peekIs(']') && strExistCheckWithEsc(send, send.length, ']')) {
                 token.type = TokenType.POSIX_BRACKET_OPEN;
             } else {
                 unfetch();
@@ -1515,7 +1522,8 @@ class Lexer extends ScannerSupport {
         rejectMalformedPerlBackref();
         if (syntax.op2OptionPerl() && left() && peek() >= '0' && peek() <= '9') {
             int backref = scanUnsignedNumber();
-            if (backref <= 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
+            if (backref == 0) newValueException(PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
+            if (backref < 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
             token.type = TokenType.BACKREF;
             token.setBackrefByName(false);
             token.setBackrefNum(1);
@@ -1567,8 +1575,11 @@ class Lexer extends ScannerSupport {
                         && enc.isDigit(peek())) {
                     int nameP = enc.prevCharHead(bytes, getBegin(), p, stop);
                     int gNum = scanUnsignedNumber();
-                    if (gNum <= 0) newValueException(gNum < 0
-                            ? TOO_BIG_NUMBER : INVALID_BACKREF);
+                    if (gNum == 0) newValueException(PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
+                    if (gNum < 0) newValueException(TOO_BIG_NUMBER);
+                    if (gNum > env.numMem) {
+                        newValueException(PERL_REFERENCE_TO_NONEXISTENT_OR_UNCLOSED_GROUP);
+                    }
                     token.type = TokenType.CALL;
                     token.setCallNameP(nameP);
                     token.setCallNameEnd(p);
@@ -1607,12 +1618,14 @@ class Lexer extends ScannerSupport {
         if (cursor >= stop || codeAt(cursor, stop) != '}') return false;
         p = nextChar(cursor, stop);
 
-        if (overflow || number == 0) newValueException(INVALID_BACKREF);
+        if (overflow) newValueException(INVALID_BACKREF);
+        if (number == 0) newValueException(PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
         long absolute = negative ? (long)env.numMem + 1 - number : number;
         if (absolute <= 0 || absolute > env.numMem || env.memNodes == null
                 || absolute >= env.memNodes.length
                 || env.memNodes[(int)absolute] == null) {
-            newValueException(INVALID_BACKREF);
+            newValueException(negative
+                    ? PERL_REFERENCE_TO_NONEXISTENT_OR_UNCLOSED_GROUP : INVALID_BACKREF);
         }
         token.type = TokenType.BACKREF;
         token.setBackrefByName(false);

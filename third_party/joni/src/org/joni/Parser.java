@@ -982,8 +982,26 @@ class Parser extends Lexer {
                         }
                     } else if (enc.isDigit(c)) { /* (n) */
                         unfetch();
-                        num = fetchName('(', true);
-                        if (syntax.strictCheckBackref()) {
+                        if (syntax.op2OptionPerl()) {
+                            int conditionEnd = p;
+                            while (conditionEnd < stop
+                                    && enc.isDigit(enc.mbcToCode(bytes, conditionEnd, stop))) {
+                                conditionEnd += enc.length(bytes, conditionEnd, stop);
+                            }
+                            if (conditionEnd >= stop
+                                    || enc.mbcToCode(bytes, conditionEnd, stop) != ')') {
+                                newSyntaxException(PERL_SWITCH_CONDITION_NOT_RECOGNIZED);
+                            }
+                        }
+                        try {
+                            num = fetchName('(', true);
+                        } catch (SyntaxException e) {
+                            if (syntax.op2OptionPerl()) {
+                                newSyntaxException(PERL_SWITCH_CONDITION_NOT_RECOGNIZED);
+                            }
+                            throw e;
+                        }
+                        if (syntax.strictCheckBackref() && !syntax.op2OptionPerl()) {
                             if (num > env.numMem || env.memNodes == null || env.memNodes[num] == null) newValueException(INVALID_BACKREF);
                         }
                     } else {
@@ -1229,6 +1247,14 @@ class Parser extends Lexer {
             EncloseNode en = (EncloseNode)node;
             if (en.type == EncloseType.DEFINE && target.getType() == NodeType.ALT) {
                 newSyntaxException(PERL_DEFINE_DOES_NOT_ALLOW_BRANCHES);
+            }
+            if (en.type == EncloseType.CONDITION && target instanceof ListNode
+                    && target.getType() == NodeType.ALT
+                    && ((ListNode)target).tail != null
+                    && ((ListNode)target).tail.tail != null) {
+                newSyntaxException(syntax.op2OptionPerl()
+                        ? PERL_SWITCH_CONDITION_TOO_MANY_BRANCHES
+                        : INVALID_CONDITION_PATTERN);
             }
             en.setTarget(target);
             if (en.type == EncloseType.MEMORY) {

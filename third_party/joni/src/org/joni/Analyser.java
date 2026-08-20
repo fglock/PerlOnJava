@@ -2640,7 +2640,8 @@ final class Analyser extends Parser {
                     }
                 }
                 if (en.assertionCondition == null && en.calloutConditionId < 0
-                        && en.recursionConditionGroup < 0 && en.regNum > env.numMem) {
+                        && en.recursionConditionGroup < 0 && en.regNum > env.numMem
+                        && !syntax.op2OptionPerl()) {
                     newValueException(INVALID_BACKREF);
                 }
                 if (en.recursionConditionGroup > env.numMem) newValueException(INVALID_BACKREF);
