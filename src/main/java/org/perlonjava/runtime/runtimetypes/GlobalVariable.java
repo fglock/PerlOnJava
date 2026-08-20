@@ -1442,8 +1442,10 @@ public class GlobalVariable {
             // accessed. A glob alias of %! must materialize the same magic.
             hash.elements = new ErrnoHash();
         } else if (names.contains("main::+")) {
+            hash.type = RuntimeHash.READONLY_HASH;
             hash.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE);
         } else if (names.contains("main::-")) {
+            hash.type = RuntimeHash.READONLY_HASH;
             hash.elements = new HashSpecialVariable(HashSpecialVariable.Id.CAPTURE_ALL);
         }
         return hash;

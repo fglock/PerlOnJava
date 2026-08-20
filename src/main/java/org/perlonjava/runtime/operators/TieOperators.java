@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.perlmodule.TieHashNamedCapture;
 
 import java.util.Arrays;
 
@@ -284,6 +285,10 @@ public class TieOperators {
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
+                if (hash.elements instanceof HashSpecialVariable special
+                        && special.captureMode() != null) {
+                    return TieHashNamedCapture.tiedObject(special.captureMode());
+                }
                 if (hash.type == TIED_HASH && hash.elements instanceof TieHash) {
                     return ((TieHash) hash.elements).getSelf();
                 }
