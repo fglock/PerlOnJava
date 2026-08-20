@@ -12,8 +12,8 @@ import java.util.regex.Pattern;
  * engine — e.g. arbitrary {@code (?{ CODE })} code blocks).
  *
  * <p>The markers are emitted by {@code StringSegmentParser} when a code
- * block can't be constant-folded. {@link RegexPreprocessor} detects them
- * and reports "not implemented":
+ * block can't be constant-folded. The native regex compilation path detects
+ * them and reports "not implemented":
  * <ul>
  *   <li>{@link #CODE_BLOCK} — a hard error under default die mode,
  *       or a no-op fallback only when {@link #CODE_BLOCK_NOOP_ENV} is set.
@@ -21,17 +21,9 @@ import java.util.regex.Pattern;
  *       feature without pretending the callback ran.</li>
  * </ul>
  *
- * <p><b>Why these specific spellings?</b> The preprocessor performs some
- * {@code /i} case-fold expansions (notably for {@code K}↔{@code k}↔
- * Kelvin sign U+212A, {@code µ}↔U+00B5↔U+03BC, and {@code Å}↔
- * U+212B↔{@code å}) by rewriting matching code points into alternations.
- * If the marker contained any of these "problem" letters it would be
- * silently rewritten under {@code /i}, bypassing the detection check and
- * leaving a garbled placeholder embedded in the compiled pattern (observed
- * bug: {@code (?{UNIMPLEMENTED_CODE_BLOC(?:\QK\E|\Qk\E|\QK\E)})}). Keeping
- * the markers free of {@code k}, {@code K}, {@code µ}, {@code å} (and
- * their Unicode counterparts) guarantees the detection check always
- * matches regardless of flags.
+ * <p><b>Why these specific spellings?</b> The markers remain stable under
+ * case-insensitive compilation and are deliberately free of fold-sensitive
+ * characters, so diagnostic/callout transport is independent of modifiers.
  */
 public final class RegexMarkers {
     /**
