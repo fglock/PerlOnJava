@@ -77,6 +77,14 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_INVALID_REFERENCE_TO_GROUP = "Invalid reference to group";
     String PERL_REFERENCE_TO_NONEXISTENT_GROUP =
             "Reference to nonexistent group";
+    String PERL_REFERENCE_TO_NONEXISTENT_OR_UNCLOSED_GROUP =
+            "Reference to nonexistent or unclosed group";
+    String PERL_REFERENCE_TO_INVALID_GROUP_ZERO =
+            "Reference to invalid group 0";
+    String PERL_SWITCH_CONDITION_NOT_RECOGNIZED =
+            "Switch condition not recognized";
+    String PERL_SWITCH_CONDITION_TOO_MANY_BRANCHES =
+            "Switch (?(condition)... contains too many branches";
     String PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED =
             "Sequence (?P%n...) not recognized";
     String PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED =

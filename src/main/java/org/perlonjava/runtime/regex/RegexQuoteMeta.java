@@ -2,6 +2,7 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -143,11 +144,24 @@ public class RegexQuoteMeta {
         // Retaining it on the cached RuntimeRegex re-emits it for every match
         // and can leak a warning-enabled compilation into a no-warnings use.
         Integer state = CALL_SITE_WARNING_STATE.get();
+        RuntimeScalar warning = new RuntimeScalar(message);
+        RuntimeScalar where = new RuntimeScalar("");
+        String warningBits = CALL_SITE_WARNING_BITS.get();
+        if (warningBits != null) {
+            String category = warningCategory(message);
+            if (!WarningFlags.isEnabledInBits(warningBits, category)) {
+                return;
+            }
+            if (WarningFlags.isFatalInBits(warningBits, category)) {
+                WarnDie.die(warning, where);
+            } else {
+                WarnDie.warn(warning, where);
+            }
+            return;
+        }
         if (state != null && state == 0) {
             return;
         }
-        RuntimeScalar warning = new RuntimeScalar(message);
-        RuntimeScalar where = new RuntimeScalar("");
         if (state != null && state == 2) {
             WarnDie.die(warning, where);
         } else if (state != null) {
@@ -155,5 +169,16 @@ public class RegexQuoteMeta {
         } else {
             WarnDie.warnWithCategory(warning, where, "regexp");
         }
+    }
+
+    /** Perl assigns a few lexer diagnostics to broader warning categories. */
+    static String warningCategory(String message) {
+        if (message != null && message.startsWith("Useless use of \\E")) {
+            return "misc";
+        }
+        if (message != null && message.contains("is more clearly written simply as")) {
+            return "syntax";
+        }
+        return "regexp";
     }
 }

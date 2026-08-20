@@ -437,18 +437,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private void emitWarningsOnUse() {
         // These warnings belong to the regex use site, not the earlier qr//
         // construction site. The active Perl code supplies the baseline lexical
-        // warning bits; WarnDie additionally applies a narrower runtime
-        // `no warnings 'regexp'` scope at the individual match site.
+        // warning bits.  Each retained diagnostic keeps its Perl warning
+        // category; WarnDie additionally applies a narrower runtime lexical
+        // scope at the individual match site.
         String activeCodeBits = WarningBitsRegistry.getCurrent();
-        boolean activeCodeEnablesRegexp = activeCodeBits == null
-                || WarningFlags.isEnabledInBits(activeCodeBits, "regexp");
-        if (!WarningFlags.areWarningsForcedOn()
-                && InterpreterState.current() == null
-                && !activeCodeEnablesRegexp) {
-            return;
-        }
         for (String warning : warningsOnUse) {
-            WarnDie.warnWithCategory(new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "regexp");
+            String category = RegexQuoteMeta.warningCategory(warning);
+            if (!WarningFlags.areWarningsForcedOn()
+                    && InterpreterState.current() == null
+                    && activeCodeBits != null
+                    && !WarningFlags.isEnabledInBits(activeCodeBits, category)) {
+                continue;
+            }
+            WarnDie.warnWithCategory(new RuntimeScalar(warning),
+                    RuntimeScalarCache.scalarEmptyString, category);
         }
     }
 
@@ -870,6 +872,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                 regex.regexFlags.isExtended());
                 if (e instanceof SyntaxException && !validatesExecutableSource) {
                     String message = e.getMessage();
+                    if ("unmatched close parenthesis".equals(message)) {
+                        message = "Unmatched )";
+                    }
                     if ("Empty \\N{}".equals(message)) {
                         throw new PerlCompilerException("Unknown charname ''");
                     }

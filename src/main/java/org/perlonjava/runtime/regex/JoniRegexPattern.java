@@ -24,6 +24,7 @@ import static org.joni.constants.SyntaxProperties.OP2_ESC_H_HORIZONTAL_WHITESPAC
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
+import static org.joni.constants.SyntaxProperties.OP_POSIX_BRACKET;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
@@ -91,7 +92,7 @@ final class JoniRegexPattern {
     // explicitly in toJoniOptions(). Keep the richer Ruby parser surface used
     // by callouts and control verbs while changing only that default policy.
     private static final Syntax PERLONJAVA_SYNTAX = new Syntax(
-            "PERLONJAVA", Syntax.RUBY.op,
+            "PERLONJAVA", Syntax.RUBY.op | OP_POSIX_BRACKET,
             (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL
                     | OP2_PLUS_POSSESSIVE_INTERVAL | OP2_ESC_H_HORIZONTAL_WHITESPACE,
             Syntax.RUBY.op3,
@@ -820,7 +821,8 @@ final class JoniRegexPattern {
                     boolean posixClass = i + 1 < pattern.length()
                             && (pattern.charAt(i + 1) == ':'
                                     || pattern.charAt(i + 1) == '.'
-                                    || pattern.charAt(i + 1) == '=');
+                                    || pattern.charAt(i + 1) == '=')
+                            && !(i + 2 < pattern.length() && pattern.charAt(i + 2) == ']');
                     if (posixClass) {
                         posixClassDepth++;
                         atClassStart = false;

@@ -907,6 +907,10 @@ public class ScopedSymbolTable {
         Integer bitPosition = warningBitPositions.get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().clear(bitPosition);
+            // A disabled category cannot remain fatal.  Keeping the fatal bit
+            // made warning-mask serialization re-enable the category when an
+            // eval STRING inherited its caller's lexical warning state.
+            warningFatalStack.peek().clear(bitPosition);
             // Mark as explicitly disabled (for proper $^W interaction)
             warningDisabledStack.peek().set(bitPosition);
         }
