@@ -998,7 +998,7 @@ public class UnicodeResolver {
                 }
                 // Preloading is an optimization for callbacks that are already
                 // available. Perl permits qr// to contain a forward reference
-                // to a user property; RegexPreprocessor represents that with a
+                // to a user property; the native compiler represents that with a
                 // placeholder and recompiles on first use. Calling the complete
                 // translator here would turn that intentional forward reference
                 // into an early "unsupported property" fatal before the

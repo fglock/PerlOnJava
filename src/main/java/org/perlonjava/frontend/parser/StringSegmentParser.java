@@ -985,7 +985,7 @@ public abstract class StringSegmentParser {
      * real-world use cases, with pack.t and most Perl code using literal patterns.</p>
      *
      * <p>Future enhancement: To support interpolated patterns, this processing would need to be
-     * moved to RegexPreprocessor.preProcessRegex() which sees the final pattern string regardless
+     * moved to native regex compilation, which sees the final pattern string regardless
      * of how it was constructed.</p>
      *
      * <p>Only called when isRegex=true.</p>
