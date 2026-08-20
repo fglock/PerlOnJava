@@ -168,9 +168,10 @@ properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
 immutable comparison are pending. The production backend selector has been
 removed and its packaging/property invariance gates are awaiting the combined
-build. The native `reg_mesg.t` residual is 99 owned rows after the numeric-class
-escape and `/xx` deprecation batch; both backends now execute 2733/2984 checks
-with 251 failures. P5 owns the two `re/pat_advanced.t` source/debug rows.
+build. The native `reg_mesg.t` residual is 91 owned rows after the numeric-class
+escape, `/xx` deprecation, and equivalent-range batches; both backends now
+execute 2765/3008 checks with 243 failures. P5 owns the two
+`re/pat_advanced.t` source/debug rows.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
