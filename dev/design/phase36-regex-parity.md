@@ -350,7 +350,7 @@ behavior.
 
 1. Finish the four active, non-overlapping slices: close the remaining
    Unicode/property source-policy rows after completing warmed callback-clone
-   isolation; reduce the current 430-row same-source `reg_mesg.t` frontier
+   isolation; reduce the current 424-row same-source `reg_mesg.t` frontier
    through the classified runtime, Unicode/property, analyser-warning, and
    frontend source-rendering families; complete the CPAN/performance and
    obsolete-Java-label audit after closing the optimizer-debug rows; and finish
@@ -539,11 +539,13 @@ gates may reopen it if a semantic regression appears.
 - [x] Native nested-quantifier source positions, including UTF-8 patterns
 - [x] Native Perl group-name start categories and source positions
 - [x] Native unknown extended-class escape identity and diagnostics
+- [x] Native invalid-range token spans and source-aware Perl diagnostics without
+      a RuntimeRegex range scanner
 - [x] Exhaust native lexer/parser diagnostic families in `reg_mesg.t` and
       classify every residual to runtime, Unicode/property, analyser, or
       frontend
 - [ ] Remaining same-source diagnostic families in `reg_mesg.t`; current exact
-      JVM/interpreter frontier is 430 failing rows
+      JVM/interpreter frontier is 424 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Thread graph cloning remaps executable regex callback CODE while
