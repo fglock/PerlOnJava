@@ -2491,6 +2491,9 @@ public class Opcodes {
     /** Restore lexical %^H after leaving a nested block. Format: SET_CALL_SITE_HINT_HASH id. */
     public static final short SET_CALL_SITE_HINT_HASH = 527;
 
+    /** Restore lexical warning bits after leaving a nested block. Format: SET_CALL_SITE_WARNING_BITS bitsIdx. */
+    public static final short SET_CALL_SITE_WARNING_BITS = 528;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 
