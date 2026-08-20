@@ -781,11 +781,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         } else if ("too big number for repeat range".equals(message)) {
                             message = "Quantifier in {,} bigger than 2147483646";
                         } else if ("end pattern with unmatched parenthesis".equals(message)) {
-                            int ordinaryUnmatched = ordinaryUnmatchedOpeningParenthesis(
+                            int structuralUnmatched = unmatchedOpeningParenthesis(
                                     originalPatternString);
-                            if (ordinaryUnmatched >= 0) {
+                            if (structuralUnmatched >= 0) {
                                 message = "Unmatched (";
-                                characterPosition = ordinaryUnmatched + 1;
+                                characterPosition = structuralUnmatched + 1;
                             }
                         }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(

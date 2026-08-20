@@ -662,10 +662,14 @@ public class StringParser {
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
         boolean literalSyntaxValidated = false;
         if (isQuoteRegex) {
+            RuntimeScalar namedCharacterTranslator =
+                    HintHashRegistry.getCompileTimeHint("charnames");
             String literalSyntax = RegexLiteralAnalyzer.constantSyntaxString(parsed);
             String literalSource = RegexLiteralAnalyzer.constantSourceString(parsed);
             if (literalSyntax != null
                     && literalSource != null
+                    && !NamedCharacterExpansion.usesCustomTranslator(
+                            namedCharacterTranslator)
                     && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalSyntax)) {
                 String validationModifiers = modStr;
                 if (ctx.symbolTable != null
@@ -674,8 +678,6 @@ public class StringParser {
                     validationModifiers += "u";
                 }
                 try {
-                    RuntimeScalar namedCharacterTranslator =
-                            HintHashRegistry.getCompileTimeHint("charnames");
                     NamedCharacterExpansion.SourceMode namedCharacterSourceMode =
                             ctx.symbolTable != null
                                     && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
