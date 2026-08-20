@@ -1024,7 +1024,7 @@ class Parser extends Lexer {
                         newSyntaxException(PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED);
                     }
                     int first = enc.mbcToCode(bytes, p, stop);
-                    if (enc.isDigit(first) || !enc.isWord(first)) {
+                    if (!isPerlGroupNameStart(first)) {
                         newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
                     }
                     if (!hasCodePointAhead('>')) {
@@ -1039,7 +1039,7 @@ class Parser extends Lexer {
                         newSyntaxException(PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
                     }
                     int first = enc.mbcToCode(bytes, p, stop);
-                    if (enc.isDigit(first) || !enc.isWord(first)) {
+                    if (!isPerlGroupNameStart(first)) {
                         newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
                     }
                     if (!hasCodePointAhead(')')) {
@@ -1707,7 +1707,7 @@ class Parser extends Lexer {
     private Node parseEncloseNamedGroup2(boolean listCapture) {
         if (syntax.op2OptionPerl() && left()) {
             int first = enc.mbcToCode(bytes, p, stop);
-            if (enc.isDigit(first) || !enc.isWord(first)) {
+            if (!isPerlGroupNameStart(first)) {
                 newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
                         p + enc.length(bytes, p, stop) - getBegin());
             }
@@ -2984,7 +2984,7 @@ class Parser extends Lexer {
         int cursor = p;
         int first = enc.mbcToCode(bytes, cursor, stop);
         int firstEnd = cursor + enc.length(bytes, cursor, stop);
-        if (first == ')' || enc.isDigit(first) || !enc.isWord(first)) {
+        if (first == ')' || !isPerlGroupNameStart(first)) {
             newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
                     firstEnd - getBegin());
         }
