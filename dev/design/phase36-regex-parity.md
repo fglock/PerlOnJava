@@ -454,6 +454,14 @@ gates may reopen it if a semantic regression appears.
 - [x] Remove Java matcher storage and empty-pattern/substitution retry branches
 - [x] Remove Java matcher-semantic preprocessing and the legacy extended-class
       adapter
+- [ ] Move the remaining matcher-semantic `JoniRegexPattern.translatePattern`
+      rewrites for abbreviated `(*:NAME)`, `/xx` class whitespace, literal
+      nested `[` in standard classes, and empty `(?)` groups into the Joni
+      lexer/parser, then delete those adapter cases
+- [ ] Reduce user-property translation to Perl-owned executable callback and
+      generated-spelling policy; built-in property/class matching must stay in
+      Joni and untrusted interpolated callback text must remain explicitly
+      documented source policy rather than an implicit matcher fallback
 - [x] Generated Perl named-sequence lookup and native sequence resolution
 - [x] Generated Perl scalar character-name and alias lookup
 - [x] Perl `/i` folding for canonical Unicode casing-property aliases
