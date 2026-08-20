@@ -1426,6 +1426,15 @@ class Lexer extends ScannerSupport {
                 break;
             }
         }
+        if (syntax.op2OptionPerl() && Option.isPerlExtendMore(env.option)) {
+            if (c == '#') {
+                syntaxWarn("Use of unescaped '#' in [] is deprecated under /xx",
+                        p - getBegin());
+            } else if (c == '\n' || c == '\r' || c == '\f' || c == 0x0b) {
+                syntaxWarn("Use of literal vertical space in [] is deprecated under /xx",
+                        p - getBegin());
+            }
+        }
         token.backP = getLastFetched();
         token.type = TokenType.CHAR;
         token.base = 0;
@@ -1521,6 +1530,14 @@ class Lexer extends ScannerSupport {
             case '6':
             case '7':
                 fetchTokenInCCFor_digit();
+                break;
+            case '8':
+            case '9':
+                if (syntax.op2OptionPerl()) {
+                    syntaxWarn("Unrecognized escape \\" + (char)c
+                            + " in character class passed through",
+                            p - getBegin());
+                }
                 break;
 
             case 'v':

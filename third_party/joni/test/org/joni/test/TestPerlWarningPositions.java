@@ -92,6 +92,25 @@ public class TestPerlWarningPositions {
     }
 
     @Test
+    public void locatesUnknownNumericEscapesInCharacterClasses() {
+        assertEquals(List.of(
+                new Warning("Unrecognized escape \\8 in character class passed through", 3),
+                new Warning("Unrecognized escape \\9 in character class passed through", 5)),
+                warnings("[\\8\\9]"));
+    }
+
+    @Test
+    public void locatesDeprecatedExtendedWhitespaceClassLiterals() {
+        assertEquals(List.of(new Warning(
+                "Use of unescaped '#' in [] is deprecated under /xx", 8)),
+                warnings("(?xx:[a#b])"));
+        assertEquals(List.of(new Warning(
+                "Use of literal vertical space in [] is deprecated under /xx", 8)),
+                warnings("(?xx:[a\nb])"));
+        assertEquals(List.of(), warnings("(?xx:[a\\#b])"));
+    }
+
+    @Test
     public void locatesUnknownAlphabeticEscapesOutsideCharacterClasses() {
         assertEquals(List.of(new Warning(
                 "Unrecognized escape \\y passed through", 2)), warnings("\\y"));

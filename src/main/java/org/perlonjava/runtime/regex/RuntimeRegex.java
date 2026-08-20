@@ -263,6 +263,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String activeCodeBits = WarningBitsRegistry.getCurrent();
         for (String warning : warningsOnUse) {
             String category = RegexQuoteMeta.warningCategory(warning);
+            boolean defaultOnExtendedClassDeprecation = warning.startsWith(
+                    "Use of unescaped '#' in [] is deprecated under /xx")
+                    || warning.startsWith(
+                            "Use of literal vertical space in [] is deprecated under /xx");
+            if (defaultOnExtendedClassDeprecation
+                    && !WarningFlags.areWarningsForcedOff()
+                    && !WarningFlags.isWarningSuppressedAtRuntime("regexp")
+                    && !WarningFlags.isWarningSuppressedAtRuntime("deprecated")) {
+                WarnDie.warn(new RuntimeScalar(warning),
+                        RuntimeScalarCache.scalarEmptyString);
+                continue;
+            }
             if (lexicalReStrict
                     && !WarningFlags.areWarningsForcedOff()
                     && !WarningFlags.isWarningSuppressedAtRuntime(category)
