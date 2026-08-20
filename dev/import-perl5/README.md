@@ -84,6 +84,7 @@ Main synchronization script that imports files from perl5/ based on config.yaml.
 - Copies individual files or entire directories
 - Refreshes the minimal tracked Unicode generator snapshot through explicit manifest rows
 - Generates pinned-source test artifacts such as `unicore/TestProp.pl`
+- Generates the core `unicore/Name.pl` source artifact before copying it
 - Applies patches automatically
 - Creates necessary directories
 - Validates sources exist
@@ -125,6 +126,23 @@ running the command above (a full unfiltered sync also runs this row). Unrelated
 filtered syncs neither generate nor remove them. Missing Unicode inputs or an
 incompatible host Perl make the sync fail with an actionable diagnostic rather
 than silently leaving the ten wrappers unavailable.
+
+#### Generated Unicode name table
+
+`_charnames.pm` loads `unicore/Name.pl` as a normal bundled core resource.
+Upstream creates this file with `perl5/lib/unicore/mktables`, but does not keep
+it in its source checkout. The manifest therefore first generates
+`perl5/lib/unicore/Name.pl` from the current checkout, reports its SHA-256,
+and then copies it through the ordinary source/target import row:
+
+```bash
+perl dev/import-perl5/sync.pl --only Name.pl
+```
+
+The invoking host Perl must be 5.36 or newer, because the current `mktables`
+uses `builtin`. The generator writes only the current checkout's missing source
+artifact and publishes it atomically; the normal sync copy remains responsible
+for the bundled `src/main/perl/lib/unicore/Name.pl` resource.
 
 ### add_module.pl
 
