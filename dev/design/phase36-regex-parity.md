@@ -154,11 +154,12 @@ Exit: release evidence and public/internal documentation match the code.
 ## Current Release Gate
 
 PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
-on Ubuntu and Windows CI. Exact integration head `61eb48af7` passes warning-free
+on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
-boundary, quantifier, and direct-charname fixtures are green on JVM and
-interpreter. The newer integration batch must pass its own exact gate before the
-PR is updated.
+boundary, quantifier, native-warning, selector, and direct-charname fixtures are
+green on JVM and interpreter. Next head `8ab138bfd` integrates the independent
+Unicode resolver tranche and passes combined licensed Joni; it needs the next
+batched full gate before the PR is updated.
 
 The current complete 286-file JVM run executes 420,748 passing assertions and
 improves 72 baseline rows, but is not yet a valid release artifact: five files
@@ -185,9 +186,12 @@ analyser/debug rows. P5 owns the
 control-verb source correction, selector retirement, P4 boundary/quantifier
 diagnostics, and P5 direct custom-charname correction are jointly green at
 `61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
-integrated through `1dc978d3b`; licensed Joni and the final warning fixture are
-green on both execution backends. The newer batch still needs its complete
-warning-free `make` gate.
+integrated through `8ab138bfd`; licensed Joni and the final warning fixture are
+green on both execution backends. On the exact combined jar and current private
+corpus, `reg_mesg.t` has backend-identical raw TAP: 3287 `ok` and 65 `not ok`
+of 3352; the runner counts ten expected TODO outcomes as effective passes
+(3297/3352). The resolver tranche closes 28 of its 52 owned source rows; 24
+rows await the serialized shared hook.
 
 The interpreter comparison's 53 lower rows are classified: 48 are general
 interpreter limitations, four are shared native rows, and its sole independent
@@ -199,14 +203,13 @@ Active ownership:
 
 - P4: diagnose the zero-TAP `anyof.t` timeout and continue adjacent native
   execution-completion roots; all focused native diagnostic rows are closed.
-- P5: finish immutable custom-charname AST/CV thread transport without the
-  large-CV row-788 regression, then own the remaining `\\N{}`/custom-charname
-  analyser/debug residual.
-- P6: after removing undeclared shared-file edits, exhaust the owned
-  UnicodeResolver/property diagnostic residual and the zero-TAP
+- P5: fix the a11 eager-validation regression that classifies the core
+  `_charnames` bootstrap as a custom translator, then deliver immutable
+  custom-charname AST/CV thread transport and close the remaining `\\N{}` /
+  custom-charname analyser/debug residual with absolute-launcher corpus gates.
+- P6: exhaust the remaining Unicode property diagnostic residual and zero-TAP
   `uniprops01..04.t` performance failures and the `/u` `\\w` complement root in
-  both `pat_special_cc` modes. If its lease expires, this complete slice is
-  fenced and redirected.
+  both `pat_special_cc` modes; shared runtime files remain centrally serialized.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
   immutable acceptance, `regex_sets.t` and `op/stat.t` regression
   classification, PR/CI, plan state, combined build, and release evidence.
