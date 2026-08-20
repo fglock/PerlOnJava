@@ -169,7 +169,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return true;
     }
 
-    private boolean stringCmpICPerlAsciiStrict(int s1, IntHolder ps2, int mbLen) {
+    private boolean stringCmpICPerl(int caseFoldFlag, int s1, IntHolder ps2,
+                                    int mbLen, boolean asciiStrict) {
         byte[]buf1 = cfbuf();
         byte[]buf2 = cfbuf2();
 
@@ -187,7 +188,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 if (s1 >= end1) break;
                 ascii1 = Encoding.isAscii(enc.mbcToCode(bytes, s1, end1));
                 value = s1;
-                len1 = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end1, buf1);
+                len1 = enc.mbcCaseFold(caseFoldFlag, bytes, this, end1, buf1);
                 s1 = value;
                 p1 = 0;
             }
@@ -196,12 +197,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 if (s2 >= range) return false;
                 ascii2 = Encoding.isAscii(enc.mbcToCode(bytes, s2, range));
                 value = s2;
-                len2 = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, range, buf2);
+                len2 = enc.mbcCaseFold(caseFoldFlag, bytes, this, range, buf2);
                 s2 = value;
                 p2 = 0;
             }
 
-            if (buf1[p1++] != buf2[p2++] || ascii1 != ascii2) return false;
+            if (buf1[p1++] != buf2[p2++]
+                    || (asciiStrict && ascii1 != ascii2)) return false;
         }
 
         if (p2 < len2) return false;
@@ -209,11 +211,48 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return true;
     }
 
+    private boolean stringCmpICPerlBytePattern(int s1, IntHolder ps2, int mbLen) {
+        int end1 = s1 + mbLen;
+        int s2 = ps2.value;
+
+        while (s1 < end1) {
+            if (s2 >= range) return false;
+            int left = enc.mbcToCode(bytes, s1, end1);
+            int right = enc.mbcToCode(bytes, s2, range);
+            s1 += enc.length(bytes, s1, end1);
+            s2 += enc.length(bytes, s2, range);
+            if (left == right) continue;
+            if (!Encoding.isAscii(left) || !Encoding.isAscii(right)) return false;
+
+            int foldLength = PerlCaseFold.simpleFoldClassLength(left);
+            boolean matched = false;
+            for (int index = 0; index < foldLength; index++) {
+                matched |= PerlCaseFold.simpleFoldClassCodePoint(left, index) == right;
+            }
+            if (!matched) return false;
+        }
+        ps2.value = s2;
+        return true;
+    }
+
     private boolean backrefStringCmpIC(int caseFoldFlag, int s1, IntHolder ps2,
                                        int mbLen, int textEnd) {
-        return Option.isPerlAsciiStrict(currentRegexOptions)
-                ? stringCmpICPerlAsciiStrict(s1, ps2, mbLen)
-                : stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd);
+        if (Option.isPerlBytePattern(currentRegexOptions)) {
+            return stringCmpICPerlBytePattern(s1, ps2, mbLen);
+        }
+        if (regex.perlSyntax) {
+            if (Option.isPerlAsciiStrict(currentRegexOptions)) {
+                return stringCmpICPerl(caseFoldFlag, s1, ps2, mbLen, true);
+            }
+            int targetStart = ps2.value;
+            if (targetStart + mbLen <= range
+                    && stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd)) {
+                return true;
+            }
+            ps2.value = targetStart;
+            return stringCmpICPerl(caseFoldFlag, s1, ps2, mbLen, false);
+        }
+        return stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd);
     }
 
     private boolean usesPerlVariableLengthBackref() {
