@@ -177,7 +177,8 @@ Active ownership:
 
 - P3: combined `regex_sets.t` property/interpolation roots and the two
   `pat_advanced` rows.
-- P4: remaining non-POSIX parser/range diagnostic families.
+- P4: byte-pattern callback/search/grapheme regressions plus remaining
+  non-POSIX parser/range diagnostic families.
 - P5: debug-trace, benchmark, and obsolete Java-label audit.
 - P6: classify and close interpreter-only regex acceptance regressions.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
