@@ -211,6 +211,12 @@ affected corpus before taking another slice.
   timeout/error/unknown execution, zero TAP, truncated/incomplete TAP, and
   malformed input, while emitting JSON and retaining exact baseline-artifact
   provenance. Direct and `_thr` files remain separate identities.
+- The final acceptance driver composes the current-checkout 286-file ledger,
+  bounded JVM/interpreter runner legs, PR-958 comparisons, and packaged-Joni
+  verification. It rejects dirty or changing tracked source, binds the selected
+  wrapper's bounded `jperl -v` identity to that source commit, retains hashes
+  for every artifact, verifies relocated unique Joni/JCodings classes and exact
+  notice bytes, and proves the exact SBOM components and dependency edge.
 - Imported `perl5/t/re` and `perl5_t/t/re` files are byte-identical. There is no
   configured regex-test patch; only a stale `pat.t.orig` artifact and the
   regex-adjacent `_charnames.pm` library patch remain for the final sync and
@@ -328,11 +334,11 @@ behavior.
 ## Ordered Next Steps
 
 1. Finish the active non-overlapping Joni slices: valid `/d` byte-backed class
-   fold policy; generated Perl scalar character names and aliases; native
-   search/optimizer work that makes unchanged `speed*` complete without
-   regressing `pat_psycho*`; and native lexer/parser diagnostic families from
-   unchanged `reg_mesg.t`. Do not implement adjacent-class or variable-width
-   full-fold-backreference rows that standard Perl itself rejects.
+   and extended-set fold policy; native search/optimizer work that makes
+   unchanged `speed*` complete without regressing `pat_psycho*`; and native
+   lexer/parser diagnostic families from unchanged `reg_mesg.t`. Do not
+   implement adjacent-class or variable-width full-fold-backreference rows
+   that standard Perl itself rejects.
 2. Integrate those commits on one immutable barrier. Run exact `regexp.t`,
    `reg_fold.t`, `reg_email*`, `regex_sets.t`, Unicode-property, callback,
    recursion, `script_run.t`, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`, and
@@ -416,10 +422,10 @@ failure blocks backend removal, not semantic fixes.
 
 - [x] Phase 0 — reproducible differential baseline
 - [ ] Phase 1 — ordinary-pattern Joni parity
-- [ ] Phase 2 — conditions and backtracking-visible state
+- [x] Phase 2 — conditions and backtracking-visible state
 - [ ] Phase 3 — Unicode and native pattern syntax
 - [ ] Phase 4 — runtime source and diagnostics
-- [ ] Phase 5 — remove migration scaffolding
+- [x] Phase 5 — remove migration scaffolding
 - [ ] Phase 6 — release and documentation
 
 A checked phase means its focused semantic implementation is complete. Release
