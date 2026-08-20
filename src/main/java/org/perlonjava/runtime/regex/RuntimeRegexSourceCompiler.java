@@ -78,7 +78,7 @@ final class RuntimeRegexSourceCompiler {
         // trailing marker used for m?PAT?. Reapply the complete operation flag
         // set to the compiled qr object below.
         String sourceModifiers = publicModifiers.replaceAll("[gcr?op]", "");
-        String source = "qr~" + pattern.toString().replace("~", "\\~")
+        String source = "qr~" + escapeDelimiter(pattern.toString(), '~')
                 + "~" + sourceModifiers;
         // Perl compiles each executable runtime pattern as a distinct eval,
         // so diagnostics and warnings use an independent (eval N) filename.
@@ -183,6 +183,22 @@ final class RuntimeRegexSourceCompiler {
         } finally {
             SpecialBlockParser.setCurrentScope(savedScope);
         }
+    }
+
+    /** Quote a non-paired qr delimiter without changing regex backslash parity. */
+    private static String escapeDelimiter(String pattern, char delimiter) {
+        StringBuilder escaped = new StringBuilder(pattern.length());
+        int precedingBackslashes = 0;
+        for (int i = 0; i < pattern.length(); i++) {
+            char current = pattern.charAt(i);
+            if (current == delimiter && (precedingBackslashes & 1) == 0) {
+                escaped.append('\\');
+            }
+            escaped.append(current);
+            precedingBackslashes = current == '\\'
+                    ? precedingBackslashes + 1 : 0;
+        }
+        return escaped.toString();
     }
 
     static RuntimeScalar compileTemplate(RuntimeScalar original,
