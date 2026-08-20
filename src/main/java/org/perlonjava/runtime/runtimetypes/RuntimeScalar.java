@@ -717,16 +717,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void restoreRegexMutationState(Object token) {
         if (!(token instanceof RegexMutationState state)) return;
-        type = state.type;
-        value = state.value;
-        utf8UncheckedOctets = state.utf8UncheckedOctets;
-        tainted = state.tainted;
-        numericLiteralText = state.numericLiteralText;
-        numericContextSeen = state.numericContextSeen;
-        firstClassRegexScalar = state.firstClassRegexScalar;
-        formatPictureTainted = state.formatPictureTainted;
-        RuntimePosLvalue.invalidatePos(this);
-        refreshSubstrLvalues();
+        RuntimeScalar restored = new RuntimeScalar();
+        restored.type = state.type;
+        restored.value = state.value;
+        restored.utf8UncheckedOctets = state.utf8UncheckedOctets;
+        restored.tainted = state.tainted;
+        restored.numericLiteralText = state.numericLiteralText;
+        restored.numericContextSeen = state.numericContextSeen;
+        restored.firstClassRegexScalar = state.firstClassRegexScalar;
+        restored.formatPictureTainted = state.formatPictureTainted;
+        set(restored);
     }
 
     private record RegexMutationState(int type, Object value,

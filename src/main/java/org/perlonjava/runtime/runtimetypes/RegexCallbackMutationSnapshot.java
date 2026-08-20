@@ -6,6 +6,7 @@ import java.util.Map;
 
 /** Backtracking savepoint for mutations made by a plain {@code (?{...})} block. */
 public final class RegexCallbackMutationSnapshot {
+    private final IdentityHashMap<RuntimeScalar, Object> scalars = new IdentityHashMap<>();
     private final IdentityHashMap<RuntimeArray, Object> arrays = new IdentityHashMap<>();
     private final IdentityHashMap<RuntimeHash, Object> hashes = new IdentityHashMap<>();
     private final IdentityHashMap<RuntimeBase, Boolean> seen = new IdentityHashMap<>();
@@ -43,6 +44,8 @@ public final class RegexCallbackMutationSnapshot {
             RuntimeBase value = work.removeLast();
             if (value == null || seen.put(value, Boolean.TRUE) != null) continue;
             if (value instanceof RuntimeScalar scalar) {
+                Object state = scalar.snapshotRegexMutationState();
+                if (state != null) scalars.put(scalar, state);
                 if (scalar.value instanceof RuntimeArray array) work.add(array);
                 else if (scalar.value instanceof RuntimeHash hash) work.add(hash);
                 else if (scalar.value instanceof RuntimeScalar nested) work.add(nested);
@@ -65,6 +68,9 @@ public final class RegexCallbackMutationSnapshot {
             entry.getKey().restoreRegexMutationState(entry.getValue());
         }
         for (Map.Entry<RuntimeHash, Object> entry : hashes.entrySet()) {
+            entry.getKey().restoreRegexMutationState(entry.getValue());
+        }
+        for (Map.Entry<RuntimeScalar, Object> entry : scalars.entrySet()) {
             entry.getKey().restoreRegexMutationState(entry.getValue());
         }
         MortalList.flush();

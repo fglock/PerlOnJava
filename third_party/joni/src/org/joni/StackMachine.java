@@ -32,6 +32,7 @@ abstract class StackMachine extends Matcher implements StackType {
     protected static final int INVALID_INDEX = -1;
 
     protected StackEntry[]stack;
+    private boolean usesThreadLocalStack;
     protected int stk;  // stkEnd
     protected final int[]repeatStk;
     protected final int[] physicalNamedCaptureBeg;
@@ -45,6 +46,7 @@ abstract class StackMachine extends Matcher implements StackType {
     protected StackMachine(Regex regex, Region region, byte[]bytes, int p , int end) {
         super(regex, region, bytes, p, end);
         stack = regex.requireStack ? fetchStack() : null;
+        usesThreadLocalStack = stack != null;
         final int n;
         if (Config.USE_SUBEXP_CALL) {
             n = regex.numRepeat + ((regex.numMem + 1) << 1);
@@ -104,7 +106,29 @@ abstract class StackMachine extends Matcher implements StackType {
 
     /** Nested matchers on the same thread must not overwrite their caller's stack. */
     protected final void useIndependentStack() {
-        if (stack != null) stack = allocateStack();
+        if (stack != null) {
+            stack = allocateStack();
+            usesThreadLocalStack = false;
+        }
+    }
+
+    private static final ThreadLocal<Integer> activeMatchers =
+            ThreadLocal.withInitial(() -> 0);
+
+    /** Protect the pooled stack when a callback starts another matcher. */
+    protected final void enterMatcherExecution() {
+        int depth = activeMatchers.get();
+        if (depth > 0 && usesThreadLocalStack) {
+            stack = allocateStack();
+            usesThreadLocalStack = false;
+        }
+        activeMatchers.set(depth + 1);
+    }
+
+    protected final void leaveMatcherExecution() {
+        int depth = activeMatchers.get() - 1;
+        if (depth <= 0) activeMatchers.remove();
+        else activeMatchers.set(depth);
     }
 
     private void doubleStack() {
