@@ -351,11 +351,11 @@ behavior.
 1. Finish the four active, non-overlapping slices: close the remaining
    Unicode/property source-policy rows after completing warmed callback-clone
    isolation; reduce the current 422-row same-source `reg_mesg.t` frontier
-   through the classified runtime, Unicode/property, analyser-warning, and
-   frontend source-rendering families; complete the CPAN/performance and
-   obsolete-Java-label audit after closing the optimizer-debug rows; and finish
-   the remaining runtime diagnostic-policy families. Each semantic slice must
-   include
+   through P4 parser/range/POSIX and P6 numeric-escape native families; complete
+   the CPAN/performance and obsolete-Java-label audit, then close P5's analyser
+   warning families. The runtime-only diagnostic lane is exhausted; new token
+   or span requirements belong in native Joni rather than source scanners. Each
+   semantic slice must include
    system-Perl oracles, JVM/interpreter parity, complete affected-corpus deltas,
    and zero introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
@@ -541,9 +541,10 @@ gates may reopen it if a semantic regression appears.
 - [x] Native unknown extended-class escape identity and diagnostics
 - [x] Native invalid-range token spans and source-aware Perl diagnostics without
       a RuntimeRegex range scanner
-- [x] Exhaust native lexer/parser diagnostic families in `reg_mesg.t` and
-      classify every residual to runtime, Unicode/property, analyser, or
-      frontend
+- [x] Normalize and classify the first native lexer/parser diagnostic vector
+- [x] Exhaust genuinely RuntimeRegex-only diagnostic policy; reclassify every
+      remaining token/span warning to native Joni or Unicode source policy
+- [ ] Remaining native parser/range/POSIX and numeric-escape diagnostic families
 - [ ] Remaining same-source diagnostic families in `reg_mesg.t`; current exact
       JVM/interpreter frontier is 422 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
