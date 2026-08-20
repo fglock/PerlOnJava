@@ -427,7 +427,7 @@ failure blocks backend removal, not semantic fixes.
 - [x] Phase 2 — conditions and backtracking-visible state
 - [ ] Phase 3 — Unicode and native pattern syntax
 - [ ] Phase 4 — runtime source and diagnostics
-- [x] Phase 5 — remove migration scaffolding
+- [ ] Phase 5 — remove migration scaffolding
 - [ ] Phase 6 — release and documentation
 
 A checked phase means its focused semantic implementation is complete. Release
