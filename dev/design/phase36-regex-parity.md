@@ -157,21 +157,22 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Next head `8ab138bfd` integrates the independent
-Unicode resolver tranche and passes combined licensed Joni; it needs the next
-batched full gate before the PR is updated.
+green on JVM and interpreter. Next head `41a585bdc` integrates the independent
+Unicode resolver tranche and restores `op/stat.t` baseline parity; combined
+licensed Joni and focused JVM/interpreter gates pass. It needs the next batched
+full gate before the PR is updated.
 
 The current complete 286-file JVM run executes 420,748 passing assertions and
 improves 72 baseline rows, but is not yet a valid release artifact: five files
-time out, 19 are incomplete, and the strict comparator reports five regressions
-(`pat_advanced_thr.t`, both `pat_special_cc` modes, `regex_sets.t`, and the
-environment-sensitive `op/stat.t`). The integrated subject-sensitive byte/`/d`
+time out, 19 are incomplete, and the strict comparator reports four unresolved
+regex regressions (`pat_advanced_thr.t`, both `pat_special_cc` modes, and
+`regex_sets.t`). The integrated subject-sensitive byte/`/d`
 and fullwidth-xdigit
 fix restores complete `re/charset.t` execution, and the logical-wide-scalar
-`chop` fix restores `op/chop.t` to 148/148. `op/stat.t` has conflicting
-environment-sensitive evidence (111/111 in the earlier isolated run and
-105/111 in the private-corpus rerun versus PR 958's 107/111), so it remains an
-unresolved comparator row. The
+`chop` fix restores `op/chop.t` to 148/148. The logical-interpreter executable
+file-test correction restores `op/stat.t` to the PR 958 threshold, 107/111, on
+both backends; its four residual rows are the baseline's volatile `/dev`/TTY
+environment cases. The
 shared default-`/d` byte-variant root is now closed in focused evidence:
 dynamic source provenance, callback search, grapheme boundaries, Unicode
 properties/classes, and extended sets pass on both backends while
@@ -211,8 +212,7 @@ Active ownership:
   `uniprops01..04.t` performance failures and the `/u` `\\w` complement root in
   both `pat_special_cc` modes; shared runtime files remain centrally serialized.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
-  immutable acceptance, `regex_sets.t` and `op/stat.t` regression
-  classification, PR/CI, plan state, combined build, and release evidence.
+  immutable acceptance, PR/CI, plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
