@@ -723,7 +723,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         && containsExecutableSource(originalPatternString,
                                 regex.regexFlags.isExtended());
                 if (e instanceof SyntaxException && !validatesExecutableSource) {
-                    String message = e.getMessage();
+                    String message = ((SyntaxException) e).getDiagnosticMessage();
                     if (message != null && message.startsWith("end pattern")
                             && originalPatternString != null
                             && originalPatternString.endsWith("\\")) {

@@ -1310,6 +1310,7 @@ class Lexer extends ScannerSupport {
                 break;
             }
         }
+        token.backP = getLastFetched();
         token.type = TokenType.CHAR;
         token.base = 0;
         token.setC(c);
