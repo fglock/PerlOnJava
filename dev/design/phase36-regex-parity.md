@@ -79,7 +79,7 @@ affected corpus before taking another slice.
   integrated signed-IV range fix removes row 1651 with zero introductions in
   exact A/B evidence; a fresh combined serial gate remains required because a
   later run stopped before the complete plan under concurrent CPAN load.
-- The current imported `reg_mesg.t` passes 1,834/2,613 on each backend with an
+- The current imported `reg_mesg.t` passes 1,893/2,658 on each backend with an
   identical status/test-number vector. Native extended-class diagnostics now
   distinguish binary operators that have no preceding operand, adjacent
   operands without an operator, and misplaced parentheses. Overlong-lookbehind
