@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -659,6 +660,39 @@ public class StringParser {
         modStr = addLexicalRegexContext(ctx, modStr);
         
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
+        boolean literalSyntaxValidated = false;
+        if (isQuoteRegex) {
+            String literalSyntax = RegexLiteralAnalyzer.constantSyntaxString(parsed);
+            String literalSource = RegexLiteralAnalyzer.constantSourceString(parsed);
+            if (literalSyntax != null
+                    && literalSource != null
+                    && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalSyntax)) {
+                String validationModifiers = modStr;
+                if (ctx.symbolTable != null
+                        && ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings")
+                        && !validationModifiers.contains("u")) {
+                    validationModifiers += "u";
+                }
+                try {
+                    RuntimeScalar namedCharacterTranslator =
+                            HintHashRegistry.getCompileTimeHint("charnames");
+                    NamedCharacterExpansion.SourceMode namedCharacterSourceMode =
+                            ctx.symbolTable != null
+                                    && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                                    ? NamedCharacterExpansion.SourceMode.UNICODE
+                                    : NamedCharacterExpansion.SourceMode.BYTE;
+                    RuntimeRegex.validateLiteralSyntax(
+                            literalSyntax, validationModifiers,
+                            namedCharacterTranslator, namedCharacterSourceMode,
+                            literalSource);
+                    literalSyntaxValidated = true;
+                } catch (PerlCompilerException exception) {
+                    String message = exception.getMessage();
+                    throw PerlCompilerException.withSourceLocation(
+                            rawStr.index, message, ctx.errorUtil);
+                }
+            }
+        }
         if (rawStr.startDelim == '?') {
             // `m?PAT?` matches exactly once
             // save the internal flag in the modifier string
@@ -672,6 +706,7 @@ public class StringParser {
         captureLexicalNamedCharacterTranslator(list, rawStr.index, ctx);
         OperatorNode node = new OperatorNode(operator, list, rawStr.index);
         node.setAnnotation("syntacticQuoteRegex", isQuoteRegex);
+        node.setAnnotation("literalSyntaxValidated", literalSyntaxValidated);
         node.setAnnotation("regexWarningsEnabled",
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
         node.setAnnotation("regexWarningsFatal",

@@ -340,6 +340,7 @@ public class EmitRegex {
     /** Validate non-interpolated qr// at CV compilation, as Perl does. */
     private static void validateLiteralRegex(EmitterVisitor emitterVisitor,
                                              OperatorNode node, ListNode operand) {
+        if (node.getBooleanAnnotation("literalSyntaxValidated")) return;
         if (operand.elements.size() < 2
                 || !(operand.elements.get(1) instanceof StringNode flags)) {
             return;

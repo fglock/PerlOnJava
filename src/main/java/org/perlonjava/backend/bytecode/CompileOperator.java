@@ -1128,7 +1128,8 @@ public class CompileOperator {
                 if (operand.elements.size() < 2) {
                     bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
                 }
-                String literalPattern = RegexLiteralAnalyzer.constantString(operand.elements.get(0));
+                String literalPattern = node.getBooleanAnnotation("literalSyntaxValidated")
+                        ? null : RegexLiteralAnalyzer.constantString(operand.elements.get(0));
                 if (literalPattern != null
                         && operand.elements.get(1) instanceof StringNode literalFlags
                         && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalPattern)) {
