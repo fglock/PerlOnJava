@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.perlonjava.PerlRuntime;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 @Tag("unit")
 class RuntimeRegexBackendInvarianceTest {
