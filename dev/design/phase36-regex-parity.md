@@ -171,7 +171,10 @@ removed and its packaging/property invariance gates are awaiting the combined
 build. The native `reg_mesg.t` residual is 91 owned rows after the numeric-class
 escape, `/xx` deprecation, and equivalent-range batches; both backends now
 execute 2765/3008 checks with 243 failures. P5 owns the two
-`re/pat_advanced.t` source/debug rows.
+`re/pat_advanced.t` source/debug rows. The exact `f296dbe54` combined build
+passes compilation, packaging, licensed Joni, selector invariance, and all but
+four unit fixtures. P4 owns the deterministic byte-property fold and
+control-verb search/cut failures before the next combined build.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -179,8 +182,9 @@ be separated and closed before dual-backend acceptance.
 
 Active ownership:
 
-- P4: exhaust all remaining same-source native `reg_mesg.t` parser/range/escape
-  diagnostic families and classify the residual.
+- P4: first close the four combined-build byte-property/control-verb fixture
+  families, then exhaust the remaining 91 same-source native `reg_mesg.t`
+  parser/range/escape diagnostic rows.
 - P5: close the `EMPTY-STR` custom-charname blocker, debug/source trace, and the
   two `pat_advanced.t` rows.
 - P6: unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and removed-
