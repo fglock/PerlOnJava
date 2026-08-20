@@ -561,7 +561,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             case "p", "P" -> preserveUnicodePropertyEscape(escape);
 
             // Unknown escape - treat as literal character
-            default -> appendToCurrentSegment("\\" + escape);
+            default -> appendLiteralToCurrentSegment("\\" + escape);
         }
     }
 

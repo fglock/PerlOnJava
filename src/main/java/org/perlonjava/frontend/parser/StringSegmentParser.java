@@ -210,6 +210,9 @@ public abstract class StringSegmentParser {
         if (inRegexCharClass) {
             if (regexCharClassEscape) {
                 regexCharClassEscape = false;
+                if (regexCharClassFirst) {
+                    regexCharClassFirst = false;
+                }
             } else if (c == '\\') {
                 regexCharClassEscape = true;
             } else if (c == ']' && !regexCharClassFirst) {
