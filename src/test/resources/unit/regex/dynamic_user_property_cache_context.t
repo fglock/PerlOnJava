@@ -5,9 +5,19 @@ use utf8;
 use charnames ':full';
 use re 'eval';
 use Test::More;
+use lib 'src/test/resources/unit/lib';
 
 our ($forward, $forward_negative, $mode_sensitive, $mode_folded, $retry_boom,
-    $with_callout, $callout_count);
+    $with_callout, $callout_count, $stateful_charname, $gc_runner);
+our ($order_im, $order_mi);
+{
+    use Phase36Cname;
+    BEGIN {
+        $Phase36Cname::Evil = 'A';
+        $stateful_charname = eval q{qr/^\N{EVIL}\p{InCacheKana}$/};
+        die $@ if $@;
+    }
+}
 BEGIN {
     $forward = qr/\p{InCacheKana}/;
     $forward_negative = qr/\P{InCacheKana}/;
@@ -15,12 +25,34 @@ BEGIN {
     $mode_folded = qr/\p{InCacheMode}/i;
     $retry_boom = qr/\p{InCacheRetryBoom}/;
     $with_callout = qr/(?{ ++$main::callout_count })\p{InCacheKana}/;
+    $order_im = qr/\p{InCacheOrder}/im;
+    $order_mi = qr/\p{InCacheOrder}/mi;
+    $gc_runner = eval q{sub {
+        my $subject = "\x{3040}x";
+        pos($subject) = 0;
+        my @events;
+        for (1 .. 2) {
+            my $matched = $subject =~ /\p{InCacheGc}/gc ? 1 : 0;
+            push @events, $matched, pos($subject);
+        }
+        return \@events;
+    }};
+    die $@ if $@;
 }
 
 sub InCacheKana { "3040\t309f\n30a0\t30ff\n" }
 sub InCacheMode { $_[0] ? "0200\n" : "0100\n" }
 sub InCacheRetryBoom { die "cache retry boom\n" }
+sub InCacheGc { "3040\n" }
+sub InCacheOrder { "0500\n" }
 sub CacheFixture::InScoped { "0400\n" }
+
+is($Phase36Cname::Evil, 'AB',
+    'custom charname translator runs once during initial construction');
+ok("A\x{3040}" =~ $stateful_charname,
+    'deferred recompilation preserves the original named expansion');
+is($Phase36Cname::Evil, 'AB',
+    'deferred recompilation does not rerun the custom charname translator');
 
 ok("\x{3040}" =~ $forward, 'forward-deferred property resolves at first use');
 ok("\x{303f}" =~ $forward_negative, 'forward-deferred complement resolves at first use');
@@ -59,6 +91,18 @@ $callout_count = 0;
 ok("\x{3040}" =~ $with_callout,
     'deferred property recompilation preserves executable callouts');
 is($callout_count, 1, 'preserved callout executes exactly once');
+
+is_deeply($gc_runner->(), [1, 1, 0, 1],
+    'deferred literal global match preserves pos after gc failure');
+
+ok("\x{0500}" =~ $order_im,
+    'first raw modifier order resolves without another placeholder cache hit');
+ok("\x{0501}" !~ $order_im,
+    'first raw modifier order preserves nonmembership');
+ok("\x{0500}" =~ $order_mi,
+    'equivalent second modifier order resolves independently');
+ok("\x{0501}" !~ $order_mi,
+    'equivalent second modifier order preserves nonmembership');
 
 for my $attempt (1 .. 2) {
     my $matched = eval { "A" =~ $retry_boom; 1 };
