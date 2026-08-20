@@ -24,6 +24,10 @@ ok($byte_upper !~ /(?d:[]\P{Lowercase}_])/i,
     'leading literal close keeps a property inside its byte class');
 ok($byte_upper !~ /(?d:[[:digit:]\P{Lowercase}_])/i,
     'POSIX nesting keeps a property inside its byte class');
+ok($subject =~ /(?d:[[:digit:]]*)\xE0\pL/i,
+    'a property after a POSIX class promotes the following byte fold');
+is($&, $subject,
+    'the POSIX class scanner returns to top level after its outer close');
 
 no warnings 'experimental::regex_sets';
 my $byte_lower = chr 0xE0;
