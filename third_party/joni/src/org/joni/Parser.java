@@ -184,6 +184,7 @@ class Parser extends Lexer {
     private static final int POSIX_BRACKET_NAME_MIN_LEN            = 4;
     private static final int POSIX_BRACKET_CHECK_LIMIT_LENGTH      = 20;
     private static final byte[] BRACKET_END                        = ":]".getBytes();
+    private static final byte[] POSIX_ASCII                        = "ascii".getBytes();
     private boolean parsePosixBracket(CClassNode cc, CClassNode ascCc,
                                       CClassNode foldCc) {
         mark();
@@ -199,10 +200,39 @@ class Parser extends Lexer {
         if (enc.strLength(bytes, p, stop) >= POSIX_BRACKET_NAME_MIN_LEN + 3) { // else goto not_posix_bracket
             boolean asciiRange = isAsciiRange(env.option) && !isPosixBracketAllRange(env.option);
 
+            // [:ascii:] is a Perl POSIX extension absent from JCodings' POSIX
+            // name table. Represent it as its concrete Unicode scalar range
+            // so it composes with the normal extended-class set operators.
+            if (enc.strNCmp(bytes, p, stop, POSIX_ASCII, 0, POSIX_ASCII.length) == 0) {
+                p = enc.step(bytes, p, stop, POSIX_ASCII.length);
+                if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
+                    newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                }
+                if (not) {
+                    cc.addCodeRange(env, 0x80, 0x10FFFF);
+                } else {
+                    cc.bs.setRange(env, 0, 0x7F);
+                }
+                if (foldCc != null) {
+                    if (not) {
+                        foldCc.addCodeRange(env, 0x80, 0x10FFFF);
+                    } else {
+                        foldCc.bs.setRange(env, 0, 0x7F);
+                    }
+                }
+                inc();
+                inc();
+                return false;
+            }
+
             for (int i=0; i<PosixBracket.PBSNamesLower.length; i++) {
                 byte[]name = PosixBracket.PBSNamesLower[i];
                 // hash lookup here ?
                 if (enc.strNCmp(bytes, p, stop, name, 0, name.length) == 0) {
+                    if (perlExtendedClassLeaf
+                            && name.length < POSIX_BRACKET_NAME_MIN_LEN) {
+                        newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                    }
                     p = enc.step(bytes, p, stop, name.length);
                     if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
                         newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
@@ -569,7 +599,15 @@ class Parser extends Lexer {
 
             case CC_CC_OPEN: /* [ */
                 if (perlExtendedClassLeaf) {
-                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
+                    // A standard class remains a leaf of (?[...]). Ruby's
+                    // class-set lexer tokenizes '[' specially, but Perl still
+                    // permits it as an unescaped member here (for example
+                    // [^][ \\ ] and [a[]).
+                    arg.inType = CCVALTYPE.SB;
+                    arg.to = '[';
+                    arg.toIsRaw = false;
+                    parseCharClassValEntry2(cc, ascCc, foldCc, arg);
+                    break;
                 }
                 ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
                 ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
@@ -1821,6 +1859,16 @@ class Parser extends Lexer {
             }
             inc();
             return new PerlExtendedClassPrimary(nested, true);
+        }
+        if (extendedClassStarts("[:")) {
+            // In (?[...]), a POSIX bracket is itself a primary: [:alpha:]
+            // is not the nested standard-class spelling [[:alpha:]].
+            p += 2;
+            CClassNode result = new CClassNode();
+            if (parsePosixBracket(result, null, null)) {
+                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            }
+            return new PerlExtendedClassPrimary(result, false);
         }
         if (extendedClassAt('[')) {
             inc();
