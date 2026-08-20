@@ -79,8 +79,8 @@ affected corpus before taking another slice.
   integrated signed-IV range fix removes row 1651 with zero introductions in
   exact A/B evidence; a fresh combined serial gate remains required because a
   later run stopped before the complete plan under concurrent CPAN load.
-- The latest isolated native-diagnostic tranche improves imported `reg_mesg.t`
-  from 2,015/2,658 to 2,050/2,658 on each backend with zero introductions and
+- The latest isolated native-diagnostic tranches improve imported `reg_mesg.t`
+  from 2,015/2,658 to 2,140/2,658 on each backend with zero introductions and
   an identical status/test-number vector; a combined-head rerun is pending.
   Native extended-class diagnostics now
   distinguish binary operators that have no preceding operand, adjacent
