@@ -1170,7 +1170,50 @@ class Lexer extends ScannerSupport {
         }
     }
 
+    /**
+     * Returns the byte immediately after an unescaped {@code delimiter]} pair,
+     * or -1 when this is not a POSIX equivalence/collating construct.  Perl
+     * reserves these constructs only when they occur as a nested class form
+     * such as {@code [[=name=]]}; a single outer class {@code [=name=]} stays
+     * ordinary class text.
+     */
+    private int reservedPosixSyntaxEnd(int delimiter) {
+        int scan = p;
+        while (scan < stop) {
+            int code = enc.mbcToCode(bytes, scan, stop);
+            int next = scan + enc.length(bytes, scan, stop);
+            if (code == syntax.metaCharTable.esc) {
+                // Perl falls back to ordinary class parsing as soon as this
+                // candidate contains an escape, even if a later delimiter]
+                // pair would otherwise make it look reserved.
+                return -1;
+            } else if (code == ']') {
+                return -1;
+            } else if (code == delimiter && next < stop
+                    && enc.mbcToCode(bytes, next, stop) == ']') {
+                return next + enc.length(bytes, next, stop);
+            }
+            scan = next;
+        }
+        return -1;
+    }
+
     private void fetchTokenInCCFor_posixBracket() {
+        if (syntax.op2OptionPerl() && (peekIs('=') || peekIs('.'))) {
+            int delimiter = peek();
+            token.backP = p;
+            inc();
+            if (left() && !peekIs(']')) {
+                int syntaxEnd = reservedPosixSyntaxEnd(delimiter);
+                if (syntaxEnd >= 0) {
+                    newSyntaxException(delimiter == '='
+                                    ? PERL_POSIX_EQUIVALENCE_CLASS_RESERVED
+                                    : PERL_POSIX_COLLATING_ELEMENT_RESERVED,
+                            syntaxEnd - getBegin());
+                }
+            }
+            unfetch();
+        }
         if (syntax.opPosixBracket() && peekIs(':')) {
             token.backP = p; /* point at '[' is readed */
             inc();
