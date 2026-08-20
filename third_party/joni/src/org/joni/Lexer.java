@@ -142,7 +142,8 @@ class Lexer extends ScannerSupport {
 
         if (!isRepeatInfinite(up) && low > up) {
             if (syntax.op2OptionPerl()) {
-                perlSyntaxWarn("Quantifier {n,m} with n > m can't match");
+                syntaxWarn("Quantifier {n,m} with n > m can't match",
+                        p - getBegin());
             } else {
                 newValueException(UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE);
             }
@@ -2521,6 +2522,11 @@ class Lexer extends ScannerSupport {
 
             token.setRepeatGreedy(false);
             token.setRepeatPossessive(false);
+            if (syntax.op2OptionPerl() && token.type == TokenType.INTERVAL
+                    && token.getRepeatLower() == token.getRepeatUpper()) {
+                syntaxWarn("Useless use of greediness modifier '?'",
+                        p - getBegin());
+            }
             rejectPerlNestedQuantifierModifier();
         } else {
             possessiveCheck();
