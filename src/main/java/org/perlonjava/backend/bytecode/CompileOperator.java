@@ -98,16 +98,7 @@ public class CompileOperator {
         }
         String varName = ((IdentifierNode) leftOp.operand).name;
         String arrayVarName = "@" + varName;
-        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
-                && bc.currentSubroutineClosureVars.contains(arrayVarName)) {
-            int arrayReg = bc.allocateRegister();
-            int nameIdx = bc.addToStringPool(arrayVarName);
-            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, tokenIndex);
-            bc.emitReg(arrayReg);
-            bc.emit(nameIdx);
-            bc.emit(bc.currentSubroutineBeginId);
-            return arrayReg;
-        } else if (bc.hasVariable(arrayVarName)) {
+        if (bc.hasVariable(arrayVarName)) {
             return bc.getVariableRegister(arrayVarName);
         } else {
             int arrayReg = bc.allocateRegister();
