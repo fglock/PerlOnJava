@@ -89,6 +89,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Switch condition not recognized";
     String PERL_SWITCH_CONDITION_NOT_TERMINATED =
             "Switch (?(condition)... not terminated";
+    String PERL_AT_MARK_GROUP_NOT_IMPLEMENTED = "Sequence (?@...) not implemented";
+    String PERL_SEMICOLON_GROUP_NOT_RECOGNIZED = "Sequence (?;...) not recognized";
     String PERL_SWITCH_CONDITION_TOO_MANY_BRANCHES =
             "Switch (?(condition)... contains too many branches";
     String PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED =
