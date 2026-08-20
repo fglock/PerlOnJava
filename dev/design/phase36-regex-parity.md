@@ -319,11 +319,10 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the four active, non-overlapping slices: forward/reverse literal and
-   class fold closure; deletion of Java matcher storage plus empty-pattern and
-   substitution retry branches; native `(*script_run:...)`/`(*sr:...)`; and a
-   latest-upstream, idempotent import sync that preserves required forkless
-   `IPC::Cmd` and `App::Cpan` patches and applies patches transactionally.
+1. Finish the three active, non-overlapping Joni slices: forward/reverse literal
+   and class fold closure; unconditional native compilation followed by removal
+   of Java matcher-semantic preprocessing; and native search/optimizer work that
+   makes unchanged `speed*` complete without regressing `pat_psycho*`.
 2. Integrate those commits on one immutable barrier. Run exact `regexp.t`,
    `reg_fold.t`, `reg_email*`, `regex_sets.t`, Unicode-property, callback,
    recursion, `script_run.t`, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`, and
@@ -467,9 +466,10 @@ gates may reopen it if a semantic regression appears.
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [x] Mechanically derived current-checkout regex acceptance ledger
 - [x] Retire proven-obsolete `dev/import-perl5` regex patches
-- [ ] Latest-upstream import sync preserves required non-regex runtime patches
+- [x] Latest-upstream import sync preserves required non-regex runtime patches
       and is transactional and idempotent
-- [ ] Native `(*script_run:...)` and `(*sr:...)`
+- [x] Native `(*script_run:...)`, `(*sr:...)`, `(*atomic_script_run:...)`, and
+      `(*asr:...)`
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       mechanically derived 286-file gates on one integrated artifact
 
