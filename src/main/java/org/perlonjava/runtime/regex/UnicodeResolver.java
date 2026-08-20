@@ -1187,6 +1187,13 @@ public class UnicodeResolver {
                     throw new IllegalArgumentException(
                             "Deferred user-defined Unicode property " + property);
                 }
+                if (isRepeatedUserDefinedPropertyPrefix(property)) {
+                    String qualified = property.contains("::")
+                            ? property : "main::" + property;
+                    throw new PerlCompilerException(
+                            "Unknown user-defined property name \\p{"
+                                    + qualified + "}");
+                }
                 String looseUserProperty = loosePropertyName(property);
                 if (looseUserProperty.startsWith("isxposix")
                         || looseUserProperty.startsWith("isposix")) {
@@ -1419,6 +1426,12 @@ public class UnicodeResolver {
         return property != null && USER_DEFINED_PROPERTY_NAME.matcher(property).matches();
     }
 
+    private static boolean isRepeatedUserDefinedPropertyPrefix(String property) {
+        int separator = property.lastIndexOf("::");
+        String localName = separator < 0 ? property : property.substring(separator + 2);
+        return localName.startsWith("Is_Is_") || localName.startsWith("In_In_");
+    }
+
     static boolean isPerlBuiltInPropertyAlias(String property) {
         if (property == null) return false;
         if (isUserDefinedPropertyName(property)
@@ -1479,6 +1492,12 @@ public class UnicodeResolver {
         if (userDefined && mustDeferPotentialUserDefinedProperty(
                 property, caseInsensitive)) {
             return null;
+        }
+        if (userDefined && isRepeatedUserDefinedPropertyPrefix(property)) {
+            String qualified = property.contains("::")
+                    ? property : "main::" + property;
+            throw new PerlCompilerException(
+                    "Unknown user-defined property name \\p{" + qualified + "}");
         }
         property = canonicalPerlPosixPropertyAlias(property);
         property = normalizePerlIsPropertyAssignment(property);
@@ -2252,10 +2271,7 @@ public class UnicodeResolver {
             String value) {
         String body = perlNumericWildcardBody(value);
         if (body == null) return null;
-        if (body.indexOf('*') >= 0) {
-            throw new IllegalArgumentException(
-                    "quantifier '*' is not allowed in Unicode property value wildcard");
-        }
+        rejectForbiddenPerlUnicodePropertyWildcardSyntax(body);
         try {
             return PerlPropertyValueMatcher.compile(body);
         } catch (RuntimeException invalidPattern) {
@@ -2280,14 +2296,19 @@ public class UnicodeResolver {
         return trimmed.equals("name") || trimmed.equals("na");
     }
 
+    static boolean isPerlStringProperty(String property) {
+        if (property == null) return false;
+        int assignment = propertyValueDelimiter(property);
+        return assignment > 0 && assignment < property.length() - 1
+                && isPerlNameProperty(property.substring(0, assignment))
+                && perlSlashWildcardBody(property.substring(assignment + 1)) == null;
+    }
+
     private static PerlUnicodePropertyWildcard resolvePerlNamePropertyWildcard(
             String propertyName, String value) {
         String body = perlSlashWildcardBody(value);
         if (body == null) return null;
-        if (body.indexOf('*') >= 0) {
-            throw new IllegalArgumentException(
-                    "quantifier '*' is not allowed in Unicode property value wildcard");
-        }
+        rejectForbiddenPerlUnicodePropertyWildcardSyntax(body);
 
         final PerlPropertyValueMatcher wildcard;
         try {
@@ -2885,6 +2906,10 @@ public class UnicodeResolver {
 
     private static String perlNumericWildcardBody(String value) {
         String trimmed = value.trim();
+        if (trimmed.length() > 2 && trimmed.startsWith(":")
+                && trimmed.endsWith(":")) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
         if (trimmed.startsWith("/\\A") && trimmed.endsWith("\\z/")
                 && trimmed.length() > 6) {
             return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
@@ -2894,6 +2919,63 @@ public class UnicodeResolver {
             return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
         }
         return null;
+    }
+
+    /**
+     * Perl deliberately permits only a restricted regex dialect inside a
+     * Unicode property-value wildcard.  Diagnose forbidden constructs against
+     * the wildcard body itself, matching the source Perl uses for its marker.
+     */
+    private static void rejectForbiddenPerlUnicodePropertyWildcardSyntax(
+            String body) {
+        int offset = body.indexOf('*');
+        if (offset >= 0) {
+            throw propertyWildcardSyntaxError(body, offset + 1,
+                    "Use of quantifier '*' is not allowed in Unicode property wildcard subpatterns");
+        }
+        offset = body.indexOf("\\G");
+        if (offset >= 0) {
+            throw propertyWildcardSyntaxError(body, offset + 2,
+                    "Use of '\\G' is not allowed in Unicode property wildcard subpatterns");
+        }
+        for (String escape : new String[] {"\\pS", "\\PS"}) {
+            offset = body.indexOf(escape);
+            if (offset >= 0) {
+                throw propertyWildcardSyntaxError(body, offset + escape.length(),
+                        "Use of '" + escape
+                                + "' is not allowed in Unicode property wildcard subpatterns");
+            }
+        }
+        java.util.regex.Matcher modifier = Pattern.compile(
+                "\\(\\?(-?[A-Za-z]+)\\)").matcher(body);
+        while (modifier.find()) {
+            String modifiers = modifier.group(1);
+            String prohibited = null;
+            int marker = modifier.end();
+            if (modifiers.startsWith("-m")) {
+                prohibited = "-m";
+                marker = modifier.end() - 1;
+            } else {
+                for (char candidate : new char[] {'g', 'a', 'u', 'd', 'l'}) {
+                    if (modifiers.indexOf(candidate) >= 0) {
+                        prohibited = String.valueOf(candidate);
+                        if (candidate == 'g') marker = modifier.end() - 1;
+                        break;
+                    }
+                }
+            }
+            if (prohibited != null) {
+                throw propertyWildcardSyntaxError(body, marker,
+                        "Use of modifier '" + prohibited
+                                + "' is not allowed in Unicode property wildcard subpatterns");
+            }
+        }
+    }
+
+    private static PerlCompilerException propertyWildcardSyntaxError(
+            String body, int offset, String message) {
+        return new PerlCompilerException(
+                RegexDiagnosticFormatter.markedPerl(body, offset, message));
     }
 
     private static short perlNumericValueIndex(String value) {
