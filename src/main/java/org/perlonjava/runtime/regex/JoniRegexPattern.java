@@ -1287,6 +1287,7 @@ final class JoniRegexPattern {
             int begin = index == 0 ? matcher.getBegin() : captures.getBeg(index);
             int end = index == 0 ? matcher.getEnd() : captures.getEnd(index);
             if (begin < 0 || end < 0) return null;
+            if (index == 0 && begin > end) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
         }
 
