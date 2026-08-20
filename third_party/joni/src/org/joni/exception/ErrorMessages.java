@@ -211,6 +211,10 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String MULTIPLEX_DEFINED_NAME = "multiplex defined name <%n>";
     String MULTIPLEX_DEFINITION_NAME_CALL = "multiplex definition name <%n> call";
     String PROPERTY_NAME_NEVER_TERMINATED = "property name never terminated \\p{%n";
+    String PERL_MISSING_RIGHT_BRACE_ON_CHARACTER_PROPERTY =
+            "Missing right brace on \\%n{}";
+    String PERL_CONTROL_ARGUMENT_MUST_BE_PRINTABLE_ASCII =
+            "Character following \"\\c\" must be printable ASCII";
     String NEVER_ENDING_RECURSION = "never ending recursion";
     String GROUP_NUMBER_OVER_FOR_CAPTURE_HISTORY = "group number is too big for capture history";
     String NOT_SUPPORTED_ENCODING_COMBINATION = "not supported encoding combination";

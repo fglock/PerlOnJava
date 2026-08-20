@@ -251,6 +251,10 @@ class Lexer extends ScannerSupport {
                 fetchEscapedValue();
             }
             if (syntax.op2OptionPerl()) {
+                if (argument < 0x20 || argument > 0x7e) {
+                    newSyntaxException(PERL_CONTROL_ARGUMENT_MUST_BE_PRINTABLE_ASCII,
+                            p - getBegin());
+                }
                 if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
                 c ^= 0x40;
                 warnObscurePerlControlEscape(argument, c);
@@ -2380,6 +2384,11 @@ class Lexer extends ScannerSupport {
                     && (c == '(' || c == ')' || c == '|')) {
                 throw new CharacterPropertyException(EncodingError.ERR_INVALID_CHAR_PROPERTY_NAME, bytes, _p, last);
             }
+        }
+        if (syntax.op2OptionPerl()) {
+            newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_CHARACTER_PROPERTY.replace(
+                    "%n", Character.toString(perlCharacterPropertyEscape)),
+                    _p - getBegin());
         }
         newValueException(PROPERTY_NAME_NEVER_TERMINATED, _p, stop);
         return null; // not reached
