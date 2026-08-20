@@ -233,7 +233,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
         boolean byteDefaultSemantics = patternByteBacked && regexFlags != null
-                && regexFlags.isCaseInsensitive() && !regexFlags.isUnicode()
+                && !regexFlags.isUnicode()
                 && !regexFlags.isAscii() && !hasInlineUnicodeCaseFoldModifier(patternString);
         if ((bytesSubstitution || byteDefaultSemantics) && recursivePatternBytes != null
                 && !Utf8.isUtf8(string)) {
@@ -558,8 +558,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                     regex.regexFlags, trustedCalloutCount, false,
                                     false, false, regex.namedCharacterCache,
                                     lexicalReStrict);
-                    if (effectivePatternByteBacked && regex.regexFlags.isCaseInsensitive()
-                            && !regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()) {
+                    if (effectivePatternByteBacked && !regex.regexFlags.isUnicode()
+                            && !regex.regexFlags.isAscii()) {
                         regex.recursivePatternBytes = new JoniRegexPattern(
                                 compilePatternString, regex.regexFlags, trustedCalloutCount,
                                 true, true, true, regex.namedCharacterCache,

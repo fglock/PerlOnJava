@@ -238,14 +238,26 @@ class Parser extends Lexer {
                         newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
                     }
                     int ctype = PosixBracket.PBSValues[i];
-                    cc.addCType(ctype, not, asciiRange, env, this);
-                    if (ascCc != null) {
-                        if (ctype != CharacterType.WORD && ctype != CharacterType.ASCII && !asciiRange) {
-                            ascCc.addCType(ctype, not, asciiRange, env, this);
+                    CharacterPropertyResolver.Result resolved = ctype == CharacterType.XDIGIT
+                            && !asciiRange && syntax.characterPropertyResolver != null
+                            ? syntax.characterPropertyResolver.resolve(
+                                    bytes, nameStart, p, enc, true)
+                            : null;
+                    if (resolved != null) {
+                        addCharProperty(cc, ascCc, foldCc,
+                                new CharProperty(0, resolved.ranges,
+                                        resolved.wideRanges, resolved.caseFold),
+                                not);
+                    } else {
+                        cc.addCType(ctype, not, asciiRange, env, this);
+                        if (ascCc != null) {
+                            if (ctype != CharacterType.WORD && ctype != CharacterType.ASCII && !asciiRange) {
+                                ascCc.addCType(ctype, not, asciiRange, env, this);
+                            }
                         }
-                    }
-                    if (foldCc != null) {
-                        foldCc.addCType(ctype, not, asciiRange, env, this);
+                        if (foldCc != null) {
+                            foldCc.addCType(ctype, not, asciiRange, env, this);
+                        }
                     }
                     inc();
                     inc();
@@ -361,7 +373,12 @@ class Parser extends Lexer {
                     newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
                 }
                 sawDefaultCharset = true;
-                option = bsOnOff(option, Option.ASCII_RANGE, true);
+                // Perl /d keeps character classes byte-oriented when both
+                // pattern and subject are byte strings, but promotes them for
+                // a UTF-8 subject. The adapter selects a dedicated
+                // PERL_BYTE_PATTERN variant for the former case.
+                option = bsOnOff(option, Option.ASCII_RANGE,
+                        !Option.isPerlBytePattern(option));
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'l':
                 if (rejectLocale) {
