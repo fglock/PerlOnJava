@@ -185,6 +185,10 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_NAMED_CALL_NOT_TERMINATED = "Sequence (?&... not terminated";
     String PERL_QUANTIFIER_ON_ZERO_LENGTH =
             "Quantifier unexpected on zero-length expression";
+    String PERL_POSITIVE_VARIABLE_LOOKBEHIND_CAPTURE =
+            "Variable length positive lookbehind with capturing is experimental";
+    String PERL_NEGATIVE_VARIABLE_LOOKBEHIND_CAPTURE =
+            "Variable length negative lookbehind with capturing is experimental";
     String PERL_EXTENDED_CLASS_INCOMPLETE =
             "Incomplete expression within '(?[ ])'";
     String PERL_EXTENDED_CLASS_SYNTAX = "Syntax error in (?[...])";
