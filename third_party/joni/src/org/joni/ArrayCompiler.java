@@ -28,7 +28,10 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import org.jcodings.constants.CharacterType;
 import org.joni.ast.AnchorNode;
@@ -59,16 +62,19 @@ final class ArrayCompiler extends Compiler {
     private int templateNum;
     private final Map<String, Integer> controlVerbLabelIds = new LinkedHashMap<>();
     private final List<CClassNode> wideScalarClasses = new ArrayList<>();
+    private final Set<BackRefNode> previousRepeatBackrefs =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     ArrayCompiler(Analyser analyser) {
         super(analyser);
     }
 
     @Override
-    protected final void prepare() {
+    protected final void prepare(Node root) {
         int codeSize = Config.USE_STRING_TEMPLATES ? 8 : ((analyser.getEnd() - analyser.getBegin()) * 2 + 2);
         code = new int[codeSize];
         codeLength = 0;
+        collectPreviousRepeatBackrefs(root, 0, 0, new boolean[regex.numMem + 1]);
     }
 
     @Override
@@ -446,6 +452,11 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileBackrefNode(BackRefNode node) {
         BackRefNode br = node;
+        if (usesPreviousRepeatCapture(br)) {
+            addOpcode(isIgnoreCase(regex.options) ? OPCode.BACKREFN_PREV_IC : OPCode.BACKREFN_PREV);
+            addMemNum(br.back[0]);
+            return;
+        }
         if (Config.USE_BACKREF_WITH_LEVEL && br.isNestLevel()) {
             addOpcode(OPCode.BACKREF_WITH_LEVEL);
             addOption(regex.options & Option.IGNORECASE);
@@ -483,6 +494,71 @@ final class ArrayCompiler extends Compiler {
                 addLength(br.backNum);
                 for (int i=br.backNum-1; i>=0; i--) addMemNum(br.back[i]);
             }
+        }
+    }
+
+    private boolean usesPreviousRepeatCapture(BackRefNode backref) {
+        return previousRepeatBackrefs.contains(backref);
+    }
+
+    private void collectPreviousRepeatBackrefs(Node node, int repeatDepth, int alternativeDepth,
+                                                boolean[] activeRepeatedCaptures) {
+        if (node == null) return;
+        switch (node.getType()) {
+        case NodeType.LIST:
+            for (ListNode item = (ListNode)node; item != null; item = item.tail) {
+                collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth,
+                        activeRepeatedCaptures);
+            }
+            break;
+        case NodeType.ALT:
+            for (ListNode item = (ListNode)node; item != null; item = item.tail) {
+                collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth + 1,
+                        activeRepeatedCaptures);
+            }
+            break;
+        case NodeType.QTFR:
+            QuantifierNode quantifier = (QuantifierNode)node;
+            int nestedRepeatDepth = quantifier.upper == QuantifierNode.REPEAT_INFINITE
+                    || quantifier.upper > 1 ? repeatDepth + 1 : repeatDepth;
+            collectPreviousRepeatBackrefs(quantifier.target, nestedRepeatDepth, alternativeDepth,
+                    activeRepeatedCaptures);
+            break;
+        case NodeType.ENCLOSE:
+            EncloseNode enclosure = (EncloseNode)node;
+            if (enclosure.isCondition() && enclosure.target instanceof ListNode
+                    && enclosure.target.getType() == NodeType.ALT) {
+                for (ListNode item = (ListNode)enclosure.target; item != null; item = item.tail) {
+                    collectPreviousRepeatBackrefs(item.value, repeatDepth, alternativeDepth,
+                            activeRepeatedCaptures);
+                }
+                break;
+            }
+            boolean wasActive = false;
+            if (enclosure.isMemory() && enclosure.regNum > 0 && repeatDepth > 0) {
+                wasActive = activeRepeatedCaptures[enclosure.regNum];
+                activeRepeatedCaptures[enclosure.regNum] = true;
+            }
+            collectPreviousRepeatBackrefs(enclosure.target, repeatDepth, alternativeDepth,
+                    activeRepeatedCaptures);
+            if (enclosure.isMemory() && enclosure.regNum > 0 && repeatDepth > 0) {
+                activeRepeatedCaptures[enclosure.regNum] = wasActive;
+            }
+            break;
+        case NodeType.ANCHOR:
+            collectPreviousRepeatBackrefs(((AnchorNode)node).target, repeatDepth, alternativeDepth,
+                    activeRepeatedCaptures);
+            break;
+        case NodeType.BREF:
+            BackRefNode backref = (BackRefNode)node;
+            if (backref.backNum == 1 && !backref.isNestLevel() && alternativeDepth == 0
+                    && backref.back[0] < activeRepeatedCaptures.length
+                    && activeRepeatedCaptures[backref.back[0]]) {
+                previousRepeatBackrefs.add(backref);
+            }
+            break;
+        default:
+            break;
         }
     }
 
@@ -1530,7 +1606,9 @@ final class ArrayCompiler extends Compiler {
         case NodeType.BREF:
             BackRefNode br = (BackRefNode)node;
 
-            if (Config.USE_BACKREF_WITH_LEVEL && br.isNestLevel()) {
+            if (usesPreviousRepeatCapture(br)) {
+                len = OPSize.OPCODE + OPSize.MEMNUM;
+            } else if (Config.USE_BACKREF_WITH_LEVEL && br.isNestLevel()) {
                 len = OPSize.OPCODE + OPSize.OPTION + OPSize.LENGTH +
                       OPSize.LENGTH + (OPSize.MEMNUM * br.backNum);
             } else { // USE_BACKREF_AT_LEVEL

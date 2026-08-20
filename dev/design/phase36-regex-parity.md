@@ -107,7 +107,7 @@ affected corpus before taking another slice.
   enabling PerlOnJava's unrelated internal compiler trace.
 - Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
   passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
-- Exact `re/regexp.t` executes 2,210/2,210 with 2,166 passing and 44 explicit
+- Exact `re/regexp.t` executes 2,210/2,210 with 2,169 passing and 41 explicit
   residuals. Non-nullable quantified captures now preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
   final iteration, and restore state on backtracking. Lexical warning masks
@@ -118,6 +118,9 @@ affected corpus before taking another slice.
 - A condition inside an open repeated capture sees the preceding completed
   iteration, while ordinary backreference behavior and final clearing remain
   unchanged.
+- Optional and conditional self-backreferences inside a repeated capture use
+  the preceding completed iteration. Ordinary alternation invalidates that
+  visibility, preserving all fourteen upstream false-positive guards.
 - The four Java/Joni × JVM/interpreter legs now have one 80-file comparison
   ledger on the pre-successor artifact. It identifies stable extended-class,
   regexp, charset, fold-grind, and bounded-speed negative clusters plus several
@@ -415,6 +418,7 @@ gates may reopen it if a semantic regression appears.
 - [ ] Final-iteration, optional, alternation, and failed-path capture clearing
 - [x] Non-nullable quantified-capture iteration scopes and backtracking restore
 - [x] Previous-iteration visibility for conditions inside repeated captures
+- [x] Previous-iteration visibility for non-alternating self-backreferences
 - [x] Physical branch-reset named calls and conditions
 - [ ] Inactive branch-reset slot publication
 - [x] Native named-character whitespace and missing-brace diagnostics
