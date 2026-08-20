@@ -571,9 +571,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (compilePatternString.contains("(?&")
                         && (compilePatternString.contains("(?<=")
                                 || compilePatternString.contains("(?<!"))) {
-                    throw new PerlJavaUnimplementedException(
-                            "Lookbehind longer than 255 not implemented in regex m/"
-                                    + compilePatternString + "/");
+                    // The retired adapter could not resolve subroutine widths
+                    // and rejected every recursive lookbehind as oversized.
+                    // Prevalidate with the native analyser instead: it accepts
+                    // fixed-width recursion and still throws the Perl ceiling
+                    // diagnostic for genuinely wider-than-255 lookbehinds.
+                    new JoniRegexPattern(compilePatternString,
+                            regex.regexFlags, trustedCalloutCount,
+                            !regex.regexFlags.isUnicode(), false, false,
+                            regex.namedCharacterCache);
                 }
                 regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
                 if (sourcePolicyWarning != null) {
