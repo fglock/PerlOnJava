@@ -702,7 +702,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         .usesCustomTranslator(namedCharacterTranslator)
                         && JoniRegexPattern.containsNamedCharacterEscape(compilePatternString)
                         || RegexBackendPolicy.useJoni(
-                                compilePatternString, regex.regexFlags);
+                                compilePatternString, regex.regexFlags)
+                        // The public default is already Joni.  Retain parsing
+                        // of the former diagnostic selector for compatibility,
+                        // but never let an explicit legacy value re-enable the
+                        // retired Java execution route.
+                        || RegexBackendPolicy.current() == RegexBackendPolicy.Mode.JAVA;
                 if (usesRecursiveBackend
                         && compilePatternString.contains("(?&")
                         && (compilePatternString.contains("(?<=")
