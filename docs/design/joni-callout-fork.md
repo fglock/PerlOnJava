@@ -14,10 +14,10 @@ capture, `use re 'eval'`, diagnostics, and Perl-visible state.
 
 All production regexes use this fork. There is no Java matcher, and the legacy
 `RegexPreprocessor` is absent. Limited Java source-policy scanning and adapter
-translation still prepare admitted source for native Joni. The disconnected
-`RegexBackendPolicy` parser and
-`JoniRegexPattern.compatibilityPatternDescription` are compatibility surfaces,
-not alternate matcher inputs.
+translation still prepare admitted source for native Joni. The historical
+`RegexBackendPolicy` model exists only in test scope, while
+`JoniRegexPattern.compatibilityPatternDescription` is a display compatibility
+surface; neither can become alternate matcher input.
 
 ## Source and dependency model
 

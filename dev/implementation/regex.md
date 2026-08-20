@@ -8,9 +8,10 @@ PerlOnJava has one production regex engine: the maintained Joni fork in
 bytecode-interpreter execution backends call this same runtime code; neither has
 its own regex implementation.
 
-`JPERL_REGEX_BACKEND`, `jperl.regex.backend`, and `RegexBackendPolicy` do not
-select a production matcher. `RegexBackendPolicy` is disconnected compatibility
-scaffolding retained for its focused parser tests. Likewise,
+`JPERL_REGEX_BACKEND` and `jperl.regex.backend` do not select a production
+matcher. The production `RegexBackendPolicy` class has been removed; a
+test-scope-only model preserves the immutable migration assertions and cannot
+enter the standalone artifact. Likewise,
 `JoniRegexPattern.compatibilityPatternDescription` is a display-only
 normalization for legacy assertions and debug descriptions. The raw
 `sourcePattern` is what Joni compiles and what source diagnostics describe.
