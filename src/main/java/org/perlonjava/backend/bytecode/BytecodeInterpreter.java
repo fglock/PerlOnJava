@@ -1099,6 +1099,7 @@ public class BytecodeInterpreter {
                                 int kindIdx = bytecode[pc++];
                                 int packageIdx = bytecode[pc++];
                                 int sourceIdx = bytecode[pc++];
+                                boolean uninitializedWarningsEnabled = bytecode[pc++] != 0;
                                 if (DEBUG_REGEX) {
                                     RuntimeCode callbackCode =
                                             (RuntimeCode) registers[codeReg].scalar().value;
@@ -1110,7 +1111,8 @@ public class BytecodeInterpreter {
                                 }
                                 registers[rd] = org.perlonjava.runtime.regex.RuntimeRegexCallback.wrap(
                                         registers[codeReg].scalar(), code.stringPool[kindIdx],
-                                        code.stringPool[packageIdx], code.stringPool[sourceIdx]);
+                                        code.stringPool[packageIdx], code.stringPool[sourceIdx],
+                                        uninitializedWarningsEnabled);
                             }
 
                             case Opcodes.REGEX_TEMPLATE -> {

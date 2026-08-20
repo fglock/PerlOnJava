@@ -1260,6 +1260,7 @@ public class Disassemble {
                         int callbackKindIdx = interpretedCode.bytecode[pc++];
                         int callbackPackageIdx = interpretedCode.bytecode[pc++];
                         int callbackSourceIdx = interpretedCode.bytecode[pc++];
+                        int callbackUninitializedWarnings = interpretedCode.bytecode[pc++];
                         sb.append("REGEX_CALLBACK r").append(rd)
                                 .append(" = callback(r").append(rs)
                                 .append(", kind=")
@@ -1268,6 +1269,8 @@ public class Disassemble {
                                 .append(interpretedCode.stringPool[callbackPackageIdx])
                                 .append(", source=")
                                 .append(interpretedCode.stringPool[callbackSourceIdx])
+                                .append(", uninitializedWarnings=")
+                                .append(callbackUninitializedWarnings != 0)
                                 .append(")\n");
                         break;
                     case Opcodes.REGEX_TEMPLATE:

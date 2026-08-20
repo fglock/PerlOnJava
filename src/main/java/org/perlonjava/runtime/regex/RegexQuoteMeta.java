@@ -10,6 +10,7 @@ public class RegexQuoteMeta {
     private static final ThreadLocal<List<String>> WARNINGS_ON_USE = ThreadLocal.withInitial(ArrayList::new);
     private static final ThreadLocal<Integer> CALL_SITE_WARNING_STATE = new ThreadLocal<>();
     private static final ThreadLocal<String> CALL_SITE_WARNING_BITS = new ThreadLocal<>();
+    private static final ThreadLocal<String> PARSER_WARNING_BITS = new ThreadLocal<>();
     private static final ThreadLocal<String> MATCH_TARGET_NAME = new ThreadLocal<>();
 
     public static void setCallSiteWarningState(int state) {
@@ -22,6 +23,15 @@ public class RegexQuoteMeta {
 
     public static String getCallSiteWarningBits() {
         return CALL_SITE_WARNING_BITS.get();
+    }
+
+    public static void setParserWarningBits(String bits) {
+        if (bits == null) PARSER_WARNING_BITS.remove();
+        else PARSER_WARNING_BITS.set(bits);
+    }
+
+    public static String getParserWarningBits() {
+        return PARSER_WARNING_BITS.get();
     }
 
     public static void setMatchTargetName(String name) {

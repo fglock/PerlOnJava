@@ -3415,6 +3415,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             machine.sstart = start;
             machine.sprev = machine.enc.prevCharHead(machine.bytes,
                     machine.str, start, machine.end);
+            // Dynamic continuations enter execute() directly instead of going
+            // through matchAt(), so initialize the option scope that matchAt()
+            // normally installs.  In particular, Perl /aa case folding is a
+            // match-time option and must remain active in the nested program.
+            machine.currentRegexOptions = machine.regex.options;
             machine.stk = 0;
             machine.ip = 0;
             machine.stackInit();

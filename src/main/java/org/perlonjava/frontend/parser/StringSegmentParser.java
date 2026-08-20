@@ -10,9 +10,11 @@ import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.regex.RegexMarkers;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -1114,6 +1116,12 @@ public abstract class StringSegmentParser {
         callback.setAnnotation("regexCallbackPackage",
                 closure.getAnnotation("regexCallbackPackage"));
         callback.setAnnotation("regexCallbackSource", source);
+        String callbackWarningBits = RegexQuoteMeta.getParserWarningBits();
+        if (callbackWarningBits == null) {
+            callbackWarningBits = parser.ctx.symbolTable.getWarningBitsString();
+        }
+        callback.setAnnotation("regexCallbackUninitializedWarningsEnabled",
+                WarningFlags.isEnabledInBits(callbackWarningBits, "uninitialized"));
         hasExecutableRegexCallbacks = true;
         return callback;
     }

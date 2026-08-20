@@ -25,9 +25,12 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackKind"));
         emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackPackage"));
         emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackSource"));
+        emitterVisitor.ctx.mv.visitInsn(Boolean.TRUE.equals(node.getAnnotation(
+                "regexCallbackUninitializedWarningsEnabled"))
+                ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegexCallback", "wrap",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
     }
 

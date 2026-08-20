@@ -107,11 +107,14 @@ affected corpus before taking another slice.
   enabling PerlOnJava's unrelated internal compiler trace.
 - Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
   passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
-- Exact `re/regexp.t` executes 2,210/2,210 with 2,159 passing and 51 explicit
+- Exact `re/regexp.t` executes 2,210/2,210 with 2,164 passing and 46 explicit
   residuals. Non-nullable quantified captures now preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
   final iteration, and restore state on backtracking. Lexical warning masks
   remain authoritative when undef captures are interpolated by eval STRING.
+- Dynamic undef-result warnings retain the regex source's lexical policy across
+  eval STRING on both execution backends. Dynamic continuations initialize
+  their nested Joni option scope, preserving strict `/aa` folding.
 - The four Java/Joni × JVM/interpreter legs now have one 80-file comparison
   ledger on the pre-successor artifact. It identifies stable extended-class,
   regexp, charset, fold-grind, and bounded-speed negative clusters plus several
@@ -417,6 +420,7 @@ gates may reopen it if a semantic regression appears.
 - [ ] Recursive call capture publication and recursion safety
 - [x] Runtime-source comment/class masking and `/aa` propagation
 - [x] Unterminated runtime-source diagnostics for regexp rows 575/576/581
+- [x] Dynamic undef-warning scope and nested-continuation `/aa` state
 - [ ] Remaining dynamic code-array residuals
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [ ] Retire proven-obsolete `dev/import-perl5` regex patches
