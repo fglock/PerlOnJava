@@ -70,6 +70,18 @@ perl dev/tools/run_phase36_regex_acceptance.pl \
   --jar target/perlonjava-standalone.jar --sbom build/reports/sbom.json
 ```
 
+### verify-joni-packaging.pl
+
+**Purpose:** Fail closed on the final standalone JAR/SBOM boundary. The
+two-argument verifier checks relocated Joni/JCodings class ownership, exact
+checked-in notice bytes, unique Joni/JCodings CycloneDX identities, and the
+declared Joni-to-JCodings dependency edge. It resolves notice sources relative
+to the repository, so it may run from an artifact directory:
+
+```bash
+perl dev/tools/verify-joni-packaging.pl standalone.jar merged-sbom.json
+```
+
 For a system-Perl oracle of an imported core test, remember that `t/test.pl`
 replaces `@INC` with the imported `../lib`. Preload host-core modules needed by
 the test before that reset. For example, the reproducible `op/do.t` oracle is:
