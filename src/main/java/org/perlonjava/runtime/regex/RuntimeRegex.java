@@ -740,6 +740,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         }
                     }
                     regex.warningsOnUse.addAll(regex.inlineModifierWarnings);
+                    regex.warningsOnUse.addAll(
+                            unicodePropertyWildcardWarnings(originalPatternString));
                 regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                         || RegexFlags.hasInlinePreserveModifier(compilePatternString);
                 regex.patternString = originalPatternString;
@@ -800,8 +802,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         throw new PerlCompilerException(
                                 "Illegal user-defined property name \"" + invalidProperty + "\"");
                     }
-                    throw new PerlCompilerException(
-                            "Can't find Unicode property definition \"" + invalidProperty + "\"");
+                    String diagnostic = failedUnicodePropertyDiagnostic(
+                            displayDiagnosticPattern, invalidProperty);
+                    throw new PerlCompilerException(diagnostic != null
+                            ? diagnostic
+                            : "Can't find Unicode property definition \""
+                                    + invalidProperty.trim() + "\"");
+                }
+                if (isUnicodePropertyResolutionFailure(e.getMessage())) {
+                    String diagnostic = failedUnicodePropertyDiagnostic(
+                            displayDiagnosticPattern, null);
+                    if (diagnostic != null) {
+                        throw new PerlCompilerException(diagnostic);
+                    }
                 }
                 // Joni reports malformed patterns with SyntaxException (including its
                 // ValueException subclass). These are real compile errors, not missing
@@ -943,6 +956,50 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         start += prefix.length();
         int end = message.indexOf('>', start);
         return end < 0 ? null : message.substring(start, end);
+    }
+
+    private static boolean isUnicodePropertyResolutionFailure(String message) {
+        if (message == null) return false;
+        return message.startsWith("Invalid or unsupported Unicode property:")
+                || message.startsWith("Unsupported General_Category value:")
+                || message.startsWith("Unsupported Numeric_Value value:")
+                || message.startsWith("Unsupported obsolete Unicode property:");
+    }
+
+    /** Preserve Perl's original spelling and point immediately after its closing brace. */
+    private static String failedUnicodePropertyDiagnostic(
+            String pattern, String engineProperty) {
+        if (pattern == null) return null;
+        Matcher property = Pattern.compile("\\\\[pP]\\{([^}]*)}").matcher(pattern);
+        while (property.find()) {
+            String original = property.group(1).trim();
+            if (engineProperty == null
+                    || original.equals(engineProperty.trim())
+                    || looseUnicodePropertyDiagnosticName(original).equals(
+                            looseUnicodePropertyDiagnosticName(engineProperty))) {
+                return RegexDiagnosticFormatter.markedPerl(
+                        pattern, property.end(),
+                        "Can't find Unicode property definition \"" + original + "\"");
+            }
+        }
+        return null;
+    }
+
+    private static String looseUnicodePropertyDiagnosticName(String property) {
+        return property == null ? "" : property.replaceAll("[\\s_-]+", "")
+                .toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static List<String> unicodePropertyWildcardWarnings(String pattern) {
+        if (pattern == null || !pattern.contains("(?[")) return List.of();
+        Matcher property = Pattern.compile(
+                "\\\\[pP]\\{\\s*(?:name|na)\\s*(?:=|:(?!:))\\s*/[^}]*/\\s*}",
+                Pattern.CASE_INSENSITIVE).matcher(pattern);
+        if (!property.find()) return List.of();
+        return List.of(
+                "The Unicode property wildcards feature is experimental",
+                RegexDiagnosticFormatter.markedPerl(pattern, property.end(),
+                        "Using just the single character results returned by \\p{} in (?[...])"));
     }
 
     private static int utf8ByteOffsetToCharacterOffset(String pattern, int byteOffset) {
