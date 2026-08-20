@@ -1200,6 +1200,13 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenInCCFor_posixBracket() {
+        boolean perlPosixCandidate = false;
+        if (syntax.op3PerlLiteralOpenInCC()
+                && (peekIs(':') || peekIs('.') || peekIs('='))) {
+            int afterDelimiter = p + enc.length(bytes, p, stop);
+            perlPosixCandidate = afterDelimiter >= stop
+                    || enc.mbcToCode(bytes, afterDelimiter, stop) != ']';
+        }
         if (syntax.op2OptionPerl() && (peekIs('=') || peekIs('.'))) {
             int delimiter = peek();
             token.backP = p;
@@ -1226,16 +1233,20 @@ class Lexer extends ScannerSupport {
             } else {
                 unfetch();
                 // remove duplication, goto cc_in_cc;
-                if (syntax.op2CClassSetOp()) {
+                boolean perlLiteralOpen = syntax.op3PerlLiteralOpenInCC()
+                        && !perlPosixCandidate;
+                if (syntax.op2CClassSetOp() && !perlLiteralOpen) {
                     token.type = TokenType.CC_CC_OPEN;
-                } else {
+                } else if (!perlLiteralOpen) {
                     env.ccEscWarn("[");
                 }
             }
         } else { // cc_in_cc:
-            if (syntax.op2CClassSetOp()) {
+            boolean perlLiteralOpen = syntax.op3PerlLiteralOpenInCC()
+                    && !perlPosixCandidate;
+            if (syntax.op2CClassSetOp() && !perlLiteralOpen) {
                 token.type = TokenType.CC_CC_OPEN;
-            } else {
+            } else if (!perlLiteralOpen) {
                 env.ccEscWarn("[");
             }
         }

@@ -819,6 +819,13 @@ class Parser extends Lexer {
                 return parsePerlRelativeCall(c);
             }
             switch(c) {
+            case ')':
+                if (syntax.op2OptionPerl()) {
+                    returnCode = 0;
+                    return StringNode.EMPTY;
+                }
+                newSyntaxException(UNDEFINED_GROUP_OPTION);
+                break;
             case 'R':
                 if (syntax.op2OptionPerl()) {
                     if (!left() || !peekIs(')')) {
@@ -1445,6 +1452,9 @@ class Parser extends Lexer {
         } else if (startsWith("MARK)") || startsWith("MARK:")) {
             kind = ControlVerbNode.Kind.MARK;
             verb = "MARK";
+        } else if (startsWith(":")) {
+            kind = ControlVerbNode.Kind.MARK;
+            verb = "";
         } else {
             String construct = controlConstructName();
             int constructEnd = p + construct.getBytes(StandardCharsets.UTF_8).length;
