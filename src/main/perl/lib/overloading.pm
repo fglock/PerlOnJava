@@ -27,7 +27,6 @@ sub import ($, @ops) {
 	delete $^H{overloading};
 	$^H &= ~$HINT_NO_AMAGIC;
     }
-
 }
 
 sub unimport ($, @ops) {

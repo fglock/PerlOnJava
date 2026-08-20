@@ -199,6 +199,7 @@ sub split_unicode_testprop {
     my $canonical_sha = sha256_hex($canonical);
     my @manifest = (
         "\n# PerlOnJava lossless TESTCHUNK dispatcher\n",
+        "# Canonical pinned mktables SHA-256: $canonical_sha\n",
         "# Canonical current-upstream mktables SHA-256: $canonical_sha\n",
     );
     for my $section (@sections) {
@@ -249,8 +250,8 @@ sub generate_unicode_testprop {
     );
     for my $required (@required) {
         unless (-f $required) {
-            warn "  ERROR: Cannot generate Unicode TestProp.pl; missing current "
-                . "generation prerequisite: $required\n"
+            warn "  ERROR: Cannot generate Unicode TestProp.pl; missing pinned generation prerequisite "
+                . "(compatibility alias; selected source is the current checkout, not a historical SHA): $required\n"
                 . "  Restore perl5/lib/unicore from the current upstream source "
                 . "before running this sync.\n\n";
             return 0;
