@@ -621,6 +621,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.ASCII_RANGE, false);
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, false);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT,
                         syntax.op2OptionPerl() && asciiModifierCount >= 2
                                 ? false : true);
@@ -635,6 +636,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.ASCII_RANGE, true);
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'd':
                 if (!syntax.op2OptionPerl() || neg) {
@@ -650,6 +652,7 @@ class Parser extends Lexer {
                 // PERL_BYTE_PATTERN variant for the former case.
                 option = bsOnOff(option, Option.ASCII_RANGE,
                         !Option.isPerlBytePattern(option));
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'l':
                 if (rejectLocale) {
@@ -666,6 +669,7 @@ class Parser extends Lexer {
                 }
                 sawLocaleCharset = true;
                 option = bsOnOff(option, Option.ASCII_RANGE, true);
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             default:
                 throw new AssertionError(modifier);
@@ -1590,6 +1594,7 @@ class Parser extends Lexer {
                     option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, true);
                     option = bsOnOff(option, Option.CAPTURE_GROUP, false);
                     option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
+                    option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                     fetch();
                     if (c == '-') {
                         newSyntaxException(PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED);
@@ -2442,6 +2447,8 @@ class Parser extends Lexer {
                 nestedOption = bsOnOff(nestedOption, Option.DONT_CAPTURE_GROUP, true);
                 nestedOption = bsOnOff(nestedOption, Option.CAPTURE_GROUP, false);
                 nestedOption = bsOnOff(nestedOption, Option.PERL_ASCII_STRICT, true);
+                nestedOption = bsOnOff(
+                        nestedOption, Option.PERL_EXPLICIT_ASCII, true);
                 inc();
             }
             boolean negateOption = false;

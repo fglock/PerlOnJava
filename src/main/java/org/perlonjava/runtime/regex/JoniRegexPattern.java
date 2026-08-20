@@ -663,6 +663,7 @@ final class JoniRegexPattern {
         if (flags.isDotAll()) options |= Option.MULTILINE;
         if (!flags.isMultiLine()) options |= Option.SINGLELINE;
         if (flags.isAscii() || forceAsciiClasses) options |= Option.ASCII_RANGE;
+        if (flags.isAscii()) options |= Option.PERL_EXPLICIT_ASCII;
         if (flags.isAsciiStrict()) options |= Option.PERL_ASCII_STRICT;
         if (perlReStrict) options |= Option.PERL_RE_STRICT;
         // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
