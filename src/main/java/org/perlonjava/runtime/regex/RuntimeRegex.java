@@ -657,8 +657,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 if ("invalid backref number/name".equals(e.getMessage())
                         || "invalid backref number".equals(e.getMessage())) {
-                    throw new PerlCompilerException(
-                            "Reference to nonexistent group in regex");
+                    int offset = nonexistentNumericBackreferenceEnd(originalPatternString);
+                    String message = "Reference to nonexistent group";
+                    throw new PerlCompilerException(offset >= 0
+                            ? RegexDiagnosticFormatter.markedPerl(
+                                    originalPatternString, offset, message)
+                            : message + " in regex");
                 }
                 if (e instanceof IllegalArgumentException
                         && e.getMessage() != null
@@ -806,6 +810,74 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
         int boundedOffset = Math.min(byteOffset, bytes.length);
         return new String(bytes, 0, boundedOffset, StandardCharsets.UTF_8).length();
+    }
+
+    /** Locate the end of the numeric escape responsible for an invalid-backref error. */
+    private static int nonexistentNumericBackreferenceEnd(String pattern) {
+        if (pattern == null) return -1;
+
+        int captureCount = 0;
+        boolean inClass = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '\\') {
+                i++;
+                continue;
+            }
+            if (c == '[') {
+                inClass = true;
+                continue;
+            }
+            if (c == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (c != '(' || inClass) continue;
+            if (i + 1 >= pattern.length() || pattern.charAt(i + 1) != '?') {
+                captureCount++;
+                continue;
+            }
+            if (i + 2 >= pattern.length()) continue;
+            char kind = pattern.charAt(i + 2);
+            if (kind == '\''
+                    || (kind == '<' && i + 3 < pattern.length()
+                            && pattern.charAt(i + 3) != '='
+                            && pattern.charAt(i + 3) != '!')
+                    || (kind == 'P' && i + 3 < pattern.length()
+                            && pattern.charAt(i + 3) == '<')) {
+                captureCount++;
+            }
+        }
+
+        inClass = false;
+        for (int i = 0; i + 1 < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '[') {
+                inClass = true;
+                continue;
+            }
+            if (c == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (c != '\\') continue;
+            char first = pattern.charAt(i + 1);
+            if (inClass || first < '1' || first > '9') {
+                i++;
+                continue;
+            }
+            int end = i + 2;
+            long number = first - '0';
+            while (end < pattern.length()
+                    && pattern.charAt(end) >= '0' && pattern.charAt(end) <= '9') {
+                number = Math.min(Integer.MAX_VALUE,
+                        number * 10 + pattern.charAt(end) - '0');
+                end++;
+            }
+            if (number > captureCount) return end;
+            i = end - 1;
+        }
+        return -1;
     }
 
     /** Locate an unmatched ordinary group opener, excluding Perl's specialized {@code (?...} forms. */
