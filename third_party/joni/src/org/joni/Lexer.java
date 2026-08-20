@@ -704,6 +704,16 @@ class Lexer extends ScannerSupport {
             index--;
         }
 
+        // The dedicated byte-pattern variant can only consume byte subjects.
+        // Keep LF..CR and NEL, but do not feed LS/PS to the single-byte
+        // encoding (notably while ignore-case builds its parallel class).
+        if (Option.isPerlBytePattern(env.option) && index >= 4) {
+            token.type = TokenType.CC_CLOSE;
+            token.setC(']');
+            perlVerticalWhitespaceTokenIndex = -1;
+            return token.type;
+        }
+
         switch (index) {
         case 0:
             token.type = TokenType.CODE_POINT;
