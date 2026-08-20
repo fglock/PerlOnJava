@@ -1304,6 +1304,17 @@ class Parser extends Lexer {
                     && END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
                 newSyntaxException(PERL_SWITCH_CONDITION_NOT_TERMINATED);
             }
+            if (node instanceof AnchorNode anchor
+                    && END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
+                String diagnostic = switch (anchor.type) {
+                case AnchorType.LOOK_BEHIND -> PERL_POSITIVE_LOOKBEHIND_NOT_TERMINATED;
+                case AnchorType.LOOK_BEHIND_NOT -> PERL_NEGATIVE_LOOKBEHIND_NOT_TERMINATED;
+                case AnchorType.PREC_READ -> PERL_POSITIVE_LOOKAHEAD_NOT_TERMINATED;
+                case AnchorType.PREC_READ_NOT -> PERL_NEGATIVE_LOOKAHEAD_NOT_TERMINATED;
+                default -> null;
+                };
+                if (diagnostic != null) newSyntaxException(diagnostic);
+            }
             throw e;
         }
 
