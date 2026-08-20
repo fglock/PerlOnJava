@@ -40,6 +40,8 @@ die "Standalone JAR contains unrelocated Joni classes\n"
     if grep { m{^org/joni/.*\.class\z} } keys %entries;
 die "Standalone JAR contains unrelocated JCodings classes\n"
     if grep { m{^org/jcodings/.*\.class\z} } keys %entries;
+die "Standalone JAR contains retired regex backend selector\n"
+    if $entries{'org/perlonjava/runtime/regex/RegexBackendPolicy.class'};
 die "Standalone JAR does not contain relocated Joni classes\n"
     unless grep { m{^org/perlonjava/internal/joni/.*\.class\z} } keys %entries;
 die "Standalone JAR does not contain relocated JCodings classes\n"
