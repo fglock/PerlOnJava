@@ -230,6 +230,14 @@ final class JoniRegexPattern {
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
                      boolean forceAsciiClasses, boolean byteMode,
                      boolean byteBackedPattern, NamedCharacterCache namedCharacterCache) {
+        this(perlPattern, flags, trustedCalloutCount, forceAsciiClasses, byteMode,
+                byteBackedPattern, namedCharacterCache, false);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses, boolean byteMode,
+                     boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
+                     boolean perlReStrict) {
         PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(perlPattern, flags.isExtended());
         if (syntaxFeatures.keepInLookaround()) {
             throw new PerlCompilerException("\\K not permitted in lookahead/lookbehind in regex");
@@ -273,7 +281,7 @@ final class JoniRegexPattern {
         Syntax syntax = syntaxForNamedCharacters(
                 namedCharacterCache, namedCharacterSourceMode,
                 flags.isCaseInsensitive());
-        int options = toJoniOptions(flags, forceAsciiClasses);
+        int options = toJoniOptions(flags, forceAsciiClasses, perlReStrict);
         if (byteMode && byteBackedPattern) options |= Option.PERL_BYTE_PATTERN;
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
@@ -554,7 +562,8 @@ final class JoniRegexPattern {
         return normalized.toString();
     }
 
-    private static int toJoniOptions(RegexFlags flags, boolean forceAsciiClasses) {
+    private static int toJoniOptions(RegexFlags flags, boolean forceAsciiClasses,
+                                     boolean perlReStrict) {
         int options = Option.NONE;
         if (flags.isCaseInsensitive()) options |= Option.IGNORECASE;
         if (flags.isExtended()) options |= Option.EXTEND;
@@ -564,6 +573,7 @@ final class JoniRegexPattern {
         if (!flags.isMultiLine()) options |= Option.SINGLELINE;
         if (flags.isAscii() || forceAsciiClasses) options |= Option.ASCII_RANGE;
         if (flags.isAsciiStrict()) options |= Option.PERL_ASCII_STRICT;
+        if (perlReStrict) options |= Option.PERL_RE_STRICT;
         // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
         // when a pattern also contains named groups. Perl keeps both kinds of
         // captures numbered. Force that behavior unless /n explicitly disables

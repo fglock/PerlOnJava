@@ -1933,30 +1933,36 @@ class Parser extends Lexer {
     }
 
     private CClassNode parsePerlExtendedCharClass() {
-        int bodyStart = p;
-        skipPerlExtendedClassSpace();
-        if (!left() || extendedClassAt(']')) {
-            newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
-        }
-        CClassNode result = parsePerlExtendedClassUnion();
-        skipPerlExtendedClassSpace();
-        if (!left() || !extendedClassAt(']')) {
-            if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)
-                    || extendedClassBodyStartsWithPosixLeaf(bodyStart)) {
-                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
-                        stop - getBegin());
+        boolean previousExtendedClass = env.inPerlExtendedClass;
+        env.inPerlExtendedClass = true;
+        try {
+            int bodyStart = p;
+            skipPerlExtendedClassSpace();
+            if (!left() || extendedClassAt(']')) {
+                newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
             }
-            newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
-        }
-        inc();
-        if (!left() || !extendedClassAt(')')) {
-            if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)) {
-                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            CClassNode result = parsePerlExtendedClassUnion();
+            skipPerlExtendedClassSpace();
+            if (!left() || !extendedClassAt(']')) {
+                if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)
+                        || extendedClassBodyStartsWithPosixLeaf(bodyStart)) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
+                newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
             }
-            newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
+            inc();
+            if (!left() || !extendedClassAt(')')) {
+                if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                }
+                newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
+            }
+            inc();
+            return result;
+        } finally {
+            env.inPerlExtendedClass = previousExtendedClass;
         }
-        inc();
-        return result;
     }
 
     private CClassNode parsePerlExtendedClassUnion() {

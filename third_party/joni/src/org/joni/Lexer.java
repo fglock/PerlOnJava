@@ -853,7 +853,12 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenInCCFor_x() {
-        if (!left()) return;
+        if (!left()) {
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+            }
+            return;
+        }
         int last = p;
 
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
@@ -867,7 +872,11 @@ class Lexer extends ScannerSupport {
         } else if (syntax.opEscXHex2()) {
             int num = scanUnsignedHexadecimalNumber(0, 2);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            checkPerlUnbracedHexSuffix(last, num);
             if (p == last) { /* can't read nothing. */
+                if (perlNumericEscapesAreFatal()) {
+                    newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+                }
                 num = 0; /* but, it's not error */
             }
             if (syntax.op2OptionPerl()) {
@@ -1013,6 +1022,7 @@ class Lexer extends ScannerSupport {
         int significantDigitCount = 0;
         boolean sawDigit = false;
         int invalid = -1;
+        int invalidPosition = -1;
         while (cursor < close) {
             int code = codeAt(cursor, close);
             int digit = perlEscapeDigit(code, radix);
@@ -1041,6 +1051,7 @@ class Lexer extends ScannerSupport {
                 break;
             }
             invalid = code;
+            invalidPosition = cursor;
             break;
         }
 
@@ -1049,13 +1060,25 @@ class Lexer extends ScannerSupport {
                 newSyntaxException(PERL_EMPTY_OCTAL_ESCAPE,
                         close + enc.length(bytes, close, stop) - getBegin());
             }
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_EMPTY_HEX_ESCAPE,
+                        close + enc.length(bytes, close, stop) - getBegin());
+            }
             value = 0;
         } else if (invalid >= 0) {
             String kind = escape == 'o' ? "octal" : "hex";
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(escape == 'o'
+                                ? PERL_NON_OCTAL_CHARACTER : PERL_NON_HEX_CHARACTER,
+                        nextChar(invalidPosition, close) - getBegin());
+            }
             String warning = "Non-" + kind + " character '" + (char)invalid
                     + "' terminates \\" + escape + " early.";
+            String resolvedDigits = formatPerlResolvedEscape(value, radix);
+            String sourceDigits = perlEscapeSourceDigits(numberStart, invalidPosition, radix);
+            resolvedDigits = preservePerlEscapeDigitCase(resolvedDigits, sourceDigits);
             String resolution = " Resolved as \"\\" + escape + "{"
-                    + formatPerlResolvedEscape(value, radix) + "}\"";
+                    + resolvedDigits + "}\"";
             if (syntax.op2OptionPerl() && env.warnings.supportsPositions()) {
                 syntaxWarn(warning + " " + resolution,
                         close + enc.length(bytes, close, stop) - getBegin());
@@ -1142,6 +1165,83 @@ class Lexer extends ScannerSupport {
         return "0".repeat(Math.max(0, minimumWidth - digits.length())) + digits;
     }
 
+    private static String preservePerlEscapeDigitCase(String resolved, String source) {
+        int suffix = resolved.length() - source.length();
+        if (suffix >= 0 && resolved.regionMatches(true, suffix, source, 0, source.length())) {
+            return resolved.substring(0, suffix) + source;
+        }
+        return resolved;
+    }
+
+    private boolean perlNumericEscapesAreFatal() {
+        return Option.isPerlReStrict(env.option) || env.inPerlExtendedClass;
+    }
+
+    private String perlEscapeSourceDigits(int start, int end, int radix) {
+        StringBuilder digits = new StringBuilder();
+        int cursor = start;
+        while (cursor >= 0 && cursor < end) {
+            int code = codeAt(cursor, end);
+            if (perlEscapeDigit(code, radix) >= 0) digits.append((char)code);
+            cursor = nextChar(cursor, end);
+        }
+        return digits.toString();
+    }
+
+    private int asciiCharacterCount(int start, int end) {
+        int count = 0;
+        for (int cursor = start; cursor < end; cursor = nextChar(cursor, end)) count++;
+        return count;
+    }
+
+    private void checkPerlUnbracedHexSuffix(int digitsStart, int value) {
+        if (!syntax.op2OptionPerl()) return;
+        int digitCount = asciiCharacterCount(digitsStart, p);
+        if (digitCount == 2 && left() && enc.isXDigit(peek())) {
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_HEX_ESCAPE_MORE_THAN_TWO_DIGITS,
+                        nextChar(p, stop) - getBegin());
+            }
+            return;
+        }
+        if (digitCount != 1 || !left()) return;
+        int invalid = peek();
+        if (!Character.isLetterOrDigit(invalid) || enc.isXDigit(invalid)) return;
+        if (perlNumericEscapesAreFatal()) {
+            newSyntaxException(PERL_NON_HEX_CHARACTER,
+                    nextChar(p, stop) - getBegin());
+        }
+        String digits = perlEscapeSourceDigits(digitsStart, p, 16);
+        String resolved = formatPerlResolvedEscape(value, 16);
+        resolved = preservePerlEscapeDigitCase(resolved, digits);
+        syntaxWarn("Non-hex character '" + (char)invalid
+                + "' terminates \\x early.  Resolved as \"\\x"
+                + resolved + (char)invalid + "\"", p - getBegin());
+    }
+
+    private void warnPerlShortOctalTermination(int value) {
+        if (!left()) return;
+        int invalid = peek();
+        if (invalid != '8' && invalid != '9') return;
+        syntaxWarn("Non-octal character '" + (char)invalid
+                + "' terminates \\0 early.  Resolved as \"\\"
+                + formatPerlResolvedEscape(value, 8) + (char)invalid + "\"",
+                nextChar(p, stop) - getBegin());
+    }
+
+    private int perlCharacterClassDiagnosticEnd(int cursor) {
+        boolean escaped = false;
+        while (cursor < stop) {
+            int code = codeAt(cursor, stop);
+            int next = nextChar(cursor, stop);
+            if (!escaped && code == ']') return next - getBegin();
+            if (!escaped && code == syntax.metaCharTable.esc) escaped = true;
+            else escaped = false;
+            cursor = next;
+        }
+        return cursor - getBegin();
+    }
+
     private boolean onlyPerlEscapeWhitespaceAfter(int cursor, int close) {
         while (cursor < close) {
             if (!isPerlEscapeWhitespace(codeAt(cursor, close))) return false;
@@ -1181,10 +1281,24 @@ class Lexer extends ScannerSupport {
 
     private void fetchTokenInCCFor_digit() {
         if (syntax.opEscOctal3()) {
+            int firstDigit = c;
             unfetch();
             int last = p;
             int num = scanUnsignedOctalNumber(3);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            int digitCount = asciiCharacterCount(last, p);
+            if (syntax.op2OptionPerl() && firstDigit == '0') {
+                int next = left() ? peek() : -1;
+                boolean tooLong = next >= '0' && next <= '7';
+                if (perlNumericEscapesAreFatal()
+                        && (digitCount != 3 || tooLong)) {
+                    int position = digitCount < 3 && (next == '8' || next == '9')
+                            ? nextChar(p, stop) - getBegin()
+                            : perlCharacterClassDiagnosticEnd(p);
+                    newSyntaxException(PERL_EXTENDED_CLASS_OCTAL_WIDTH, position);
+                }
+                warnPerlShortOctalTermination(num);
+            }
             if (p == last) {  /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }
@@ -1466,7 +1580,12 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenFor_xBrace() {
-        if (!left()) return;
+        if (!left()) {
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+            }
+            return;
+        }
 
         int last = p;
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
@@ -1479,7 +1598,11 @@ class Lexer extends ScannerSupport {
         } else if (syntax.opEscXHex2()) {
             int num = scanUnsignedHexadecimalNumber(0, 2);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            checkPerlUnbracedHexSuffix(last, num);
             if (p == last) { /* can't read nothing. */
+                if (perlNumericEscapesAreFatal()) {
+                    newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+                }
                 num = 0; /* but, it's not error */
             }
             if (syntax.op2OptionPerl()) {
@@ -1543,6 +1666,9 @@ class Lexer extends ScannerSupport {
             int last = p;
             int num = scanUnsignedOctalNumber(c == '0' ? 2 : 3);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            if (syntax.op2OptionPerl() && c == '0') {
+                warnPerlShortOctalTermination(num);
+            }
             if (p == last) { /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }

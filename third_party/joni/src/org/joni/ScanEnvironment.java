@@ -55,6 +55,7 @@ public final class ScanEnvironment {
     boolean hasRecursion;
     boolean hasControlVerb;
     boolean hasCallout;
+    boolean inPerlExtendedClass;
     private int warningsFlag;
 
     int numPrecReadNotNodes;
