@@ -168,14 +168,15 @@ properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
 immutable comparison are pending. The production backend selector has been
 removed and its packaging/property invariance gates are awaiting the combined
-build. The latest focused `reg_mesg.t` artifact is 2907/3062 on both backends,
-with 155 failures partitioned as 61 native-parser, 74 redirected
+build. The latest focused `reg_mesg.t` artifact is 2939/3086 on both backends,
+with 147 failures partitioned as 53 native-parser, 74 redirected
 Unicode/property/charname, and 20 analyser/debug rows. P5 owns the
 `re/pat_advanced.t` source/debug and charname rows. The exact `f296dbe54`
 combined build passed compilation, packaging, licensed Joni, selector
 invariance, and all but four unit fixtures; their byte-property fold and
-control-verb source correction is integrated as `0f4209f6c` and awaits the
-next combined build with P5's adjacent delivery.
+control-verb source correction, P4 boundary/quantifier diagnostics, and P5
+direct custom-charname correction are integrated through `799c39004` and await
+the next exact combined build.
 
 The interpreter artifact is diagnostic only: it has 53 lower rows containing
 both regex and existing general interpreter limitations. Regex-owned rows must
@@ -183,11 +184,12 @@ be separated and closed before dual-backend acceptance.
 
 Active ownership:
 
-- P4: exhaust the remaining 61 same-source native `reg_mesg.t`
+- P4: exhaust the remaining 53 same-source native `reg_mesg.t`
   parser/range/escape diagnostic rows; combined-build regressions are fixed in
   source and await integration validation.
-- P5: deliver the `EMPTY-STR` and constant-pattern custom-charname transport,
-  then own the remaining `\\N{}`/custom-charname and analyser/debug residual.
+- P5: carry immutable pre-resolved custom-charname metadata through AST/CV
+  thread cloning, then own the remaining `\\N{}`/custom-charname and
+  analyser/debug residual.
 - P6: complete the unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and
   String::Random matrix, then own the redirected Unicode-property wildcard,
   name/value, user-property, and string-property diagnostic residual.
