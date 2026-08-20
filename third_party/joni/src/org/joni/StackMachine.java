@@ -452,7 +452,7 @@ abstract class StackMachine extends Matcher implements StackType {
         return snapshot;
     }
 
-    /** Restore only the caller capture owned by a PerlOnJava subroutine call. */
+    /** Restore caller captures that a nested Perl subroutine call may overwrite. */
     protected final void restoreCallFrameCaptureSnapshot(StackEntry frame) {
         if (!frame.getCallFrameRestoreCallerCaptures()) return;
         int[] snapshot = frame.getCallFrameCaptureSnapshot();
@@ -465,7 +465,23 @@ abstract class StackMachine extends Matcher implements StackType {
             // backreference reducer.
             System.arraycopy(snapshot, 0, repeatStk, memStartStk, count);
             System.arraycopy(snapshot, count, repeatStk, memEndStk, count);
-        } else if (groupNum > 0 && groupNum < count) {
+            return;
+        }
+
+        // A nested call reuses physical capture slots.  Closed values belonged
+        // to the caller before the call and must be visible again after return
+        // (for example, a palindrome's enclosing character backreference).
+        // Deliberately do not restore open or unset slots: their final state
+        // belongs to the successful nested path.
+        for (int mem = 1; mem < count; mem++) {
+            if (snapshot[mem] != INVALID_INDEX
+                    && snapshot[count + mem] != INVALID_INDEX) {
+                repeatStk[memStartStk + mem] = snapshot[mem];
+                repeatStk[memEndStk + mem] = snapshot[count + mem];
+            }
+        }
+
+        if (groupNum > 0 && groupNum < count) {
             repeatStk[memStartStk + groupNum] = snapshot[groupNum];
             repeatStk[memEndStk + groupNum] = snapshot[count + groupNum];
         }
