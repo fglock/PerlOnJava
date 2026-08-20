@@ -446,7 +446,11 @@ final class ArrayCompiler extends Compiler {
         addAbsAddr(0); /*dummy addr.*/
         // Preserve analyser recursion knowledge for the matcher without adding
         // an opcode operand. -1 remains reserved for compiler-internal calls.
-        addMemNum(node.isRecursion() ? -(node.groupNum + 1) : node.groupNum);
+        // Whole-pattern recursion has group number zero, so it needs a distinct
+        // recursive sentinel rather than the normal group-zero encoding.
+        addMemNum(node.isRecursion()
+                ? (node.groupNum == 0 ? Integer.MIN_VALUE : -(node.groupNum + 1))
+                : node.groupNum);
     }
 
     @Override
