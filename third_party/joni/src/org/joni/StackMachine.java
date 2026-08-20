@@ -112,23 +112,26 @@ abstract class StackMachine extends Matcher implements StackType {
         }
     }
 
-    private static final ThreadLocal<Integer> activeMatchers =
-            ThreadLocal.withInitial(() -> 0);
+    // Keep a mutable counter per thread. Removing/recreating a boxed Integer
+    // for every match made small global matches spend more time maintaining
+    // ThreadLocalMap entries than executing regex bytecode.
+    private static final ThreadLocal<int[]> activeMatchers =
+            ThreadLocal.withInitial(() -> new int[1]);
 
     /** Protect the pooled stack when a callback starts another matcher. */
     protected final void enterMatcherExecution() {
-        int depth = activeMatchers.get();
+        int[] counter = activeMatchers.get();
+        int depth = counter[0];
         if (depth > 0 && usesThreadLocalStack) {
             stack = allocateStack();
             usesThreadLocalStack = false;
         }
-        activeMatchers.set(depth + 1);
+        counter[0] = depth + 1;
     }
 
     protected final void leaveMatcherExecution() {
-        int depth = activeMatchers.get() - 1;
-        if (depth <= 0) activeMatchers.remove();
-        else activeMatchers.set(depth);
+        int[] counter = activeMatchers.get();
+        counter[0]--;
     }
 
     private void doubleStack() {
