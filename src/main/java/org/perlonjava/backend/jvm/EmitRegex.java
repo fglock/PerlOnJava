@@ -70,7 +70,10 @@ public class EmitRegex {
     private static void emitRegexWarningState(EmitterVisitor emitterVisitor, OperatorNode node) {
         boolean enabled = Boolean.TRUE.equals(node.getAnnotation("regexWarningsEnabled"));
         boolean fatal = Boolean.TRUE.equals(node.getAnnotation("regexWarningsFatal"));
-        emitterVisitor.ctx.mv.visitInsn(fatal ? Opcodes.ICONST_2
+        boolean suppressed = Boolean.TRUE.equals(
+                node.getAnnotation("regexWarningsSuppressed"));
+        emitterVisitor.ctx.mv.visitInsn(suppressed ? Opcodes.ICONST_M1
+                : fatal ? Opcodes.ICONST_2
                 : enabled ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RegexQuoteMeta",

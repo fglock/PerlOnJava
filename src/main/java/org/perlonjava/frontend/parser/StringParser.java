@@ -638,6 +638,8 @@ public class StringParser {
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
         node.setAnnotation("regexWarningsFatal",
                 ctx.symbolTable != null && ctx.symbolTable.isFatalWarningCategory("regexp"));
+        node.setAnnotation("regexWarningsSuppressed",
+                ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryDisabled("regexp"));
         node.setAnnotation("regexWarningBits",
                 ctx.symbolTable == null ? null : ctx.symbolTable.getWarningBitsString());
         return node;
@@ -713,6 +715,8 @@ public class StringParser {
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
         node.setAnnotation("regexWarningsFatal",
                 ctx.symbolTable != null && ctx.symbolTable.isFatalWarningCategory("regexp"));
+        node.setAnnotation("regexWarningsSuppressed",
+                ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryDisabled("regexp"));
         node.setAnnotation("regexWarningBits",
                 ctx.symbolTable == null ? null : ctx.symbolTable.getWarningBitsString());
         return node;
