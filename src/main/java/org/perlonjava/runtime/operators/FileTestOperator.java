@@ -688,6 +688,13 @@ public class FileTestOperator {
                         yield scalarUndef;
                     }
                     getGlobalVariable("main::!").set(0); // Clear error
+                    if (isPerlOnJavaExecutable(path)) {
+                        // $^X names the logical interpreter executable.  The
+                        // development/package launcher may be a text script,
+                        // but Perl's file-test contract observes the active
+                        // interpreter as a binary executable.
+                        yield getScalarBoolean(operator.equals("-B"));
+                    }
                     yield isTextOrBinary(path, operator.equals("-T"));
                 }
                 case "-M", "-A", "-C" -> {
@@ -795,6 +802,17 @@ public class FileTestOperator {
         }
 
         return analyzeTextBinary(buffer, bytesRead, checkForText);
+    }
+
+    private static boolean isPerlOnJavaExecutable(Path path) {
+        String executable = System.getenv("PERLONJAVA_EXECUTABLE");
+        if (executable == null || executable.isEmpty()) return false;
+        try {
+            Path executablePath = Path.of(executable);
+            return Files.exists(executablePath) && Files.isSameFile(path, executablePath);
+        } catch (IOException | InvalidPathException exception) {
+            return false;
+        }
     }
 
     /**
