@@ -350,7 +350,7 @@ behavior.
 
 1. Finish the four active, non-overlapping slices: close the remaining
    Unicode/property source-policy rows after completing warmed callback-clone
-   isolation; reduce the current 424-row same-source `reg_mesg.t` frontier
+   isolation; reduce the current 422-row same-source `reg_mesg.t` frontier
    through the classified runtime, Unicode/property, analyser-warning, and
    frontend source-rendering families; complete the CPAN/performance and
    obsolete-Java-label audit after closing the optimizer-debug rows; and finish
@@ -545,9 +545,11 @@ gates may reopen it if a semantic regression appears.
       classify every residual to runtime, Unicode/property, analyser, or
       frontend
 - [ ] Remaining same-source diagnostic families in `reg_mesg.t`; current exact
-      JVM/interpreter frontier is 424 failing rows
+      JVM/interpreter frontier is 422 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
+- [x] Preserve authoritative dynamic callback source spelling and positions in
+      compile diagnostics without source scanning
 - [x] Thread graph cloning remaps executable regex callback CODE while
       preserving child-side shared lexical identity and parent isolation
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
