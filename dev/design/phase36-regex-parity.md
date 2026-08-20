@@ -79,7 +79,7 @@ affected corpus before taking another slice.
   integrated signed-IV range fix removes row 1651 with zero introductions in
   exact A/B evidence; a fresh combined serial gate remains required because a
   later run stopped before the complete plan under concurrent CPAN load.
-- The current imported `reg_mesg.t` passes 1,915/2,658 on each backend with an
+- The current imported `reg_mesg.t` passes 2,015/2,658 on each backend with an
   identical status/test-number vector. Native extended-class diagnostics now
   distinguish binary operators that have no preceding operand, adjacent
   operands without an operator, and misplaced parentheses. Overlong-lookbehind
@@ -335,36 +335,42 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the active non-overlapping Joni slices: valid `/d` byte-backed class
-   and extended-set fold policy; native search/optimizer work that makes
-   unchanged `speed*` complete without regressing `pat_psycho*`; and native
-   lexer/parser diagnostic families from unchanged `reg_mesg.t`. Do not
-   implement adjacent-class or variable-width full-fold-backreference rows
-   that standard Perl itself rejects.
-2. Integrate those commits on one immutable barrier. Run exact `regexp.t`,
-   `reg_fold.t`, `reg_email*`, `regex_sets.t`, Unicode-property, callback,
-   recursion, `script_run.t`, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`, and
-   `reg_mesg.t` gates. Classify every residual by a general native-Joni root;
-   reject zero-TAP, timeout, truncated, incomplete, backend, or direct/thread
-   mismatches. Prioritize variable lookbehind and any remaining runtime-source
-   or extended-class residuals shown by that artifact.
-3. Delete the remaining production Java selector/fallback state, duplicate
+1. Finish the four active, non-overlapping slices: alternating dynamic
+   user-property cache identity; native abbreviated MARK, empty group,
+   standard-class literal `[`, and `/xx` adapter retirement; native
+   forward/reverse literal and class fold expansion; and the remaining dynamic
+   code-array/mixed-source matrix. Each slice must include system-Perl oracles,
+   JVM/interpreter parity, complete affected-corpus deltas, and zero
+   introductions.
+2. Integrate those commits on one immutable barrier and run one warning-free
+   `make`. Refresh exact `regexp.t`, `reg_fold.t`, `fold_grind_d.t`,
+   `reg_email*`, `regex_sets.t`, Unicode-property, callback, recursion,
+   `script_run.t`, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t`
+   gates. Classify every residual by a general native-Joni root and immediately
+   assign the highest-count independent roots. Reject zero-TAP, timeout,
+   truncated, incomplete, backend, or direct/thread mismatches.
+3. Close the remaining native diagnostic, variable-lookbehind, fold/search,
+   and runtime-source roots shown by that integrated artifact. Do not implement
+   adjacent-class or variable-width full-fold-backreference behavior that
+   standard Perl itself rejects. Repeat focused gates per slice and one combined
+   build per integration batch, not per worker commit.
+4. Delete the remaining production Java selector/fallback state, duplicate
    matcher-semantic preprocessing, and unreachable adapters. Retain only
    documented Perl source policy that cannot live in runtime-neutral Joni, plus
    any disconnected compatibility parser required by immutable existing tests.
    Prove no production Java matcher construction, no environment setting that
    changes the matcher, and no supported test dependency on
    `JPERL_UNIMPLEMENTED=warn`.
-4. Complete the mechanically derived 286-file acceptance run on JVM and
+5. Complete the mechanically derived 286-file acceptance run on JVM and
    interpreter, compare every file/test identity with PR 958, and separately
    record current-upstream plan-size changes and system-Perl oracle counts. Run
    bounded `pat_psycho*` and `speed*` lanes without starving implementation.
-5. Pass warmed performance, CPAN smoke, warning-free `make`, packaging,
+6. Pass warmed performance, CPAN smoke, packaging,
    license/notice, Ubuntu, Windows, and CI gates. Reconcile the feature matrix,
    as-implemented regex architecture, and Joni fork documents with shipped
    source; remove or summarize redundant design documents; rebase on current
    `master`; and open the final reviewable PR.
-6. After the final implementation PR is integrated into `master`, review the
+7. After the final implementation PR is integrated into `master`, review the
    shipped PerlOnJava behavior against Perl's documented regex surface in
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`, `pod/perlrequick.pod`,
    `pod/perlrepository.pod`, `pod/perlre.pod`, `pod/perlretut.pod`, and
@@ -448,6 +454,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Native fold adapter and unsafe optimizer-boundary suppression
 - [x] Property/class fold closure
 - [x] Fold-mode and byte/Unicode provenance context
+- [x] Preserve foldable-property provenance through native class-set operations
+- [x] Preserve nullable end-anchor terminal search candidates
 - [x] Variable-width simple-fold backreference comparison
 - [ ] Forward/reverse literal and character-class fold expansion
 - [x] Prevent the legacy backend selector from re-enabling Java matching
