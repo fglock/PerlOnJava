@@ -190,9 +190,9 @@ public class Re extends PerlModuleBase {
                 symbolTable.enableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equalsIgnoreCase("taint")) {
                 symbolTable.enableStrictOption(Strict.HINT_RE_TAINT);
-            } else if (opt.equals("debug")) {
+            } else if (opt.equalsIgnoreCase("debug")) {
                 symbolTable.enableStrictOption(Strict.HINT_RE_DEBUG);
-            } else if (opt.equals("debugcolor")) {
+            } else if (opt.equalsIgnoreCase("debugcolor")) {
                 symbolTable.enableStrictOption(Strict.HINT_RE_DEBUG | Strict.HINT_RE_DEBUGCOLOR);
             } else if (opt.equals("/a")) {
                 // use re '/a' - ASCII-restrict regex character classes
@@ -236,9 +236,9 @@ public class Re extends PerlModuleBase {
                 symbolTable.disableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equalsIgnoreCase("taint")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_TAINT);
-            } else if (opt.equals("debug")) {
+            } else if (opt.equalsIgnoreCase("debug")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_DEBUG | Strict.HINT_RE_DEBUGCOLOR);
-            } else if (opt.equals("debugcolor")) {
+            } else if (opt.equalsIgnoreCase("debugcolor")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_DEBUGCOLOR);
             } else if (opt.equals("/a") || opt.equals("/aa")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
