@@ -56,7 +56,8 @@ historical Perl revision as the expected corpus.
 **Purpose:** Compose the Phase 36 current-checkout ledger, bounded JVM and
 interpreter runner legs, PR-958-normalized fail-closed comparisons, and exact
 Joni packaging check into one immutable-artifact manifest. It records the
-starting/final source SHA and current `perl5/` SHA as provenance, along with
+starting/final clean tracked-source state, current `perl5/` SHA as provenance,
+and the bounded `jperl -v` injected SHA matched to that source, along with
 list-form commands, exit statuses, counts, and SHA-256s for retained artifacts.
 
 The coordinator runs the real corpus only after creating the exact JAR/SBOM.

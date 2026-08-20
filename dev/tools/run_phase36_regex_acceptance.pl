@@ -26,6 +26,7 @@ GetOptions(
     'jar=s' => \$option{jar},
     'sbom=s' => \$option{sbom},
     'perl=s' => \$option{perl},
+    'source-dir=s' => \$option{source_dir},
     'perl5-dir=s' => \$option{perl5_dir},
     'jperl=s' => \$option{jperl},
     'timeout=i' => \$option{timeout},
@@ -47,7 +48,7 @@ for my $required (qw(baseline artifact_dir jar sbom)) {
 die "--timeout must be positive\n" unless $option{timeout} > 0;
 die "--jobs must be positive\n" unless $option{jobs} > 0;
 
-my $root = getcwd();
+my $root = $option{source_dir} // getcwd();
 $option{perl5_dir} //= File::Spec->catdir($root, 'perl5');
 validate_file($option{baseline}, 'PR-958 baseline');
 validate_file($option{jar}, 'standalone JAR');
@@ -57,9 +58,10 @@ for my $tool (qw(ledger_tool runner_tool comparator_tool packaging_tool)) {
     validate_file($option{$tool}, "$tool path");
 }
 validate_program($option{perl}, 'Perl executable');
-validate_file($option{jperl}, 'jperl executable') unless $option{prepare_only};
+validate_file($option{jperl}, 'jperl executable');
 
 my $start_sha = git_sha($root);
+my $start_state = tracked_state($root);
 my $perl5_sha = git_sha($option{perl5_dir});
 my %path = map { $_ => File::Spec->catfile($option{artifact_dir}, $_) } qw(
     regex-ledger.json
@@ -74,6 +76,7 @@ my %path = map { $_ => File::Spec->catfile($option{artifact_dir}, $_) } qw(
     jvm-comparison.log
     interpreter-comparison.log
     packaging.log
+    jperl-version.log
     manifest.json
 );
 for my $name (keys %path) {
@@ -82,6 +85,11 @@ for my $name (keys %path) {
 
 my @commands;
 my %statuses;
+run_logged(
+    name => 'jperl-version', command => [$option{jperl}, '-v'],
+    log => $path{'jperl-version.log'}, commands => \@commands, statuses => \%statuses,
+);
+my $runner_sha = parse_runner_sha($path{'jperl-version.log'}, $start_sha);
 run_logged(
     name => 'ledger',
     command => [$option{perl}, $option{ledger_tool},
@@ -138,6 +146,8 @@ run_logged(
 my $final_sha = git_sha($root);
 die "Checkout HEAD changed during acceptance: $start_sha -> $final_sha\n"
     unless $start_sha eq $final_sha;
+die "Tracked source state changed during acceptance\n"
+    unless tracked_state($root) eq $start_state;
 
 my @retained = sort grep { -f $path{$_} } keys %path;
 my $manifest = {
@@ -147,10 +157,12 @@ my $manifest = {
         starting_sha => $start_sha,
         final_sha => $final_sha,
         perl5_sha_as_provenance => $perl5_sha,
+        tracked_state_signature => $start_state,
     },
     baseline => abs_file($option{baseline}),
     artifact_directory => abs_path($option{artifact_dir}),
     expected_files => $expected_files,
+    verified_runner_sha => $runner_sha,
     ledger_summary => $ledger->{summary},
     commands => \@commands,
     exit_statuses => \%statuses,
@@ -172,6 +184,7 @@ Options:
   --prepare-only             Exercise the composition with injected fake tools;
                              never use this as authority for the real corpus.
   --perl PATH --jperl PATH   Tool executables (default perl / ./jperl)
+  --source-dir DIR           Clean source checkout to verify (default cwd)
   --perl5-dir DIR            Current imported perl5 checkout (default ./perl5)
   --timeout N --jobs N       Existing runner bounds and worker budget
   --ledger-tool PATH --runner-tool PATH --comparator-tool PATH
@@ -211,6 +224,23 @@ sub git_sha {
     return $output;
 }
 
+sub tracked_state {
+    my ($directory) = @_;
+    my $status = capture_command(['git', '-C', $directory, 'status', '--porcelain', '--untracked-files=no']);
+    die "Tracked source checkout is not clean\n" if length $status;
+    return sha256_hex(capture_command(['git', '-C', $directory, 'diff', '--binary', 'HEAD']));
+}
+
+sub parse_runner_sha {
+    my ($log, $source_sha) = @_;
+    my $contents = read_raw($log);
+    my @sha = $contents =~ /\b([0-9a-f]{7,40})\b/ig;
+    for my $candidate (@sha) {
+        return $candidate if index($source_sha, lc $candidate) == 0;
+    }
+    die "jperl -v does not report the source Git SHA or prefix\n";
+}
+
 sub load_file_list {
     my ($file) = @_;
     open my $fh, '<:raw', $file or die "Cannot read runner list $file: $!\n";
@@ -224,6 +254,14 @@ sub load_file_list {
     }
     close $fh or die "Cannot close runner list $file: $!\n";
     return @files;
+}
+
+sub read_raw {
+    my ($file) = @_;
+    open my $fh, '<:raw', $file or die "Cannot read $file: $!\n";
+    my $contents = do { local $/; <$fh> };
+    close $fh or die "Cannot close $file: $!\n";
+    return $contents;
 }
 
 sub run_logged {

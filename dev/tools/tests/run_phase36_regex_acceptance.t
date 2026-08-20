@@ -13,6 +13,14 @@ my $root = File::Spec->rel2abs(
 my $tool = File::Spec->catfile($root, 'dev', 'tools',
     'run_phase36_regex_acceptance.pl');
 my $temporary = tempdir(CLEANUP => 1);
+my $source = File::Spec->catdir($temporary, 'source');
+make_path($source);
+system('git', 'init', '-q', $source) == 0 or die 'Cannot initialize source fixture';
+system('git', '-C', $source, 'config', 'user.email', 'fixture@example.test') == 0 or die 'Cannot configure fixture';
+system('git', '-C', $source, 'config', 'user.name', 'Fixture') == 0 or die 'Cannot configure fixture';
+write_file(File::Spec->catfile($source, 'tracked.txt'), "fixture\n");
+system('git', '-C', $source, 'add', 'tracked.txt') == 0 or die 'Cannot stage fixture';
+system('git', '-C', $source, 'commit', '-qm', 'fixture') == 0 or die 'Cannot commit fixture';
 my $artifacts = File::Spec->catdir($temporary, 'artifacts');
 make_path($artifacts);
 my $test_file = File::Spec->catfile($temporary, 'focused.t');
@@ -80,14 +88,24 @@ print {$rfh} JSON::PP->new->canonical->encode({kind => 'packaging', argv => \@AR
 close $rfh;
 print "packaging fake passed\n";
 PACKAGING
+my $jperl = fake_tool('jperl', <<'JPERL');
+#!/usr/bin/env perl
+print "PerlOnJava fake $ENV{ACCEPT_SOURCE_SHA}\n";
+JPERL
+chmod 0755, $jperl or die "Cannot chmod fake jperl: $!";
+open my $git, '-|', 'git', '-C', $source, 'rev-parse', 'HEAD' or die "Cannot run git: $!";
+my $source_sha = do { local $/; <$git> };
+close $git or die "Cannot close git: $?";
+chomp $source_sha;
 
 local $ENV{ACCEPT_TEST_FILE} = $test_file;
 local $ENV{ACCEPT_RECORD} = $record;
+local $ENV{ACCEPT_SOURCE_SHA} = $source_sha;
 my @command = ($^X, $tool, '--prepare-only',
     '--baseline', $baseline, '--artifact-dir', $artifacts,
     '--jar', $jar, '--sbom', $sbom,
-    '--perl5-dir', $root,
-    '--jperl', File::Spec->catfile($temporary, 'not-used-jperl'),
+    '--source-dir', $source, '--perl5-dir', $source,
+    '--jperl', $jperl,
     '--ledger-tool', $ledger, '--runner-tool', $runner,
     '--comparator-tool', $comparator, '--packaging-tool', $packaging,
     '--timeout', 17, '--jobs', 3);
@@ -101,6 +119,7 @@ is($manifest->{source}{starting_sha}, $manifest->{source}{final_sha},
     'manifest records unchanged checkout HEAD');
 ok($manifest->{source}{perl5_sha_as_provenance} =~ /^[0-9a-f]{40}$/,
     'current perl5 revision is provenance');
+is($manifest->{verified_runner_sha}, $source_sha, 'manifest records verified runner SHA');
 for my $name (qw(regex-ledger.json regex-files.txt jvm-results.json
     interpreter-results.json jvm-comparison.json interpreter-comparison.json
     ledger.log jvm-runner.log interpreter-runner.log jvm-comparison.log
@@ -108,6 +127,8 @@ for my $name (qw(regex-ledger.json regex-files.txt jvm-results.json
     ok($manifest->{artifacts}{$name}{sha256} =~ /^[0-9a-f]{64}$/,
         "$name has a retained SHA-256");
 }
+ok($manifest->{artifacts}{'jperl-version.log'}{sha256} =~ /^[0-9a-f]{64}$/,
+    'retained jperl version log has a SHA-256');
 
 my @calls = map { JSON::PP->new->decode($_) }
     grep { length } split /\n/, read_file($record);
