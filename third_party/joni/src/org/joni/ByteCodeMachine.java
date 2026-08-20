@@ -345,6 +345,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.BACKREF_MULTI:              opBackRefMulti();          continue;
                 case OPCode.BACKREF_MULTI_IC:           opBackRefMultiIC();        continue;
                 case OPCode.BACKREF_WITH_LEVEL:         opBackRefAtLevel();        continue;
+                case OPCode.BACKREFN_PREV:              opBackRefPrevious();       continue;
+                case OPCode.BACKREFN_PREV_IC:           opBackRefPreviousIC();     continue;
 
                 case OPCode.SET_OPTION_PUSH:            opSetOptionPush();         continue;
                 case OPCode.SET_OPTION:                 opSetOption();             continue;
@@ -518,6 +520,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.BACKREF_MULTI:              opBackRefMulti();          continue;
                 case OPCode.BACKREF_MULTI_IC:           opBackRefMultiIC();        continue;
                 case OPCode.BACKREF_WITH_LEVEL:         opBackRefAtLevel();        continue;
+                case OPCode.BACKREFN_PREV:              opBackRefPrevious();       continue;
+                case OPCode.BACKREFN_PREV_IC:           opBackRefPreviousIC();     continue;
 
                 case OPCode.SET_OPTION_PUSH:            opSetOptionPush();         continue;
                 case OPCode.SET_OPTION:                 opSetOption();             continue;
@@ -2397,6 +2401,69 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
         s = value;
 
+        if (sprev < range) {
+            int len;
+            while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
+        }
+    }
+
+    private StackEntry previousBackref(int mem) {
+        if (repeatStk[memStartStk + mem] == INVALID_INDEX
+                || repeatStk[memEndStk + mem] != INVALID_INDEX) {
+            return null;
+        }
+        StackEntry snapshot = repeatCaptureSnapshot(mem);
+        return snapshot == null || snapshot.getMemStart() == INVALID_INDEX
+                || snapshot.getMemEnd() == INVALID_INDEX ? null : snapshot;
+    }
+
+    private int previousBackrefStart(StackEntry snapshot, int mem) {
+        int start = snapshot.getMemStart();
+        return bsAt(regex.btMemStart, mem) ? stack[start].getMemPStr() : start;
+    }
+
+    private int previousBackrefEnd(StackEntry snapshot, int mem) {
+        int captureEnd = snapshot.getMemEnd();
+        return bsAt(regex.btMemEnd, mem) ? stack[captureEnd].getMemPStr() : captureEnd;
+    }
+
+    private void opBackRefPrevious() {
+        int mem = code[ip++];
+        if (mem > regex.numMem) {opFail(); return;}
+        if (!backrefInvalid(mem)) {
+            backref(mem);
+            return;
+        }
+        StackEntry snapshot = previousBackref(mem);
+        if (snapshot == null) {opFail(); return;}
+        int pstart = previousBackrefStart(snapshot, mem);
+        int n = previousBackrefEnd(snapshot, mem) - pstart;
+        if (s + n > range) {opFail(); return;}
+        sprev = s;
+        while (n-- > 0) if (bytes[pstart++] != bytes[s++]) {opFail(); return;}
+        if (sprev < range) {
+            int len;
+            while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
+        }
+    }
+
+    private void opBackRefPreviousIC() {
+        int mem = code[ip++];
+        if (mem > regex.numMem) {opFail(); return;}
+        if (!backrefInvalid(mem)) {
+            ip--;
+            opBackRefNIC();
+            return;
+        }
+        StackEntry snapshot = previousBackref(mem);
+        if (snapshot == null) {opFail(); return;}
+        int pstart = previousBackrefStart(snapshot, mem);
+        int n = previousBackrefEnd(snapshot, mem) - pstart;
+        if (!Option.isPerlAsciiStrict(currentRegexOptions) && s + n > range) {opFail(); return;}
+        sprev = s;
+        value = s;
+        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
+        s = value;
         if (sprev < range) {
             int len;
             while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;

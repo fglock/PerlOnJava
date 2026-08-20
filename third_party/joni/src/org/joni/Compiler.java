@@ -50,12 +50,12 @@ abstract class Compiler implements ErrorMessages {
     }
 
     final void compile(Node root) {
-        prepare();
+        prepare(root);
         compileTree(root);
         finish();
     }
 
-    protected abstract void prepare();
+    protected abstract void prepare(Node root);
     protected abstract void finish();
 
     protected abstract void compileAltNode(ListNode node);

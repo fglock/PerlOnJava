@@ -170,6 +170,8 @@ public interface OPCode {
     int CONTROL_FAIL                  = 126;          /* explicit Perl (*FAIL[:name]) verb */
     int REPEAT_CAPTURE_CLEAR          = 127;          /* begin repeat capture-lifetime scope */
     int REPEAT_CAPTURE_CLEAR_END      = 128;          /* clear captures untouched by repeat body */
+    int BACKREFN_PREV                 = 129;          /* Perl self-reference may use prior repeat iteration */
+    int BACKREFN_PREV_IC              = 130;          /* case-folded prior repeat self-reference */
 
     String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
         "finish", /*OP_FINISH*/
@@ -302,6 +304,8 @@ public interface OPCode {
         "control-fail",
         "repeat-capture-clear",
         "repeat-capture-clear-end",
+        "backrefn-prev",
+        "backrefn-prev-ic",
     } : null;
 
     int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
@@ -435,5 +439,7 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_CONTROL_FAIL*/
         Arguments.MEMNUM, /*OP_REPEAT_CAPTURE_CLEAR*/
         Arguments.MEMNUM, /*OP_REPEAT_CAPTURE_CLEAR_END*/
+        Arguments.MEMNUM, /*OP_BACKREFN_PREV*/
+        Arguments.MEMNUM, /*OP_BACKREFN_PREV_IC*/
     } : null;
 }

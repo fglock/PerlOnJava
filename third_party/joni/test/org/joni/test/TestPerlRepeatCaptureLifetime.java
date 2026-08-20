@@ -69,4 +69,27 @@ public class TestPerlRepeatCaptureLifetime {
         assertEquals(3, matcher.getRegion().getBeg(1));
         assertEquals(4, matcher.getRegion().getEnd(1));
     }
+
+    @Test
+    public void exposesPreviousIterationToOptionalSelfBackref() {
+        Matcher matcher = match("^(a\\1?){4}$", "aaaaaaaaaa");
+        assertEquals(6, matcher.getRegion().getBeg(1));
+        assertEquals(10, matcher.getRegion().getEnd(1));
+    }
+
+    @Test
+    public void exposesPreviousIterationToConditionalSelfBackref() {
+        Matcher matcher = match("^(a(?(1)\\1)){4}$", "aaaaaaaaaa");
+        assertEquals(6, matcher.getRegion().getBeg(1));
+        assertEquals(10, matcher.getRegion().getEnd(1));
+    }
+
+    @Test
+    public void ordinaryAlternativeInvalidatesPreviousSelfCapture() {
+        byte[] pattern = "^(xa|=?\\1a){2}$".getBytes(StandardCharsets.UTF_8);
+        byte[] input = "xa=xaaa".getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(pattern, 0, pattern.length,
+                Option.CAPTURE_GROUP, UTF8Encoding.INSTANCE, Syntax.RUBY);
+        assertEquals(-1, regex.matcher(input).search(0, input.length, Option.NONE));
+    }
 }
