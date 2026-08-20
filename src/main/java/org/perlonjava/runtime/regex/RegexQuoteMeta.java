@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
@@ -147,6 +148,12 @@ public class RegexQuoteMeta {
         RuntimeScalar warning = new RuntimeScalar(message);
         RuntimeScalar where = new RuntimeScalar("");
         String warningBits = CALL_SITE_WARNING_BITS.get();
+        if (warningBits == null) {
+            // Synthetic/interpolated regex wrappers do not always have a
+            // dedicated quote opcode. Use the active statement mask rather
+            // than a stale warning-state value from an earlier qr//.
+            warningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        }
         if (warningBits != null) {
             String category = warningCategory(message);
             if (!WarningFlags.isEnabledInBits(warningBits, category)) {

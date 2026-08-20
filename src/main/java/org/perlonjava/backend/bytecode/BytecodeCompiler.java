@@ -1448,6 +1448,11 @@ public class BytecodeCompiler implements Visitor {
         // EmitBlock.emitPostBlockStrictOptions() in the JVM backend.
         Object postBlockStrictOptions = node.getAnnotation("postBlockStrictOptions");
         if (postBlockStrictOptions instanceof Integer hints) {
+            if (!node.getBooleanAnnotation("blockIsSubroutine")) {
+                Object postBlockWarningBits = node.getAnnotation("postBlockWarningBits");
+                emit(Opcodes.SET_CALL_SITE_WARNING_BITS);
+                emit(addToStringPool(postBlockWarningBits instanceof String bits ? bits : ""));
+            }
             emit(Opcodes.SET_CALL_SITE_HINTS);
             emit(hints);
         }
