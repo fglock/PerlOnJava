@@ -160,11 +160,17 @@ boundary, quantifier, and direct-charname fixtures are green on JVM and
 interpreter. The newer integration batch must pass its own exact gate before the
 PR is updated.
 
-The first complete 286-file JVM comparison improves 74 rows and 403,846 passing
-assertions. The integrated subject-sensitive byte/`/d` and fullwidth-xdigit
+The current complete 286-file JVM run executes 420,748 passing assertions and
+improves 72 baseline rows, but is not yet a valid release artifact: five files
+time out, 19 are incomplete, and the strict comparator reports five regressions
+(`pat_advanced_thr.t`, both `pat_special_cc` modes, `regex_sets.t`, and the
+environment-sensitive `op/stat.t`). The integrated subject-sensitive byte/`/d`
+and fullwidth-xdigit
 fix restores complete `re/charset.t` execution, and the logical-wide-scalar
-`chop` fix restores `op/chop.t` to 148/148. A fresh bounded rerun also
-executes `op/stat.t` 111/111 on both backends, above PR 958's 107/111. The
+`chop` fix restores `op/chop.t` to 148/148. `op/stat.t` has conflicting
+environment-sensitive evidence (111/111 in the earlier isolated run and
+105/111 in the private-corpus rerun versus PR 958's 107/111), so it remains an
+unresolved comparator row. The
 shared default-`/d` byte-variant root is now closed in focused evidence:
 dynamic source provenance, callback search, grapheme boundaries, Unicode
 properties/classes, and extended sets pass on both backends while
@@ -189,27 +195,32 @@ they must close before dual-backend acceptance.
 Active ownership:
 
 - P4: close the final two mode-duplicate runtime-interpolated unknown-escape
-  warning rows; all parser/range/structural diagnostic rows are closed.
-- P5: carry immutable pre-resolved custom-charname metadata through AST/CV
-  thread cloning, then own the remaining `\\N{}`/custom-charname and
-  analyser/debug residual.
-- P6: exhaust the 52-row redirected Unicode-property wildcard, name/value,
-  user-property, and string-property diagnostic residual; the affected CPAN
-  matrix is classified and its independent caller fix is integrated.
+  warning rows without overlapping P5's shared runtime files, then diagnose
+  the zero-TAP `anyof.t` timeout; all other native diagnostic rows are closed.
+- P5: deliver the green immutable custom-charname AST/CV thread transport, then
+  own the `pat_advanced_thr.t` and `pat_special_cc` acceptance regressions plus
+  the remaining `\\N{}`/custom-charname analyser/debug residual.
+- P6: after removing undeclared shared-file edits, exhaust the owned
+  UnicodeResolver/property diagnostic residual and the zero-TAP
+  `uniprops01..04.t` performance failures. If its lease expires, this complete
+  slice is fenced and redirected.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
-  immutable acceptance, PR/CI, plan state, combined build, and release evidence.
+  immutable acceptance, `regex_sets.t` and `op/stat.t` regression
+  classification, PR/CI, plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Integrate cohesive P4/P5/P6 deliveries, preserving all vendored notices.
-   Resolve shared Joni parser changes centrally and retain every independent
-   semantic fix.
+1. Integrate P5's green shared-runtime barrier, then replay only declared P4/P6
+   helper contracts and integrate cohesive deliveries, preserving all vendored
+   notices. Resolve shared Joni parser changes centrally and retain every
+   independent semantic fix.
 2. Run one combined warning-free `make`, then refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-3. Rerun the current shared JVM/interpreter acceptance rows. If they close, run
-   the complete 286-file JVM acceptance and compare file/test identities with
+3. Repair and rerun the five comparator regressions and the regex-specific
+   timeout/error/incomplete files. If they close, run the complete 286-file JVM
+   acceptance and compare file/test identities with
    PR 958. Push that exact green head to PR 1087, run CI, and make the
    incremental PR reviewable.
 4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
