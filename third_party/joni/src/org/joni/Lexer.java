@@ -2393,6 +2393,10 @@ class Lexer extends ScannerSupport {
                     case '(':
                         if (peekIs('?') && syntax.op2QMarkGroupEffect()) {
                             inc();
+                            if (Option.isPerlReStrict(env.option) && peekIs(')')) {
+                                syntaxWarn("Empty (?) without any modifiers",
+                                        p + enc.length(bytes, p, stop) - getBegin());
+                            }
                             if (syntax.op2OptionPerl() && peekIs('[')) {
                                 inc();
                                 token.type = TokenType.EXTENDED_CC_OPEN;
@@ -2435,7 +2439,17 @@ class Lexer extends ScannerSupport {
                         break;
                     case ']':
                         if (src > getBegin()) { /* /].../ is allowed. */
-                            env.closeBracketWithoutEscapeWarn("]");
+                            if (Option.isPerlReStrict(env.option)
+                                    && (p < getBegin() + 2 || bytes[p - 2] != ']')) {
+                                syntaxWarn("Unescaped literal ']'", p - getBegin());
+                            } else {
+                                env.closeBracketWithoutEscapeWarn("]");
+                            }
+                        }
+                        break;
+                    case '}':
+                        if (Option.isPerlReStrict(env.option)) {
+                            syntaxWarn("Unescaped literal '}'", p - getBegin());
                         }
                         break;
                     case '#':
