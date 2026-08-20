@@ -1371,7 +1371,9 @@ class Lexer extends ScannerSupport {
             // Perl treats an empty [:] opener as ordinary class text rather
             // than an empty POSIX class.  Do not enter the POSIX parser unless
             // there is at least one name character before the closing :].
-            if (left() && !peekIs(']') && strExistCheckWithEsc(send, send.length, ']')) {
+            if (left() && !peekIs(']')
+                    && (strExistCheckWithEsc(send, send.length, ']')
+                            || env.usesPerlDiagnostics() && perlPosixCandidate)) {
                 token.type = TokenType.POSIX_BRACKET_OPEN;
             } else {
                 unfetch();

@@ -24,6 +24,7 @@ import static org.joni.BitStatus.bsOnOff;
 import static org.joni.Option.isAsciiRange;
 import static org.joni.Option.isDontCaptureGroup;
 import static org.joni.Option.isIgnoreCase;
+import static org.joni.Option.isPerlReStrict;
 import static org.joni.Option.isPosixBracketAllRange;
 
 import java.nio.charset.StandardCharsets;
@@ -168,6 +169,243 @@ class Parser extends Lexer {
 
     protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex, syntax, bytes, p, end, warnings);
+        emitPerlPosixDiagnostics();
+    }
+
+    private static final Set<String> PERL_POSIX_NAMES = Set.of(
+            "alnum", "alpha", "ascii", "blank", "cntrl", "digit", "graph",
+            "lower", "print", "punct", "space", "upper", "word", "xdigit");
+
+    private boolean asciiAt(int position, int value) {
+        return position >= getBegin() && position < getEnd()
+                && (bytes[position] & 0xff) == value;
+    }
+
+    private boolean asciiOnly(int start, int end) {
+        for (int cursor = start; cursor < end; cursor++) {
+            if ((bytes[cursor] & 0x80) != 0) return false;
+        }
+        return true;
+    }
+
+    private String asciiText(int start, int end) {
+        return new String(bytes, start, end - start, StandardCharsets.US_ASCII);
+    }
+
+    private boolean knownPosixName(String name) {
+        if (name.startsWith("^")) name = name.substring(1);
+        return PERL_POSIX_NAMES.contains(name);
+    }
+
+    private boolean plausiblePosixName(String name) {
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (knownPosixName(lower)) return true;
+        if (lower.length() < POSIX_BRACKET_NAME_MIN_LEN) return false;
+        for (String known : PERL_POSIX_NAMES) {
+            if (known.length() != lower.length() + 1) continue;
+            for (int omitted = 0; omitted < known.length(); omitted++) {
+                if ((known.substring(0, omitted) + known.substring(omitted + 1))
+                        .equals(lower)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean insidePerlCharacterClass(int position) {
+        boolean inClass = false;
+        for (int cursor = getBegin(); cursor < position; cursor++) {
+            if (asciiAt(cursor, '\\')) {
+                cursor++;
+                continue;
+            }
+            if (!inClass) {
+                if (asciiAt(cursor, '[')) inClass = true;
+                continue;
+            }
+            if (asciiAt(cursor, '[') && cursor + 2 < position
+                    && (asciiAt(cursor + 1, ':') || asciiAt(cursor + 1, '.')
+                            || asciiAt(cursor + 1, '='))) {
+                int delimiter = bytes[cursor + 1] & 0xff;
+                int nested = cursor + 2;
+                while (nested + 1 < position
+                        && !(asciiAt(nested, delimiter)
+                                && asciiAt(nested + 1, ']'))) nested++;
+                if (nested + 1 < position) {
+                    cursor = nested + 1;
+                    continue;
+                }
+            }
+            if (asciiAt(cursor, ']')) inClass = false;
+        }
+        return inClass;
+    }
+
+    private void posixWarn(String reason, int position) {
+        syntaxWarn("Assuming NOT a POSIX class since " + reason,
+                position - getBegin());
+    }
+
+    /**
+     * Perl diagnoses near-miss POSIX spellings before ordinary character-class
+     * parsing. Keep that lexical policy in Joni so consumers receive ordered,
+     * byte-positioned metadata without inspecting regex source themselves.
+     */
+    private void emitPerlPosixDiagnostics() {
+        if (!env.usesPerlDiagnostics() || env.warnings == WarnCallback.NONE) return;
+
+        int begin = getBegin();
+        int end = getEnd();
+        for (int i = begin; i + 2 < end; i++) {
+            if (asciiAt(i, '\\')) {
+                if (++i < end && (bytes[i] & 0x80) != 0) {
+                    i += enc.length(bytes, i, end) - 1;
+                }
+                continue;
+            }
+            if (!asciiAt(i, '[')) continue;
+
+            // A single bracket around POSIX-looking text is an ordinary class,
+            // but Perl warns that the construct belongs one bracket deeper.
+            int delimiter = bytes[i + 1] & 0xff;
+            if ((delimiter == ':' || delimiter == '.' || delimiter == '=')
+                    && !insidePerlCharacterClass(i)) {
+                int cursor = i + 2;
+                int close = -1;
+                int delimiterEnd = -1;
+                while (cursor < end && !asciiAt(cursor, ']')) {
+                    if (asciiAt(cursor, delimiter)) delimiterEnd = cursor;
+                    cursor++;
+                }
+                if (cursor < end) close = cursor;
+                if (delimiter != ':') {
+                    if (delimiterEnd >= i + 2 && delimiterEnd + 1 == close) {
+                        char delimiterChar = (char)delimiter;
+                        syntaxWarn("POSIX syntax [" + delimiterChar + " "
+                                + delimiterChar + "] belongs inside character classes "
+                                + "(but this one isn't implemented)", close + 1 - begin);
+                    }
+                } else if (close >= 0) {
+                    boolean terminated = delimiterEnd >= i + 2
+                            && delimiterEnd + 1 == close;
+                    String name = terminated && asciiOnly(i + 2, delimiterEnd)
+                            ? asciiText(i + 2, delimiterEnd) : "";
+                    if (!terminated && (!asciiOnly(i + 2, close)
+                            || !plausiblePosixName(asciiText(i + 2, close)))) {
+                        continue;
+                    }
+                    boolean valid = terminated && knownPosixName(name.toLowerCase(
+                            java.util.Locale.ROOT));
+                    String suffix = valid ? ""
+                            : " (but this one isn't fully valid)";
+                    syntaxWarn("POSIX syntax [: :] belongs inside character classes"
+                            + suffix, terminated ? close + 1 - begin : close - begin);
+                }
+            }
+        }
+
+        for (int i = begin; i + 3 < end; i++) {
+            if (!asciiAt(i, '[') || !asciiAt(i + 1, '[')) continue;
+
+            if (asciiAt(i + 2, ':')) {
+                int nameStart = i + 3;
+                int cursor = nameStart;
+                while (cursor < end && !asciiAt(cursor, ':')
+                        && !asciiAt(cursor, ']')) cursor++;
+                if (cursor >= end || !asciiOnly(nameStart, cursor)) continue;
+                String name = asciiText(nameStart, cursor);
+                if (asciiAt(cursor, ':')) {
+                    if (!asciiAt(cursor + 1, ']')
+                            && (plausiblePosixName(name) || name.indexOf('#') >= 0)) {
+                        posixWarn("there is no terminating ']'", cursor + 1);
+                    }
+                } else if (plausiblePosixName(name)) {
+                    if (!name.equals(name.toLowerCase(java.util.Locale.ROOT))) {
+                        posixWarn("the name must be all lowercase letters", cursor);
+                    }
+                    posixWarn("there is no terminating ':'", cursor);
+                }
+                continue;
+            }
+
+            if (asciiAt(i + 2, ' ')) {
+                emitSpacedPosixDiagnostics(i, end);
+                continue;
+            }
+
+            int cursor = i + 2;
+            boolean caret = asciiAt(cursor, '^');
+            if (caret) cursor++;
+            int nameStart = cursor;
+            while (cursor < end && !asciiAt(cursor, ']')) cursor++;
+            if (cursor >= end || !asciiOnly(nameStart, cursor)) continue;
+            String name = asciiText(nameStart, cursor);
+            if (!plausiblePosixName(name)) continue;
+            if (caret) {
+                posixWarn("the '^' must come after the colon", nameStart);
+            }
+            posixWarn("there must be a starting ':'", nameStart);
+            posixWarn("there is no terminating ':'", cursor);
+        }
+
+        for (int i = begin; i + 3 < end; i++) {
+            if (!asciiAt(i, ':') || asciiAt(i - 1, '[')) continue;
+            int nameEnd = i + 1;
+            while (nameEnd < end && !asciiAt(nameEnd, ':')
+                    && !asciiAt(nameEnd, ']')) nameEnd++;
+            if (!asciiAt(nameEnd, ':') || !asciiAt(nameEnd + 1, ']')
+                    || !asciiOnly(i + 1, nameEnd)) continue;
+            if (knownPosixName(asciiText(i + 1, nameEnd))) {
+                posixWarn("it doesn't start with a '['", i);
+            }
+        }
+
+        for (int i = begin; i + 3 < end; i++) {
+            if (!asciiAt(i, ';')) continue;
+            int nameEnd = i + 1;
+            while (nameEnd < end && !asciiAt(nameEnd, ';')
+                    && !asciiAt(nameEnd, ']')) nameEnd++;
+            if (!asciiAt(nameEnd, ';') || !asciiAt(nameEnd + 1, ']')
+                    || !asciiOnly(i + 1, nameEnd)
+                    || !knownPosixName(asciiText(i + 1, nameEnd))) continue;
+            if (!asciiAt(i - 1, '[')) {
+                posixWarn("it doesn't start with a '['", i);
+            }
+            posixWarn("a semi-colon was found instead of a colon", i + 1);
+            posixWarn("a semi-colon was found instead of a colon", nameEnd + 2);
+            i = nameEnd;
+        }
+    }
+
+    private void emitSpacedPosixDiagnostics(int open, int end) {
+        int caret = open + 2;
+        while (caret < end && asciiAt(caret, ' ')) caret++;
+        if (!asciiAt(caret, '^')) return;
+        int colon = caret + 1;
+        while (colon < end && asciiAt(colon, ' ')) colon++;
+        if (!asciiAt(colon, ':')) return;
+        int close = colon + 1;
+        while (close < end && !asciiAt(close, ']')) close++;
+        if (close >= end) return;
+        int outerClose = close + 1;
+        while (outerClose < end && asciiAt(outerClose, ' ')) outerClose++;
+        if (!asciiAt(outerClose, ']')) return;
+
+        posixWarn("no blanks are allowed in one", caret);
+        posixWarn("the '^' must come after the colon", caret + 1);
+        if (asciiAt(caret + 1, ' ')) {
+            posixWarn("no blanks are allowed in one", colon);
+        }
+        if (asciiAt(colon + 1, ' ')) {
+            int nameStart = colon + 1;
+            while (nameStart < close && asciiAt(nameStart, ' ')) nameStart++;
+            posixWarn("no blanks are allowed in one", nameStart);
+        }
+        if (asciiAt(close + 1, ' ')) {
+            posixWarn("no blanks are allowed in one", close + 1);
+        }
+        if (isPerlReStrict(env.option)) {
+            syntaxWarn("Unescaped literal ']'", outerClose + 1 - getBegin());
+        }
     }
 
     private void setLexicalMemNode(EncloseNode node) {
@@ -206,6 +444,10 @@ class Parser extends Lexer {
             if (enc.strNCmp(bytes, p, stop, POSIX_ASCII, 0, POSIX_ASCII.length) == 0) {
                 p = enc.step(bytes, p, stop, POSIX_ASCII.length);
                 if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
+                    if (env.usesPerlDiagnostics()) {
+                        restore();
+                        return true;
+                    }
                     newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
                 }
                 if (not) {
@@ -235,6 +477,10 @@ class Parser extends Lexer {
                     }
                     p = enc.step(bytes, p, stop, name.length);
                     if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
+                        if (env.usesPerlDiagnostics()) {
+                            restore();
+                            return true;
+                        }
                         newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
                     }
                     int ctype = PosixBracket.PBSValues[i];
@@ -282,6 +528,13 @@ class Parser extends Lexer {
                 fetch();
                 if (c == ']') {
                     if (env.usesPerlDiagnostics()) {
+                        int nameCharacters = enc.strLength(bytes, nameStart, nameEnd);
+                        if (!asciiOnly(nameStart, nameEnd)
+                                || perlExtendedClassLeaf
+                                        && nameCharacters < POSIX_BRACKET_NAME_MIN_LEN) {
+                            restore();
+                            return true;
+                        }
                         if (perlExtendedClassLeaf && left() && peekIs(']')) {
                             int closeEnd = p + enc.length(bytes, p, stop);
                             newSyntaxException(
@@ -320,6 +573,17 @@ class Parser extends Lexer {
 
         restore();
         return false;
+    }
+
+    private boolean extendedPosixPrimaryUsesParser() {
+        int nameStart = p + 2;
+        int cursor = nameStart;
+        while (cursor < stop && !asciiAt(cursor, ':')
+                && !asciiAt(cursor, ']')) cursor++;
+        if (!asciiAt(cursor, ':') || !asciiAt(cursor + 1, ']')) return false;
+        if (!asciiOnly(nameStart, cursor)) return false;
+        String name = asciiText(nameStart, cursor);
+        return name.length() >= POSIX_BRACKET_NAME_MIN_LEN;
     }
 
     private record ParsedCharClass(CClassNode standard,
@@ -412,7 +676,6 @@ class Parser extends Lexer {
     private ParsedCharClass parseCharClass(ObjPtr<CClassNode> ascNode,
                                            ObjPtr<CClassNode> foldNode) {
         int classContentStart = p - getBegin();
-        warnPerlPosixSyntaxOutsideClass();
         final boolean neg;
         CClassNode cc, prevCc = null, ascCc = null, ascPrevCc = null,
                 workCc = null, ascWorkCc = null, foldCc = null,
@@ -544,8 +807,14 @@ class Parser extends Lexer {
 
             case POSIX_BRACKET_OPEN:
                 if (parsePosixBracket(cc, ascCc, foldCc)) { /* true: is not POSIX bracket */
-                    env.ccEscWarn("[");
-                    p = token.backP;
+                    if (!env.usesPerlDiagnostics()) env.ccEscWarn("[");
+                    // Perl recovers a POSIX-looking near miss as literal class
+                    // text. Consume the candidate '[' exactly once; rewinding
+                    // onto it reparses it as a nested class and can turn a
+                    // recoverable spelling into a spurious Unmatched [ error.
+                    p = env.usesPerlDiagnostics()
+                            ? token.backP + enc.length(bytes, token.backP, stop)
+                            : token.backP;
                     arg.to = token.getC();
                     arg.toIsRaw = false;
                     parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
@@ -769,50 +1038,6 @@ class Parser extends Lexer {
         }
 
         return new ParsedCharClass(cc, namedSequences);
-    }
-
-    private void warnPerlPosixSyntaxOutsideClass() {
-        if (!env.usesPerlDiagnostics() || p >= stop) return;
-
-        int delimiter = enc.mbcToCode(bytes, p, stop);
-        if (delimiter != ':' && delimiter != '.' && delimiter != '=') return;
-
-        int cursor = p + enc.length(bytes, p, stop);
-        if (delimiter == ':' && cursor < stop
-                && enc.mbcToCode(bytes, cursor, stop) == '^') {
-            cursor += enc.length(bytes, cursor, stop);
-        }
-        int nameStart = cursor;
-        while (cursor < stop) {
-            int code = enc.mbcToCode(bytes, cursor, stop);
-            if (code == delimiter || code == ']') break;
-            cursor += enc.length(bytes, cursor, stop);
-        }
-        if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != delimiter) return;
-        int delimiterEnd = cursor + enc.length(bytes, cursor, stop);
-        if (delimiterEnd >= stop || enc.mbcToCode(bytes, delimiterEnd, stop) != ']') return;
-        int classEnd = delimiterEnd + enc.length(bytes, delimiterEnd, stop);
-
-        String message;
-        if (delimiter == ':') {
-            String name = new String(bytes, nameStart, cursor - nameStart,
-                    StandardCharsets.US_ASCII);
-            message = isKnownPerlPosixClassName(name)
-                    ? PERL_POSIX_CLASS_OUTSIDE_CLASS
-                    : PERL_INVALID_POSIX_CLASS_OUTSIDE_CLASS;
-        } else {
-            message = PERL_UNIMPLEMENTED_POSIX_CLASS_OUTSIDE_CLASS.replace(
-                    "%n", Character.toString((char)delimiter));
-        }
-        syntaxWarn(message, classEnd - getBegin());
-    }
-
-    private static boolean isKnownPerlPosixClassName(String candidate) {
-        if (candidate.equals("ascii")) return true;
-        for (byte[] name : PosixBracket.PBSNamesLower) {
-            if (candidate.equals(new String(name, StandardCharsets.US_ASCII))) return true;
-        }
-        return false;
     }
 
     private StringNode namedCharacterStringNode(int[] sequence) {
@@ -2232,7 +2457,7 @@ class Parser extends Lexer {
             inc();
             return new PerlExtendedClassPrimary(nested, true);
         }
-        if (extendedClassStarts("[:") && p + 2 < stop && bytes[p + 2] != ']') {
+        if (extendedClassStarts("[:") && extendedPosixPrimaryUsesParser()) {
             // In (?[...]), a POSIX bracket is itself a primary: [:alpha:]
             // is not the nested standard-class spelling [[:alpha:]].
             p += 2;
