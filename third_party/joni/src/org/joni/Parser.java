@@ -714,6 +714,7 @@ class Parser extends Lexer {
             boolean fetched = false;
             arg.toEscaped = token.escaped;
             arg.toNamedCharacter = token.namedCharacter;
+            arg.toFalseRangeEligible = false;
             arg.toStart = token.backP - getBegin();
             arg.toEnd = p - getBegin();
 
@@ -824,6 +825,8 @@ class Parser extends Lexer {
                 break;
 
             case CHAR_TYPE:
+                warnFalseRangeBeforeClass(arg, p - getBegin());
+                arg.toFalseRangeEligible = true;
                 cc.addCType(token.getPropCType(), token.getPropNot(), isAsciiRange(env.option), env, this);
                 if (ascCc != null) {
                     if (token.getPropCType() != CharacterType.WORD) {
@@ -839,6 +842,9 @@ class Parser extends Lexer {
 
             case CHAR_PROPERTY:
                 CharProperty property = fetchCharProperty(true);
+                arg.toEnd = p - getBegin();
+                warnFalseRangeBeforeClass(arg, arg.toEnd);
+                arg.toFalseRangeEligible = true;
                 addCharProperty(cc, ascCc, foldCc, property, token.getPropNot());
                 cc.nextStateClass(arg, ascCc, foldCc, env); // goto next_class
                 break;
@@ -848,6 +854,7 @@ class Parser extends Lexer {
                     if (arg.type == CCVALTYPE.CLASS && env.usesPerlDiagnostics()) {
                         // Perl accepts [\d-z] as a false range: retain the
                         // class and make the hyphen a pending literal value.
+                        if (arg.fromFalseRangeEligible) warnFalseRangeAfterClass(arg);
                         arg.state = CCSTATE.COMPLETE;
                         arg.to = '-';
                         arg.toIsRaw = false;
@@ -1106,6 +1113,27 @@ class Parser extends Lexer {
         }
         warnPerlExtendedClassRange(arg);
         cc.nextStateValue(arg, ascCc, foldCc, env);
+    }
+
+    private void warnFalseRangeBeforeClass(CCStateArg arg, int endpointEnd) {
+        if (arg.state != CCSTATE.RANGE || !env.usesPerlDiagnostics()) return;
+        warnFalseRange(arg.fromStart, endpointEnd, endpointEnd);
+    }
+
+    private void warnFalseRangeAfterClass(CCStateArg arg) {
+        warnFalseRange(arg.fromStart, arg.toEnd, arg.toEnd);
+    }
+
+    private void warnFalseRange(int sourceStart, int sourceEnd, int warningPosition) {
+        if (sourceStart < 0 || sourceEnd < sourceStart
+                || getBegin() + sourceEnd > stop) return;
+        String range = new String(bytes, getBegin() + sourceStart,
+                sourceEnd - sourceStart, enc.getCharset());
+        String message = "False [] range \"" + range + "\"";
+        if (perlExtendedClassLeaf) {
+            newSyntaxException("False [] range", warningPosition, message);
+        }
+        env.warnings.warn(message, warningPosition);
     }
 
     private void warnPerlExtendedClassRange(CCStateArg arg) {

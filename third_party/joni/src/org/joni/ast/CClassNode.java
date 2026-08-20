@@ -695,6 +695,8 @@ public final class CClassNode extends Node {
         public boolean toEscaped;
         public boolean fromNamedCharacter;
         public boolean toNamedCharacter;
+        public boolean fromFalseRangeEligible;
+        public boolean toFalseRangeEligible;
         public int fromStart;
         public int fromEnd;
         public int toStart;
@@ -737,6 +739,10 @@ public final class CClassNode extends Node {
         }
         arg.state = CCSTATE.VALUE;
         arg.type = CCVALTYPE.CLASS;
+        arg.fromStart = arg.toStart;
+        arg.fromEnd = arg.toEnd;
+        arg.fromNamedCharacter = arg.toNamedCharacter;
+        arg.fromFalseRangeEligible = arg.toFalseRangeEligible;
     }
 
     public void nextStateValue(CCStateArg arg, CClassNode ascCc,
@@ -829,6 +835,7 @@ public final class CClassNode extends Node {
         arg.fromIsRaw = arg.toIsRaw;
         arg.fromEscaped = arg.toEscaped;
         arg.fromNamedCharacter = arg.toNamedCharacter;
+        arg.fromFalseRangeEligible = arg.toFalseRangeEligible;
         arg.fromStart = arg.toStart;
         arg.fromEnd = arg.toEnd;
         arg.from = arg.to;

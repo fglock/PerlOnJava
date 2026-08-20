@@ -602,6 +602,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                             .hasDeferredUserDefinedUnicodeProperty();
                     regex.inlineModifierWarnings.addAll(
                             regex.recursivePattern.compileWarnings());
+                    if (lexicalReStrict) {
+                        for (String warning : regex.inlineModifierWarnings) {
+                            if (warning.startsWith("False [] range")) {
+                                throw new PerlCompilerException(warning);
+                            }
+                        }
+                    }
                     regex.warningsOnUse.addAll(regex.inlineModifierWarnings);
                 regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                         || RegexFlags.hasInlinePreserveModifier(compilePatternString);
