@@ -2,7 +2,6 @@
 use strict;
 use warnings;
 use Cwd qw(abs_path getcwd);
-use File::Basename qw(dirname);
 use File::Spec;
 use FindBin;
 use Getopt::Long qw(GetOptions);
@@ -45,6 +44,11 @@ die "Refusing to update $perl_root: invalid upstream $upstream\n" unless defined
 my $remote_url = capture_line('git', '-C', $perl_root, 'remote', 'get-url', $remote);
 die "Refusing to update $perl_root: upstream remote $remote_url does not match $repository\n"
     unless normalized_repository($remote_url) eq normalized_repository($repository);
+my $latest_branch = remote_default_branch($perl_root, $remote);
+die "Refusing to update $perl_root: checked-out branch $branch is not the latest upstream branch $latest_branch\n"
+    unless $branch eq $latest_branch;
+die "Refusing to update $perl_root: upstream $upstream does not track $remote/$latest_branch\n"
+    unless $upstream eq "$remote/$latest_branch";
 
 run('git', '-C', $perl_root, 'fetch', $remote);
 unless (succeeds('git', '-C', $perl_root, 'merge-base', '--is-ancestor', 'HEAD', $upstream)) {
@@ -70,6 +74,15 @@ sub normalized_repository {
     $value =~ s{/+\z}{};
     $value =~ s{\.git\z}{};
     return $value;
+}
+
+sub remote_default_branch {
+    my ($checkout, $remote) = @_;
+    my $advertisement = capture('git', '-C', $checkout, 'ls-remote', '--symref', $remote, 'HEAD');
+    my ($branch) = $advertisement =~ /^ref:\s+refs\/heads\/(\S+)\s+HEAD$/m;
+    die "Refusing to update $checkout: cannot determine the latest branch advertised by $remote\n"
+        unless defined $branch && length $branch;
+    return $branch;
 }
 
 sub run {
@@ -118,6 +131,9 @@ Usage: perl dev/import-perl5/update_perl5.pl [options]
   --sync-script PATH sync implementation (default: dev/import-perl5/sync.pl)
   --sync             run the complete import manifest after updating
   --filter TEXT      pass exactly one --only filter to sync.pl (requires --sync)
+
+Existing checkouts must be on the branch advertised as the repository's HEAD.
+The helper never switches branches; it refuses non-default branches instead.
 USAGE
     exit $status;
 }

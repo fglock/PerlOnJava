@@ -27,20 +27,27 @@ The import system helps maintain modules that are (nearly) identical to their pe
 make perl5-update
 make perl5-sync
 make perl5-sync FILTER=Name.pl
+# If the platform Perl is older than current blead requires:
+make PERL=/path/to/system/perl perl5-sync FILTER=Name.pl
 ```
 
 `perl5-update` clones the official Perl repository into the gitignored
 `perl5/` directory when absent. For an existing checkout (including a
 `perl5/` symlink to an adjacent checkout), it refuses tracked edits, detached
 HEAD, missing or mismatched upstream configuration, and non-fast-forward
-updates before changing files. It fetches the configured upstream and advances
-the checked-out branch with `--ff-only`, then prints the exact consumed commit.
+updates before changing files. The checked-out branch must be the branch the
+remote currently advertises as its default; the helper refuses any other
+branch instead of silently switching it. It fetches the configured upstream
+and advances the checked-out branch with `--ff-only`, then prints the exact
+consumed commit.
 Ignored and untracked generated files do not make the checkout falsely dirty.
 
 `perl5-sync` performs that safe update and then replays the complete import
 manifest. `FILTER` passes exactly one `--only` value. These explicit developer
 targets may access the network; ordinary `make`, tests, packaging, and CI do
-not depend on them.
+not depend on them. `PERL` may select a compatible system Perl when the
+platform default is too old for current blead's Unicode generators; never use
+`jperl` for the importer.
 
 ### Synchronize All Configured Imports
 
