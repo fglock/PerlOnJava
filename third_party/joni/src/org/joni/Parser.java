@@ -2678,7 +2678,8 @@ class Parser extends Lexer {
             }
 
             qtfr.greedy = token.getRepeatGreedy();
-            int ret = qtfr.setQuantifier(target, group, env, bytes, getBegin(), getEnd());
+            int ret = qtfr.setQuantifier(target, group, env, bytes, getBegin(), getEnd(),
+                    getPatternPosition());
             Node qn = qtfr;
 
             if (token.getRepeatPossessive()) {
@@ -2716,7 +2717,8 @@ class Parser extends Lexer {
                                                      token.type == TokenType.INTERVAL);
 
             qtfr.greedy = token.getRepeatGreedy();
-            int ret = qtfr.setQuantifier(target.value, group, env, bytes, getBegin(), getEnd());
+            int ret = qtfr.setQuantifier(target.value, group, env, bytes, getBegin(), getEnd(),
+                    getPatternPosition());
             Node qn = qtfr;
 
             if (token.getRepeatPossessive()) {
