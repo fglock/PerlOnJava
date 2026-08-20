@@ -621,11 +621,11 @@ public final class CClassNode extends Node {
         case CharacterType.ALNUM:
             if (not) {
                 for (int c=0; c<BitSet.SINGLE_BYTE_SIZE; c++) {
-                    if (!enc.isCodeCType(c, ctype)) bs.set(env, c);
+                    if (!enc.isCodeCType(c, ctype) || c >= maxCode) bs.set(env, c);
                 }
-                addAllMultiByteRange(env);
+                if (asciiRange || enc.minLength() > 1) addAllMultiByteRange(env);
             } else {
-                for (int c=0; c<BitSet.SINGLE_BYTE_SIZE; c++) {
+                for (int c=0; c<maxCode; c++) {
                     if (enc.isCodeCType(c, ctype)) bs.set(env, c);
                 }
             }
