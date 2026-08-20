@@ -175,6 +175,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Unexpected ']' with no following ')' in (?[...";
     String PERL_EXTENDED_CLASS_BARE_CHARACTER =
             "Unexpected character in extended character class";
+    String PERL_EXTENDED_CLASS_UNEXPECTED_CHARACTER = "Unexpected character";
     String PERL_EXTENDED_CLASS_BINARY_OPERATOR_WITHOUT_OPERAND =
             "Unexpected binary operator '%c' with no preceding operand";
     String PERL_EXTENDED_CLASS_OPERAND_WITHOUT_OPERATOR =
