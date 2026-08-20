@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import java.util.BitSet;
 
 import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
@@ -3403,6 +3404,12 @@ public class BytecodeInterpreter {
                 int warningState = bytecode[pc++];
                 int warningBitsIndex = bytecode[pc++];
                 int quoteConstruction = bytecode[pc++];
+                int namedCharacterExpansionIndex = bytecode[pc++];
+                NamedCharacterExpansionMap namedCharacterExpansions =
+                        namedCharacterExpansionIndex >= 0
+                                ? (NamedCharacterExpansionMap)
+                                        code.constants[namedCharacterExpansionIndex]
+                                : null;
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
@@ -3410,7 +3417,9 @@ public class BytecodeInterpreter {
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
                 RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
                         ? code.stringPool[warningBitsIndex] : null);
-                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
+                registers[rd] = RuntimeRegex.getQuotedRegex(
+                        registers[patternReg].scalar(), flags,
+                        namedCharacterExpansions);
                 if (quoteConstruction != 0) {
                     registers[rd] = quoteConstruction == 2
                             ? RuntimeRegex.markSyntacticQuoteConstruction(registers[rd].scalar())
@@ -3427,6 +3436,12 @@ public class BytecodeInterpreter {
                 int warningState = bytecode[pc++];
                 int warningBitsIndex = bytecode[pc++];
                 int quoteConstruction = bytecode[pc++];
+                int namedCharacterExpansionIndex = bytecode[pc++];
+                NamedCharacterExpansionMap namedCharacterExpansions =
+                        namedCharacterExpansionIndex >= 0
+                                ? (NamedCharacterExpansionMap)
+                                        code.constants[namedCharacterExpansionIndex]
+                                : null;
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
@@ -3434,7 +3449,9 @@ public class BytecodeInterpreter {
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
                 RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
                         ? code.stringPool[warningBitsIndex] : null);
-                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
+                registers[rd] = RuntimeRegex.getQuotedRegex(
+                        registers[patternReg].scalar(), flags, callsiteId,
+                        namedCharacterExpansions);
                 if (quoteConstruction != 0) {
                     registers[rd] = quoteConstruction == 2
                             ? RuntimeRegex.markSyntacticQuoteConstruction(registers[rd].scalar())

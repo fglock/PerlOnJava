@@ -11,6 +11,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,6 +90,50 @@ public class EmitRegex {
                 "setCallSiteWarningBits", "(Ljava/lang/String;)V", false);
     }
 
+    /** Stack: pattern -> pattern carrying this literal's immutable lexical results. */
+    private static void attachNamedCharacterExpansions(
+            EmitterVisitor emitterVisitor, OperatorNode node, ListNode operand) {
+        Object annotated = node.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        if (annotated == null) {
+            annotated = operand.getAnnotation(
+                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        }
+        if (!(annotated instanceof NamedCharacterExpansionMap metadata)) return;
+
+        emitterVisitor.ctx.mv.visitLdcInsn(metadata.literalIdentity().value());
+        emitterVisitor.ctx.mv.visitLdcInsn(metadata.callableIdentity().value());
+        emitterVisitor.ctx.mv.visitLdcInsn(metadata.expansions().size() * 7);
+        emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+        int index = 0;
+        for (var entry : metadata.expansions().entrySet()) {
+            NamedCharacterExpansionMap.Key key = entry.getKey();
+            NamedCharacterExpansion expansion = entry.getValue();
+            String[] fields = {
+                    key.sourceSpelling(), key.sourceMode().name(),
+                    expansion.sequence(), expansion.sourceMode().name(),
+                    Boolean.toString(expansion.promotesUnicode()),
+                    expansion.status().name(), expansion.diagnostic()
+            };
+            for (String field : fields) {
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                emitterVisitor.ctx.mv.visitLdcInsn(index++);
+                if (field == null) emitterVisitor.ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+                else emitterVisitor.ctx.mv.visitLdcInsn(field);
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.AASTORE);
+            }
+        }
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/NamedCharacterExpansionMap", "fromFlat",
+                "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;)Lorg/perlonjava/runtime/NamedCharacterExpansionMap;",
+                false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RuntimeRegex",
+                "attachNamedCharacterExpansions",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/NamedCharacterExpansionMap;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+    }
+
     /**
      * Handles the binding regex operation where a variable is bound to a regex operation.
      * This method processes the binary operator node representing the binding operation.
@@ -108,6 +153,9 @@ public class EmitRegex {
             // Do not mutate the original AST: create a local copy of the operator and its operand list.
             ListNode boundListNode = new ListNode(new ArrayList<>(listNode.elements), listNode.tokenIndex);
             boundListNode.handle = listNode.handle;
+            if (listNode.annotations != null) {
+                boundListNode.annotations = new HashMap<>(listNode.annotations);
+            }
             boundListNode.elements.add(node.left);
 
             OperatorNode boundRight = new OperatorNode(right.operator, boundListNode, right.tokenIndex);
@@ -320,6 +368,7 @@ public class EmitRegex {
 
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
+        attachNamedCharacterExpansions(emitterVisitor, node, operand);
         operand.elements.get(1).accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
         emitRegexWarningState(emitterVisitor, node);
@@ -350,32 +399,26 @@ public class EmitRegex {
         }
         String pattern = RegexLiteralAnalyzer.constantString(operand.elements.get(0));
         if (pattern == null || RuntimeRegex.requiresRuntimeUnicodePropertyResolution(pattern)) return;
+        String diagnosticPattern = RegexLiteralAnalyzer.constantSourceString(
+                operand.elements.get(0));
         String modifiers = flags.value;
         if (unicodeStringsEnabled(emitterVisitor) && !modifiers.contains("u")) {
             modifiers += "u";
         }
         try {
-            RuntimeRegex.validateLiteralSyntax(pattern, modifiers,
-                    lexicalNamedCharacterTranslator(operand),
-                    lexicalNamedCharacterSourceMode(operand));
+            StringParser.validateLiteralNamedCharacters(
+                    operand, pattern, modifiers,
+                    diagnosticPattern == null ? pattern : diagnosticPattern);
+            Object expansions = operand.getAnnotation(
+                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+            if (expansions != null) {
+                node.setAnnotation(StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS,
+                        expansions);
+            }
         } catch (PerlCompilerException exception) {
             throw PerlCompilerException.withSourceLocation(node.tokenIndex,
                     exception.getMessage(), emitterVisitor.ctx.errorUtil);
         }
-    }
-
-    private static RuntimeScalar lexicalNamedCharacterTranslator(ListNode operand) {
-        Object translator = operand.getAnnotation(
-                StringParser.LEXICAL_NAMED_CHARACTER_TRANSLATOR);
-        return translator instanceof RuntimeScalar scalar ? scalar : null;
-    }
-
-    private static NamedCharacterExpansion.SourceMode lexicalNamedCharacterSourceMode(
-            ListNode operand) {
-        Object sourceMode = operand.getAnnotation(
-                StringParser.LEXICAL_NAMED_CHARACTER_SOURCE_MODE);
-        return sourceMode instanceof NamedCharacterExpansion.SourceMode mode
-                ? mode : null;
     }
 
     /**
@@ -399,6 +442,7 @@ public class EmitRegex {
 
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
+        attachNamedCharacterExpansions(emitterVisitor, node, operand);
         flagsNode.accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
         emitRegexWarningState(emitterVisitor, node);

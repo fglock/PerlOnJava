@@ -4,6 +4,7 @@ import org.joni.exception.SyntaxException;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.StringOperators;
@@ -387,8 +388,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
                                         int trustedCalloutCount, boolean patternByteBacked,
                                         boolean lexicalReStrict, String sourceDiagnosticPattern) {
-        RuntimeScalar namedCharacterTranslator =
-                org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames");
+        return compile(patternString, modifiers, lexicalDebugMode, trustedCalloutCount,
+                patternByteBacked, lexicalReStrict, sourceDiagnosticPattern, null);
+    }
+
+    private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
+                                        int trustedCalloutCount, boolean patternByteBacked,
+                                        boolean lexicalReStrict, String sourceDiagnosticPattern,
+                                        NamedCharacterExpansionMap preResolvedNamedCharacters) {
+        RuntimeScalar namedCharacterTranslator = preResolvedNamedCharacters == null
+                ? org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames")
+                : null;
         modifiers = stripInternalMarkers(modifiers);
         // Dynamic/interpolated qr// compilation can begin during ordinary
         // execution, outside the Perl compiler lock. User-defined Unicode
@@ -401,7 +411,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 preloadFlags.isExtended());
         return compileSynchronized(patternString, modifiers, lexicalDebugMode,
                 trustedCalloutCount, false, patternByteBacked, lexicalReStrict,
-                namedCharacterTranslator, sourceDiagnosticPattern);
+                namedCharacterTranslator,
+                preResolvedNamedCharacters == null ? null
+                        : new JoniRegexPattern.NamedCharacterCache(preResolvedNamedCharacters),
+                preResolvedNamedCharacters == null ? null
+                        : preResolvedNamedCharacters.sourceMode(),
+                false, sourceDiagnosticPattern);
     }
 
     /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
@@ -439,8 +454,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String patternString, String modifiers,
             RuntimeScalar namedCharacterTranslator,
             NamedCharacterExpansion.SourceMode namedCharacterSourceMode) {
+        validateLiteralSyntaxResult(patternString, modifiers,
+                namedCharacterTranslator, namedCharacterSourceMode);
+    }
+
+    private static RuntimeRegex validateLiteralSyntaxResult(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode) {
         try {
-            compileSynchronized(patternString, stripInternalMarkers(modifiers),
+            return compileSynchronized(patternString, stripInternalMarkers(modifiers),
                     debugMode(modifiers), 0, true, false, reStrictMode(modifiers),
                     namedCharacterTranslator, null, namedCharacterSourceMode, false, null);
         } catch (PerlJavaUnimplementedException unsupported) {
@@ -456,6 +479,30 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     || message.contains("Illegal repetition"))) {
                 throw new PerlCompilerException(message);
             }
+            return null;
+        }
+    }
+
+    /**
+     * Validate one lexical literal and retain the custom translator's immutable
+     * results for compiled-CV and ithread use.
+     */
+    public static NamedCharacterExpansionMap validateLiteralSyntaxAndCapture(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            NamedCharacterExpansionMap.LiteralIdentity literalIdentity,
+            NamedCharacterExpansionMap.CallableIdentity callableIdentity,
+            String diagnosticPatternString) {
+        try {
+            RuntimeRegex regex = validateLiteralSyntaxResult(patternString, modifiers,
+                    namedCharacterTranslator, namedCharacterSourceMode);
+            return regex == null ? new NamedCharacterExpansionMap(
+                    literalIdentity, callableIdentity, Map.of())
+                    : regex.namedCharacterCache.snapshot(literalIdentity, callableIdentity);
+        } catch (PerlCompilerException exception) {
+            throw new PerlCompilerException(remapLiteralDiagnosticSource(
+                    exception.getMessage(), patternString, diagnosticPatternString));
         }
     }
 
@@ -1310,6 +1357,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
+        NamedCharacterExpansionMap metadata =
+                patternString instanceof RuntimeRegexLiteralScalar literal
+                        ? literal.namedCharacterExpansions() : null;
+        return getQuotedRegex(patternString, modifiers, metadata);
+    }
+
+    /** Attach CV-owned immutable charname results without changing pattern text. */
+    public static RuntimeScalar attachNamedCharacterExpansions(
+            RuntimeScalar patternString, NamedCharacterExpansionMap metadata) {
+        return metadata == null ? patternString
+                : new RuntimeRegexLiteralScalar(patternString, metadata);
+    }
+
+    public static RuntimeScalar getQuotedRegex(
+            RuntimeScalar patternString, RuntimeScalar modifiers,
+            NamedCharacterExpansionMap preResolvedNamedCharacters) {
         String rawModifierStr = modifiers.toString();
         int callSiteDebugMode = debugMode(rawModifierStr);
         String modifierStr = stripInternalMarkers(rawModifierStr);
@@ -1451,7 +1514,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // so the cached RuntimeRegex is not corrupted by refCount changes)
         RuntimeRegex compiled = compile(patternString.toString(), rawModifierStr,
                 callSiteDebugMode, 0,
-                patternString.type == RuntimeScalarType.BYTE_STRING).cloneTracked();
+                patternString.type == RuntimeScalarType.BYTE_STRING,
+                reStrictMode(rawModifierStr), null,
+                preResolvedNamedCharacters).cloneTracked();
         return new RuntimeScalar(compiled).propagateTaint(patternString);
     }
 
@@ -1584,6 +1649,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return A RuntimeScalar representing the compiled regex.
      */
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId) {
+        NamedCharacterExpansionMap metadata =
+                patternString instanceof RuntimeRegexLiteralScalar literal
+                        ? literal.namedCharacterExpansions() : null;
+        return getQuotedRegex(patternString, modifiers, callsiteId, metadata);
+    }
+
+    public static RuntimeScalar getQuotedRegex(
+            RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId,
+            NamedCharacterExpansionMap preResolvedNamedCharacters) {
         String rawModifierStr = modifiers.toString();
         String modifierStr = stripInternalMarkers(rawModifierStr);
         
@@ -1598,13 +1672,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             
             // Compile the regex and cache it
-            RuntimeScalar result = getQuotedRegex(patternString, modifiers);
+            RuntimeScalar result = getQuotedRegex(
+                    patternString, modifiers, preResolvedNamedCharacters);
             state().optimizedRegexCache.put(callsiteId, result);
             return result;
         }
         
         // No /o or m?PAT? modifier, use normal compilation
-        return getQuotedRegex(patternString, modifiers);
+        return getQuotedRegex(patternString, modifiers, preResolvedNamedCharacters);
     }
 
     /**

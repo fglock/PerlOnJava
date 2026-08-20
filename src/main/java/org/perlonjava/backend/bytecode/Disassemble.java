@@ -1347,11 +1347,14 @@ public class Disassemble {
                         int warningState = interpretedCode.bytecode[pc++];
                         int warningBitsIndex = interpretedCode.bytecode[pc++];
                         int quoteConstruction = interpretedCode.bytecode[pc++];
+                        int namedCharacterExpansionIndex = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" implicitU=").append(implicitU)
                                 .append(" warningState=").append(warningState)
                                 .append(" warningBits=").append(warningBitsIndex)
-                                .append(" quoteConstruction=").append(quoteConstruction).append("\n");
+                                .append(" quoteConstruction=").append(quoteConstruction)
+                                .append(" namedCharacters=")
+                                .append(namedCharacterExpansionIndex).append("\n");
                         break;
                     case Opcodes.QUOTE_REGEX_O:
                         rd = interpretedCode.bytecode[pc++];
@@ -1362,12 +1365,15 @@ public class Disassemble {
                         warningState = interpretedCode.bytecode[pc++];
                         warningBitsIndex = interpretedCode.bytecode[pc++];
                         quoteConstruction = interpretedCode.bytecode[pc++];
+                        namedCharacterExpansionIndex = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX_O r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" callsite=").append(callsiteId)
                                 .append(" implicitU=").append(implicitU)
                                 .append(" warningState=").append(warningState)
                                 .append(" warningBits=").append(warningBitsIndex)
-                                .append(" quoteConstruction=").append(quoteConstruction).append("\n");
+                                .append(" quoteConstruction=").append(quoteConstruction)
+                                .append(" namedCharacters=")
+                                .append(namedCharacterExpansionIndex).append("\n");
                         break;
                     case Opcodes.ITERATOR_CREATE:
                         rd = interpretedCode.bytecode[pc++];
