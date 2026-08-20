@@ -87,6 +87,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Reference to invalid group 0";
     String PERL_SWITCH_CONDITION_NOT_RECOGNIZED =
             "Switch condition not recognized";
+    String PERL_UNKNOWN_SWITCH_CONDITION = "Unknown switch condition (?(...))";
     String PERL_SWITCH_CONDITION_NOT_TERMINATED =
             "Switch (?(condition)... not terminated";
     String PERL_AT_MARK_GROUP_NOT_IMPLEMENTED = "Sequence (?@...) not implemented";
