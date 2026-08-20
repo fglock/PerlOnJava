@@ -488,9 +488,10 @@ gates may reopen it if a semantic regression appears.
   execution failures. Regex-owned differences must be separated from general
   interpreter parity before the final dual-backend comparison can pass.
 - P3 owns Unicode/property/charnames closure; P4 owns acceptance regressions
-  plus range/POSIX recovery; P5 owns dynamic-recursion lifecycle, debug trace,
-  and analyser warnings; P6 owns native malformed numeric escapes. The
-  coordinator owns literal NUL-delimited substitution parsing and integration.
+  plus non-POSIX ranges; P5 owns debug trace and analyser warnings; P6 owns the
+  remaining native POSIX recovery families. Literal NUL-delimited substitution
+  parsing is fully gated on its isolated coordinator branch and awaits P3-first
+  integration to minimize `StringParser` conflicts.
 
 ### Active phase detail
 
@@ -578,6 +579,9 @@ gates may reopen it if a semantic regression appears.
       compile diagnostics without source scanning
 - [x] Thread graph cloning remaps executable regex callback CODE while
       preserving child-side shared lexical identity and parent isolation
+- [x] Preserve escaped character-class state so subsequent dynamic callbacks
+      compile once; unchanged Regexp::Common nested comments pass 9,187/9,187
+      on both backends
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
 - [x] Mechanically derived current-checkout regex acceptance ledger
 - [x] Canonical as-implemented regex architecture and shipped Joni fork/API
