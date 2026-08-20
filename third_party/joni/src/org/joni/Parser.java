@@ -914,8 +914,12 @@ class Parser extends Lexer {
                     en.regNum = num;
                     node = en;
                 } else {
-                    newSyntaxException(UNDEFINED_GROUP_OPTION);
+                    newSyntaxException(PERL_AT_MARK_GROUP_NOT_IMPLEMENTED);
                 }
+                break;
+
+            case ';':
+                newSyntaxException(PERL_SEMICOLON_GROUP_NOT_RECOGNIZED);
                 break;
 
             case 'P':  /* Perl's Python-style (?P<name>...) and (?P=name) */
