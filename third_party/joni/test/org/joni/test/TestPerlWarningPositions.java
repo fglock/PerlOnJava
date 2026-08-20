@@ -90,4 +90,12 @@ public class TestPerlWarningPositions {
                 "Unrecognized escape \\z in character class passed through", 4)),
                 warnings("[a\\zb]"));
     }
+
+    @Test
+    public void locatesUnknownAlphabeticEscapesOutsideCharacterClasses() {
+        assertEquals(List.of(new Warning(
+                "Unrecognized escape \\y passed through", 2)), warnings("\\y"));
+        assertEquals(List.of(new Warning(
+                "Unrecognized escape \\q passed through", 3)), warnings("a\\q"));
+    }
 }
