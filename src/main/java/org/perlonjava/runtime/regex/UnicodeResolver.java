@@ -1480,6 +1480,16 @@ public class UnicodeResolver {
 
     private static UnicodeSet resolvePerlCaseFoldableBareProperty(
             String property, boolean caseInsensitive) {
+        try {
+            int propertyEnum = UCharacter.getPropertyEnum(property);
+            if (propertyEnum == UProperty.UPPERCASE
+                    || propertyEnum == UProperty.LOWERCASE) {
+                return resolveStandardPropertyAsSet(
+                        property, new LinkedHashSet<>());
+            }
+        } catch (IllegalArgumentException unsupportedAlias) {
+            // Perl-only compatibility aliases are handled below.
+        }
         return switch (property) {
             case "Uppercase", "XPosixLower", "XPosixUpper" ->
                     resolveStandardPropertyAsSet(
