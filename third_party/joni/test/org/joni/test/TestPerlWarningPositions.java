@@ -80,4 +80,14 @@ public class TestPerlWarningPositions {
                 "(?=a)+ matches null string many times", 6)), warnings("(?=a)+"));
         assertEquals(List.of(), warnings("\\b?"));
     }
+
+    @Test
+    public void locatesUnknownAlphabeticEscapesInCharacterClasses() {
+        assertEquals(List.of(new Warning(
+                "Unrecognized escape \\y in character class passed through", 3)),
+                warnings("[\\y]"));
+        assertEquals(List.of(new Warning(
+                "Unrecognized escape \\z in character class passed through", 4)),
+                warnings("[a\\zb]"));
+    }
 }
