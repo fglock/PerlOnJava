@@ -2986,8 +2986,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         }
         int addr = code[ip++];
         int encodedGroupNum = code[ip++];
-        boolean recursive = encodedGroupNum <= -2;
-        int groupNum = recursive ? -encodedGroupNum - 1 : encodedGroupNum;
+        boolean recursive = encodedGroupNum == Integer.MIN_VALUE || encodedGroupNum <= -2;
+        int groupNum = encodedGroupNum == Integer.MIN_VALUE ? 0
+                : recursive ? -encodedGroupNum - 1 : encodedGroupNum;
         recursive |= isInsideSubexpCall(groupNum);
         pushCallFrame(ip, groupNum, recursive);
         ip = addr; // absolute address
@@ -3426,6 +3427,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opReturn() {
         StackEntry frame = returnFrame();
+        restoreCallFrameCaptureSnapshot(frame);
         ip = frame.getCallFrameRetAddr();
         pushReturn();
     }

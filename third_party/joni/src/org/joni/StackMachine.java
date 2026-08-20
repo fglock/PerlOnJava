@@ -423,6 +423,20 @@ abstract class StackMachine extends Matcher implements StackType {
         return snapshot;
     }
 
+    /**
+     * Whole-pattern recursion is a lexical re-entry and must not publish its
+     * inner captures to the caller. Named and numbered subexpression calls do
+     * publish their captures, as the upstream Joni tests require.
+     */
+    protected final void restoreCallFrameCaptureSnapshot(StackEntry frame) {
+        if (frame.getCallFrameNum() != 0) return;
+        int[] snapshot = frame.getCallFrameCaptureSnapshot();
+        if (snapshot == null) return;
+        int count = regex.numMem + 1;
+        System.arraycopy(snapshot, 0, repeatStk, memStartStk, count);
+        System.arraycopy(snapshot, count, repeatStk, memEndStk, count);
+    }
+
     protected final boolean isInsideSubexpCall(int groupNum) {
         int returned = 0;
         for (int i = stk - 1; i >= 0; i--) {
