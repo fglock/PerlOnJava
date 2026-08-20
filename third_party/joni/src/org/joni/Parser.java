@@ -1384,6 +1384,10 @@ class Parser extends Lexer {
                 } // while
 
             default:
+                if (syntax.op2OptionPerl() && c > 0x7f) {
+                    newValueException(PERL_GROUP_SEQUENCE_NOT_RECOGNIZED,
+                            new String(Character.toChars(c)));
+                }
                 newSyntaxException(UNDEFINED_GROUP_OPTION);
             } // switch
 
@@ -2050,7 +2054,9 @@ class Parser extends Lexer {
             p += 2;
             int previousOption = env.option;
             int nestedOption = previousOption;
+            boolean caretOptions = false;
             if (left() && extendedClassAt('^')) {
+                caretOptions = true;
                 nestedOption = bsOnOff(nestedOption, Option.ASCII_RANGE, true);
                 nestedOption = bsOnOff(nestedOption, Option.IGNORECASE, true);
                 nestedOption = bsOnOff(nestedOption, Option.SINGLELINE, false);
@@ -2071,6 +2077,11 @@ class Parser extends Lexer {
                         && option != 'l' && option != 'm' && option != 'n'
                         && option != 'p' && option != 's' && option != 'u'
                         && option != 'x' && option != '-') {
+                    if (option == '(' && caretOptions) {
+                        newSyntaxException(
+                                PERL_CARET_GROUP_SEQUENCE_NOT_RECOGNIZED,
+                                p + enc.length(bytes, p, stop) - getBegin());
+                    }
                     newSyntaxException(option == '('
                             ? PERL_EXTENDED_CLASS_UNEXPECTED_CHARACTER
                             : PERL_EXTENDED_CLASS_SYNTAX);
@@ -2175,6 +2186,29 @@ class Parser extends Lexer {
         int escapeStart = p;
         if (escapeStart < stop && enc.mbcToCode(bytes, escapeStart, stop) == '\\') {
             int cursor = escapeStart + enc.length(bytes, escapeStart, stop);
+            if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == 'x') {
+                cursor += enc.length(bytes, cursor, stop);
+                if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '{') {
+                    int close = cursor + enc.length(bytes, cursor, stop);
+                    if (close < stop && enc.mbcToCode(bytes, close, stop) == '}') {
+                        close += enc.length(bytes, close, stop);
+                        newSyntaxException(PERL_EMPTY_HEX_ESCAPE,
+                                close - getBegin());
+                    }
+                } else {
+                    int digitCount = 0;
+                    while (cursor < stop && digitCount < 3
+                            && enc.isXDigit(enc.mbcToCode(bytes, cursor, stop))) {
+                        cursor += enc.length(bytes, cursor, stop);
+                        digitCount++;
+                    }
+                    if (digitCount == 3) {
+                        newSyntaxException(PERL_HEX_ESCAPE_MORE_THAN_TWO_DIGITS,
+                                cursor - getBegin());
+                    }
+                }
+            }
+            cursor = escapeStart + enc.length(bytes, escapeStart, stop);
             if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '0') {
                 int digits = 0;
                 while (cursor < stop) {
