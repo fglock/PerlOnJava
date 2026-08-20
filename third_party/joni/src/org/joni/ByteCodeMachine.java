@@ -228,24 +228,28 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         exportedDestructiveControl = false;
 
         if (Config.DEBUG_MATCH) debugMatchBegin();
-        stackInit();
-
-        bestLen = -1;
-        s = _sstart;
-        pkeep = _sstart;
+        enterMatcherExecution();
         int result = -1;
         try {
+            stackInit();
+            bestLen = -1;
+            s = _sstart;
+            pkeep = _sstart;
             result = enc.isSingleByte() || (msaOptions & Option.CR_7_BIT) != 0
                     ? executeSb(interrupt) : execute(interrupt);
             return result;
         } finally {
-            if (result >= 0) {
-                controlError = null;
-                completeActiveCallouts();
-            } else {
-                if (controlMark != null) controlError = controlMark;
-                controlMark = null;
-                unwindActiveCallouts();
+            try {
+                if (result >= 0) {
+                    controlError = null;
+                    completeActiveCallouts();
+                } else {
+                    if (controlMark != null) controlError = controlMark;
+                    controlMark = null;
+                    unwindActiveCallouts();
+                }
+            } finally {
+                leaveMatcherExecution();
             }
         }
     }

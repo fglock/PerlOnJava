@@ -1590,7 +1590,8 @@ final class JoniRegexPattern {
         }
 
         void abort() {
-            restoreCallbackMutations();
+            // Perl retains ordinary assignments performed before a callback
+            // exception; only dynamic local() scope is unwound here.
             callbackMutations.clear();
             DynamicVariableManager.popToLocalLevel(initialLocalLevel);
         }

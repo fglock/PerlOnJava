@@ -192,4 +192,27 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             }
         }
     }
+
+    /**
+     * Detach a localized hash element while a regex callback frame is held by
+     * the matcher. The ordinary save/restore stack remembers the outer value;
+     * this token separately carries the active localized value to the next
+     * callback on the same successful path.
+     */
+    @Override
+    public Object dynamicSuspendState() {
+        RuntimeScalar active = parent.elements.get(key);
+        RuntimeScalar token = active == null ? null : new RuntimeScalar(active);
+        dynamicRestoreState();
+        return token;
+    }
+
+    /** Reinstall a localized hash element detached by dynamicSuspendState(). */
+    @Override
+    public void dynamicResumeState(Object token) {
+        dynamicSaveState();
+        if (token instanceof RuntimeScalar active) {
+            active.addToScalar(this);
+        }
+    }
 }
