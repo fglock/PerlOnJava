@@ -2395,9 +2395,21 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void backref(int mem) {
-        if (mem > regex.numMem || backrefInvalid(mem)) {opFail(); return;}
-        int pstart = backrefStart(mem);
-        int pend = backrefEnd(mem);
+        if (mem > regex.numMem) {opFail(); return;}
+        int pstart;
+        int pend;
+        if (backrefInvalid(mem)) {
+            int[] callerSnapshot = activeRecursiveCallerSnapshot(mem);
+            if (callerSnapshot == null) {opFail(); return;}
+            int start = callerSnapshot[mem];
+            int end = callerSnapshot[regex.numMem + 1 + mem];
+            if (start == INVALID_INDEX || end == INVALID_INDEX) {opFail(); return;}
+            pstart = bsAt(regex.btMemStart, mem) ? stack[start].getMemPStr() : start;
+            pend = bsAt(regex.btMemEnd, mem) ? stack[end].getMemPStr() : end;
+        } else {
+            pstart = backrefStart(mem);
+            pend = backrefEnd(mem);
+        }
         int n = pend - pstart;
         if (s + n > range) {opFail(); return;}
         sprev = s;
@@ -2408,6 +2420,28 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             int len;
             while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
         }
+    }
+
+    private int[] activeRecursiveCallerSnapshot(int mem) {
+        int returned = 0;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == RETURN) {
+                returned++;
+            } else if (entry.type == CALL_FRAME) {
+                if (returned > 0) {
+                    returned--;
+                    continue;
+                }
+                if (!entry.getCallFrameRecursiveVisibility()) continue;
+                int[] snapshot = entry.getCallFrameCaptureSnapshot();
+                if (snapshot != null && snapshot[mem] != INVALID_INDEX
+                        && snapshot[regex.numMem + 1 + mem] != INVALID_INDEX) {
+                    return snapshot;
+                }
+            }
+        }
+        return null;
     }
 
     private void opBackRef1() {
@@ -2452,8 +2486,24 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             return null;
         }
         StackEntry snapshot = repeatCaptureSnapshot(mem);
-        return snapshot == null || snapshot.getMemStart() == INVALID_INDEX
-                || snapshot.getMemEnd() == INVALID_INDEX ? null : snapshot;
+        if (snapshot != null && snapshot.getMemStart() != INVALID_INDEX
+                && snapshot.getMemEnd() != INVALID_INDEX) {
+            return snapshot;
+        }
+
+        // A recursive call opens the same capture slot again.  Its MEM_START
+        // entry retains the closed value from the caller frame, which is the
+        // value a self-backreference must consume while this invocation is
+        // still open.
+        int currentStart = repeatStk[memStartStk + mem];
+        if (bsAt(regex.btMemStart, mem) && currentStart >= 0 && currentStart < stk) {
+            StackEntry current = stack[currentStart];
+            if (current.type == MEM_START && current.getMemStart() != INVALID_INDEX
+                    && current.getMemEnd() != INVALID_INDEX) {
+                return current;
+            }
+        }
+        return null;
     }
 
     private int previousBackrefStart(StackEntry snapshot, int mem) {
@@ -2801,6 +2851,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opPushIfPeekNext() {
         int addr = code[ip++];
+        // The next-head optimization is derived from the lexical successor of
+        // a subexpression body.  A shared body entered through a subexpression
+        // call instead has its effective continuation at the caller, so retain
+        // the ordinary repeat alternative for that frame.
+        if (isInsideSubexpCall(0)) {
+            ip++;
+            pushAlt(ip + addr, s, sprev, pkeep);
+            return;
+        }
         // beyond string check
         if (s < range && code[ip] == bytes[s]) {
             ip++;

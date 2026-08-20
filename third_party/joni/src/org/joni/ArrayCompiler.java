@@ -64,6 +64,10 @@ final class ArrayCompiler extends Compiler {
     private final List<CClassNode> wideScalarClasses = new ArrayList<>();
     private final Set<BackRefNode> previousRepeatBackrefs =
             Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<BackRefNode> recursiveFrameBackrefs =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<EncloseNode> calledFrameStopBacktracks =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     ArrayCompiler(Analyser analyser) {
         super(analyser);
@@ -75,6 +79,7 @@ final class ArrayCompiler extends Compiler {
         code = new int[codeSize];
         codeLength = 0;
         collectPreviousRepeatBackrefs(root, 0, 0, new boolean[regex.numMem + 1]);
+        collectRecursiveFrameBackrefs(root, false);
     }
 
     @Override
@@ -455,7 +460,7 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileBackrefNode(BackRefNode node) {
         BackRefNode br = node;
-        if (usesPreviousRepeatCapture(br)) {
+        if (usesPreviousRepeatCapture(br) || usesPreviousRecursiveFrameCapture(br)) {
             addOpcode(isIgnoreCase(regex.options) ? OPCode.BACKREFN_PREV_IC : OPCode.BACKREFN_PREV);
             addMemNum(br.back[0]);
             return;
@@ -502,6 +507,58 @@ final class ArrayCompiler extends Compiler {
 
     private boolean usesPreviousRepeatCapture(BackRefNode backref) {
         return previousRepeatBackrefs.contains(backref);
+    }
+
+    private boolean usesPreviousRecursiveFrameCapture(BackRefNode backref) {
+        return recursiveFrameBackrefs.contains(backref);
+    }
+
+    private void collectRecursiveFrameBackrefs(Node node, boolean recursiveFrame) {
+        if (node == null) return;
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            for (ListNode item = (ListNode)node; item != null; item = item.tail) {
+                collectRecursiveFrameBackrefs(item.value, recursiveFrame);
+            }
+            break;
+        case NodeType.QTFR:
+            collectRecursiveFrameBackrefs(((QuantifierNode)node).target, recursiveFrame);
+            break;
+        case NodeType.ENCLOSE:
+            EncloseNode enclosure = (EncloseNode)node;
+            if (recursiveFrame && enclosure.isStopBtSimpleRepeat()) {
+                calledFrameStopBacktracks.add(enclosure);
+            }
+            collectRecursiveFrameBackrefs(enclosure.target,
+                    recursiveFrame || (enclosure.isMemory() && enclosure.isCalled()));
+            break;
+        case NodeType.ANCHOR:
+            collectRecursiveFrameBackrefs(((AnchorNode)node).target, recursiveFrame);
+            break;
+        case NodeType.CALL:
+            CallNode call = (CallNode)node;
+            // A recursive target is normally compiled from its CALL node,
+            // rather than from the enclosing occurrence in the main tree.
+            // Visit that body once to classify its forward backreferences;
+            // do not follow nested calls again, as their targets form cycles.
+            if (!recursiveFrame && call.isRecursion()) {
+                collectRecursiveFrameBackrefs(call.target.target, true);
+            }
+            break;
+        case NodeType.BREF:
+            BackRefNode backref = (BackRefNode)node;
+            if (recursiveFrame && backref.isRecursion()) {
+                recursiveFrameBackrefs.add(backref);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    private boolean preservesCalledFrameBacktracking(EncloseNode enclosure) {
+        return calledFrameStopBacktracks.contains(enclosure);
     }
 
     private void collectPreviousRepeatBackrefs(Node node, int repeatDepth, int alternativeDepth,
@@ -936,7 +993,7 @@ final class ArrayCompiler extends Compiler {
             if (qn.greedy) {
                 if (qn.headExact != null) {
                     len += OPSize.PUSH_OR_JUMP_EXACT1 + modTLen + OPSize.JUMP;
-                } else if (qn.nextHeadExact != null) {
+                } else if (qn.nextHeadExact != null && qn.target.getType() != NodeType.CALL) {
                     len += OPSize.PUSH_IF_PEEK_NEXT + modTLen + OPSize.JUMP;
                 } else {
                     len += OPSize.PUSH + modTLen + OPSize.JUMP;
@@ -1021,7 +1078,7 @@ final class ArrayCompiler extends Compiler {
                     addBytes(sn.bytes, sn.p, 1);
                     compileRepeatTreeEmptyCheck(qn.target, emptyInfo, clearId);
                     addOpcodeRelAddr(OPCode.JUMP, -(modTLen + OPSize.JUMP + OPSize.PUSH_OR_JUMP_EXACT1));
-                } else if (qn.nextHeadExact != null) {
+                } else if (qn.nextHeadExact != null && qn.target.getType() != NodeType.CALL) {
                     addOpcodeRelAddr(OPCode.PUSH_IF_PEEK_NEXT, modTLen + OPSize.JUMP);
                     StringNode sn = (StringNode)qn.nextHeadExact;
                     addBytes(sn.bytes, sn.p, 1);
@@ -1134,7 +1191,8 @@ final class ArrayCompiler extends Compiler {
             if (node.isStopBtSimpleRepeat()) {
                 QuantifierNode qn = (QuantifierNode)node.target;
                 tlen = compileLengthTree(qn.target);
-                len = tlen * qn.lower + OPSize.PUSH + tlen + OPSize.POP + OPSize.JUMP;
+                len = tlen * qn.lower + OPSize.PUSH + tlen + OPSize.JUMP;
+                if (!preservesCalledFrameBacktracking(node)) len += OPSize.POP;
             } else {
                 len = OPSize.PUSH_STOP_BT + tlen + OPSize.POP_STOP_BT;
             }
@@ -1263,10 +1321,12 @@ final class ArrayCompiler extends Compiler {
                 compileTreeNTimes(qn.target, qn.lower);
 
                 len = compileLengthTree(qn.target);
-                addOpcodeRelAddr(OPCode.PUSH, len + OPSize.POP + OPSize.JUMP);
+                int tailLen = preservesCalledFrameBacktracking(node)
+                        ? OPSize.JUMP : OPSize.POP + OPSize.JUMP;
+                addOpcodeRelAddr(OPCode.PUSH, len + tailLen);
                 compileTree(qn.target);
-                addOpcode(OPCode.POP);
-                addOpcodeRelAddr(OPCode.JUMP, -(OPSize.PUSH + len + OPSize.POP + OPSize.JUMP));
+                if (!preservesCalledFrameBacktracking(node)) addOpcode(OPCode.POP);
+                addOpcodeRelAddr(OPCode.JUMP, -(OPSize.PUSH + len + tailLen));
             } else {
                 addOpcode(OPCode.PUSH_STOP_BT);
                 compileTree(node.target);
@@ -1609,7 +1669,7 @@ final class ArrayCompiler extends Compiler {
         case NodeType.BREF:
             BackRefNode br = (BackRefNode)node;
 
-            if (usesPreviousRepeatCapture(br)) {
+            if (usesPreviousRepeatCapture(br) || usesPreviousRecursiveFrameCapture(br)) {
                 len = OPSize.OPCODE + OPSize.MEMNUM;
             } else if (Config.USE_BACKREF_WITH_LEVEL && br.isNestLevel()) {
                 len = OPSize.OPCODE + OPSize.OPTION + OPSize.LENGTH +
