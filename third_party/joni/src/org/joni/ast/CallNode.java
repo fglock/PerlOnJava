@@ -27,6 +27,8 @@ public final class CallNode extends StateNode {
     public final int nameEnd;
 
     public int groupNum;
+    /** Perl subroutine calls retain captures that were visible to their caller. */
+    public boolean preserveCallerCaptures;
     public EncloseNode lexicalTarget;
     public EncloseNode target;
     public UnsetAddrList unsetAddrList;

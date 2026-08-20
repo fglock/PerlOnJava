@@ -2986,11 +2986,19 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         }
         int addr = code[ip++];
         int encodedGroupNum = code[ip++];
-        boolean recursive = encodedGroupNum == Integer.MIN_VALUE || encodedGroupNum <= -2;
-        int groupNum = encodedGroupNum == Integer.MIN_VALUE ? 0
-                : recursive ? -encodedGroupNum - 1 : encodedGroupNum;
+        // -1 is emitted for the compiler's ordinary group-entry CALL.  It is
+        // not a user-visible subpattern call and predates the flag encoding.
+        if (encodedGroupNum == -1) {
+            pushCallFrame(ip, -1, false, false, false);
+            ip = addr;
+            return;
+        }
+        boolean recursive = (encodedGroupNum & 0x40000000) != 0;
+        boolean preserveCallerCaptures = (encodedGroupNum & 0x80000000) != 0;
+        int groupNum = encodedGroupNum & 0x3fffffff;
         recursive |= isInsideSubexpCall(groupNum);
-        pushCallFrame(ip, groupNum, recursive);
+        pushCallFrame(ip, groupNum, recursive || preserveCallerCaptures,
+                preserveCallerCaptures, recursive);
         ip = addr; // absolute address
     }
 
@@ -3395,7 +3403,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             } else if (entry.type == CALL_FRAME) {
                 if (returns.isEmpty()) break;
                 int returnIndex = returns.pop();
-                if (entry.getCallFrameCaptureSnapshot() != null
+                if (entry.getCallFrameRecursiveVisibility()
+                        && entry.getCallFrameCaptureSnapshot() != null
                         && (visible == null || returnIndex > visible.returnIndex)) {
                     visible = new CompletedRecursiveCall(entry, returnIndex);
                 }

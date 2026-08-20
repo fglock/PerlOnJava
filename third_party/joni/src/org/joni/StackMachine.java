@@ -406,12 +406,17 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
-    protected final void pushCallFrame(int pat, int groupNum, boolean recursive) {
+    protected final void pushCallFrame(int pat, int groupNum, boolean snapshotCaptures,
+            boolean restoreCallerCaptures, boolean recursiveVisibility) {
         StackEntry e = ensure1();
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
         e.setCallFrameNum(groupNum);
-        e.setCallFrameCaptureSnapshot(recursive ? captureSnapshot() : null);
+        // Joni uses snapshots to mark completed recursive calls for MatchView,
+        // independently of PerlOnJava's caller-capture restoration policy.
+        e.setCallFrameCaptureSnapshot(snapshotCaptures ? captureSnapshot() : null);
+        e.setCallFrameRestoreCallerCaptures(restoreCallerCaptures);
+        e.setCallFrameRecursiveVisibility(recursiveVisibility);
         stk++;
     }
 
@@ -423,18 +428,23 @@ abstract class StackMachine extends Matcher implements StackType {
         return snapshot;
     }
 
-    /**
-     * Whole-pattern recursion is a lexical re-entry and must not publish its
-     * inner captures to the caller. Named and numbered subexpression calls do
-     * publish their captures, as the upstream Joni tests require.
-     */
+    /** Restore only the caller capture owned by a PerlOnJava subroutine call. */
     protected final void restoreCallFrameCaptureSnapshot(StackEntry frame) {
-        if (frame.getCallFrameNum() != 0) return;
+        if (!frame.getCallFrameRestoreCallerCaptures()) return;
         int[] snapshot = frame.getCallFrameCaptureSnapshot();
         if (snapshot == null) return;
         int count = regex.numMem + 1;
-        System.arraycopy(snapshot, 0, repeatStk, memStartStk, count);
-        System.arraycopy(snapshot, count, repeatStk, memEndStk, count);
+        int groupNum = frame.getCallFrameNum();
+        if (groupNum == 0) {
+            // Whole-pattern recursion has no ordinary capture slot.  Preserve
+            // its established snapshot behavior, covered by the recursive
+            // backreference reducer.
+            System.arraycopy(snapshot, 0, repeatStk, memStartStk, count);
+            System.arraycopy(snapshot, count, repeatStk, memEndStk, count);
+        } else if (groupNum > 0 && groupNum < count) {
+            repeatStk[memStartStk + groupNum] = snapshot[groupNum];
+            repeatStk[memEndStk + groupNum] = snapshot[count + groupNum];
+        }
     }
 
     protected final boolean isInsideSubexpCall(int groupNum) {
