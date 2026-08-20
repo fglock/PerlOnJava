@@ -185,10 +185,11 @@ Active ownership:
 - P4: first close the four combined-build byte-property/control-verb fixture
   families, then exhaust the remaining 91 same-source native `reg_mesg.t`
   parser/range/escape diagnostic rows.
-- P5: close the `EMPTY-STR` custom-charname blocker, debug/source trace, and the
-  two `pat_advanced.t` rows.
-- P6: unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and removed-
-  accommodation CPAN release matrix; latest-upstream sync is integrated.
+- P5: deliver the `EMPTY-STR` and constant-pattern custom-charname transport,
+  then own the remaining `\\N{}`/custom-charname and analyser/debug residual.
+- P6: complete the unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and
+  String::Random matrix, then own the redirected Unicode-property wildcard,
+  name/value, user-property, and string-property diagnostic residual.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
   immutable acceptance, PR/CI, plan state, combined build, and release evidence.
 
