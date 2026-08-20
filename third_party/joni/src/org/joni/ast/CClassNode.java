@@ -655,7 +655,7 @@ public final class CClassNode extends Node {
             } else {
                 for (int c=0; c<BitSet.SINGLE_BYTE_SIZE; c++) {
                     if (enc.codeToMbcLength(c) > 0 && /* check invalid code point */
-                            !(enc.isWord(c) || c >= maxCode)) bs.set(env, c);
+                            (!enc.isWord(c) || c >= maxCode)) bs.set(env, c);
                 }
                 if (asciiRange) addAllMultiByteRange(env);
             }
