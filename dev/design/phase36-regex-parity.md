@@ -177,14 +177,17 @@ properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
 immutable comparison are pending. The production backend selector has been
 removed and its packaging/property invariance gates are awaiting the combined
-build. The latest focused `reg_mesg.t` artifact is 3190/3286 on both backends,
-with 96 failures partitioned as two native-runtime-warning, 74 redirected
-Unicode/property/charname, and 20 analyser/debug rows. P5 owns the
+build. The latest focused `reg_mesg.t` artifact is 3198/3292 on both backends.
+The native parser/range/structural/runtime-warning diagnostic lease is
+exhausted; the residual is redirected Unicode/property/charname and
+analyser/debug rows. P5 owns the
 `re/pat_advanced.t` source/debug and charname rows. The byte-property fold and
 control-verb source correction, selector retirement, P4 boundary/quantifier
 diagnostics, and P5 direct custom-charname correction are jointly green at
 `61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
-integrated through `572e6354b` and queued for the following batched gate.
+integrated through `1dc978d3b`; licensed Joni and the final warning fixture are
+green on both execution backends. The newer batch still needs its complete
+warning-free `make` gate.
 
 The interpreter comparison's 53 lower rows are classified: 48 are general
 interpreter limitations, four are shared native rows, and its sole independent
@@ -194,16 +197,16 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: close the final two mode-duplicate runtime-interpolated unknown-escape
-  warning rows without overlapping P5's shared runtime files, then diagnose
-  the zero-TAP `anyof.t` timeout; all other native diagnostic rows are closed.
-- P5: deliver the green immutable custom-charname AST/CV thread transport, then
-  own the `pat_advanced_thr.t` and `pat_special_cc` acceptance regressions plus
-  the remaining `\\N{}`/custom-charname analyser/debug residual.
+- P4: diagnose the zero-TAP `anyof.t` timeout and continue adjacent native
+  execution-completion roots; all focused native diagnostic rows are closed.
+- P5: finish immutable custom-charname AST/CV thread transport without the
+  large-CV row-788 regression, then own the remaining `\\N{}`/custom-charname
+  analyser/debug residual.
 - P6: after removing undeclared shared-file edits, exhaust the owned
   UnicodeResolver/property diagnostic residual and the zero-TAP
-  `uniprops01..04.t` performance failures. If its lease expires, this complete
-  slice is fenced and redirected.
+  `uniprops01..04.t` performance failures and the `/u` `\\w` complement root in
+  both `pat_special_cc` modes. If its lease expires, this complete slice is
+  fenced and redirected.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
   immutable acceptance, `regex_sets.t` and `op/stat.t` regression
   classification, PR/CI, plan state, combined build, and release evidence.
