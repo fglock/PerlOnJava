@@ -564,10 +564,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             
             try {
-                // All executable regexes use the native Joni compiler.  The
-                // remaining Java cache construction below is retired in the
-                // next cutover step; this flag keeps that mechanical removal
-                // separate from the native-policy transition.
                 regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
                 if (sourcePolicyWarning != null) {
                     regex.inlineModifierWarnings.add(sourcePolicyWarning);
@@ -1966,6 +1962,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             char ch = pattern.charAt(i);
             if (ch > 0xff) return true;
             if (!quoted && ch == '[') {
+                if (characterClassDepth > 0) {
+                    // A nested opener (including the '[' in a POSIX class)
+                    // consumes the parent class's first member position.
+                    classAtStart[characterClassDepth - 1] = false;
+                }
                 classAtStart[characterClassDepth] = true;
                 characterClassDepth++;
                 continue;
