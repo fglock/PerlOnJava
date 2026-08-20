@@ -49,12 +49,21 @@ public interface CharacterPropertyResolver {
 
     /**
      * Returns resolved ranges and their ignore-case policy, or {@code null} to
-     * use the encoding's built-in property lookup. The context flag allows a
-     * resolver to defer properties whose class-composition semantics require
-     * frontend handling.
+     * use the encoding's built-in property lookup. The class context allows a
+     * resolver to defer properties whose composition semantics require host
+     * handling. The overload below additionally exposes lexical options.
      */
     Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                    boolean inCharacterClass);
+
+    /**
+     * Resolves a property with the lexical option state active at its token.
+     * Existing resolvers remain source-compatible and may ignore that state.
+     */
+    default Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                           boolean inCharacterClass, int option) {
+        return resolve(bytes, p, end, encoding, inCharacterClass);
+    }
 
     /** Validates a Perl script-run span; ordinary resolvers remain neutral. */
     default boolean isScriptRun(byte[] bytes, int p, int end, Encoding encoding,

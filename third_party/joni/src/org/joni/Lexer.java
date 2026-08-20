@@ -2536,7 +2536,8 @@ class Lexer extends ScannerSupport {
                 if (syntax.characterPropertyResolver != null) {
                     CharacterPropertyResolver.Result resolved =
                             syntax.characterPropertyResolver.resolve(
-                                    bytes, _p, last, enc, inCharacterClass);
+                                    bytes, _p, last, enc, inCharacterClass,
+                                    env.option);
                     if (resolved != null) {
                         validateCharacterPropertyRanges(resolved.ranges,
                                 resolved.wideRanges);

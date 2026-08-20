@@ -326,7 +326,14 @@ class Parser extends Lexer {
                                    List<StringNode> namedSequences) {}
 
     private record PerlExtendedClassPrimary(CClassNode node,
-                                            boolean scopedOptionsApplied) {}
+                                            CClassNode asciiFoldSource,
+                                            CClassNode foldSource,
+                                            boolean scopedOptionsApplied) {
+        private PerlExtendedClassPrimary(
+                CClassNode node, boolean scopedOptionsApplied) {
+            this(node, node, node, scopedOptionsApplied);
+        }
+    }
 
     private final class PerlCharsetOptionState {
         private int asciiModifierCount;
@@ -2095,16 +2102,17 @@ class Parser extends Lexer {
         PerlExtendedClassPrimary primary = parsePerlExtendedClassPrimary(afterOperator);
         CClassNode result = primary.node();
         if (!primary.scopedOptionsApplied() && isIgnoreCase(env.option)) {
-            caseFoldPerlExtendedClass(result);
+            caseFoldPerlExtendedClass(primary);
         }
         return result;
     }
 
-    private void caseFoldPerlExtendedClass(CClassNode result) {
+    private void caseFoldPerlExtendedClass(PerlExtendedClassPrimary primary) {
         int previousOption = env.option;
         env.option &= ~Option.PERL_BYTE_PATTERN;
         try {
-            cClassCaseFold(result, result, result, result);
+            cClassCaseFold(primary.node(), primary.node(),
+                    primary.asciiFoldSource(), primary.foldSource());
         } finally {
             env.option = previousOption;
         }
@@ -2252,7 +2260,8 @@ class Parser extends Lexer {
             if (!parsed.namedSequences().isEmpty()) {
                 newSyntaxException(PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER);
             }
-            return new PerlExtendedClassPrimary(parsed.standard(), false);
+            return new PerlExtendedClassPrimary(parsed.standard(),
+                    ascPtr.p, foldPtr.p, false);
         }
         if (extendedClassAt('\\')) {
             return parsePerlExtendedClassEscape();
