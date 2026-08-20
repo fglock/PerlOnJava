@@ -1,8 +1,14 @@
 --- perl5/cpan/IPC-Cmd/lib/IPC/Cmd.pm
 +++ src/main/perl/lib/IPC/Cmd.pm
-@@ -8,5 +8,9 @@
+@@ -7,7 +7,14 @@
+     use constant IS_VMS         => $^O eq 'VMS'                       ? 1 : 0;
+     use constant IS_WIN32       => $^O eq 'MSWin32'                   ? 1 : 0;
      use constant IS_HPUX        => $^O eq 'hpux'                      ? 1 : 0;
-     use constant IS_WIN98       => (IS_WIN32 and !Win32::IsWinNT())   ? 1 : 0;
+-    use constant IS_WIN98       => (IS_WIN32 and !Win32::IsWinNT())   ? 1 : 0;
++    use constant IS_WIN98       => (IS_WIN32 and do {
++        require Win32;
++        !Win32::IsWinNT();
++    }) ? 1 : 0;
 +    use constant IS_PERLONJAVA  => do {
 +        require Config;
 +        $Config::Config{perlonjava} ? 1 : 0;
@@ -10,7 +16,7 @@
      use constant ALARM_CLASS    => __PACKAGE__ . '::TimeOut';
      use constant SPECIAL_CHARS  => qw[< > | &];
      use constant QUOTE          => do { IS_WIN32 ? q["] : q['] };
-@@ -38,7 +42,7 @@
+@@ -38,7 +45,7 @@
          require Time::HiRes; Time::HiRes->import();
          require Win32 if IS_WIN32;
      };
@@ -19,3 +25,73 @@
  
      eval {
          my $wait_start_time = Time::HiRes::clock_gettime(&Time::HiRes::CLOCK_MONOTONIC);
+@@ -190,6 +197,7 @@
+ sub can_capture_buffer {
+     my $self    = shift;
+ 
++    return 1 if IS_PERLONJAVA;
+     return 1 if $USE_IPC_RUN    && $self->can_use_ipc_run;
+     return 1 if $USE_IPC_OPEN3  && $self->can_use_ipc_open3;
+     return;
+@@ -1345,9 +1353,18 @@
+             qq[: Command '$pp_cmd' aborted by alarm after $timeout seconds]
+         }, ALARM_CLASS } if $timeout;
+         alarm $timeout || 0;
++
++        ### PerlOnJava has no fork(), so forced IPC::Run/Open3 selection must
++        ### still use the JVM ProcessBuilder backend.
++        if (IS_PERLONJAVA) {
++            $self->_debug("# Using PerlOnJava::Process. Have buffer: $have_buffer")
++                if $DEBUG;
++            $ok = $self->_perlonjava_run(
++                $cmd, $_out_handler, $_err_handler, $timeout, $verbose
++            );
+ 
+         ### IPC::Run is first choice if $USE_IPC_RUN is set.
+-        if( !IS_WIN32 and $USE_IPC_RUN and $self->can_use_ipc_run( 1 ) ) {
++        } elsif( !IS_WIN32 and $USE_IPC_RUN and $self->can_use_ipc_run( 1 ) ) {
+             ### ipc::run handlers needs the command as a string or an array ref
+ 
+             $self->_debug( "# Using IPC::Run. Have buffer: $have_buffer" )
+@@ -1407,8 +1424,41 @@
+                     ? ($ok, $err, \@buffer, \@buff_out, \@buff_err)
+                     : ($ok, $err )
+                 : $ok
++
++
++}
++
++sub _perlonjava_run {
++    my ($self, $cmd, $outhand, $errhand, $timeout, $verbose) = @_;
+ 
++    require Config;
++    require PerlOnJava::Process;
++    my $argv = ref($cmd) eq 'ARRAY' ? [@$cmd] : IS_WIN32
++        ? [($ENV{COMSPEC} || 'cmd.exe'), '/d', '/s', '/c', $cmd]
++        : [($Config::Config{sh} || '/bin/sh'), '-c', $cmd];
+ 
++    my $result = PerlOnJava::Process::run_process(
++        argv    => $argv,
++        timeout => $timeout,
++        tee     => 0,
++    );
++    $outhand->($result->{stdout}) if length($result->{stdout} // '');
++    $errhand->($result->{stderr}) if length($result->{stderr} // '');
++
++    if ($result->{timed_out}) {
++        $self->error(loc("Command '%1' timed out", ref($cmd) ? "@$cmd" : $cmd));
++        return $self->ok(0);
++    }
++    if (length($result->{error} // '')) {
++        $self->error($result->{error});
++        return $self->ok(0);
++    }
++    if (($result->{exit_code} // -1) != 0) {
++        $self->error(loc("Command '%1' exited with value %2",
++            ref($cmd) ? "@$cmd" : $cmd, $result->{exit_code}));
++        return $self->ok(0);
++    }
++    return $self->ok(1);
+ }
+ 
+ sub _open3_run_win32 {
