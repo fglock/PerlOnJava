@@ -305,6 +305,27 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String activeCodeBits = WarningBitsRegistry.getCurrent();
         for (String warning : warningsOnUse) {
             String category = RegexQuoteMeta.warningCategory(warning);
+            if (lexicalReStrict
+                    && !WarningFlags.areWarningsForcedOff()
+                    && !WarningFlags.isWarningSuppressedAtRuntime(category)
+                    && !WarningFlags.isWarningSuppressedAtRuntime("regexp")
+                    && !WarningFlags.isWarningSuppressedAtRuntime("digit")) {
+                String warningBits = WarningBitsRegistry.getRuntimeWarningBits();
+                if (warningBits == null) {
+                    warningBits = activeCodeBits;
+                }
+                RuntimeScalar message = new RuntimeScalar(warning);
+                if (warningBits != null
+                        && WarningFlags.isFatalInBits(warningBits, category)) {
+                    WarnDie.die(message, RuntimeScalarCache.scalarEmptyString);
+                } else {
+                    // `use re 'strict'` makes its retained regex diagnostics
+                    // default-on.  This is independent of $^W, including the
+                    // deliberately localized unset value used by reg_mesg.t.
+                    WarnDie.warn(message, RuntimeScalarCache.scalarEmptyString);
+                }
+                continue;
+            }
             if (!WarningFlags.areWarningsForcedOn()
                     && InterpreterState.current() == null
                     && activeCodeBits != null
