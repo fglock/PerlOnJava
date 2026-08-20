@@ -517,6 +517,7 @@ final class JoniRegexPattern {
                 || syntaxFeatures.asciiStrictPresent()
                 || syntaxFeatures.keepPresent()
                 || syntaxFeatures.lookbehindPresent()
+                || syntaxFeatures.nativeExtendedClassPresent()
                 || syntaxFeatures.branchResetPresent()
                 || syntaxFeatures.conditionalPresent()
                 || syntaxFeatures.alphaAssertionPresent()
@@ -576,6 +577,7 @@ final class JoniRegexPattern {
     private record PerlSyntaxFeatures(boolean keepPresent,
                                       boolean keepInLookaround,
                                       boolean lookbehindPresent,
+                                      boolean nativeExtendedClassPresent,
                                       boolean branchResetPresent,
                                       boolean conditionalPresent,
                                       boolean alphaAssertionPresent,
@@ -590,6 +592,7 @@ final class JoniRegexPattern {
         java.util.ArrayDeque<Boolean> groups = new java.util.ArrayDeque<>();
         boolean keepPresent = false;
         boolean lookbehindPresent = false;
+        boolean nativeExtendedClassPresent = false;
         boolean branchResetPresent = false;
         boolean conditionalPresent = false;
         boolean alphaAssertionPresent = false;
@@ -607,7 +610,14 @@ final class JoniRegexPattern {
             }
             if (extendedClassDepth > 0) {
                 if (ch == '\\' && i + 1 < pattern.length()) {
+                    if (pattern.charAt(i + 1) == 'p' || pattern.charAt(i + 1) == 'P') {
+                        nativeExtendedClassPresent = true;
+                    }
                     i++;
+                } else if (ch == '[' && i + 1 < pattern.length()
+                        && pattern.charAt(i + 1) == ':') {
+                    nativeExtendedClassPresent = true;
+                    extendedClassDepth++;
                 } else if (ch == '[') {
                     extendedClassDepth++;
                 } else if (ch == ']' && --extendedClassDepth == 0) {
@@ -657,7 +667,7 @@ final class JoniRegexPattern {
                 } else if (escaped == 'K') {
                     keepPresent = true;
                     if (lookaroundDepth > 0) {
-                        return new PerlSyntaxFeatures(true, true, lookbehindPresent, branchResetPresent, conditionalPresent,
+                        return new PerlSyntaxFeatures(true, true, lookbehindPresent, nativeExtendedClassPresent, branchResetPresent, conditionalPresent,
                                 alphaAssertionPresent, asciiStrictPresent);
                     }
                 }
@@ -722,7 +732,7 @@ final class JoniRegexPattern {
                 if (groups.pop()) lookaroundDepth--;
             }
         }
-        return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, branchResetPresent, conditionalPresent,
+        return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, nativeExtendedClassPresent, branchResetPresent, conditionalPresent,
                 alphaAssertionPresent, asciiStrictPresent);
     }
 
