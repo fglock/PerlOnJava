@@ -358,17 +358,19 @@ public class StringParser {
         }
 
         // fetch the last string: s/aaa/bbb/LAST
-        String modifier = "";
-        if (tokens.get(pos).type == LexerTokenType.IDENTIFIER) {
-            modifier = tokens.get(pos).text;
-            ast.next = pos + 1;
+        StringBuilder modifier = new StringBuilder();
+        while (tokens.get(pos).type == LexerTokenType.IDENTIFIER
+                || tokens.get(pos).type == LexerTokenType.NUMBER) {
+            modifier.append(tokens.get(pos).text);
+            pos++;
+            ast.next = pos;
         }
         ArrayList<String> buffers = ast.buffers;
         if (buffers == null) {
             buffers = new ArrayList<>();
             ast.buffers = buffers;
         }
-        buffers.add(modifier);
+        buffers.add(modifier.toString());
         return ast;
     }
 

@@ -519,8 +519,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
 
-            validateModifiers(modifiers);
-
             regex.regexFlags = fromModifiers(modifiers, compilePatternString);
             regex.useGAssertion = regex.regexFlags.useGAssertion();
 
@@ -735,6 +733,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     throw unimplEx;
                 }
             }
+
+            // Parse the complete alphanumeric modifier suffix before reporting
+            // it. Perl can diagnose a malformed pattern and an invalid numeric
+            // modifier from the same quote-like construct; compiling the
+            // pattern first preserves the more specific native syntax error.
+            // A valid pattern still reaches the ordinary modifier diagnostic.
+            validateModifiers(modifiers);
 
             // Cache the result if the cache is not full
             if (state().compiledRegexCache.size() < MAX_REGEX_CACHE_SIZE
