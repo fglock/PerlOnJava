@@ -150,10 +150,12 @@ affected corpus before taking another slice.
   evidence.
 - Exact `/aa` routing/folding gates pass on native Joni, and the Java `/aa`
   workaround is removed.
-- The legacy `JPERL_REGEX_BACKEND=java` spelling remains accepted for command
-  compatibility but can no longer re-enable Java production matching. Java
-  matcher storage and empty-pattern/substitution retry branches remain only as
-  migration scaffolding and are the next deletion boundary.
+- Java matcher storage, Java regex frontend compilation, matcher-semantic
+  preprocessing, and the legacy extended-class adapter are deleted. The legacy
+  `JPERL_REGEX_BACKEND=java` spelling cannot re-enable Java production matching.
+  Its disconnected compatibility parser remains only because existing routing
+  tests compile against that API; removing both is the final selector-cleanup
+  item and requires explicit authority to retire those tests.
 - Perl grouped nested-quantifier semantics and extended-mode quantifier
   modifiers are native Joni behavior; the exact `regexp.t` differential removes
   seven failures with no introductions.
@@ -319,10 +321,12 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the three active, non-overlapping Joni slices: forward/reverse literal
-   and class fold closure; unconditional native compilation followed by removal
-   of Java matcher-semantic preprocessing; and native search/optimizer work that
-   makes unchanged `speed*` complete without regressing `pat_psycho*`.
+1. Finish the active non-overlapping Joni slices: valid `/d` byte-backed class
+   fold policy; generated Perl scalar character names and aliases; native
+   search/optimizer work that makes unchanged `speed*` complete without
+   regressing `pat_psycho*`; and native lexer/parser diagnostic families from
+   unchanged `reg_mesg.t`. Do not implement adjacent-class or variable-width
+   full-fold-backreference rows that standard Perl itself rejects.
 2. Integrate those commits on one immutable barrier. Run exact `regexp.t`,
    `reg_fold.t`, `reg_email*`, `regex_sets.t`, Unicode-property, callback,
    recursion, `script_run.t`, `pat.t`, `pat_advanced.t`, `pat_re_eval.t`, and
@@ -435,6 +439,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Remove Java matcher-semantic preprocessing and the legacy extended-class
       adapter
 - [x] Generated Perl named-sequence lookup and native sequence resolution
+- [ ] Generated Perl scalar character-name and alias lookup
 - [x] Remove temporary named-sequence encoding from native Joni pattern source
 - [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
 - [x] Restore Perl diagnostics for unknown/empty/malformed named sequences
@@ -463,6 +468,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Unterminated runtime-source diagnostics for regexp rows 575/576/581
 - [x] Dynamic undef-warning scope and nested-continuation `/aa` state
 - [x] Native compile diagnostics and exact warning-category inheritance
+- [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
