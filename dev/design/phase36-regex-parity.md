@@ -181,6 +181,16 @@ affected corpus before taking another slice.
   literals without changing single-literal lookbehind width. The targeted
   `regexp.t` identity and the existing literal/backreference fold contract pass
   on default and forced Joni for JVM and interpreter.
+- Case-insensitive backreferences compare a continuous Perl fold stream, so
+  multi-character expansions may cross captured-character boundaries while
+  byte patterns remain ASCII-fold-only. Folded optimizer and lookbehind length
+  ranges retain shorter source-character alternatives. The isolated fold
+  differential improves exact `regexp.t` to 2,207/2,210 with zero introductions;
+  the current combined artifact is 2,206/2,210 because native adapter retirement
+  exposes one additional named-group diagnostic row. Its four residuals are
+  assigned to diagnostic, frontend provenance, and lookbehind owners. The
+  complete fold contract and deterministic fold-grind matrix agree across
+  backends.
 - Perl's exact `L_` General_Category compatibility spelling resolves as `LC`
   before loose alias normalization, so uncased letters no longer enter that
   class. The focused system-Perl oracle, four runtime legs, and imported
@@ -338,10 +348,10 @@ behavior.
 ## Ordered Next Steps
 
 1. Finish the four active, non-overlapping slices: reduce user-property
-   translation to executable callback/source policy; complete native
-   forward/reverse literal and class fold expansion; close the next substantial
-   native `reg_mesg.t` diagnostic tranche; and close the next runtime-source/
-   eval diagnostic tranche. Each slice must include system-Perl oracles,
+   translation to executable callback/source policy; close variable-lookbehind
+   and KEEP-in-lookaround matcher semantics; close the next substantial native
+   `reg_mesg.t` diagnostic tranche; and close the next runtime-source/eval
+   diagnostic tranche. Each slice must include system-Perl oracles,
    JVM/interpreter parity, complete affected-corpus deltas, and zero
    introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
@@ -374,7 +384,15 @@ behavior.
    as-implemented regex architecture, and Joni fork documents with shipped
    source; remove or summarize redundant design documents; rebase on current
    `master`; and open the final reviewable PR.
-7. After the final implementation PR is integrated into `master`, review the
+7. After the final implementation PR is integrated into `master`, retire the
+   regex `JPERL_UNIMPLEMENTED=warn` compatibility path. First remove automatic
+   injection for regex files from `dev/tools/perl_test_runner.pl` and rerun the
+   complete 286-file JVM/interpreter acceptance corpus. Then delete
+   `RuntimeRegex`'s warning-plus-never-match downgrade, update its compatibility
+   tests to standard-Perl behavior, and remove obsolete regex documentation.
+   Keep any independently justified non-regex development use separate; the
+   environment setting must no longer alter regex compilation or matching.
+8. After the final implementation PR is integrated into `master`, review the
    shipped PerlOnJava behavior against Perl's documented regex surface in
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`, `pod/perlrequick.pod`,
    `pod/perlrepository.pod`, `pod/perlre.pod`, `pod/perlretut.pod`, and
@@ -461,7 +479,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Preserve foldable-property provenance through native class-set operations
 - [x] Preserve nullable end-anchor terminal search candidates
 - [x] Variable-width simple-fold backreference comparison
-- [ ] Forward/reverse literal and character-class fold expansion
+- [x] Forward/reverse literal, character-class, and backreference fold expansion
 - [x] Prevent the legacy backend selector from re-enabling Java matching
 - [x] Remove Java matcher storage and empty-pattern/substitution retry branches
 - [x] Remove Java matcher-semantic preprocessing and the legacy extended-class
@@ -529,6 +547,9 @@ gates may reopen it if a semantic regression appears.
       recursion, dynamic source, byte strings, and Unicode strings.
 - [ ] `pat_psycho*` and `speed*` pass under bounded parallelism.
 - [ ] No supported regex test needs `JPERL_UNIMPLEMENTED=warn`.
+- [ ] After merge, regex runner injection and RuntimeRegex's
+      `JPERL_UNIMPLEMENTED=warn` downgrade are removed and the complete corpus
+      passes without the setting.
 - [ ] Joni is the sole production matcher; Java matcher routing is gone and any
       retained selector-policy parser is disconnected from production.
 - [ ] Matcher-semantic preprocessing is gone.
