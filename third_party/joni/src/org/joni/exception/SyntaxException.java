@@ -24,14 +24,20 @@ public class SyntaxException extends JOniException{
     public static final int UNKNOWN_PATTERN_POSITION = -1;
 
     private final int patternPosition;
+    private final String diagnosticMessage;
 
     public SyntaxException(String message) {
         this(message, UNKNOWN_PATTERN_POSITION);
     }
 
     public SyntaxException(String message, int patternPosition) {
+        this(message, patternPosition, message);
+    }
+
+    public SyntaxException(String message, int patternPosition, String diagnosticMessage) {
         super(message);
         this.patternPosition = patternPosition;
+        this.diagnosticMessage = diagnosticMessage;
     }
 
     /**
@@ -41,5 +47,13 @@ public class SyntaxException extends JOniException{
      */
     public int getPatternPosition() {
         return patternPosition;
+    }
+
+    /**
+     * Returns the source-aware diagnostic when the parser retained one, while
+     * {@link #getMessage()} remains the stable engine-level error contract.
+     */
+    public String getDiagnosticMessage() {
+        return diagnosticMessage;
     }
 }

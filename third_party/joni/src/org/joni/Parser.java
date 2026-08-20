@@ -426,6 +426,8 @@ class Parser extends Lexer {
             boolean fetched = false;
             arg.toEscaped = token.escaped;
             arg.toNamedCharacter = token.namedCharacter;
+            arg.toStart = token.backP - getBegin();
+            arg.toEnd = p - getBegin();
 
             switch (token.type) {
             case CHAR:
@@ -798,6 +800,16 @@ class Parser extends Lexer {
 
     private void parseCharClassValEntry2(CClassNode cc, CClassNode ascCc,
                                          CClassNode foldCc, CCStateArg arg) {
+        if (arg.state == CCSTATE.RANGE && arg.from > arg.to
+                && env.usesPerlDiagnostics() && !syntax.allowEmptyRangeInCC()) {
+            int sourceStart = getBegin() + arg.fromStart;
+            int sourceEnd = getBegin() + arg.toEnd;
+            String range = new String(bytes, sourceStart, sourceEnd - sourceStart,
+                    enc.getCharset());
+            String message = env.emptyRangeError();
+            newSyntaxException(message, arg.toEnd,
+                    message + " \"" + range + "\"");
+        }
         warnPerlExtendedClassRange(arg);
         cc.nextStateValue(arg, ascCc, foldCc, env);
     }

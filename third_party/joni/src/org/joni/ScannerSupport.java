@@ -53,6 +53,10 @@ abstract class ScannerSupport extends IntHolder implements ErrorMessages {
         return end;
     }
 
+    protected final int getLastFetched() {
+        return lastFetched;
+    }
+
     protected final int getPatternPosition() {
         return p - begin;
     }
@@ -173,6 +177,11 @@ abstract class ScannerSupport extends IntHolder implements ErrorMessages {
 
     protected void newSyntaxException(String message, int patternPosition) {
         throw new SyntaxException(message, patternPosition);
+    }
+
+    protected void newSyntaxException(String message, int patternPosition,
+            String diagnosticMessage) {
+        throw new SyntaxException(message, patternPosition, diagnosticMessage);
     }
 
     protected void newValueException(String message) {
