@@ -17,6 +17,7 @@ my %option = (
     packaging_tool => 'dev/tools/verify-joni-packaging.pl',
     jperl => './jperl',
     timeout => 300,
+    version_timeout => 30,
     jobs => 5,
 );
 my $help;
@@ -30,6 +31,7 @@ GetOptions(
     'perl5-dir=s' => \$option{perl5_dir},
     'jperl=s' => \$option{jperl},
     'timeout=i' => \$option{timeout},
+    'version-timeout=i' => \$option{version_timeout},
     'jobs=i' => \$option{jobs},
     'ledger-tool=s' => \$option{ledger_tool},
     'runner-tool=s' => \$option{runner_tool},
@@ -46,6 +48,7 @@ for my $required (qw(baseline artifact_dir jar sbom)) {
         && length $option{$required};
 }
 die "--timeout must be positive\n" unless $option{timeout} > 0;
+die "--version-timeout must be positive\n" unless $option{version_timeout} > 0;
 die "--jobs must be positive\n" unless $option{jobs} > 0;
 
 my $root = $option{source_dir} // getcwd();
@@ -58,7 +61,7 @@ for my $tool (qw(ledger_tool runner_tool comparator_tool packaging_tool)) {
     validate_file($option{$tool}, "$tool path");
 }
 validate_program($option{perl}, 'Perl executable');
-validate_file($option{jperl}, 'jperl executable');
+validate_program($option{jperl}, 'jperl executable');
 
 my $start_sha = git_sha($root);
 my $start_state = tracked_state($root);
@@ -88,6 +91,7 @@ my %statuses;
 run_logged(
     name => 'jperl-version', command => [$option{jperl}, '-v'],
     log => $path{'jperl-version.log'}, commands => \@commands, statuses => \%statuses,
+    timeout => $option{version_timeout},
 );
 my $runner_sha = parse_runner_sha($path{'jperl-version.log'}, $start_sha);
 run_logged(
@@ -187,6 +191,7 @@ Options:
   --source-dir DIR           Clean source checkout to verify (default cwd)
   --perl5-dir DIR            Current imported perl5 checkout (default ./perl5)
   --timeout N --jobs N       Existing runner bounds and worker budget
+  --version-timeout N        Hard bound for the jperl identity probe (default 30)
   --ledger-tool PATH --runner-tool PATH --comparator-tool PATH
   --packaging-tool PATH      Injectable list-form subprocess tools for testing
 USAGE
@@ -267,15 +272,19 @@ sub read_raw {
 sub run_logged {
     my (%arg) = @_;
     my @command = @{$arg{command}};
-    my $status = run_to_log($arg{log}, $arg{environment}, @command);
+    my $status = run_to_log($arg{log}, $arg{environment}, $arg{timeout}, @command);
     push @{$arg{commands}}, { name => $arg{name}, argv => \@command,
         environment => $arg{environment} // {} };
     $arg{statuses}{$arg{name}} = $status;
+    if ($status == 124 && defined $arg{timeout}) {
+        warn "$arg{name} timed out after $arg{timeout}s; see $arg{log}\n";
+        exit 124;
+    }
     die "$arg{name} failed with exit status $status; see $arg{log}\n" if $status != 0;
 }
 
 sub run_to_log {
-    my ($log, $environment, @command) = @_;
+    my ($log, $environment, $timeout, @command) = @_;
     my $pid = fork();
     die "Cannot fork $command[0]: $!\n" unless defined $pid;
     if ($pid == 0) {
@@ -289,7 +298,25 @@ sub run_to_log {
         exec { $command[0] } @command;
         die "Cannot execute $command[0]: $!\n";
     }
-    waitpid($pid, 0);
+    if (defined $timeout) {
+        my $completed = eval {
+            local $SIG{ALRM} = sub { die "acceptance child timeout\n" };
+            alarm $timeout;
+            waitpid($pid, 0);
+            alarm 0;
+            1;
+        };
+        if (!$completed) {
+            alarm 0;
+            kill 'TERM', $pid;
+            select undef, undef, undef, 0.1;
+            kill 'KILL', $pid if kill 0, $pid;
+            waitpid($pid, 0);
+            return 124;
+        }
+    } else {
+        waitpid($pid, 0);
+    }
     return $? >> 8 if $? != -1 && ($? & 127) == 0;
     return 255;
 }
