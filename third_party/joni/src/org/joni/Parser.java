@@ -2232,7 +2232,7 @@ class Parser extends Lexer {
             inc();
             return new PerlExtendedClassPrimary(nested, true);
         }
-        if (extendedClassStarts("[:")) {
+        if (extendedClassStarts("[:") && p + 2 < stop && bytes[p + 2] != ']') {
             // In (?[...]), a POSIX bracket is itself a primary: [:alpha:]
             // is not the nested standard-class spelling [[:alpha:]].
             p += 2;
@@ -2438,6 +2438,18 @@ class Parser extends Lexer {
     private void skipPerlExtendedClassSpace() {
         while (left()) {
             int codePoint = extendedClassCode();
+            if (extendedClassStarts("(?#")) {
+                p += 3;
+                while (left() && !extendedClassAt(')')) {
+                    p += enc.length(bytes, p, stop);
+                }
+                if (!left()) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
+                p += enc.length(bytes, p, stop);
+                continue;
+            }
             if (codePoint == '#') {
                 do {
                     int length = enc.length(bytes, p, stop);
