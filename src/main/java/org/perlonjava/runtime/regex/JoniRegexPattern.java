@@ -286,6 +286,10 @@ final class JoniRegexPattern {
                 hasControlVerbState, byteMode, input, callbacks, subject);
     }
 
+    Map<String, Integer> namedGroups() {
+        return namedGroups;
+    }
+
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
 
     static InputEncoding inputEncoding(String input) {
