@@ -38,9 +38,9 @@ The immutable no-regression comparison point is:
   intact under `third_party/`. Standalone packaging relocates them to
   `org.perlonjava.internal`, avoiding public namespace collisions without
   rewriting the maintained source namespace.
-- Joni is the default for every closure-bearing pattern throughout migration.
-  No callback, condition, control verb, recursive program, or dynamic source may
-  fall back to Java. Ordinary constants move to Joni as their native gates pass.
+- Joni is the production matcher for ordinary constants, closures, conditions,
+  control verbs, recursive programs, and dynamic source. No regex may fall back
+  to Java.
 - Final production code has one matcher. Ordinary patterns allocate no callout
   state, and a match operation never runs two engines because regex side effects
   are observable.
@@ -79,8 +79,10 @@ affected corpus before taking another slice.
   integrated signed-IV range fix removes row 1651 with zero introductions in
   exact A/B evidence; a fresh combined serial gate remains required because a
   later run stopped before the complete plan under concurrent CPAN load.
-- The current imported `reg_mesg.t` passes 2,015/2,658 on each backend with an
-  identical status/test-number vector. Native extended-class diagnostics now
+- The latest isolated native-diagnostic tranche improves imported `reg_mesg.t`
+  from 2,015/2,658 to 2,050/2,658 on each backend with zero introductions and
+  an identical status/test-number vector; a combined-head rerun is pending.
+  Native extended-class diagnostics now
   distinguish binary operators that have no preceding operand, adjacent
   operands without an operator, and misplaced parentheses. Overlong-lookbehind
   errors retain Perl's unmarked `m/pattern/` rendering. Unsupported conditional
@@ -125,11 +127,12 @@ affected corpus before taking another slice.
   interpreter. Executable callbacks introduced by overloaded scalar and array
   interpolation retain containing lexicals under large-method fallback, and
   nonstrict scalar dereference preserves first-class REGEXP source.
-- Exact `re/regexp.t` executes 2,210/2,210 with 2,200 passing on the current
-  acceptance artifact. Recursive capture publication reaches 2,208/2,210 on
-  both execution backends at its focused barrier, leaving only the separately
-  owned named-diagnostic and variable-lookbehind rows; the combined integrated
-  artifact still requires an exact rerun. Non-nullable quantified captures now
+- Exact `re/regexp.t` executes 2,210/2,210. The last combined artifact passes
+  2,206 on both execution backends; the subsequent isolated diagnostic slice
+  closes its two compile-diagnostic rows with zero introductions. The two
+  remaining combined identities are assigned to frontend provenance and native
+  lookbehind-prevalidation owners, and the integrated artifact still requires
+  an exact rerun. Non-nullable quantified captures now
   preserve the preceding
   iteration for backreferences, clear captures untouched by the successful
   final iteration, and restore state on backtracking. Lexical warning masks
@@ -185,12 +188,10 @@ affected corpus before taking another slice.
   multi-character expansions may cross captured-character boundaries while
   byte patterns remain ASCII-fold-only. Folded optimizer and lookbehind length
   ranges retain shorter source-character alternatives. The isolated fold
-  differential improves exact `regexp.t` to 2,207/2,210 with zero introductions;
-  the current combined artifact is 2,206/2,210 because native adapter retirement
-  exposes one additional named-group diagnostic row. Its four residuals are
-  assigned to diagnostic, frontend provenance, and lookbehind owners. The
-  complete fold contract and deterministic fold-grind matrix agree across
-  backends.
+  differential improves its isolated exact `regexp.t` boundary with zero
+  introductions. The complete fold contract and deterministic fold-grind matrix
+  agree across backends; the current combined residuals are outside fold/search
+  code.
 - Perl's exact `L_` General_Category compatibility spelling resolves as `LC`
   before loose alias normalization, so uncased letters no longer enter that
   class. The focused system-Perl oracle, four runtime legs, and imported
@@ -347,12 +348,13 @@ behavior.
 
 ## Ordered Next Steps
 
-1. Finish the four active, non-overlapping slices: reduce user-property
-   translation to executable callback/source policy; close variable-lookbehind
-   and KEEP-in-lookaround matcher semantics; close the next substantial native
-   `reg_mesg.t` diagnostic tranche; and close the next runtime-source/eval
-   diagnostic tranche. Each slice must include system-Perl oracles,
-   JVM/interpreter parity, complete affected-corpus deltas, and zero
+1. Finish the four active, non-overlapping slices: close KEEP-in-lookaround
+   matcher publication; close the next three-to-five native `reg_mesg.t`
+   diagnostic families; finish runtime-source escaping/strict-policy cleanup,
+   frontend fold/property provenance, obsolete lookbehind prevalidation, and
+   warning-default cache state; and complete the source-grounded architecture/
+   fork-document consolidation. Each semantic slice must include system-Perl
+   oracles, JVM/interpreter parity, complete affected-corpus deltas, and zero
    introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
    `make`. The preceding native-adapter/runtime-source batch is already saved in
