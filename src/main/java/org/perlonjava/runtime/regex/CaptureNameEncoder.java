@@ -5,14 +5,14 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 /**
- * Utility class for encoding/decoding capture group names to work around Java regex limitations.
+ * Utility class for encoding and decoding internal capture-group metadata.
  *
  * <h2>Purpose</h2>
- * Java's regex engine has several limitations compared to Perl:
+ * The frontend and native matcher exchange metadata through capture names for:
  * <ul>
- *   <li>No support for executing code in regex ((?{...}) blocks)</li>
- *   <li>Named captures cannot contain underscores</li>
- *   <li>Duplicate capture group names not supported</li>
+ *   <li>constant code-block results used by the callback adapter</li>
+ *   <li>capture names containing underscores</li>
+ *   <li>duplicate capture names that need stable publication identities</li>
  * </ul>
  *
  * <h2>Solution: In-Place Encoding</h2>
@@ -51,14 +51,14 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
  *   <li>Self-contained: pattern carries its own metadata</li>
  *   <li>No static state accumulation</li>
  *   <li>Works with regex caching</li>
- *   <li>Reusable pattern for multiple Java limitations</li>
+ *   <li>Independent of the production matcher implementation</li>
  * </ul>
  */
 public class CaptureNameEncoder {
 
     /**
-     * Maximum length for a Java capture group name.
-     * Longer names may cause pattern compilation issues.
+     * Maximum length for an encoded capture group name.
+     * Longer names may cause native pattern compilation issues.
      */
     public static final int MAX_CAPTURE_NAME_LENGTH = 200;
 
@@ -78,7 +78,7 @@ public class CaptureNameEncoder {
 
     /**
      * Compiled pattern that matches the duplicate-name marker followed by its
-     * counter at the end of a Java group name. Used by {@link #decodeGroupName}
+     * counter at the end of an encoded group name. Used by {@link #decodeGroupName}
      * and {@link #stripDuplicateMarker} to recover the original Perl name.
      */
     private static final java.util.regex.Pattern DUPLICATE_MARKER_PATTERN =
@@ -185,7 +185,7 @@ public class CaptureNameEncoder {
 
     // UNDERSCORE ENCODING:
     //
-    // Java regex doesn't allow underscores in group names (only [a-zA-Z][a-zA-Z0-9]*).
+    // The internal capture-name transport uses an alphanumeric alphabet.
     // Perl allows \w+ (letters, digits, underscores) for group names.
     //
     // Encoding: Replace each underscore with "U95" (ASCII code 95 for '_')
@@ -193,16 +193,16 @@ public class CaptureNameEncoder {
     //   (?<_>)       → (?<U95>)
     //   (?<_foo>)    → (?<U95foo>)
     //
-    // Names starting with underscore need a letter prefix for Java, so U95 works
+    // Names starting with underscore need a letter prefix, so U95 works
     // since it starts with 'U'. To avoid ambiguity, literal "U95" sequences in
     // names are escaped as "UU95" (the 'U' itself is escaped).
 
     /**
-     * Encodes a Perl capture group name for use in Java regex.
+     * Encodes a Perl capture group name for the internal matcher transport.
      * Replaces underscores with "U95" and escapes literal "U95" sequences.
      *
      * @param perlName The original Perl capture group name
-     * @return The encoded name safe for Java regex, or the original if no encoding needed
+     * @return The transport-safe name, or the original if no encoding is needed
      */
     public static String encodeGroupName(String perlName) {
         if (perlName == null || (!perlName.contains("_") && !perlName.contains("U95"))) {
@@ -216,20 +216,20 @@ public class CaptureNameEncoder {
     }
 
     /**
-     * Decodes a Java regex capture group name back to the original Perl name.
+     * Decodes an internal capture group name back to the original Perl name.
      * Reverses the encoding done by encodeGroupName, and also strips any
      * duplicate-name marker carried by the native capture-name adapter
      * for patterns like {@code (?<y>a)|(?<y>b)}.
      *
-     * @param javaName The encoded Java group name
+     * @param javaName The encoded internal group name
      * @return The original Perl capture group name
      */
     public static String decodeGroupName(String javaName) {
         if (javaName == null) {
             return javaName;
         }
-        // First strip any duplicate-name marker (preprocessor adds this for
-        // names that appear more than once in alternation branches).
+        // First strip any duplicate-name marker (the native compilation adapter
+        // adds this for names that appear more than once in alternation branches).
         javaName = stripDuplicateMarker(javaName);
         if (!javaName.contains("U95")) {
             return javaName;

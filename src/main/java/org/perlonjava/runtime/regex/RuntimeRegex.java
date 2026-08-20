@@ -2196,8 +2196,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
             found = false;
         } catch (StackOverflowError e) {
-            // Java's backtracking engine uses the native stack for some nested
-            // quantifiers. Perl reports an unsuccessful match when its own
+            // Joni uses the native stack for some nested quantifiers. Perl
+            // reports an unsuccessful match when its own
             // recursion ceiling is reached; do not let the JVM error abort the
             // whole program for the equivalent pathological failure case.
             found = false;
@@ -2270,13 +2270,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Avoid Java Pattern recursion for ExifTool's XMP element scan:
+     * Avoid deep matcher recursion for ExifTool's XMP element scan:
      * {@code <(/?)x:xmpmeta([-\w:.\x80-\xff]*)(.*?(/?))>}.
      *
-     * <p>On Google extended-XMP payloads, Java's backtracking engine can
-     * recurse deeply enough to throw {@link StackOverflowError}, while Perl
-     * handles the scan iteratively. This narrow path preserves the captures
-     * ExifTool uses while keeping other regexes on the normal engine.</p>
+     * <p>On Google extended-XMP payloads, a generic backtracking scan can
+     * recurse deeply enough to throw {@link StackOverflowError}. This narrow
+     * path preserves the captures ExifTool uses while keeping other regexes on
+     * the normal Joni engine.</p>
      */
     private static RuntimeBase tryFastXmpMetaElementScan(RuntimeRegex regex,
                                                          RuntimeScalar string,
@@ -2377,7 +2377,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Avoid Java Pattern recursion for ExifTool's generic XML element scan:
+     * Avoid deep matcher recursion for ExifTool's generic XML element scan:
      * {@code <([?/]?)([-\w:.\x80-\xff]+|!--)([^>]*)>}.
      */
     private static RuntimeBase tryFastXmlElementScan(RuntimeRegex regex,

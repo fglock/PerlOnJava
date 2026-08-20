@@ -183,7 +183,7 @@ factorial(1000000);  # Not interruptible
 **Solution:** Don't check every subroutine call (too expensive)
 **Impact:** Rare edge case - 99% of code has loops
 
-### 2. Regex Engine (Java Pattern/Matcher)
+### 2. Regex Engine (Joni)
 
 **Problem:**
 ```perl
@@ -191,7 +191,8 @@ alarm(1);
 "aaa...aaa" =~ /(a+)+b/;  # Catastrophic backtracking - NOT interruptible
 ```
 
-**Why:** `matcher.find()` is Java library call, not interruptible
+**Why:** A native Joni search runs inside one JVM call and does not currently
+poll PerlOnJava's signal state while backtracking.
 **Workaround:** Wrap regex in timeout thread when alarm active
 **Status:** Not yet implemented (future enhancement)
 
@@ -394,4 +395,3 @@ sleep 10;
 This implementation provides a **lightweight, efficient, and practical** solution for alarm()-based signal handling in PerlOnJava. While not 100% compatible with Perl (particularly regarding regex interruption), it covers 85-90% of real-world use cases with negligible performance overhead.
 
 The key insight is to check signals at **strategic points** (loop entries, I/O) rather than everywhere, achieving both correctness and performance.
-
