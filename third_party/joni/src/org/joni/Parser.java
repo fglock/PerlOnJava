@@ -863,6 +863,9 @@ class Parser extends Lexer {
             case '\'':
                 if (Config.USE_NAMED_GROUP) {
                     if (syntax.op2QMarkLtNamedGroup()) {
+                        if (!left()) {
+                            newSyntaxException(PERL_QUOTE_NAMED_CAPTURE_NOT_TERMINATED);
+                        }
                         listCapture = false; // goto named_group1
                         node = parseEncloseNamedGroup2(listCapture);
                         break;
@@ -872,7 +875,11 @@ class Parser extends Lexer {
                 } // USE_NAMED_GROUP
                 break;
             case '<':  /* look behind (?<=...), (?<!...) */
-                if (!left()) newSyntaxException(END_PATTERN_WITH_UNMATCHED_PARENTHESIS);
+                if (!left()) {
+                    newSyntaxException(syntax.op2OptionPerl()
+                            ? PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED
+                            : END_PATTERN_WITH_UNMATCHED_PARENTHESIS);
+                }
                 fetch();
                 if (c == '=') {
                     node = new AnchorNode(AnchorType.LOOK_BEHIND);
@@ -881,6 +888,11 @@ class Parser extends Lexer {
                 } else {
                     if (Config.USE_NAMED_GROUP) {
                         if (syntax.op2QMarkLtNamedGroup()) {
+                            if (syntax.op2OptionPerl() && c != '>'
+                                    && !hasCodePointAhead('>')) {
+                                newSyntaxException(PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED,
+                                        nextClosingParenthesisPosition());
+                            }
                             unfetch();
                             c = '<';
 
@@ -1063,6 +1075,11 @@ class Parser extends Lexer {
                     } else {
                         if (Config.USE_NAMED_GROUP) {
                             if (c == '<' || c == '\'') {    /* (<name>), ('name') */
+                                if (!left()) {
+                                    newSyntaxException(c == '<'
+                                            ? PERL_ANGLE_NAMED_CONDITION_NOT_TERMINATED
+                                            : PERL_QUOTE_NAMED_CONDITION_NOT_TERMINATED);
+                                }
                                 name = p;
                                 fetchNamedBackrefToken();
                                 inc();
@@ -1617,6 +1634,16 @@ class Parser extends Lexer {
             cursor += enc.length(bytes, cursor, stop);
         }
         return false;
+    }
+
+    private int nextClosingParenthesisPosition() {
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == ')') return cursor - getBegin();
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return stop - getBegin();
     }
 
     private int findStrPosition(int[]s, int n, int from, int to, Ptr nextChar) {

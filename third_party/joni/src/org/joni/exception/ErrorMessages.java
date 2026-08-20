@@ -102,6 +102,12 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Sequence (?P%n...) not recognized";
     String PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED =
             "Sequence (?<... not terminated";
+    String PERL_QUOTE_NAMED_CAPTURE_NOT_TERMINATED =
+            "Sequence (?'... not terminated";
+    String PERL_ANGLE_NAMED_CONDITION_NOT_TERMINATED =
+            "Sequence (?(<... not terminated";
+    String PERL_QUOTE_NAMED_CONDITION_NOT_TERMINATED =
+            "Sequence (?('... not terminated";
     String PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED =
             "Sequence ?P=... not terminated";
     String PERL_ALPHA_ASSERTION_REQUIRES_COLON =
