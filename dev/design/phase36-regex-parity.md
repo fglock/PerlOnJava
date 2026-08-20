@@ -349,13 +349,14 @@ behavior.
 ## Ordered Next Steps
 
 1. Finish the four active, non-overlapping slices: preserve trusted callback
-   token provenance and remove the untrusted callback no-op; close the next
-   three-to-five native `reg_mesg.t` diagnostic families; close the next two or
-   three native matcher-semantic residual families; and finish frontend fold/
-   property provenance, obsolete lookbehind prevalidation, warning-default
-   cache state, and inverted KEEP match-variable publication. Each semantic
-   slice must include system-Perl oracles, JVM/interpreter parity, complete
-   affected-corpus deltas, and zero introductions.
+   token provenance across nested runtime-source templates and then isolate
+   warmed callback clones; reduce the current 480-row same-source
+   `reg_mesg.t` frontier through the next three-to-five native diagnostic
+   families; qualify and optimize the complete `speed*`/`pat_psycho*` lane;
+   and finish warning-default cache state, numeric diagnostic rendering, and
+   inverted KEEP match-variable publication. Each semantic slice must include
+   system-Perl oracles, JVM/interpreter parity, complete affected-corpus deltas,
+   and zero introductions.
 2. Integrate those commits on one immutable barrier and run one warning-free
    `make`. The preceding native-adapter/runtime-source batch is already saved in
    draft PR 1087 at an exact warning-free checkpoint. Refresh exact
@@ -534,7 +535,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Dynamic code-array source strict policy, eval lexical-cell lifetime, and
       child-thread reuse
 - [x] Native compile diagnostics and exact warning-category inheritance
-- [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`
+- [ ] Remaining native lexer/parser diagnostic families in `reg_mesg.t`;
+      current same-source JVM/interpreter frontier is 480 failing rows
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Fail-closed PR-958 comparison with machine-readable evidence
@@ -546,6 +548,8 @@ gates may reopen it if a semantic regression appears.
       and is transactional and idempotent
 - [x] Native `(*script_run:...)`, `(*sr:...)`, `(*atomic_script_run:...)`, and
       `(*asr:...)`
+- [ ] Complete bounded `speed*` and `pat_psycho*` semantic/performance closure
+      on JVM, interpreter, direct Joni, and thread wrappers
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       mechanically derived 286-file gates on one integrated artifact
 
