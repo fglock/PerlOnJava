@@ -2,9 +2,11 @@ use strict;
 use warnings;
 
 use File::Path qw(make_path);
+use File::Find qw(find);
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
+use IO::Compress::Zip qw($ZipError);
 use JSON::PP;
 use Test::More;
 
@@ -28,6 +30,14 @@ subtest 'packaging entry failure families are fail-closed' => sub {
     rejected($wrong_notice_jar, $same_sbom, qr/notice bytes differ/, 'wrong notice bytes');
     my ($unrelocated_jar, $another_sbom) = fixture('unrelocated', unrelocated => 1);
     rejected($unrelocated_jar, $another_sbom, qr/unrelocated Joni classes/, 'unrelocated class');
+    my ($duplicate_class_jar, $duplicate_class_sbom) =
+        fixture('duplicate-class', duplicate_class => 1);
+    rejected($duplicate_class_jar, $duplicate_class_sbom, qr/duplicate class entry/,
+        'duplicate relocated class');
+    my ($duplicate_notice_jar, $duplicate_notice_sbom) =
+        fixture('duplicate-notice', duplicate_notice => 1);
+    rejected($duplicate_notice_jar, $duplicate_notice_sbom, qr/duplicate notice/,
+        'duplicate notice');
 };
 
 subtest 'SBOM failure families are fail-closed' => sub {
@@ -37,6 +47,8 @@ subtest 'SBOM failure families are fail-closed' => sub {
     rejected($jar, $sbom, qr/wrong jcodings version/, 'wrong JCodings version');
     ($jar, $sbom) = fixture('missing-joni', sbom => sub { shift @{$_[0]{components}} });
     rejected($jar, $sbom, qr/missing vendored joni/, 'missing Joni component');
+    ($jar, $sbom) = fixture('missing-jcodings', sbom => sub { pop @{$_[0]{components}} });
+    rejected($jar, $sbom, qr/missing vendored jcodings/, 'missing JCodings component');
     ($jar, $sbom) = fixture('duplicate-purl', sbom => sub { push @{$_[0]{components}}, {
         type => 'library', 'bom-ref' => 'other', purl => $joni_ref,
         group => 'example', name => 'other', version => '1' } });
@@ -78,8 +90,15 @@ sub fixture {
         write_file(File::Spec->catfile($tree, 'META-INF', 'licenses', $notice), $bytes);
     }
     my $jar = File::Spec->catfile($temporary, "$name.jar");
-    system('jar', 'cf', $jar, '-C', $tree, '.');
-    die "jar fixture failed" if $? != 0;
+    if ($option{duplicate_class} || $option{duplicate_notice}) {
+        create_zip_fixture($jar, $tree,
+            $option{duplicate_class}
+                ? 'org/perlonjava/internal/joni/Regex.class'
+                : 'META-INF/licenses/joni-LICENSE.txt');
+    } else {
+        system('jar', 'cf', $jar, '-C', $tree, '.');
+        die "jar fixture failed" if $? != 0;
+    }
     my $document = {
         components => [
             { type => 'library', 'bom-ref' => $joni_ref, purl => $joni_ref,
@@ -93,6 +112,29 @@ sub fixture {
     my $sbom = File::Spec->catfile($temporary, "$name.json");
     write_file($sbom, JSON::PP->new->canonical->encode($document));
     return ($jar, $sbom);
+}
+
+sub create_zip_fixture {
+    my ($jar, $tree, $duplicate) = @_;
+    my @names;
+    find({ no_chdir => 1, wanted => sub {
+        return unless -f $_;
+        my $name = File::Spec->abs2rel($_, $tree);
+        $name =~ s{\\}{/}g;
+        push @names, $name;
+    }}, $tree);
+    @names = sort @names;
+    push @names, $duplicate;
+    my $first = shift @names;
+    my $zip = IO::Compress::Zip->new($jar, Name => $first)
+        or die "Cannot create duplicate-entry fixture: $ZipError";
+    print {$zip} read_file(File::Spec->catfile($tree, split m{/}, $first));
+    for my $name (@names) {
+        $zip->newStream(Name => $name)
+            or die "Cannot add duplicate-entry fixture stream: $ZipError";
+        print {$zip} read_file(File::Spec->catfile($tree, split m{/}, $name));
+    }
+    close $zip or die "Cannot close duplicate-entry fixture: $ZipError";
 }
 
 sub rejected {

@@ -152,6 +152,26 @@ for my $call (@comparison_calls) {
 is(scalar(grep { $_->{kind} eq 'packaging' } @calls), 1,
     'exact artifact packaging verification executes once');
 
+my $sleeping_jperl = fake_tool('sleeping-jperl', <<'SLEEPING_JPERL');
+#!/usr/bin/env perl
+sleep 30;
+SLEEPING_JPERL
+chmod 0755, $sleeping_jperl or die "Cannot chmod sleeping fake jperl: $!";
+my $timeout_artifacts = File::Spec->catdir($temporary, 'timeout-artifacts');
+make_path($timeout_artifacts);
+my @timeout_command = @command;
+for (my $i = 0; $i < @timeout_command; $i++) {
+    $timeout_command[$i + 1] = $sleeping_jperl
+        if $timeout_command[$i] eq '--jperl';
+    $timeout_command[$i + 1] = $timeout_artifacts
+        if $timeout_command[$i] eq '--artifact-dir';
+}
+push @timeout_command, '--version-timeout', 1;
+my $timeout_output = capture_tool(@timeout_command);
+is($? >> 8, 124, 'hung jperl identity probe exits with timeout status');
+like($timeout_output, qr/jperl-version timed out after 1s/,
+    'hung identity probe has a specific timeout diagnostic');
+
 done_testing;
 
 sub fake_tool {
@@ -159,6 +179,25 @@ sub fake_tool {
     my $path = File::Spec->catfile($temporary, $name);
     write_file($path, $contents);
     return $path;
+}
+
+sub capture_tool {
+    my (@command) = @_;
+    pipe my $read, my $write or die "pipe: $!";
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if ($pid == 0) {
+        close $read;
+        open STDOUT, '>&', $write or die $!;
+        open STDERR, '>&', $write or die $!;
+        exec { $command[0] } @command;
+        die "exec: $!";
+    }
+    close $write;
+    my $output = do { local $/; <$read> };
+    close $read;
+    waitpid($pid, 0);
+    return $output;
 }
 
 sub write_file {
