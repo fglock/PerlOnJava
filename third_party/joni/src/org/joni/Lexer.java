@@ -1427,11 +1427,20 @@ class Lexer extends ScannerSupport {
                 break;
             }
         }
+        boolean literalVerticalSpace = c == '\n' || c == '\r'
+                || c == '\f' || c == 0x0b;
+        if (syntax.op2OptionPerl() && Option.isPerlReStrict(env.option)
+                && !Option.isPerlExtendMore(env.option)
+                && literalVerticalSpace) {
+            newSyntaxException(
+                    "Literal vertical space in [] is illegal except under /x",
+                    p - getBegin());
+        }
         if (syntax.op2OptionPerl() && Option.isPerlExtendMore(env.option)) {
             if (c == '#') {
                 syntaxWarn("Use of unescaped '#' in [] is deprecated under /xx",
                         p - getBegin());
-            } else if (c == '\n' || c == '\r' || c == '\f' || c == 0x0b) {
+            } else if (literalVerticalSpace) {
                 syntaxWarn("Use of literal vertical space in [] is deprecated under /xx",
                         p - getBegin());
             }
