@@ -435,7 +435,7 @@ gates may reopen it if a semantic regression appears.
 - [x] Inactive branch-reset slot publication
 - [x] Native named-character whitespace and missing-brace diagnostics
 - [x] Remove the duplicate Java named-character translation path
-- [ ] Exact named-character diagnostic-version policy
+- [x] Exact named-character diagnostic-version policy
 - [x] Native whole-pattern `(?R)` parsing and execution
 - [ ] Recursive call capture publication and recursion safety
 - [x] Runtime-source comment/class masking and `/aa` propagation
