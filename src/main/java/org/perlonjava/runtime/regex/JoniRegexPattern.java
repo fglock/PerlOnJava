@@ -100,18 +100,11 @@ final class JoniRegexPattern {
             Syntax.RUBY.options & ~(Option.ASCII_RANGE
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable,
-            JoniRegexPattern::resolveNamedCharacter,
+            null,
             (bytes, p, end, encoding, inCharacterClass) ->
                     resolveCharacterProperty(
                             bytes, p, end, encoding, inCharacterClass, false),
             PERL_SCALAR_CODEC);
-
-    private static int resolveNamedCharacter(byte[] bytes, int p, int end,
-                                             Encoding encoding) {
-        return UnicodeResolver.getCodePointFromName(new String(bytes, p, end - p,
-                encoding == ISO8859_1Encoding.INSTANCE
-                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8));
-    }
 
     static final class NamedCharacterCache {
         private final Map<String, NamedCharacterExpansion> expansions =
@@ -141,7 +134,12 @@ final class JoniRegexPattern {
         NamedCharacterResolver resolver = new NamedCharacterResolver() {
             @Override
             public int resolve(byte[] bytes, int p, int end, Encoding encoding) {
-                return resolveNamedCharacter(bytes, p, end, encoding);
+                int[] sequence = resolveSequence(bytes, p, end, encoding);
+                if (sequence.length != 1) {
+                    throw new IllegalArgumentException(
+                            "named character resolver requires one code point");
+                }
+                return sequence[0];
             }
 
             @Override
@@ -771,6 +769,11 @@ final class JoniRegexPattern {
         return false;
     }
 
+    /**
+     * Test-facing compatibility normalizer. Production patterns retain raw
+     * {@code \N{...}} source for Joni's resolver; this helper keeps its
+     * historical one-code-point assertion independent of that native path.
+     */
     static String translatePattern(String pattern) {
         return translatePattern(pattern, RegexFlags.fromModifiers("", pattern), 0, true);
     }
