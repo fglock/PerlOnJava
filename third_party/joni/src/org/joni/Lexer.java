@@ -2259,6 +2259,31 @@ class Lexer extends ScannerSupport {
                 case 'K':
                     if (syntax.op2EscCapitalKKeep()) token.type = TokenType.KEEP;
                     break;
+                case 'c':
+                    if (syntax.opEscCControl()) {
+                        // A control escape can resolve to the literal 'c'
+                        // itself (notably \c#). Do not infer whether the
+                        // escape changed from token.getC(); its token identity
+                        // is unconditionally a code point.
+                        unfetch();
+                        fetchEscapedValue();
+                        token.type = TokenType.CODE_POINT;
+                        token.setCode(c);
+                        break;
+                    }
+                    unfetch();
+                    fetchEscapedValue();
+                    if (token.getC() != c) {
+                        token.type = TokenType.CODE_POINT;
+                        token.setCode(c);
+                    } else {
+                        int encLength = enc.length(bytes, token.backP, stop);
+                        if (encLength == Encoding.CHAR_INVALID) {
+                            throw new IllegalArgumentException("Invalid character found.");
+                        }
+                        p = token.backP + encLength;
+                    }
+                    break;
                 case 'v':
                 case 'V':
                     if (usesPerlVerticalWhitespaceEscape()) {

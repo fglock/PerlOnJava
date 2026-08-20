@@ -25,6 +25,7 @@ import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
 import static org.joni.constants.SyntaxProperties.OP3_PERL_LITERAL_OPEN_IN_CC;
+import static org.joni.constants.SyntaxProperties.OP_ESC_C_CONTROL;
 import static org.joni.constants.SyntaxProperties.OP_POSIX_BRACKET;
 
 import org.joni.constants.internal.AnchorType;
@@ -95,7 +96,7 @@ final class JoniRegexPattern {
     // explicitly in toJoniOptions(). Keep the richer Ruby parser surface used
     // by callouts and control verbs while changing only that default policy.
     private static final Syntax PERLONJAVA_SYNTAX = new Syntax(
-            "PERLONJAVA", Syntax.RUBY.op | OP_POSIX_BRACKET,
+            "PERLONJAVA", Syntax.RUBY.op | OP_POSIX_BRACKET | OP_ESC_C_CONTROL,
             (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL
                     | OP2_PLUS_POSSESSIVE_INTERVAL | OP2_ESC_H_HORIZONTAL_WHITESPACE,
             Syntax.RUBY.op3 | OP3_PERL_LITERAL_OPEN_IN_CC,
