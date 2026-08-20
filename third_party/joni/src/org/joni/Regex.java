@@ -66,6 +66,7 @@ public final class Regex {
     MatcherFactory factory;
 
     final Encoding enc;
+    final boolean perlSyntax;
     int options;
     int userOptions;
     Object userObject;
@@ -175,6 +176,7 @@ public final class Regex {
         }
 
         this.enc = enc;
+        this.perlSyntax = syntax.op2OptionPerl();
         this.wideScalarCodec = syntax.wideScalarCodec;
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;

@@ -215,6 +215,36 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 : stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd);
     }
 
+    private boolean usesPerlVariableLengthBackref() {
+        return regex.perlSyntax && !Option.isPerlBytePattern(currentRegexOptions);
+    }
+
+    private boolean backrefPerlSimpleClassCmp(int s1, IntHolder ps2, int mbLen) {
+        int end1 = s1 + mbLen;
+        int s2 = ps2.value;
+        boolean asciiStrict = Option.isPerlAsciiStrict(currentRegexOptions);
+
+        while (s1 < end1) {
+            if (s2 >= range) return false;
+            int left = enc.mbcToCode(bytes, s1, end1);
+            int right = enc.mbcToCode(bytes, s2, range);
+            s1 += enc.length(bytes, s1, end1);
+            s2 += enc.length(bytes, s2, range);
+            if (left == right) continue;
+            if (asciiStrict && Encoding.isAscii(left) != Encoding.isAscii(right)) {
+                return false;
+            }
+            int foldLength = PerlCaseFold.simpleFoldClassLength(left);
+            boolean matched = false;
+            for (int index = 0; index < foldLength; index++) {
+                matched |= PerlCaseFold.simpleFoldClassCodePoint(left, index) == right;
+            }
+            if (!matched) return false;
+        }
+        ps2.value = s2;
+        return true;
+    }
+
     @Override
     protected final int matchAt(int _range, int _sstart, int _sprev, boolean interrupt) throws InterruptedException {
         range = _range;
@@ -2398,11 +2428,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int pstart = backrefStart(mem);
         int pend = backrefEnd(mem);
         int n = pend - pstart;
-        if (!Option.isPerlAsciiStrict(currentRegexOptions) && s + n > range) {opFail(); return;}
+        if (!Option.isPerlAsciiStrict(currentRegexOptions)
+                && !usesPerlVariableLengthBackref() && s + n > range) {opFail(); return;}
         sprev = s;
 
         value = s;
-        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
+        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {
+            value = s;
+            if (!usesPerlVariableLengthBackref()
+                    || !backrefPerlSimpleClassCmp(pstart, this, n)) {opFail(); return;}
+        }
         s = value;
 
         if (sprev < range) {
