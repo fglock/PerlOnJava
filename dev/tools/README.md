@@ -51,6 +51,25 @@ The generated counts describe the current latest upstream checkout. Refresh
 comparisons may record hashes for that run, but they must not encode a
 historical Perl revision as the expected corpus.
 
+### run_phase36_regex_acceptance.pl
+
+**Purpose:** Compose the Phase 36 current-checkout ledger, bounded JVM and
+interpreter runner legs, PR-958-normalized fail-closed comparisons, and exact
+Joni packaging check into one immutable-artifact manifest. It records the
+starting/final source SHA and current `perl5/` SHA as provenance, along with
+list-form commands, exit statuses, counts, and SHA-256s for retained artifacts.
+
+The coordinator runs the real corpus only after creating the exact JAR/SBOM.
+Workers use `--prepare-only` with injected fake tool paths to test the
+composition without starting the corpus; the real invocation is:
+
+```bash
+perl dev/tools/run_phase36_regex_acceptance.pl \
+  --baseline logs/test_20260815_080000_958.log \
+  --artifact-dir /tmp/phase36-acceptance \
+  --jar target/perlonjava-standalone.jar --sbom build/reports/sbom.json
+```
+
 For a system-Perl oracle of an imported core test, remember that `t/test.pl`
 replaces `@INC` with the imported `../lib`. Preload host-core modules needed by
 the test before that reset. For example, the reproducible `op/do.t` oracle is:
