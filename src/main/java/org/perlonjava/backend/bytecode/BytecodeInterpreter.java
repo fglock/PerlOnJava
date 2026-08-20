@@ -929,8 +929,6 @@ public class BytecodeInterpreter {
                                     if (element instanceof RuntimeScalarReadOnly
                                             && element != RuntimeScalarCache.scalarUndef) {
                                         element = new ReadOnlyAlias(element);
-                                    } else if (element instanceof ScalarSpecialVariable) {
-                                        element = ensureMutableScalar(element);
                                     }
                                     registers[rd] = element;
                                     GlobalVariable.aliasForeachGlobalVariable(name, element);
@@ -1320,16 +1318,13 @@ public class BytecodeInterpreter {
                                     // mutating opcodes would silently strip), but mutation
                                     // attempts still throw "Modification of a read-only
                                     // value". Fixes op/ref.t 232-234, op/for.t 130-134.
-                                    // ScalarSpecialVariable is unboxed to a mutable copy
-                                    // because surrounding interpreter paths can't propagate
-                                    // its alias status (and Perl's $&/$1 differ from the
-                                    // foreach-loop-alias case anyway).
+                                    // Keep ScalarSpecialVariable cells live.  Foreach aliases
+                                    // to match variables such as $' must observe later matches,
+                                    // just like the JVM backend and Perl do.
                                     RuntimeScalar elem = iterator.next();
                                     if (elem instanceof RuntimeScalarReadOnly
                                             && elem != RuntimeScalarCache.scalarUndef) {
                                         elem = new ReadOnlyAlias(elem);
-                                    } else if (elem instanceof ScalarSpecialVariable) {
-                                        elem = ensureMutableScalar(elem);
                                     }
                                     registers[rd] = elem;
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
