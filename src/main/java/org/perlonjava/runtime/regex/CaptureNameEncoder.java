@@ -65,7 +65,7 @@ public class CaptureNameEncoder {
     /**
      * Marker appended to capture group names that appear more than once in the
      * same pattern, e.g. {@code (?<y>a)|(?<y>b)}. Perl accepts duplicate names
-     * in alternation; Java rejects them. RegexPreprocessor appends
+     * in alternation; the native compilation adapter appends
      * "{@value #DUPLICATE_MARKER}<N>" to the second and later occurrences, and
      * {@link #decodeGroupName} strips the suffix back off so user code sees
      * the original name.
@@ -218,7 +218,7 @@ public class CaptureNameEncoder {
     /**
      * Decodes a Java regex capture group name back to the original Perl name.
      * Reverses the encoding done by encodeGroupName, and also strips any
-     * duplicate-name marker added by {@link RegexPreprocessor#handleNamedCapture}
+     * duplicate-name marker carried by the native capture-name adapter
      * for patterns like {@code (?<y>a)|(?<y>b)}.
      *
      * @param javaName The encoded Java group name
