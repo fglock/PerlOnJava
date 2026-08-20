@@ -568,19 +568,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // remaining Java cache construction below is retired in the
                 // next cutover step; this flag keeps that mechanical removal
                 // separate from the native-policy transition.
-                if (compilePatternString.contains("(?&")
-                        && (compilePatternString.contains("(?<=")
-                                || compilePatternString.contains("(?<!"))) {
-                    // The retired adapter could not resolve subroutine widths
-                    // and rejected every recursive lookbehind as oversized.
-                    // Prevalidate with the native analyser instead: it accepts
-                    // fixed-width recursion and still throws the Perl ceiling
-                    // diagnostic for genuinely wider-than-255 lookbehinds.
-                    new JoniRegexPattern(compilePatternString,
-                            regex.regexFlags, trustedCalloutCount,
-                            !regex.regexFlags.isUnicode(), false, false,
-                            regex.namedCharacterCache);
-                }
                 regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
                 if (sourcePolicyWarning != null) {
                     regex.inlineModifierWarnings.add(sourcePolicyWarning);
