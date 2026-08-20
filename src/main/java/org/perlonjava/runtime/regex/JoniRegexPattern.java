@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
@@ -44,6 +45,8 @@ import org.perlonjava.runtime.runtimetypes.*;
 final class JoniRegexPattern {
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
+    private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final WideScalarCodec PERL_SCALAR_CODEC = new WideScalarCodec() {
         @Override
         public byte[] encode(long value, Encoding encoding) {
@@ -288,6 +291,46 @@ final class JoniRegexPattern {
     }
 
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
+
+    private record SubjectInputEncodings(Object value, int type, boolean uncheckedOctets,
+                                        InputEncoding unicode, InputEncoding bytes) {}
+
+    static InputEncoding inputEncoding(String input, RuntimeScalar subject, boolean byteMode) {
+        boolean directImmutableString = subject != null
+                && (subject.type == RuntimeScalarType.STRING
+                        || subject.type == RuntimeScalarType.BYTE_STRING)
+                && subject.value == input;
+        if (!directImmutableString) {
+            return byteMode ? byteInputEncoding(input) : inputEncoding(input);
+        }
+        Object value = subject.value;
+
+        synchronized (SUBJECT_INPUT_ENCODINGS) {
+            SubjectInputEncodings cached = SUBJECT_INPUT_ENCODINGS.get(subject);
+            if (cached != null && cached.value == value && cached.type == subject.type
+                    && cached.uncheckedOctets == subject.utf8UncheckedOctets) {
+                InputEncoding encoding = byteMode ? cached.bytes : cached.unicode;
+                if (encoding != null) return encoding;
+            }
+
+            InputEncoding unicode = cached != null && cached.value == value
+                    && cached.type == subject.type
+                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
+                    ? cached.unicode : null;
+            InputEncoding bytes = cached != null && cached.value == value
+                    && cached.type == subject.type
+                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
+                    ? cached.bytes : null;
+            if (byteMode) {
+                bytes = buildByteInputEncoding(input);
+            } else {
+                unicode = buildInputEncoding(input);
+            }
+            SUBJECT_INPUT_ENCODINGS.put(subject, new SubjectInputEncodings(
+                    value, subject.type, subject.utf8UncheckedOctets, unicode, bytes));
+            return byteMode ? bytes : unicode;
+        }
+    }
 
     static InputEncoding inputEncoding(String input) {
         synchronized (INPUT_ENCODINGS) {
@@ -1084,8 +1127,7 @@ final class JoniRegexPattern {
             this.input = input;
             this.callbacks = callbacks;
             this.subject = subject;
-            InputEncoding encoding = byteMode
-                    ? byteInputEncoding(input) : inputEncoding(input);
+            InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
             this.byteToChar = encoding.byteToChar();
