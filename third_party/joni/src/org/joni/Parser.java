@@ -1929,7 +1929,8 @@ class Parser extends Lexer {
         CClassNode result = parsePerlExtendedClassUnion();
         skipPerlExtendedClassSpace();
         if (!left() || !extendedClassAt(']')) {
-            if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)) {
+            if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)
+                    || extendedClassBodyStartsWithPosixLeaf(bodyStart)) {
                 newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
                         stop - getBegin());
             }
@@ -2377,6 +2378,25 @@ class Parser extends Lexer {
                 return firstLeafCodePoint == ' ' || firstLeafCodePoint == '\t'
                         || firstLeafCodePoint == '\n' || firstLeafCodePoint == '\r'
                         || firstLeafCodePoint == '\f';
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return false;
+    }
+
+    private boolean extendedClassBodyStartsWithPosixLeaf(int bodyStart) {
+        int cursor = bodyStart;
+        while (cursor < stop) {
+            int codePoint = enc.mbcToCode(bytes, cursor, stop);
+            if (codePoint != ' ' && codePoint != '\t' && codePoint != '\n'
+                    && codePoint != '\r' && codePoint != '\f') {
+                if (codePoint != '[') return false;
+                cursor += enc.length(bytes, cursor, stop);
+                if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != '[') {
+                    return false;
+                }
+                cursor += enc.length(bytes, cursor, stop);
+                return cursor < stop && enc.mbcToCode(bytes, cursor, stop) == ':';
             }
             cursor += enc.length(bytes, cursor, stop);
         }
