@@ -1540,7 +1540,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegex regex = resolveRegex(quotedRegex);
         regex.quoteConstruction = true;
         for (String warning : regex.inlineModifierWarnings) {
-            RegexQuoteMeta.warnAtConstruction(warning);
+            RegexQuoteMeta.warnAtConstruction(warning, regex.lexicalReStrict);
             regex.warningsOnUse.remove(warning);
         }
         regex.inlineModifierWarnings.clear();

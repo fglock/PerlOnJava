@@ -290,6 +290,7 @@ public class CompileOperator {
     }
 
     private static int regexWarningState(OperatorNode node) {
+        if (Boolean.TRUE.equals(node.getAnnotation("regexWarningsSuppressed"))) return -1;
         if (Boolean.TRUE.equals(node.getAnnotation("regexWarningsFatal"))) return 2;
         return Boolean.TRUE.equals(node.getAnnotation("regexWarningsEnabled")) ? 1 : 0;
     }

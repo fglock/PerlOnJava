@@ -27,6 +27,11 @@ public class RegexQuoteMeta {
         return CALL_SITE_WARNING_BITS.get();
     }
 
+    public static boolean isCallSiteWarningExplicitlyDisabled() {
+        Integer state = CALL_SITE_WARNING_STATE.get();
+        return state != null && state < 0;
+    }
+
     public static void setParserWarningBits(String bits) {
         if (bits == null) PARSER_WARNING_BITS.remove();
         else PARSER_WARNING_BITS.set(bits);
@@ -141,6 +146,10 @@ public class RegexQuoteMeta {
 
     /** Emit a regex-construction warning using the lexical state captured at the quote site. */
     public static void warnAtConstruction(String message) {
+        warnAtConstruction(message, false);
+    }
+
+    static void warnAtConstruction(String message, boolean strictDefault) {
         // This warning belongs to construction of the interpolated pattern.
         // Retaining it on the cached RuntimeRegex re-emits it for every match
         // and can leak a warning-enabled compilation into a no-warnings use.
@@ -156,7 +165,13 @@ public class RegexQuoteMeta {
         }
         if (warningBits != null) {
             String category = warningCategory(message);
-            if (!WarningFlags.isEnabledInBits(warningBits, category)) {
+            boolean enabled = WarningFlags.isEnabledInBits(warningBits, category);
+            if (!enabled && !isCallSiteWarningExplicitlyDisabled()) {
+                enabled = strictDefault
+                        || (WarningFlags.isGlobalWarningVariableEnabled()
+                            && !WarningFlags.isWarningSuppressedAtRuntime(category));
+            }
+            if (!enabled) {
                 return;
             }
             if (WarningFlags.isFatalInBits(warningBits, category)) {
