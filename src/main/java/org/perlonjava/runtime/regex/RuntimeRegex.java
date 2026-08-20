@@ -316,11 +316,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * operations around regex matches (for example {@code split}).
      */
     public RegexMatcher matcher(RuntimeScalar string, String input) {
-        if (recursivePattern != null) {
-            return selectRecursivePattern(string).matcher(input, executableCallbacks, string);
-        }
-        Pattern selected = selectPattern(string, input);
-        return new JavaRegexMatcher(selected.matcher(new RegexTimeoutCharSequence(input)));
+        return selectRecursivePattern(string).matcher(input, executableCallbacks, string);
     }
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
@@ -2350,6 +2346,39 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     /**
      * Direct regex matching without timeout wrapper (fast path).
      */
+    /**
+     * Resolve Perl's empty-pattern reuse without retaining Java matcher state.
+     * A changed modifier set needs a complete native recompilation; otherwise a
+     * tracked wrapper around the last native compiled form is sufficient.
+     */
+    private static RuntimeRegex emptyPatternReuse(RuntimeRegex previous,
+                                                  RegexFlags flags,
+                                                  int lexicalDebugMode,
+                                                  boolean lexicalReStrict,
+                                                  RuntimeScalar replacement) {
+        RuntimeRegex reused;
+        if (previous != null && (flags == null || flags.equals(previous.regexFlags))) {
+            reused = previous.cloneTracked();
+        } else {
+            String source = previous == null ? "" : previous.patternString;
+            String modifiers = flags == null ? "" : flags.toFlagString();
+            int debugMode = lexicalDebugMode != 0
+                    ? lexicalDebugMode
+                    : (previous == null ? 0 : previous.lexicalDebugMode);
+            reused = compile(source, modifiers, debugMode, 0,
+                    previous != null && previous.patternByteBacked,
+                    lexicalReStrict || (previous != null && previous.lexicalReStrict));
+        }
+        reused.regexFlags = flags == null ? reused.regexFlags : flags;
+        reused.hasPreservesMatch = reused.hasPreservesMatch
+                || (flags != null && flags.preservesMatch());
+        reused.lexicalDebugMode = lexicalDebugMode != 0 ? lexicalDebugMode : reused.lexicalDebugMode;
+        reused.lexicalReStrict = lexicalReStrict || reused.lexicalReStrict;
+        reused.useGAssertion = flags != null && flags.useGAssertion();
+        reused.replacement = replacement;
+        return reused;
+    }
+
     private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegexState regexState = state();
         RuntimeRegex regex = resolveRegex(quotedRegex);
@@ -2364,42 +2393,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regexState.lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current flags (especially /g and /i)
-                Pattern pattern = regexState.lastSuccessfulPattern.pattern;
-                // Re-apply current flags if they differ
-                if (originalFlags != null && !originalFlags.equals(regexState.lastSuccessfulPattern.regexFlags)) {
-                    // Need to recompile with current flags using preprocessed pattern
-                    int newFlags = originalFlags.toPatternFlags();
-                    String recompilePattern = regexState.lastSuccessfulPattern.javaPatternString != null
-                            ? regexState.lastSuccessfulPattern.javaPatternString : regexState.lastSuccessfulPattern.patternString;
-                    pattern = Pattern.compile(recompilePattern, newFlags);
-                }
-                // Create a temporary regex with the right pattern and current flags
-                RuntimeRegex tempRegex = new RuntimeRegex();
-                tempRegex.pattern = pattern;
-                tempRegex.patternUnicode = regexState.lastSuccessfulPattern.patternUnicode;
-                tempRegex.recursivePattern = regexState.lastSuccessfulPattern.recursivePattern;
-                tempRegex.recursivePatternUnicode =
-                        regexState.lastSuccessfulPattern.recursivePatternUnicode;
-                tempRegex.executableCallbacks = regexState.lastSuccessfulPattern.executableCallbacks;
-                tempRegex.patternNoInternalMarkers = regexState.lastSuccessfulPattern.patternNoInternalMarkers;
-                tempRegex.patternUnicodeNoInternalMarkers = regexState.lastSuccessfulPattern.patternUnicodeNoInternalMarkers;
-                tempRegex.patternString = regexState.lastSuccessfulPattern.patternString;
-                tempRegex.javaPatternString = regexState.lastSuccessfulPattern.javaPatternString;
-                tempRegex.requiredLiteral = regexState.lastSuccessfulPattern.requiredLiteral;
-                tempRegex.hasPreservesMatch = regexState.lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
-                tempRegex.warningsOnUse = new ArrayList<>(regexState.lastSuccessfulPattern.warningsOnUse);
-                tempRegex.inlineModifierWarnings = new ArrayList<>(
-                        regexState.lastSuccessfulPattern.inlineModifierWarnings);
-                tempRegex.lexicalDebugMode = regex.lexicalDebugMode != 0
-                        ? regex.lexicalDebugMode
-                        : regexState.lastSuccessfulPattern.lexicalDebugMode;
-                tempRegex.lexicalReStrict = regex.lexicalReStrict
-                        || regexState.lastSuccessfulPattern.lexicalReStrict;
-                tempRegex.regexFlags = originalFlags;
-                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
-                regex = tempRegex;
+                regex = emptyPatternReuse(regexState.lastSuccessfulPattern, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, null);
+            } else {
+                regex = emptyPatternReuse(null, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, null);
             }
-            // If no previous pattern, the empty pattern matches empty string at start (default behavior)
         }
 
         regex.emitWarningsOnUse();
@@ -2427,23 +2426,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String inputStr = string.toString();
         regex.emitNonUnicodePropertyWarning(string, inputStr);
         regex.emitExecutionDebugTrace(inputStr);
-        CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
-        RegexMatcher matcher;
-        if (regex.recursivePattern != null) {
-            matcher = regex.selectRecursivePattern(string)
-                    .matcher(inputStr, regex.executableCallbacks, string);
-        } else {
-            Pattern pattern = regex.selectPattern(string, inputStr);
-
-            // Workaround for Java MULTILINE quirk: Java's Pattern.MULTILINE changes ^ to only
-            // match after line terminators, so "^" fails on empty strings. In Perl, /m makes ^
-            // and $ match at line boundaries AND at start/end of string. Since empty strings have
-            // no line breaks, MULTILINE is irrelevant and we can safely strip it.
-            if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
-                pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
-            }
-            matcher = new JavaRegexMatcher(pattern.matcher(matchInput));
-        }
+        RegexMatcher matcher = regex.selectRecursivePattern(string)
+                .matcher(inputStr, regex.executableCallbacks, string);
 
         // hexPrinter(inputStr);
 
@@ -2486,7 +2470,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         string, posScalar.getInt(), patternKey)) {
                     // First, try the notempty variant at the SAME position (Perl behavior)
                     RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
-                            regex, string, inputStr, matchInput, startPos);
+                            regex, string, inputStr, startPos);
                     boolean notemptySucceeded = notemptyMatcher != null;
                     if (notemptySucceeded) {
                         matcher = notemptyMatcher;
@@ -2670,7 +2654,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         }
                         if (zeroLengthMatch) {
                             RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
-                                    regex, string, inputStr, matchInput, startPos);
+                                    regex, string, inputStr, startPos);
                             if (notemptyMatcher != null) {
                                 matcher = notemptyMatcher;
                                 skipFirstFind = true;
@@ -3127,14 +3111,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @param ctx         The context LIST, SCALAR, VOID.
      * @return A RuntimeScalar or RuntimeList.
      */
-    private static Pattern compileNonEmptySubstitutionPattern(Pattern pattern) {
-        try {
-            return Pattern.compile("(?:" + pattern.pattern() + ")(?<=[\\s\\S])", pattern.flags());
-        } catch (RuntimeException e) {
-            return null;
-        }
-    }
-
     private static int bumpGlobalMatchPosition(String inputStr, int offset) {
         if (offset >= inputStr.length()) {
             return inputStr.length() + 1;
@@ -3145,45 +3121,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RegexMatcher findNonEmptyGlobalRetry(RuntimeRegex regex,
                                                          RuntimeScalar string,
                                                          String inputStr,
-                                                         CharSequence matchInput,
                                                          int startPos) {
-        RegexMatcher retryMatcher;
-        boolean nativeNotEmpty;
-        if (regex.recursivePattern != null) {
-            retryMatcher = regex.selectRecursivePattern(string)
-                    .matcher(inputStr, regex.executableCallbacks, string);
-            nativeNotEmpty = true;
-        } else {
-            Pattern notemptyPattern = regex.notemptyPattern;
-            if (regex.notemptyPatternUnicode != null
-                    && regex.notemptyPatternUnicode != regex.notemptyPattern
-                    && !(regex.regexFlags != null && regex.regexFlags.isAscii())
-                    && !hasInlineAsciiModifier(regex.patternString)
-                    && Utf8.isUtf8(string)) {
-                notemptyPattern = regex.notemptyPatternUnicode;
-            }
-            if (notemptyPattern == null) {
-                // A compiled qr// can be created without /g and interpolated
-                // later into a global match. Build its retry form lazily from
-                // the selected byte/Unicode Java pattern.
-                notemptyPattern = compileNonEmptySubstitutionPattern(
-                        regex.selectPattern(string, inputStr));
-                if (notemptyPattern == null) {
-                    return null;
-                }
-            }
-            retryMatcher = new JavaRegexMatcher(notemptyPattern.matcher(matchInput));
-            nativeNotEmpty = false;
-        }
+        RegexMatcher retryMatcher = regex.selectRecursivePattern(string)
+                .matcher(inputStr, regex.executableCallbacks, string);
 
         retryMatcher.region(startPos, inputStr.length());
         retryMatcher.useAnchoringBounds(false);
         if (regex.useGAssertion) {
             retryMatcher.setGlobalPosition(startPos);
         }
-        boolean found = nativeNotEmpty
-                ? retryMatcher.findNotEmpty()
-                : retryMatcher.find();
+        boolean found = retryMatcher.findNotEmpty();
         return found
                 && retryMatcher.consumedStart() == startPos
                 && retryMatcher.end() > startPos
@@ -3272,69 +3219,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (state().lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current replacement and flags (especially /g and /i)
-                Pattern pattern = state().lastSuccessfulPattern.pattern;
-                // Re-apply current flags if they differ
-                if (originalFlags != null && !originalFlags.equals(state().lastSuccessfulPattern.regexFlags)) {
-                    // Need to recompile with current flags using preprocessed pattern
-                    int newFlags = originalFlags.toPatternFlags();
-                    String recompilePattern = state().lastSuccessfulPattern.javaPatternString != null
-                            ? state().lastSuccessfulPattern.javaPatternString : state().lastSuccessfulPattern.patternString;
-                    pattern = Pattern.compile(recompilePattern, newFlags);
-                }
-                // Create a temporary regex with the right pattern and current flags
-                RuntimeRegex tempRegex = new RuntimeRegex();
-                tempRegex.pattern = pattern;
-                tempRegex.patternUnicode = state().lastSuccessfulPattern.patternUnicode;
-                tempRegex.recursivePattern = state().lastSuccessfulPattern.recursivePattern;
-                tempRegex.recursivePatternUnicode =
-                        state().lastSuccessfulPattern.recursivePatternUnicode;
-                tempRegex.executableCallbacks = state().lastSuccessfulPattern.executableCallbacks;
-                tempRegex.patternNoInternalMarkers = state().lastSuccessfulPattern.patternNoInternalMarkers;
-                tempRegex.patternUnicodeNoInternalMarkers = state().lastSuccessfulPattern.patternUnicodeNoInternalMarkers;
-                tempRegex.patternString = state().lastSuccessfulPattern.patternString;
-                tempRegex.javaPatternString = state().lastSuccessfulPattern.javaPatternString;
-                tempRegex.hasPreservesMatch = state().lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
-                tempRegex.warningsOnUse = new ArrayList<>(state().lastSuccessfulPattern.warningsOnUse);
-                tempRegex.inlineModifierWarnings = new ArrayList<>(
-                        state().lastSuccessfulPattern.inlineModifierWarnings);
-                tempRegex.regexFlags = originalFlags;
-                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
-                tempRegex.replacement = replacement;
-                regex = tempRegex;
+                regex = emptyPatternReuse(state().lastSuccessfulPattern, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, replacement);
             } else {
                 // No previous regex - use empty pattern (matches empty string at start)
                 // This matches Perl's behavior: s//x/ inserts 'x' at the beginning
-                RuntimeRegex tempRegex = new RuntimeRegex();
-                int flags = originalFlags != null ? originalFlags.toPatternFlags() : 0;
-                tempRegex.pattern = Pattern.compile("", flags);
-                tempRegex.patternUnicode = tempRegex.pattern;  // Empty pattern - same for both
-                tempRegex.patternString = "";
-                tempRegex.regexFlags = originalFlags;
-                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
-                tempRegex.replacement = replacement;
-                regex = tempRegex;
+                regex = emptyPatternReuse(null, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, replacement);
             }
         }
 
         regex.emitWarningsOnUse();
 
-        CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
-        Pattern pattern = null;
-        RegexMatcher matcher;
-        if (regex.recursivePattern != null) {
-            matcher = regex.selectRecursivePattern(inputValue)
-                    .matcher(inputStr, regex.executableCallbacks, inputValue);
-        } else {
-            pattern = regex.selectPattern(inputValue, inputStr);
-            if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
-                pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
-            }
-            matcher = new JavaRegexMatcher(pattern.matcher(matchInput));
-        }
-        Pattern nonEmptySubstitutionPattern = pattern != null
-                && regex.regexFlags != null && regex.regexFlags.isGlobalMatch()
-                ? compileNonEmptySubstitutionPattern(pattern)
-                : null;
+        RegexMatcher matcher = regex.selectRecursivePattern(inputValue)
+                .matcher(inputStr, regex.executableCallbacks, inputValue);
         int searchStart = 0;
         int globalPosition = 0;
         boolean nativeGlobalPosition = false;
@@ -3449,18 +3347,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 int zeroLengthOffset = matcher.end();
                 boolean consumedNonEmptyRetry = false;
-                if ((nonEmptySubstitutionPattern != null || regex.recursivePattern != null)
-                        && zeroLengthOffset <= inputStr.length()) {
-                    RegexMatcher retryMatcher = nonEmptySubstitutionPattern != null
-                            ? new JavaRegexMatcher(nonEmptySubstitutionPattern.matcher(matchInput))
-                            : regex.selectRecursivePattern(inputValue)
-                                    .matcher(inputStr, regex.executableCallbacks, inputValue);
+                if (zeroLengthOffset <= inputStr.length()) {
+                    RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
+                            .matcher(inputStr, regex.executableCallbacks, inputValue);
                     // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                     // so a zero-length match at the region start is rejected.
                     setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
                     if (nativeGlobalPosition) retryMatcher.setGlobalPosition(zeroLengthOffset);
-                    boolean retryFound = nonEmptySubstitutionPattern != null
-                            ? retryMatcher.find() : retryMatcher.findNotEmpty();
+                    boolean retryFound = retryMatcher.findNotEmpty();
                     if (retryFound
                             && retryMatcher.start() == zeroLengthOffset
                             && retryMatcher.end() > zeroLengthOffset) {
