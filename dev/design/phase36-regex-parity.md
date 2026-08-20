@@ -472,6 +472,26 @@ failure blocks backend removal, not semantic fixes.
 A checked phase means its focused semantic implementation is complete. Release
 gates may reopen it if a semantic regression appears.
 
+### Current release gate
+
+- PR 1087's saved checkpoint is warning-free and green on Ubuntu and Windows.
+- The current combined branch additionally contains native forward named-
+  reference resolution and removal of the dead required-literal and historical
+  adapter-helper scanners.
+- The first immutable 286-file JVM comparison has the complete file set and
+  improves 74 rows and 403,846 passing assertions, but remains fail-closed on
+  six lower rows: the P3-owned `pat_advanced` pair, `regex_sets.t`,
+  `charset.t`, `chop.t`, and `stat.t`. P4 owns exact rerun/classification and
+  the independent fixes.
+- The interpreter artifact is complete but is not acceptance evidence: it
+  exposes 53 lower rows, mostly existing non-regex interpreter capability and
+  execution failures. Regex-owned differences must be separated from general
+  interpreter parity before the final dual-backend comparison can pass.
+- P3 owns Unicode/property/charnames closure; P4 owns acceptance regressions
+  plus range/POSIX recovery; P5 owns dynamic-recursion lifecycle, debug trace,
+  and analyser warnings; P6 owns native malformed numeric escapes. The
+  coordinator owns literal NUL-delimited substitution parsing and integration.
+
 ### Active phase detail
 
 - [x] Transactional latest-upstream Perl Unicode generator refresh and exact
@@ -541,6 +561,8 @@ gates may reopen it if a semantic regression appears.
 - [x] Native unknown extended-class escape identity and diagnostics
 - [x] Native invalid-range token spans and source-aware Perl diagnostics without
       a RuntimeRegex range scanner
+- [x] Resolve forward named backreferences after the complete native parse
+      while preserving missing-name source positions
 - [x] Normalize and classify the first native lexer/parser diagnostic vector
 - [x] Exhaust genuinely RuntimeRegex-only diagnostic policy; reclassify every
       remaining token/span warning to native Joni or Unicode source policy
@@ -575,6 +597,10 @@ gates may reopen it if a semantic regression appears.
 - [x] Publish inverted `\K` match text as undef while preserving Perl match
       offsets and backtracking state
 - [x] Remove the dead callback no-op runner switch and marker constants
+- [x] Remove unreachable historical adapter helpers and the dead required-
+      literal scanner
+- [ ] Parse and diagnose literal NUL-delimited substitutions through the native
+      pattern compiler without masking errors as a stray numeric expression
 - [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
       mechanically derived 286-file gates on one integrated artifact
 
