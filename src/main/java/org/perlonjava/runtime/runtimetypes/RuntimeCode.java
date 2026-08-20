@@ -3929,6 +3929,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         frame = callerFrameIncludingRegexPseudoBlocks(frame);
+        // Perl treats every negative caller depth as an out-of-range frame.
+        // Return the usual empty result before indexing implementation stacks;
+        // in scalar context an empty RuntimeList naturally becomes undef.
+        if (frame < 0) {
+            return res;
+        }
 
         // Save the original user-supplied frame before the JVM skip adjustment.
         // This value maps directly to hasArgsStack depth: caller(0) → depth 0 (current frame),
