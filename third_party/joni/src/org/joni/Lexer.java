@@ -823,6 +823,7 @@ class Lexer extends ScannerSupport {
             token.setPropNot(c == 'P');
 
             if (left() && syntax.op2EscPBraceCircumflexNot()) {
+                skipPerlPropertyWhitespaceBeforeCaret();
                 c2 = fetchTo();
                 if (c2 == '^') {
                     token.setPropNot(!token.getPropNot());
@@ -1836,6 +1837,7 @@ class Lexer extends ScannerSupport {
             token.setPropNot(c == 'P');
 
             if (left() && syntax.op2EscPBraceCircumflexNot()) {
+                skipPerlPropertyWhitespaceBeforeCaret();
                 fetch();
                 if (c == '^') {
                     token.setPropNot(!token.getPropNot());
@@ -1856,6 +1858,17 @@ class Lexer extends ScannerSupport {
             newSyntaxException(message.replace("%n", Character.toString(c)));
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
+        }
+    }
+
+    private void skipPerlPropertyWhitespaceBeforeCaret() {
+        if (!syntax.op2OptionPerl()) return;
+        int cursor = p;
+        while (cursor < stop && Character.isWhitespace(enc.mbcToCode(bytes, cursor, stop))) {
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        if (cursor > p && cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '^') {
+            p = cursor;
         }
     }
 
