@@ -501,6 +501,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emit(nameIdx);
                                 bytecodeCompiler.emit(beginId);
+                                bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
 
                                 // Now register contains a reference to the persistent RuntimeScalar
                                 // Store the initializer value INTO that RuntimeScalar
@@ -540,6 +541,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(valueReg);
                                 bytecodeCompiler.emit(nameIdx);
                                 bytecodeCompiler.emit(persistId);
+                                bytecodeCompiler.emitActiveLexicalBinding(reg, varName);
 
                                 bytecodeCompiler.registerVariable(varName, reg);
 
@@ -603,6 +605,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(arrayReg);
                                 bytecodeCompiler.emit(nameIdx);
                                 bytecodeCompiler.emit(beginId);
+                                bytecodeCompiler.emitActiveLexicalBinding(arrayReg, varName);
 
                                 // Compile RHS (should evaluate to a list)
                                 bytecodeCompiler.compileNode(node.right, -1, rhsContext);
@@ -678,6 +681,7 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(hashReg);
                                 bytecodeCompiler.emit(nameIdx);
                                 bytecodeCompiler.emit(beginId);
+                                bytecodeCompiler.emitActiveLexicalBinding(hashReg, varName);
 
                                 // Compile RHS (should evaluate to a list)
                                 bytecodeCompiler.compileNode(node.right, -1, rhsContext);
@@ -824,6 +828,7 @@ public class CompileAssignment {
                                                 bytecodeCompiler.emit(beginId);
                                             }
                                         }
+                                        bytecodeCompiler.emitActiveLexicalBinding(varReg, varName);
                                         bytecodeCompiler.registerVariable(varName, varReg);
                                         bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
                                         bytecodeCompiler.emitReg(varReg);

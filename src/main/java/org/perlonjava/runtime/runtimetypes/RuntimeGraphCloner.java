@@ -251,6 +251,7 @@ public class RuntimeGraphCloner {
         target.isDeclared = source.isDeclared;
         target.isSymbolicReference = source.isSymbolicReference;
         target.isClosurePrototype = source.isClosurePrototype;
+        target.tracksRuntimeRegexLexicals = source.tracksRuntimeRegexLexicals;
         target.definitionPending = source.definitionPending;
         if (source.compilerSupplier == null) {
             target.compilerSupplier = null;

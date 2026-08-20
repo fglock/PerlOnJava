@@ -1466,9 +1466,11 @@ public class SubroutineParser {
             placeholder.ourVariableRegistry = declaredOurVarMap.isEmpty()
                     ? null : declaredOurVarMap;
             explicitlyUsedVars = usedVarSet;
-            if (!collector.hasEvalString()) {
+            if (!collector.requiresAllRuntimeLexicals()) {
                 usedVars = usedVarSet;
             }
+            placeholder.tracksRuntimeRegexLexicals =
+                    collector.requiresAllRuntimeLexicals();
         }
 
         ArrayList<Class> classList = new ArrayList<>();

@@ -24,6 +24,7 @@ public class VariableCollectorVisitor implements Visitor {
     private final Set<String> declaredVariables;
     private final Map<String, String> declaredOurVariables;
     private boolean hasEvalString = false;
+    private boolean requiresAllRuntimeLexicals = false;
     private final Deque<Set<String>> localScopes = new ArrayDeque<>();
     private int subroutineDepth = 0;
 
@@ -57,12 +58,30 @@ public class VariableCollectorVisitor implements Visitor {
         return hasEvalString;
     }
 
+    /**
+     * Returns true when runtime-generated source can reference any visible
+     * lexical, rather than only the variable nodes present in the static AST.
+     * This includes eval STRING and executable regex interpolation whose
+     * string overload can produce callback source at match time.
+     */
+    public boolean requiresAllRuntimeLexicals() {
+        return requiresAllRuntimeLexicals;
+    }
+
     private boolean isDeclarationOperator(String op) {
         return op.equals("my") || op.equals("state") || op.equals("our");
     }
 
     private boolean isVariableOperator(String op) {
         return op.equals("$") || op.equals("@") || op.equals("%") || op.equals("&");
+    }
+
+    private boolean hasDynamicRegexPattern(OperatorNode node) {
+        if (!(node.operand instanceof ListNode operands)
+                || operands.elements == null || operands.elements.isEmpty()) {
+            return false;
+        }
+        return !(operands.elements.getFirst() instanceof StringNode);
     }
 
     private boolean isDeclaredLocal(String varName) {
@@ -162,6 +181,14 @@ public class VariableCollectorVisitor implements Visitor {
         // at runtime, so we must capture all visible variables.
         if (op.equals("eval") || op.equals("evalbytes")) {
             hasEvalString = true;
+            requiresAllRuntimeLexicals = true;
+        } else if (op.equals("regexTemplate")) {
+            requiresAllRuntimeLexicals = true;
+        } else if ((op.equals("quoteRegex") || op.equals("matchRegex"))
+                && hasDynamicRegexPattern(node)) {
+            // A blessed interpolation can turn an otherwise ordinary dynamic
+            // pattern into executable callback source through dot overload.
+            requiresAllRuntimeLexicals = true;
         }
 
         // Check if this is a variable reference (sigil + identifier)
