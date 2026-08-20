@@ -63,10 +63,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
 
-    // Constants for regex pattern flags
-    private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
-    private static final int MULTILINE = Pattern.MULTILINE;
-    private static final int DOTALL = Pattern.DOTALL;
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
     private static final Pattern MALFORMED_USER_DEFINED_PROPERTY_PATTERN =

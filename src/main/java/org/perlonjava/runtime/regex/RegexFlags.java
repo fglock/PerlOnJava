@@ -2,8 +2,6 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
-import static java.util.regex.Pattern.*;
-
 /**
  * @param isGlobalMatch        g flag - match globally (find all occurrences)
  * @param keepCurrentPosition  c flag - continue matching from last match position
@@ -119,39 +117,6 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
             }
         }
         return false;
-    }
-
-    public int toPatternFlags() {
-        int flags = 0;
-        
-        // UNIX_LINES ensures that . only excludes \n (not \r, \u0085, etc.)
-        // This matches Perl's behavior where . excludes only \n
-        flags |= UNIX_LINES;
-        
-        // /u flag enables Unicode semantics for \w, \d, \s
-        // /a flag (ASCII-restrict) disables Unicode semantics
-        if (isUnicode && !isAscii) {
-            flags |= UNICODE_CHARACTER_CLASS;
-        }
-        
-        if (isCaseInsensitive) {
-            flags |= CASE_INSENSITIVE;
-            // /a restricts character classes such as \w but retains Unicode
-            // case folding. Only /aa forbids ASCII/non-ASCII fold crossings.
-            if (!isAsciiStrict) {
-                flags |= UNICODE_CASE;
-            }
-        }
-        if (isMultiLine) {
-            flags |= MULTILINE;
-        }
-        if (isDotAll) {
-            flags |= DOTALL;
-        }
-        if (isExtended) {
-            flags |= COMMENTS;
-        }
-        return flags;
     }
 
     public RegexFlags with(String positiveFlags, String negativeFlags) {
