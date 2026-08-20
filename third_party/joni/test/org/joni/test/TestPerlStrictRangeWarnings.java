@@ -23,6 +23,7 @@ import static org.joni.constants.SyntaxProperties.ALLOW_MULTIPLEX_DEFINITION_NAM
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Syntax;
 import org.joni.WarnCallback;
+import org.joni.exception.SyntaxException;
 import org.junit.Test;
 
 public class TestPerlStrictRangeWarnings {
@@ -80,6 +82,20 @@ public class TestPerlStrictRangeWarnings {
                 .getBytes(StandardCharsets.UTF_8).length + 1;
     }
 
+    private static void assertFalseRange(String pattern, String diagnostic,
+                                         int position) {
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        try {
+            new Regex(bytes, 0, bytes.length, Option.NONE, UTF8Encoding.INSTANCE,
+                    SYNTAX, WarnCallback.NONE);
+            fail("expected false range error for " + pattern);
+        } catch (SyntaxException error) {
+            assertEquals("False [] range", error.getMessage());
+            assertEquals(diagnostic, error.getDiagnosticMessage());
+            assertEquals(position, error.getPatternPosition());
+        }
+    }
+
     @Test
     public void warnsForStrictAsciiAndDigitRanges() {
         String ascii = "(?[ [ A - a ] ])";
@@ -100,6 +116,25 @@ public class TestPerlStrictRangeWarnings {
         assertEquals(List.of(new Warning(
                 "Both or neither range ends should be Unicode",
                 endpointPosition(mixed))), warnings(mixed));
+    }
+
+    @Test
+    public void rejectsCharacterClassRangeEndpointsInExtendedClasses() {
+        String rightType = "(?[[a-\\d]])";
+        assertFalseRange(rightType, "False [] range \"a-\\d\"",
+                rightType.indexOf("\\d") + 2);
+
+        String leftType = "(?[[\\w-x]])";
+        assertFalseRange(leftType, "False [] range \"\\w-\"",
+                leftType.indexOf('-') + 1);
+
+        String rightProperty = "(?[[a-\\pM]])";
+        assertFalseRange(rightProperty, "False [] range \"a-\\pM\"",
+                rightProperty.indexOf("\\pM") + 3);
+
+        String leftProperty = "(?[[\\pM-x]])";
+        assertFalseRange(leftProperty, "False [] range \"\\pM-\"",
+                leftProperty.indexOf('-') + 1);
     }
 
     @Test
