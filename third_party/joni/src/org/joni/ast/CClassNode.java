@@ -691,6 +691,10 @@ public final class CClassNode extends Node {
         public long to;
         public boolean fromIsRaw;
         public boolean toIsRaw;
+        public boolean fromEscaped;
+        public boolean toEscaped;
+        public boolean fromNamedCharacter;
+        public boolean toNamedCharacter;
         public CCVALTYPE inType;
         public CCVALTYPE type;
         public CCSTATE state;
@@ -819,6 +823,8 @@ public final class CClassNode extends Node {
         } // switch
 
         arg.fromIsRaw = arg.toIsRaw;
+        arg.fromEscaped = arg.toEscaped;
+        arg.fromNamedCharacter = arg.toNamedCharacter;
         arg.from = arg.to;
         arg.type = arg.inType;
     }
