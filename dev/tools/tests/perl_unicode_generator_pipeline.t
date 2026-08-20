@@ -21,17 +21,28 @@ make_path($unicode, $perl_root, $tools, $output_dir);
 
 my $version = "17.0.0\n";
 my $source = "# test Unicode table\n0041 ; Example\n";
-my $generated = "generated\n";
+my $generated = "# test Unicode table\n0041 ; Example\n# pinned Perl generator source\n";
 write_file(File::Spec->catfile($unicode, 'version'), $version);
 write_file(File::Spec->catfile($unicode, 'table.txt'), $source);
 my $perl_source = "# pinned Perl generator source\n";
 write_file(File::Spec->catfile($perl_root, 'source.pl'), $perl_source);
+write_file(File::Spec->catfile($perl_root, 'patchlevel.h'), "#define PERL_REVISION 5\n#define PERL_VERSION 45\n#define PERL_SUBVERSION 2\n");
+system('git', '-C', $perl_root, 'init', '-q') == 0 or die 'Cannot initialize fixture checkout';
+system('git', '-C', $perl_root, 'config', 'user.email', 'test@example.invalid') == 0 or die 'Cannot configure fixture checkout';
+system('git', '-C', $perl_root, 'config', 'user.name', 'Fixture') == 0 or die 'Cannot configure fixture checkout';
+system('git', '-C', $perl_root, 'add', '.') == 0 or die 'Cannot stage fixture checkout';
+system('git', '-C', $perl_root, 'commit', '-qm', 'fixture') == 0 or die 'Cannot commit fixture checkout';
+
 write_file(File::Spec->catfile($tools, 'generate.pl'), <<'GENERATOR');
 #!/usr/bin/env perl
 use strict;
 use warnings;
 binmode STDOUT, ':raw';
-print "generated\n";
+for my $path ("$ENV{PERLONJAVA_UNICODE_ROOT}/table.txt", "$ENV{PERLONJAVA_PERL_ROOT}/source.pl") {
+    open my $input, '<:raw', $path or die $!;
+    print while <$input>;
+    close $input;
+}
 GENERATOR
 my $output = File::Spec->catfile($output_dir, 'Data.java');
 write_file($output, "stale\n");
@@ -58,6 +69,26 @@ my ($status, $log) = run_pipeline('--list');
 is($status, 0, '--list succeeds without reading source data');
 like($log, qr/^example\s+tools\/generate\.pl\s+generated\/Data\.java\s+/m,
     '--list exposes manifest provenance');
+
+# Schema 2 deliberately follows an explicitly supplied current checkout.  The
+# old hashes remain provenance for a later regeneration, but do not freeze the
+# checkout to a historical Perl commit.
+my $current_manifest = File::Spec->catfile($temporary, 'current-manifest.json');
+my $current_value = decode_json(read_file($manifest));
+$current_value->{schema_version} = 2;
+$current_value->{perl_source_policy} = 'current-checkout';
+delete $current_value->{perl_commit};
+write_manifest($current_manifest, $current_value);
+write_file(File::Spec->catfile($unicode, 'table.txt'), "moving current source\n");
+($status, $log) = run_pipeline_with_manifest($current_manifest, '--check');
+is($status, 255, 'current-checkout check rejects stale source provenance');
+like($log, qr/table\.txt SHA-256 mismatch/, 'stale current source is named');
+($status, $log) = run_pipeline_with_manifest($current_manifest, '--refresh');
+is($status, 0, 'refresh updates source provenance and dependent output');
+($status, $log) = run_pipeline_with_manifest($current_manifest, '--check');
+is($status, 0, 'refreshed current checkout is checkable');
+write_file(File::Spec->catfile($unicode, 'table.txt'), $source);
+write_file($output, "stale\n");
 
 ($status, $log) = run_pipeline('--check');
 is($status, 1, '--check rejects stale output');
@@ -114,12 +145,16 @@ is(read_file($output), $generated, 'nondeterminism leaves published output untou
 done_testing;
 
 sub run_pipeline {
-    my (@arguments) = @_;
+    return run_pipeline_with_manifest($manifest, @_);
+}
+
+sub run_pipeline_with_manifest {
+    my ($selected_manifest, @arguments) = @_;
     my $error = gensym;
     my $pid = open3(undef, my $stdout, $error,
         $^X, $pipeline,
         '--root', $temporary,
-        '--manifest', $manifest,
+        '--manifest', $selected_manifest,
         '--unicode-root', $unicode,
         '--perl-root', $perl_root,
         @arguments);

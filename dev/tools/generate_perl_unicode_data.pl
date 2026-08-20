@@ -15,6 +15,7 @@ use PerlOnJava::UnicodeGenerator qw(
 
 my $check = 0;
 my $list = 0;
+my $refresh = 0;
 my @only;
 my $unicode_root;
 my $perl_root;
@@ -24,6 +25,7 @@ my $help = 0;
 GetOptions(
     'check' => \$check,
     'list' => \$list,
+    'refresh' => \$refresh,
     'only=s@' => \@only,
     'unicode-root=s' => \$unicode_root,
     'perl-root=s' => \$perl_root,
@@ -32,11 +34,18 @@ GetOptions(
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
+die "--refresh cannot be combined with --check or --list\n" if $refresh && ($check || $list);
 
 my $root = defined $root_override ? File::Spec->rel2abs($root_override) : repo_root($FindBin::Bin);
 my $manifest = decode_json(read_raw($manifest_path));
+my $schema_version = $manifest->{schema_version} // 0;
 die "$manifest_path has unsupported schema_version\n"
-    unless ($manifest->{schema_version} // 0) == 1;
+    unless $schema_version == 1 || $schema_version == 2;
+my $current_checkout = $schema_version == 2
+    && ($manifest->{perl_source_policy} // '') eq 'current-checkout';
+die "$manifest_path schema 2 requires perl_source_policy current-checkout\n"
+    if $schema_version == 2 && !$current_checkout;
+die "--refresh requires schema 2 current-checkout provenance\n" if $refresh && !$current_checkout;
 my @entries = @{$manifest->{generators} // []};
 die "$manifest_path defines no generators\n" unless @entries;
 
@@ -102,16 +111,34 @@ $unicode_root //= select_unicode_root(
     version => $manifest->{unicode_version},
     required => \@required,
 );
+if ($refresh) {
+    $manifest->{version_sha256} = sha256_hex(read_raw(File::Spec->catfile($unicode_root, 'version')));
+    for my $entry (@entries) {
+        for my $field ('sources', 'perl_sources') {
+            my $base = $field eq 'sources' ? $unicode_root : ($perl_root // select_perl_root(repo_root => $root, unicode_root => $unicode_root, required => [keys %{$entry->{$field} // {}}]));
+            for my $relative (keys %{$entry->{$field} // {}}) {
+                $entry->{$field}{$relative} = sha256_hex(read_raw(File::Spec->catfile($base, split m{/}, $relative)));
+            }
+        }
+    }
+    for my $relative (keys %{$manifest->{shared_sources} // {}}) {
+        $manifest->{shared_sources}{$relative} = sha256_hex(read_raw(File::Spec->catfile($unicode_root, split m{/}, $relative)));
+    }
+    %source_hash = (%{$manifest->{shared_sources} // {}});
+    %perl_source_hash = ();
+    for my $entry (@entries) {
+        $source_hash{$_} = $entry->{sources}{$_} for keys %{$entry->{sources} // {}};
+        $perl_source_hash{$_} = $entry->{perl_sources}{$_} for keys %{$entry->{perl_sources} // {}};
+    }
+}
 read_unicode_version(
     path => File::Spec->catfile($unicode_root, 'version'),
     expected => $manifest->{unicode_version},
     sha256 => $manifest->{version_sha256},
 );
 for my $relative (sort keys %source_hash) {
-    read_pinned_source(
-        path => File::Spec->catfile($unicode_root, split m{/}, $relative),
-        sha256 => $source_hash{$relative},
-    );
+    read_pinned_source(path => File::Spec->catfile($unicode_root, split m{/}, $relative),
+        sha256 => $source_hash{$relative});
 }
 if (%perl_source_hash) {
     $perl_root //= select_perl_root(
@@ -120,10 +147,21 @@ if (%perl_source_hash) {
         required => [sort keys %perl_source_hash],
     );
     for my $relative (sort keys %perl_source_hash) {
-        read_pinned_source(
-            path => File::Spec->catfile($perl_root, split m{/}, $relative),
-            sha256 => $perl_source_hash{$relative},
-        );
+        read_pinned_source(path => File::Spec->catfile($perl_root, split m{/}, $relative),
+            sha256 => $perl_source_hash{$relative});
+    }
+}
+if ($current_checkout) {
+    my $actual_commit = checkout_identity($perl_root, 'rev-parse', 'HEAD');
+    my $actual_version = perl_language_version($perl_root);
+    if ($refresh) {
+        $manifest->{perl_commit} = $actual_commit;
+        $manifest->{perl_version} = $actual_version;
+    } else {
+        die "Perl checkout revision mismatch: expected $manifest->{perl_commit}, found $actual_commit\n"
+            unless ($manifest->{perl_commit} // '') eq $actual_commit;
+        die "Perl checkout version mismatch: expected $manifest->{perl_version}, found $actual_version\n"
+            unless ($manifest->{perl_version} // '') eq $actual_version;
     }
 }
 
@@ -140,7 +178,8 @@ for my $entry (@entries) {
         unless $first eq $second;
     my $actual_hash = sha256_hex($first);
     die "$entry->{name} generated SHA-256 mismatch: expected $entry->{output_sha256}, found $actual_hash\n"
-        unless $actual_hash eq $entry->{output_sha256};
+        unless $refresh || $actual_hash eq $entry->{output_sha256};
+    $entry->{output_sha256} = $actual_hash if $refresh;
 
     my $current = -f $output ? read_raw($output) : undef;
     if (defined $current && $current eq $first) {
@@ -156,6 +195,7 @@ for my $entry (@entries) {
 }
 
 exit 1 if $failed;
+my @staged;
 for my $item (@publication) {
     my ($entry, $output, $bytes, $hash) = @$item;
     my $directory = dirname($output);
@@ -165,8 +205,22 @@ for my $item (@publication) {
     close $temporary or die "Cannot close $temporary_path: $!\n";
     die "$entry->{name} staged SHA-256 changed before publication\n"
         unless sha256_hex(read_raw($temporary_path)) eq $hash;
+    push @staged, [$entry, $output, $temporary_path, $hash];
+}
+my $manifest_temporary_path;
+if ($refresh) {
+    my ($temporary, $temporary_path) = tempfile('.unicode-manifest-XXXXXX', DIR => dirname($manifest_path), UNLINK => 0);
+    print {$temporary} JSON::PP->new->canonical->pretty->encode($manifest) or die "Cannot write $temporary_path: $!\n";
+    close $temporary or die "Cannot close $temporary_path: $!\n";
+    $manifest_temporary_path = $temporary_path;
+}
+for my $item (@staged) {
+    my ($entry, $output, $temporary_path, $hash) = @$item;
     rename $temporary_path, $output or die "Cannot publish $output: $!\n";
     print "$entry->{name}: updated ($hash)\n";
+}
+if ($refresh) {
+    rename $manifest_temporary_path, $manifest_path or die "Cannot publish $manifest_path: $!\n";
 }
 
 sub run_generator {
@@ -195,14 +249,37 @@ sub safe_relative_path {
     return $path;
 }
 
+sub checkout_identity {
+    my ($root, @arguments) = @_;
+    open my $pipe, '-|', 'git', '-C', $root, @arguments
+        or die "Cannot inspect Perl checkout $root: $!\n";
+    my $value = <$pipe> // '';
+    close $pipe or die "Cannot inspect Perl checkout $root\n";
+    chomp $value;
+    die "Perl checkout $root has no Git identity\n" unless length $value;
+    return $value;
+}
+
+sub perl_language_version {
+    my ($root) = @_;
+    my $text = read_raw(File::Spec->catfile($root, 'patchlevel.h'));
+    my ($revision) = $text =~ /^#define\s+PERL_REVISION\s+(\d+)/m;
+    my ($version) = $text =~ /^#define\s+PERL_VERSION\s+(\d+)/m;
+    my ($subversion) = $text =~ /^#define\s+PERL_SUBVERSION\s+(\d+)/m;
+    die "Cannot derive Perl language version from $root/patchlevel.h\n"
+        unless defined $revision && defined $version && defined $subversion;
+    return join '.', $revision, $version, $subversion;
+}
+
 sub usage {
     my ($exit) = @_;
     print <<'USAGE';
 Usage: perl dev/tools/generate_perl_unicode_data.pl [options]
   --check                 verify generated files without changing them
+  --refresh               regenerate outputs and transactionally refresh schema-2 provenance
   --only NAME             process one named generator (repeatable)
   --unicode-root PATH     use an explicit Perl unicore source directory
-  --perl-root PATH        use an explicit pinned Perl source checkout
+  --perl-root PATH        use an explicit selected/current Perl source checkout
   --root PATH             resolve manifest paths under PATH (testing/automation)
   --list                  list the complete generated-data inventory
   --help                  show this help
