@@ -566,9 +566,12 @@ gates may reopen it if a semantic regression appears.
 - [x] Normalize and classify the first native lexer/parser diagnostic vector
 - [x] Exhaust genuinely RuntimeRegex-only diagnostic policy; reclassify every
       remaining token/span warning to native Joni or Unicode source policy
-- [ ] Remaining native parser/range/POSIX and numeric-escape diagnostic families
+- [ ] Remaining native parser/range/POSIX diagnostic families
+- [x] Native malformed numeric-escape severity, warning cardinality, and source
+      positions; remove the matching RuntimeRegex scanners and case normalizer
 - [ ] Remaining same-source diagnostic families in `reg_mesg.t`; current exact
-      JVM/interpreter frontier is 422 failing rows
+      numeric-tranche frontier is 310 failing assertions on both backends, with
+      the combined frontier pending one integrated rerun
 - [x] Dynamic overloaded scalar/array code-source interpolation and lexical
       capture under large-method interpreter fallback
 - [x] Preserve authoritative dynamic callback source spelling and positions in
