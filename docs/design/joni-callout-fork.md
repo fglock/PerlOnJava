@@ -23,10 +23,11 @@ commit messages, not here.
   and runtime classpaths.
 - JCodings remains an upstream binary dependency because PerlOnJava does not
   modify its encoding implementation.
-- Default and auto routing use the vendored engine. Explicit Java routing is a
-  diagnostic differential mode; patterns Java cannot represent still force
-  Joni. Production matcher ownership is already Joni; retiring the diagnostic
-  selector remains a separately tracked evidence gate.
+- Every production regex is compiled by the vendored engine. No Java matcher or
+  Java preprocessing adapter remains in the runtime path. The unreferenced
+  `RegexBackendPolicy` parser may remain solely as disconnected scaffolding for
+  immutable compatibility tests; its environment/property spellings do not
+  select a production backend.
 
 ## Internal callout syntax
 
@@ -50,6 +51,7 @@ interface CalloutHandler {
     default DynamicPatternResult executeDynamic(int calloutId, MatchView match);
     void unwind(Object backtrackToken);
     default void complete(Object successfulToken) { unwind(successfulToken); }
+    default void finish(boolean matched) {}
 }
 
 final class DynamicPatternResult {
@@ -63,12 +65,16 @@ interface MatchView {
     int captureCount();
     int captureBegin(int capture);
     int captureEnd(int capture);
+    int lastClosedCapture();
+    String controlMark();
 }
 ```
 
 The handler is installed on each `Matcher`, not on the compiled `Regex`, so a
 shared compiled pattern can execute concurrently with runtime-local callback
-state.
+state. `lastClosedCapture()` exposes Perl's capture-close order for `$^N`, which
+cannot be derived from the highest-numbered defined capture. `controlMark()`
+exposes the current backtracking-visible mark. Both values are provisional.
 
 `CalloutResult` selects `CONTINUE` or `FAIL` and may carry an opaque unwind
 token. The engine neither interprets that token nor depends on PerlOnJava
@@ -78,6 +84,11 @@ runtime classes.
 handler, and the token for the dynamic expression's provisional Perl state. The
 default `executeDynamic` implementation fails fast, so handlers that only use
 plain callouts remain source compatible.
+
+`finish(matched)` is the invocation-level hook after all active tokens have
+been completed or unwound. The default is empty because token cleanup is
+already complete; PerlOnJava uses it to publish or restore final match state and
+to close the matcher's dynamic-local level.
 
 ## Execution and unwind contract
 
@@ -90,7 +101,9 @@ plain callouts remain source compatible.
    reverse execution order. Its default implementation delegates to `unwind`,
    preserving the cleanup-only contract for engine-neutral handlers.
 5. Failed completion, interruption, timeout, and handler exceptions unwind every
-   still-active token in reverse execution order.
+   already-active token in reverse execution order. A handler that throws must
+   clean up state created by that invocation itself because the matcher never
+   receives its token.
 6. A `FAIL` result enters normal matcher backtracking after installing the frame,
    so cleanup follows the same path as later-pattern failure.
 7. A dynamic callout resolves its nested program only when execution reaches
@@ -102,7 +115,10 @@ plain callouts remain source compatible.
    remain unchanged.
 9. Completing or abandoning a nested continuation propagates completion or
    unwind to all of its active callback tokens exactly once.
-10. Patterns without callout nodes allocate no handler state or callout frames.
+10. After token resolution, the host calls `finish(true)` for a selected match or
+    `finish(false)` for failure. Nested continuations do the same when completed
+    or abandoned.
+11. Patterns without callout nodes allocate no handler state or callout frames.
 
 Callback conditions use an internal conditional-callout opcode. `CONTINUE`
 selects the yes branch and `FAIL` selects the no branch without treating the
@@ -167,13 +183,13 @@ corresponding pseudo-block diagnostic before it can reach surrounding Perl
 frames. Recursive callback re-entry has an engine-owned depth ceiling independent
 of the JVM's configured native stack size.
 
-Every structured executable callback template selects Joni, including a
-callback whose body happens to return a constant: `(?{ 1 })` still has match-time
-side effects and unwind semantics. Runtime-dependent dynamic-pattern expressions
-also select Joni and execute only when their opcode is reached. Semantically safe
-constant expressions may use the compile-time fold path; constants with captures
-or top-level alternatives remain dynamic so they cannot change outer grouping or
-capture numbers.
+Every structured executable callback template executes in Joni, including a
+callback whose body happens to return a constant: `(?{ 1 })` still has
+match-time side effects and unwind semantics. Runtime-dependent dynamic-pattern
+expressions execute only when their opcode is reached. Semantically safe
+constant expressions may use the compile-time fold path; constants with
+captures or top-level alternatives remain dynamic so they cannot change outer
+grouping or capture numbers.
 
 Literal match targets have one stable scalar identity per compiled call site so
 `pos()` and `/g` survive repeated loop execution without allowing two identical
@@ -203,54 +219,65 @@ separate PerlOnJava modification notice under `META-INF/licenses`. The SBOM must
 identify the vendored Joni component, its upstream version, MIT license, and
 JCodings dependency.
 
-## Regex preprocessing boundary
+## Source-policy and matcher boundary
 
-Do not move the entire `RegexPreprocessor` into the Joni fork. The ownership
-boundary is:
+The former `RegexPreprocessor` and Java matcher adapter are absent. The shipped
+boundary is now:
 
-- PerlOnJava owns Perl source policy and runtime integration: trusted callback
-  templates, `use re 'eval'` security, lexical warnings, user-defined Unicode
-  properties, Perl diagnostics, named/branch-reset capture mapping, and the
-  temporary backend-selection policy.
-- A backend-neutral Perl normalization layer may own syntax aliases shared by
-  all engines, such as accepted named-group spellings and modifier validation.
-- Joni should own matcher semantics required by Perl, including condition
-  execution, backtracking-visible state, native capture behavior, case-folding
-  differences, and constructs that cannot be represented faithfully by textual
-  rewrites.
-- The Java-only adapter retains Java `Pattern` syntax rewrites and stack-safety
-  workarounds only while the Java route exists. The Joni adapter may temporarily
-  materialize constructs whose native grammar is not complete, but it must use
-  Joni—not Java regex—to execute property-value wildcard expressions.
+- `StringSegmentParser`, `RuntimeRegexTemplate`, `RuntimeRegexSourceCompiler`,
+  and `RuntimeRegex` own Perl source provenance, trusted callback templates,
+  `use re 'eval'`, lexical policy, user-defined properties, source locations,
+  diagnostics, and runtime match state.
+- `JoniRegexPattern` converts that policy into a Joni `Syntax`, options, resolver
+  hooks, and trusted internal tokens. It also converts between Perl character
+  offsets and matcher byte offsets.
+- The fork owns matcher-visible grammar and behavior. Native Joni parses and
+  executes extended classes, `(?(DEFINE)...)`, named characters, subpattern
+  calls, conditions, control verbs, callback/dynamic opcodes, folding, captures,
+  backtracking, and optimizer selection.
 
-Migration is incremental, but the destination is fixed: Joni becomes the sole
-production matcher. Each preprocessing rule is classified as source policy,
-backend-neutral syntax, Java adaptation, or matcher semantics. Matcher semantics
-move into focused Joni changes with differential Perl tests. Java adaptation is
-deleted with the Java route; source policy remains in PerlOnJava.
+Text normalization may express source policy, but it must not emulate behavior
+that depends on capture close order, matcher regions, encoding, backtracking, or
+callback execution. Semantically safe constant dynamic expressions may fold to
+pattern text; embedded closures never become compile-time constants because
+their execution and unwind are observable.
 
-The compatibility inventory is the regex section of
-`docs/reference/feature-matrix.md`. Default routing already uses Joni;
-subpattern calls, conditions, control verbs, ASCII-strict folds, and every
-structured executable callback template—including runtime `(??{...})`—also
-force Joni when the diagnostic Java differential mode is selected. Ordinary
-patterns remain part of the forced-Joni corpus.
-Semantically safe constant dynamic expressions may still fold to pattern text;
-embedded closures never become compile-time constants because their execution
-and unwind are observable.
+`RuntimeRegex` caches compiled Joni values per Perl runtime. The key includes
+source/modifiers, lexical debug and strict state, trusted callout count, byte
+provenance, and custom-charname translator identity. A handler remains
+matcher-local. Joni owns compiled optimizer metadata, and disables ordinary
+search optimization where control-flow or dynamic-option opcodes make its
+assumptions unsafe.
+
+Unicode programs use UTF-8 and explicit byte/character offset maps. Byte-mode
+programs use ISO-8859-1 identity maps. The PerlOnJava `CharacterPropertyResolver`,
+`NamedCharacterResolver`, and `WideScalarCodec` hooks supply current-Perl
+property/name data and reversible signed/wide scalar encodings without giving
+the fork access to runtime objects. Property-value wildcard expressions execute
+through Joni's runtime-neutral `PerlPropertyValueMatcher`.
+
+Generated tables follow the latest safely fast-forwarded upstream `perl5/`
+checkout. The exact consumed revision and hashes are provenance for a generation,
+not a permanent target SHA. Deterministic second-generation checks protect the
+checked-in data while allowing the next refresh to advance upstream.
 
 ## Remaining integration gates
 
-- Complete native extended character classes and a non-executing
-  `(?(DEFINE)...)` container, then delete their textual rewrites.
-- Carry Perl charset mode and byte/Unicode provenance through property/class,
-  literal, reverse-expansion, and backreference folding.
-- Parse nested property-value regex syntax inside Joni character properties and
-  remove adapter range materialisation.
-- Restore original source names and exact Perl diagnostics after temporary
-  internal encodings.
-- Retire the diagnostic Java differential selector after the complete semantic
-  and performance evidence gate; it is not production matcher ownership.
+The canonical checklist is `dev/design/phase36-regex-parity.md`; do not promote
+independently staged P3/P4/P5 work to integrated behavior. At this snapshot the
+recorded residuals include:
+
+- remaining native lexer/parser diagnostic families and exact source rendering;
+- forward/reverse literal and character-class fold expansion;
+- classification of the disconnected selector/fallback parser while keeping
+  production Java routing absent; immutable compatibility tests are not a
+  deletion target without explicit authority;
+- one immutable integrated Unicode/regex acceptance artifact, followed by the
+  complete corpus, performance, packaging, notice, and platform gates.
+
+Unsupported syntax remains fatal unless the explicit development-only
+`JPERL_UNIMPLEMENTED=warn` downgrade is requested. That downgrade is never
+evidence of semantic support.
 
 ## Verification
 
