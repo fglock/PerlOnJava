@@ -18,4 +18,23 @@ ok($subject =~ $pattern,
 is($&, $subject,
     'interpolated property fold captures the complete byte subject');
 
+my $byte_upper = chr 0xC0;
+utf8::downgrade($byte_upper, 1);
+ok($byte_upper !~ /(?d:[]\P{Lowercase}_])/i,
+    'leading literal close keeps a property inside its byte class');
+ok($byte_upper !~ /(?d:[[:digit:]\P{Lowercase}_])/i,
+    'POSIX nesting keeps a property inside its byte class');
+
+no warnings 'experimental::regex_sets';
+my $byte_lower = chr 0xE0;
+utf8::downgrade($byte_lower, 1);
+ok($byte_lower =~
+        /(?d:(?[ ([\x{e0}] + \p{Hex_Digit}) - \p{Hex_Digit} ]))/i,
+    'nested extended classes retain their surviving byte literal');
+ok($byte_upper =~
+        /(?d:(?[ ([\x{e0}] + \p{Hex_Digit}) - \p{Hex_Digit} ]))/i,
+    'nested extended classes retain byte fold provenance');
+ok('[A' =~ /^\[\p{Lowercase}$/i,
+    'an escaped opening bracket does not hide a top-level property');
+
 done_testing;

@@ -1974,16 +1974,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (pattern == null) return false;
         boolean quoted = false;
         int characterClassDepth = 0;
+        boolean[] classAtStart = new boolean[pattern.length() + 1];
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (ch > 0xff) return true;
             if (!quoted && ch == '[') {
+                classAtStart[characterClassDepth] = true;
                 characterClassDepth++;
                 continue;
             }
             if (!quoted && ch == ']' && characterClassDepth > 0) {
+                if (classAtStart[characterClassDepth - 1]) {
+                    // A close bracket immediately after '[' or '[^' is a
+                    // literal member, not the end of the character class.
+                    classAtStart[characterClassDepth - 1] = false;
+                    continue;
+                }
                 characterClassDepth--;
                 continue;
+            }
+            if (!quoted && characterClassDepth > 0
+                    && classAtStart[characterClassDepth - 1]) {
+                if (ch != '^') classAtStart[characterClassDepth - 1] = false;
             }
             if (ch != '\\' || i + 1 >= pattern.length()) continue;
 
