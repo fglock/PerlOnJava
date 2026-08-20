@@ -199,7 +199,7 @@ sub split_unicode_testprop {
     my $canonical_sha = sha256_hex($canonical);
     my @manifest = (
         "\n# PerlOnJava lossless TESTCHUNK dispatcher\n",
-        "# Canonical pinned mktables SHA-256: $canonical_sha\n",
+        "# Canonical current-upstream mktables SHA-256: $canonical_sha\n",
     );
     for my $section (@sections) {
         my @counts = map { "$_=$section->{counts}{$_}" }
@@ -236,7 +236,7 @@ DISPATCHER
 }
 
 # Generate the Unicode property test fixture from a pristine copy of the
-# pinned source data. Upstream deliberately does not commit TestProp.pl; its
+# current upstream source data. Upstream deliberately does not commit TestProp.pl; its
 # normal build creates it with lib/unicore/mktables -maketest.
 sub generate_unicode_testprop {
     my ($generator_relative, $target, $project_root) = @_;
@@ -249,9 +249,9 @@ sub generate_unicode_testprop {
     );
     for my $required (@required) {
         unless (-f $required) {
-            warn "  ERROR: Cannot generate Unicode TestProp.pl; missing pinned "
+            warn "  ERROR: Cannot generate Unicode TestProp.pl; missing current "
                 . "generation prerequisite: $required\n"
-                . "  Restore perl5/lib/unicore from the pinned perl5 source "
+                . "  Restore perl5/lib/unicore from the current upstream source "
                 . "before running this sync.\n\n";
             return 0;
         }
@@ -265,7 +265,7 @@ sub generate_unicode_testprop {
     };
     unless (copy_directory($unicode_source, $temporary_unicode,
                            $project_root, [], [])) {
-        warn "  ERROR: Cannot copy pinned Unicode data for TestProp.pl generation.\n\n";
+        warn "  ERROR: Cannot copy current upstream Unicode data for TestProp.pl generation.\n\n";
         return 0;
     }
 
@@ -275,7 +275,7 @@ sub generate_unicode_testprop {
         warn "  ERROR: Cannot enter project root for TestProp.pl generation: $!\n\n";
         return 0;
     }
-    print "  Generating with pinned Unicode data: $generator_relative\n";
+    print "  Generating with current upstream Unicode data: $generator_relative\n";
     my $result = system($^X, $generator_relative,
                         '-C', $temporary_unicode,
                         '-T', $generated,
@@ -291,7 +291,7 @@ sub generate_unicode_testprop {
                 ? "terminated by signal " . ($result & 127)
                 : "exit code " . ($result >> 8);
         warn "  ERROR: Unicode TestProp.pl generation failed ($exit).\n"
-            . "  Ensure the pinned perl5/lib/unicore data is complete and the "
+            . "  Ensure the current upstream perl5/lib/unicore data is complete and the "
             . "host Perl can run mktables.\n\n";
         return 0;
     }
