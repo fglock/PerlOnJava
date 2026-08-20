@@ -168,16 +168,16 @@ properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
 immutable comparison are pending. The production backend selector has been
 removed and its packaging/property invariance gates are awaiting the combined
-build. The latest focused `reg_mesg.t` artifact is 2941/3086 on both backends,
-with 145 failures partitioned as 51 native-parser, 74 redirected
+build. The latest focused `reg_mesg.t` artifact is 2961/3096 on both backends,
+with 135 failures partitioned as 41 native-parser, 74 redirected
 Unicode/property/charname, and 20 analyser/debug rows. P5 owns the
 `re/pat_advanced.t` source/debug and charname rows. The exact `f296dbe54`
 combined build passed compilation, packaging, licensed Joni, selector
 invariance, and all but four unit fixtures; their byte-property fold and
 control-verb source correction, P4 boundary/quantifier diagnostics, and P5
-direct custom-charname correction are integrated through `61d4d3356`; exact
-`61eb48af7` is under combined validation and the latest P4 slice is queued for
-the following batched gate.
+direct custom-charname correction are integrated through `9d3cc95ec`; exact
+`61eb48af7` is under combined validation and the latest P4/P6 slices are queued
+for the following batched gate.
 
 The interpreter comparison's 53 lower rows are classified: 48 are general
 interpreter limitations, four are shared native rows, and its sole independent
@@ -187,7 +187,7 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: exhaust the remaining 51 same-source native `reg_mesg.t`
+- P4: exhaust the remaining 41 same-source native `reg_mesg.t`
   parser/range/escape diagnostic rows; combined-build regressions are fixed in
   source and await integration validation.
 - P5: carry immutable pre-resolved custom-charname metadata through AST/CV
