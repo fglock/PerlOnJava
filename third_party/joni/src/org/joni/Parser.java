@@ -2227,12 +2227,17 @@ class Parser extends Lexer {
             Node qn = qtfr;
 
             if (token.getRepeatPossessive()) {
+                // A bare {1} is normally a no-op, but {1}+ still establishes
+                // an atomic boundary around its target.  Keep that boundary
+                // instead of taking the ordinary no-op return path.
+                if (ret == 1) qtfr.setTarget(target);
                 EncloseNode en = new EncloseNode(EncloseType.STOP_BACKTRACK); // node_new_enclose
                 en.setTarget(qn);
                 qn = en;
             }
 
-            if (ret == 0 || (syntax.op3OptionECMAScript() && ret == 1)) {
+            if (ret == 0 || token.getRepeatPossessive()
+                    || (syntax.op3OptionECMAScript() && ret == 1)) {
                 target = qn;
             } else if (ret == 2) { /* split case: /abc+/ */
                 target = ListNode.newList(target, null);
@@ -2260,12 +2265,13 @@ class Parser extends Lexer {
             Node qn = qtfr;
 
             if (token.getRepeatPossessive()) {
+                if (ret == 1) qtfr.setTarget(target.value);
                 EncloseNode en = new EncloseNode(EncloseType.STOP_BACKTRACK); // node_new_enclose
                 en.setTarget(qn);
                 qn = en;
             }
 
-            if (ret == 0) {
+            if (ret == 0 || token.getRepeatPossessive()) {
                 target.setValue(qn);
             } else if (ret == 2) { /* split case: /abc+/ */
                 assert false;
