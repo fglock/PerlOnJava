@@ -200,6 +200,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Zero length \\N{}";
     String PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER =
             "\\N{} here is restricted to one character in regex";
+    String PERL_UNRECOGNIZED_ESCAPE_IN_CHAR_CLASS =
+            "Unrecognized escape \\%n in character class";
     String PERL_WIDE_SCALAR_OVERFLOW =
             "Use of code point is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF";
 
