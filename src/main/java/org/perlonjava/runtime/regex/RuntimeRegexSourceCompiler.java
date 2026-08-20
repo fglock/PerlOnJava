@@ -72,7 +72,8 @@ final class RuntimeRegexSourceCompiler {
 
         String publicModifiers = modifiers.replace("E", "").replace("T", "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_MARKER), "")
-                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER), "");
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_RE_STRICT_MARKER), "");
         // qr// accepts pattern modifiers, not operation modifiers such as the
         // trailing marker used for m?PAT?. Reapply the complete operation flag
         // set to the compiled qr object below.
