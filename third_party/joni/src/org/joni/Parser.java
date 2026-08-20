@@ -1151,6 +1151,15 @@ class Parser extends Lexer {
 
         int from = (int)arg.from;
         int to = (int)arg.to;
+        if (from == to && !rangeEndpointSource(arg.fromStart, arg.fromEnd)
+                .equals(rangeEndpointSource(arg.toStart, arg.toEnd))) {
+            int warningPosition = perlExtendedRangeWarningPosition();
+            String source = rangeEndpointSource(arg.fromStart, warningPosition);
+            env.warnings.warn("\"" + source
+                    + "\" is more clearly written simply as \""
+                    + perlRangeLiteral(from) + "\"", warningPosition);
+            return;
+        }
         if (isAsciiPrintable(from) || isAsciiPrintable(to)) {
             if (from != to && (arg.fromEscaped || arg.toEscaped
                     || !isSameAsciiRangeGroup(from, to))) {
@@ -1169,6 +1178,22 @@ class Parser extends Lexer {
             env.warnings.warn("Ranges of digits should be from the same group of 10",
                     perlExtendedRangeWarningPosition());
         }
+    }
+
+    private String rangeEndpointSource(int start, int end) {
+        return new String(bytes, getBegin() + start, end - start, enc.getCharset());
+    }
+
+    private static String perlRangeLiteral(int codePoint) {
+        return switch (codePoint) {
+            case '\t' -> "\\t";
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\f' -> "\\f";
+            default -> isAsciiPrintable(codePoint)
+                    ? Character.toString(codePoint)
+                    : String.format("\\x{%X}", codePoint);
+        };
     }
 
     private int perlExtendedRangeWarningPosition() {

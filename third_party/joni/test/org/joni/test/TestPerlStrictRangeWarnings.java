@@ -111,6 +111,19 @@ public class TestPerlStrictRangeWarnings {
     }
 
     @Test
+    public void warnsForEquivalentDifferentlySpelledEndpoints() {
+        String colon = "(?[ [ : - \\x3A ] ])";
+        assertEquals(List.of(new Warning(
+                "\": - \\x3A \" is more clearly written simply as \":\"",
+                endpointPosition(colon))), warnings(colon));
+
+        String tab = "(?[ [ \\t - \\x09 ] ])";
+        assertEquals(List.of(new Warning(
+                "\"\\t - \\x09 \" is more clearly written simply as \"\\t\"",
+                endpointPosition(tab))), warnings(tab));
+    }
+
+    @Test
     public void preservesNamedEndpointProvenance() {
         String mixed = "(?[ [ \\N{ZERO} - \\x01 ] ])";
         assertEquals(List.of(new Warning(
