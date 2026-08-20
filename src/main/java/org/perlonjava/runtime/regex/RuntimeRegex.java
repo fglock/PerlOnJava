@@ -432,6 +432,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
                                         int trustedCalloutCount, boolean patternByteBacked,
                                         boolean lexicalReStrict) {
+        return compile(patternString, modifiers, lexicalDebugMode, trustedCalloutCount,
+                patternByteBacked, lexicalReStrict, null);
+    }
+
+    private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
+                                        int trustedCalloutCount, boolean patternByteBacked,
+                                        boolean lexicalReStrict, String sourceDiagnosticPattern) {
         RuntimeScalar namedCharacterTranslator =
                 org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames");
         modifiers = stripInternalMarkers(modifiers);
@@ -445,7 +452,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 patternString, preloadFlags.isCaseInsensitive());
         return compileSynchronized(patternString, modifiers, lexicalDebugMode,
                 trustedCalloutCount, false, patternByteBacked, lexicalReStrict,
-                namedCharacterTranslator);
+                namedCharacterTranslator, sourceDiagnosticPattern);
     }
 
     /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
@@ -492,7 +499,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             RuntimeScalar namedCharacterTranslator) {
         return compileSynchronized(patternString, modifiers, lexicalDebugMode,
                 trustedCalloutCount, literalSyntaxValidation, patternByteBacked,
-                lexicalReStrict, namedCharacterTranslator, null, false);
+                lexicalReStrict, namedCharacterTranslator, null);
+    }
+
+    private static synchronized RuntimeRegex compileSynchronized(
+            String patternString, String modifiers, int lexicalDebugMode,
+            int trustedCalloutCount, boolean literalSyntaxValidation,
+            boolean patternByteBacked, boolean lexicalReStrict,
+            RuntimeScalar namedCharacterTranslator, String sourceDiagnosticPattern) {
+        return compileSynchronized(patternString, modifiers, lexicalDebugMode,
+                trustedCalloutCount, literalSyntaxValidation, patternByteBacked,
+                lexicalReStrict, namedCharacterTranslator, null, false,
+                sourceDiagnosticPattern);
     }
 
     private static synchronized RuntimeRegex compileSynchronized(
@@ -501,7 +519,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             boolean patternByteBacked, boolean lexicalReStrict,
             RuntimeScalar namedCharacterTranslator,
             JoniRegexPattern.NamedCharacterCache existingNamedCharacterCache,
-            boolean forceRecompile) {
+            boolean forceRecompile, String sourceDiagnosticPattern) {
         // Debug logging
         if (DEBUG_REGEX) {
             System.err.println("RuntimeRegex.compile: pattern=" + patternString + " modifiers=" + modifiers);
@@ -518,6 +536,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     RegexMarkers.LITERAL_USELESS_CASE_ESCAPE, "");
         }
         String compilePatternString = originalPatternString;
+        String displayDiagnosticPattern = sourceDiagnosticPattern == null
+                ? originalPatternString : sourceDiagnosticPattern;
         List<String> quoteMetaWarningsOnUse = new ArrayList<>();
         if (compilePatternString != null && compilePatternString.contains("\\Q")) {
             // Interpolated-pattern warnings are lexical diagnostics for each
@@ -752,7 +772,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     int bytePosition = ((SyntaxException) e).getPatternPosition();
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
-                                compilePatternString, bytePosition);
+                                displayDiagnosticPattern, bytePosition);
                         if ("undefined group option".equals(message)
                                 && originalPatternString != null
                                 && characterPosition >= 3
@@ -770,7 +790,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             }
                         }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
-                                originalPatternString, characterPosition, message));
+                                displayDiagnosticPattern, characterPosition, message));
                     }
                     throw new PerlCompilerException(message);
                 }
@@ -1292,7 +1312,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.regexFlags == null ? "" : regex.regexFlags.toFlagString(),
                 regex.lexicalDebugMode, regex.trustedCalloutCount, false,
                 regex.patternByteBacked, regex.lexicalReStrict,
-                regex.namedCharacterTranslator, regex.namedCharacterCache, true);
+                regex.namedCharacterTranslator, regex.namedCharacterCache, true, null);
         if (recompiled.deferredUserDefinedUnicodeProperties) {
             throw new PerlCompilerException(
                     "Deferred user-defined Unicode property remained unresolved at runtime");
@@ -1725,7 +1745,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (patternString.value instanceof RuntimeRegexTemplate template) {
             RuntimeRegex regex = compile(template.pattern(), rawModifierStr, callSiteDebugMode,
-                    template.callbacks().size(), template.byteBackedPattern()).cloneTracked();
+                    template.callbacks().size(), template.byteBackedPattern(),
+                    reStrictMode(rawModifierStr), RuntimeRegexTemplate.displayPattern(
+                            template.pattern(), template.callbacks())).cloneTracked();
             regex.setExecutableCallbacks(template.callbacks());
             return new RuntimeScalar(regex).propagateTaint(patternString);
         }
