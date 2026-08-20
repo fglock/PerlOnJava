@@ -1397,6 +1397,9 @@ public class UnicodeResolver {
         } else if (isPerlSentenceBreakProperty(name)) {
             if (resolvePerlSentenceBreakProperty(property) == null) return null;
             caseFold = false;
+        } else if (isPerlLineBreakProperty(name)) {
+            if (resolvePerlLineBreakProperty(property) == null) return null;
+            caseFold = false;
         } else if (isPerlVerticalOrientationProperty(name)) {
             if (resolvePerlVerticalOrientationProperty(property) == null) return null;
             caseFold = false;
@@ -1412,10 +1415,15 @@ public class UnicodeResolver {
         // the AST can retain per-property fold policy through class composition.
         if (!caseFold && inCharacterClass) return null;
 
-        UnicodeSet set = binaryAssignment == null
-                ? resolvePerlBuiltInPropertyAlias(property)
-                : resolveStandardPropertyAsSet(
-                        binaryAssignment.propertyName, new LinkedHashSet<>());
+        UnicodeSet set;
+        if (binaryAssignment != null) {
+            set = resolveStandardPropertyAsSet(
+                    binaryAssignment.propertyName, new LinkedHashSet<>());
+        } else if (isPerlLineBreakProperty(name)) {
+            set = resolvePerlLineBreakProperty(property);
+        } else {
+            set = resolvePerlBuiltInPropertyAlias(property);
+        }
         if (set == null) return null;
 
         long[] wideRanges = isPerlVerticalOrientationDefault(property)
@@ -1861,6 +1869,32 @@ public class UnicodeResolver {
     private static boolean isPerlSentenceBreakProperty(String property) {
         return switch (loosePropertyName(property)) {
             case "sb", "sentencebreak" -> true;
+            default -> false;
+        };
+    }
+
+    private static UnicodeSet resolvePerlLineBreakProperty(String property) {
+        int assignment = propertyValueDelimiter(property);
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlLineBreakProperty(property.substring(0, assignment))) {
+            return null;
+        }
+        String value = property.substring(assignment + 1);
+        // ICU exposes Line_Break's data for matching but not through its
+        // property-value enum lookup. Preserve the canonical CR value aliases
+        // that Perl accepts, matching the existing frontend property adapter.
+        if (switch (loosePropertyName(value)) {
+            case "cr", "carriagereturn" -> true;
+            default -> false;
+        }) {
+            return new UnicodeSet('\r', '\r');
+        }
+        return unicodePropertyValueSet(UProperty.LINE_BREAK, value);
+    }
+
+    private static boolean isPerlLineBreakProperty(String property) {
+        return switch (loosePropertyName(property)) {
+            case "lb", "linebreak" -> true;
             default -> false;
         };
     }
