@@ -5820,43 +5820,7 @@ public class BytecodeCompiler implements Visitor {
 
         closureCapturedVarNames.addAll(closureVarNames);
 
-        int beginId = 0;
-        if (!closureVarIndices.isEmpty()) {
-            beginId = EmitterMethodCreator.classCounter.getAndIncrement();
-
-            // Store each closure variable in PersistentVariable globals
-            for (int i = 0; i < closureVarNames.size(); i++) {
-                String varName = closureVarNames.get(i);
-                int varReg = closureVarIndices.get(i);
-
-                // Get the variable type from the sigil
-                String sigil = varName.substring(0, 1);
-                String bareVarName = varName.substring(1);
-                String beginVarName = PersistentVariable.beginPackage(beginId) + "::" + bareVarName;
-
-                // Store the variable value in PersistentVariable global
-                int nameIdx = addToStringPool(beginVarName);
-                switch (sigil) {
-                    case "$" -> {
-                        emit(Opcodes.STORE_GLOBAL_SCALAR);
-                        emit(nameIdx);
-                        emitReg(varReg);
-                    }
-                    case "@" -> {
-                        emit(Opcodes.STORE_GLOBAL_ARRAY);
-                        emit(nameIdx);
-                        emitReg(varReg);
-                    }
-                    case "%" -> {
-                        emit(Opcodes.STORE_GLOBAL_HASH);
-                        emit(nameIdx);
-                        emitReg(varReg);
-                    }
-                }
-            }
-        }
-
-        // Step 3: Compile the subroutine body with a packed registry for captured variables.
+        // Step 2: Compile the subroutine body with a packed registry for captured variables.
         // The closure created at runtime packs capturedVars sequentially into registers 3..,
         // so the compiled sub body must use the same packed register layout.
         Map<String, Integer> packedRegistry = new HashMap<>();
@@ -5884,16 +5848,12 @@ public class BytecodeCompiler implements Visitor {
         // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
         inheritPragmaFlags(subCompiler);
 
-        // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
-        subCompiler.currentSubroutineBeginId = beginId;
-        subCompiler.currentSubroutineClosureVars = new HashSet<>(closureVarNames);
-
         // Subroutine bodies should use RUNTIME context so the calling context
         // (VOID/SCALAR/LIST) propagates correctly at runtime via register 2 (wantarray).
         subCompiler.currentCallContext = RuntimeContextType.RUNTIME;
 
-        // Step 4: Compile the subroutine body
-        // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
+        // Step 3: Compile the subroutine body. Captured variables resolve directly
+        // through the packed registers instead of a copied synthetic global cell.
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
@@ -5905,7 +5865,7 @@ public class BytecodeCompiler implements Visitor {
             System.out.println(Disassemble.disassemble(subCode));
         }
 
-        // Step 5: Emit bytecode to create closure or simple code ref
+        // Step 4: Emit bytecode to create closure or simple code ref
         int codeReg = allocateRegister();
 
         if (closureVarIndices.isEmpty()) {
@@ -5927,7 +5887,7 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 6: Store in global namespace
+        // Step 5: Store in global namespace
         String fullName = node.name;
         if (!fullName.contains("::")) {
             fullName = getCurrentPackage() + "::" + fullName;  // Use getCurrentPackage() for proper package tracking
@@ -5938,7 +5898,7 @@ public class BytecodeCompiler implements Visitor {
         emit(nameIdx);
         emitReg(codeReg);
 
-        // Step 7: Register subroutine location for %DB::sub (only in debug mode)
+        // Step 6: Register subroutine location for %DB::sub (only in debug mode)
         if (DebugState.isDebugMode() && errorUtil != null) {
             int startLine = errorUtil.getLineNumber(node.getIndex());
             // Use start line as end line for now (accurate end would require tracking block end)
