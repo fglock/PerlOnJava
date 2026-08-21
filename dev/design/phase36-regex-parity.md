@@ -83,7 +83,7 @@ Remaining scanner-removal queue:
   identity.
 - [x] Remove the exact-source Perl16894 alternate-capture correction after
   native Joni capture-history behavior passes a focused standard-Perl oracle.
-- [ ] Retire the exact-source XMP and XML manual matcher selectors behind
+- [x] Retire the exact-source XMP and XML manual matcher selectors behind
   correctness and bounded warmed-performance gates.
 - [x] Replace `requiresRuntimeUnicodePropertyResolution` and
   `preloadUserDefinedProperties` source scanning with Joni-compiled deferred-
@@ -299,22 +299,22 @@ host semantic seams.
   not influence matching or backend policy.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
-- [ ] Retire the final production host semantic seams: parser-owned Unicode
-  XMP/XML matcher selectors and the residual renderer closure. Parser-owned
-  Unicode promotion, native `\Q...\E`, inline `/p`, dead mapper,
-  custom-charname substring-probe, and alternate-capture correction retirement
-  are complete; the production source-seam audit classifies every retained
-  scanner by ownership and evidence.
+- [ ] Retire the final production host semantic seams: finish the residual
+  renderer closure and move dead matcher-compatibility islands to test scope.
+  Parser-owned Unicode promotion, XMP/XML matcher-selector retirement, native
+  `\Q...\E`, inline `/p`, dead mapper, custom-charname substring-probe, and
+  alternate-capture correction retirement are complete; the production
+  source-seam audit classifies every retained scanner by ownership and evidence.
 
 Active ownership:
 
 - P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
-  locale-UTF8, and low-ANYOFR renderer closure; the XMP/XML retirement plan is
-  ready for its subsequent implementation lease.
+  locale-UTF8, and low-ANYOFR renderer closure.
 - P6: prepare the row-oriented seven-POD capability evidence audit without
   claiming active unintegrated behavior as shipped.
-- P3: retire both XMP/XML exact-source manual matcher selectors under the
-  accepted correctness and warmed-performance gates.
+- P3: move dead Java-matcher timeout and multi-fold compatibility islands to
+  test scope while preserving their existing tests unchanged, and remove
+  unreachable production catches/imports.
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
@@ -326,10 +326,9 @@ Active ownership:
 1. Finish the remaining 27-row residual class-renderer closure on the
    integrated exact-program/simple-fold base, require zero introductions, and
    publish the combined warning-free base.
-2. Retire the XMP/XML matcher selectors; the alternate-capture correction is
-   removed after direct-Joni and focused `pat.t` proof. Close any residual
-   compiled renderer/debug roots and refresh complete Unicode, `pat.t`, and
-   `pat_advanced.t` maps without introductions.
+2. Close residual compiled renderer/debug roots, retire dead production
+   compatibility islands to test scope, and refresh complete Unicode, `pat.t`,
+   and `pat_advanced.t` maps without introductions.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
