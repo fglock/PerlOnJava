@@ -618,6 +618,10 @@ final class JoniRegexPattern {
         return regex.byteCodeDebugDescription();
     }
 
+    boolean hasForwardNamedBackreference() {
+        return regex.hasForwardNamedBackreference();
+    }
+
     boolean hasOnlyAuthoritativeWideCharacterClasses() {
         return regex.hasOnlyAuthoritativeWideCharacterClasses();
     }

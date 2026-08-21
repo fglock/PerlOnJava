@@ -65,9 +65,11 @@ public class Re extends PerlModuleBase {
 
     private static int namedDebugFlag(String option) {
         return switch (option) {
-            case "COMPILE", "PARSE", "OPTIMISE", "TRIEC", "DUMP", "FLAGS",
+            case "COMPILE", "OPTIMISE", "TRIEC", "DUMP", "FLAGS",
                     "TEST", "EXTRA", "DUMP_PRE_OPTIMIZE", "WILDCARD" ->
                     RuntimeRegex.LEXICAL_DEBUG_COMPILE;
+            case "PARSE" -> RuntimeRegex.LEXICAL_DEBUG_COMPILE
+                    | RuntimeRegex.LEXICAL_DEBUG_PARSE;
             case "EXECUTE", "INTUIT", "MATCH", "TRIEE", "TRIEM", "OFFSETS",
                     "OFFSETSDBG", "STATE", "OPTIMISEM", "STACK", "BUFFERS",
                     "GPOS" -> RuntimeRegex.LEXICAL_DEBUG_EXECUTE;

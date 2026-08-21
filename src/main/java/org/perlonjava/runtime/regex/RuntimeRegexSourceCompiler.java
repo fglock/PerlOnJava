@@ -74,6 +74,7 @@ final class RuntimeRegexSourceCompiler {
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_RE_STRICT_MARKER), "");
         // qr// accepts pattern modifiers, not operation modifiers such as the
         // trailing marker used for m?PAT?. Reapply the complete operation flag
@@ -210,7 +211,8 @@ final class RuntimeRegexSourceCompiler {
         String sourceModifiers = modifiers
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
-                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "");
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER), "");
         RuntimeScalar compiled = compile(RuntimeRegexTemplate.patternScalar(
                 masked.pattern(), template.byteBackedPattern()), sourceModifiers);
         if (!(compiled.value instanceof RuntimeRegex sourceRegex)) {

@@ -805,6 +805,9 @@ public class StringParser {
         if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
             marked.append(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER);
         }
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_PARSE) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER);
+        }
         return marked.toString();
     }
 

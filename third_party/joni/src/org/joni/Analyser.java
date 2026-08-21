@@ -221,6 +221,7 @@ final class Analyser extends Parser {
         case NodeType.BREF:
             BackRefNode backref = (BackRefNode)node;
             if (backref.unresolvedName != null) {
+                regex.hasForwardNamedBackreference = true;
                 NameEntry entry = regex.nameToGroupNumbers(backref.unresolvedName,
                         backref.unresolvedNameP, backref.unresolvedNameEnd);
                 if (entry == null) {

@@ -68,9 +68,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static final char INTERNAL_DEBUG_EXECUTE_MARKER = '\u0002';
     public static final char INTERNAL_RE_STRICT_MARKER = '\u0003';
     public static final char INTERNAL_DEBUG_COLOR_MARKER = '\u0004';
+    public static final char INTERNAL_DEBUG_PARSE_MARKER = '\u0005';
     public static final int LEXICAL_DEBUG_COMPILE = 1;
     public static final int LEXICAL_DEBUG_EXECUTE = 2;
     public static final int LEXICAL_DEBUG_COLOR = 4;
+    public static final int LEXICAL_DEBUG_PARSE = 8;
 
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
@@ -1425,6 +1427,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (modifiers.indexOf(INTERNAL_DEBUG_COLOR_MARKER) >= 0) {
             mode |= LEXICAL_DEBUG_COLOR;
         }
+        if (modifiers.indexOf(INTERNAL_DEBUG_PARSE_MARKER) >= 0) {
+            mode |= LEXICAL_DEBUG_PARSE;
+        }
         return mode;
     }
 
@@ -1437,7 +1442,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return modifiers.replace(String.valueOf(INTERNAL_DEBUG_COMPILE_MARKER), "")
                 .replace(String.valueOf(INTERNAL_DEBUG_EXECUTE_MARKER), "")
                 .replace(String.valueOf(INTERNAL_RE_STRICT_MARKER), "")
-                .replace(String.valueOf(INTERNAL_DEBUG_COLOR_MARKER), "");
+                .replace(String.valueOf(INTERNAL_DEBUG_COLOR_MARKER), "")
+                .replace(String.valueOf(INTERNAL_DEBUG_PARSE_MARKER), "");
     }
 
     private void emitCompileDebugTrace() {
@@ -1446,6 +1452,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         registerDebugLifecycle();
         if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
         String patternDescription = debugPatternDescription();
+        if ((lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0) {
+            StringBuilder trace = new StringBuilder(
+                    compileDebugPreamble(patternDescription));
+            if (recursivePattern != null
+                    && recursivePattern.hasForwardNamedBackreference()) {
+                trace.append("Need to redo parse\n")
+                        .append("Freeing REx: \"")
+                        .append(patternDescription)
+                        .append("\"\n")
+                        .append("Starting parse and generation\n");
+            }
+            debugWrite(trace.toString());
+            return;
+        }
         if (recursivePattern != null
                 && recursivePattern.engineRegex()
                         .hasDeferredCharacterProperties()) {

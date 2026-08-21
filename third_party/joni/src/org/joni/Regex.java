@@ -103,6 +103,7 @@ public final class Regex {
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
     boolean hasControlVerb;
+    boolean hasForwardNamedBackreference;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
     final WideScalarCodec wideScalarCodec;
@@ -647,6 +648,11 @@ public final class Regex {
     /** Stable textual view of the actual compiled native instruction stream. */
     public String byteCodeDebugDescription() {
         return new ByteCodePrinter(this).byteCodeListToString();
+    }
+
+    /** Whether a named backreference was resolved only after the first parse pass. */
+    public boolean hasForwardNamedBackreference() {
+        return hasForwardNamedBackreference;
     }
 
     public enum DebugProgramKind {
