@@ -82,6 +82,16 @@
          }
       },
       {
+         "generator" : "dev/tools/generate_perl_unicode_indic_category_data.pl",
+         "name" : "indic-category",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeIndicCategoryData.java",
+         "output_sha256" : "2362ba0552cdcc065d0fa5fe9266d557cebc41ed63aff2046b6b0595e3bdbe03",
+         "sources" : {
+            "IndicPositionalCategory.txt" : "68cedc29a7e57f984d90fe2c7712f2e6d0c717e253db219607daea8997d6c480",
+            "IndicSyllabicCategory.txt" : "3fc122f4cf58b0c19268d5f810263b04ab4e1e67743386ec0e0ada9c76aec5be"
+         }
+      },
+      {
          "generator" : "dev/tools/generate_perl_unicode_joining_group_data.pl",
          "name" : "joining-group",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeJoiningGroupData.java",
@@ -119,7 +129,7 @@
          }
       }
    ],
-   "perl_commit" : "fa00284182335e5fed578460346efb88843f08da",
+   "perl_commit" : "fd584474cf36982e2f2ef85b042ea51bb02fffaa",
    "perl_source_policy" : "current-checkout",
    "perl_version" : "5.45.2",
    "schema_version" : 2,
