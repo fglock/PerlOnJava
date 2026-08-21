@@ -186,8 +186,12 @@ with 677871/695187 assertions passing and 95 improved rows. Fresh private-tree
 isolation found no regex pass decrease: both `pat.t` variants improve by 147
 passing assertions. Plan/platform drift explains four raw decreases; missing
 private-import inputs explain two new porting errors. The
-`lib/overload_fallback.t` 3/4 decrease is fixed at `cbee747f1`; the sole
-remaining genuine non-regex decrease is `io/socket.t` at 23/25 versus 25/25.
+`lib/overload_fallback.t` 3/4 decrease is fixed at `cbee747f1`.
+`io/socket.t` is environmental rather than a product decrease: the exact
+one-file runner outside the restricted sandbox passes 25/25 with zero
+errors/timeouts, while the sandbox denies localhost bind and clamps
+`SO_SNDBUF` to 816; focused JVM/interpreter option probes outside it both
+return 32768. There is no remaining reproduced non-regex pass-count blocker.
 The complete runner, comparator, isolation, dossier, 622-file list, reducers,
 and verified checksum manifest are
 durably retained under
@@ -219,8 +223,7 @@ Active ownership:
   full-context/prefix rules in `ByteCodeMachine`/`WordBreakData`.
 - P4: finish and deliver built-in property text-rewrite removal by routing raw Script,
   Script_Extensions, Block, Age/Present_In, and alias spellings through Joni's
-  runtime-neutral resolver; then close the remaining `io/socket.t` release
-  regression in a disjoint worktree.
+  runtime-neutral resolver.
 - P5: close default-on `experimental::uniprop_wildcards` warning policy and
   escaped-`[` callback provenance, then produce the complete 25-file
   `JPERL_UNIMPLEMENTED=warn` retirement table; after P4 delivery, generate and
@@ -235,29 +238,27 @@ Active ownership:
 1. Finish P3 word-boundary, P4 raw-property scanner removal, P5
    runtime/frontend diagnostics, and P6 byte-linebreak tranches. Preserve
    vendored notices and serialize overlapping property/Parser ownership.
-2. Close the sole remaining reproduced non-regex decrease,
-   `io/socket.t`, in P4's disjoint successor worktree.
-3. Integrate every delivered green tranche, run one combined warning-free `make`, then
+2. Integrate every delivered green tranche, run one combined warning-free `make`, then
    refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-4. Preserve the documented fixture-invalid disposition for missing private
-   porting inputs. Refresh the comparator evidence for the exact integration
+3. Preserve the documented fixture-invalid and sandbox-environment dispositions.
+   Refresh the comparator evidence for the exact integration
    head without repeating the already-retained discovery run. Push a head with no PR-958
    pass-count regression to PR 1087, run CI, and make the incremental PR
    reviewable.
-5. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
+4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
    PR. Repeat focused tests per semantic tranche and one combined build per
    integration batch.
-6. Delete remaining production migration scaffolding and prove all constants,
+5. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
-7. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
+6. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
-8. Reconcile final documentation and remove redundant design material.
-9. After the final implementation PR is merged to `master`, remove automatic
+7. Reconcile final documentation and remove redundant design material.
+8. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
