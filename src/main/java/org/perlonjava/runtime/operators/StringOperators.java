@@ -816,7 +816,8 @@ public class StringOperators {
             exactCodePoint = BigInteger.valueOf(0xFFFD);
         } else if (exactCodePoint.compareTo(MAX_PERL_CODE_POINT) > 0) {
             BigInteger diagnosticValue = exactCodePoint.min(MAX_PERL_UV);
-            throw new PerlCompilerException("Use of code point 0x"
+            throw PerlCompilerException.atCurrentExecutionLocation(
+                    "Use of code point 0x"
                     + diagnosticValue.toString(16).toUpperCase(Locale.ROOT)
                     + " is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF");
         }
