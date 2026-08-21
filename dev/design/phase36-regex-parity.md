@@ -191,6 +191,10 @@ unresolved PR-958 pass-count decrease. The user owns the release checkout;
 workers use private exact-head worktrees and must not mutate, rebase, or push
 the user's branch.
 
+The class candidate must also be validated with a private build of the exact
+latest pulled Perl source: the available 5.43.9 executable predates the new
+leading-underscore accessor rule and cannot serve as its standard-Perl oracle.
+
 Independent implementation continues on `integrate/phase36-post1087-wip`.
 Its current preserved tranche generates current-Perl InSC/InPC data and closes
 all 4,240 labelled `uniprops02.t` assertions through native Joni property
