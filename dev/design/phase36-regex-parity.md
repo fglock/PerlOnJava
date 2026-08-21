@@ -236,6 +236,15 @@ or no longer reach an unsupported path. Final removal still requires the
 planned strict 623-file A/B run because test-local warning handlers may hide a
 marker from the outer transcript.
 
+Final-acceptance preparation is also fail-closed at the current checkpoint.
+The latest-Perl ledger resolves 80 core regex files, 201 auxiliary files, 287
+unique runner files, 50 documented unit gates, and 11 direct/thread records,
+with zero unresolved references; nested documented gates such as
+`japh/abigail.t` are now included while dot segments and canonical or symlink
+escapes are rejected. Prepare-only, standalone packaging/notices/SBOM checks,
+and all 24 acceptance-tool files (234 assertions) pass. The final semantic run
+must still rebuild and execute from one exact clean final implementation head.
+
 Current exact-artifact diagnostic maps are also closed: both JVM and
 interpreter pass all 3,390 `reg_mesg.t` rows and all 2,210 `regexp.t` rows.
 Executable, wrapper, JAR, cwd, and command identities are retained with the
@@ -272,9 +281,10 @@ Active ownership:
   graphs and standard-Perl callback-timing/provenance oracles, ready for the
   exact post-A24 writable base. Canonical regex architecture reconciliation and
   the redundant-document inventory are integrated.
-- P6: validate the final-acceptance orchestrator, ledger, direct/thread
-  inventory, packaging identity, and command manifest at exact checkpoint
-  `4314449ee` without starting the expensive corpus.
+- P6: prepare retirement of test-scope `requiresJoniBackend` source-policy
+  scans using direct compiled Joni parser/program facts, ready for the exact
+  post-A24 writable base. Final-acceptance orchestrator, ledger, direct/thread
+  inventory, packaging identity, and command manifest preparation are complete.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined builds, worker rebasing, release evidence, and final
   warn-mode removal execution after final integration.
