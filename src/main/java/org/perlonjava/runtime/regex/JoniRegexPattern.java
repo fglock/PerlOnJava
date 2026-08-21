@@ -20,6 +20,7 @@ import org.joni.WideScalarCodec;
 import org.joni.exception.SyntaxException;
 
 import static org.joni.constants.SyntaxProperties.ALLOW_MULTIPLEX_DEFINITION_NAME_CALL;
+import static org.joni.constants.SyntaxProperties.OP2_ESC_CAPITAL_Q_QUOTE;
 import static org.joni.constants.SyntaxProperties.OP2_ESC_H_HORIZONTAL_WHITESPACE;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
@@ -123,7 +124,8 @@ final class JoniRegexPattern {
     private static final Syntax PERLONJAVA_SYNTAX = new Syntax(
             "PERLONJAVA", Syntax.RUBY.op | OP_POSIX_BRACKET | OP_ESC_C_CONTROL,
             (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL
-                    | OP2_PLUS_POSSESSIVE_INTERVAL | OP2_ESC_H_HORIZONTAL_WHITESPACE,
+                    | OP2_PLUS_POSSESSIVE_INTERVAL | OP2_ESC_H_HORIZONTAL_WHITESPACE
+                    | OP2_ESC_CAPITAL_Q_QUOTE,
             Syntax.RUBY.op3 | OP3_PERL_LITERAL_OPEN_IN_CC,
             Syntax.RUBY.behavior | ALLOW_MULTIPLEX_DEFINITION_NAME_CALL,
             Syntax.RUBY.options & ~(Option.ASCII_RANGE
