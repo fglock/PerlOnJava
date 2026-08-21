@@ -56,7 +56,9 @@ public class OperatorParser {
         // Since Perl 5.42, `do NAME(...)` is a syntax error rather than an
         // ambiguous do-file expression. CORE() retains its historical special
         // case and `do NAME` without parentheses is still parsed as do-file.
-        if (token.type == IDENTIFIER && !token.text.equals("CORE")) {
+        if (token.type == IDENTIFIER
+                && !token.text.equals("CORE")
+                && !ParsePrimary.isIsQuoteLikeOperator(token.text)) {
             int nextIndex = Whitespace.skipWhitespace(
                     parser, parser.tokenIndex + 1, parser.tokens);
             if (nextIndex < parser.tokens.size()
