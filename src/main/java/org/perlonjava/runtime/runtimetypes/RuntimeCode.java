@@ -4165,6 +4165,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (frame > 0 && frame - 1 < stackTraceSize) {
                         String prevPkg = stackTrace.get(frame - 1).getFirst();
                         subName = (prevPkg != null && !prevPkg.isEmpty() ? prevPkg : "main") + "::__ANON__";
+                    } else {
+                        // Compile-time and deferred special blocks can be the
+                        // outermost formatted frame.  They have no previous
+                        // frame from which to derive a CV name, but caller's
+                        // package/file/line tuple is still valid.  Keep element
+                        // 3 defined, as Perl does, using that frame's package.
+                        subName = normalizeCallerPackage(pkg) + "::__ANON__";
                     }
                 }
 
@@ -4384,12 +4391,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int callerStackFrame = frame - stackTraceSize + result.callerStackConsumed();
             CallerStack.CallerInfo info = CallerStack.peek(callerStackFrame);
             if (info != null) {
+                String pkg = normalizeCallerPackage(info.packageName());
                 if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(normalizeCallerPackage(info.packageName())));
+                    res.add(new RuntimeScalar(pkg));
                 } else {
-                    res.add(new RuntimeScalar(normalizeCallerPackage(info.packageName())));
+                    res.add(new RuntimeScalar(pkg));
                     res.add(new RuntimeScalar(info.filename()));
                     res.add(new RuntimeScalar(info.line()));
+                    if (hasExplicitExpr) {
+                        String subName = activeSubName != null && !activeSubName.isEmpty()
+                                ? activeSubName : pkg + "::__ANON__";
+                        res.add(new RuntimeScalar(subName));
+                        Boolean hasArgsFromStack = getHasArgsAt(trackedOriginalFrame);
+                        res.add(hasArgsFromStack != null && hasArgsFromStack
+                                ? RuntimeScalarCache.scalarTrue
+                                : RuntimeScalarCache.scalarUndef);
+                        res.add(callerWantarrayScalar(getCallContextAt(trackedOriginalFrame)));
+                        res.add(RuntimeScalarCache.scalarUndef); // eval text
+                        res.add(RuntimeScalarCache.scalarUndef); // is require
+                        int hints = WarningBitsRegistry.getCallerHintsAtFrame(frame - 1);
+                        res.add(new RuntimeScalar(hints >= 0 ? hints : 0));
+                        String warningBits = WarningBitsRegistry.getCallerBitsAtFrame(frame - 1);
+                        res.add(warningBits != null
+                                ? new RuntimeScalar(warningBits)
+                                : RuntimeScalarCache.scalarUndef);
+                        java.util.Map<String, String> callerHintHash =
+                                HintHashRegistry.getCallerHintHashAtFrame(frame - 1);
+                        if (callerHintHash != null) {
+                            RuntimeHash snapshot = new RuntimeHash();
+                            for (java.util.Map.Entry<String, String> entry : callerHintHash.entrySet()) {
+                                snapshot.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                            }
+                            res.add(snapshot.createReference());
+                        } else {
+                            res.add(RuntimeScalarCache.scalarUndef);
+                        }
+                    }
                 }
             }
         }
