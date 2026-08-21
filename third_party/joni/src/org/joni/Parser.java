@@ -1200,8 +1200,13 @@ class Parser extends Lexer {
 
         if (arg.fromEscaped && arg.toEscaped
                 && arg.fromNamedCharacter != arg.toNamedCharacter) {
-            env.warnings.warn("Both or neither range ends should be Unicode",
-                    perlExtendedRangeWarningPosition());
+            long unnamedEndpoint = arg.fromNamedCharacter ? arg.to : arg.from;
+            int unnamedStart = arg.fromNamedCharacter ? arg.toStart : arg.fromStart;
+            int unnamedEnd = arg.fromNamedCharacter ? arg.toEnd : arg.fromEnd;
+            if (isPerlByteRangeEndpoint(unnamedStart, unnamedEnd, unnamedEndpoint)) {
+                env.warnings.warn("Both or neither range ends should be Unicode",
+                        perlExtendedRangeWarningPosition());
+            }
             return;
         }
 
@@ -1238,6 +1243,15 @@ class Parser extends Lexer {
 
     private String rangeEndpointSource(int start, int end) {
         return new String(bytes, getBegin() + start, end - start, enc.getCharset());
+    }
+
+    private boolean isPerlByteRangeEndpoint(int start, int end, long value) {
+        if (value > 0xff) return false;
+        String source = rangeEndpointSource(start, end);
+        if (source.length() < 2 || source.charAt(0) != '\\') return false;
+        char escape = source.charAt(1);
+        return escape == 'x' || escape == 'o'
+                || escape >= '0' && escape <= '7';
     }
 
     private static String perlRangeLiteral(int codePoint) {
