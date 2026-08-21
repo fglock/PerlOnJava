@@ -157,7 +157,7 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current exact head `723997118` additionally integrates
+green on JVM and interpreter. Current exact head `d3a4bb074` additionally integrates
 the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
 transports immutable lexical custom-charname expansions through ithreads,
 preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
@@ -166,7 +166,7 @@ word-class complements, four extended-set parser diagnostics, implicit
 live JVM foreach membership for actual arrays.
 It also keeps `utf8.pm` absent from `%INC` until explicitly required, closing
 `re/no_utf8_pm.t` on both backends, and maps printable punctuation control
-escapes like Perl. Its combined warning-free `make` passes in 4m16s, including
+escapes like Perl. Its combined warning-free `make` passes in 3m36s, including
 packaging, licensed Joni, and all five unit shards. The independent P4/P5/P6
 builds and focused JVM/interpreter gates also pass for their integrated
 semantic commits.
@@ -185,16 +185,16 @@ regex regressions (`pat_advanced_thr.t`, both `pat_special_cc` modes, and
 `regex_sets.t`). Focused exact-head evidence closes both `pat_special_cc`
 modes at 9/9 and restores `pat_advanced_thr.t` through all 1632 planned rows
 on both backends, exceeding PR 958's 1376-pass threshold; a post-plan
-deferred-property child fatal remains assigned to P6. P3's read-only 622-file
+deferred-property child fatal and package-provenance loss are closed. P3's read-only 622-file
 reconnaissance at exact `723997118` records 635,395/687,121 passing assertions,
 65 improved files, and no missing files. Because it used jobs 8 and shared
 writable test state with active workers, its 141 apparent decreases and 215
 execution issues are diagnostic. P3 is now rerunning the 28 affected regex
 files from a private test tree with the baseline-equivalent jobs-5 contract;
-the complete release gate follows at the next green integration barrier.
-`regex_sets.t` improves to 84/85 on JVM after four native parser-diagnostic
-fixes and the shared frontend `\\c#` subject-value correction. The remaining
-`Is0` user-property diagnostic is assigned to P6. Full interpreter execution
+the complete release gate follows on current green `d3a4bb074` after the sieve.
+`regex_sets.t` reaches all 85 planned JVM assertions after native parser,
+subject-value, and digit-suffix user-property fixes. The first post-plan
+interpolated extended-class blocker is under P6 classification. Full interpreter execution
 currently stops before TAP at a raw-NEL source-decoding boundary assigned to
 P5; the shared 66-case control fixture is green on both backends.
 The integrated subject-sensitive byte/`/d`
@@ -207,8 +207,8 @@ environment cases. The
 shared default-`/d` byte-variant root is now closed in focused evidence:
 dynamic source provenance, callback search, grapheme boundaries, Unicode
 properties/classes, and extended sets pass on both backends while
-`re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
-immutable comparison are pending. The production backend selector has been
+`re/charset.t` remains 5552/5552. The combined exact-head gate is green; the
+refreshed immutable comparison is pending. The production backend selector has been
 removed and its packaging/property invariance gates pass in the exact v5
 combined build. The latest exact-head `reg_mesg.t` artifact is backend-identical raw TAP:
 3331 `ok` and 33 `not ok` of 3364 on both backends.
@@ -235,35 +235,30 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: close three non-strict named-sequence parser-warning rows, then classify
-  the next unowned timeout. Its qx byte-output correction, truthful Joni-backed
-  `re::optimization` adapter and JVM live-foreach correction are integrated;
-  `alpha_assertions.t` closes at 2320/2320 on both backends. `anyof.t` is
-  cumulative child-JVM startup and debug-display adaptation, not a matcher
-  deadlock.
-- P5: close the VLB, duplicate strict-class, and Unicode/byte range-end warning
-  ledger roots. Its scalar-context named-sequence diagnostics, row-65 frontend
-  mapping, invalid-charname diagnostics, and child callback state are integrated.
-- P6: close the post-plan deferred user-property fatal and `regex_sets.t` row 85
-  (`\\P{Is0}`). Its Unicode-property diagnostics and `/u` `\\w` complement
-  roots are integrated, and shared runtime files remain centrally serialized.
+- P3: finish the private 28-file regression sieve, then run baseline-equivalent
+  complete acceptance from current green `d3a4bb074` with private writable test
+  state.
+- P4: implement native Joni ISO-8859-1 negated POSIX ASCII class semantics in
+  `CClassNode`, preserving `regexp.t`, `reg_posixcc.t`, and `charset.t`.
+- P5: implement six strict ordinary range-end warnings, then remove the single
+  duplicate Parser warning as a separate commit behind one combined worker gate.
+- P6: classify the first post-plan interpolated extended-class blocker and own
+  it only if it does not overlap P5's active `Parser.java` lease.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
   immutable acceptance, PR/CI, plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Close P6's deferred user-property fatal and `\\P{Is0}` diagnostic. In
-   parallel close P4/P5's partitioned `reg_mesg.t` warning residuals.
-   Preserve vendored notices and serialize any shared runtime/Joni overlap.
-2. Integrate the three active deliveries, run one combined warning-free `make`,
-   then refresh focused Unicode,
+1. Complete P4's byte-POSIX and P5's two warning commits in parallel while P6
+   finishes interpolation classification and P3 finishes the private sieve.
+   Preserve vendored notices and serialize Parser/runtime overlap.
+2. Integrate the next deliveries, run one combined warning-free `make`, then
+   refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-3. Review P3's in-flight complete 622-file JVM comparison against PR 958.
-   Isolate every decrease or new invalid row in a private writable test tree
-   before routing it as semantic work. Refresh the complete corpus at the next
-   exact green integration barrier with the PR-958 jobs-5, timeout-300,
+3. Use P3's private sieve to route only reproduced semantic decreases. Refresh
+   the complete corpus at the exact green integration barrier with the PR-958 jobs-5, timeout-300,
    environment, and cleanup contract. Push a head with no PR-958 pass-count
    regression to PR 1087, run CI, and make the incremental PR reviewable.
 4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
