@@ -21,6 +21,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -122,6 +123,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
     public String patternString;
+    // Perl source spelling used only for diagnostics and debug lifecycle
+    // output. The executable pattern may contain private structural callout
+    // slots that must never leak into user-visible traces.
+    private String debugPatternString;
     // Source scalar provenance needed when a compiled qr// is reused under
     // lexical use bytes: byte-backed source characters are already octets.
     private boolean patternByteBacked;
@@ -193,6 +198,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.userPropertyPackage = this.userPropertyPackage;
         copy.setExecutableCallbacks(callbacks);
         copy.patternString = this.patternString;
+        copy.debugPatternString = this.debugPatternString;
         copy.patternByteBacked = this.patternByteBacked;
         copy.hasPreservesMatch = this.hasPreservesMatch;
         copy.useGAssertion = this.useGAssertion;
@@ -822,6 +828,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                         || RegexFlags.hasInlinePreserveModifier(compilePatternString);
                 regex.patternString = originalPatternString;
+                regex.debugPatternString = sourceDiagnosticPattern == null
+                        ? originalPatternString : displayDiagnosticPattern;
 
                 // Check if pattern has code block captures for $^R optimization
                 // Code blocks are encoded as named captures like (?<cb010...>)
@@ -1015,7 +1023,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 state().compiledRegexCache.put(cacheKey, regex);
             }
             if (lexicalDebugMode != 0
-                    && !regex.deferredUserDefinedUnicodeProperties
                     && state().reportedDebugCompilations.add(cacheKey)) {
                 regex.emitCompileDebugTrace();
             }
@@ -1406,7 +1413,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 | LEXICAL_DEBUG_EXECUTE)) == 0) return;
         registerDebugLifecycle();
         if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
-        String patternDescription = patternString == null ? "" : patternString;
+        String patternDescription = debugPatternDescription();
+        if (deferredUserDefinedUnicodeProperties) {
+            debugWrite("Compiling REx \"" + patternDescription + "\"\n"
+                    + "Final program:\n"
+                    + "JONI_PATTERN deferred user-property placeholder; "
+                    + "native bytecode pending runtime resolution\n");
+            return;
+        }
         String optimizerDescription = recursivePattern == null
                 ? "" : recursivePattern.optimizerDebugDescription();
         String nativeProgram = recursivePattern == null
@@ -1421,8 +1435,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public void emitExecutionDebugTrace(String input) {
         if ((lexicalDebugMode & LEXICAL_DEBUG_EXECUTE) == 0) return;
+        // A qr// can acquire execute tracing through a wrapper or enter an
+        // ithread whose active lifecycle list is intentionally empty. Ensure
+        // the logical compiled regex is represented before emitting Matching.
+        registerDebugLifecycle();
         StringBuilder trace = new StringBuilder(Math.max(96, input.length() * 72));
-        trace.append("Matching REx \"").append(patternString == null ? "" : patternString)
+        trace.append("Matching REx \"").append(debugPatternDescription())
                 .append("\" against input of length ").append(input.length()).append('\n');
         // Joni's matcher does not expose its live instruction cursor publicly.
         // Report the three observable stages of consuming each candidate input
@@ -1440,6 +1458,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         List<RuntimeRegex> active = state().activeDebugRegexes;
         for (RuntimeRegex regex : active) {
             if (regex == this) return;
+            if (Objects.equals(regex.debugPatternDescription(),
+                        debugPatternDescription())
+                    && Objects.equals(
+                            regex.regexFlags == null
+                                    ? "" : regex.regexFlags.toFlagString(),
+                            regexFlags == null ? "" : regexFlags.toFlagString())) return;
         }
         active.add(this);
     }
@@ -1450,7 +1474,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (RuntimeRegex regex : active) {
             if ((regex.lexicalDebugMode & (LEXICAL_DEBUG_COMPILE
                     | LEXICAL_DEBUG_EXECUTE)) == 0) continue;
-            String patternDescription = regex.patternString == null ? "" : regex.patternString;
+            String patternDescription = regex.debugPatternDescription();
             regex.debugWrite("Freeing REx: \"" + patternDescription + "\"\n");
         }
         active.clear();
@@ -1462,6 +1486,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         RuntimeIO.getStderr().write(message);
         RuntimeIO.getStderr().flush();
+    }
+
+    private String debugPatternDescription() {
+        if (debugPatternString != null) return debugPatternString;
+        return executableCallbacks.isEmpty()
+                ? patternString == null ? "" : patternString
+                : RuntimeRegexTemplate.displayPattern(patternString, executableCallbacks);
     }
 
     private static RuntimeRegex ensureCompiledForRuntime(RuntimeRegex regex) {
@@ -1481,21 +1512,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                     && regex.regexFlags.isCaseInsensitive(),
                             regex.regexFlags != null && regex.regexFlags.isExtended());
 
-                    // The placeholder was cached under its original lexical
-                    // compilation context. Package and lexical charnames
-                    // provenance must both be reused for recompilation.
-                    if (regex.compiledRegexCacheKey != null) {
-                        state().compiledRegexCache.remove(regex.compiledRegexCacheKey);
-                        state().reportedDebugCompilations.remove(regex.compiledRegexCacheKey);
-                    }
-                    return compileSynchronized(regex.patternString,
-                            regex.regexFlags == null
-                                    ? "" : regex.regexFlags.toFlagString(),
-                            regex.lexicalDebugMode, regex.trustedCalloutCount, false,
-                            regex.patternByteBacked, regex.lexicalReStrict,
-                            regex.namedCharacterTranslator, regex.namedCharacterCache,
-                            regex.namedCharacterSourceMode, true, null);
+                    return recompileDeferredForRuntime(regex);
                 });
+        // The forced compilation emits the resolved native program, but the
+        // temporary cache object is not a second logical regex lifecycle.
+        // The original deferred object remains registered for the one Freeing
+        // record emitted at runtime teardown.
+        state().activeDebugRegexes.removeIf(active -> active == recompiled);
         if (recompiled.deferredUserDefinedUnicodeProperties) {
             throw new PerlCompilerException(
                     "Deferred user-defined Unicode property remained unresolved at runtime");
@@ -1521,6 +1544,33 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.lexicalDebugMode = recompiled.lexicalDebugMode;
         regex.lexicalReStrict = recompiled.lexicalReStrict;
         return regex;
+    }
+
+    private static synchronized RuntimeRegex recompileDeferredForRuntime(
+            RuntimeRegex regex) {
+        // Another tracked clone of this placeholder may already have resolved
+        // the shared cache key. Reuse its native program instead of evicting
+        // and recompiling it again.
+        if (regex.compiledRegexCacheKey != null) {
+            RuntimeRegex cached = state().compiledRegexCache.get(
+                    regex.compiledRegexCacheKey);
+            if (cached != null && !cached.deferredUserDefinedUnicodeProperties) {
+                return cached;
+            }
+
+            // The placeholder was cached under its original lexical
+            // compilation context. Package and lexical charnames provenance
+            // must both be reused for recompilation.
+            state().compiledRegexCache.remove(regex.compiledRegexCacheKey);
+            state().reportedDebugCompilations.remove(regex.compiledRegexCacheKey);
+        }
+        return compileSynchronized(regex.patternString,
+                regex.regexFlags == null ? "" : regex.regexFlags.toFlagString(),
+                regex.lexicalDebugMode, regex.trustedCalloutCount, false,
+                regex.patternByteBacked, regex.lexicalReStrict,
+                regex.namedCharacterTranslator, regex.namedCharacterCache,
+                regex.namedCharacterSourceMode, true,
+                regex.debugPatternDescription());
     }
 
     private static RuntimeScalar copyScalarOrNull(RuntimeScalar value) {
@@ -1640,10 +1690,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         if (patternString.value instanceof RuntimeRegexTemplate template) {
+            String displayPattern = RuntimeRegexTemplate.displayPattern(
+                    template.pattern(), template.callbacks());
             RuntimeRegex regex = compile(template.pattern(), rawModifierStr, callSiteDebugMode,
                     template.callbacks().size(), template.byteBackedPattern(),
-                    reStrictMode(rawModifierStr), RuntimeRegexTemplate.displayPattern(
-                            template.pattern(), template.callbacks())).cloneTracked();
+                    reStrictMode(rawModifierStr), displayPattern).cloneTracked();
+            // Native programs are shared by executable slot skeleton and
+            // callback count. Source display belongs to this construction,
+            // not to whichever same-shaped template populated the cache.
+            regex.debugPatternString = displayPattern;
             regex.setExecutableCallbacks(template.callbacks());
             return new RuntimeScalar(regex).propagateTaint(patternString);
         }
@@ -1671,6 +1726,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.userPropertyPackage = originalRegex.userPropertyPackage;
             regex.setExecutableCallbacks(originalRegex.executableCallbacks);
             regex.patternString = originalRegex.patternString;
+            regex.debugPatternString = originalRegex.debugPatternString;
             regex.patternByteBacked = originalRegex.patternByteBacked;
             regex.deferredUserDefinedUnicodeProperties =
                     originalRegex.deferredUserDefinedUnicodeProperties;
@@ -1718,6 +1774,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.userPropertyPackage = originalRegex.userPropertyPackage;
                     regex.setExecutableCallbacks(originalRegex.executableCallbacks);
                     regex.patternString = originalRegex.patternString;
+                    regex.debugPatternString = originalRegex.debugPatternString;
                     regex.patternByteBacked = originalRegex.patternByteBacked;
                     regex.deferredUserDefinedUnicodeProperties =
                             originalRegex.deferredUserDefinedUnicodeProperties;
@@ -1834,8 +1891,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             List<RuntimeRegexCallback> callbacks, RuntimeScalar original,
             boolean patternByteBacked) {
         int lexicalDebugMode = debugMode(modifiers);
+        String displayPattern = RuntimeRegexTemplate.displayPattern(
+                executablePattern, callbacks);
         RuntimeRegex regex = compile(executablePattern, modifiers,
-                lexicalDebugMode, callbacks.size(), patternByteBacked).cloneTracked();
+                lexicalDebugMode, callbacks.size(), patternByteBacked,
+                reStrictMode(modifiers), displayPattern).cloneTracked();
+        regex.debugPatternString = displayPattern;
         regex.setExecutableCallbacks(callbacks);
         return new RuntimeScalar(regex).propagateTaint(original);
     }
@@ -1962,6 +2023,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.userPropertyPackage = resolvedRegex.userPropertyPackage;
         regex.executableCallbacks = resolvedRegex.executableCallbacks;
         regex.patternString = resolvedRegex.patternString;
+        regex.debugPatternString = resolvedRegex.debugPatternString;
         regex.patternByteBacked = resolvedRegex.patternByteBacked;
         regex.deferredUserDefinedUnicodeProperties =
                 resolvedRegex.deferredUserDefinedUnicodeProperties;
@@ -1995,7 +2057,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString,
                         newFlags.toFlagString(), regex.lexicalDebugMode,
                         resolvedRegex.executableCallbacks.size(),
-                        resolvedRegex.patternByteBacked, regex.lexicalReStrict);
+                        resolvedRegex.patternByteBacked, regex.lexicalReStrict,
+                        resolvedRegex.debugPatternDescription());
                 regex.recursivePattern = recompiledRegex.recursivePattern;
                 regex.recursivePatternUnicode = recompiledRegex.recursivePatternUnicode;
                 regex.recursivePatternBytes = recompiledRegex.recursivePatternBytes;
@@ -2008,6 +2071,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.userPropertyPackage = recompiledRegex.userPropertyPackage;
                 regex.executableCallbacks = resolvedRegex.executableCallbacks;
                 regex.patternString = recompiledRegex.patternString;
+                regex.debugPatternString = recompiledRegex.debugPatternString;
                 regex.patternByteBacked = recompiledRegex.patternByteBacked;
                 regex.regexFlags = recompiledRegex.regexFlags;
                 regex.deferredUserDefinedUnicodeProperties =

@@ -103,6 +103,25 @@ public final class RuntimeRegexState {
         manualCaptureEnds = null;
     }
 
+    /**
+     * Start a new top-level script in the same managed runtime.
+     *
+     * <p>User-property results are deliberately retained: they can be seeded
+     * before lazy initialization and are the only regex metadata inherited by
+     * an ithread snapshot. Callsite identities, match/pos state, compiled
+     * programs, and debug lifecycle records belong to one top-level script
+     * and must not collide with the next script's reused integer IDs.</p>
+     */
+    public void resetForTopLevel() {
+        compiledRegexCache.clear();
+        optimizedRegexCache.clear();
+        literalRegexTargets.clear();
+        positionCache.clear();
+        activeDebugRegexes.clear();
+        reportedDebugCompilations.clear();
+        clearMatchState();
+    }
+
     /** Copy immutable regex metadata that Perl ithreads inherit at creation. */
     void snapshotInto(RuntimeRegexState target) {
         target.userUnicodePropertyCache.putAll(userUnicodePropertyCache);

@@ -99,6 +99,12 @@ public class PerlLanguageProvider {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.bindCurrentOrNew();
              CompilationLockGuard ignored = acquireCompilationLock()) {
             PerlRuntime.current().globalState().resetCoreGlobalsInitialization();
+            // resetAll() starts a new top-level interpreter lifecycle even
+            // when the embedding layer reuses the same PerlRuntime object.
+            // Reset compiled/debug lifecycle state without discarding
+            // inherited user-property results prepared for an ithread
+            // snapshot before lazy runtime initialization.
+            PerlRuntime.current().regexState.resetForTopLevel();
             GlobalContext.setThreadTaintMode(false);
             resetAllGlobals();
             WeakRefRegistry.resetState();
