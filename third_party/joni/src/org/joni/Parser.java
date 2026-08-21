@@ -816,9 +816,25 @@ class Parser extends Lexer {
                 if (perlExtendedClassLeaf && namedSequence.length == 0) {
                     newSyntaxException(PERL_EXTENDED_CLASS_ZERO_LENGTH_NAMED_CHARACTER);
                 }
-                if (neg && namedSequence.length > 1) {
+                boolean namedSequenceStartsRange = false;
+                if (!neg && namedSequence.length > 1
+                        && arg.state != CCSTATE.RANGE) {
+                    // A multi-code-point \N{} is normally an atomic string
+                    // alternative in a positive class.  Look one token ahead
+                    // before committing it as a class member: when followed
+                    // by '-', Perl instead uses one code point as the range
+                    // endpoint and emits the same warning as for a negated
+                    // class.  Keeping the fetched token lets the ordinary
+                    // range state machine consume the '-' on the next pass.
+                    fetchTokenInCC();
+                    fetched = true;
+                    namedSequenceStartsRange = token.type == TokenType.CC_RANGE;
+                }
+                if (namedSequence.length > 1
+                        && (neg || arg.state == CCSTATE.RANGE
+                                || namedSequenceStartsRange)) {
                     syntaxWarn("Using just the first character returned by \\N{} in character class",
-                            p - getBegin());
+                            arg.toEnd);
                     // Perl 5 observably selects the final source-order code
                     // point here, although its warning calls it the "first".
                     arg.to = namedSequence[namedSequence.length - 1];
@@ -827,7 +843,9 @@ class Parser extends Lexer {
                 } else {
                     cc.nextStateClass(arg, ascCc, foldCc, env);
                 }
-                if (!neg && namedSequence.length > 0) {
+                if (!neg && namedSequence.length > 0
+                        && !namedSequenceStartsRange
+                        && arg.state != CCSTATE.COMPLETE) {
                     namedSequences.add(namedCharacterStringNode(
                             namedSequence));
                 }
