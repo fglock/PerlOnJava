@@ -198,13 +198,26 @@ final class JoniRegexPattern {
             @Override
             public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                                   boolean inCharacterClass) {
-                return resolve(bytes, p, end, encoding, inCharacterClass,
+                return resolve(bytes, p, end, encoding,
+                        inCharacterClass
+                                ? CharacterPropertyResolver.Context.STANDARD_CHARACTER_CLASS
+                                : CharacterPropertyResolver.Context.OUTSIDE_CHARACTER_CLASS,
                         Option.NONE);
             }
 
             @Override
             public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                                   boolean inCharacterClass, int option) {
+                return resolve(bytes, p, end, encoding,
+                        inCharacterClass
+                                ? CharacterPropertyResolver.Context.STANDARD_CHARACTER_CLASS
+                                : CharacterPropertyResolver.Context.OUTSIDE_CHARACTER_CLASS,
+                        option);
+            }
+
+            @Override
+            public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                                  CharacterPropertyResolver.Context context, int option) {
                 String property = new String(bytes, p, end - p,
                         encoding == ISO8859_1Encoding.INSTANCE
                                 ? StandardCharsets.ISO_8859_1
@@ -213,8 +226,15 @@ final class JoniRegexPattern {
                 boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(property);
                 if (userDefined) deferredPropertyState.userDefined = true;
 
+                if (context == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS
+                        && UnicodeResolver.isPerlStringProperty(property)) {
+                    throw new CharacterPropertyResolver.ResolutionException(
+                            "Unicode string properties are not implemented in (?[...])");
+                }
+
                 CharacterPropertyResolver.Result resolved = resolveCharacterProperty(
-                        bytes, p, end, encoding, inCharacterClass,
+                        bytes, p, end, encoding,
+                        context == CharacterPropertyResolver.Context.STANDARD_CHARACTER_CLASS,
                         Option.isIgnoreCase(option));
                 if (resolved != null) return resolved;
 
@@ -222,6 +242,11 @@ final class JoniRegexPattern {
                 if (userDefined
                         && UnicodeResolver.mustDeferPotentialUserDefinedProperty(
                                 property, caseInsensitive)) {
+                    if (context
+                            == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS) {
+                        throw new CharacterPropertyResolver.ResolutionException(
+                                "Unknown user-defined property name \"" + property + "\"");
+                    }
                     deferredPropertyState.deferred = true;
                     return new Result(new int[] {1, 0, 0x10ffff},
                             new long[] {1, 0, Long.MAX_VALUE}, false);
@@ -317,7 +342,6 @@ final class JoniRegexPattern {
                      boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
                      NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
                      boolean perlReStrict) {
-        validateExtendedPropertyPolicy(perlPattern);
         this.flags = flags;
         this.byteMode = byteMode;
         sourcePattern = RuntimeRegexTemplate.materializeTrustedCallouts(
@@ -576,53 +600,6 @@ final class JoniRegexPattern {
 
     List<String> compileWarnings() {
         return List.copyOf(compileWarnings);
-    }
-
-    /** Retains only source policy that the runtime-neutral resolver cannot see. */
-    private static void validateExtendedPropertyPolicy(String pattern) {
-        int extendedDepth = 0;
-        for (int i = 0; i < pattern.length(); i++) {
-            if (pattern.charAt(i) == '\\') {
-                if (i + 2 < pattern.length()
-                        && (pattern.charAt(i + 1) == 'p'
-                                || pattern.charAt(i + 1) == 'P')
-                        && pattern.charAt(i + 2) == '{') {
-                    int end = pattern.indexOf('}', i + 3);
-                    if (end < 0) continue;
-                    String property = pattern.substring(i + 3, end).trim();
-                    if (property.startsWith("^")) {
-                        property = property.substring(1).trim();
-                    }
-                    if (extendedDepth > 0
-                            && UnicodeResolver.isPerlStringProperty(property)) {
-                        throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
-                                pattern, end + 1,
-                                "Unicode string properties are not implemented in (?[...])"));
-                    }
-                    if (extendedDepth > 0
-                            && UnicodeResolver.isUserDefinedPropertyName(property)
-                            && (UnicodeResolver.mustDeferPotentialUserDefinedProperty(
-                                    property, false)
-                                || UnicodeResolver.mustDeferPotentialUserDefinedProperty(
-                                    property, true))) {
-                        throw new PerlCompilerException(
-                                "Unknown user-defined property name \"" + property + "\"");
-                    }
-                    i = end;
-                    continue;
-                }
-                if (i + 1 < pattern.length()) i++;
-                continue;
-            }
-            if (extendedDepth == 0 && pattern.startsWith("(?[", i)) {
-                extendedDepth = 1;
-                i += 2;
-            } else if (extendedDepth > 0 && pattern.charAt(i) == '[') {
-                extendedDepth++;
-            } else if (extendedDepth > 0 && pattern.charAt(i) == ']') {
-                extendedDepth--;
-            }
-        }
     }
 
     /**

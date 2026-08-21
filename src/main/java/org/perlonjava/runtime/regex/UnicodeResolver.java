@@ -2525,9 +2525,13 @@ public class UnicodeResolver {
     static boolean isPerlStringProperty(String property) {
         if (property == null) return false;
         int assignment = propertyValueDelimiter(property);
-        return assignment > 0 && assignment < property.length() - 1
-                && isPerlNameProperty(property.substring(0, assignment))
-                && perlNumericWildcardBody(property.substring(assignment + 1)) == null;
+        if (assignment <= 0 || assignment == property.length() - 1
+                || !isPerlNameProperty(property.substring(0, assignment))) {
+            return false;
+        }
+        String value = property.substring(assignment + 1);
+        return perlNumericWildcardBody(value) == null
+                && PerlUnicodeNamedSequenceData.isNamedSequence(value);
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlNamePropertyWildcard(

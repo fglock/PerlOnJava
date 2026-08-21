@@ -62,8 +62,8 @@ Remaining scanner-removal queue:
 - [ ] Keep raw user-defined property tokens through Joni parsing and resolve or
   defer them through the mode-specific callback cache; remove never-match or
   match-all text substitutions used to represent deferred properties.
-- [ ] Preserve ordinary/extended-class context and source positions in Joni so
-  the adapter no longer scans bracket depth or generates replacement classes.
+- [x] Preserve ordinary/extended-class context and source positions in Joni so
+  the adapter no longer scans bracket depth for property policy.
 - [x] Replace `hasControlVerbState(String)` with a compiled Joni fact, including
   unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
 - [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
@@ -201,6 +201,15 @@ plain-`\N` intervals and fixed in Joni's optimizer. Each delivery has an
 isolated warning-free full build; the next combined head batches these with the
 remaining property and loaded-performance deliveries.
 
+P5's property-specific scanner phase is complete on the post-1091 successor:
+the four residual `pat_advanced.t` property rows are closed, Joni now reports
+ordinary versus experimental extended-class property context to the resolver,
+and the host-side `validateExtendedPropertyPolicy` source walk is removed.
+Actual multi-code-point Name properties and deferred user properties are
+rejected natively at the exact closing-brace position. The Age-wildcard arm in
+`legacyCompatibilityDescription` remains test/debug-only because existing
+description-contract tests exercise it; it never feeds compilation or matching.
+
 ### Execution Tracker
 
 - [x] Reproducible PR 958 baseline and strict comparator.
@@ -223,10 +232,10 @@ Active ownership:
 
 - P3: finish complete `anyof.t` and `pat_advanced.t` maps for the integrated
   finite-high renderer, then classify the residual debug frontier.
-- P4: reconcile the canonical implementation/fork documents with shipped
-  behavior and inventory redundant regex design documents.
-- P5: integrate the extended-property context delivery, repair the four
-  Quick_Check assigned aliases, and close the property scanner inventory.
+- P4: close the remaining non-property, non-debug native parser/range
+  diagnostic frontier with complete affected maps.
+- P5: extended-property context, assigned Quick_Check aliases, and the property
+  source scanner are complete; next own the residual source-policy inventory.
 - P6: profile and fix loaded `pat.t`/`pat_thr.t` completion, preserving direct
   counts and proving representative ten-process behavior.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
@@ -235,8 +244,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Integrate the P5 property repair and P6 loaded-performance repair; resolve
-   overlaps centrally and refresh complete affected maps.
+1. Integrate the P6 loaded-performance repair and refresh complete affected
+   maps.
 2. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.

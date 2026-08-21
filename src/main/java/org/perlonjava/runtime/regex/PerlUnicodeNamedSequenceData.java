@@ -262,6 +262,26 @@ public final class PerlUnicodeNamedSequenceData {
         return sequence.toString();
     }
 
+    /** Returns whether a name identifies a sequence under Unicode loose matching. */
+    static boolean isNamedSequence(String name) {
+        if (name == null) return false;
+        String loose = looseName(name);
+        for (String candidate : NAMES) {
+            if (looseName(candidate).equals(loose)) return true;
+        }
+        return false;
+    }
+
+    private static String looseName(String name) {
+        StringBuilder loose = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (ch == ' ' || ch == '_' || ch == '-') continue;
+            loose.append(Character.toUpperCase(ch));
+        }
+        return loose.toString();
+    }
+
     static int entryCount() {
         return NAMES.length;
     }

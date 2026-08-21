@@ -227,13 +227,12 @@ runtime executable source, and discovery/preloading of user-property callbacks.
 `RegexDiagnosticFormatter` and Joni's `WarnCallback` mapping retain Perl source
 spelling, marker positions, categories, lexical masks, and fatality.
 
-There is one remaining production grammar-aware scanner:
-`JoniRegexPattern.validateExtendedPropertyPolicy()`. It tracks extended-class
-bracket depth only to reject (1) Unicode string properties inside `(?[...])`
-and (2) unresolved user-defined properties whose extended-class composition
-cannot yet be represented by the runtime-neutral property hook. Moving that
-context and source position into Joni, then deleting this scan, is pending; it
-must not be documented as shipped.
+`CharacterPropertyResolver.Context` carries whether a property escape is
+outside a class, in an ordinary class, or in Perl's experimental `(?[...])`
+class. The PerlOnJava resolver rejects actual multi-code-point Name properties
+and unresolved user properties only in the extended context; Joni attaches the
+exact closing-brace source position. No host-side extended-property scanner
+remains.
 
 `requiresJoniBackend()`, `analyzePerlSyntax()`, and their helper scanners remain
 in the main source file only as package-private compatibility surfaces for the
