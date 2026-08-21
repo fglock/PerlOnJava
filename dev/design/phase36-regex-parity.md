@@ -56,9 +56,10 @@ same tranche.
 
 Remaining scanner-removal queue:
 
-- [ ] Make Joni's property resolver accept every raw built-in Perl spelling
-  currently expanded by `JoniRegexPattern.translateUserDefinedProperties`,
-  including Script, Script_Extensions, Block, Age/Present_In, and aliases.
+- [x] Make Joni's property resolver accept raw built-in Perl Script,
+  Script_Extensions, Block, Age/Present_In, and alias spellings. Production has
+  no `translateUserDefinedProperties` expansion path; only a test/debug
+  compatibility description can still render translated property text.
 - [ ] Keep raw user-defined property tokens through Joni parsing and resolve or
   defer them through the mode-specific callback cache; remove never-match or
   match-all text substitutions used to represent deferred properties.
@@ -202,8 +203,9 @@ accepted-corpus `Regex compilation failed` downgrade is reduced to descending
 plain-`\N` intervals and fixed in Joni's optimizer. The Java-owned Unicode::UCD
 initialization also publishes Perl's signed-IV `MAX_CP` package scalar and
 upstream export-list metadata, so imported class-debug expectations no longer
-rewrite correct zero digits as `INFTY`. The current combined head batches these
-changes with the loaded-performance delivery for one warning-free full build.
+rewrite correct zero digits as `INFTY`. Published checkpoint `4314449ee`
+contains these changes and passes exact warning-free `make` in 2m53s, including
+all five unit shards, direct Joni tests, packaging, notices, and shadow JAR.
 The complete `anyof.t` JVM map has 561 passing and 771 known residual rows,
 with no timeout, incomplete record, or execution error. It closes all 35
 ANYOFRb, 36 ANYOFHbbm, and 15 bounded `HIGHEST_CP` target rows. The backend map
@@ -262,10 +264,12 @@ Active ownership:
   complete and integrated.
 - P4: close the remaining non-property, non-class-renderer debug-trace
   semantics from complete `pat_advanced.t` and lexical debug lifecycle maps.
-- P5: available for a fresh non-overlapping lease after a new ownership
-  handshake; the deferred-property design and reducers remain authoritative.
-- P6: available for the next bounded acceptance or documentation slice after a
-  fresh ownership handshake.
+- P5: reconcile and clarify the two canonical regex architecture documents at
+  exact published checkpoint `4314449ee`, with an explicit A24 follow-up and a
+  redundant-document inventory.
+- P6: validate the final-acceptance orchestrator, ledger, direct/thread
+  inventory, packaging identity, and command manifest at exact checkpoint
+  `4314449ee` without starting the expensive corpus.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined builds, worker rebasing, release evidence, and final
   warn-mode removal execution after final integration.
