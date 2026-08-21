@@ -55,6 +55,7 @@ public abstract class Matcher extends IntHolder {
     protected long timeout;  // nanoseconds
     private CalloutHandler calloutHandler;
     private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
+    private LocaleResolver localeResolver;
     private CharacterPropertyResolver.Result[][] deferredPropertyCache;
     private boolean abortSearch;
     private int skipSearchTo = -1;
@@ -579,7 +580,9 @@ public abstract class Matcher extends IntHolder {
                 prev = 0; // -1
             }
 
-            if (regex.forward != null) {
+            // Locale character tables are matcher-local, so compile-time maps
+            // cannot safely reject candidates selected by those tables.
+            if (regex.forward != null && localeResolver == null) {
                 int schRange = range;
                 if (regex.dMax != 0) {
                     if (regex.dMax == MinMaxLen.INFINITE_DISTANCE) {
@@ -804,6 +807,17 @@ public abstract class Matcher extends IntHolder {
             CharacterPropertyResolver.DeferredResolver resolver) {
         deferredPropertyResolver = resolver;
         deferredPropertyCache = null;
+    }
+
+    /** Attaches immutable matcher-local character semantics for Perl {@code /l}. */
+    public final void setLocaleResolver(LocaleResolver resolver) {
+        localeResolver = resolver;
+    }
+
+    protected final boolean isLocaleCodeCType(int codePoint, int characterType,
+            boolean fallback) {
+        return localeResolver == null
+                ? fallback : localeResolver.isCodeCType(codePoint, characterType);
     }
 
     protected final CharacterPropertyResolver.Result[] resolveDeferredProperties(

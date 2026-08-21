@@ -33,6 +33,7 @@ import org.jcodings.CodeRange;
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
 import org.jcodings.IntHolder;
+import org.jcodings.constants.CharacterType;
 import org.jcodings.unicode.UnicodeCodeRange;
 import org.joni.constants.internal.OPCode;
 import org.joni.constants.internal.OPSize;
@@ -1512,37 +1513,53 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opWord() {
-        if (s >= range || !enc.isMbcWord(bytes, s, end)) {opFail(); return;}
+        if (s >= range || !isPerlWordAt(s)) {opFail(); return;}
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }
 
     private void opWordSb() {
-        if (s >= range || !enc.isWord(bytes[s] & 0xff)) {opFail(); return;}
+        if (s >= range || !isPerlWordAt(s)) {opFail(); return;}
         s++;
         sprev = sbegin; // break;
     }
 
     private void opAsciiWord() {
-        if (s >= range || !isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+        if (s >= range || !isLocaleCodeCType(
+                enc.mbcToCode(bytes, s, end), CharacterType.WORD,
+                isMbcAsciiWord(enc, bytes, s, end))) {
+            opFail();
+            return;
+        }
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }
 
     private void opNotWord() {
-        if (s >= range || enc.isMbcWord(bytes, s, end)) {opFail(); return;}
+        if (s >= range || isPerlWordAt(s)) {opFail(); return;}
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }
 
     private void opNotWordSb() {
-        if (s >= range || enc.isWord(bytes[s] & 0xff)) {opFail(); return;}
+        if (s >= range || isPerlWordAt(s)) {opFail(); return;}
         s++;
         sprev = sbegin; // break;
     }
 
+    private boolean isPerlWordAt(int position) {
+        int codePoint = enc.mbcToCode(bytes, position, end);
+        boolean fallback = enc.isCodeCType(codePoint, CharacterType.WORD);
+        return isLocaleCodeCType(codePoint, CharacterType.WORD, fallback);
+    }
+
     private void opNotAsciiWord() {
-        if (s >= range || isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+        if (s >= range || isLocaleCodeCType(
+                enc.mbcToCode(bytes, s, end), CharacterType.WORD,
+                isMbcAsciiWord(enc, bytes, s, end))) {
+            opFail();
+            return;
+        }
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }

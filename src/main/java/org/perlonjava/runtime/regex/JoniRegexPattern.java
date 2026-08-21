@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.regex;
 
 import org.jcodings.Encoding;
+import org.jcodings.constants.CharacterType;
 import org.jcodings.specific.ISO8859_1Encoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
@@ -9,6 +10,7 @@ import org.joni.CalloutResult;
 import org.joni.CharacterPropertyResolver;
 import org.joni.DynamicPatternResult;
 import org.joni.MatchView;
+import org.joni.LocaleResolver;
 import org.joni.NameEntry;
 import org.joni.NamedCharacterResolver;
 import org.joni.Option;
@@ -1164,6 +1166,10 @@ final class JoniRegexPattern {
                 return false;
             }
             matcher = regex.matcher(bytes);
+            if (flags.isLocale()) {
+                matcher.setLocaleResolver(localeResolver(
+                        PerlRuntime.current().regexState().localeState.snapshot()));
+            }
             matcher.setDeferredPropertyResolver(deferredPropertyResolver);
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
@@ -1216,6 +1222,24 @@ final class JoniRegexPattern {
             int end = end();
             nextStart = end > consumedStart ? end : advanceCodePoint(end);
             return true;
+        }
+
+        private static LocaleResolver localeResolver(
+                RuntimeLocaleState.Snapshot snapshot) {
+            String name = snapshot.ctypeName();
+            boolean cLocale = name.equalsIgnoreCase("C")
+                    || name.equalsIgnoreCase("POSIX")
+                    || name.regionMatches(true, 0, "C.", 0, 2);
+            return (codePoint, characterType) -> {
+                if (codePoint < 0 || codePoint > 0xff
+                        || characterType != CharacterType.WORD) return false;
+                if (codePoint == '_') return true;
+                return cLocale
+                        ? codePoint >= 'A' && codePoint <= 'Z'
+                                || codePoint >= 'a' && codePoint <= 'z'
+                                || codePoint >= '0' && codePoint <= '9'
+                        : Character.isLetterOrDigit(codePoint);
+            };
         }
 
         @Override
