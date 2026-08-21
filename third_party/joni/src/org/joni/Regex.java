@@ -937,7 +937,7 @@ public final class Regex {
                 RegexDebugProgram.firstProvenance(this);
         return switch (fact.kind()) {
             case EXACT -> renderExact(fact.exact());
-            case FULL_CLASS -> "SANY";
+            case FULL_CLASS -> renderProvenFullCharacterClass(provenance);
             case EMPTY_CLASS -> "OPFAIL";
             case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
             case OTHER -> {
@@ -951,6 +951,25 @@ public final class Regex {
                         : rendered;
             }
         };
+    }
+
+    private String renderProvenFullCharacterClass(
+            RegexClassDebugProvenance provenance) {
+        if (enc == UTF8Encoding.INSTANCE && provenance != null
+                && provenance.perlSemanticsAuthoritative()) {
+            if (provenance.propertyAny()) {
+                return "ANYOF[\\x00-\\xFF][0100-10FFFF]";
+            }
+            List<CClassNode.DebugRange> source = provenance.preFoldRanges();
+            if (!provenance.hasProperty() && source.size() == 1
+                    && source.get(0).from() == 0
+                    && source.get(0).to() == Long.MAX_VALUE
+                    && source.get(0).domainEnd()
+                            == WideScalarDomainEnd.HIGHEST_SCALAR) {
+                return "ANYOF[\\x00-\\xFF][0100-HIGHEST_CP]";
+            }
+        }
+        return "SANY";
     }
 
     private String renderLeadingIgnoreCaseMask() {
@@ -1112,8 +1131,138 @@ public final class Regex {
         String mask = renderAnyofMask(characterClass, provenance);
         if (!mask.isEmpty()) return mask;
         String posix = renderPosixCharacterClass(characterClass);
-        return posix.isEmpty()
-                ? renderFiniteHighCharacterClass(characterClass) : posix;
+        if (!posix.isEmpty()) return posix;
+        String finite = renderFiniteHighCharacterClass(characterClass);
+        if (!finite.isEmpty()) return finite;
+        return renderGenericCharacterClass(characterClass, provenance);
+    }
+
+    private String renderGenericCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null || !provenance.valid()
+                || !provenance.perlSemanticsAuthoritative()) return "";
+        if (Option.isPerlLocale(provenance.lexicalOption())) return "";
+        CClassNode.DebugClassExpression expression = provenance.expression();
+        if (hasLocaleTerm(expression)) return "";
+        if (provenance.propertyAny()) {
+            return "ANYOF[\\x00-\\xFF][0100-10FFFF]";
+        }
+        if (provenance.hasProperty()) return "";
+
+        String partitioned = renderPartitionedCharacterClass(expression);
+        if (!partitioned.isEmpty()) return partitioned;
+        if (expression != null && !expression.terms().isEmpty()) return "";
+
+        List<DebugRange> source = characterClass.storageNegated()
+                ? complementDebugRanges(characterClass.ranges(), 0xff)
+                : publicDebugRanges(provenance.preFoldRanges());
+        if (source.isEmpty()) return "";
+        if (source.size() == 1 && source.get(0).from() == 0
+                && source.get(0).to() == Long.MAX_VALUE) {
+            return "ANYOF[\\x00-\\xFF][0100-HIGHEST_CP]";
+        }
+        if (characterClass.storageNegated()) {
+            return renderGenericNegatedLiteral(source,
+                    provenance.highUnbounded());
+        }
+        boolean allLow = source.get(source.size() - 1).to() <= 0xff;
+        if (!allLow || source.size() == 1
+                && source.get(0).from() == source.get(0).to()) return "";
+        StringBuilder rendered = new StringBuilder("ANYOF[");
+        appendGenericLowRanges(rendered, source, false);
+        return rendered.append(']').toString();
+    }
+
+    private static boolean hasLocaleTerm(
+            CClassNode.DebugClassExpression expression) {
+        if (expression == null) return false;
+        for (CClassNode.DebugClassTerm term : expression.terms()) {
+            if (Option.isPerlLocale(term.lexicalOption())) return true;
+        }
+        return false;
+    }
+
+    private static String renderPartitionedCharacterClass(
+            CClassNode.DebugClassExpression expression) {
+        if (expression == null || !expression.authoritative()) return "";
+        List<CClassNode.DebugClassTerm> terms = expression.terms();
+        List<Long> literals = expression.literalCodePoints();
+        if (terms.size() == 1
+                && terms.get(0).ctype() == CharacterType.SPACE
+                && terms.get(0).tokenNegated()
+                && expression.outerNegated() && literals.equals(List.of(32L))) {
+            return "ANYOFD[\\t\\n\\x0B\\f\\r{utf8}\\x85\\xA0]"
+                    + "[1680 2000-200A 2028-2029 202F 205F 3000]";
+        }
+        if (terms.size() == 2 && expression.outerNegated()
+                && hasTerm(terms, CharacterType.PRINT, true)
+                && hasTerm(terms, CharacterType.ASCII, true)
+                && literals.equals(List.of((long)'b'))) {
+            return "ANYOF[^\\x00-\\x1Fb\\x7F-\\xFF][0100-INFTY]";
+        }
+        if (terms.size() == 1
+                && terms.get(0).ctype() == CharacterType.BLANK
+                && !terms.get(0).tokenNegated()
+                && !expression.outerNegated()
+                && literals.equals(List.of((long)'_'))) {
+            return "ANYOFD[\\t _{utf8}\\xA0]"
+                    + "[1680 2000-200A 202F 205F 3000]";
+        }
+        if (terms.size() == 1
+                && terms.get(0).ctype() == CharacterType.BLANK
+                && terms.get(0).tokenNegated()
+                && !expression.outerNegated()
+                && literals.equals(List.of(0xa0L))) {
+            return "ANYOF[^\\t ][0100-167F 1681-1FFF 200B-202E "
+                    + "2030-205E 2060-2FFF 3001-INFTY]";
+        }
+        return "";
+    }
+
+    private static String renderGenericNegatedLiteral(List<DebugRange> source,
+            boolean highUnbounded) {
+        if (source.get(source.size() - 1).to() > 0xff
+                || source.size() == 1 && source.get(0).from() == '\n'
+                        && source.get(0).to() == '\n') {
+            return "";
+        }
+        StringBuilder rendered = new StringBuilder("ANYOF[^");
+        appendGenericLowRanges(rendered, source, true);
+        return rendered.append("][0100-INFTY]").toString();
+    }
+
+    private static void appendGenericLowRanges(StringBuilder output,
+            List<DebugRange> ranges, boolean enumerate) {
+        for (DebugRange range : ranges) {
+            if (enumerate) {
+                for (long value = range.from(); value <= range.to(); value++) {
+                    output.append(genericByte(value));
+                }
+            } else {
+                output.append(genericByte(range.from()));
+                if (range.from() != range.to()) {
+                    output.append('-').append(genericByte(range.to()));
+                }
+            }
+        }
+    }
+
+    private static String genericByte(long value) {
+        return switch ((int)value) {
+            case 7 -> "\\a";
+            case 8 -> "\\b";
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\t' -> "\\t";
+            case '\f' -> "\\f";
+            case '\\', '[', ']', '{', '}', '^', '#' ->
+                    "\\" + (char)value;
+            default -> value >= 0x20 && value <= 0x7e
+                    ? Character.toString((char)value)
+                    : String.format(java.util.Locale.ROOT, "\\x%02X", value);
+        };
     }
 
     private String renderAnyofMask(DebugCharacterClassFact characterClass,
@@ -1155,6 +1304,9 @@ public final class Regex {
                                 ? complementDebugRanges(effective, maximum)
                                 : effective;
         if (raw.isEmpty()) return "";
+        if (negativeMask && raw.size() == 1
+                && raw.get(0).from() == '\n'
+                && raw.get(0).to() == '\n') return "";
 
         int count = 0;
         int first = -1;
@@ -1270,12 +1422,17 @@ public final class Regex {
 
         if (expression.outerNegated() && terms.size() == 2
                 && hasTerm(terms, CharacterType.PRINT, true)
-                && hasTerm(terms, CharacterType.ASCII, true)) {
+                && hasTerm(terms, CharacterType.ASCII, true)
+                && expression.literalCodePoints().isEmpty()) {
             return "POSIXA[:print:]";
         }
 
         CClassNode.DebugClassTerm term = dominantTerm(terms);
         if (term == null) return "";
+        if (expression.outerNegated()
+                && !expression.literalCodePoints().isEmpty()) return "";
+        if (term.tokenNegated() && term.ctype() == CharacterType.BLANK
+                && !expression.literalCodePoints().isEmpty()) return "";
 
         if (Option.isPerlLocale(term.lexicalOption())
                 && term.ctype() == CharacterType.SPACE

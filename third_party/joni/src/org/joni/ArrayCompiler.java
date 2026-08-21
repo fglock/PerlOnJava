@@ -389,7 +389,10 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileCClassNode(CClassNode cc) {
         debugCharacterClassProvenances.put(codeLength,
-                RegexClassDebugProvenance.snapshot(cc, regex.enc));
+                RegexClassDebugProvenance.snapshot(cc, regex.enc,
+                        analyser.syntax.characterPropertyResolver != null
+                        && analyser.syntax.characterPropertyResolver
+                                .hasAuthoritativePerlClassSemantics()));
         CClassNode.DebugClassExpression debugExpression =
                 cc.debugClassExpression();
         if (debugExpression != null) {

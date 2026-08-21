@@ -30,6 +30,7 @@ import org.joni.CharacterPropertyResolver;
 import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Syntax;
+import org.joni.WideScalarCodec;
 import org.junit.Test;
 
 public class TestRegexResidualClassRendering {
@@ -47,10 +48,23 @@ public class TestRegexResidualClassRendering {
                 }
             };
 
+    private static final WideScalarCodec CODEC = new WideScalarCodec() {
+        @Override
+        public byte[] encode(long value, Encoding encoding) {
+            return Long.toHexString(value).getBytes(StandardCharsets.US_ASCII);
+        }
+
+        @Override
+        public Decoded decode(byte[] bytes, int p, int end,
+                Encoding encoding) {
+            return null;
+        }
+    };
+
     private static final Syntax SYNTAX = new Syntax(
             "ResidualClassRendering", Syntax.PerlNG.op, Syntax.PerlNG.op2,
             Syntax.PerlNG.op3, Syntax.PerlNG.behavior, Syntax.PerlNG.options,
-            Syntax.PerlNG.metaCharTable, null, RESOLVER, null);
+            Syntax.PerlNG.metaCharTable, null, RESOLVER, CODEC);
 
     @Test
     public void rendersAnyofmAndNanyofmFamilies() {
@@ -74,11 +88,41 @@ public class TestRegexResidualClassRendering {
 
     @Test
     public void keepsMaskFalsePositiveControlsOnFallback() {
-        assertDescription("[\\xC5\\xE5]", "");
         assertDescription("[a]", "");
         assertDescription("[[:digit:]]", "POSIXU[\\d]");
         assertDescription("(?l)[aA]", "");
         assertDescription("[aA]", ISO8859_1Encoding.INSTANCE, "");
+    }
+
+    @Test
+    public void rendersGenericWideAndInvertedFamilies() {
+        assertDescription("[\\xC5\\xE5]", "ANYOF[\\xC5\\xE5]");
+        assertDescription("[^\\S ]",
+                "ANYOFD[\\t\\n\\x0B\\f\\r{utf8}\\x85\\xA0]"
+                + "[1680 2000-200A 2028-2029 202F 205F 3000]");
+        assertDescription("[^\\n\\r]", "ANYOF[^\\n\\r][0100-INFTY]");
+        assertDescription("[^\\/\\|,\\$\\%%\\@\\ \\%\\\"\\<\\>"
+                + "\\:\\#\\&\\*\\{\\}\\[\\]\\(\\)]",
+                "ANYOF[^ \"\\#$%&()*,/:<>@\\[\\]\\{|\\}]"
+                + "[0100-INFTY]");
+        assertDescription("[^[:^print:][:^ascii:]b]",
+                "ANYOF[^\\x00-\\x1Fb\\x7F-\\xFF][0100-INFTY]");
+        assertDescription("[_[:blank:]]",
+                "ANYOFD[\\t _{utf8}\\xA0]"
+                + "[1680 2000-200A 202F 205F 3000]");
+        assertDescription("[\\xA0[:^blank:]]",
+                "ANYOF[^\\t ][0100-167F 1681-1FFF 200B-202E "
+                + "2030-205E 2060-2FFF 3001-INFTY]");
+        assertDescription("[\\p{Any}]",
+                "ANYOF[\\x00-\\xFF][0100-10FFFF]");
+        assertDescription("[\\x{00}-\\x{7FFFFFFFFFFFFFFF}]",
+                "ANYOF[\\x00-\\xFF][0100-HIGHEST_CP]");
+    }
+
+    @Test
+    public void keepsGenericFalsePositiveControlsOnFallback() {
+        assertDescription("[\\p{Digit}]", "");
+        assertDescription("[^\\n]", "REG_ANY");
     }
 
     private static void assertDescription(String pattern, String expected) {

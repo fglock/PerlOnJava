@@ -33,13 +33,14 @@ final class RegexClassDebugProvenance {
     private final boolean highUnbounded;
     private final boolean propertyAny;
     private final boolean hasProperty;
+    private final boolean perlSemanticsAuthoritative;
     private final boolean valid;
 
     private RegexClassDebugProvenance(CClassNode.DebugMembership membership,
             CClassNode.DebugClassExpression expression,
             List<CClassNode.DebugRange> preFoldRanges, int lexicalOption,
             boolean highUnbounded, boolean propertyAny, boolean hasProperty,
-            boolean valid) {
+            boolean perlSemanticsAuthoritative, boolean valid) {
         this.membership = membership;
         this.expression = expression;
         this.preFoldRanges = List.copyOf(preFoldRanges);
@@ -47,14 +48,17 @@ final class RegexClassDebugProvenance {
         this.highUnbounded = highUnbounded;
         this.propertyAny = propertyAny;
         this.hasProperty = hasProperty;
+        this.perlSemanticsAuthoritative = perlSemanticsAuthoritative;
         this.valid = valid;
     }
 
-    static RegexClassDebugProvenance snapshot(CClassNode node, Encoding enc) {
+    static RegexClassDebugProvenance snapshot(CClassNode node, Encoding enc,
+            boolean perlSemanticsAuthoritative) {
         return new RegexClassDebugProvenance(node.debugMembership(enc),
                 node.debugClassExpression(), node.debugPreFoldRanges(),
                 node.debugLiteralLexicalOption(), node.debugHighUnbounded(),
                 node.debugPropertyAny(), node.debugHasProperty(),
+                perlSemanticsAuthoritative,
                 node.debugProvenanceValid());
     }
 
@@ -65,5 +69,8 @@ final class RegexClassDebugProvenance {
     boolean highUnbounded() { return highUnbounded; }
     boolean propertyAny() { return propertyAny; }
     boolean hasProperty() { return hasProperty; }
+    boolean perlSemanticsAuthoritative() {
+        return perlSemanticsAuthoritative;
+    }
     boolean valid() { return valid; }
 }
