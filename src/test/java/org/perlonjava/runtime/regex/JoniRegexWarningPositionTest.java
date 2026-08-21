@@ -6,9 +6,10 @@ import java.util.List;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.perlonjava.PerlRuntimeTestBase;
 
 @Tag("unit")
-class JoniRegexWarningPositionTest {
+class JoniRegexWarningPositionTest extends PerlRuntimeTestBase {
     private static final RegexFlags FLAGS = RegexFlags.fromModifiers("", "");
 
     @Test
@@ -41,7 +42,7 @@ class JoniRegexWarningPositionTest {
         }) {
             JoniRegexPattern pattern = new JoniRegexPattern(
                     testCase[0], FLAGS, 0, false, false, false,
-                    new NamedCharacterCache(), true);
+                    new JoniRegexPattern.NamedCharacterCache(), true);
             assertEquals(List.of(
                     "Both or neither range ends should be Unicode in regex; "
                             + "marked by <-- HERE in m/" + testCase[1] + "/"),
