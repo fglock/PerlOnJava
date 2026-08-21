@@ -72,7 +72,7 @@ sub select_perl_root {
         return $candidate unless @missing;
         push @diagnostics, "$candidate missing " . join(', ', @missing);
     }
-    die "No complete pinned Perl source tree: " . join('; ', @diagnostics) . "\n";
+    die "No complete current Perl source tree: " . join('; ', @diagnostics) . "\n";
 }
 
 sub read_raw {
