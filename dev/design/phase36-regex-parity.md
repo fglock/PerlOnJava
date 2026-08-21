@@ -312,8 +312,8 @@ Active ownership:
 
 - P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
   locale-UTF8, and low-ANYOFR renderer closure.
-- P6: available in persistent polling after closing the complete default-`/d`
-  four-mode byte/Unicode provenance matrix without source scanning.
+- P6: map the complete locale-regex gap against the imported corpus and both
+  backends after closing default-`/d` provenance without source scanning.
 - P3: prepare and implement immutable native parser debug events, failed-prefix
   transport, successful-reparse construction identity, and source mapping after
   the residual-renderer base is published.
