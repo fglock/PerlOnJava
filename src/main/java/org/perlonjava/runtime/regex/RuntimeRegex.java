@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import org.joni.CharacterPropertyResolver;
 import org.joni.exception.SyntaxException;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.WarningBitsRegistry;
@@ -913,6 +914,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (e instanceof IllegalArgumentException
                         && isNamedCharacterDiagnostic(e.getMessage())) {
                     throw new PerlCompilerException(e.getMessage());
+                }
+                if (e instanceof CharacterPropertyResolver.ResolutionException rejection
+                        && rejection.getPosition() >= 0) {
+                    java.nio.charset.Charset charset = effectivePatternByteBacked
+                            ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                    byte[] sourceBytes = compilePatternString.getBytes(charset);
+                    int byteOffset = Math.max(0, Math.min(
+                            rejection.getPosition(), sourceBytes.length));
+                    int characterOffset = new String(sourceBytes, 0,
+                            byteOffset, charset).length();
+                    throw new PerlCompilerException(
+                            RegexDiagnosticFormatter.markedPerl(
+                                    displayDiagnosticPattern, characterOffset,
+                                    rejection.getMessage()));
                 }
                 String invalidProperty = invalidUnicodePropertyName(e.getMessage());
                 if (invalidProperty != null) {

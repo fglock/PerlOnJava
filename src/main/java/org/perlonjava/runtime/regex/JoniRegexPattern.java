@@ -250,15 +250,6 @@ final class JoniRegexPattern {
                         throw new CharacterPropertyResolver.ResolutionException(
                                 "Unicode string properties are not implemented in (?[...])");
                     }
-                    if (userDefined) {
-                        // Perl rejects forward user properties in an extended
-                        // class at construction time.  They cannot share the
-                        // ordinary deferred matcher path: set algebra must be
-                        // complete while Joni builds the CClassNode.
-                        throw new CharacterPropertyResolver.ResolutionException(
-                                "Unknown user-defined property name \""
-                                        + property + "\"");
-                    }
                 }
 
                 CharacterPropertyResolver.Result resolved = resolveCharacterProperty(

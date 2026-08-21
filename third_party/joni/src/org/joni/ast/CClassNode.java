@@ -211,8 +211,7 @@ public final class CClassNode extends Node {
     // and_cclass
     public void and(CClassNode other, ScanEnvironment env) {
         if (hasDeferredProperties() || other.hasDeferredProperties()) {
-            throw new SyntaxException(
-                    "deferred character properties do not support class intersection");
+            throw deferredSetOperationException(other);
         }
         boolean not1 = isNot();
         BitSet bsr1 = bs;
@@ -273,8 +272,7 @@ public final class CClassNode extends Node {
     // or_cclass
     public void or(CClassNode other, ScanEnvironment env) {
         if (hasDeferredProperties() || other.hasDeferredProperties()) {
-            throw new SyntaxException(
-                    "deferred character properties do not support nested class union");
+            throw deferredSetOperationException(other);
         }
         boolean not1 = isNot();
         BitSet bsr1 = bs;
@@ -345,6 +343,18 @@ public final class CClassNode extends Node {
         membership.propertyFoldMask = null;
         merged.and(membership, env);
         propertyFoldMask = merged;
+    }
+
+    private CharacterPropertyResolver.ResolutionException
+            deferredSetOperationException(CClassNode other) {
+        CClassNode owner = hasDeferredProperties() ? this : other;
+        CharacterPropertyResolver.DeferredProperty property =
+                owner.deferredProperties.get(0);
+        String name = new String(property.name(),
+                java.nio.charset.StandardCharsets.US_ASCII);
+        return new CharacterPropertyResolver.ResolutionException(
+                "Unknown user-defined property name \"" + name + "\"",
+                property.position());
     }
 
     public CClassNode propertyFoldMask() {
