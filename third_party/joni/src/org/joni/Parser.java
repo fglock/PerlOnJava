@@ -1203,10 +1203,8 @@ class Parser extends Lexer {
 
         if (arg.fromEscaped && arg.toEscaped
                 && arg.fromNamedCharacter != arg.toNamedCharacter) {
-            if (perlExtendedClassLeaf) {
-                env.warnings.warn("Both or neither range ends should be Unicode",
-                        perlExtendedRangeWarningPosition());
-            }
+            env.warnings.warn("Both or neither range ends should be Unicode",
+                    perlExtendedRangeWarningPosition());
             return;
         }
 
