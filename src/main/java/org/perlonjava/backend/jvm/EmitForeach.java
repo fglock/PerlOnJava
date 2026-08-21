@@ -376,8 +376,11 @@ public class EmitForeach {
                 mv.visitInsn(Opcodes.POP);  // Discard the returned scalar
             }
 
-            // Get iterator from the pre-evaluated array
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
+            // Preserve live membership for an array while retaining snapshot
+            // iteration for non-array list expressions and tied arrays.
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    "foreachAliasIterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
         } else if (isGlobalUnderscore) {
             // Global $_ as loop variable: use pre-evaluated list (evaluated in enclosing scope)
@@ -410,10 +413,11 @@ public class EmitForeach {
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 
-            // Non-range: preserve aliasing semantics by iterating an array-of-alias.
+            // Non-range: preserve aliases and live membership for an actual array.
             mv.visitLabel(notRangeLabel);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    "foreachAliasIterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
 
             mv.visitLabel(afterIterLabel);

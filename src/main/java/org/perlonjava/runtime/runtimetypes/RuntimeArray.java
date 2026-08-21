@@ -1708,6 +1708,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return new RuntimeArrayIterator();
     }
 
+    @Override
+    public Iterator<RuntimeScalar> foreachAliasIterator() {
+        // Plain Perl arrays are live during foreach: structural changes alter
+        // the remaining membership. Tied arrays retain FETCH-based snapshot
+        // behavior because their backing TieArray is not directly iterable.
+        return type == TIED_ARRAY ? getArrayOfAlias().iterator() : iterator();
+    }
+
     /**
      * Returns a string representation of the array reference.
      *
