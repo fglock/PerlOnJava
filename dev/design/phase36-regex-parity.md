@@ -181,8 +181,8 @@ out under resource contention: isolated single-job probes execute all 1,302
 assertions with 1,249 passes each, but equivalent exact-head quiet reruns remain
 required. `op/do.t` needs two fixes to reach standard Perl's 71/71 plus an
 ID-normalized disposition because PR958 over-executed it as 94/99;
-`class/accessor.t` drops eight;
-and `japh/abigail.t` drops one nondeterministically. Acceptance must have no new
+`class/accessor.t` aborts before the newly imported accessor-name rows; and
+`japh/abigail.t` drops one nondeterministically. Acceptance must have no new
 invalid, missing, timeout, truncated, incomplete, or zero-TAP row and no
 unresolved PR-958 pass-count decrease. The user owns the release checkout;
 workers use private exact-head worktrees and must not mutate, rebase, or push
@@ -219,15 +219,15 @@ checks at the same immutable head.
 Active ownership:
 
 - P3: close the complete stable regex debug-trace contract and interpreter eval
-  propagation; no speculative production change is needed for the `pat*`
-  contention timeout.
-- P4: deliver the green fatal/nonfatal diagnostic aggregation change, then close
-  the 200-row warning tranche.
-- P5: close the complete remaining 420-assertion generated-property batch,
-  then the disjoint 5,064-assertion Script bare-alias tranche.
-- P6: publish no-warning retirement qualification, then fix/classify the
-  exact-head `op/do.t`, `class/accessor.t`, and `japh/abigail.t` decreases;
-  resume infinite-recursion diagnostics afterward.
+  propagation, including exact compile/match/free lifecycle parity and imported
+  reducers.
+- P4: finish and deliver the focused-green 200-row deprecated-property warning
+  tranche after its single full build.
+- P5: close the disjoint 1,048-row `In...` Block-alias tranche, then remove
+  redundant property scanning after the P3 integration reference is published.
+- P6: finish exact-head release repairs: both backends at `op/do.t` 71/71,
+  deterministic `japh/abigail.t`, and the already delivered class accessor-name
+  correction; validate all three with one combined build.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
@@ -240,7 +240,10 @@ Active ownership:
    Unicode, `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_thr.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates, then repeat the
    complete corpus, strict PR-958 comparison, additional release checks, and
-   exact-head CI.
+   exact-head CI. Run `pat.t` and `pat_thr.t` exclusively with no external
+   worker builds; the runner's 600-second minimum already exceeds their
+   isolated 399/446-second measurements. Increase only that documented
+   per-file minimum if a quiet exact-head run still times out.
 3. Merge PR 1087 only when every checkpoint gate is green or has a documented
    baseline-equivalent environmental disposition.
 4. Meanwhile integrate P3 matcher-state, P4 warning, P5 generated-property,
