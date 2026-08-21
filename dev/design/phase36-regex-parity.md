@@ -184,7 +184,8 @@ outside it.
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
-- [x] Pass warning-free `make`, Ubuntu, Windows, and complete CI.
+- [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
+  acceptance head.
 - [ ] Reconcile `docs/reference/feature-matrix.md`,
   `dev/implementation/regex.md`, and `docs/design/joni-callout-fork.md`
   with shipped behavior.
@@ -203,11 +204,13 @@ CI. Imported fixtures remain authoritative and are never patched to recover
 counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 `anyof.t` uses the measured 1,800-second per-file bound.
 
-Open implementation blockers are execution-time `LC_CTYPE` semantics for `/l`,
-opt-in native parser debug rendering, and the residual complete-`anyof.t`
-renderer roots. Final acceptance then runs the immutable latest-Perl ledger on
-both backends, direct/thread parity, affected CPAN suites, warmed performance,
-packaging/notices/licenses, and platform CI from one exact clean head.
+Open implementation blockers are the remaining mixed and runtime-switching
+`LC_CTYPE` semantics for `/l`, plus fatal-diagnostic/free-trace publication
+order for a malformed callback. The nonlocale `anyof.t` renderer roots and
+opt-in native parser trace transport are complete. Final acceptance then runs
+the immutable latest-Perl ledger on both backends, direct/thread parity,
+affected CPAN suites, warmed performance, packaging/notices/licenses, and
+platform CI from one exact clean head.
 
 The implementation already satisfies the architectural invariants in this
 document: Joni is the sole production matcher, generated Perl Unicode data is
@@ -227,8 +230,10 @@ machine-readable comparison identity so expensive maps are reusable.
 - [x] Runtime regex source, lexical context, callback unwind, and diagnostics.
 - [x] Ordinary-pattern Joni parity: prove the full corpus with native byte and
   Unicode matching and no Java matcher fallback.
-- [ ] Unicode and pattern syntax: complete nested scoped extended-class
-  interpolation and remaining corpus-derived roots.
+- [x] Unicode and pattern syntax foundations, including nested scoped
+  extended-class interpolation and the known nonlocale `anyof.t` roots.
+- [ ] Refresh the complete Unicode, `pat.t`, and `pat_advanced.t` maps and
+  close any newly exposed corpus-derived roots.
 - [x] Production Java matcher/backend selector and legacy `RegexPreprocessor`
   are absent; historical routing fixtures assert parser-owned Joni facts
   directly and no source scanner decides a backend.
@@ -248,25 +253,27 @@ machine-readable comparison identity so expensive maps are reusable.
 
 Active ownership:
 
-- P4: finish runtime-neutral execution-time `LC_CTYPE` state and native `/l`
-  byte-class/fold matching.
-- P6: prepare reproducible final POD/feature-matrix evidence without publishing
-  capability claims before the final integrated artifact.
-- P3: make native parser debug recording opt-in, expose immutable traces to the
-  host renderer, and close the remaining imported debug rows.
-- Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
-  close combined regressions, and own final acceptance. Parser-owned Unicode
-  promotion and source-provenance cache identity are complete.
-- P5: close the seven proven nonlocale `anyof.t` renderer roots using the
-  preserved byte-identical JVM/interpreter map; do not repeat complete maps.
+- P3 / A69: close generic fatal-diagnostic versus `Freeing REx` publication
+  order, preserving nested, eval, deferred-callback, and successful lifecycles.
+- P5 / A70: finish mixed and negated `/l` classes, same-compiled-regex locale
+  switching, matcher/runtime isolation, multi-character `/il`, locale warning
+  and taint behavior, and thread/runtime cloning.
+- P6 / A71: produce reusable affected-CPAN evidence, including deterministic
+  DBIx warning and WWW::Mechanize overload reducers, without running the full
+  imported corpus.
+- Coordinator: integrate deliveries, maintain the exact clean acceptance head
+  and PR/CI, run combined gates, close integration regressions, and execute the
+  final ledger and documentation reconciliation.
 
 ## Ordered Next Steps
 
-1. Close native parser debug traces and runtime `LC_CTYPE` `/l` matching,
-   including lexical locale propagation and thread-local switching.
-2. Prove the combined residual/exact/fold renderer with complete dual-backend
-   `anyof.t`; refresh Unicode, `pat.t`, and `pat_advanced.t` maps without
-   introductions.
+1. Close generic fatal/free trace ordering and the remaining execution-time
+   `LC_CTYPE` `/l` matrix, including mixed classes, locale switching, folding,
+   warnings, taint, and runtime/thread isolation.
+2. Run combined focused and warning-free build gates, then refresh complete
+   dual-backend Unicode, `pat.t`, `pat_advanced.t`, and debug maps without
+   introductions. Re-run complete `anyof.t` only if those maps expose a root
+   that the retained focused contracts cannot classify.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
