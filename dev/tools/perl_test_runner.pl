@@ -2,12 +2,15 @@
 use strict;
 use warnings;
 use File::Find;
+use File::Path qw(remove_tree);
 use File::Spec;
+use File::Temp qw(tempdir);
 use Time::HiRes qw(time);
 use Getopt::Long;
 use JSON::PP;
 use Data::Dumper;
 use POSIX qw(WNOHANG WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG setsid);
+use Text::ParseWords qw(shellwords);
 use Config ();
 use FindBin qw($Bin);
 use lib "$Bin/lib";
@@ -350,6 +353,11 @@ sub process_test_result {
 sub run_single_test {
     my ($test_file) = @_;
 
+    # Resolve the selected launcher before any test-specific chdir. This exact
+    # absolute path is also used by private overlays for literal #!./perl.
+    my $old_dir = File::Spec->rel2abs('.');
+    my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
+
     # Core thread distributions assume their own build-directory cwd.  In
     # particular, threads and threads-shared resolve ../../t/test.pl when
     # PERL_CORE is set, while Thread-Queue and Thread-Semaphore load their
@@ -439,9 +447,6 @@ sub run_single_test {
     # These tests can crash the JVM with StackOverflowError during regex backtracking
     local $ENV{PERL_SKIP_BIG_MEM_TESTS} = 1;
 
-    # Save current directory
-    my $old_dir = File::Spec->rel2abs('.');
-
     # For perl5_t tests (especially Pod tests), change to the test directory
     # so they can find their test data files with relative paths
     my $local_test_dir = $test_dir;
@@ -487,11 +492,68 @@ sub run_single_test {
         $local_test_dir = $1;
     }
 
-    chdir($local_test_dir) if $local_test_dir && -d $local_test_dir;
+    # abigail.t writes progtmp* programs containing literal #!./perl. Run it in
+    # a private overlay so concurrent runner processes cannot share either the
+    # launcher or generated programs. All authoritative test-tree entries
+    # remain read-only links; only perl and progtmp* live in the private cwd.
+    my $private_test_root;
+    my $private_test_dir;
+    my $test_name;
+    if ($^O ne 'MSWin32' && $^O ne 'cygwin' && $^O ne 'msys'
+            && $test_file =~ m{(?:^|/)perl5_t/t/japh/abigail\.t$}) {
+        my $source_test_dir = File::Spec->rel2abs('perl5_t/t', $old_dir);
+        my $source_lib_dir = File::Spec->rel2abs('perl5_t/lib', $old_dir);
+        $private_test_root = tempdir('perlonjava-abigail-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+        $private_test_dir = File::Spec->catdir($private_test_root, 't');
+        mkdir $private_test_dir or die "Cannot create private test cwd: $!";
+        symlink $source_lib_dir, File::Spec->catfile($private_test_root, 'lib')
+            or die "Cannot link private Perl library tree: $!";
+        opendir my $source, $source_test_dir
+            or die "Cannot read $source_test_dir: $!";
+        while (defined(my $entry = readdir $source)) {
+            next if $entry eq '.' || $entry eq '..' || $entry eq 'perl';
+            next if $entry =~ /^progtmp/;
+            symlink File::Spec->catfile($source_test_dir, $entry),
+                    File::Spec->catfile($private_test_dir, $entry)
+                or die "Cannot link private test-tree entry $entry: $!";
+        }
+        closedir $source;
+        # The selected jperl is normally a shell script. Kernels do not
+        # reliably allow a script to be the interpreter of another shebang
+        # script, so use a native per-run trampoline which execs the exact
+        # selected absolute launcher and forwards the generated script path.
+        my $launcher_source = File::Spec->catfile($private_test_dir, '.jperl-launcher.c');
+        my $launcher_binary = File::Spec->catfile($private_test_dir, 'perl');
+        open my $launcher, '>', $launcher_source
+            or die "Cannot create private launcher source: $!";
+        print {$launcher} <<'NATIVE_LAUNCHER';
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+int main(int argc, char **argv) {
+    const char *target = getenv("PERLONJAVA_SHEBANG_TARGET");
+    if (target == NULL || *target == '\0') {
+        fputs("PERLONJAVA_SHEBANG_TARGET is not set\n", stderr);
+        return 127;
+    }
+    argv[0] = (char *)target;
+    execv(target, argv);
+    perror("execv selected jperl");
+    return 127;
+}
+NATIVE_LAUNCHER
+        close $launcher or die "Cannot close private launcher source: $!";
+        my @compiler = shellwords($Config::Config{cc} || 'cc');
+        system(@compiler, $launcher_source, '-o', $launcher_binary) == 0
+            or die "Cannot build private native jperl trampoline\n";
+        unlink $launcher_source;
+        $ENV{PERLONJAVA_SHEBANG_TARGET} = $abs_jperl;
+        $local_test_dir = $private_test_dir;
+        $test_name = 'japh/abigail.t';
+    }
 
-    # Use absolute path for jperl
-    my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
-    my $test_name = File::Spec->abs2rel($test_file, $local_test_dir || '.');
+    chdir($local_test_dir) if $local_test_dir && -d $local_test_dir;
+    $test_name //= File::Spec->abs2rel($test_file, $local_test_dir || '.');
 
     # Try to use system timeout command if available.
     # Use --kill-after (-k) so a SIGTERM that the JVM ignores is followed
@@ -589,6 +651,7 @@ sub run_single_test {
 
     # Restore directory
     chdir($old_dir);
+    remove_tree($private_test_root) if defined $private_test_root && -d $private_test_root;
 
     # Check if it was a timeout.
     # 124 = GNU timeout sent SIGTERM and child exited.
