@@ -2570,11 +2570,10 @@ class Parser extends Lexer {
             CClassNode nested;
             try {
                 skipPerlExtendedClassSpace();
-                if (!extendedClassStarts("(?[")) {
+                if (!extendedClassStarts("(?")) {
                     newSyntaxException(PERL_EXTENDED_CLASS_EXPECTING_INTERPOLATED);
                 }
-                p += 3;
-                nested = parsePerlExtendedCharClass();
+                nested = parsePerlExtendedClassPrimary(false).node();
                 skipPerlExtendedClassSpace();
                 if (!left() || !extendedClassAt(')')) {
                     newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
