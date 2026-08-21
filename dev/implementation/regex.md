@@ -89,9 +89,8 @@ constructs `RegexFlags`, and creates `JoniRegexPattern` variants. Its cache key
 includes source and modifiers, lexical debug and `re 'strict'` state, trusted
 callout count, effective byte provenance, and custom-`charnames` translator
 discriminator. The translator and its `NamedCharacterCache` remain attached to
-the compiled regex. Deferred-property handling on this base is transitional,
-not a durable architecture contract; its integration requirements are recorded
-in the handoff below.
+the compiled regex. User-defined property callbacks are represented by native
+deferred Joni class terms as described below.
 
 `JoniRegexPattern` supplies Joni `Syntax`, options, resolver hooks, warning
 mapping, and trusted-token materialization. Production matcher input otherwise
@@ -255,55 +254,38 @@ metadata directly, while the old test policy can no longer select a Java
 matcher. Joni compilation and compiled metadata own `\K`-inside-lookaround,
 control-verb, inline-charset, and native-syntax decisions.
 
-## Deferred-property integration handoff
+## Deferred user properties
 
-On exact base `4314449ee`, literal compilation can encounter an ordinary
-user-property callback before Perl execution has made the subroutine available.
-The adapter currently records that condition on `RuntimeRegex` and gives Joni a
-temporary full-domain class. Before the first match or substitution,
-`ensureCompiledForRuntime()` resolves the callback outside the compiler lock,
-evicts the placeholder's compiled-cache entry, recompiles the complete pattern,
-and copies the resolved Joni variants back into the original runtime object.
-The runtime-local result cache is keyed by fully qualified construction package
-and sensitive/folded mode; its resolved values are inherited by ithread
-snapshots. This is truthful current-state documentation, not the desired final
-matcher contract.
+`CharacterPropertyResolver.Result.deferred(...)` tells the parser to retain an
+unresolved property as a `DeferredProperty` in the immutable character-class
+program. The retained fact includes raw and display spelling, parser context,
+token-local options, source position, token negation, and enclosing-class
+negation. Static class members and multiple deferred terms remain distinct;
+Joni disables optimizer facts that would bypass required property execution.
 
-The active deferred-property tranche has these durable requirements:
+`JoniRegexPattern` installs a `CharacterPropertyResolver.DeferredResolver` on
+each `Matcher`. `ByteCodeMachine` asks for the ranges only when execution reaches
+the class opcode, and `Matcher` caches the result by compiled class and term for
+that invocation. Nested dynamic matchers inherit the resolver. The compiled
+`Regex` therefore contains no Perl runtime object or resolved callback state,
+and an unreachable alternative, skipped optional term, or optimizer rejection
+does not invoke the callback.
 
-1. Joni retains an unresolved ordinary `Is...` or `In...` token, its parser
-   context, local option state, token negation, and enclosing-class negation.
-2. Resolution is matcher-local and occurs only if execution reaches that class;
-   an unreachable alternative or an optimizer rejection must not run or reject
-   the Perl callback.
-3. The callback/result cache remains runtime-local and keyed by fully qualified
-   construction package plus sensitive/folded mode. Shared compiled programs
-   must not share mutable resolution state across ithreads.
-4. Extended `(?[...])` classes continue to reject an unresolved user property
-   at compile time because deferred set algebra is not part of that syntax.
-5. Ordinary patterns without deferred properties allocate no resolver service.
+The bridge captures the relevant Perl package and delegates reached terms to
+`UnicodeResolver.resolveDeferredJoniProperty()`. It keeps sensitive and folded
+results separate, maps rejection positions back to Perl source, and preserves
+runtime/thread isolation. A forward declaration can be installed after the
+regex was compiled and retried after an unknown-property failure. Unknown
+properties in `(?[...])` remain construction errors because deferred set
+algebra is not admitted there. Patterns without deferred terms install no
+resolver.
 
-After that tranche lands, the coordinator should replace this handoff with the
-exact public Joni hook names and matcher lifecycle, update the responsibility
-map in both canonical documents, and verify that no description of the retired
-temporary mechanism remains. This section deliberately records requirements,
-not unmerged API names or implementation claims.
-
-### Post-A24 replacement text (apply only after integration)
-
-Replace the current-state paragraph above after the deferred-property commit
-and its focused gates land:
-
-> Joni retains unresolved ordinary user-property tokens in the compiled class
-> program. A matcher-local resolver evaluates a token only when execution
-> reaches that class and caches the resulting ranges for that matcher. The host
-> callback/result cache preserves construction-package and local fold-mode
-> identity across compiled-regex reuse and ithread snapshots. No full-domain
-> stand-in or whole-pattern runtime recompilation participates in matching.
-
-At the same time, replace this handoff with the integrated public type names,
-source links, and direct-test evidence; until then, the quoted paragraph is not
-an assertion about the current tree.
+`deferred_user_property_execution.t`,
+`dynamic_user_property_cache_context.t`, and
+`TestDeferredCharacterProperty` cover lazy execution, caching, negation and
+union semantics, local `/i`, nested programs, package identity, failures, and
+thread/runtime ownership. No full-domain stand-in or whole-pattern runtime
+recompilation participates in matching.
 
 ## Verification
 
@@ -348,31 +330,8 @@ describes architecture rather than project status.
 | Regex incident notes under `dev/modules/` | Keep with their modules | They explain the implementation current when each module was fixed; several mention deleted `RegexPreprocessor*` files and must not be generalized to current architecture. |
 | `dev/presentations/German_Perl_Raku_Workshop_2026/{slides.md,slides-part2-technical.md,slide-deck-plan.md}` | Refresh before reuse | Their regex slides still claim a Java engine and preprocessor. Presentation maintenance is outside this documentation tranche. |
 
-The exact stale-reference inventory on base `4314449ee` is:
-
-- Working notes:
-  [`alternation-capture-issue-analysis.md`](../prompts/alternation-capture-issue-analysis.md),
-  [`conditional-pattern-transformation-strategy.md`](../prompts/conditional-pattern-transformation-strategy.md), and
-  [`test-failures-not-quick-fix.md`](../prompts/test-failures-not-quick-fix.md).
-- Module histories:
-  [`excel_writer_xlsx.md`](../modules/excel_writer_xlsx.md),
-  [`exiftool_parity.md`](../modules/exiftool_parity.md),
-  [`jcpan_datetimex_easy.md`](../modules/jcpan_datetimex_easy.md),
-  [`json_test_parity.md`](../modules/json_test_parity.md),
-  [`net_telnet.md`](../modules/net_telnet.md),
-  [`smoke_test_investigation.md`](../modules/smoke_test_investigation.md), and
-  [`xml_simple.md`](../modules/xml_simple.md).
-- Presentation sources:
-  [`slide-deck-plan.md`](../presentations/German_Perl_Raku_Workshop_2026/slide-deck-plan.md),
-  [`slides-part2-technical.md`](../presentations/German_Perl_Raku_Workshop_2026/slides-part2-technical.md), and
-  [`slides.md`](../presentations/German_Perl_Raku_Workshop_2026/slides.md).
-
-These files are not redundant canonical documents: their stale engine wording
-is historical or presentation content. The inventory exists so future readers
-do not mistake a broad repository search result for the current architecture.
-
-No document is deleted as part of this reconciliation. Search results alone do
-not establish duplication: module histories, prompts, presentations, the active
-acceptance plan, the user-facing matrix, and the standalone-library RFC have
-different lifecycles. Only this file and `joni-callout-fork.md` are normative
-implementation references.
+Searches may still find retired engine wording in prompts, module incident
+notes, and presentations. Those files record the state or proposal relevant to
+their own purpose; they are neither redundant copies nor current architecture.
+Only this file and `joni-callout-fork.md` are normative implementation
+references.

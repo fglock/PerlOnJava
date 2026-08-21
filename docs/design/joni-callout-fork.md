@@ -257,40 +257,30 @@ Perl extended-class escapes. This lets the adapter reject string-valued and
 unresolved user-defined properties in the correct context while Joni preserves
 the exact closing-brace source position; no source rescan is involved.
 
-### Deferred-property handoff
+### Deferred properties
 
-On exact base `4314449ee`, `CharacterPropertyResolver.Result` can return ranges
-but has no runtime-deferred result. The PerlOnJava adapter therefore compiles a
-temporary full-domain class and replaces the complete Joni program before its
-first match. That host mechanism is outside the fork API and must not be
-mistaken for a matcher capability.
+`CharacterPropertyResolver.Result.deferred(...)` marks a property for matcher-
+time resolution. The parser stores an immutable `DeferredProperty` containing
+its raw and display spelling, `Context`, lexical option bits, source position,
+token negation, and enclosing-class role. `Regex` exposes those facts but never
+stores a host runtime object or a resolved result.
 
-The active deferred-property work is not yet part of the API contract above. Its
-integration must preserve raw unresolved ordinary-property tokens and resolve
-them only when the matcher reaches the corresponding class. The compiled
-`Regex` stays runtime-neutral and immutable; resolution results are
-matcher-local so shared programs and ithread clones cannot exchange mutable
-state. Static class membership, token negation, enclosing-class negation, and
-token-local `/i` mode remain distinct inputs. An unreachable branch and a
-search rejected by a later optimizer literal must not invoke the host. Ordinary
-patterns must not allocate this service, while unresolved properties inside
-Perl extended classes remain compile-time errors.
+The host installs a `CharacterPropertyResolver.DeferredResolver` through
+`Matcher.setDeferredPropertyResolver()`. The character-class opcode resolves a
+term only when reached and caches its `Result` per matcher, class, and term.
+Nested dynamic matchers receive the same resolver. Static membership, multiple
+deferred terms, local folding, token negation, and enclosing negation are
+combined by the native class program. Optimizer analysis declines facts that
+could skip a deferred term incorrectly. Patterns without deferred terms do not
+allocate the cache or resolver service.
 
-When that implementation is integrated, replace this handoff with the exact
-resolver/result types, installation point on `Matcher`, lazy cache lifetime,
-error contract, and direct-test names. Do not document proposed class names as
-if they were already public API.
-
-After integration, replace the two current-state paragraphs with this bounded
-statement, expanded using the actual public names and direct-test links:
-
-> The property hook can mark an ordinary property token as deferred. Joni keeps
-> its raw spelling, parser context, lexical options, and class-negation roles in
-> the immutable compiled program. A service installed on `Matcher` resolves the
-> token at first opcode execution and keeps the resolved membership local to
-> that matcher; compiled `Regex` instances never retain host runtime objects.
-
-The quoted text is a coordinator handoff, not a claim about base `4314449ee`.
+Resolver failures use `CharacterPropertyResolver.ResolutionException` with the
+parser-owned source position. Unknown ordinary properties can remain harmless
+on an unreachable path and can be retried after the host definition appears;
+deferred set algebra in Perl extended classes remains a construction error.
+`TestDeferredCharacterProperty`, `TestDeferredCharacterPropertyFacts`, and
+`TestDeferredPropertyDebugRendering` are the direct fork contracts; the host
+execution and runtime-isolation gates are listed in the implementation document.
 
 ## Packaging and notices
 
