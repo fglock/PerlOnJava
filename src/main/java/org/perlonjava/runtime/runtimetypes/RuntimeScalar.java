@@ -3746,15 +3746,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
                         // Example: my $b = $a; $b++; should NOT modify $a
                         RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
                         if (copyResult != null) {
-                            // Copy the cloned object's fields into this
-                            this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            set(copyResult);
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for ++
@@ -3772,6 +3772,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             this.type = result.type;
                             this.value = result.value;
                             return this;
+                        }
+
+                        // An explicit copy constructor may return a plain value.
+                        // Perl applies the native increment to that copied value
+                        // when neither ++ nor + supplies the mutation.
+                        if (copiedToPlainScalar) {
+                            return preAutoIncrementWithoutWatcherNotification();
                         }
                     }
                 }
@@ -3881,14 +3888,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
                         RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
                         if (copyResult != null) {
-                            // Copy the cloned object's fields into this
-                            this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            set(copyResult);
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for ++
@@ -3905,6 +3912,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // For fallback, + should NOT modify operand, so we handle assignment
                             this.type = result.type;
                             this.value = result.value;
+                            return old;
+                        }
+
+                        if (copiedToPlainScalar) {
+                            preAutoIncrementWithoutWatcherNotification();
                             return old;
                         }
                     }
