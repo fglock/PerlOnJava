@@ -575,18 +575,35 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         int close = remaining.indexOf('}', 1);
         if (close >= 0) {
-            warnDeprecatedHyphenProperty(remaining.substring(1, close));
+            warnDeprecatedUnicodeProperty(remaining.substring(1, close));
         }
     }
 
-    private void warnDeprecatedHyphenProperty(String sourceProperty) {
+    private void warnDeprecatedUnicodeProperty(String sourceProperty) {
         String spelling = sourceProperty.replaceFirst("^\\^?\\s*", "");
-        String normalized = spelling.replaceAll("[\\s_]", "")
-                .toLowerCase(java.util.Locale.ROOT);
-        boolean canonicalIsAlias = spelling.equals("IsHyphen")
-                || spelling.equals("Is_Hyphen");
-        if (!(normalized.equals("hyphen")
-                || normalized.equals("ishyphen") && !canonicalIsAlias)) {
+        String[] assignment = spelling.split("[=:]", 2);
+        String property = normalizeUnicodePropertyPart(assignment[0]);
+        String value = assignment.length == 2
+                ? normalizeUnicodePropertyPart(assignment[1]) : null;
+        String reason = null;
+
+        if (property.equals("hyphen") || property.equals("ishyphen")) {
+            boolean canonicalIsAlias = assignment.length == 1
+                    && (spelling.equals("IsHyphen") || spelling.equals("Is_Hyphen"));
+            if (!canonicalIsAlias) {
+                reason = "Supplanted by Line_Break property values; "
+                        + "see www.unicode.org/reports/tr14";
+            }
+        } else if (value != null
+                && (value.equals("surrogate") || value.equals("sg"))
+                && (property.equals("linebreak")
+                    || property.equals("islinebreak")
+                    || property.equals("lb")
+                    || property.equals("islb"))) {
+            reason = "Surrogates should never appear in well-formed text, "
+                    + "and therefore shouldn't be the basis for line breaking";
+        }
+        if (reason == null) {
             return;
         }
 
@@ -595,9 +612,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             return;
         }
         String message = "Use of '" + spelling
-                + "' in \\p{} or \\P{} is deprecated because: "
-                + "Supplanted by Line_Break property values; "
-                + "see www.unicode.org/reports/tr14";
+                + "' in \\p{} or \\P{} is deprecated because: " + reason;
         RuntimeScalar text = new RuntimeScalar(message);
         RuntimeScalar location = new RuntimeScalar(
                 ctx.errorUtil.warningLocation(tokenIndex));
@@ -610,6 +625,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
         } else {
             Warnings.warnWithCategory(category, message, location.toString());
         }
+    }
+
+    private static String normalizeUnicodePropertyPart(String part) {
+        return part.replaceAll("[\\s_]", "")
+                .toLowerCase(java.util.Locale.ROOT);
     }
 
     /**
