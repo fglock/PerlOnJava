@@ -949,7 +949,8 @@ public final class Regex {
                 yield splitMask.isEmpty()
                         ? renderExact(fact.exact()) : splitMask;
             }
-            case FULL_CLASS -> renderProvenFullCharacterClass(provenance);
+            case FULL_CLASS -> renderProvenFullCharacterClass(
+                    fact.characterClass(), provenance);
             case EMPTY_CLASS -> "OPFAIL";
             case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
             case OTHER -> {
@@ -966,6 +967,7 @@ public final class Regex {
     }
 
     private String renderProvenFullCharacterClass(
+            DebugCharacterClassFact characterClass,
             RegexClassDebugProvenance provenance) {
         if (enc == UTF8Encoding.INSTANCE && provenance != null
                 && provenance.perlSemanticsAuthoritative()) {
@@ -973,10 +975,15 @@ public final class Regex {
                 return "ANYOF[\\x00-\\xFF][0100-10FFFF]";
             }
             List<CClassNode.DebugRange> source = provenance.preFoldRanges();
+            List<DebugRange> effective = characterClass == null
+                    ? List.of() : characterClass.ranges();
             if (!provenance.hasProperty() && source.size() == 1
                     && source.get(0).from() == 0
                     && source.get(0).to() == Long.MAX_VALUE
-                    && source.get(0).domainEnd()
+                    && effective.size() == 1
+                    && effective.get(0).from() == 0
+                    && effective.get(0).to() == Long.MAX_VALUE
+                    && effective.get(0).domainEnd()
                             == WideScalarDomainEnd.HIGHEST_SCALAR) {
                 return "ANYOF[\\x00-\\xFF][0100-HIGHEST_CP]";
             }
