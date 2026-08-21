@@ -750,13 +750,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 msaBegin = visibleMatchStart() - str;
                 msaEnd   = s      - str;
             }
-        } else {
-            Region region = msaRegion;
-            if (region != null) {
-                region.clear();
-            } else {
-                msaBegin = msaEnd = 0;
-            }
         }
         // end_best_len:
         /* default behavior: return first-matching result. */
