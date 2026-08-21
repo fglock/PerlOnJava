@@ -69,9 +69,9 @@ Remaining scanner-removal queue:
   unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
 - [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
   class/name helpers) once their assertions are replaced by direct Joni facts.
-- [ ] Compile raw `\Q...\E` in Joni, preserving warning timing/category, and
+- [x] Compile raw `\Q...\E` in Joni, preserving warning timing/category, and
   remove host `RegexQuoteMeta.escapeQ()` source rewriting.
-- [ ] Replace the inline-`/p` raw-source scan with immutable parser-owned Joni
+- [x] Replace the inline-`/p` raw-source scan with immutable parser-owned Joni
   metadata while preserving match-variable retention.
 - [ ] Replace `hasUnicodePromotingPatternSyntax()` with a parser-owned fact and
   make byte/Unicode variant/cache selection consume the compiled result.
@@ -298,10 +298,10 @@ closure, followed by removal of the final host semantic seams.
   not influence matching or backend policy.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
-- [ ] Retire the final production host semantic seams in order: native
-  `\Q...\E` plus inline `/p`, parser-owned Unicode promotion, alternate-capture
-  correction, XMP/XML matcher selectors, and a fresh production source-scan
-  audit. Dead mapper and custom-charname substring probe deletion are complete.
+- [ ] Retire the final production host semantic seams: parser-owned Unicode
+  promotion, alternate-capture correction, XMP/XML matcher selectors, and a
+  fresh production source-scan audit. Native `\Q...\E`, inline `/p`, dead
+  mapper, and custom-charname substring-probe retirement are complete.
 
 Active ownership:
 
@@ -311,9 +311,9 @@ Active ownership:
 - P6: close all 33 current exact-fold residual rows from integrated exact base
   `6a339281a`, including 29 complete simple-fold classes and four U+2029 mode
   rows; remain in persistent polling after delivery.
-- Coordinator: finish native raw `\Q...\E` ownership and inline `/p` metadata,
-  integrate P4/P6, publish each exact base, assign Unicode promotion and the
-  alternate-capture/XMP/XML seams, maintain PR/CI, and own final acceptance.
+- Coordinator: integrate P4/P6, publish each exact base, assign Unicode
+  promotion and the alternate-capture/XMP/XML seams, maintain PR/CI, and own
+  final acceptance.
 - P3 and P5: no active lease; prior unreachable leases are fenced and may be
   reassigned only from a current published integration base.
 
@@ -322,10 +322,8 @@ Active ownership:
 1. Finish the 33-row exact-fold and 27-row residual class-renderer closures on
    the integrated exact-program base, require zero introductions, and publish
    the combined warning-free base.
-2. Integrate the 27-row residual class renderer and retire host `\Q...\E`
-   normalization plus inline `/p` scanning; then replace
-   host Unicode-promotion scanning with parser-owned metadata and delete the
-   custom-charname cache substring probe (already complete). Re-audit every
+2. Replace host Unicode-promotion scanning with parser-owned metadata; the
+   custom-charname cache substring probe is already gone. Re-audit every
    production pattern-source scan by ownership.
 3. Remove the alternate-capture correction and XMP/XML matcher selectors;
    close any residual compiled renderer/debug roots and refresh complete
