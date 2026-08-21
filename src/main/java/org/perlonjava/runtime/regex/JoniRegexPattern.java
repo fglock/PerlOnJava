@@ -317,10 +317,6 @@ final class JoniRegexPattern {
                      boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
                      NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
                      boolean perlReStrict) {
-        PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(perlPattern, flags.isExtended());
-        if (syntaxFeatures.keepInLookaround()) {
-            throw new PerlCompilerException("\\K not permitted in lookahead/lookbehind in regex");
-        }
         validateExtendedPropertyPolicy(perlPattern);
         this.flags = flags;
         this.byteMode = byteMode;
