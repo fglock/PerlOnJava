@@ -276,8 +276,9 @@ renderer build.
   are absent; source audit finds only test-scope backend-policy assertions.
 - [x] Obsolete imported regex patches are removed and targeted sync is
   idempotent.
-- [ ] Remove residual temporary source-policy scanners identified by the final
-  corpus.
+- [x] Replace backend-selection and `\\G` source scans with immutable
+  parser-owned Joni program metadata; retain only presentation helpers that do
+  not influence matching or backend policy.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
 
@@ -291,9 +292,10 @@ Active ownership:
   305-row ANYOF frontier; property source-scanner retirement is integrated.
 - P6: unavailable; its queued scanner-metadata reservation is fenced so no
   critical-path work depends on its return.
-- Coordinator: implement compiled parsed-program/G-assertion facts and retire
-  test-policy source scans, then integrate the three worker tranches, run the
-  combined build, maintain PR/CI, and own final acceptance/documentation.
+- Coordinator: parsed-program/G-assertion facts and the extended-class
+  construction diagnostic are integrated. Integrate the three renderer
+  tranches, run the combined build, maintain PR/CI, and own final
+  acceptance/documentation.
 
 ## Ordered Next Steps
 
