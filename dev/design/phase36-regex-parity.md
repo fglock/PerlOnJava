@@ -195,10 +195,11 @@ Development continues in draft PR 1089 on
 includes Unicode property closure, lexical package propagation, named-character
 source mode, overloaded-subject handling, typed Joni debug facts, compiled
 control-verb/charset metadata, native `\K`-lookaround diagnostics, finite-high
-ANYOFR/ANYOFHbbm rendering, and the special-block caller repair. The renderer
-integration and its exact parent both have warning-free full builds. The next
-combined head batches the remaining property, loaded-performance, and
-descending-interval deliveries before another full build.
+ANYOFR/ANYOFHbbm rendering, and the special-block caller repair. The final
+accepted-corpus `Regex compilation failed` downgrade is reduced to descending
+plain-`\N` intervals and fixed in Joni's optimizer. Each delivery has an
+isolated warning-free full build; the next combined head batches these with the
+remaining property and loaded-performance deliveries.
 
 ### Execution Tracker
 
@@ -229,14 +230,13 @@ Active ownership:
 - P6: profile and fix loaded `pat.t`/`pat_thr.t` completion, preserving direct
   counts and proving representative ten-process behavior.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, combined builds, worker rebasing, release evidence, and the
-  remaining `pat.t` descending-interval optimizer crash.
+  plan state, combined builds, worker rebasing, release evidence, and final
+  warn-mode dependency auditing.
 
 ## Ordered Next Steps
 
-1. Integrate the P5 property repair, P6 loaded-performance repair, and
-   coordinator descending-interval fix; resolve overlaps centrally and refresh
-   complete affected maps.
+1. Integrate the P5 property repair and P6 loaded-performance repair; resolve
+   overlaps centrally and refresh complete affected maps.
 2. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
