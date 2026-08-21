@@ -2950,9 +2950,11 @@ class Parser extends Lexer {
             right.bs.setRange(env, 0x0A, 0x0D);
         }
 
+        if (enc.isUnicode() || enc.codeToMbcLength(0x85) == 1) {
+            right.addCodeRange(env, 0x85, 0x85);
+        }
         if (enc.isUnicode()) {
             /* UTF-8, UTF-16BE/LE, UTF-32BE/LE */
-            right.addCodeRange(env, 0x85, 0x85);
             right.addCodeRange(env, 0x2028, 0x2029);
         }
         /* (?>...) */
