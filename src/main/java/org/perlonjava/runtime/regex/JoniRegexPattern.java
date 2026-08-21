@@ -664,6 +664,11 @@ final class JoniRegexPattern {
                 Regex.ParsedProgramFeature.G_ASSERTION);
     }
 
+    boolean hasInlinePreserve() {
+        return parsedProgramMetadata().has(
+                Regex.ParsedProgramFeature.INLINE_PRESERVE);
+    }
+
     String optimizerDebugDescription() {
         org.joni.Regex.OptimizationInfo info = regex.getOptimizationInfo();
         StringBuilder description = new StringBuilder("optimizer search=")
@@ -780,10 +785,9 @@ final class JoniRegexPattern {
         if (pattern == null) return false;
         RegexFlags effective = flags == null
                 ? RegexFlags.fromModifiers("", pattern) : flags;
-        String normalized = RegexQuoteMeta.escapeQ(pattern);
         try {
             JoniRegexPattern compiled = new JoniRegexPattern(
-                    normalized, effective, 0);
+                    pattern, effective, 0);
             Regex engine = compiled.engineRegex();
             return Option.isPerlAsciiStrict(engine.getOptions())
                     || hasCompatibilityFeature(

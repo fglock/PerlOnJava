@@ -101,52 +101,6 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         }
     }
 
-    /**
-     * Finds a positive inline Perl {@code p} modifier without treating escaped
-     * text or character-class contents as modifier groups. Match-variable
-     * retention is PerlOnJava source policy rather than a Joni matcher option.
-     */
-    static boolean hasInlinePreserveModifier(String pattern) {
-        if (pattern == null || pattern.length() < 4) return false;
-
-        boolean escaped = false;
-        boolean inClass = false;
-        for (int i = 0; i + 3 < pattern.length(); i++) {
-            char c = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (c == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (c == '[') {
-                inClass = true;
-                continue;
-            }
-            if (c == ']' && inClass) {
-                inClass = false;
-                continue;
-            }
-            if (inClass || c != '(' || pattern.charAt(i + 1) != '?') continue;
-
-            boolean negative = false;
-            for (int j = i + 2; j < pattern.length(); j++) {
-                char modifier = pattern.charAt(j);
-                if (modifier == ':' || modifier == ')') break;
-                if (modifier == '-') {
-                    negative = true;
-                    continue;
-                }
-                if (modifier == '^') continue;
-                if (modifier < 'a' || modifier > 'z') break;
-                if (modifier == 'p' && !negative) return true;
-            }
-        }
-        return false;
-    }
-
     public RegexFlags with(String positiveFlags, String negativeFlags) {
         boolean newFlagN = this.isNonCapturing;
         boolean newIsCaseInsensitive = this.isCaseInsensitive;

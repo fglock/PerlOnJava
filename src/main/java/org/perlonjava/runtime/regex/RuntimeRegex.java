@@ -30,7 +30,6 @@ import java.util.function.Function;
 
 import static org.perlonjava.runtime.regex.RegexFlags.fromModifiers;
 import static org.perlonjava.runtime.regex.RegexFlags.validateModifiers;
-import static org.perlonjava.runtime.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
@@ -721,14 +720,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String displayDiagnosticPattern = sourceDiagnosticPattern == null
                 ? originalPatternString
                 : RegexMarkers.stripLiteralDiagnostics(sourceDiagnosticPattern);
-        List<String> quoteMetaWarningsOnUse = new ArrayList<>();
-        if (compilePatternString != null && compilePatternString.contains("\\Q")) {
-            // Interpolated-pattern warnings are lexical diagnostics for each
-            // construction, even when the compiled regex itself is cached.
-            compilePatternString = escapeQ(compilePatternString);
-            quoteMetaWarningsOnUse = RegexQuoteMeta.getWarningsOnUse();
-        }
-
         // Lexical regex debugging changes the compiled representation.
         // A lexical charname translator may return a different expansion for
         // each compilation. Literal syntax validation is the first leg of one
@@ -797,7 +788,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
 
             try {
-                regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
+                regex.warningsOnUse = new ArrayList<>();
                 if (sourcePolicyWarning != null) {
                     regex.inlineModifierWarnings.add(sourcePolicyWarning);
                 }
@@ -859,7 +850,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.warningsOnUse.addAll(
                             unicodePropertyWildcardWarnings(originalPatternString));
                 regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
-                        || RegexFlags.hasInlinePreserveModifier(compilePatternString);
+                        || regex.recursivePattern.hasInlinePreserve();
                 // Check if pattern has code block captures for $^R optimization
                 // Code blocks are encoded as named captures like (?<cb010...>)
                 Map<String, Integer> namedGroups = regex.recursivePattern.namedGroups();

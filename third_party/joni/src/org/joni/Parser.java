@@ -1775,6 +1775,7 @@ class Parser extends Lexer {
             case 'o':
                 boolean neg = false;
                 int positiveXCount = 0;
+                boolean sawPositivePreserveModifier = false;
                 PerlCharsetOptionState charsetOptions = new PerlCharsetOptionState();
                 boolean sawContinueModifier = false;
                 while (true) {
@@ -1830,6 +1831,7 @@ class Parser extends Lexer {
                         if (!syntax.op2OptionPerl()) {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
                         }
+                        if (!neg) sawPositivePreserveModifier = true;
                         break;
 
                     case 'c':
@@ -1889,6 +1891,10 @@ class Parser extends Lexer {
                         if (Option.isDynamic(env.option ^ option)) {
                             regex.hasDynamicOptions = true;
                         }
+                        if (sawPositivePreserveModifier) {
+                            env.markParsedProgramFeature(
+                                    Regex.ParsedProgramFeature.INLINE_PRESERVE);
+                        }
                         node = EncloseNode.newOption(option);
                         returnCode = 2; /* option only */
                         return node;
@@ -1901,6 +1907,10 @@ class Parser extends Lexer {
                         fetchToken();
                         Node target = parseSubExp(term);
                         env.option = prev;
+                        if (sawPositivePreserveModifier) {
+                            env.markParsedProgramFeature(
+                                    Regex.ParsedProgramFeature.INLINE_PRESERVE);
+                        }
                         EncloseNode en = EncloseNode.newOption(option);
                         en.setTarget(target);
                         node = en;
