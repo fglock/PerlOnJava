@@ -10,6 +10,7 @@ import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -271,6 +272,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // category; WarnDie additionally applies a narrower runtime lexical
         // scope at the individual match site.
         String activeCodeBits = WarningBitsRegistry.getCurrent();
+        String retainedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        String retainedCallSiteWarningBits = RegexQuoteMeta.getCallSiteWarningBits();
+        boolean retainedWarnFlagSet = Warnings.isWarnFlagSet();
         for (String warning : warningsOnUse) {
             String category = RegexQuoteMeta.warningCategory(warning);
             if ("experimental::uniprop_wildcards".equals(category)) {
@@ -278,21 +282,30 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // single-character diagnostic follows the lexical warning
                 // bits (or re strict). Snapshot those bits before warning
                 // callbacks can temporarily replace the active Perl scope.
-                String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
-                if (warningBits == null) {
-                    warningBits = activeCodeBits;
-                }
                 boolean defaultOnFeatureNotice = warning.startsWith(
                         "The Unicode property wildcards feature is experimental");
+                boolean categoryEnabled = retainedRuntimeWarningBits != null
+                        && WarningFlags.isEnabledInBits(
+                                retainedRuntimeWarningBits, category)
+                        || retainedCallSiteWarningBits != null
+                                && WarningFlags.isEnabledInBits(
+                                        retainedCallSiteWarningBits, category)
+                        || activeCodeBits != null
+                                && WarningFlags.isEnabledInBits(activeCodeBits, category);
                 boolean enabledAtCallSite = WarningFlags.areWarningsForcedOn()
-                        || warningBits != null
-                                && WarningFlags.isEnabledInBits(warningBits, category);
+                        || retainedWarnFlagSet || categoryEnabled;
                 if ((defaultOnFeatureNotice || lexicalReStrict || enabledAtCallSite)
                         && !WarningFlags.areWarningsForcedOff()
                         && !WarningFlags.isWarningSuppressedAtRuntime(category)) {
                     RuntimeScalar message = new RuntimeScalar(warning);
-                    if (warningBits != null
-                            && WarningFlags.isFatalInBits(warningBits, category)) {
+                    if (retainedRuntimeWarningBits != null
+                            && WarningFlags.isFatalInBits(
+                                    retainedRuntimeWarningBits, category)
+                            || retainedCallSiteWarningBits != null
+                                    && WarningFlags.isFatalInBits(
+                                            retainedCallSiteWarningBits, category)
+                            || activeCodeBits != null
+                                    && WarningFlags.isFatalInBits(activeCodeBits, category)) {
                         WarnDie.die(message, RuntimeScalarCache.scalarEmptyString);
                     } else {
                         WarnDie.warn(message, RuntimeScalarCache.scalarEmptyString);
