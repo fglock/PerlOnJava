@@ -444,7 +444,7 @@ public class EvalStringHandler {
 
             evalTrace("EvalStringHandler compilePackage=" + compilePackage + " fileName=" + opts.fileName);
 
-            ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
+            ErrorMessageUtil errorUtil = new ErrorMessageUtil(evalFileName, tokens);
             EmitterContext ctx = new EmitterContext(
                     new JavaClassInfo(),
                     symbolTable,
@@ -639,7 +639,7 @@ public class EvalStringHandler {
             symbolTable.addVariable("@_", "our", null);
             symbolTable.addVariable("wantarray", "", null);
 
-            ErrorMessageUtil errorUtil = new ErrorMessageUtil(sourceName, tokens);
+            ErrorMessageUtil errorUtil = new ErrorMessageUtil(evalFileName, tokens);
             EmitterContext ctx = new EmitterContext(
                     new JavaClassInfo(),
                     symbolTable,
