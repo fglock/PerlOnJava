@@ -45,59 +45,9 @@ public class SystemOperator {
     private static final Pattern TAINTED_ENV_METACHARACTERS = Pattern.compile("[^A-Za-z0-9_./-]");
 
     private static String decodeSubprocessOutput(byte[] bytes) {
-        StringBuilder decoded = new StringBuilder(bytes.length);
-        for (int i = 0; i < bytes.length; ) {
-            int first = bytes[i] & 0xff;
-            if (first < 0x80) {
-                decoded.append((char) first);
-                i++;
-                continue;
-            }
-
-            int length;
-            int codePoint;
-            if (first >= 0xc2 && first <= 0xdf) {
-                length = 2;
-                codePoint = first & 0x1f;
-            } else if (first >= 0xe0 && first <= 0xef) {
-                length = 3;
-                codePoint = first & 0x0f;
-            } else if (first >= 0xf0 && first <= 0xf4) {
-                length = 4;
-                codePoint = first & 0x07;
-            } else {
-                decoded.append((char) first);
-                i++;
-                continue;
-            }
-
-            boolean valid = i + length <= bytes.length;
-            for (int j = 1; valid && j < length; j++) {
-                int continuation = bytes[i + j] & 0xff;
-                valid = (continuation & 0xc0) == 0x80;
-                if (valid) codePoint = (codePoint << 6) | (continuation & 0x3f);
-            }
-            if (valid && length == 3) {
-                int second = bytes[i + 1] & 0xff;
-                valid = (first != 0xe0 || second >= 0xa0)
-                        && (first != 0xed || second <= 0x9f);
-            } else if (valid && length == 4) {
-                int second = bytes[i + 1] & 0xff;
-                valid = (first != 0xf0 || second >= 0x90)
-                        && (first != 0xf4 || second <= 0x8f);
-            }
-
-            if (valid) {
-                decoded.appendCodePoint(codePoint);
-                i += length;
-            } else {
-                // Preserve an invalid octet one-for-one instead of replacing
-                // it with U+FFFD, so qx// remains binary-safe.
-                decoded.append((char) first);
-                i++;
-            }
-        }
-        return decoded.toString();
+        // qx// has no implicit decoding layer: Perl returns subprocess stdout
+        // as an SvUTF8-off byte string even when the octets form valid UTF-8.
+        return new String(bytes, StandardCharsets.ISO_8859_1);
     }
 
     /**
@@ -1054,23 +1004,28 @@ public class SystemOperator {
             int separatorLength = separator.length();
 
             if (separatorLength == 0) {
-                result.add(new RuntimeScalar(output).taintFromExternalInput());
+                result.add(subprocessOutputScalar(output));
             } else {
                 while (index < output.length()) {
                     int nextIndex = output.indexOf(separator, index);
                     if (nextIndex == -1) {
-                        result.add(new RuntimeScalar(output.substring(index)).taintFromExternalInput());
+                        result.add(subprocessOutputScalar(output.substring(index)));
                         break;
                     }
-                    result.add(new RuntimeScalar(output.substring(index, nextIndex + separatorLength))
-                            .taintFromExternalInput());
+                    result.add(subprocessOutputScalar(
+                            output.substring(index, nextIndex + separatorLength)));
                     index = nextIndex + separatorLength;
                 }
             }
             return list;
         } else {
-            return new RuntimeScalar(output).taintFromExternalInput();
+            return subprocessOutputScalar(output);
         }
+    }
+
+    private static RuntimeScalar subprocessOutputScalar(String output) {
+        return new RuntimeScalar(output.getBytes(StandardCharsets.ISO_8859_1))
+                .taintFromExternalInput();
     }
 
     /**
