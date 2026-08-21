@@ -169,8 +169,11 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The integration head is `cbee747f1`. Its overload-copy increment correction
-passes the unchanged `lib/overload_fallback.t` 4/4 on JVM and interpreter,
+The integration head is `16dd30f51`. Its native word-boundary newline-run
+correction passes direct Joni, JVM/interpreter focused and adjacent boundary
+gates, a warning-free full build, and improves `uniprops10.t` by 80 assertions
+with zero introductions. The integrated overload-copy increment correction
+passes unchanged `lib/overload_fallback.t` 4/4 on JVM and interpreter,
 adjacent overload gates, and a warning-free full build. The preceding exact
 combined code barrier `18b9a0133` passes packaging, licensed Joni, all unit
 shards, and the shadow JAR. PR 1087 remains the next
@@ -211,9 +214,9 @@ full corpus merely to rediscover this evidence.
 
 Active ownership:
 
-- P3: close the 1,195-assertion native Joni word-boundary root, beginning with
-  CR × CR and adjacent boundary-state invariants in `ByteCodeMachine`/
-  `WordBreakData`.
+- P3: continue the remaining 1,110 native Joni word-boundary assertions by
+  implementing ignored Extend/Format/ZWJ sequence state and associated
+  full-context/prefix rules in `ByteCodeMachine`/`WordBreakData`.
 - P4: finish and deliver built-in property text-rewrite removal by routing raw Script,
   Script_Extensions, Block, Age/Present_In, and alias spellings through Joni's
   runtime-neutral resolver; then close the remaining `io/socket.t` release
